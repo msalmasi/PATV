@@ -16,8 +16,9 @@
 //                                             Camfrog login, the linked login or the account key hidden / incognito; a masked seat session;
 //                                             fails closed while the hidden sets load), keyed by the masked seat's own id - its label
 //                                             (a frog name or "someone") and nothing else: no account, no login, no tip, no avatar
-//                                             (1.99?? casmask gap b: + vb: 1 when the viewer frog-blocked that person and the label is
-//                                             a frog name - the menu's ✅ Unblock; its 🚫 Block is {k:'cseat'}, personref.js)
+//                                             (1.99?? casmask gap b: + bk: 1 on a FROG-NAMED seat for a signed-in viewer - the menu's
+//                                             🚫 Block, {k:'cseat'}, personref.js; + vb: 1 when the viewer frog-blocked that person -
+//                                             its ✅ Unblock instead. A "someone" seat: neither - review fix)
 //   * {display, web: true, patv, tip?}       a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
 //   * {display, patv, tip?, login?, pad?}     a room seat: its login ONLY when it is a NAMED member of a live bridged pad the table plays in
 //                                             or advertises in (its own room first) THAT THE VIEWER MAY OPEN (padaccess.full + the 18+
@@ -120,7 +121,9 @@ async function seatsFor(T, user, pads) {
     if (V.masked(T, k)) {
       if (me && String(k) === me.userId) { out[hash] = { me: true, display: V.label(T, k) }; continue; }
       const lab = V.label(T, k), seat = { veil: true, display: lab };
-      if (vkeys && vkeys.size && lab !== V.SOMEONE && V.keysOf(String(k), p, row.camfrogUsername || null).some((x) => vkeys.has(x))) seat.vb = 1;
+      // (casmask review: Block / Unblock on a FROG-NAMED seat only - a "someone" seat can be the one a watcher just saw named)
+      if (me && lab !== V.SOMEONE) seat.bk = 1;
+      if (seat.bk && vkeys && vkeys.size && V.keysOf(String(k), p, row.camfrogUsername || null).some((x) => vkeys.has(x))) seat.vb = 1;
       out[hash] = seat;
       continue;
     }

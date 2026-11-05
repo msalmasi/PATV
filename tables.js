@@ -50,10 +50,25 @@ let RECEIVED = 0;
 // the host, the result, the felt's last round and the public log. Who sits where comes from the sync's SERVER-ONLY `who`
 // ({<table id>: {seats: [<login> | "u:<id>"], host}} - kept in WHO, never in STATE, never on a page); a table without it (an older
 // Pepe) has every seat and its host masked (fail closed). /api/tables/state and the homepage read the tables through view().
+// 1.99?? casmask review fixes:
+//   * STICKY for the table's life (Pepe's own rule, _game_veil_map): a person the site masked at a table (a confirmed veil -
+//     incognito / !bridge hide) stays masked there under the same label - after they stand up, after their veil is switched off, in
+//     its final round, its linger and every log line it wrote (kept while a line of that table can still be in Pepe's log). Masks
+//     that come from a check that can't say (no `who`, no read yet, a failed read) are for that answer only, never sticky.
+//   * the host: masked with their seat (the same key, else the same name) or by their own key / typed login (who.host_login)
+//   * labels numbered after EVERY label of Pepe's that table shows anywhere (seats, host, turn, result, last round, its log lines),
+//     never one he uses for someone else
+//   * a log line is masked by ITS OWN table (Pepe's `tid`; an older Pepe's line: every table of its game)
+//   * Pepe is told: the sync answer's {"veil": {<table id>: [seat keys]}} (confirmed veils only - his veil is sticky) and a website
+//     action's `veil: 1` in /api/tables/claim - so his OBS board, his synced public part and (for a website player) his Camfrog lines
+//     mask them too (pepe_tables._tables_site_veil)
 const KEY_LOGIN = /^[\w.\-]{1,40}$/, KEY_ACCT = /^u:([A-Za-z0-9-]{6,64})$/;
-const KIND_MS = 2000, LINK_MS = 60 * 1000;
+const KIND_MS = 2000, LINK_MS = 60 * 1000, STICKY_MAX = 100, STICKY_SLACK_MS = 120 * 1000;
 const PEPE_LABEL = /^someone(?: (\d{1,3}))?$/;
-let WHO = new Map();                   // table id -> {seats: [key | null], host: key | null}
+const PEPE_LABEL_IN = /(?<![\w])someone(?: (\d{1,3}))?(?![\w])/g;
+let WHO = new Map();                   // table id -> {seats: [key | null], host: key | null, logins, host_login}
+const STICKY = new Map();              // table id -> {game, ids: Map(person id -> Set(names shown)), lab: Map(person id -> label), seen}
+let SKEW = 0;                          // our clock - Pepe's (ms), from the last sync: a log line's time on our clock
 const KIND = new Map();                // key -> {k, at}: incognito | out | unknown | null (veil.kindOf)
 const LINKS = new Map();               // key -> {keys, at}
 let kindsP = null;
@@ -66,7 +81,7 @@ function cleanWho(w, ids) {
     if (!x || typeof x !== "object") continue;
     // (logins: the login a seat typed from where it differs from its key - an alias Pepe's memory store folds in; both are checked)
     out.set(id, { seats: Array.isArray(x.seats) ? x.seats.slice(0, 12).map(cleanKey) : [], host: cleanKey(x.host),
-                  logins: Array.isArray(x.logins) ? x.logins.slice(0, 12).map(cleanKey) : [] });
+                  logins: Array.isArray(x.logins) ? x.logins.slice(0, 12).map(cleanKey) : [], host_login: cleanKey(x.host_login) });
   }
   return out;
 }
@@ -97,7 +112,7 @@ function refreshKinds() {
     const keys = new Set();
     for (const id of ids) {
       const w = WHO.get(id);
-      if (w) { for (const k of w.seats.concat(w.logins || [])) if (k) keys.add(k); if (w.host) keys.add(w.host); }
+      if (w) { for (const k of w.seats.concat(w.logins || [])) if (k) keys.add(k); if (w.host) keys.add(w.host); if (w.host_login) keys.add(w.host_login); }
     }
     for (const k of keys) {
       const c = KIND.get(k);
@@ -112,44 +127,95 @@ function refreshKinds() {
 }
 /** masked now (fails closed: no key, never read, a failed read) */
 const veiledKey = (k) => { if (!k) return true; const c = KIND.get(k); return !c || c.k === "incognito" || c.k === "out" || c.k === "unknown"; };
-/** one table (a copy) with the site's masks: -> [[the name it showed, its label], ...] for the log */
-function maskTable(t) {
-  const w = WHO.get(t.id) || null;
-  const seats = Array.isArray(t.seats) ? t.seats : [];
-  const isLabel = (n) => PEPE_LABEL.test(String(n == null ? "" : n));
-  const seatKey = (i) => (w ? w.seats[i] || null : null);
-  // who is masked here: seats by their key (no `who` = no key = masked), the host by its own
-  const alt = (i) => (w && Array.isArray(w.logins) ? w.logins[i] || null : null);
-  const masked = seats.map((s, i) => !!(s && s.name && !isLabel(s.name) && (veiledKey(seatKey(i)) || (alt(i) && veiledKey(alt(i))))));
-  const hostMasked = !!(t.host && !isLabel(t.host) && veiledKey(w ? w.host : null));
-  // one label per person: a seat's key (else its name, with no `who`), the host the same as their seat
-  const idOf = (i) => (w && seatKey(i) ? "k:" + seatKey(i) : "n:" + seats[i].name);
-  const hostId = w && w.host ? "k:" + w.host : "n:" + t.host;
-  const order = [];
-  seats.forEach((s, i) => { if (masked[i] && !order.includes(idOf(i))) order.push(idOf(i)); });
-  if (hostMasked && !order.includes(hostId)) order.push(hostId);
-  if (!order.length) return [];
-  // numbered after Pepe's own labels (a bare "someone" of his is 1) - "someone" alone only when it is the table's one masked person
+/** a CONFIRMED veil (incognito / !bridge hide read for this key) - what may stick, and what Pepe is told */
+const confirmedKey = (k) => { if (!k) return false; const c = KIND.get(k); return !!(c && (c.k === "incognito" || c.k === "out")); };
+const isLabel = (n) => PEPE_LABEL.test(String(n == null ? "" : n));
+/** the highest "someone N" of Pepe's in these names / texts (a bare "someone" is 1) -> {top, any} */
+function pepeLabels(names, texts) {
   let top = 0, any = false;
-  for (const n of seats.map((s) => s && s.name).concat([t.host])) {
+  for (const n of names) {
     const m = PEPE_LABEL.exec(String(n == null ? "" : n));
     if (m) { any = true; top = Math.max(top, m[1] ? Number(m[1]) : 1); }
   }
+  for (const t of texts) {
+    for (const m of String(t || "").matchAll(PEPE_LABEL_IN)) { any = true; top = Math.max(top, m[1] ? Number(m[1]) : 1); }
+  }
+  return { top, any };
+}
+/** one table (a copy) with the site's masks, `lines` = the texts of its log lines: -> [[a name it showed, its label], ...] for the log */
+function maskTable(t, lines) {
+  const w = WHO.get(t.id) || null;
+  const seats = Array.isArray(t.seats) ? t.seats : [];
+  const seatKey = (i) => (w ? w.seats[i] || null : null);
+  const alt = (i) => (w && Array.isArray(w.logins) ? w.logins[i] || null : null);
+  const st = STICKY.get(t.id) || { game: t.game, ids: new Map(), lab: new Map(), seen: 0 };
+  // one id per person: a seat's key (else its name, with no key)
+  const idOf = (i) => (w && seatKey(i) ? "k:" + seatKey(i) : "n:" + seats[i].name);
+  // why each seat is masked: "sticky" (masked at this table before), "veil" (a confirmed veil - sticky from now on), "closed" (no
+  // `who` / no key / no read yet / a failed read - this answer only), null (named)
+  const why = seats.map((s, i) => {
+    if (!s || !s.name || isLabel(s.name)) return null;
+    if (st.ids.has(idOf(i))) return "sticky";
+    if (!w || !seatKey(i)) return "closed";
+    const ks = [seatKey(i), alt(i)].filter(Boolean);
+    if (ks.some(confirmedKey)) return "veil";
+    return ks.some(veiledKey) ? "closed" : null;
+  });
+  // the host: the same person as the seat with their key (else, with no key, their name) - masked with it, or by their own key /
+  // typed login (casmask review: an alias host - the seat masked by its typed login - was named in the host field); a masked seat
+  // showing the host's name masks the host too (fails closed)
+  let hostWhy = null, hostId = null;
+  if (t.host && !isLabel(t.host)) {
+    const hk = w ? w.host : null;
+    let hs = -1;
+    seats.forEach((s, i) => { if (hs < 0 && s && s.name && (hk ? seatKey(i) === hk : s.name === t.host)) hs = i; });
+    hostId = hs >= 0 ? idOf(hs) : hk ? "k:" + hk : "n:" + t.host;
+    const hks = [hk, w ? w.host_login : null].filter(Boolean);
+    if (hs >= 0 && why[hs]) hostWhy = why[hs];
+    else if (st.ids.has(hostId)) hostWhy = "sticky";
+    else if (!w || !hk) hostWhy = "closed";
+    else if (hks.some(confirmedKey)) hostWhy = "veil";
+    else if (hks.some(veiledKey)) hostWhy = "closed";
+    if (!hostWhy && seats.some((s, i) => why[i] && s.name === t.host)) {
+      hostWhy = "closed";
+      const j = seats.findIndex((s, i) => why[i] && s.name === t.host);
+      hostId = idOf(j);
+    }
+    // ... and a masked host's own seat (its host mark would name them) is masked with them
+    if (hostWhy && hs >= 0 && !why[hs]) why[hs] = hostWhy;
+  }
+  // the sticky ones: kept for the table's life, with every name they were shown under
+  const keep = (id, name) => { if (!st.ids.has(id)) st.ids.set(id, new Set()); if (name) st.ids.get(id).add(String(name)); };
+  seats.forEach((s, i) => { if (why[i] === "veil" || why[i] === "sticky") keep(idOf(i), s.name); });
+  if (hostWhy === "veil" || hostWhy === "sticky") keep(hostId, t.host);
+  // this answer's masked people: the sticky ones first (in the order they were first masked - also those who left: their lines
+  // stay), then this answer's own
+  const order = [...st.ids.keys()], names = new Map();
+  for (const [id, ns] of st.ids) names.set(id, new Set(ns));
+  const add = (id, name) => { if (!order.includes(id)) order.push(id); if (!names.has(id)) names.set(id, new Set()); if (name) names.get(id).add(String(name)); };
+  seats.forEach((s, i) => { if (why[i]) add(idOf(i), s.name); });
+  if (hostWhy) add(hostId, t.host);
+  if (st.ids.size) { st.seen = Date.now(); STICKY.set(t.id, st); }
+  if (!order.length) return [];
+  // labels: after every label of Pepe's this table shows (seats, host, turn, result, last round, its log lines) - "someone" alone
+  // only when nobody else at it is masked
+  const shown = seats.map((s) => s && s.name).concat([t.host, t.turn && t.turn.name]);
+  for (const part of [t.result, t.last_round]) {
+    if (!part || typeof part !== "object") continue;
+    for (const f of ["winners", "players", "shown"]) if (Array.isArray(part[f])) for (const x of part[f]) shown.push(x && x.name);
+  }
+  const { top, any } = pepeLabels(shown, lines || []);
   const lab = new Map();
   order.forEach((id, j) => lab.set(id, !any && order.length === 1 ? "someone" : "someone " + (top + j + 1)));
-  const pairs = [];
-  const byName = new Map();
-  seats.forEach((s, i) => {
-    if (!masked[i]) return;
-    const l = lab.get(idOf(i));
-    byName.set(s.name, l); pairs.push([s.name, l]);
-    s.name = l;
-  });
-  if (hostMasked) { const l = lab.get(hostId); if (!byName.has(t.host)) { byName.set(t.host, l); pairs.push([t.host, l]); } t.host = l; }
+  st.lab = lab;
+  const pairs = [], byName = new Map();
+  for (const id of order) for (const n of names.get(id) || []) { if (!byName.has(n)) { byName.set(n, lab.get(id)); pairs.push([n, lab.get(id)]); } }
+  seats.forEach((s, i) => { if (why[i]) s.name = lab.get(idOf(i)); });
+  if (hostWhy) t.host = lab.get(hostId);
   const nm = (x) => { if (x && typeof x === "object" && typeof x.name === "string" && byName.has(x.name)) x.name = byName.get(x.name); return x; };
   if (t.turn) {
     const i = Number(t.turn.seat);
-    if (Number.isInteger(i) && seats[i]) { if (masked[i]) t.turn.name = seats[i].name; }     // (by its seat: a named seat keeps its name)
+    if (Number.isInteger(i) && seats[i]) { if (why[i]) t.turn.name = seats[i].name; }     // (by its seat: a named seat keeps its name)
     else nm(t.turn);
   }
   for (const part of [t.result, t.last_round]) {
@@ -158,30 +224,91 @@ function maskTable(t) {
   }
   return pairs;
 }
+/** a table no longer in the state: its sticky names under their last labels (for the log lines it wrote) */
+function stickyPairs(st) {
+  const out = [];
+  for (const [id, ns] of st.ids) for (const n of ns) out.push([n, (st.lab && st.lab.get(id)) || "someone"]);
+  return out;
+}
+/** drop the sticky record of a table that is gone and whose lines can no longer be in Pepe's log; at most STICKY_MAX */
+function pruneSticky(live, log) {
+  for (const [id, st] of [...STICKY]) {
+    if (live.has(id)) continue;
+    const mine = log.some((l) => l && (l.tid ? l.tid === id
+      : l.game === st.game && Number(l.ts) * 1000 + SKEW <= st.seen + STICKY_SLACK_MS));
+    if (!mine) STICKY.delete(id);
+  }
+  if (STICKY.size > STICKY_MAX) for (const [id] of [...STICKY].sort((a, b) => a[1].seen - b[1].seen).slice(0, STICKY.size - STICKY_MAX)) STICKY.delete(id);
+}
 /** the public state as a page may see it (a copy): every table masked by the site's veils too, the log with them */
 function maskState(out) {
   const o = JSON.parse(JSON.stringify(out));
-  const pairs = [];
+  const log = Array.isArray(o.log) ? o.log : [];
+  const pairsBy = new Map(), gameBy = new Map(), live = new Set();
   for (const t of (o.tables || []).concat(o.closed || [])) {
-    try { pairs.push(...maskTable(t)); }
+    live.add(t.id); gameBy.set(t.id, t.game);
+    const lines = log.filter((l) => l && typeof l.text === "string" && (l.tid ? l.tid === t.id : l.game === t.game)).map((l) => l.text);
+    try { pairsBy.set(t.id, maskTable(t, lines)); }
     catch (e) {
       // (can't be made safe: every name on it "someone")
+      const pairs = [];
       for (const s of t.seats || []) if (s && s.name) { pairs.push([s.name, "someone"]); s.name = "someone"; }
       if (t.host) { pairs.push([t.host, "someone"]); t.host = "someone"; }
       t.turn = t.turn ? Object.assign(t.turn, { name: "someone" }) : t.turn;
       t.result = null; t.last_round = null;
+      const st = STICKY.get(t.id);
+      pairsBy.set(t.id, st ? stickyPairs(st).map(([n]) => [n, "someone"]).concat(pairs) : pairs);
     }
   }
-  if (pairs.length && Array.isArray(o.log)) {
+  for (const [id, st] of STICKY) if (!live.has(id)) { pairsBy.set(id, stickyPairs(st)); gameBy.set(id, st.game); }
+  if (Array.isArray(o.log)) {
     const V = require("./casino/veil");
-    o.log = o.log.map((l) => (l && typeof l.text === "string" ? Object.assign({}, l, { text: V.maskWith(l.text, pairs) }) : l));
+    o.log = o.log.map((l) => {
+      if (!l || typeof l.text !== "string") return l;
+      // each line by its own table (Pepe's tid); an older Pepe's line without one: every table of its game
+      let pairs = [];
+      if (l.tid) pairs = pairsBy.get(l.tid) || [];
+      else for (const [id, ps] of pairsBy) if (gameBy.get(id) === l.game) pairs = pairs.concat(ps);
+      return { ts: l.ts, game: l.game, text: pairs.length ? V.maskWith(l.text, pairs) : l.text };     // (the tid stays here)
+    });
   }
+  pruneSticky(live, log);
   return o;
 }
 /** what /api/tables/state and the homepage read: the public state, the site's veils re-read first (at most every 2 s) */
 async function view() {
   try { await refreshKinds(); } catch (e) { /* the masks fail closed on what isn't read */ }
   return maskState(publicState());
+}
+/** 1.99?? casmask review: the sync answer's {<table id>: [seat keys]} - the seats (and host) the site finds veiled, CONFIRMED veils
+ *  only (incognito / !bridge hide - never a check that couldn't say: Pepe's veil is sticky for the table's life), and the ones it
+ *  keeps masked there (STICKY). Pepe adds them to that table's veil (pepe_tables._tables_site_veils). */
+function veilReport() {
+  const out = {};
+  for (const [id, w] of WHO) {
+    const keys = new Set();
+    w.seats.forEach((k, i) => { if (k && (confirmedKey(k) || confirmedKey((w.logins || [])[i]))) keys.add(k); });
+    if (w.host && (confirmedKey(w.host) || confirmedKey(w.host_login))) keys.add(w.host);
+    const st = STICKY.get(id);
+    if (st) for (const pid of st.ids.keys()) if (pid.startsWith("k:")) keys.add(pid.slice(2));
+    if (keys.size) out[id] = [...keys].slice(0, 24);
+  }
+  return out;
+}
+/** 1.99?? casmask review: a website table action's player as the site's veils see them (their login, their account, its linked
+ *  login) - true for a CONFIRMED veil only (a check that can't say, or fails: false - Pepe's own checks still apply, and the web
+ *  view masks them anyway). Pepe puts them in the table's veil before the action's first room line. */
+async function actorVeiled(a) {
+  try {
+    const keys = new Set();
+    const login = cleanKey(a && a.camfrog);
+    if (login) for (const k of await keysOfKey(login)) keys.add(k);
+    const acct = a && a.user_id ? cleanKey("u:" + a.user_id) : null;
+    if (acct) for (const k of await keysOfKey(acct)) keys.add(k);
+    if (!keys.size) return false;
+    const k = await require("./casino/veil").kindOf([...keys]);
+    return k === "incognito" || k === "out";
+  } catch (e) { return false; }
 }
 
 // ── cleaning (the bot is trusted, but nothing malformed should reach a page) ──
@@ -339,7 +466,9 @@ function cleanSync(b) {
       tables, closed, max_tables: int(b.max_tables || 1, 1, 50),
       rooms: arr(b.rooms, 30).map((r) => ({ id: str(r.id, 64), name: str(r.name, 64), holdem: bool(r.holdem), bj: bool(r.bj) })),
       busy: b.busy ? str(b.busy, 40) : null,
-      log: arr(b.log, 40).map((l) => ({ ts: int(l.ts), game: l.game === "bj" ? "bj" : "holdem", text: str(l.text, 200) })),
+      // (1.99?? casmask review: + the line's table - server side only, maskState masks a line by its own table)
+      log: arr(b.log, 40).map((l) => Object.assign({ ts: int(l.ts), game: l.game === "bj" ? "bj" : "holdem", text: str(l.text, 200) },
+                                                     /^[0-9a-f]{6,16}$/.test(String(l.tid || "")) ? { tid: String(l.tid) } : {})),
       config: {
         holdem: { sb_cap: int(h.sb_cap), bb_cap: int(h.bb_cap), min_buy_bb: int(h.min_buy_bb), max_buy_bb: int(h.max_buy_bb),
                   act_secs: int(h.act_secs), max_seats: int(h.max_seats), next_hand_secs: int(h.next_hand_secs),
@@ -408,21 +537,30 @@ function publicState() {
 
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
-  app.post("/api/tables/sync", (req, res) => {
+  app.post("/api/tables/sync", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    let ok = false;
     try {
       const { state, priv, who } = cleanSync(b);
       STATE = state;
       PRIV = priv;           // replaced wholesale: a player who left loses their entry at once
       WHO = who;             // 1.99?? casmask: who sits where - server only, for the site's own veils (view)
-      refreshKinds();        // (the next read finds them read)
       RECEIVED = Date.now();
-      res.json({ ok: true });
+      SKEW = Number(b.bot_now) > 0 ? RECEIVED - Number(b.bot_now) * 1000 : 0;
+      ok = true;
     } catch (e) {
       console.error("[tables] sync:", e.message);
-      res.status(400).json({ ok: false });
+      return res.status(400).json({ ok: false });
     }
+    // 1.99?? casmask review: the site's veils for these tables go back to Pepe (veilReport) - read first (at most 1.5 s)
+    let tm = null;
+    try { await Promise.race([refreshKinds(), new Promise((r) => { tm = setTimeout(r, 1500); if (tm.unref) tm.unref(); })]); } catch (e) { /* as read */ }
+    if (tm) clearTimeout(tm);
+    let veil = {};
+    try { maskState(publicState()); } catch (e) { /* (the sticky masks as of this sync - a read does the same) */ }
+    try { veil = veilReport(); } catch (e) { veil = {}; }
+    res.json(Object.keys(veil).length ? { ok, veil } : { ok });
   });
 
   // Pepe's fast lane: website table actions only. Old ones are dropped, not run late.
@@ -436,12 +574,16 @@ function register(app, { isBotToken, addUser }) {
         ["Pepe didn't get to it in time — nothing happened. Try again.", now, now - EXPIRE_MS, now - EXPIRE_MS]);
       const rows = await getQuery("SELECT * FROM pepe_actions WHERE kind = 'table' AND status = 'pending' ORDER BY id LIMIT 10");
       for (const a of rows) await runQuery("UPDATE pepe_actions SET status = 'claimed', claimed = ?, updated = ? WHERE id = ? AND status = 'pending'", [now, now, a.id]);
-      res.json({ actions: rows.map((a) => {
+      const out = [];
+      for (const a of rows) {
         let args = [];
         try { args = JSON.parse(a.args); } catch (e) { args = []; }
-        return { id: a.id, kind: "table", args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin,
-                 user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null } };   // 1.99wv
-      }) });
+        const x = { id: a.id, kind: "table", args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin,
+                    user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null } };   // 1.99wv
+        if (await actorVeiled(a)) x.veil = 1;      // 1.99?? casmask review: the site's veil - Pepe masks them from the first line
+        out.push(x);
+      }
+      res.json({ actions: out });
     } catch (e) {
       console.error("[tables] claim:", e.message);
       res.status(500).json({ actions: [] });
@@ -544,5 +686,6 @@ function register(app, { isBotToken, addUser }) {
   app.get(["/blackjack", "/bj"], addUser, page("bj"));
 }
 
-module.exports = { register, cleanSync, buildArgs, view, maskState, _state: () => ({ STATE, PRIV, WHO }),
-  _reset: () => { KIND.clear(); LINKS.clear(); kindsP = null; } };
+module.exports = { register, cleanSync, buildArgs, view, maskState, _state: () => ({ STATE, PRIV, WHO, STICKY }),
+  _reset: () => { KIND.clear(); LINKS.clear(); STICKY.clear(); kindsP = null; },
+  _kinds: () => { KIND.clear(); LINKS.clear(); kindsP = null; } };          // (tests: a veil changed - the sticky masks stay)

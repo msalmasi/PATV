@@ -13,7 +13,11 @@
 //   {k: "cseat", t, s}     1.99?? casmask (the 1.99ajw verifier's gap b): a MASKED seat at a site casino table by the masked seat's
 //                          own id (casino/veil.js seatOf - never the account's seat hash) -> the account / login behind it, read from
 //                          the table in memory (a seat that is no longer masked or no longer there: "They aren't at the table any
-//                          more."). No pad: anyone signed in may watch a table.
+//                          more."). No pad: anyone signed in may watch a table. casmask review: OPT-IN - only a caller that asks
+//                          ({cseat: true}: blocks.set, the seat menu's Block) gets it resolved; everyone else (pad bans, gifts,
+//                          mentions) is refused. And only a FROG-NAMED seat: a "someone" seat can be the seat a watcher just saw
+//                          under the name (switched on mid-session / sat down right after their named seat - frognames C.2), so a
+//                          frog-name block on it would tie that name to every frog name the person uses.
 //
 // resolve(ref, {R}) -> {kind: "account" | "login" | "veil", userId | null, username | null, login | null, label, veil: bool} | {error}
 // A veiled result's real identity is for the SERVER only: callers never send userId / username / login of a veil to a page.
@@ -89,6 +93,8 @@ async function ofCasinoSeat(ref) {
   if (!T || !T.eng || !Array.isArray(T.eng.seats)) return gone;
   const uid = T.eng.seats.map(String).find((u) => V.masked(T, u) && V.seatOf(T, u) === ref.s);
   if (!uid) return gone;
+  // (casmask review: a "someone" seat is never blocked from the table - the same answer whoever sits there; its label is on the page)
+  if (String(V.label(T, uid) || V.SOMEONE) === V.SOMEONE) return { error: "Only a frog-named seat can be blocked from the table." };
   const p = (T.players || {})[uid] || {};
   const a = await accountById(uid);
   const login = p.via === "room" && p.camfrog ? low(p.camfrog) : a && a.camfrogUsername ? low(a.camfrogUsername) : null;
@@ -96,7 +102,7 @@ async function ofCasinoSeat(ref) {
            label: String(V.label(T, uid) || "someone").slice(0, 60), room: T.room ? String(T.room) : null, veil: true };
 }
 
-async function resolve(raw, { R = null } = {}) {
+async function resolve(raw, { R = null, cseat = false } = {}) {
   const ref = clean(raw);
   if (!ref) return { error: "Who? Pick someone from the list." };
   if (ref.k === "login") {
@@ -112,7 +118,7 @@ async function resolve(raw, { R = null } = {}) {
     const a = await accountByUsername(ref.v);
     return a ? acctOut(a) : { error: "That account isn't here any more." };
   }
-  if (ref.k === "cseat") return ofCasinoSeat(ref);
+  if (ref.k === "cseat") return cseat ? ofCasinoSeat(ref) : { error: "That line isn't here any more." };     // (casmask review: opt-in)
   if (!R) return { error: "Which pad?" };
   if (ref.k === "veil") {
     const e = [...(R.members || []), ...(R.mic || [])].find((x) => x && x.anon && x.id === ref.id && x._vz);
@@ -140,9 +146,10 @@ function pageSafe(p) {
 
 /** 1.99ajn padppl review fix: may `viewer` ({userId, class}) point at a veiled row / line of pad R (its full access - a private pad's
  *  frog names stay out of reach of people who can't see it)? Named refs need no pad. Fails closed. */
-async function padOk(raw, viewer, R) {
+async function padOk(raw, viewer, R, { cseat = false } = {}) {
   const ref = clean(raw);
-  if (ref && ref.k === "cseat") return !!(viewer && viewer.userId);       // (1.99?? casmask: a casino table - no pad, signed in only)
+  // (1.99?? casmask: a casino table - no pad, signed in only; casmask review: and only for a caller that opts in - blocks.js)
+  if (ref && ref.k === "cseat") return !!(cseat && viewer && viewer.userId);
   if (!ref || (ref.k !== "veil" && ref.k !== "line")) return true;
   if (!R || !R.id || !viewer || !viewer.userId) return false;
   try { const PA = require("./padaccess"); if (PA.init) await PA.init(); return !!PA.full({ userId: viewer.userId, class: viewer.class }, R.id); } catch (e) { return false; }

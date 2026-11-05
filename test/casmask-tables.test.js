@@ -8,6 +8,9 @@
 //     host, the turn, the result, the felt's last round and the public log; a named seat stays named
 //   * fail closed: a table without `who` (an older Pepe), a key never read or a failed read masks that seat
 //   * the viewer's own seat is still theirs: /api/tables/state's me.seats (by the index) and the homepage's "seated at" chip
+//   * (review fixes) sticky for the table's life: after they stand up, switch their veil off, the table closes - its lines stay
+//     masked; the host masked with their seat / by host_login; labels after every label of Pepe's the table shows (its log too);
+//     each log line by its own table (tid); Pepe told: the sync answer's `veil` (confirmed veils only) and the claim's `veil: 1`
 //   node --test test/casmask-tables.test.js      (uses a temp DB)
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -164,4 +167,156 @@ test("Pepe's own tables: a seat whose key is the login an alias folds into is ch
   assert.equal(await sync({ tables: [holdem()], closed: [], log: LOG, private: PRIV,
                             who: { [TID]: { seats: ["alice", "frankie", "hid1", "u:ubob001"], logins: [null, "frankalt", null, null], host: "frankie" } } }), 200);
   assert.equal((await get(null)).d.tables[0].seats[1].name, "Frankie", "named when neither is veiled");
+});
+
+// ── 1.99?? casmask review fixes ──
+const syncJ = async (body) => { const r = await fetch(base + "/api/tables/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.assign({ password: "tok" }, body)) }); return { status: r.status, d: await r.json() }; };
+const LR = { hand_no: 3, uncontested: false, board: ["As", "Kd", "2c", "3h", "4s"], pot: 600, rake: 0,
+             shown: [{ name: "Frankie", cards: ["Ah", "Ad"], hand: "a pair of aces" }, { name: "Alice", cards: ["7c", "8d"], hand: "high card" }],
+             winners: [{ name: "Frankie", amount: 600, hand: "a pair of aces", pot: "pot" }] };
+const plain = (seats, extra) => holdem(Object.assign({ host: "Alice", result: { hand_no: 3, uncontested: false, rake: 0, winners: LR.winners }, last_round: LR,
+  seats: seats.map((n, i) => ({ name: n, stack: 900 + i, status: "waiting", host: n === "Alice" })) }, extra || {}));
+
+test("review: sticky for the table's life - a site-veiled player who stands up, switches the veil off, or whose table closes stays masked (seat, host, result, last round, every log line)", async () => {
+  reset();
+  VK.set("u:ufrank1", "incognito");                                  // only the SITE finds him veiled (Pepe's checks missed it)
+  const log1 = [{ ts: 1, game: "holdem", text: "Frankie sits down", tid: TID }, { ts: 2, game: "holdem", text: "Frankie raises to 400", tid: TID },
+                { ts: 3, game: "holdem", text: "Frankie wins 600 (pot) with a pair of aces", tid: TID }];
+  const who = (seats) => ({ [TID]: { seats, host: "alice" } });
+  assert.equal(await sync({ tables: [plain(["Alice", "Frankie", "Bob"])], closed: [], log: log1, who: who(["alice", "frankie", "u:ubob001"]) }), 200);
+  let { d, text } = await get(null);
+  assert.deepEqual(d.tables[0].seats.map((s) => s.name), ["Alice", "someone", "Bob"]);
+  assert.ok(!/Frankie/.test(text));
+  // he stands up between hands (Pepe logs it under his name, the felt's last round still shows his hand)
+  const log2 = log1.concat([{ ts: 4, game: "holdem", text: "🚪 Frankie leaves the table — 1,500 chips back to PAT.", tid: TID }]);
+  assert.equal(await sync({ tables: [plain(["Alice", "Bob"])], closed: [], log: log2, who: who(["alice", "u:ubob001"]) }), 200);
+  ({ d, text } = await get(null));
+  assert.ok(!/Frankie/.test(text), "after he left: still masked everywhere - " + text.slice(0, 400));
+  assert.deepEqual(d.log.map((l) => l.text), ["someone sits down", "someone raises to 400", "someone wins 600 (pot) with a pair of aces",
+                                              "🚪 someone leaves the table — 1,500 chips back to PAT."]);
+  assert.equal(d.tables[0].last_round.winners[0].name, "someone");
+  assert.equal(d.tables[0].result.winners[0].name, "someone");
+  assert.ok(!d.log.some((l) => "tid" in l), "the line's table stays on the server");
+  // back at the table with his veil switched OFF (re-read): the same seat keeps the mask for the rest of this table
+  VK.clear(); tables._kinds();
+  assert.equal(await sync({ tables: [plain(["Alice", "Frankie", "Bob"])], closed: [], log: log2, who: who(["alice", "frankie", "u:ubob001"]) }), 200);
+  ({ d, text } = await get(null));
+  assert.deepEqual(d.tables[0].seats.map((s) => s.name), ["Alice", "someone", "Bob"], "veil off mid-table: still 'someone' here");
+  assert.ok(!/Frankie/.test(text));
+  // the table closes (no linger): Pepe's log keeps its lines - still masked; they leave the log -> the record goes
+  assert.equal(await sync({ tables: [], closed: [], log: log2, who: {} }), 200);
+  ({ d, text } = await get(null));
+  assert.ok(!/Frankie/.test(text) && d.log.length === 4, "closed: the lines it wrote stay masked");
+  assert.ok(tables._state().STICKY.has(TID));
+  assert.equal(await sync({ tables: [], closed: [], log: [{ ts: 9, game: "bj", text: "Round 1 - dealing", tid: "beef0001" }], who: {} }), 200);
+  await get(null);
+  assert.ok(!tables._state().STICKY.has(TID), "no line of it left: forgotten");
+  // a NEW table (another id) with him named: named
+  const T2 = "abc99999";
+  assert.equal(await sync({ tables: [Object.assign(plain(["Alice", "Frankie"]), { id: T2 })], closed: [], log: [], who: { [T2]: { seats: ["alice", "frankie"], host: "alice" } } }), 200);
+  assert.deepEqual((await get(null)).d.tables[0].seats.map((s) => s.name), ["Alice", "Frankie"], "another table: his own veil decides");
+});
+
+test("review: a check that can't say (no read, a failed read) masks for that answer only - never sticky", async () => {
+  reset();
+  VK.set("frankie", "throw");
+  assert.equal(await sync({ tables: [plain(["Alice", "Frankie"])], closed: [], log: [], who: { [TID]: { seats: ["alice", "frankie"], host: "alice" } } }), 200);
+  assert.equal((await get(null)).d.tables[0].seats[1].name, "someone", "a failed read: masked");
+  VK.clear(); tables._kinds();
+  assert.equal((await get(null)).d.tables[0].seats[1].name, "Frankie", "read fine now: named (a blip never sticks)");
+  assert.equal(tables._state().STICKY.size, 0);
+});
+
+test("review: the host - masked with their seat (an alias seat masked by its typed login) and by host_login; a masked seat showing the host's name masks the host", async () => {
+  reset();
+  VK.set("frankalt", "incognito");
+  const seats = [{ name: "Alice", stack: 1000, status: "waiting" }, { name: "Frankie", stack: 900, status: "waiting", host: true }];
+  assert.equal(await sync({ tables: [holdem({ seats, host: "Frankie", result: null, last_round: null })], closed: [], log: [{ ts: 1, game: "holdem", text: "Frankie sits down", tid: TID }],
+                            who: { [TID]: { seats: ["alice", "frankie"], logins: [null, "frankalt"], host: "frankie" } } }), 200);
+  let { d, text } = await get(null);
+  assert.deepEqual([d.tables[0].seats[1].name, d.tables[0].host], ["someone", "someone"], "the alias host's seat and the host field: one label");
+  assert.ok(!/Frankie|frankalt/.test(text));
+  // a host who never sat, veiled by the login they typed from (who.host_login)
+  reset();
+  VK.set("frankalt", "incognito");
+  assert.equal(await sync({ tables: [holdem({ seats: [seats[0]], host: "Frankie", result: null, last_round: null })], closed: [], log: [],
+                            who: { [TID]: { seats: ["alice"], host: "frankie", host_login: "frankalt" } } }), 200);
+  ({ d, text } = await get(null));
+  assert.equal(d.tables[0].host, "someone");
+  assert.ok(!/Frankie|frankalt/.test(text));
+  // a seated host masked by host_login alone: their seat (with its host mark) is masked with them
+  reset();
+  VK.set("frankalt", "incognito");
+  assert.equal(await sync({ tables: [holdem({ seats, host: "Frankie", result: null, last_round: null })], closed: [], log: [],
+                            who: { [TID]: { seats: ["alice", "frankie"], host: "frankie", host_login: "frankalt" } } }), 200);
+  ({ d, text } = await get(null));
+  assert.deepEqual([d.tables[0].seats[1].name, d.tables[0].seats[1].host, d.tables[0].host], ["someone", true, "someone"]);
+  assert.ok(!/Frankie|frankalt/.test(text));
+  // no keys to go by: a masked seat with the host's name masks the host too
+  reset();
+  VK.set("frankie", "incognito");
+  assert.equal(await sync({ tables: [holdem({ seats, host: "Frankie", result: null, last_round: null })], closed: [], log: [],
+                            who: { [TID]: { seats: ["alice", "frankie"], host: null } } }), 200);
+  ({ d } = await get(null));
+  assert.equal(d.tables[0].host, "someone", "the host's name on a masked seat: masked");
+});
+
+test("review: labels never reuse one of Pepe's - also a label only his log, result or last round still shows (someone who left)", async () => {
+  reset();
+  VK.set("frankie", "incognito");
+  const log = [{ ts: 1, game: "holdem", text: "🏆 someone 2 +900", tid: TID }, { ts: 2, game: "holdem", text: "👋 someone 2 left the table", tid: TID },
+               { ts: 3, game: "holdem", text: "💺 Frankie buys in", tid: TID }];
+  const t = holdem({ host: "Alice", result: { hand_no: 3, uncontested: true, rake: 0, winners: [{ name: "someone 1", amount: 900, hand: "", pot: "pot" }] }, last_round: null,
+                     seats: [{ name: "Alice", stack: 1000, status: "waiting" }, { name: "Frankie", stack: 900, status: "waiting" }] });
+  assert.equal(await sync({ tables: [t], closed: [], log, who: { [TID]: { seats: ["alice", "frankie"], host: "alice" } } }), 200);
+  const { d } = await get(null);
+  assert.equal(d.tables[0].seats[1].name, "someone 3", "after Pepe's 'someone 2' (his log) - never a label he used for someone else");
+  assert.deepEqual(d.log.map((l) => l.text), ["🏆 someone 2 +900", "👋 someone 2 left the table", "💺 someone 3 buys in"]);
+});
+
+test("review: each log line by its own table - another table's line keeps its name; an older Pepe's line (no tid) by its game", async () => {
+  reset();
+  VK.set("frankie", "incognito");
+  const T2 = "def45678";
+  const bj = { id: T2, game: "bj", room: "PepeLab", room_name: "PepeLab", phase: "betting", round_no: 1, min_bet: 100, max_bet: 1000, host: "Bob",
+               max_seats: 7, act_secs: 30, decks: 6, dealer: { cards: [] }, seats: [{ name: "Bob", bet: 0, hands: [] }], turn: null, result: null, last_round: null,
+               home: { kind: "room", room: "PepeLab", room_name: "PepeLab" }, featured: false };
+  const log = [{ ts: 1, game: "holdem", text: "Frankie raises to 400", tid: TID }, { ts: 2, game: "bj", text: "Frankie says hi at blackjack", tid: T2 },
+               { ts: 3, game: "holdem", text: "Frankie checks" }];
+  assert.equal(await sync({ tables: [plain(["Alice", "Frankie"]), bj], closed: [], log,
+                            who: { [TID]: { seats: ["alice", "frankie"], host: "alice" }, [T2]: { seats: ["bob"], host: "bob" } } }), 200);
+  const { d } = await get(null);
+  assert.deepEqual(d.log.map((l) => l.text), ["someone raises to 400", "Frankie says hi at blackjack", "someone checks"]);
+});
+
+test("review: Pepe is told - the sync answer names the seats the site finds veiled (confirmed veils + the sticky ones; never a failed or unread check)", async () => {
+  reset();
+  VK.set("frankie", "incognito"); VK.set("evecf", "out"); VK.set("bob", "throw");
+  const t = plain(["Alice", "Frankie", "🌐 Eve", "Bob"]);
+  const r1 = await syncJ({ tables: [t], closed: [], log: [], who: { [TID]: { seats: ["alice", "frankie", "u:ueve001", "bob"], host: "alice" } } });
+  assert.equal(r1.status, 200);
+  assert.deepEqual(r1.d.veil && r1.d.veil[TID] && r1.d.veil[TID].sort(), ["frankie", "u:ueve001"], JSON.stringify(r1.d));
+  VK.clear(); tables._kinds();
+  const r2 = await syncJ({ tables: [t], closed: [], log: [], who: { [TID]: { seats: ["alice", "frankie", "u:ueve001", "bob"], host: "alice" } } });
+  assert.deepEqual(r2.d.veil[TID].sort(), ["frankie", "u:ueve001"], "kept: they stay masked at this table (sticky)");
+  reset();
+  const r3 = await syncJ({ tables: [t], closed: [], log: [], who: { [TID]: { seats: ["alice", "frankie", "u:ueve001", "bob"], host: "alice" } } });
+  assert.deepEqual(r3.d, { ok: true }, "nobody veiled: the answer as before");
+});
+
+test("review: a website action Pepe claims carries veil: 1 when the site finds its player veiled (by the login, the account or its linked login) - never on a failed read", async () => {
+  reset();
+  await runQuery("DELETE FROM pepe_actions");
+  VK.set("u:ufrank1", "incognito"); VK.set("bob", "throw");
+  const now = Date.now();
+  for (const [uid, u, cf] of [["ufrank1", "frank_patv", "Frankie"], ["ualice1", "alice_patv", "alice"], ["ubob001", "bob_patv", "bob"]]) {
+    await runQuery("INSERT INTO pepe_actions (user_id, username, camfrog, kind, args, status, created) VALUES (?, ?, ?, 'table', ?, 'pending', ?)",
+      [uid, u, cf, JSON.stringify(["holdem", "check", "t=" + TID]), now]);
+  }
+  const r = await fetch(base + "/api/tables/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "tok" }) });
+  const d = await r.json();
+  const by = Object.fromEntries(d.actions.map((a) => [a.username, a]));
+  assert.equal(by.frank_patv.veil, 1, "incognito by his account: veil");
+  assert.ok(!("veil" in by.alice_patv), "named: no veil");
+  assert.ok(!("veil" in by.bob_patv), "a failed read: no veil (Pepe's veil is sticky - never a blip)");
 });

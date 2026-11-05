@@ -164,7 +164,7 @@ test("blackjack: an incognito web player is a frog name under a seat id of its o
   assert.ok(pt.includes(frog) && !pt.includes("Bob") && !pt.includes(svc.uidHash("u2")), "the board's seats / turn / last round");
   // the people answer: the masked seat is its label under its own id, nothing else
   const pp = (await get(`/api/casino/t/${tid}/people`, "u5")).d;
-  assert.deepEqual(pp.seats[vseat], { veil: true, display: frog });
+  assert.deepEqual(pp.seats[vseat], { veil: true, display: frog, bk: 1 }, "(bk: a frog-named seat's menu offers Block - casmask)");
   assert.equal(pp.seats[svc.uidHash("u2")], undefined);
 });
 
@@ -560,7 +560,7 @@ test("casmask (gap b): a masked seat's Block is a frog-name block by the masked 
   const vs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil);
   assert.ok(vs && isFrog(vs.name), "Bob's seat: a frog name");
   const ref = { k: "cseat", t: tid, s: vs.seat };
-  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name }, "nothing blocked yet: no vb");
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name, bk: 1 }, "nothing blocked yet: Block (bk), no vb");
   assert.equal((await post({ ref, on: true }, null)).status, 401, "signed out: no block");
   const b1 = await post({ ref, on: true }, "u5");
   assert.equal(b1.status, 200, b1.text);
@@ -575,29 +575,29 @@ test("casmask (gap b): a masked seat's Block is a frog-name block by the masked 
   assert.deepEqual(b2.d, b1.d, "blocking again: the same answer");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM veil_blocks WHERE blocker_id = 'u5'"))[0].n, 1, "and no second row");
   B._reset();
-  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name, vb: 1 }, "blocked: the menu offers Unblock");
-  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u3")).d.seats[vs.seat], { veil: true, display: vs.name }, "only for the blocker");
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name, bk: 1, vb: 1 }, "blocked: the menu offers Unblock");
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u3")).d.seats[vs.seat], { veil: true, display: vs.name, bk: 1 }, "only for the blocker");
   const u1 = await post({ ref, on: false }, "u5");
   assert.deepEqual(u1.d, { ok: true, blocked: false, veil: true, label: vs.name });
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM veil_blocks WHERE blocker_id = 'u5'"))[0].n, 0, "unblocked: every frog-name block on that person lifted");
   B._reset();
-  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name });
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name, bk: 1 });
   // yourself; a seat id that is no masked seat here (a named seat's hash isn't a masked id at all); another table's id
   assert.equal((await post({ ref, on: true }, "u2")).d.error, "That's you.");
   const fake = await post({ ref: { k: "cseat", t: tid, s: "v" + "0".repeat(11) }, on: true }, "u5");
   assert.deepEqual([fake.status, fake.d.error], [404, "They aren't at the table any more."]);
   assert.equal((await post({ ref: { k: "cseat", t: tid, s: svc.uidHash("u1") }, on: true }, "u5")).status, 404, "a named seat's hash: refused (named people are blocked by name)");
   assert.equal((await post({ ref: { k: "cseat", t: "0123456789", s: vs.seat }, on: true }, "u5")).status, 404, "another table");
-  // a "someone" seat (switched on mid-session - C.2): Block, but never vb (a "someone" seat can follow their named seat by moments)
+  // a "someone" seat (switched on mid-session - C.2): neither Block nor Unblock (casmask review - see the next test)
   assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
   await get(`/api/casino/t/${tid}`, "u5");
   VK.set("u:u3", "incognito"); tick(3);
   const cs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil && s.name === "someone");
   assert.ok(cs, "Cat's seat reads 'someone'");
   const b3 = await post({ ref: { k: "cseat", t: tid, s: cs.seat }, on: true }, "u5");
-  assert.deepEqual(b3.d, { ok: true, blocked: true, veil: true, label: "someone" });
+  assert.deepEqual([b3.status, b3.d.error], [404, "Only a frog-named seat can be blocked from the table."]);
   B._reset();
-  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[cs.seat], { veil: true, display: "someone" }, "a 'someone' seat never shows vb");
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[cs.seat], { veil: true, display: "someone" }, "a 'someone' seat: no bk, no vb");
   // the page: the masked seat's small menu carries Block / Unblock (the chat's words), nothing that says who; signed-out viewers get no menu
   const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
   const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("if (tableId) {", ui.indexOf("function veilMenu(")));
@@ -605,7 +605,8 @@ test("casmask (gap b): a masked seat's Block is a frog-name block by the masked 
   assert.match(vm, /bt\("js\.block\.menu", "Block…"\)/);
   assert.match(vm, /bt\("js\.block\.menu_un", "Unblock"\)/);
   assert.match(vm, /const on = !p\.vb;/);
-  assert.match(vm, /if \(signed && seat && window\.PATVBlockSheet\)/);
+  assert.match(vm, /if \(signed && seat && p\.bk && window\.PATVBlockSheet\)/);
+  assert.match(vm, /\}, null, on\]\);/, "Block in the danger colour (the chat's masked-entry item)");
   assert.doesNotMatch(vm.replace(/PATVBlockSheet/g, ""), /\/u\/|tip|patv|login/i, "no profile, no tip, nothing that says who");
 });
 
@@ -622,4 +623,111 @@ test("casmask: asking for Pepe's stream while another table holds it names THAT 
   assert.ok(r.ok && r.queued === 1, r.reply);
   assert.ok(!/\bBob\b/.test(r.reply), "never the name: " + r.reply);
   assert.ok(r.reply.includes(V.label(svc.getTable(t1), "u2") + "'s table"), "the other table's label: " + r.reply);
+});
+
+// ── 1.99?? casmask review fixes (gap b): a "someone" seat is never blocked or unblocked from the table; {k:'cseat'} is opt-in ──
+test("casmask review: a 'someone' seat the viewer just saw NAMED - Block and Unblock both refused (the same answer whoever sits there): no frog-name block tied to the name, no Settings row lifted, no oracle", async () => {
+  await fresh();
+  const B = require(path.join(repo, "blocks"));
+  await B.init(); await runQuery("DELETE FROM veil_blocks"); B._reset();
+  const post = async (body, uid) => { const r = await fetch(base + "/api/blocks", { method: "POST", headers: H(uid), body: JSON.stringify(body) }); const text = await r.text(); return { status: r.status, text, d: JSON.parse(text) }; };
+  // Eve blocked a frog name in a pad's chat earlier - it is Cat (Eve doesn't know)
+  await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES ('u5', 'u3', 'catcf', 'Mossy Toad', 'r1', 1)");
+  B._reset();
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(cat, "bet", ["700"], { table: tid })).ok);
+  assert.ok((await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.some((s) => s.name === "Cat"), "Cat shown named");
+  VK.set("u:u3", "incognito"); tick(3);
+  const cs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil && s.name === "someone");
+  assert.ok(cs, "her seat now reads 'someone' - the watcher saw it was Cat");
+  const keys0 = [...(await B.veilKeysOf("u5"))].sort();
+  for (const on of [true, false]) {
+    const r = await post({ ref: { k: "cseat", t: tid, s: cs.seat }, on }, "u5");
+    assert.deepEqual([r.status, r.d.error], [404, "Only a frog-named seat can be blocked from the table."], "on=" + on + ": " + r.text);
+  }
+  B._reset();
+  assert.deepEqual((await getQuery("SELECT label FROM veil_blocks WHERE blocker_id = 'u5'")).map((x) => x.label), ["Mossy Toad"], "nothing added, nothing lifted");
+  assert.deepEqual([...(await B.veilKeysOf("u5"))].sort(), keys0);
+  // the same answer for a 'someone' seat whose person Eve never blocked (Ann switched on mid-session too)
+  VK.set("u:u1", "incognito"); tick(3);
+  const as = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.filter((s) => s.veil && s.name === "someone").find((s) => s.seat !== cs.seat);
+  assert.ok(as);
+  const r2 = await post({ ref: { k: "cseat", t: tid, s: as.seat }, on: true }, "u5");
+  assert.deepEqual([r2.status, r2.d.error], [404, "Only a frog-named seat can be blocked from the table."]);
+  const pp = (await get(`/api/casino/t/${tid}/people`, "u5")).d.seats;
+  assert.deepEqual([pp[cs.seat], pp[as.seat]], [{ veil: true, display: "someone" }, { veil: true, display: "someone" }], "no Block / Unblock offered");
+});
+
+test("casmask review: {k:'cseat'} resolves only for a caller that opts in (blocks.js) - pad bans, gifts and mentions never reach the person behind a masked seat", async () => {
+  await fresh();
+  const PR = require(path.join(repo, "personref"));
+  VK.set("u:u2", "incognito");
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(bob, "bet", ["500"], { table: tid })).ok);
+  const vs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil);
+  const ref = { k: "cseat", t: tid, s: vs.seat };
+  const viewer = { userId: "u5" };
+  assert.equal(await PR.padOk(ref, viewer, null), false, "padOk: no opt-in - refused");
+  assert.equal(await PR.padOk(ref, viewer, null, { cseat: true }), true, "padOk: opted in (signed in)");
+  assert.equal(await PR.padOk(ref, null, null, { cseat: true }), false, "signed out: never");
+  const r0 = await PR.resolve(ref, {});
+  assert.ok(r0.error && !r0.userId && !r0.login, "resolve: no opt-in - an error, nobody behind it");
+  const r1 = await PR.resolve(ref, { cseat: true });
+  assert.equal(r1.userId, "u2", "opted in: the server finds the person (never sent to a page)");
+  // only blocks.js opts in
+  for (const f of ["padbans.js", "veilgift.js", "bridge-relay.js"]) {
+    const src = fs.readFileSync(path.join(repo, f), "utf8");
+    assert.ok(!/cseat\s*:\s*true/.test(src), f + " never opts in");
+  }
+  const bsrc = fs.readFileSync(path.join(repo, "blocks.js"), "utf8");
+  assert.ok(/PR\.resolve\(ref, \{ R, cseat: true \}\)/.test(bsrc) && /PR\.padOk\(b\.ref, me, R, \{ cseat: true \}\)/.test(bsrc), "blocks.js does");
+});
+
+test("casmask review (gap c): a closed table out of memory reads a room seat's veil by the login it played from too - as it does in memory", async () => {
+  await fresh();
+  const danAlt = mk("u4", "Dan", { camfrog: "DanAlt", via: "room", room: "Casino.Room" });   // an alt login Pepe folds into his account
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(danAlt, "bet", ["700"], { table: tid })).ok);
+  await dealRound(tid, [ann, danAlt]);                                // round 1: Dan named
+  assert.ok((await A(danAlt, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5"); tick(120);
+  VK.set("danalt", "incognito"); tick(3);                             // incognito on the login he played from (not his account's)
+  await get(`/api/casino/t/${tid}`, "u5");
+  const live = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(!/\bDan\b/.test(live.text), "in memory: masked");
+  assert.ok((await A(ann, "end", [], { table: tid })).ok);
+  svc.S.tables.delete(tid); V._reset();
+  const gone = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(!/\bDan\b/.test(gone.text), "out of memory: masked too (the saved player's room login) - " + gone.text.slice(0, 300));
+  assert.ok(/\bAnn\b/.test(gone.text), "a named player stays named");
+});
+
+test("casmask review: the stream reply to a CAMFROG asker - the other table's host as a room line gives them (a website host's label; a room host keeps the name the room saw)", async () => {
+  await fresh();
+  VK.set("u:u2", "incognito");
+  const t1 = (await A(bob, "start", [], { room: null })).table;     // Bob (web, incognito) hosts the table on the stream
+  assert.ok((await A(bob, "bet", ["500"], { table: t1 })).ok);
+  await get(`/api/casino/t/${t1}`, "u5");
+  assert.ok((await svc.stream(t1, true, Object.assign({}, bob), false)).ok);
+  const t2 = (await A(dan, "start", [], { room: null })).table;     // Dan (Camfrog room) hosts another table and asks for the stream
+  const r = await svc.stream(t2, true, Object.assign({}, dan), false);
+  assert.ok(r.ok && r.queued >= 1, r.reply);                         // (a queue an earlier test saved may be ahead)
+  assert.ok(!/\bBob\b/.test(r.reply) && r.reply.includes(V.label(svc.getTable(t1), "u2") + "'s table"), "a website host: their label - " + r.reply);
+  // a ROOM host on the stream, incognito: a room asker hears the name the room sees them type under; a website asker never
+  await fresh();
+  VK.set("dancf", "incognito");
+  const t3 = (await A(dan, "start", [], { room: null })).table;
+  assert.ok((await A(dan, "bet", ["500"], { table: t3 })).ok);
+  await get(`/api/casino/t/${t3}`, "u5");
+  assert.ok((await svc.stream(t3, true, Object.assign({}, dan), false)).ok);
+  const eveRoom = Object.assign({}, eve, { via: "room", camfrog: "EveCF", room: "Casino.Room" });
+  const t4 = (await A(eveRoom, "start", [], { room: null })).table;
+  const roomAsk = await svc.stream(t4, true, Object.assign({}, eveRoom), false);
+  assert.ok(roomAsk.ok && roomAsk.reply.includes("Dan's table"), "a room asker: the room's name for a room host - " + roomAsk.reply);
+  const t5 = (await A(cat, "start", [], { room: null })).table;
+  const webAsk = await svc.stream(t5, true, Object.assign({}, cat), false);
+  assert.ok(webAsk.ok && !/\bDan\b/.test(webAsk.reply), "a website asker: never the name - " + webAsk.reply);
 });

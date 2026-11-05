@@ -124,13 +124,15 @@ async function kindForActor(actor) {
   if (!actor || !actor.uid) return null;
   try { return await kindOf(keysOf(String(actor.uid), actor, await linkedLogin(String(actor.uid)))); } catch (e) { return "unknown"; }
 }
-const kindCache = new Map();         // userId -> {k, at}: people a stored round names whom no table in memory knows (maskRounds)
-async function kindForUid(uid) {
-  const c = kindCache.get(uid), t = clock();
+const kindCache = new Map();         // userId (+ room login) -> {k, at}: people a stored round names whom no table in memory knows (maskRounds)
+/** p: their player record at the table (1.99?? casmask review: a room seat's login counts - a saved table read it too) */
+async function kindForUid(uid, p = null) {
+  const ck = uid + (p && p.via === "room" && p.camfrog ? "|" + lc(p.camfrog) : "");
+  const c = kindCache.get(ck), t = clock();
   if (c && t - c.at < KIND_MS) return c.k;
   let k;
-  try { k = await kindOf(keysOf(uid, null, await linkedLogin(uid))); } catch (e) { k = "unknown"; }
-  kindCache.set(uid, { k, at: t });
+  try { k = await kindOf(keysOf(uid, p, await linkedLogin(uid))); } catch (e) { k = "unknown"; }
+  kindCache.set(ck, { k, at: t });
   if (kindCache.size > 5000) kindCache.delete(kindCache.keys().next().value);
   return k;
 }
@@ -415,7 +417,7 @@ async function maskRounds(tableId, rows) {
   if (!T && rows.some((row) => row && row.results && typeof row.results === "object")) {
     try {
       T = await savedTable(tableId);
-      for (const uid of Object.keys(T.veil)) T.veil[uid].k = await kindForUid(uid);
+      for (const uid of Object.keys(T.veil)) T.veil[uid].k = await kindForUid(uid, (T.players || {})[uid] || null);     // (+ the room login)
     } catch (e) {
       return rows.map((row) => Object.assign({}, row, { results: row.results && typeof row.results === "object" ? scrubRound(row.results) : row.results }));
     }
@@ -426,7 +428,7 @@ async function maskRounds(tableId, rows) {
     for (const p of Array.isArray(row.players) ? row.players : []) {
       const uid = p && p.uid ? String(p.uid) : null;
       if (!uid || kinds.has(uid) || (T && T.veil && T.veil[uid])) continue;
-      kinds.set(uid, await kindForUid(uid));
+      kinds.set(uid, await kindForUid(uid, (T && T.players && T.players[uid]) || null));
     }
   }
   return rows.map((row) => {

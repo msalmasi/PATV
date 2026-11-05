@@ -610,7 +610,7 @@
     p.remove();
     if (refocus && p._anchor && p._anchor.isConnected) p._anchor.focus();
   }
-  /** a small menu at anchor: o = {cls, aria, avatar: {name, avatar?, veil?}, name, role, items: [[label, href, fn, why]], note} */
+  /** a small menu at anchor: o = {cls, aria, avatar: {name, avatar?, veil?}, name, role, items: [[label, href, fn, why, danger]], note} */
   function smallMenu(anchor, o) {
     if (pepePop && pepePop._anchor === anchor) { closePepe(true); return; }
     closePepe(false);
@@ -625,8 +625,8 @@
     p.appendChild(hd);
     const list = document.createElement("div"); list.className = "pm-pop-l";
     if ((o.items || []).length) { list.setAttribute("role", "menu"); list.setAttribute("aria-label", o.aria); }    // (a masked seat's: only Block / Unblock, signed in - casmask)
-    for (const [label, href, fn, why] of o.items || []) {
-      const b = document.createElement(href ? "a" : "button"); b.className = "pm-pop-i"; b.setAttribute("role", "menuitem"); b.tabIndex = -1;
+    for (const [label, href, fn, why, danger] of o.items || []) {
+      const b = document.createElement(href ? "a" : "button"); b.className = "pm-pop-i" + (danger ? " danger" : ""); b.setAttribute("role", "menuitem"); b.tabIndex = -1;
       b.textContent = label;
       if (href) b.href = href; else { b.type = "button"; b.addEventListener("click", (e) => { e.preventDefault(); closePepe(false); fn(); }); }
       if (why) { const w = document.createElement("small"); w.className = "pm-pop-why"; w.textContent = why; b.appendChild(w); }
@@ -679,17 +679,19 @@
   /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who. 1.99?? casmask (the
    *  1.99ajw verifier's gap b): 🚫 Block… - a FROG-NAME block, the chat's masked-entry item and sheet (block-sheet.js veil: whatever frog
    *  name they use their veiled activity is hidden from you; the server finds who it is from the masked seat's own id and never says) -
-   *  or ✅ Unblock on a frog name you already blocked that way (the people answer's vb). Signed-out viewers never get this menu. */
+   *  or ✅ Unblock on a frog name you already blocked that way (the people answer's vb). Signed-out viewers never get this menu.
+   *  casmask review: a FROG-NAMED seat only (the people answer's bk) - a "someone" seat can be the one you just saw named; Block in
+   *  the danger colour, as the chat's masked-entry menu has it. */
   function veilMenu(anchor, p, seat) {
     const name = String(p.display || "someone");
     const items = [];
     const bt = (k, d) => (window.__t ? window.__t(k, d) : d);       // (the chat menu's own words - room-mod.js)
-    if (signed && seat && window.PATVBlockSheet) {
+    if (signed && seat && p.bk && window.PATVBlockSheet) {
       const on = !p.vb;
       items.push([on ? "🚫 " + bt("js.block.menu", "Block…") : "✅ " + bt("js.block.menu_un", "Unblock"), null, () => {
         window.PATVBlockSheet.open({ ref: { k: "cseat", t: tableId, s: String(seat) }, name, veil: true, on, anchor,
                                      onDone: () => { ppl.at = 0; loadPeople(); } });
-      }]);
+      }, null, on]);
     }
     smallMenu(anchor, { cls: "cz-veilm", aria: T("veil_menu", "Incognito player {name}", { name }), avatar: { name, veil: 1 }, name,
                         role: T("veil_role", "incognito player"), items,

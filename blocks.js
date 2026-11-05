@@ -41,8 +41,9 @@
 // Every answer to a veil block is the same whoever is behind it (an account, an unlinked login, nobody), apart from "That's you".
 // Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry (Unblock is in Settings → Blocked people)
 // - except (1.99?? casmask, the 1.99ajw verifier's gap b) a FROG-NAMED masked casino seat whose person the viewer frog-blocked (people.js
-// vb, {k:'cseat'} below): the same residual a folded frog line already carries (two frog names are the same person - never who); never
-// on a "someone" seat.
+// vb, {k:'cseat'} below): the same residual a folded frog line already carries (two frog names are the same person - never who). A
+// "someone" seat is neither blocked nor unblocked from the table (casmask review: it can be the seat a watcher just saw named - a
+// block on it would tie the name to every frog name; personref refuses it, the same answer whoever sits there).
 //
 // Routes: POST /api/blocks {ref, on, slug?} (ref = personref.js, or {k:'vb', id} / {k:'lb', v} from the settings list)
 //         (1.99?? casmask: or {k:'cseat', t, s} - a masked casino seat by its own id: Block, and Unblock lifting every frog-name block on that person)
@@ -217,7 +218,7 @@ async function set(user, ref, on, { R = null } = {}) {
     if (on === false) { await runQuery("DELETE FROM login_blocks WHERE blocker_id = ? AND login = ?", [me, l]); changed(me); return { ok: true, blocked: false, login: l }; }
     ref = { k: "login", v: l };
   }
-  const p = await PR.resolve(ref, { R });
+  const p = await PR.resolve(ref, { R, cseat: true });       // (1.99?? casmask: the masked casino seat's Block - personref opt-in)
   if (p.error) throw new Refuse(404, p.error);
   const myLogin = user.camfrogUsername ? low(user.camfrogUsername) : await loginOf(me);
   if (p.veil) {
@@ -347,7 +348,7 @@ function register(app, { addUser, bySlug = null }) {
       if (!me) return res.status(401).json({ ok: false, error: "Sign in first." });
       const R = roomOf(b.slug);
       // (1.99ajn padppl review fix: a frog name's row / line only in a pad this viewer may see - the same answer as a line that's gone)
-      if (!(await PR.padOk(b.ref, me, R))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
+      if (!(await PR.padOk(b.ref, me, R, { cseat: true }))) return res.status(404).json({ ok: false, error: "That line isn't here any more." });
       res.json(await set(me, b.ref, b.on !== false, { R }));
     } catch (e) { fail(res, e); }
   });
