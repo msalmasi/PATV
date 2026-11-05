@@ -201,11 +201,22 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") { res.status(400).json({ ok: false, error: "Bad request." }); return false; }
     return true;
   };
-  const mine = (req, res) => {
+  // audiogate (review F4): the preview is the pad's room audio (and its 🎙 words) - its view, audio and Post answer to the same
+  // audience rule as the live room (padaccess.full for who you are now + the pad's 💎 bridge perk), not only "your own clip": a
+  // member removed from an Approved pad (or no longer its owner / staff) stops getting it. Discard (hear: false) still works.
+  const mine = (req, res, { hear = true } = {}) => {
     const c = clips.get(String(req.params.id || ""));
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
     if (require("./adultgate").refuseJson(req, res, R.id)) return null;        // adultgate site: the 18+ gate on this room
+    if (hear) {
+      let perk = true;
+      try { perk = require("./bridge").bridgeOk(R.id); } catch (e) { perk = true; }
+      if (!perk || !require("./padaccess").full(req.user, R.id)) {
+        res.status(403).json({ ok: false, code: "no_access", error: "You can't hear this pad's room any more." });
+        return null;
+      }
+    }
     return { c, R };
   };
   const LINK = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
@@ -333,7 +344,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
   app.post("/api/rooms/:slug/micclip/:id/discard", addUser, express.json({ limit: "4kb" }), (req, res) => {
     if (!jsonOnly(req, res)) return;
-    const x = mine(req, res);
+    const x = mine(req, res, { hear: false });       // (audiogate F4: throwing your own clip away needs no access)
     if (!x) return;
     if (x.c.save) return res.status(409).json({ ok: false, error: "It's being posted." });
     // 1.99sh: discarding a request still in flight withdraws its job too (if Pepe hasn't taken it yet)

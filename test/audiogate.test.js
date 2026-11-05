@@ -10,7 +10,7 @@
 //   * a WebRTC session the hook never saw (opened before a site restart) on a pad not open to everyone is ended on a change, and
 //     on the tick once the hook's ids are confirmed (or it was there before the first pass) - review F1; a kick that didn't land
 //     is tried again while MediaMTX lists it (F2); the hook asks the bridge perk too (F3)
-//   * a mic-stage capture's tap ends once with its viewer's access
+//   * a mic-stage capture's tap ends once with its viewer's access; a 🔊 mic-clip preview answers to the same rule (F4)
 //   TZ=UTC PEPE_BOT_DIR=G:/wt/casino2-bot node --test test/audiogate.test.js
 "use strict";
 const test = require("node:test");
@@ -461,7 +461,7 @@ test("hearNow: open pads answer without lookups; a sign-in that's gone counts as
   finally { SE.isLive = orig; }
 });
 
-// ── review fixes (access F1-F3, regression R1-R3) ──
+// ── review fixes (access F1-F4, regression R1-R3) ──
 /** what MediaMTX's path list says (webrtc.sync -> noteSync, every 5 s): {pad: [session ids]} - ONE listing for every pad */
 const listAll = (by) => RR.noteSync(Object.entries(by).map(([k, ids]) => ({ name: RR.pathFor(PADS[k].id), ready: true,
   readers: ids.map((id) => ({ type: "webRTCSession", id })) })));
@@ -671,5 +671,35 @@ test("R3: the periodic pass itself - started by register, every AUDIO_RECHECK_MS
     mock.timers.reset();
     bridge._audioRecheckStart();
     close(st);
+  }
+});
+
+test("F4: a 🔊 mic-clip preview of a pad plays (and shows its words) only while you may still hear the pad - removed from the Approved pad, it's refused; discarding still works", async () => {
+  const MC = require(path.join(repo, "micclip"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ag-mc-")); MC._setDir(dir);
+  const id = "w0123456789abcdef";
+  fs.writeFileSync(MC.fileOf(id), Buffer.from("fake-m4a-of-a-members-only-mic-turn"));
+  MC._clips.set(id, { id, roomId: PADS.app.id, slug: PADS.app.slug, userId: U.m1.userId, username: U.m1.username, login: "bobcf", tx: "t1",
+                      state: "ready", status: "ok", done: Date.now(), ts: Date.now(), secs: 3, text: "the words", viewerOk: true, cost: 0, save: null });
+  const base2 = "/api/rooms/" + PADS.app.slug + "/micclip/" + id;
+  const get = (p) => fetch(base + p, { headers: { "x-test-user": U.m1.userId } }).then(async (r) => ({ status: r.status, text: await r.text() }));
+  const jpost = (p) => fetch(base + p, { method: "POST", headers: { "x-test-user": U.m1.userId, "content-type": "application/json", "x-requested-with": "fetch" }, body: "{}" })
+    .then(async (r) => ({ status: r.status, d: await r.json().catch(() => null) }));
+  try {
+    assert.equal((await get(base2 + "/audio")).status, 200, "(a member: their own preview plays)");
+    assert.ok((await get(base2)).text.includes("the words"));
+    await PA.remove(U.owner, await R(PADS.app), U.m1.userId);
+    const au = await get(base2 + "/audio"), vw = await get(base2);
+    assert.equal(au.status, 403);
+    assert.equal(vw.status, 403);
+    assert.ok(!vw.text.includes("the words"));
+    const sv = await jpost(base2 + "/save");
+    assert.equal(sv.status, 403);
+    assert.equal(sv.d && sv.d.code, "no_access", JSON.stringify(sv.d));
+    assert.equal((await jpost(base2 + "/discard")).status, 200, "they can still throw it away");
+  } finally {
+    MC._clips.delete(id);
+    await runQuery("UPDATE pad_members SET status = 'approved' WHERE room_id = ? AND user_id = ?", [PADS.app.id, U.m1.userId]);
+    await PA.load();
   }
 });
