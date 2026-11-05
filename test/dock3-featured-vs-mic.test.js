@@ -149,7 +149,7 @@ test("server: /api/stage carries `featured` (live or not, the homepage / cam rul
   // (dock3 review 1.99akf: `home` - the front stage, or a Dock's own pad asked with home=1 - test/dock3-review-server.test.js)
   assert.match(br, /featured = await MS\.featuredOf\(R\.id, req\.user \|\| null, \{ front: home \}\)/);
   assert.match(br, /\} catch \(e\) \{ slots = \[\]; stale = true; \}/);
-  assert.match(br, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);
+  assert.match(br, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(next !== undefined \? \{ next \} : \{\}\), \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);
   assert.match(room, /featured: <%- JSON\.stringify\(RS\.featured \|\| null\)/);
   assert.match(hj, /stageFeatured = await require\("\.\/mainstage"\)\.featuredOf\(front\.id, viewer, \{ front: true \}\)/);
   assert.equal((home.match(/featured: locals\.stageFeatured \|\| null|featured: <%- JSON\.stringify\(locals\.stageFeatured \|\| null\)/g) || []).length, 2, "the Dock's init and the old switcher");
