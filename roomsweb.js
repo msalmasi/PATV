@@ -311,14 +311,19 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, ...(await stage.ownerState(R.id)), royalties: R.owner ? await royalties.status(R.id, R.owner.userId) : null });
     } catch (e) { fail(res, e); }
   });
-  app.post("/api/rooms/:slug/ban", addUser, needUser, jsonOnly, async (req, res) => {
+  // banfix (owner 2026-11-05: "I can't ban user boogie for some reason says no such user"): these two paths are ALSO padbans.js's
+  // person-menu ban / Lift (⛔ Website ban… - registered later, by bridge.js), and this route answered them all first: a {ref} body has no
+  // username -> mainstage.roomBan "No such user." (404), a Lift {ref, scope} / {entry} -> {ok: false} - for everyone, nothing written. The
+  // stage room-ban form here (room-manage.js) sends {username, reason} / {userId}; a ban sheet body ({ref} / {entry} / {scope}) goes on.
+  const sheetBody = (req, res, next) => { const b = req.body; return b && typeof b === "object" && (b.ref != null || b.entry != null || b.scope != null) ? next("route") : next(); };
+  app.post("/api/rooms/:slug/ban", sheetBody, addUser, needUser, jsonOnly, async (req, res) => {
     try {
       const R = await manageable(req, res); if (!R) return;
       const u = await stage.roomBan(R.id, (req.body || {}).username, (req.body || {}).reason, actor(req));
       res.json({ ok: true, username: u.username });
     } catch (e) { fail(res, e); }
   });
-  app.post("/api/rooms/:slug/unban", addUser, needUser, jsonOnly, async (req, res) => {
+  app.post("/api/rooms/:slug/unban", sheetBody, addUser, needUser, jsonOnly, async (req, res) => {
     try {
       const R = await manageable(req, res); if (!R) return;
       res.json({ ok: await stage.roomUnban(R.id, (req.body || {}).userId, actor(req)) });

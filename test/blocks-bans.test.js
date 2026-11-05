@@ -78,6 +78,11 @@ test.before(async () => {
   const app = express();
   const addUser = (req, res, next) => { const u = req.get("x-test-user"); req.user = u ? U[u] || null : null; next(); };
   const bySlug = (s) => (s === SLUG ? LR : null);
+  // banfix (owner 2026-11-05: "I can't ban user boogie ... says no such user"): the app is built the way index.js builds the site - its
+  // global JSON parser, roomsweb.js's routes (index.js), THEN bridge.js's padbans routes. The pad settings page's stage room-ban form
+  // (room-manage.js) owns the SAME paths, POST /api/rooms/:slug/ban + /unban, and answered every person-menu ban first.
+  app.use(express.json());
+  require(path.join(repo, "roomsweb")).register(app, { addUser, isBotToken: () => false });
   B.register(app, { addUser, bySlug });
   PB.register(app, { addUser, bySlug });
   await new Promise((r) => { server = app.listen(0, r); });
@@ -549,4 +554,102 @@ test("rework: the live view passes the viewer's frog-name block keys to dress; t
   assert.match(en["js.ban.scope_veil_sub"], /Every frog name they use here, now and later/);
   assert.match(en["js.block.veil_body"], /^Whatever frog name they use, in any pad: their lines are folded for you/);
   assert.match(en["js.block.veil_body"], /what they do under their own name doesn't change/);
+});
+
+// banfix (owner 2026-11-05, iPhone: "⛔ PATV account @Boogie · 🌐 web, no Camfrog link", Whole site, 7 days, "You know why", networks
+// ticked -> "No such user."): roomsweb.js's stage room-ban route (the pad settings page's form, {username} / {userId}) shares the paths
+// POST /api/rooms/:slug/ban + /unban with padbans.js and is registered first (index.js), so it answered EVERY person-menu ban - no
+// username in a {ref} body -> mainstage.roomBan "No such user." (404) - and every ↩️ Lift ({ok: false}, "Not changed."); nothing written.
+test("banfix: the site builds roomsweb.js's routes before bridge.js's padbans routes - this file's app is built in that order", () => {
+  const ix = fs.readFileSync(path.join(repo, "index.js"), "utf8"), br = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
+  const rw = ix.indexOf('require("./roomsweb").register(app'), bj = ix.indexOf("bridge.register(app");
+  assert.ok(rw > 0 && bj > 0 && rw < bj, "index.js: roomsweb.register, then bridge.register");
+  assert.match(br, /require\("\.\/padbans"\)\.register\(app, \{ addUser, bySlug \}\)/);
+  // (the shared paths: the pad settings page's stage room-ban form posts {username} / {userId}; the ban sheet {ref, scope, ...} / {entry})
+  assert.match(fs.readFileSync(path.join(repo, "public", "js", "room-manage.js"), "utf8"), /post\('\/api\/rooms\/' \+ encodeURIComponent\(slug\) \+ '\/unban', \{ userId: /);
+  const sheet = fs.readFileSync(path.join(repo, "public", "js", "pad-ban-sheet.js"), "utf8");
+  assert.match(sheet, /api\(base\(o\.slug\) \+ '\/unban', \{ ref: o\.ref, scope: scope \}\)/);
+});
+
+test("banfix: a WEB-ONLY account (@Boogie, no Camfrog link) - banned and lifted through the real routes at every scope the sheet offers, with and without its networks; a missing person still gets the right words", async () => {
+  const NB = require(path.join(repo, "netban"));
+  const MS = require(path.join(repo, "mainstage"));
+  const BOOGIE = "0d641146-163f-40bb-b9b9-e66ecf5a7942";
+  // (camfrogUsername '' - prod's row has it empty, not NULL)
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, class) VALUES (?, 'Boogie', 'Boogie', 'x', '', 'pleb')", [BOOGIE]);
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, class) VALUES ('adm-0001', 'boss', 'boss', 'x', NULL, 'Admin')");
+  U.adm = { userId: "adm-0001", username: "boss", class: "Admin", camfrogUsername: null };
+  await NB.init();                                   // (init reads the stored switch - turn it on after)
+  NB._setOn(true);
+  try {
+    await MS.init();
+    // Boogie's network (as the proxy hands it on: the socket is loopback, the address in CF-Connecting-IP)
+    await NB.note(BOOGIE, { socket: { remoteAddress: "127.0.0.1" }, get: (k) => (k.toLowerCase() === "cf-connecting-ip" ? "198.51.100.77" : "") }, "signin");
+    const rows = async (sql, args) => (await getQuery(sql, args)).length;
+    const state = async () => ({ site: await rows("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = ''", [BOOGIE]),
+                                 pad: await rows("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = ?", [BOOGIE, ROOM]),
+                                 bridge: await rows("SELECT 1 FROM bridge_blocks WHERE user_id = ? AND room_id = ? AND feature = 'all'", [BOOGIE, ROOM]),
+                                 stage: await rows("SELECT 1 FROM stage_room_bans WHERE userId = ?", [BOOGIE]) });
+    const want = { site: { site: 1, pad: 0, bridge: 0, stage: 0 }, pad: { site: 0, pad: 1, bridge: 1, stage: 0 }, bridge: { site: 0, pad: 0, bridge: 1, stage: 0 } };
+    const none = { site: 0, pad: 0, bridge: 0, stage: 0 };
+    const WHO = { kind: "account", title: "PATV account @Boogie", sub: "🌐 web, no Camfrog link" };
+    // the people list's 🌐 row (its PATV username) and a web line's account key - the two refs the page sends for a web poster
+    for (const ref of [{ k: "user", v: "Boogie" }, { k: "acct", v: "u:" + BOOGIE }]) {
+      PB._reset();
+      const pv = await post(`/api/rooms/${SLUG}/ban/preview`, "adm", { ref, scope: "bridge" });
+      assert.equal(pv.status, 200, JSON.stringify(pv.d));
+      assert.deepEqual(pv.d.who, WHO);
+      assert.deepEqual(pv.d.scopes, ["bridge", "pad", "site"]);
+      assert.deepEqual(pv.d.nets, { on: true, networks: 1, shared: 0, accounts: [] }, "No other account shares them.");
+      for (const scope of ["site", "pad", "bridge"]) {
+        for (const nets of [true, false]) {
+          PB._reset();
+          const t0 = Date.now();
+          const r = await post(`/api/rooms/${SLUG}/ban`, "adm", { ref, scope, dur: "7d", reason: "You know why", nets, exempt: [] });
+          const tag = `${ref.k} ${scope} nets=${nets}`;
+          assert.equal(r.status, 200, tag + ": " + JSON.stringify(r.d));
+          assert.equal(r.d.ok, true, tag); assert.equal(r.d.scope, scope, tag);
+          assert.deepEqual(r.d.who, WHO, tag);
+          assert.ok(r.d.until >= t0 + 7 * 86400e3 - 5000 && r.d.until <= Date.now() + 7 * 86400e3, tag + ": 7 days");
+          if (nets) assert.equal(r.d.nets && r.d.nets.networks, 1, tag); else assert.equal(r.d.nets, undefined, tag);
+          assert.deepEqual(await state(), want[scope], tag + ": the ban's own stores - never the stage form's");
+          const au = await getQuery("SELECT reason FROM admin_audit WHERE action = 'pad_ban' AND target_id = ? ORDER BY id DESC LIMIT 1", [BOOGIE]);
+          assert.equal(au[0] && au[0].reason, "You know why", tag + ": audited");
+          // ↩️ Lift - the sheet's {ref, scope}
+          const l = await post(`/api/rooms/${SLUG}/unban`, "adm", { ref, scope });
+          assert.equal(l.status, 200, tag + " lift: " + JSON.stringify(l.d));
+          assert.equal(l.d.ok, true, tag + " lift");
+          assert.deepEqual(await state(), none, tag + ": lifted");
+        }
+      }
+    }
+    // the pad's owner (not staff): a whole-pad ban and its Lift, through the same routes
+    PB._reset();
+    let r = await post(`/api/rooms/${SLUG}/ban`, "owner", { ref: { k: "user", v: "Boogie" }, scope: "pad", dur: "1d", reason: "" });
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    assert.equal((await post(`/api/rooms/${SLUG}/unban`, "owner", { ref: { k: "user", v: "Boogie" }, scope: "pad" })).d.ok, true);
+    assert.deepEqual(await state(), none);
+    // someone really missing: the ban sheet's own words (404) - nothing written, never the stage form's "No such user."
+    for (const ref of [{ k: "user", v: "nosuchperson" }, { k: "acct", v: "u:00000000-0000-0000-0000-000000000000" }]) {
+      for (const p of ["/ban/preview", "/ban", "/unban"]) {
+        PB._reset();
+        const m = await post(`/api/rooms/${SLUG}${p}`, "adm", { ref, scope: "site", dur: "7d", reason: "x" });
+        assert.deepEqual([m.status, m.d], [404, { ok: false, error: "That account isn't here any more." }], p + " " + ref.k);
+      }
+    }
+    PB._reset();
+    const noRef = await post(`/api/rooms/${SLUG}/ban`, "adm", { scope: "site", dur: "7d", reason: "x" });
+    assert.deepEqual([noRef.status, noRef.d.error], [404, "Who? Pick someone from the list."]);
+    // the pad settings page's stage room-ban form (room-manage.js) still owns ITS bodies on the same paths
+    r = await post(`/api/rooms/${SLUG}/ban`, "owner", { username: "Boogie", reason: "spam" });
+    assert.deepEqual([r.status, r.d], [200, { ok: true, username: "Boogie" }]);
+    assert.equal((await state()).stage, 1);
+    r = await post(`/api/rooms/${SLUG}/ban`, "owner", { username: "nosuchperson", reason: "x" });
+    assert.deepEqual([r.status, r.d], [404, { ok: false, error: "No such user." }], "the form's typed name: its own words");
+    r = await post(`/api/rooms/${SLUG}/unban`, "owner", { userId: BOOGIE });
+    assert.deepEqual([r.status, r.d], [200, { ok: true }]);
+    assert.deepEqual(await state(), none);
+  } finally {
+    NB._setOn(false);
+  }
 });
