@@ -44,6 +44,7 @@ const express = require("express");
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const PR = require("./personref");
 const SP = require("./siteperms");
+const SR = require("./staffrank");     // rankrule: the one rank rule (+ its words)
 
 const REASON_MAX = 120;
 const DUR = { "1h": 3600e3, "1d": 86400e3, "7d": 7 * 86400e3, perm: null };
@@ -178,8 +179,9 @@ async function rankRefusal(me, R, live, p) {
   const core = require("./siteperms-core");
   const t = (await getQuery("SELECT userId, class, camfrogUsername FROM users WHERE userId = ?", [String(p.userId)]))[0];
   if (!t) return null;
-  const mine = core.classRank(me), theirs = core.classRank(t);
-  if (theirs > 0 && theirs >= mine) return "You can't ban PATV staff of your rank or above.";
+  const mine = core.classRank(me);
+  // rankrule: the one rule (staffrank.js - the owner above every Admin; the same words on every route). "That's you." stays ban()'s.
+  if (await SR.decide(me, t, { self: false })) return SR.TEXT.rank;
   let owner = null;
   try { const r = await require("./rooms").get(R.id); owner = r && r.owner ? String(r.owner.userId) : null; } catch (e) { owner = null; }
   if (owner && owner === String(p.userId) && !mine) return "That's the pad's owner.";
@@ -241,10 +243,10 @@ async function ban(me, R, live, { ref, scope, dur, reason, nets = false, exempt 
     // stored as "bridge"; and "That's you" / "Pepe" are never answered for a veil (the same answer whoever is behind it)
     if (scope === "pad") scope = "bridge";
   } else {
-    if ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername))) throw new Refuse(400, "That's you.");
+    if ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername))) throw new SR.StaffRankError("self");   // rankrule: the shared words (en.json)
     if (p.userId && String(p.userId) === String(require("./feedstore").PEPE_ID)) throw new Refuse(400, "Pepe can't be banned.");
     const rk = await rankRefusal(me, R, live, p);
-    if (rk) throw new Refuse(403, rk);
+    if (rk) throw rk === SR.TEXT.rank ? new SR.StaffRankError("rank") : new Refuse(403, rk);
   }
   const until = DUR[dur] == null ? null : now() + DUR[dur];
   const room = scope === "site" ? "" : String(R.id);
@@ -312,6 +314,7 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, feat
     const [, login, sc] = e.split(":");
     if (!SCOPES.includes(sc)) throw new Refuse(400, "Which ban?");
     await need(me, R, live, sc);
+    if (me.camfrogUsername && low(login) === low(me.camfrogUsername)) throw new SR.StaffRankError("self");     // rankrule: never your own
     const room = sc === "site" ? "" : String(R.id);
     await runQuery("DELETE FROM pad_login_bans WHERE login = ? AND room_id = ? AND scope = ?", [low(login), room, sc]);
     if (room) await require("./rooms").event(room, "pad-unban", me.username, `Camfrog login ${low(login)} - ${sc}`);
@@ -323,6 +326,9 @@ async function unban(me, R, live, { ref = null, entry = null, scope = null, feat
   const p = await PR.resolve(ref, { R: live });
   if (p.error) throw new Refuse(404, p.error);
   if (p.veil) throw new Refuse(400, "Lift a frog name's ban from the pad's list of bans.");
+  // rankrule: you never lift your own ban (your account, or your own linked Camfrog login); a lift is never refused for rank
+  if ((p.userId && String(p.userId) === String(me.userId)) || (p.login && me.camfrogUsername && p.login === low(me.camfrogUsername))) throw new SR.StaffRankError("self");
+  if (p.userId) await SR.assert(me, p.userId, { lift: true });
   const room = scope === "site" ? "" : String(R.id);
   if (!p.userId) {
     await runQuery("DELETE FROM pad_login_bans WHERE login = ? AND room_id = ? AND scope = ?", [p.login, room, scope]);
@@ -467,7 +473,8 @@ function register(app, { addUser, bySlug = null }) {
   const guard = require("./middleware/authGuard");
   const liveOf = (slug) => { try { return (bySlug || ((s) => require("./bridge").bySlug(s)))(String(slug)); } catch (e) { return null; } };
   const fail = (res, e) => {
-    if (e && e.status && e.status < 500) return res.status(e.status).json(Object.assign({ ok: false, error: e.message }, e.choices ? { code: "ambiguous", choices: e.choices } : {}));
+    if (e && e.status && e.status < 500) return res.status(e.status).json(Object.assign({ ok: false, error: SR.msg(res, e) }, e.choices ? { code: "ambiguous", choices: e.choices } : {},
+                                                                                         e instanceof SR.StaffRankError ? { code: e.code } : {}));
     console.error("[padbans]", e); res.status(500).json({ ok: false, error: "Something went wrong - nothing changed." });
   };
   async function ctx(req, res, write) {

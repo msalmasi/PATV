@@ -6711,6 +6711,8 @@
   "js.settings.timezone.now": "Now: {time} ({zone})",
   "js.settings.timezone.failed": "Couldn't save your time zone - try again.",
   "err.bad_timezone": "That isn't a time zone we know.",
+  "staffrank.refused": "You can't do that to PATV staff of your rank or above.",
+  "staffrank.self": "That's you.",
   "economy.group.activity": "Activity rewards",
   "economy.page_title": "PAT Economy Guide",
   "economy.eyebrow": "THE PAT ECONOMY",

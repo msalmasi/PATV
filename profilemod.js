@@ -17,7 +17,8 @@
 //
 // Who sees the group at all (the existing rules, padbans.rankRefusal's): a signed-in viewer, never on their own profile or a visitor
 // preview, never on Pepe's / a Bot account, and never on PATV staff of the viewer's rank or above (an Assistant / Staff / Admin target
-// needs a viewer of a HIGHER class). The viewer's class is read fresh here. (Review fixes: never on a deleted / merged - archived -
+// needs a viewer of a HIGHER class; rankrule: staffrank.decide - the one rule every action's route uses - so the site's owner sees the
+// group on an Admin, and nobody on the owner). The viewer's class is read fresh here. (Review fixes: never on a deleted / merged - archived -
 // account, never on your own alt - the same linked Camfrog login, the ban route's "That's you." rule; the target's row is read fresh too.) What the menu says about the person (an active site ban, a
 // stage ban, creator status, a global bridge restriction, an uploaded cover, open reports) is only what the same capability already shows
 // in /admin - and only for the holder of that capability; never a veil (incognito) ban, never who shares their networks (that look is
@@ -48,12 +49,11 @@ async function eligible(viewer, target, { preview = false } = {}) {
   // account); your own alt (the same linked Camfrog login - the ban route's "That's you." rule) is you
   const them = (await getQuery("SELECT * FROM users WHERE userId = ?", [String(target.userId)]))[0];
   if (!them || them.archived_at) return null;
-  const low = (s) => String(s == null ? "" : s).trim().toLowerCase();
-  if (low(me.camfrogUsername) && low(me.camfrogUsername) === low(them.camfrogUsername)) return null;
   if (them.class === "Bot") return null;
-  const mine = core.classRank(me), theirs = core.classRank(them);
-  if (!mine) return null;                                                                   // (no capability reaches a member)
-  if (theirs > 0 && theirs >= mine) return null;                                            // staff of your rank or above
+  if (!core.classRank(me)) return null;                                                     // (no capability reaches a member)
+  // rankrule: the routes' own rule (staffrank.js) - your own alt (the same linked Camfrog login) is you; staff of your rank or above
+  // (the owner above every Admin) get no group
+  if (await require("./staffrank").decide(me, them)) return null;
   return me;
 }
 
