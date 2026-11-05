@@ -168,19 +168,45 @@ test("item 7: ✂️ Clip this message / 🔊 Clip the audio hand the line to ch
 });
 
 // ── items 5 / 21: the holder chips ──
-test("items 5, 21: a holder chip is [🎙][avatar][name + flair], says 'on the mic', and rings the one the mic stage says is talking; veiled: no ring, no flair", () => {
+test("items 5, 21 + dock3 item 2: a holder chip is [avatar][name + flair] (no 🎙 badge), says 'on the mic'; the bar's eq meter is the sign (.rmd-now.rmd-talk); rings the one talking; veiled: no ring, no flair", () => {
   let asked = [];
   const h = harness({ opts: { person: (u, o) => { asked.push(o); return null; } } });
   const d = F.initial(); h.controller.mic([]); asked = []; h.controller.mic(d.mic);
   const chips = h.doc.querySelectorAll(".rmd-holder");
   assert.ok(chips.length >= 1);
-  for (const c of chips) { assert.equal(c.firstChild.className, "rmd-mic-b"); assert.equal(c.firstChild.getAttribute("aria-hidden"), "true"); assert.match(c.textContent, /on the mic/); }
+  for (const c of chips) { assert.equal(c.querySelector(".rmd-mic-b"), null, "no 🎙 badge (dock3: 'that's pointless')"); assert.match(c.textContent, /on the mic/); }
+  // dock3 item 2 (owner: "I meant the one with the bars like we have in desktop"): the meter sits first in .rmd-now; rmd-talk while anyone holds the mic
+  const now = h.doc.querySelector(".rmd-now"); assert.ok(now, "the bar's now zone");
+  assert.equal(now.firstChild.className.split(" ")[0], "rb-meter", "the eq meter right before the holder chips");
+  assert.ok(now.classList.contains("rmd-talk"), "someone holds the mic: the bars show (and move without a real level)");
+  h.controller.mic([]); assert.equal(now.classList.contains("rmd-talk"), false, "nobody: no bars while paused");
+  const veiledOnly = d.mic.filter((u) => u.veil || u.anon);
+  if (veiledOnly.length) { h.controller.mic(veiledOnly); assert.ok(now.classList.contains("rmd-talk"), "a veiled holder counts too (the bars name nobody)"); }
+  h.controller.mic(d.mic);
   const named = d.mic.find((u) => !u.veil && !u.anon), veiled = d.mic.find((u) => u.veil || u.anon);
   assert.ok(asked.some((o) => o && o.flair === true), "a named holder is drawn with its flair");
   if (veiled) assert.ok(asked.some((o) => o && o.flair === false), "a veiled one without");
   h.controller.talking({ src: [{ id: "a", login: named.login, ring: true }, { id: "c", kind: "cover", ring: true }] });
   const ringed = h.doc.querySelectorAll(".rmd-holder.rmd-talking"); assert.equal(ringed.length, 1, "only the named holder the stage rings");
   h.controller.talking(null); assert.equal(h.doc.querySelectorAll(".rmd-holder.rmd-talking").length, 0);
+});
+
+test("dock3 item 2: the bars' CSS - shown with holders even while paused; animated only without a real level and only with motion allowed; a still shape otherwise; no 🎙 badge rules left", () => {
+  const css = read("public", "css", "pad-dock.css"), rb = read("public", "css", "room-bridge.css"), js = read("public", "js", "room-bridge.js");
+  assert.doesNotMatch(css, /rmd-mic-b/, "the 🎙 badge's rules are gone");
+  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio:not\(\.on\) \.rmd-now:not\(\.rmd-talk\) > \.rb-meter \{ display: none; \}/, "paused + nobody on the mic: hidden (1.99ajf)");
+  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio \.rmd-now\.rmd-talk > \.rb-meter \{ display: inline-flex; \}/);
+  const mq = css.indexOf("@media (prefers-reduced-motion: no-preference) {\n  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i { height: 14px;");
+  assert.ok(mq > 0, "the animation lives inside no-preference");
+  assert.ok(css.indexOf("animation: rmdEq") > mq, "rmdEq only there");
+  assert.equal(css.split("animation: rmdEq").length, 2, "one animation rule");
+  assert.match(css, /\.rmd-now\.rmd-talk > \.rb-meter:not\(\.rb-lvl\) > i:nth-child\(3\) \{ height: 14px; \}/, "the still eq shape (reduced motion)");
+  assert.match(css, /@keyframes rmdEq \{ from \{ transform: scaleY\(\.18\); \} to \{ transform: scaleY\(1\); \} \}/);
+  assert.match(css, /@media \(forced-colors: active\) \{ main\.rm\.rm-dock \.rb-meter > i \{ forced-color-adjust: none; background: CanvasText; \} \}/);
+  assert.match(rb, /\.rb-meter\.rb-nolvl \{ display: none; \}/, "iOS outside the Dock: hidden as before");
+  assert.match(js, /if \(IOS\) \{ meter\.classList\.add\('rb-nolvl'\); vol\.style\.display = 'none'; \}/, "no inline hide on iOS (an inline style beats every rule)");
+  assert.match(js, /var an = mode === 'rtc' \? rtcAnalyser : analyser;\n\s+lvl\(an && playing\);\n\s+if \(!an \|\| !playing\)/, "rb-lvl follows the analyser, before the early return");
+  assert.match(js, /playing = false; cancelAnimationFrame\(raf\);[^\n]*\n[^\n]*\n\s+bars\.forEach\(function \(b\) \{ b\.style\.height = ''; \}\); lvl\(false\);/, "stop() clears the last frame's heights and rb-lvl");
 });
 
 // ── item 15 / 17: the cam strip's size; a pinned cam pops out ──

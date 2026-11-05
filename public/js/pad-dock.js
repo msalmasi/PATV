@@ -762,16 +762,21 @@
       if (key !== null && key === holderKey) return;
       holderKey = key;
       holderBox.textContent = '';
-      // 1.99ajq dockpol (owner items 5, 21): a holder chip is [🎙][avatar][name + flair] at every width (the 🎙 is the "on the mic" sign phones
-      // lost with the On the mic card; the bar's eq meter is off on iOS and while paused); the flair shows whole when there is room, and
-      // talking() rings the avatar of the one the mic stage says is talking now. Veiled holders: a static 🎙, no flair, never a ring.
+      // 1.99ajq dockpol (owner items 5, 21): a holder chip is [avatar][name + flair] at every width; the flair shows whole when there is room,
+      // and talking() rings the avatar of the one the mic stage says is talking now. Veiled holders: no flair, never a ring.
+      // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... wasn't just a mic icon on the name - that's pointless. I meant the one
+      // with the bars like we have in desktop") 1.99??: the 🎙 badge is gone; the "on the mic" sign is the bar's eq meter right before the
+      // chips on EVERY device - .rmd-talk below: with a real level (desktop / Android playing) the analyser drives it as before; without one
+      // (iOS, paused, no analyser) it animates while someone holds the mic (pad-dock.css); a still eq shape under reduced motion.
       holders.slice(0, max).forEach(function (u) {
-        var chip = el('span', 'rmd-holder'), b = el('span', 'rmd-mic-b', '🎙'); b.setAttribute('aria-hidden', 'true'); chip.appendChild(b);
+        var chip = el('span', 'rmd-holder');
         var content = o.person(u, { flair: !(u && (u.veil || u.anon)) }); if (content) chip.appendChild(content);
         chip.appendChild(el('span', 'ds-sr-only', ' ' + t('on_mic_aria', 'on the mic')));
         chip._login = u && !u.veil && !u.anon && u.login ? String(u.login).toLowerCase() : null;
         holderBox.appendChild(chip); personLine(chip, u);
       });
+      // (before the flair fit: it measures the names with the meter showing)
+      if (nowBox) nowBox.classList.toggle('rmd-talk', holders.length > 0);
       paintTalking(); fitSoon(holderBox);
       if (holders.length > max) {
         var more = button('', 'more_holders', 'More people on the mic', participants, 'ds-btn quiet sm rmd-holder-more');

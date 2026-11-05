@@ -111,7 +111,7 @@ test("management and cosmetic entry points survive the Dock",async()=>{
 
 test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is one eight-token rule",()=>{
   const css=read("public/css/pad-dock.css").replace(/\/\*[\s\S]*?\*\//g,"");
-  const rules=[];function parse(s){let at=0;while(at<s.length){const open=s.indexOf("{",at);if(open<0)break;let d=1,end=open+1;while(end<s.length&&d){if(s[end]==="{")d++;if(s[end]==="}")d--;end++;}const selector=s.slice(at,open).trim(),body=s.slice(open+1,end-1);if(selector.startsWith("@"))parse(body);else if(selector)rules.push({selector,body});at=end;}}parse(css);
+  const rules=[];function parse(s){let at=0;while(at<s.length){const open=s.indexOf("{",at);if(open<0)break;let d=1,end=open+1;while(end<s.length&&d){if(s[end]==="{")d++;if(s[end]==="}")d--;end++;}const selector=s.slice(at,open).trim(),body=s.slice(open+1,end-1);if(selector.startsWith("@keyframes")){/* (dock3: a keyframes block has steps, not selectors) */}else if(selector.startsWith("@"))parse(body);else if(selector)rules.push({selector,body});at=end;}}parse(css);
   assert.ok(rules.length>10);
   for(const r of rules) {
     // (1.99ajh dockpop: + the chat window's body, and the person menu's Dock look while the chat floats off Live or is in its own window)

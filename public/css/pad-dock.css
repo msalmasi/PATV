@@ -580,8 +580,8 @@ main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-
   border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--ds-r-md); }
 main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play)[aria-expanded="true"] { background: var(--ds-hover); }
 main.rm.rm-dock #rmAudioBox .rb-play { color: var(--ds-ac-2); font-size: var(--ds-fs-lead); }
-/* paused: no "live" eq dots */
-main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rb-meter { display: none; }
+/* paused: no "live" eq dots - unless someone holds the mic (dock3 1.99??: then they are the "on the mic" bars, below) */
+main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rmd-now:not(.rmd-talk) > .rb-meter { display: none; }
 /* the people column / sheet: one 36px line, [avatar][name + flair][🎙][📷][⋯] - three fixed slots so the icons line up in columns;
    the flair gives way first (to its emoji alone in a narrow row), then the name */
 main.rm.rm-dock #rmPeople > li { container-type: inline-size; grid-template-columns: 28px minmax(0, 1fr) auto; column-gap: var(--ds-sp-1); }
@@ -909,13 +909,11 @@ main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { block-size: 100%; }
 @media (max-width: 760px) { main.rm.rm-dock #rmStrip > .rmd-pin-size { flex-direction: column; padding: 1px; } main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz { min-block-size: 14px; min-inline-size: 28px; font-size: 10px; } }
 main.rm.rm-dock #rmStrip > .rmd-placeholder { flex: none; align-self: center; padding: var(--ds-sp-1) var(--ds-sp-2); font-size: var(--ds-fs-xs); }
 
-/* (items 5, 21) a holder chip: [🎙][avatar][name + flair] - the 🎙 at every width; a ring on the avatar of the one talking now (static under
-   reduced motion); the flair gives way first (to its emoji), then the name */
+/* (items 5, 21) a holder chip: [avatar][name + flair] (dock3 1.99??: the 🎙 badge is gone - the eq meter before the chips is the "on the mic"
+   sign); a ring on the avatar of the one talking now (static under reduced motion); the flair gives way first (to its emoji), then the name */
 main.rm.rm-dock .rmd-holders > .rmd-holder { gap: var(--ds-sp-1); }
-main.rm.rm-dock .rmd-holder > .rmd-mic-b { flex: none; display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 50%; background: var(--ds-ac-bg); box-shadow: inset 0 0 0 1px var(--ds-ac-line); font-size: 10px; line-height: 1; }
 main.rm.rm-dock .rmd-holder > .rmd-person { flex: 0 1 auto; min-inline-size: 0; }
 main.rm.rm-dock .rmd-holder.rmd-talking .av { box-shadow: 0 0 0 2px var(--ds-surface), 0 0 0 4px var(--ds-ac); }
-main.rm.rm-dock .rmd-holder.rmd-talking > .rmd-mic-b { background: var(--ds-ac); color: var(--ds-on-ac); }
 main.rm.rm-dock .rmd-holders .rmd-person-name > .ufl { flex: 0 100000 auto; }
 main.rm.rm-dock .rmd-holders .rmd-person-name > :is(.who, .who-web) { flex: 0 1 auto; min-inline-size: 4ch; }
 @media (min-width: 1024px) { main.rm.rm-dock .rmd-holders > * { max-inline-size: min(45%, 320px); } }
@@ -1037,11 +1035,8 @@ main.rm.rm-dock #rmPeople .ic:not(:has(> .rmd-mic, > .cam, > span:not(.rmd-mic))
   main.rm.rm-dock #rmPeople .ic > .pm-mg { inline-size: 36px; min-inline-size: 36px; }
   main.rm.rm-dock #rmPeople .ic:not(:has(> .rmd-mic, > .cam, > span:not(.rmd-mic))) { grid-template-columns: 36px; }
 }
-/* (items 5 / 21) a holder chip's 🎙 is a badge on the avatar's corner - it takes no width from the name (an 18px disc before the avatar had
-   cut "Aster Fable" to "Aster …" on a phone); one holder may use the whole zone (no "+N" to keep room for) */
+/* (items 5 / 21) one holder may use the whole zone (no "+N" to keep room for) */
 main.rm.rm-dock .rmd-holders > .rmd-holder { position: relative; }
-main.rm.rm-dock .rmd-holder > .rmd-mic-b { position: absolute; inset-inline-start: 12px; inset-block-end: 0; z-index: var(--ds-z-raised); inline-size: 14px; block-size: 14px; font-size: 8px;
-  background: var(--ds-surface-2); box-shadow: inset 0 0 0 1px var(--ds-ac-line), 0 0 0 1px var(--ds-surface); pointer-events: none; }
 @media (max-width: 1023px) { main.rm.rm-dock .rmd-holders > * { max-inline-size: 100%; } }
 /* (item 15) a phone's cam row: ONE size button (it opens the four as a menu) instead of four 14px radios stacked beside a 64px row; wider
    screens keep the seg (and never show the button) */
@@ -1091,7 +1086,6 @@ body.pad-dock-live.rmd-nav-off main.rm.rm-dock .rmd-ov-top > .rmd-nav-back { dis
   main.rm.rm-dock .rmd-holder.rmd-talking .av { outline: 2px solid Highlight; outline-offset: 1px; }
   main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz[aria-checked="true"] { outline: 2px solid Highlight; outline-offset: -3px; }
   main.rm.rm-dock .rmd-log .line[data-la-open] { outline: 2px solid Highlight; outline-offset: -2px; }
-  main.rm.rm-dock .rmd-holder > .rmd-mic-b { border: 1px solid CanvasText; }
 }
 
 /* ── 1.99ajw casino2: 📼 Play from Plex in a Dock sheet (pad-dock.js plexSheet; plex-play.js - the flow /stage runs) ── */
@@ -1288,3 +1282,23 @@ main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot > :is(.rmd-icon[aria-disabled="tr
 /* (verify: the stage in fullscreen with 💬 Show chat - the chat ends above the stage's bar, so ⏯ / 🔉 / 🖥️ Exit fullscreen / ⋯ stay in reach) */
 main.rm.rm-dock .rmd-fullscreen:has(> .rmd-full-media > #rmStage) > .rmd-overlay { inset-block-end: calc(var(--ds-sp-2) + 52px); }
 @media (forced-colors: active) { main.rm.rm-dock :is(.rmd-npbar, #rmdNp) { border: 1px solid CanvasText; } }
+
+/* ── dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... I meant the one with the bars like we have in desktop") 1.99??: the bar's
+   eq meter is the "on the mic" sign on every device - .rmd-now.rmd-talk = someone holds the mic (pad-dock.js mic()). With a real level
+   (.rb-lvl: the analyser, desktop / Android while playing) it draws that level, as before; without one (iOS - no Web Audio there, paused, no
+   analyser) the bars move by themselves while someone holds the mic; under reduced motion a still eq shape. Nobody on the mic: hidden while
+   paused (1.99ajf), the real level while playing (hidden on iOS - room-bridge.css .rb-nolvl). ── */
+main.rm.rm-dock #rmAudioBox .rb-audio .rmd-now.rmd-talk > .rb-meter { display: inline-flex; }
+main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i { transition: none; }
+main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:is(:nth-child(1), :nth-child(5)) { height: 5px; }
+main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:is(:nth-child(2), :nth-child(4)) { height: 9px; }
+main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(3) { height: 14px; }
+@media (prefers-reduced-motion: no-preference) {
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i { height: 14px; transform-origin: 50% 100%; transform: scaleY(.18); animation: rmdEq .9s ease-in-out infinite alternate; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(2) { animation-duration: .62s; animation-delay: -.25s; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(3) { animation-duration: .8s; animation-delay: -.5s; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(4) { animation-duration: .7s; animation-delay: -.15s; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(5) { animation-duration: 1.05s; animation-delay: -.4s; }
+}
+@keyframes rmdEq { from { transform: scaleY(.18); } to { transform: scaleY(1); } }
+@media (forced-colors: active) { main.rm.rm-dock .rb-meter > i { forced-color-adjust: none; background: CanvasText; } }
