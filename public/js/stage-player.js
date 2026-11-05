@@ -157,6 +157,16 @@
     return { stats: function () { return { rebuffers: st.rebuffers, jumps: st.jumps, margin: st.margin, rate: st.rate, lead: st.lead, low: st.low, td: st.td }; } };
   }
 
+  // 1.99?? dockmedia (owner item 2): the Room Dock draws its own play / pause / volume / LIVE bar - PATVStage.nativeControls === false (set by
+  // pad-dock.js before its players start; setNativeControls(on) tells the running ones) leaves video.js's control bar off: no bar under the
+  // Dock's, no click-to-pause, no second fullscreen. Everywhere else (/stage, a pad without the Dock) the default is ON, as before.
+  var running = [];
+  function nativeOn() { return !(window.PATVStage && window.PATVStage.nativeControls === false); }
+  function setNativeControls(on) {
+    window.PATVStage = window.PATVStage || {};
+    window.PATVStage.nativeControls = !!on;
+    running.forEach(function (x) { try { x.controls(!!on); } catch (e) { /* disposed */ } });
+  }
   // 1.99zc: Safari (any WebKit with Apple's HLS) plays HLS natively; everything else uses VHS (MSE)
   function nativeHls() {
     var B = window.videojs && window.videojs.browser;
@@ -182,9 +192,10 @@
       var v = document.createElement('video-js');
       if (o.id) v.id = o.id;
       v.className = 'video-js vjs-default-skin';
-      v.setAttribute('playsinline', ''); v.setAttribute('controls', ''); v.setAttribute('muted', '');
+      var ctl = nativeOn();
+      v.setAttribute('playsinline', ''); if (ctl) v.setAttribute('controls', ''); v.setAttribute('muted', '');
       o.wrap.appendChild(v);
-      p = videojs(v, { muted: true, autoplay: true, liveui: true, fluid: false, preload: 'auto',
+      p = videojs(v, { controls: ctl, muted: true, autoplay: true, liveui: true, fluid: false, preload: 'auto',
                        // 1.99fd: VHS may play inside the last 3 segments; liveSync decides how close
                        // 1.99zc: except on Safari (macOS / iOS / iPadOS): its own HLS player (overrideNative off there -
                        // video.js's own default). VHS-over-MSE was forced on Safari, where Apple's player is the reliable
@@ -192,6 +203,7 @@
                        html5: { vhs: { overrideNative: !nativeHls(), enableLowInitialPlaylist: true, allowSeeksWithinUnsafeLiveWindow: true },
                                 nativeAudioTracks: nativeHls(), nativeVideoTracks: nativeHls() } });
       sync = liveSync(p);
+      running.push(p);
       hookGlobal(); hookPlayer(p);
       p.src({ src: SRC, type: 'application/x-mpegURL' });
       p.on('error', scheduleRetry);
@@ -204,7 +216,7 @@
     function stop() {
       clearTimeout(retry); retry = null; reconnecting(false);
       if (o.unmute) o.unmute.classList.add('hide');
-      if (p) { try { p.dispose(); } catch (e) {} p = null; }
+      if (p) { var was = p; running = running.filter(function (x) { return x !== was; }); try { p.dispose(); } catch (e) {} p = null; }
       sync = null;
     }
     if (o.unmute) {
@@ -233,6 +245,7 @@
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.player = player;
   window.PATVStage.liveSync = liveSync;
+  window.PATVStage.setNativeControls = setNativeControls;      // 1.99?? dockmedia
   window.PATVStage._pt = { withPt: withPt, notePt: notePt, addQ: addQ };   // tests
   window.PATVStage._nativeHls = nativeHls;
   window.PATVStage._live = { step: liveStep, state: liveState, rebuffered: rebuffered, LIVE: LIVE };   // tests

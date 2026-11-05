@@ -107,7 +107,8 @@
       mode = 'rtc'; note = '';
       hls.stop();
       video = doc.createElement('video');
-      video.className = 'rtc-video'; video.muted = true; video.autoplay = true; video.playsInline = true; video.controls = true;
+      // (1.99?? dockmedia: no native controls under the Room Dock's own bar - PATVStage.nativeControls, stage-player.js; on everywhere else)
+      video.className = 'rtc-video'; video.muted = true; video.autoplay = true; video.playsInline = true; video.controls = !(window.PATVStage && window.PATVStage.nativeControls === false);
       video.setAttribute('playsinline', '');
       o.wrap.appendChild(video);
       on(video, 'pause', applyIdle);
