@@ -4898,6 +4898,35 @@
    "keywords": []
   },
   {
+   "id": "camdelay",
+   "title": "!camdelay on|off|<ms>",
+   "category": "stage",
+   "role": "admin",
+   "commands": [
+    "!camdelay"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!camdelay",
+    "!camdelay on|off",
+    "!camdelay <ms>"
+   ],
+   "summary": "Delay Pepe's Camfrog picture only while an on-air pick with sound plays, so it meets the sound Camfrog hears late - or keep it real time.",
+   "details": "Camfrog hears an on-air pick's sound about a second late, so Pepe holds his Camfrog picture back by the same amount **only while a pick with sound is on air** (a stream, a Plex play, a YouTube / Twitch link, a live page with sound). His stream on publicaccess.tv and Twitch is never delayed. When the delay starts, Camfrog's picture repeats about that long once; when it ends (a few seconds after the pick) it jumps ahead. `!camdelay off` keeps Pepe's Camfrog cam real time all the time, at once even mid-pick; `!camdelay on` turns the delay back on with the same length. `!camdelay 1100` sets the length in ms (0-5000, 0 = none). `!camdelay` shows the setting and whether it's delayed right now. Saved across restarts; also in the admin panel (Pepe's camera).",
+   "examples": [
+    "!camdelay",
+    "!camdelay off",
+    "!camdelay 1200"
+   ],
+   "keywords": [
+    "camfrog delay",
+    "lip sync",
+    "audio sync",
+    "on-air delay",
+    "virtual camera"
+   ]
+  },
+  {
    "id": "scene",
    "title": "!scene [name] · !scenes",
    "category": "stage",
@@ -8545,5 +8574,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "50bdca38e0725623"
+ "hash": "d1b2de432a976367"
 }
