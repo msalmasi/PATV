@@ -147,6 +147,16 @@
   .pf .actions .fw-btn { min-height: 36px; padding: 0 var(--ds-sp-4); border-radius: var(--ds-r-pill); font: 700 13.5px/1.1 var(--ds-font); }
   .pf .actions .pf-msg { border-color: var(--ds-green-line); }
   .pf .pf-menu .pf-report:hover, .pf .pf-menu .pf-report:focus-visible { color: var(--ds-danger) !important; }
+  /* profmod: the ⋯ menu's Admin group - the chat person menu's look (person-sheet.css .pm-pop-gh heading, red ink on the destructive items,
+     room-mod.css .pm-pop-i.danger); what is already in force is a muted second line on the item that changes it (two lines at most) */
+  .pf .pf-more:has(.pf-mod-gh) .pf-menu { min-width: 256px; max-width: min(320px, calc(100vw - 32px)); }
+  .pf .pf-menu .pf-danger { color: var(--ds-danger-ink, #ffcdcd) !important; }
+  .pf .pf-menu .pf-danger:hover, .pf .pf-menu .pf-danger:focus-visible { background: var(--ds-danger-fill, #2a1010); color: var(--ds-danger-ink, #ffcdcd) !important; }
+  .pf .pf-menu .pf-mod-gh { margin: 4px 2px 2px; text-align: start; }
+  .pf .pf-menu .pf-mod-2 { flex-wrap: wrap; align-content: center; row-gap: 1px; padding-block: 6px; }
+  .pf .pf-menu .pf-mod-sub { flex-basis: 100%; padding-inline-start: 1.65em; font-size: var(--ds-fs-meta); line-height: 1.3; color: var(--ds-text-muted); white-space: normal; overflow-wrap: anywhere;
+                             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pf .pf-menu .pf-mod-n { margin-inline-start: auto; padding-inline-start: var(--ds-sp-2); color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
   .pf .tj-new { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ds-badge); color: #fff; font: 700 11px/18px var(--ds-font); font-variant-numeric: tabular-nums; }
   .pf .pf-more { position: relative; }
   /* 1.99jg: an open ⋯ More menu sits above the cards after it (padfx.css makes a framed box its own stacking context) */
@@ -248,6 +258,10 @@
     .pf .ps.lv { flex-basis: 100%; order: 9; }
     .pf .ps b { font-size: 16px; }
     .pf .pf-menu { inset-inline-start: auto; inset-inline-end: 0; }
+    /* profmod: with the Admin group the menu hangs from the whole actions row (the card's width), never past the screen's edge */
+    .pf .actions:has(.pf-mod-gh) { position: relative; }
+    .pf .actions:has(.pf-mod-gh) > .pf-more { position: static; }
+    .pf .pf-more:has(.pf-mod-gh) .pf-menu { inset-inline: 0; min-width: 0; max-width: none; }
     .pf .pf-tab { padding: 0 var(--ds-sp-3h); }
     .pf .gtf { grid-template-columns: auto minmax(0, 1fr); }
     .pf .gtf > .btn { grid-column: 1 / -1; justify-self: start; }
@@ -351,8 +365,31 @@
             <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
             <%# 1.99ajn padppl: 🚫 Block / ✅ Unblock (blocks.js, the same block as the DM header's) - signed-in visitors, never on Pepe %>
             <% const pb_ = locals.profileBlock; if (pb_) { %><% if (!soc) { %><hr><% } %><button type="button" role="menuitem" class="pf-report" data-block-ref="<%= JSON.stringify({ k: 'user', v: usernameProfile }) %>" data-block-name="@<%= usernameProfile %>" data-block-who="<%= t('js.block.kind_account', { name: usernameProfile }) + (locals.camfrog ? ' · ' + t('js.block.kind_login', { login: locals.camfrog }) : '') %>" data-block-on="<%= pb_.blocked ? '0' : '1' %>"><%- pb_.blocked ? t('profile.menu.unblock', { name: t.esc(usernameProfile) }) : t('profile.menu.block', { name: t.esc(usernameProfile) }) %></button><% } %>
+            <%# profmod: the Admin group (profilemod.js) - the existing per-account staff actions this viewer's class holds, each gated by its
+                route's own capability (the route checks again); never on your own profile, a preview, Pepe, or staff of your rank or above.
+                Buttons open in-page confirm sheets (profile-mod.js); what's already in force is the second line of the item that changes it. %>
+            <% const pm_ = locals.profileMod; if (pm_ && pm_.may) { const mm_ = pm_.may;
+                 const pmWho_ = t('js.block.kind_account', { name: usernameProfile }) + (locals.camfrog ? ' · ' + t('js.block.kind_login', { login: locals.camfrog }) : '');
+                 const pmCfg_ = { u: usernameProfile, id: pm_.userId, ref: pm_.ref, slug: pm_.slug, who: pmWho_, siteBan: pm_.siteBan, stageBan: pm_.stageBan,
+                                  creator: pm_.creator, bridge: pm_.bridge };
+                 const pmUtc_ = (ms) => new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+                 const pmUntil_ = (u) => (u ? t('profile.mod.until', { when: pmUtc_(u) }) : t('profile.mod.until_lifted'));
+                 const pmSub_ = (txt) => '<small class="pf-mod-sub">' + txt + '</small>';   // (txt: t() output / escaped - HTML-safe) %>
+              <div class="pm-pop-gh pf-mod-gh" role="presentation" data-pfmod-cfg="<%= JSON.stringify(pmCfg_) %>"><%- t('profile.mod.heading') %></div>
+              <% if (mm_.siteban) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="siteban">⛔ <%- t('profile.mod.siteban') %></button><% } %>
+              <% if (mm_.siteban && pm_.siteBan) { %><button type="button" role="menuitem" class="pf-mod-2" data-pfmod="lift">↩️ <%- t('profile.mod.lift_site') %><%- pmSub_(pmUntil_(pm_.siteBan.until) + (pm_.siteBan.reason ? ' · ' + t.esc(pm_.siteBan.reason) : '')) %></button><% } %>
+              <% if (mm_.bridge) { const pmWhat_ = pm_.bridge ? pm_.bridge.features.map((f) => t('profile.mod.f_' + (/^(all|chat|commands|soundboard|voice|snapshots|livecams|clips)$/.test(f) ? f : 'all'))).join(', ') : ''; %><button type="button" role="menuitem"<%- pm_.bridge ? ' class="pf-mod-2"' : '' %> data-pfmod="bridge">🌐 <%- t('profile.mod.bridge') %><% if (pm_.bridge) { %><%- pmSub_(t('profile.mod.bridge_now', { what: pmWhat_ }) + ' · ' + pmUntil_(pm_.bridge.until)) %><% } %></button><% } %>
+              <% if (mm_.stage) { %><% if (pm_.stageBan) { %><button type="button" role="menuitem" class="pf-mod-2" data-pfmod="unstage">↩️ <%- t('profile.mod.unstage') %><%- pmSub_(pm_.stageBan.reason ? t.esc(pm_.stageBan.reason) : t('profile.mod.until_lifted')) %></button><% } else { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="stage">🎬 <%- t('profile.mod.stage') %></button><% } %><% } %>
+              <% if (mm_.creator) { const pmCr_ = /^(active|paused|banned|pending)$/.test(pm_.creator.status) ? pm_.creator.status : 'active'; %><button type="button" role="menuitem" class="pf-mod-2" data-pfmod="creator">⭐ <%- t('profile.mod.creator') %><%- pmSub_(t('profile.mod.cr_' + pmCr_)) %></button><% } %>
+              <% if (mm_.cover) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="cover">🖼️ <%- t('profile.mod.cover') %></button><% } %>
+              <% if (mm_.signout) { %><button type="button" role="menuitem" class="pf-danger" data-pfmod="signout">🔐 <%- t('profile.mod.signout') %></button><% } %>
+              <% if (mm_.details) { %><button type="button" role="menuitem" data-safety="details" data-user-id="<%= pm_.userId %>">🔍 <%- t('profile.mod.details') %></button><% } %>
+              <% if (mm_.reports && pm_.reports > 0) { %><a role="menuitem" href="/feed/admin#users">⚑ <%- t('profile.mod.reports') %><span class="pf-mod-n"><%= pm_.reports %></span></a><% } %>
+              <% if (mm_.account) { %><a role="menuitem" href="/admin/accounts?u=<%= enc %>">🗂️ <%- t('profile.mod.account') %></a><% } %>
+              <% if (mm_.comp) { %><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
+            <% } %>
           <% } %>
-          <% if (typeof viewerIsAdmin !== 'undefined' && viewerIsAdmin) { %><hr><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
+          <% if (typeof viewerIsAdmin !== 'undefined' && viewerIsAdmin && !(locals.profileMod && locals.profileMod.may && locals.profileMod.may.comp)) { %><hr><a role="menuitem" href="/admin/comps?user=<%= enc %>">🎁 <%- t('profile.menu.comp') %></a><% } %>
         </div>
       </details>
     </div>
@@ -541,6 +578,9 @@
 </div>
 <% } %>
 <script src="/public/js/profile-tabs.js?v=3" defer></script>
-<% if (locals.profileBlock) { %><link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3" defer></script><% } %>
+<% if (locals.profileBlock || locals.profileMod) { %><link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3" defer></script><% } %>
+<%# profmod: the Admin group's sheets - the ⛔ ban sheet (scope site only) + profile-mod.js; 🔍 details is feed-safety.js's (loaded by the
+    follow partial's Report item when the profile has its social block - never twice, or one click opens two panels) %>
+<% if (locals.profileMod) { %><script src="/public/js/pad-ban-sheet.js?v=4" defer></script><script src="/public/js/profile-mod.js?v=1" defer></script><% if (profileMod.may && profileMod.may.details && !soc) { %><script src="/public/js/feed-safety.js?v=4" defer></script><% } %><% } %>
 </body>
 </html>

@@ -1799,6 +1799,9 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         profileVault,
         vaultView: vr.vault,      // 1.99vy: /u/<name>/vault - the header, the tab bar and the vault card, nothing else
         viewerIsAdmin: SP.can(req.user, "comps.manage") && !preview,      // 1.99ma: the ⋯ menu's "🎁 Comp…" (admins: /admin/comps?user=)
+        // profmod: the ⋯ menu's "Admin" group - the existing per-account staff actions this viewer's class holds (profilemod.js: never on
+        // your own profile / a preview / Pepe, never on staff of your rank or above; each action's own route checks again)
+        profileMod: await require("./profilemod").forProfile(req.user, user, { preview }).catch((e) => { console.error("profile mod:", e.message); return null; }),
         // 1.99qp: ⭐ PATV Creators on the profile - the Creator chip + Subscribe (their creator page), the owner's dashboard /
         // "Become a creator" link; nothing while the feature is off
         creatorProfile: (() => { try { const CR = require("./creators"); const on = !!CR.config().enabled;
