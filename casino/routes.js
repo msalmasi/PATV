@@ -32,12 +32,12 @@ const svc = require("./service");
 const rewards = require("./rewards");
 
 const WEB_VERBS = new Set(["bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
-                           "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin"]);
+                           "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand"]);
 const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
                            "sit", "buyin", "buy", "join", "cashout", "next", "check", "call", "fold", "allin", "all-in", "raise", "cards",
-                           "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert"]);
+                           "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand"]);
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
 
@@ -112,6 +112,12 @@ async function history(tableId, limit) {
 
 function register(app, { isBotToken, addUser }) {
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
+  app.get("/api/casino/me/hands", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ok:false,error:"Sign in to view your hands."});
+    try { res.json({ok:true,hands:await svc.myHands(req.user.userId,req.query.limit)}); }
+    catch (e) { console.error("[casino] my hands:",e); res.status(500).json({ok:false,hands:[]}); }
+  });
   const boot = () => svc.boot().catch((e) => console.error("[casino] boot:", e));
   setImmediate(boot);
 

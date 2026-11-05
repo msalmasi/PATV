@@ -169,6 +169,8 @@
         <% }) %>
       </div>
       <div class="dock-row" id="cz-misc">
+        <button type="button" class="cz-btn ghost sm" id="cz-myhandsbtn"><%- t('casino.my_hands') %></button>
+        <label id="cz-showlabel"><input type="checkbox" id="cz-showhand"> <%- t('casino.show_hand') %></label>
         <button type="button" class="cz-btn gold" id="cz-sit" hidden><%- t('casino.sit_down') %></button>
         <button type="button" class="cz-btn green sm" id="cz-deal" hidden><%- t('casino.deal_now') %></button>
         <button type="button" class="cz-btn ghost sm" id="cz-topup" hidden><%- t('casino.top_up') %></button>
@@ -194,9 +196,18 @@
     </div>
   </dialog>
   <%- include('partials/casino-chat', { t }) %>
+  <dialog class="sheet" id="cz-myhands" aria-labelledby="cz-myhands-h">
+    <div class="sheet-h"><h2 id="cz-myhands-h"><%- t('casino.my_hands') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
+    <div class="sheet-b">
+      <label for="cz-handselect"><%- t('casino.choose_hand') %></label><select id="cz-handselect"></select>
+      <div id="cz-replay" aria-live="polite"></div>
+      <div class="dock-row"><button type="button" class="cz-btn ghost sm" id="cz-replayprev"><%- t('casino.previous_action') %></button><button type="button" class="cz-btn ghost sm" id="cz-replaynext"><%- t('casino.next_action') %></button></div>
+      <p class="fine"><%- t('casino.muck_note') %></p>
+    </div>
+  </dialog>
   <% } %>
 </main>
 <% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99ajw casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
 <script src="/public/js/casino-ui.js?v=8"></script>
 <script src="/api/casino/sizing.js?v=1"></script>
-<script src="/public/js/casinohm.js?v=8"></script>
+<script src="/public/js/casinohm.js?v=9"></script>

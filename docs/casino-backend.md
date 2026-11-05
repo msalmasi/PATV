@@ -1,5 +1,36 @@
 # Casino backend: blackjack and hold'em on the site
 
+## Own hands and show / muck (handoff 21, phase 2)
+
+`GET /api/casino/me/hands?limit=20` requires a signed-in account, uses that account
+as the membership filter, caps the list at twenty across Hold'em tables, and sends
+`Cache-Control: no-store`. It returns own hole cards, board, proof, shown cards,
+pot awards, net stack change and ordered replay steps. Opponents' unshown cards
+and internal account keys are omitted. Labels and seats pass through
+`casino/veil.js`'s round masking, including its saved-table and fail-closed paths.
+
+`casino_actions` gains one additive nullable `replay` column. One internal record
+per new completed hand (`hm-replay:<table>:<hand>`) stores masked-at-the-time
+participant labels, account keys for membership and replay association, initial
+stacks, and event steps `{uid,action,amount,street,board,pot,stacks}`. Its ordinary
+idempotency response is only `{ok:false}`; private metadata is never returned by
+the idempotency lookup. Replay writes use `dbUtils.tx`; the table JSON journals
+the in-progress replay with the existing hand state. No hole cards are duplicated:
+the caller's cards are reconstructed from the existing revealed deck and deal order.
+The existing action/round retention is unchanged. Older hands have cards and proof,
+but an empty replay and unknown net change.
+
+`showhand on|off` (`1|0` from the page) sets a per-player, per-table preference,
+default off. Showdown winners are always public; losers are shown only by choice.
+The private full showdown still feeds achievements, which remain unchanged. The
+table summary, log and room event all use the filtered reveal. Mucking is display
+only: the unchanged fairness proof reveals the deck afterwards.
+
+The web's My hands sheet steps action-by-action through board, pot and stacks;
+public showdown cards appear at its final step. Camfrog's existing worker routes
+`!sitout`, `!sitin [post]`, `!pre <kind>`, `!checkfold` and `!callany` to Hold'em.
+Sizing expressions continue through the existing raw-argument path.
+
 ## Hold'em quality of life (handoff 21, phase 1)
 
 The engine, rake, escrow keys and fairness proof are unchanged. The service stores

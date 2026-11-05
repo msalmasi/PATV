@@ -94,6 +94,8 @@ function ensure() {
       PRIMARY KEY (table_id, round_no))`);
     await runQuery(`CREATE TABLE IF NOT EXISTS casino_actions (
       key TEXT PRIMARY KEY, table_id TEXT, userId TEXT, response TEXT, created INTEGER)`);
+    const actionColumns = await getQuery("PRAGMA table_info(casino_actions)");
+    if (!actionColumns.some((c) => c.name === "replay")) await require("../dbUtils").tx(() => runQuery("ALTER TABLE casino_actions ADD COLUMN replay TEXT"));
     await runQuery(`CREATE TABLE IF NOT EXISTS casino_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)`);
     const m = await getQuery("SELECT MAX(seq) AS s FROM casino_events");
     S.lastSeq = (m[0] && m[0].s) || 0;
@@ -1403,6 +1405,40 @@ async function fairRecord(tableId, round) {
   return rec;
 }
 
+/** Signed-in player's own last hands. Raw account ids and unshown opponent cards never leave here. */
+async function myHands(uid, limit) {
+  await ensure();
+  if (!uid) return [];
+  const rows = await getQuery(`SELECT r.*, a.replay FROM casino_rounds r
+    JOIN casino_tables t ON t.id = r.table_id AND t.game = 'holdem'
+    LEFT JOIN casino_actions a ON a.key = 'hm-replay:' || r.table_id || ':' || r.round_no
+    WHERE r.revealed IS NOT NULL AND json_valid(r.players) AND EXISTS
+      (SELECT 1 FROM json_each(r.players) p WHERE json_extract(p.value, '$.uid') = ?)
+    ORDER BY r.revealed DESC, r.table_id, r.round_no DESC LIMIT ?`, [uid, Math.max(1,Math.min(20,Math.trunc(Number(limit)||20)))]);
+  const out = [];
+  for (const r of rows) {
+    const players = JSON.parse(r.players), index = players.findIndex((p) => p.uid === uid);
+    if (index < 0) continue;
+    const result = r.results ? JSON.parse(r.results) : {};
+    const replay = r.replay ? JSON.parse(r.replay) : null;
+    const source = replay ? replay.players : players.map((p) => ({ uid:p.uid, name:p.name, seat:uidHash(p.uid), stack:p.stack }));
+    const live = S.tables.get(r.table_id);
+    if (live) await refreshVeil(live);
+    const masked = (await V.maskRounds(r.table_id,[{players,results:{hand_no:r.round_no,players:source.map((p)=>({name:p.name,seat:p.seat})),shown:result.shown||[],winners:result.winners||[]}}]))[0].results;
+    const shoe = r.shoe ? JSON.parse(r.shoe) : [];
+    const labels = source.map((p,i) => ({ name:masked.players[i].name, seat:masked.players[i].seat, stack:p.stack,
+      cards:p.uid===uid ? shoe.slice(index*2,index*2+2) : ((result.shown||[]).find((s)=>s.seat && s.seat===p.seat)||{}).cards || null }));
+    const steps = replay ? replay.steps.map((s) => ({street:s.street,action:s.action,amount:s.amount,board:s.board,pot:s.pot,
+      player:s.uid ? labels[source.findIndex((p)=>p.uid===s.uid)] || null : null,
+      stacks:source.map((p,i)=>({seat:labels[i].seat,name:labels[i].name,stack:s.stacks[p.uid]}))})) : [];
+    const mine = source.find((p)=>p.uid===uid), final = replay && replay.steps[replay.steps.length-1];
+    out.push({table:r.table_id,round:r.round_no,revealed:r.revealed,proof:`/casino/fair/${r.table_id}/${r.round_no}`,
+      cards:shoe.slice(index*2,index*2+2),board:result.board||[],pots:masked.winners,shown:masked.shown,players:labels,
+      net:mine && final ? final.stacks[uid]-mine.stack : null,replay:steps});
+  }
+  return out;
+}
+
 /** 1.99ajw casino2 rework (casino/veil.js): re-read a table's veils (at most every 2 s, shared by every caller); a changed seat mask is
  *  saved under the mutex (never from inside it - the callers are the routes and Pepe's poll) */
 const persistVeil = (T) => locked(() => (S.tables.get(T.id) === T ? save(T) : null));
@@ -1425,5 +1461,5 @@ module.exports = {
   C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
-  refreshVeil,  // 1.99ajw casino2 rework: the routes re-read a table's veils before they answer (casino/veil.js)
+  refreshVeil, myHands,  // the routes re-read a table's veils before they answer
 };

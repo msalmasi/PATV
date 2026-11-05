@@ -94,6 +94,26 @@ function install(core) {
     qos(T, uid).bank = bankLeft(T, uid);
   }
 
+  // Replay bookkeeping follows the engine's events, never its settlement logic.
+  function recordStep(T, ev) {
+    const r = T.replay;
+    if (!r) return;
+    const s = r.state, uid = ev.who;
+    let amount = ev.amount || 0, action = ev.t;
+    if (ev.t === "blind" || ev.t === "acted") {
+      if (ev.t === "acted") {
+        action = ev.action;
+        if (["raises to","bets","goes all-in"].includes(action)) amount -= s.paid[uid] || 0;
+      }
+      if (amount) { s.stacks[uid] -= amount; s.paid[uid] = (s.paid[uid]||0)+amount; s.pot += amount; }
+    } else if (ev.t === "refund") { s.stacks[uid] += amount; s.pot -= amount; }
+    else if (ev.t === "board") { s.board = ev.cards.slice(); s.street = ev.street; s.paid = {}; }
+    else if (ev.t === "win_uncontested") { s.stacks[uid] += amount; s.pot -= amount; }
+    else if (ev.t === "awards") { for (const a of ev.awards) { s.stacks[a.who] += a.amount; s.pot -= a.amount; } s.pot -= ev.rake; }
+    else return;
+    r.steps.push({uid:uid||null,action,amount,street:s.street,board:s.board.slice(),pot:s.pot,stacks:Object.assign({},s.stacks)});
+  }
+
   function clearInvalidPre(T) {
     const e = T.eng;
     T.pre = T.pre || {};
@@ -300,6 +320,8 @@ function install(core) {
     T.hand = { no: T.next.no, seed: T.next.seed, commitment: T.next.commitment, deck };
     T.last_round = null;
     T.last_activity = clock();
+    T.replay = { players: active.map((uid) => ({uid,name:V.nameOf(T,uid,e.names[uid]),seat:V.seatOf(T,uid),stack:e.chips[uid]})), steps: [],
+      state: {stacks:Object.fromEntries(active.map((uid)=>[uid,e.chips[uid]])),paid:{},pot:0,board:[],street:"preflop"} };
     await core.advertRepeat(T);                       // 1.99pc: a hand is about to start - remind the advertised rooms (rate-limited)
     let events;
     e.seats = active;
@@ -339,9 +361,11 @@ function install(core) {
 
   async function render(T, events) {
     const e = T.eng;
+    const winners = new Set(events.filter((ev)=>ev.t==="awards").flatMap((ev)=>ev.awards.map((a)=>a.who)));
     let blinds = [];
     const won = {};                 // 1.99mw: chips each winner took in this step's hand (win XP / gang rep at hand_end)
     for (const ev of events) {
+      recordStep(T, ev);
       const t = ev.t;
       if (t === "hand_start") {
         const btn = ev.names[ev.button] || ev.button;
@@ -389,13 +413,14 @@ function install(core) {
         await emit(T, "win", `🏆 ${ev.name} wins ${fmt(ev.amount)} chips — everyone folded.`,
                    { winners: [{ amount: ev.amount }] });
       } else if (t === "showdown") {
+        const visible = ev.reveals.filter((r)=>winners.has(r.who) || (T.show || {})[r.who]);
         T.dl.turn = null; T.turn = null;
         T.sd = { board: ev.board.slice(), shown: ev.reveals.map((r) => ({ name: r.name, cards: r.cards.slice(), hand: r.hand, seat: uidHash(r.who) })),
                  cf: ev.reveals.map((r) => ({ uid: r.who, camfrog: (T.players[r.who] || {}).camfrog || null })),
                  // 1.99ajw casino2 rework: what the felt / history show (the event above is Pepe's, for the Camfrog room)
-                 pub: ev.reveals.map((r) => ({ name: V.nameOf(T, r.who, r.name), cards: r.cards.slice(), hand: r.hand, seat: V.seatOf(T, r.who) })) };
-        await emit(T, "showdown", "🃏 SHOWDOWN — " + ev.reveals.map((r) => `${r.name} shows ${H.cardsStr(r.cards)} (${r.hand})`).join("; "),
-                   { shown: T.sd.shown });
+                 pub: visible.map((r) => ({ name: V.nameOf(T, r.who, r.name), cards: r.cards.slice(), hand: r.hand, seat: V.seatOf(T, r.who) })) };
+        await emit(T, "showdown", "🃏 SHOWDOWN — " + visible.map((r) => `${r.name} shows ${H.cardsStr(r.cards)} (${r.hand})`).join("; "),
+                   { shown: visible.map((r)=>({name:r.name,cards:r.cards.slice(),hand:r.hand,seat:uidHash(r.who)})) });
       } else if (t === "awards") {
         for (const a of ev.awards) await emit(T, "line", `🏆 ${a.name} wins ${fmt(a.amount)} (${a.pot}) with ${a.hand}.`);
         T.last_round = { hand_no: e.hand_no, uncontested: false, board: (T.sd || {}).board || e.board.slice(), shown: (T.sd || {}).pub || (T.sd || {}).shown || [],
@@ -453,12 +478,16 @@ function install(core) {
     await bookRake(T);
     // reveal this hand's seed and deck (the fairness proof), and commit the next one
     if (T.hand) {
+      if (T.replay) await require("../dbUtils").tx(() => core.runQuery(`INSERT INTO casino_actions (key,table_id,userId,response,created,replay)
+        VALUES (?,?,NULL,'{"ok":false}',?,?) ON CONFLICT(key) DO UPDATE SET replay=excluded.replay`,
+        [`hm-replay:${T.id}:${T.hand.no}`,T.id,clock(),JSON.stringify({players:T.replay.players,steps:T.replay.steps})]));
       await core.runQuery("UPDATE casino_rounds SET server_seed = ?, shoe = ?, results = ?, revealed = ? WHERE table_id = ? AND round_no = ?",
                           [T.hand.seed, JSON.stringify(T.hand.deck), JSON.stringify(T.last_round), clock(), T.id, T.hand.no]);
       await emit(T, "reveal", `🔐 Shuffle proof for hand #${T.hand.no}: ${core.fairLink(T, T.hand.no)}`,
                  { round_no: T.hand.no, commitment: T.hand.commitment, server_seed: T.hand.seed, client_seed: T.client_seed });
       T.last_hand_revealed = T.hand.no;
       T.hand = null;
+      T.replay = null;
     }
     await commitNext(T);
     for (const k of e.leaving.slice()) await cashout(T, k, false);
@@ -544,13 +573,19 @@ function install(core) {
   }
 
   const HELP = "🃏 No-Limit Hold'em — !holdem start <sb>/<bb> opens a table; !sit <amount> buys in; !holdem deal starts a hand. " +
-               "On your turn: !check, !call, !bet <n>, !raise <to>, !allin, !fold. Hole cards arrive by PM (!cards resends). Leave with !stand.";
+               "On your turn: !check, !call, !bet <n>, !raise <to>, !allin, !fold. Sizing: 3bb, +2bb, 75%, pot, half, min, all. " +
+               "!pre check_fold|check|call|call_any|fold|off; !sitout; !sitin [post]. Hole cards arrive by PM (!cards resends). Leave with !stand. " +
+               "Losing hands are mucked unless show is selected; the fairness proof still reveals the deck.";
 
   async function run(T, actor, verb, args) {
     switch (verb) {
       case "pre": return premove(T, actor, String(args[0] || "off").toLowerCase());
       case "sitout": return sitout(T, actor, false, false);
       case "sitin": return sitout(T, actor, true, args[0] === "post");
+      case "showhand":
+        if (!T.eng.seats.includes(actor.uid)) return R(false, "you're not seated at the table.");
+        T.show = T.show || {}; T.show[actor.uid] = args[0] === "1" || args[0] === "on";
+        await save(T); return R(true, "show preference saved.");
       case "sit": case "buyin": case "buy": case "join": return sit(T, actor, args[0]);
       case "stand": case "leave": case "cashout": return standCmd(T, actor);
       case "deal": case "next": case "go":
@@ -717,6 +752,7 @@ function install(core) {
       seat: e.seats.includes(uid) ? V.seatOf(T, uid) : null, stack: e.chips[uid] || 0, in_hand: e.hand_active && e.players.includes(uid),
       cards: c ? c.cards : null, folded: c ? c.folded : false, my_turn: actor === uid, leaving: e.leaving.includes(uid),
       pre: (T.pre || {})[uid] || null,
+      show_hand: !!(T.show || {})[uid],
       sitting_out: !!(T.qol && T.qol[uid] && T.qol[uid].out), waiting_bb: !!(T.qol && T.qol[uid] && T.qol[uid].back === "wait"), to_call: e.hand_active ? H.toCall(e, uid) : 0,
       host: T.host.uid === uid, high_roller: await isHighRoller(uid),
     };

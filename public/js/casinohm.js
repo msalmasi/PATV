@@ -4,7 +4,7 @@
 // board and the pot (main pot / side pots / uncalled bet spelled out), YOUR hole cards (only ever in your own `me` part,
 // face down for everyone else), the showdown reveal and winner pops, an action bar with a bet slider + presets and a
 // countdown ring on the server's deadline, pre-moves, sizing grammar, sit-out and time-bank controls.
-// Buy-in / top-up and every move post with an idempotency key.
+// Buy-in / top-up and every move post with an idempotency key. My hands replays only your completed hands.
 (function () {
   "use strict";
   const CZ = window.CZ;
@@ -304,6 +304,8 @@
     $("cz-sitout").hidden = !me.seat || me.sitting_out || me.waiting_bb;
     $("cz-sitin").hidden = !me.seat || !me.sitting_out;
     $("cz-postnow").hidden = !me.seat || !(me.sitting_out || me.waiting_bb);
+    $("cz-showlabel").hidden = !me.seat;
+    $("cz-showhand").checked = !!me.show_hand;
     $("cz-pre").hidden = !(me.in_hand && !me.folded && !myTurn);
     for (const input of $("cz-pre").querySelectorAll("input[data-pre]")) {
       input.checked = !!(me.pre && me.pre.kind === input.dataset.pre);
@@ -383,6 +385,35 @@
   $("cz-sitout").addEventListener("click", () => act("sitout"));
   $("cz-sitin").addEventListener("click", () => act("sitin"));
   $("cz-postnow").addEventListener("click", () => act("sitin", "post"));
+  $("cz-showhand").addEventListener("change", (e) => act("showhand", e.target.checked ? "1" : "0"));
+  let myHands = [], replayStep = 0;
+  function drawReplay() {
+    const hand = myHands[Number($("cz-handselect").value) || 0];
+    if (!hand) { $("cz-replay").textContent = T("no_hands", "No hands played yet."); $("cz-replayprev").disabled = true; $("cz-replaynext").disabled = true; return; }
+    const steps = hand.replay || [], step = steps[replayStep], end = !steps.length || replayStep === steps.length-1;
+    const board = step ? step.board : hand.board;
+    $("cz-replay").innerHTML = `<p><a href="${esc(hand.proof)}">🔐 ${esc(T("verify", "verify"))}</a> · ${esc(T("hand_n", "Hand #{n}", { n: hand.round }))}` +
+      (hand.net == null ? "" : ` · ${CZ.net(hand.net)} PAT`) + `</p><div>${CZ.staticCards(hand.cards || [])}</div><div>${CZ.staticCards(board || [])}</div>` +
+      (step ? `<p>${esc(CZ.streetName(step.street))} · ${replayStep+1}/${steps.length} · ${esc(step.player ? step.player.name : "")} ${esc(step.action)} ${step.amount ? esc(fmt(step.amount)) : ""}</p><p>${esc(T("pot_n", "Pot {n}", {n:fmt(step.pot)}))}</p>` : `<p>${esc(T("old_hand", "Action replay is unavailable for this older hand."))}</p>`) +
+      (step ? step.stacks : hand.players || []).map((p)=>`<div class="pl"><b>${esc(p.name)}</b> ${esc(fmt(p.stack))}</div>`).join("") +
+      (end ? (hand.pots || []).map((p)=>`<div class="pl">🏆 ${esc(p.name)} +${esc(fmt(p.amount))} · ${esc(potName(p.pot))}</div>`).join("") : "") +
+      (end ? (hand.shown || []).map((p)=>`<div class="pl">${esc(p.name)} ${CZ.staticCards(p.cards || [])}</div>`).join("") : "");
+    $("cz-replayprev").disabled = replayStep <= 0;
+    $("cz-replaynext").disabled = replayStep >= steps.length-1;
+  }
+  $("cz-myhandsbtn").addEventListener("click", async () => {
+    CZ.openSheet("cz-myhands");
+    try {
+      const j = await (await fetch("/api/casino/me/hands?limit=20", {credentials:"same-origin"})).json();
+      if (!j.ok) throw new Error("history");
+      myHands = j.hands || []; replayStep = 0;
+      $("cz-handselect").innerHTML = myHands.map((h,i)=>`<option value="${i}">${esc(T("hand_n", "Hand #{n}", {n:h.round}))} · ${esc(h.table)}</option>`).join("");
+      drawReplay();
+    } catch (e) { $("cz-replay").textContent = T("history_fail", "Couldn't load your hands. Try again."); }
+  });
+  $("cz-handselect").addEventListener("change", () => { replayStep=0; drawReplay(); });
+  $("cz-replayprev").addEventListener("click", () => { replayStep=Math.max(0,replayStep-1); drawReplay(); });
+  $("cz-replaynext").addEventListener("click", () => { const h=myHands[Number($("cz-handselect").value)||0]; if(h) replayStep=Math.min((h.replay||[]).length-1,replayStep+1); drawReplay(); });
   $("cz-sit").addEventListener("click", () => openBuy("sit"));
   $("cz-topup").addEventListener("click", () => openBuy("top"));
   $("cz-seats").addEventListener("click", (e) => { if (e.target.closest("[data-sit]")) openBuy("sit"); });
