@@ -1302,3 +1302,9 @@ main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(3) { he
 }
 @keyframes rmdEq { from { transform: scaleY(.18); } to { transform: scaleY(1); } }
 @media (forced-colors: active) { main.rm.rm-dock .rb-meter > i { forced-color-adjust: none; background: CanvasText; } }
+
+/* dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: the 📼 Plex app's sheet - ▶ Play from Plex… as one full-width row
+   under the queue & controls (or the idle line), the !plex tiles below */
+main.rm.rm-dock .rmd-px-row { margin: var(--ds-sp-2) 0; }
+main.rm.rm-dock .rmd-px-row > .rmd-px-play { inline-size: 100%; justify-content: center; }
+@media (pointer: coarse) { main.rm.rm-dock .rmd-px-row > .rmd-px-play { min-block-size: 44px; } }

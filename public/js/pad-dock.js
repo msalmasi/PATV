@@ -51,6 +51,11 @@
     ['!resume', '▶️', 'dj_resume', 'Resume', 0], ['!remove', '↩️', 'dj_remove', 'Remove my last', 0]];
   var DJ_STAFF = [['!dj', '🤖', 'dj_on', 'Auto-DJ on', 0, '!dj on'], ['!dj', '🛑', 'dj_off', 'Auto-DJ off', 0, '!dj off'], ['!shuffle', '🔀', 'dj_shuffle', 'Shuffle', 0],
     ['!repeat', '🔁', 'dj_repeat', 'Repeat', 0], ['!vol', '🔊', 'dj_vol', 'Volume', 1]];
+  // dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: 📼 Plex's chat commands as tiles, like the DJ's - only while Pepe
+  // offers !plex here (d.room.cmds; the site prices / refuses as for a typed one: plexchat.js). Its controls (pause, next, seek...) are the
+  // Plex queue & controls' own buttons in the same sheet - no second set. [command, icon, key, words, trailing space, inserted text]
+  var PLEX_APPS = [['!plex', '🔎', 'px_find', 'Find a title', 1], ['!plex', '🎞️', 'px_np', 'What’s playing', 0, '!plex np'],
+    ['!plex', '➕', 'px_queue', 'Queue it next', 1, '!plex queue']];
   var HIDE_MS = 2500, VOICE_KEY = 'patv.dock.voice';
   function store(k, v) { try { if (v === undefined) return W.localStorage.getItem(k); W.localStorage.setItem(k, String(v)); } catch (e) { return null; } return null; }
   function priceText(p) { return p === 0 ? t('free', 'free') : typeof p === 'number' && p > 0 ? t('price', '{n} PAT', { n: fmtN(p) }) : ''; }
@@ -907,11 +912,11 @@
     function appTile(grid, a, doc, after) {
       var b = el('button', 'ds-btn quiet rmd-app', null, doc); b.type = 'button';
       var ic = el('span', 'ds-ic', a[1], doc); ic.setAttribute('aria-hidden', 'true'); b.appendChild(ic);
-      var name = t(a[2].indexOf('dj_') === 0 ? a[2] : 'app_' + a[2], a[3]), shownCmd = a[5] || a[0];
+      var name = t(/^(dj|px)_/.test(a[2]) ? a[2] : 'app_' + a[2], a[3]), shownCmd = a[5] || a[0];
       b.appendChild(el('span', 'rmd-app-n', name, doc));
       var p = priceText(cmds()[a[0]]); b.appendChild(el('small', 'rmd-app-p', shownCmd + (p ? ' · ' + p : ''), doc));
       b.setAttribute('aria-label', name + ' (' + shownCmd + ')' + (p ? ', ' + p : ''));
-      on(b, 'click', function () { closeLayer(false); insertCmd(a[2].indexOf('dj_') === 0 && a[5] ? a[5] : a[0], !!a[4]); if (after) after(); });
+      on(b, 'click', function () { closeLayer(false); insertCmd(a[5] || a[0], !!a[4]); if (after) after(); });
       grid.appendChild(b); return b;
     }
     function apps(opener) {
@@ -925,15 +930,60 @@
         box.appendChild(grid);
       }
       // (1.99ajq dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
-      if ((musicOn() || dj()) && !inPip()) {
-        box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_music', 'Music'), doc));
-        var g2 = el('div', 'rmd-apps', null, doc), b2 = el('button', 'ds-btn quiet rmd-app', null, doc); b2.type = 'button';
-        var ic2 = el('span', 'ds-ic', '🎧', doc); ic2.setAttribute('aria-hidden', 'true'); b2.appendChild(ic2); b2.appendChild(el('span', 'rmd-app-n', t('app_dj_tile', 'DJ'), doc));
-        b2.appendChild(el('small', 'rmd-app-p', t('app_dj_sub', 'songs, queue, skip'), doc));
-        b2.setAttribute('aria-label', t('app_dj_tile', 'DJ'));
-        on(b2, 'click', function () { djSheet(opener); }); g2.appendChild(b2); box.appendChild(g2);
+      // (dock3 1.99?? (owner item 3): + ONE 📼 Plex tile beside it - the queue & controls, Play from Plex… and Plex's commands in its sheet)
+      var djOn = musicOn() || !!dj(), pxOn = plexOn();
+      if ((djOn || pxOn) && !inPip()) {
+        box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', pxOn ? t('apps_media', 'Music & video') : t('apps_music', 'Music'), doc));
+        var g2 = el('div', 'rmd-apps', null, doc);
+        if (djOn) bigTile(g2, '🎧', t('app_dj_tile', 'DJ'), t('app_dj_sub', 'songs, queue, skip'), function () { djSheet(opener); }, doc);
+        if (pxOn) bigTile(g2, '📼', t('app_plex_tile', 'Plex'), npPlex() ? t('app_plex_sub_np', 'now playing, queue') : t('app_plex_sub', 'movies & shows'), function () { plexApp(opener); }, doc).classList.add('rmd-app-plex');
+        box.appendChild(g2);
       }
       box.appendChild(el('p', 'ds-fine rmd-apps-f', t('apps_more', 'Type ! in the chat for every command'), doc));
+    }
+    /** a sheet-opening tile (🎧 DJ, 📼 Plex): icon, name, what it holds - never a command */
+    function bigTile(grid, icon, name, sub, fn, doc) {
+      var b = el('button', 'ds-btn quiet rmd-app', null, doc); b.type = 'button';
+      var ic = el('span', 'ds-ic', icon, doc); ic.setAttribute('aria-hidden', 'true'); b.appendChild(ic); b.appendChild(el('span', 'rmd-app-n', name, doc));
+      b.appendChild(el('small', 'rmd-app-p', sub, doc)); b.setAttribute('aria-label', name);
+      on(b, 'click', fn); grid.appendChild(b); return b;
+    }
+    function backToApps(box, opener) {
+      var back = button('‹', 'dj_back', 'Back to chat apps', function () { apps(opener); }, 'ds-btn quiet sm rmd-sheet-back', box.ownerDocument);
+      back.querySelector('.rmd-label').textContent = t('dj_back_short', 'Chat apps');
+      box.insertBefore(back, layer.head.nextSibling);
+    }
+    // ── dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: the 📼 Plex app - the tile shows while something from Plex plays
+    // on this pad's stage (#rmPlexQ, pad-plexq.js), while this viewer may start a play here (o.plexPlay - bridge.js goLiveInfo: Plex members,
+    // the override list, staff, the pad's rules; null = not offered) or while Pepe offers !plex here. Its sheet: the Plex queue & controls
+    // (the SAME node the Now playing card holds - its buttons and their server checks, can_control) while something plays, then ▶ Play from
+    // Plex… for whoever may start one, then the !plex command tiles. ──
+    function canPlexPlay() { return !!(o.plexPlay && W.PATVPlexPlay && mode === 'pad'); }
+    function plexOn() { return npPlex() || canPlexPlay() || hasCmd('!plex'); }
+    function plexApp(opener) {
+      var px = node('rmPlexQ'), playing = npPlex();
+      external(function () {
+        var box = null;
+        if (playing && px) {
+          box = nodeSheet(t('np_plex_sheet', 'Plex queue & controls'), px, opener, 'plex');
+          if (box && layer && layer.kind === 'plex') npQueueOpen(px);
+        }
+        if (!box) {
+          box = sheet(t('plex_app_title', '📼 Plex'), opener); layer.kind = 'plexapp';
+          box.appendChild(el('p', 'ds-fine rmd-dj-idle', t('plex_idle', 'Nothing from Plex on this pad’s stage right now'), box.ownerDocument));
+        }
+        backToApps(box, opener);
+        var doc = box.ownerDocument;
+        if (canPlexPlay()) {
+          var pb = button('📼', 'plex_play', 'Play from Plex…', function () { plexSheet(opener); }, 'ds-btn sm rmd-px-play', doc);
+          var row = el('p', 'rmd-px-row', null, doc); row.appendChild(pb); box.appendChild(row);
+        }
+        var list = PLEX_APPS.filter(function (a) { return hasCmd(a[0]); });
+        if (list.length) {
+          box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('px_cmds', 'Ask Pepe'), doc));
+          var grid = el('div', 'rmd-apps', null, doc); list.forEach(function (a) { appTile(grid, a, doc); }); box.appendChild(grid);
+        }
+      });
     }
     // (1.99ajy dockmedia (owner item 1): opts.expand - from the Now playing card: no "‹ Chat apps" (it didn't come from there) and the booth
     // OPEN (its own ▾ toggle, proxied; closed again on the way out if the Dock opened it - patvDjOpen ends where it was))
