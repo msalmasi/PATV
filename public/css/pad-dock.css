@@ -580,8 +580,9 @@ main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-
   border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--ds-r-md); }
 main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play)[aria-expanded="true"] { background: var(--ds-hover); }
 main.rm.rm-dock #rmAudioBox .rb-play { color: var(--ds-ac-2); font-size: var(--ds-fs-lead); }
-/* paused: no "live" eq dots - unless someone holds the mic (dock3 1.99akf: then they are the "on the mic" bars, below) */
-main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rmd-now:not(.rmd-talk) > .rb-meter { display: none; }
+/* paused: no eq bars at all - not even while someone holds the mic (pausebars, owner 2026-11-05: "Let's remove them from paused audio anyway";
+   dock3 1.99akf had drawn them paused as the "on the mic" bars - those now show only while playing, below) */
+main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rmd-now > .rb-meter { display: none; }
 /* the people column / sheet: one 36px line, [avatar][name + flair][🎙][📷][⋯] - three fixed slots so the icons line up in columns;
    the flair gives way first (to its emoji alone in a narrow row), then the name */
 main.rm.rm-dock #rmPeople > li { container-type: inline-size; grid-template-columns: 28px minmax(0, 1fr) auto; column-gap: var(--ds-sp-1); }
@@ -1287,8 +1288,9 @@ main.rm.rm-dock .rmd-fullscreen:has(> .rmd-full-media > #rmStage) > .rmd-overlay
    eq meter is the "on the mic" sign on every device - .rmd-now.rmd-talk = someone holds the mic (pad-dock.js mic()). With a real level
    (.rb-lvl: the analyser, desktop / Android while playing) it draws that level, as before; without one (iOS - no Web Audio there, paused, no
    analyser) the bars move by themselves while someone holds the mic; under reduced motion a still eq shape. Nobody on the mic: hidden while
-   paused (1.99ajf), the real level while playing (hidden on iOS - room-bridge.css .rb-nolvl). ── */
-main.rm.rm-dock #rmAudioBox .rb-audio .rmd-now.rmd-talk > .rb-meter { display: inline-flex; }
+   paused (1.99ajf), the real level while playing (hidden on iOS - room-bridge.css .rb-nolvl). pausebars (owner 2026-11-05: "Let's remove them
+   from paused audio anyway"): only while PLAYING (.rb-audio.on) - paused, no bars on any device, holders or not (above). ── */
+main.rm.rm-dock #rmAudioBox .rb-audio.on .rmd-now.rmd-talk > .rb-meter { display: inline-flex; }
 main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i { transition: none; }
 main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:is(:nth-child(1), :nth-child(5)) { height: 5px; }
 main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:is(:nth-child(2), :nth-child(4)) { height: 9px; }

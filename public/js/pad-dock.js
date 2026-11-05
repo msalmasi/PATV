@@ -871,7 +871,8 @@
       // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... wasn't just a mic icon on the name - that's pointless. I meant the one
       // with the bars like we have in desktop") 1.99akf: the 🎙 badge is gone; the "on the mic" sign is the bar's eq meter right before the
       // chips on EVERY device - .rmd-talk below: with a real level (desktop / Android playing) the analyser drives it as before; without one
-      // (iOS, paused, no analyser) it animates while someone holds the mic (pad-dock.css); a still eq shape under reduced motion.
+      // (iOS, no analyser) it animates while someone holds the mic (pad-dock.css); a still eq shape under reduced motion. pausebars (owner
+      // 2026-11-05): only while the audio PLAYS - paused, no bars on any device (the chips, the ring and "on the mic" stay).
       holders.slice(0, max).forEach(function (u) {
         var chip = el('span', 'rmd-holder');
         var content = o.person(u, { flair: !(u && (u.veil || u.anon)) }); if (content) chip.appendChild(content);
@@ -879,7 +880,7 @@
         chip._login = u && !u.veil && !u.anon && u.login ? String(u.login).toLowerCase() : null;
         holderBox.appendChild(chip); personLine(chip, u);
       });
-      // (before the flair fit: it measures the names with the meter showing)
+      // (before the flair fit: it measures the names with the meter showing - while playing; pausebars: paused, no meter - decorateAudio refits on ▶ / ❚❚)
       if (nowBox) nowBox.classList.toggle('rmd-talk', holders.length > 0);
       paintTalking(); fitSoon(holderBox);
       if (holders.length > max) {
@@ -1687,7 +1688,12 @@
       each(row.querySelectorAll('button'), function (b) { b.classList.add('ds-btn', 'quiet', 'sm'); });
       mic(holders);
       if (o.ptt && o.ptt.onRecording && o.audio && o.audio.setRecording) o.ptt.onRecording(function (yes) { o.audio.setRecording(yes); });
-      observe(row, function () { paintNow(); if (layer && layer.box && layer.box.classList.contains('rmd-audio-pop')) { var st = layer.box.querySelector('.rmd-audio-st'); if (st) st.textContent = audioStatus(); } }, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+      // pausebars (owner 2026-11-05: "Let's remove them from paused audio anyway"): the eq meter shows only while PLAYING now (pad-dock.css), so
+      // ▶ / ❚❚ changes the holder chips' room by the meter's width - the flair fit runs again then (the names were measured with or without it)
+      var wasOn = row.classList.contains('on');
+      observe(row, function () {
+        var on = row.classList.contains('on'); if (on !== wasOn) { wasOn = on; if (holderBox) fitSoon(holderBox); }
+        paintNow(); if (layer && layer.box && layer.box.classList.contains('rmd-audio-pop')) { var st = layer.box.querySelector('.rmd-audio-st'); if (st) st.textContent = audioStatus(); } }, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     }
     // ── the composer box (owner point 10): row 1 [＋][input][🎙️][Send], row 2 the tool row; the status line under the box ──
     function decorateComposer() {

@@ -178,8 +178,8 @@ test("items 5, 21 + dock3 item 2: a holder chip is [avatar][name + flair] (no ðŸ
   // dock3 item 2 (owner: "I meant the one with the bars like we have in desktop"): the meter sits first in .rmd-now; rmd-talk while anyone holds the mic
   const now = h.doc.querySelector(".rmd-now"); assert.ok(now, "the bar's now zone");
   assert.equal(now.firstChild.className.split(" ")[0], "rb-meter", "the eq meter right before the holder chips");
-  assert.ok(now.classList.contains("rmd-talk"), "someone holds the mic: the bars show (and move without a real level)");
-  h.controller.mic([]); assert.equal(now.classList.contains("rmd-talk"), false, "nobody: no bars while paused");
+  assert.ok(now.classList.contains("rmd-talk"), "someone holds the mic: the bars show while playing (and move without a real level) - pausebars: never while paused (the CSS test below)");
+  h.controller.mic([]); assert.equal(now.classList.contains("rmd-talk"), false, "nobody: no 'on the mic' bars");
   const veiledOnly = d.mic.filter((u) => u.veil || u.anon);
   if (veiledOnly.length) { h.controller.mic(veiledOnly); assert.ok(now.classList.contains("rmd-talk"), "a veiled holder counts too (the bars name nobody)"); }
   h.controller.mic(d.mic);
@@ -191,11 +191,14 @@ test("items 5, 21 + dock3 item 2: a holder chip is [avatar][name + flair] (no ðŸ
   h.controller.talking(null); assert.equal(h.doc.querySelectorAll(".rmd-holder.rmd-talking").length, 0);
 });
 
-test("dock3 item 2: the bars' CSS - shown with holders even while paused; animated only without a real level and only with motion allowed; a still shape otherwise; no ðŸŽ™ badge rules left", () => {
+test("dock3 item 2 + pausebars: the bars' CSS - shown with holders only while PLAYING (paused: none, holders or not - owner 2026-11-05); animated only without a real level and only with motion allowed; a still shape otherwise; no ðŸŽ™ badge rules left", () => {
   const css = read("public", "css", "pad-dock.css"), rb = read("public", "css", "room-bridge.css"), js = read("public", "js", "room-bridge.js");
   assert.doesNotMatch(css, /rmd-mic-b/, "the ðŸŽ™ badge's rules are gone");
-  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio:not\(\.on\) \.rmd-now:not\(\.rmd-talk\) > \.rb-meter \{ display: none; \}/, "paused + nobody on the mic: hidden (1.99ajf)");
-  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio \.rmd-now\.rmd-talk > \.rb-meter \{ display: inline-flex; \}/);
+  // pausebars (owner 2026-11-05: "Let's remove them from paused audio anyway"): paused = no meter, whoever holds the mic; the show rule is .on only
+  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio:not\(\.on\) \.rmd-now > \.rb-meter \{ display: none; \}/, "paused: hidden - holders or not");
+  assert.doesNotMatch(css, /\.rmd-now:not\(\.rmd-talk\) > \.rb-meter/, "no paused exception for holders any more (1.99akf)");
+  assert.match(css, /main\.rm\.rm-dock #rmAudioBox \.rb-audio\.on \.rmd-now\.rmd-talk > \.rb-meter \{ display: inline-flex; \}/, "the 'on the mic' bars: only while playing");
+  assert.doesNotMatch(css, /#rmAudioBox \.rb-audio \.rmd-now\.rmd-talk > \.rb-meter \{ display:/, "no show rule without .on");
   const mq = css.indexOf("@media (prefers-reduced-motion: no-preference) {\n  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i { height: 14px;");
   assert.ok(mq > 0, "the animation lives inside no-preference");
   assert.ok(css.indexOf("animation: rmdEq") > mq, "rmdEq only there");
