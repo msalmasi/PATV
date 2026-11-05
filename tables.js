@@ -173,7 +173,8 @@ function maskTable(t, lines) {
     const hks = [hk, w ? w.host_login : null].filter(Boolean);
     if (hs >= 0 && why[hs]) hostWhy = why[hs];
     else if (st.ids.has(hostId)) hostWhy = "sticky";
-    else if (!w || !hk) hostWhy = "closed";
+    else if (!w) hostWhy = "closed";
+    else if (!hk) hostWhy = hs >= 0 ? null : "closed";                 // (no key: the seat showing their name decides)
     else if (hks.some(confirmedKey)) hostWhy = "veil";
     else if (hks.some(veiledKey)) hostWhy = "closed";
     if (!hostWhy && seats.some((s, i) => why[i] && s.name === t.host)) {

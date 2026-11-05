@@ -259,6 +259,17 @@ test("review: the host - masked with their seat (an alias seat masked by its typ
                             who: { [TID]: { seats: ["alice", "frankie"], host: null } } }), 200);
   ({ d } = await get(null));
   assert.equal(d.tables[0].host, "someone", "the host's name on a masked seat: masked");
+  // no host key, the seat with the host's name named: both named (a table tearing down - Pepe clears its host key)
+  reset();
+  assert.equal(await sync({ tables: [holdem({ seats, host: "Frankie", result: null, last_round: null })], closed: [], log: [],
+                            who: { [TID]: { seats: ["alice", "frankie"], host: null } } }), 200);
+  ({ d } = await get(null));
+  assert.deepEqual([d.tables[0].seats[1].name, d.tables[0].host], ["Frankie", "Frankie"], "the named seat decides");
+  // neither a key nor a seat to go by: masked (fails closed)
+  reset();
+  assert.equal(await sync({ tables: [holdem({ seats: [seats[0]], host: "Frankie", result: null, last_round: null })], closed: [], log: [],
+                            who: { [TID]: { seats: ["alice"], host: null } } }), 200);
+  assert.equal((await get(null)).d.tables[0].host, "someone");
 });
 
 test("review: labels never reuse one of Pepe's - also a label only his log, result or last round still shows (someone who left)", async () => {
