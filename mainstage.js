@@ -166,6 +166,10 @@ const AUTO_HOLD_MS = 60 * 1000;      // an auto-featured stream that drops keeps
 // starting (libraryUpNext) is the pad's featured stage at once - the page shows a "Coming up next" card - for at most this long; a title that
 // hasn't published by then falls back as normal (mic follows, or Pepe's stream)
 const UPNEXT_MS = 90 * 1000;
+// upnext review (function F4): a marker set while the title before was still on (mediaqueue.step: its encoder didn't stop, the old ffmpeg kept
+// publishing) - that stream still beating this long after the marker means nothing is starting: the marker is void (never "Coming up next:
+// <the other title>" over a later pause, never the "didn't start" let-go at its first drop). nginx-rtmp's on_update comes every 10 s.
+const UPNEXT_STALE_MS = 15 * 1000;
 // 1.99fv: Pepe's Twitch channel (the "Use Twitch" shortcut on /stage/admin + the viewers' "Watch on Twitch" link)
 const TW_LOGIN_RE = /^[A-Za-z0-9_]{3,25}$/;
 function pepeTwitchChannel() {
@@ -656,7 +660,26 @@ function upnextClean(info, at) {
 }
 function upnextOf(s) {
   if (!s || !s.upnext) return null;
-  try { const u = JSON.parse(s.upnext); return u && typeof u === "object" && Number(u.at) > 0 ? u : null; } catch (e) { return null; }
+  let u = null;
+  try { u = JSON.parse(s.upnext); } catch (e) { return null; }
+  if (!u || typeof u !== "object" || !(Number(u.at) > 0)) return null;
+  if (Number(s.beat) > 0 && Number(s.beat) - Number(u.at) > UPNEXT_STALE_MS) return null;   // (review F4: the old title kept going - see UPNEXT_STALE_MS)
+  return u;
+}
+/** upnext review (privacy F1): what `viewer` gets of a featured slot's next - its poster (the Plex rating key the site's proxy takes) only
+ *  for a signed-in viewer (the proxy is theirs); signed out: the title and no key. */
+function upNextFor(n, viewer) {
+  if (!n) return null;
+  if (viewer && viewer.userId) return n;
+  const out = { ...n, poster: false };
+  delete out.key;
+  return out;
+}
+/** upnext review: does this pad's featured 📼 title that is starting have a poster for signed-in viewers? (publicSlots' cache - /api/stage
+ *  reads the sign-in only then: it isn't read on every poll) */
+function upNextPoster(roomId) {
+  const c = pubCache.get(String(roomId || "")), f = c && c.featured;
+  return !!(f && f.next && f.next.poster);
 }
 const upnextFresh = (s, t = now()) => { const u = upnextOf(s); return !!u && t - u.at < UPNEXT_MS; };
 /** upnext: what a page gets for a featured 📼 slot whose next title is starting -> {title, kind, year, show, season, episode, poster, key?,
@@ -2041,7 +2064,7 @@ async function featuredOf(roomId, viewer, { front = false } = {}) {
   const c = pubCache.get(String(roomId)), f = c && c.featured;
   if (!f) return null;
   if (f.cam && (front || !camVisible(roomId, viewer))) return null;
-  return { id: f.id, live: f.live, by: f.by, went: f.went, ...(f.next ? { next: f.next } : {}) };   // (upnext: + next while its title starts)
+  return { id: f.id, live: f.live, by: f.by, went: f.went, ...(f.next ? { next: upNextFor(f.next, viewer) } : {}) };   // (upnext: + next while its title starts)
 }
 /** stagefix fix: slot id -> Camfrog login of a room's live cam slots, from publicSlots' cache (server side only). */
 async function camLoginsOf(roomId) {
@@ -2106,7 +2129,7 @@ async function roomStage(roomId, viewer) {
     // stagefix: + cam slots only for viewers who may see the live room, and mine: true on the viewer's own cam (slotsFor)
     slots: await slotsFor(roomId, viewer, live), open: shown, free: Math.max(0, RS.slot_count - shown),
     featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live,
-                           ...(upNextView(featured, t) ? { next: upNextView(featured, t) } : {}) } : null,   // (dock3 1.99akf: + went - the page's first featured marker; upnext: + next)
+                           ...(upNextView(featured, t) ? { next: upNextFor(upNextView(featured, t), viewer) } : {}) } : null,   // (dock3 1.99akf: + went - the page's first featured marker; upnext: + next)
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
@@ -2577,7 +2600,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
-  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, libraryUpNext, upNextView, UPNEXT_MS, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
+  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, libraryActivate, libraryUpNext, upNextView, upNextPoster, UPNEXT_MS, setLibraryIdle, idleMinFor, maxMinutesFor, libraryMaxFor, limitsFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, whipRelayed, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates, slotsFor, camNotify,      // mfix: camNotify - a 📌 pin on the mic stage tells the person the same way
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,

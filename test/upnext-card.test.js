@@ -37,6 +37,7 @@ function mkEl(tag) {
     hasAttribute(k) { return k in this.attrs; }, addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); }, removeEventListener() {},
     querySelectorAll(sel) { const c = sel.replace(/^\./, ""), out = []; const walk = (n) => n.children.forEach((k) => { if (k.classList.contains(c)) out.push(k); walk(k); }); walk(this); return out; },
     querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }, play: () => Promise.resolve(), focus() {},
+    contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; },
   };
   return e;
 }
@@ -51,10 +52,15 @@ function switcher(opts, env = {}) {
   const clear = (h) => { const i = timers.findIndex((x) => x.h === h); if (i >= 0) timers.splice(i, 1); };
   const reconnect = mkEl("div"), unmute = mkEl("button");
   reconnect.classList.add("hide"); unmute.classList.add("hide");
-  const player = { src: [], starts: 0, stops: 0, on: false,
-    stop() { this.stops++; this.on = false; reconnect.classList.add("hide"); unmute.classList.add("hide"); },
-    setSrc(s) { this.src.push(s); }, start() { if (this.on) return; this.starts++; this.on = true; reconnect.classList.remove("hide"); unmute.classList.remove("hide"); },
-    running() { return this.on; }, playing() { reconnect.classList.add("hide"); } };
+  // (like stage-player.js: setSrc with the same URL is a no-op, another one restarts a running player - a new player starts muted; state()
+  // says whether frames move. review: playing() = the first frame and the picture moving from then on, stall() = it froze / reconnects)
+  const player = { srcs: [], cur: null, starts: 0, stops: 0, on: false, muted: true, moving: false, t0: 0,
+    stop() { this.stops++; this.on = false; this.moving = false; this.muted = true; reconnect.classList.add("hide"); unmute.classList.add("hide"); },
+    setSrc(s) { this.srcs.push(s); if (!s || s === this.cur) return; this.cur = s; if (this.on) { this.stop(); this.start(); } }, src() { return this.cur; },
+    start() { if (this.on) return; this.starts++; this.on = true; this.moving = false; this.muted = true; reconnect.classList.remove("hide"); unmute.classList.remove("hide"); },
+    running() { return this.on; }, state() { return this.on ? { playing: this.moving, time: this.moving ? (clock.t - this.t0) / 1000 : 0, muted: this.muted } : null; },
+    playing() { reconnect.classList.add("hide"); this.moving = true; this.t0 = clock.t; }, stall() { reconnect.classList.remove("hide"); this.moving = false; },
+    frozen() { reconnect.classList.add("hide"); this.moving = false; } };
   const ctx = { document: { readyState: "complete", createElement: mkEl, documentElement: { lang: "en" } }, console, Date: FakeDate, Intl, encodeURIComponent,
     setTimeout: (fn, ms) => add(fn, ms, false), clearTimeout: clear, setInterval: (fn, ms) => add(fn, ms, true), clearInterval: clear, location: { hostname: "x" },
     fetch: (url, init) => { calls.push({ url, init, at: clock.t });
@@ -90,8 +96,8 @@ function switcher(opts, env = {}) {
   const click = (v) => { const b = { hasAttribute: (k) => k === "data-v", getAttribute: () => v }; tabs.listeners.click[0]({ target: { closest: () => b } }); };
   const card = () => wrap.children.find((c) => c.classList.contains("st-upnext")) || null;
   const q = (sel) => { const c = card(); return c ? c.querySelector(sel) : null; };
-  return { sw, wrap, tabs: () => html, air, calls, player, reconnect, unmute, card, q, adv, click, now: () => clock.t,
-           answer: (a) => answers.push(a), poll: async () => { await sw.poll(); await flush(); }, timers };
+  return { sw, wrap, tabs: () => html, air, calls, player, reconnect, unmute, card, q, adv, click, now: () => clock.t, doc: ctx.document,
+           answer: (a) => answers.push(a), clearAnswers: () => { answers.length = 0; }, poll: async () => { await sw.poll(); await flush(); }, timers };
 }
 const MIC = (extra) => Object.assign({ v: 1, active: true, count: 2, default: "first", layout: "split", src: [{ id: "a" }, { id: "b" }] }, extra || {});
 const MOVIE = (at, extra) => Object.assign({ title: "Night of the Living Dead", kind: "movie", year: 1968, show: null, season: null, episode: null, poster: true, key: "501",
@@ -128,7 +134,7 @@ test("a featured marker WITH next is the pad's featured stage: it beats an activ
   assert.deepEqual(x.air[x.air.length - 1], [true, "📼 Night of the Living Dead (1968)", { pending: true }], "ON AIR (clears the old homepage's off-air slate)");
   assert.match(x.tabs(), /<button type="button" class="stab feat off pending" role="tab" data-v="slot:lib1" aria-selected="true" title="Night of the Living Dead \(1968\)">/);
   assert.match(x.tabs(), /<span class="star"[^>]*>★<\/span><span class="n">📼 Up next<\/span>/);
-  assert.deepEqual({ ...x.sw.selection() }, { stream: "lib1", label: "📼", embed: true, capture: false, nsfw: false }, "never captured, no watch-minutes");
+  assert.deepEqual({ ...x.sw.selection() }, { stream: "lib1", label: "📼", embed: true, capture: false, nsfw: false, pending: true }, "never captured, no watch-minutes (pending: the capture bar greys its row)");
 });
 
 test("dock3's C2 holds: the server's marker WITHOUT next never beats the mic stage (no card)", () => {
@@ -227,7 +233,7 @@ test("the stream comes up: its player starts behind the card, which fades once i
   x.answer(ans([LIB()], { id: "lib1", live: true, by: "auto", went: true }));
   await x.poll();
   assert.equal(x.sw.view(), "slot:lib1");
-  assert.deepEqual(x.player.src.slice(-1), ["/hls/lib1.m3u8"]);
+  assert.deepEqual(x.player.srcs.slice(-1), ["/hls/lib1.m3u8"]);
   assert.equal(x.player.starts, 1, "started behind the card");
   assert.ok(x.card() && !x.card().classList.contains("is-out"), "the card stays until the first frame");
   assert.equal(x.reconnect.style.visibility, "hidden", "...over the player's 'Reconnecting…'");
@@ -235,7 +241,7 @@ test("the stream comes up: its player starts behind the card, which fades once i
   await x.adv(1000);
   assert.ok(!x.card().classList.contains("is-out"), "not playing yet");
   x.player.playing();                                           // the first frame: the reconnect overlay hides
-  await x.adv(300);
+  await x.adv(600);                                             // (review F1: + the picture moving - two 250 ms looks)
   assert.ok(x.card().classList.contains("is-out"), "fading out");
   assert.equal(x.reconnect.style.visibility, "", "the player's overlays are its own again");
   await x.adv(800);
@@ -244,7 +250,7 @@ test("the stream comes up: its player starts behind the card, which fades once i
   // reduced motion: the same, a shorter fade
   const r = switcher({ featured: PEND(MOVIE(T0)) }, { reduced: true });
   r.answer(ans([LIB()], { id: "lib1", live: true, by: "auto", went: true })); await r.poll();
-  r.player.playing(); await r.adv(300);
+  r.player.playing(); await r.adv(600);
   assert.ok(r.card().classList.contains("is-out"));
   await r.adv(300);
   assert.equal(r.card(), null, "gone in ~0.25 s");
@@ -350,6 +356,12 @@ test("views + strings + styles: the css is linked, stage-room.js v23, the poster
   assert.match(read("views", "home.ejs"), /posters: <%= typeof me !== 'undefined' && me \? 'true' : 'false' %>/);
   assert.match(read("public", "js", "home-dock.js"), /posters: !!I\.signed/);
   assert.match(read("views", "home.ejs"), /home-dock\.js\?v=5/);
+  // upnext review V2 / V3: the homepage draws its stage ON while a 📼 title is starting (no 44 px collapsed stage / OFF AIR slate first); the
+  // capture bar's pending row (stage-capture.js v4 on both surfaces)
+  assert.match(read("views", "home.ejs"), /const live = \(!!st\.active && pepeHere_\) \|\| paid\.length > 0 \|\| !!\(locals\.stageFeatured && locals\.stageFeatured\.next\);/);
+  assert.match(read("views", "room.ejs"), /const live = pepeOn_ \|\| RS\.slots\.length > 0 \|\| !!\(RS\.featured && RS\.featured\.next\);/);
+  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /stage-capture\.js\?v=4/, v);
+  assert.equal(EN["js.stagecap.upnext"], "Snaps and clips work once the next title is playing");
   for (const [k, v] of Object.entries({ "js.stage.upnext.kicker": "Coming up next", "js.stage.upnext.starting": "Starting", "js.stage.upnext.standby": "Please stand by",
     "js.stage.upnext.aria": "Up next on the stage: {title} – starting…", "js.stage.upnext.episode_aria": "season {season}, episode {episode}",
     "js.stage.upnext.movie": "Movie", "js.stage.upnext.episode": "S{season} · E{episode}", "js.stage.upnext.tab": "📼 Up next" })) assert.equal(EN[k], v, k);
@@ -363,10 +375,133 @@ test("views + strings + styles: the css is linked, stage-room.js v23, the poster
   assert.match(css, /\.st-upnext\[data-state="standby"\] :is\(\.st-un-play, \.st-un-cur, \.st-un-dots\) \{ display: none; \}/);
   assert.match(css, /#rmStage\.rmd-controls-on \.st-upnext :is\(\.st-un-top, \.st-un-foot\) \{ opacity: 0; \}/);
   assert.match(css, /container: stun \/ size;/);
+  // upnext review V4 + nits: 5 lines in a portrait box, 3 for an xl title in the wide banner; "PLEASE STAND BY" bigger; the clock falls back
+  // with the other pixel lines; a ▶ (not a ■) in forced colours; a hollow tab dot
+  assert.match(css, /@container stun \(max-aspect-ratio: 4 \/ 5\) \{[\s\S]*?\.st-upnext\[data-len\] \.st-un-title \{ -webkit-line-clamp: 5; line-clamp: 5; \}/);
+  assert.match(css, /\.st-upnext\[data-poster="0"\]\[data-len="xl"\] \.st-un-title \{ font-size: clamp\(13px, calc\(var\(--u\) \* 8\.6\), 80px\); -webkit-line-clamp: 3; line-clamp: 3; \}/);
+  assert.match(css, /\.st-upnext\[data-state="standby"\] \.st-un-start \{ font-size: clamp\(11px/);
+  assert.match(css, /:is\(\.st-un-kick, \.st-un-start, \.st-un-meta, \.st-un-clock\)/);
+  assert.match(css, /\.st-un-play \{ forced-color-adjust: none;/);
+  assert.match(css, /:is\(\.rm, \.hm\) \.stab\.off\.pending \.dot \{ background: transparent;/);
   assert.doesNotMatch(css, /VT323|@import|url\(["']?https?:/i, "only the site's own fonts, nothing external");
   assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ""), /(^|[^-])\.upnext\b/m, "never the schedule list's .upnext class");
   const js = read("public", "js", "stage-room.js");
   const card = js.slice(js.indexOf("function upCard("), js.indexOf("function upShow("));
   assert.ok(card.length > 1000);
   assert.doesNotMatch(card, /innerHTML/, "the card is built with textContent only");
+});
+
+// ── upnext review fixes (each failed on the review build 945c8bfb) ──
+test("review V1: a poster that fails to load stays the plain card - the next poll never brings the broken image back", async () => {
+  const x = switcher({ featured: PEND(MOVIE(T0)), posters: true });
+  const img = x.q(".st-un-pic").children[0];
+  img.onerror();
+  assert.equal(x.card().getAttribute("data-poster"), "0");
+  for (let i = 0; i < 3; i++) { x.answer(() => ans([], PEND(MOVIE(T0)), { now: x.now() })); await x.adv(3000); }
+  assert.equal(x.card().getAttribute("data-poster"), "0", "3 polls later: still the plain card");
+  assert.equal(x.card().querySelectorAll("st-un-pic").length, 1, "and no second request");
+});
+
+test("review F1: a 📼 queue between two titles keeps ITS player under the card - the viewer's sound (and fullscreen / picture-in-picture) carry on into the next title", async () => {
+  const x = switcher({ slots: [LIB({ title: "📼 The Show — S1E1 Pilot" })], featured: { id: "lib1", live: true, by: "auto", went: true } });
+  assert.equal(x.player.starts, 1);
+  x.player.playing(); x.player.muted = false;                  // title 1 plays; the viewer unmuted it
+  await x.adv(1000);
+  x.player.stall();                                             // title 1 ended: its stream is gone
+  x.answer(() => ans([], PEND(EPISODE(T0 + 1000), { went: true }), { now: x.now() }));
+  await x.poll();
+  assert.ok(x.card(), "the card");
+  assert.equal(x.player.stops, 0, "the player was NOT stopped (a new one starts muted, out of fullscreen)");
+  assert.equal(x.player.running(), true);
+  assert.equal(x.player.muted, false, "the viewer's sound");
+  // the next title publishes on the same stream: the same player picks it up
+  x.answer(() => ans([LIB({ title: "📼 The Show — S1E2 Second" })], { id: "lib1", live: true, by: "auto", went: true }, { now: x.now() }));
+  await x.poll();
+  assert.equal(x.player.starts, 1, "never restarted");
+  assert.ok(x.card() && !x.card().classList.contains("is-out"), "the card until it plays");
+  x.player.playing();
+  await x.adv(1300);
+  assert.equal(x.card(), null);
+  assert.equal(x.player.muted, false);
+  assert.equal(x.player.stops, 0);
+});
+
+test("review F1: a kept player that sits on a frame with no overlay up isn't 'playing' - the card waits for the picture to move", async () => {
+  const x = switcher({ slots: [LIB()], featured: { id: "lib1", live: true, by: "auto", went: true } });
+  x.answer(() => ans([], PEND(EPISODE(T0), { went: true }), { now: x.now() }));
+  await x.poll();
+  x.player.frozen();                                            // VHS never noticed the gap: no reconnecting overlay, nothing moving
+  x.answer(() => ans([LIB()], { id: "lib1", live: true, by: "auto", went: true }, { now: x.now() }));
+  await x.poll();
+  await x.adv(3000);
+  assert.ok(x.card() && !x.card().classList.contains("is-out"), "a frozen frame is no hand-over");
+  x.player.playing();
+  await x.adv(600);
+  assert.ok(x.card().classList.contains("is-out"), "the picture moves: hand over");
+});
+
+test("review F1: the stage's own <video> in picture-in-picture (the Dock leaves it when what's showing changes): no card for that viewer, the same selection - the card once they're back", async () => {
+  const x = switcher({ slots: [LIB()], featured: { id: "lib1", live: true, by: "auto", went: true } });
+  const sel0 = JSON.stringify(x.sw.selection());
+  const video = mkEl("video"); x.wrap.appendChild(video);
+  x.doc.pictureInPictureElement = video;
+  x.answer(() => ans([], PEND(EPISODE(T0), { went: true }), { now: x.now() }));
+  await x.poll();
+  assert.equal(x.sw.view(), "slot:lib1");
+  assert.equal(x.card(), null, "nobody would see it on the page");
+  assert.equal(JSON.stringify(x.sw.selection()), sel0, "what's showing didn't change (picture-in-picture stays)");
+  assert.equal(x.player.stops, 0);
+  x.doc.pictureInPictureElement = null;
+  x.answer(() => ans([], PEND(EPISODE(T0), { went: true }), { now: x.now() }));
+  await x.adv(3000);
+  assert.ok(x.card(), "back on the page: the card");
+  // the Dock's in-place fullscreen (the whole stage, an ancestor of the player's box) is NOT the video's own: the card shows there
+  x.doc.fullscreenElement = { stage: true };
+  x.answer(() => ans([], PEND(EPISODE(T0), { went: true }), { now: x.now() }));
+  await x.adv(3000);
+  assert.ok(x.card() && !x.card().classList.contains("is-out"));
+});
+
+test("review F3: the stream publishes and drops between two polls (goLive cleared the marker; the server still features it) - the card stays, never the mic stage; at its until: the defaults (a slot this page never saw live) / the hold it had", async () => {
+  const x = switcher({ featured: PEND(MOVIE(T0)) });
+  x.sw.setMic(MIC());
+  assert.equal(x.sw.view(), "slot:lib1");
+  x.answer(() => ans([], { id: "lib1", live: false, by: "auto", went: true }, { now: x.now() }));   // published + dropped, no next any more
+  await x.poll();
+  assert.equal(x.sw.view(), "slot:lib1", "not the mic stage");
+  assert.ok(x.card() && !x.card().classList.contains("is-out"), "the card stays (it's still starting)");
+  for (let i = 0; i < 5; i++) x.answer(() => ans([], { id: "lib1", live: false, by: "auto", went: true }, { now: x.now() }));   // (then "stale" answers: nothing moves)
+  await x.adv(60000);
+  assert.ok(x.card() && !x.card().classList.contains("is-out"), "60 s: still the card");
+  await x.adv(31000);
+  assert.equal(x.sw.view(), "mic", "its 90 s: a slot this page never saw live gives way (dock3 C2)");
+  // a 📼 queue slot this page HAD listed: the same drop, then at its until the ordinary hold it had (as the 1.99akf hold always did)
+  const y = switcher({ slots: [LIB()], featured: { id: "lib1", live: true, by: "auto", went: true } });
+  y.sw.setMic(MIC());
+  y.answer(() => ans([], PEND(EPISODE(T0), { went: true }), { now: y.now() }));
+  await y.poll();
+  assert.ok(y.card());
+  y.answer(() => ans([], { id: "lib1", live: false, by: "auto", went: true }, { now: y.now() }));
+  await y.poll();
+  assert.ok(y.card() && !y.card().classList.contains("is-out"), "the card stays");
+  for (let i = 0; i < 5; i++) y.answer(() => ans([], { id: "lib1", live: false, by: "auto", went: true }, { now: y.now() }));
+  await y.adv(91000);
+  assert.equal(y.sw.view(), "slot:lib1", "the server still holds it: held, as before the card");
+  assert.equal(y.card(), null, "the card is over");
+  assert.doesNotMatch(y.tabs(), /pending/);
+  // ...and the server letting it go moves on as usual
+  y.clearAnswers(); y.answer(() => ans([], null, { now: y.now() }));
+  await y.poll();
+  assert.equal(y.sw.view(), "mic");
+});
+
+test("review F5: ONE poll timer - every 3 s while the card says STARTING, the ordinary 10 s from PLEASE STAND BY on (a 95 s card: no 38 calls)", async () => {
+  const x = switcher({ featured: PEND(MOVIE(T0)) });
+  const at = () => x.calls.filter((c) => c.url === "/api/stage?room=pad").map((c) => c.at - T0);
+  await x.adv(95000);
+  const t = at();
+  for (let i = 1; i < t.length; i++) assert.ok(t[i] - t[i - 1] >= 3000, "never two polls inside 3 s: " + t.join(","));
+  assert.ok(t.length <= 17, t.length + " polls");
+  assert.ok(t.filter((v) => v <= 30000).length >= 9, "fast while starting");
+  assert.ok(t.filter((v) => v > 33000 && v <= 90000).length <= 7, "10 s while standing by");
 });

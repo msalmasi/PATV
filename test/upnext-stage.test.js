@@ -39,6 +39,7 @@ const golive = require(path.join(repo, "golive"));
 const M = require(path.join(repo, "deploy", "mediactl", "mediactl.js"));
 
 // ── a Plex with two films and a show (season 1: 3 episodes) ──
+let posterCalls = 0;
 const media = path.join(tmp, "media");
 fs.mkdirSync(media, { recursive: true });
 const FILE = path.join(media, "secret-library-path.mkv");
@@ -57,7 +58,7 @@ const plex = {
     if (key === "502") return { key, type: "movie", title: "Carnival of Souls", year: 1962, file: FILE, duration: 4680, audio: [], subs: [], poster: false };
     const err = new Error("Not in the Plex library"); err.status = 404; throw err;
   },
-  async poster() { return { type: "image/jpeg", body: Buffer.from([1]) }; },
+  async poster() { posterCalls++; return { type: "image/jpeg", body: Buffer.from([1]) }; },
 };
 const procs = [];
 function fakeSpawn(cmd, args) {
@@ -91,7 +92,9 @@ const beat = (p) => S.rtmpCallback({ call: "update_publish", app: "stage", name:
 async function playFor(sec) { last().stdout.write(`out_time_us=${Math.round(sec * 1e6)}\n`); await tick(); }
 async function finish() { const p = last(); p.stdout.write(`out_time_us=${DUR * 1e6}\n`); await tick(); p.emit("exit", 0); await tick(); }
 const feat = async (id) => { const s = await S.getSlot(id); return s && s.featured ? s.feature_by : null; };
-const featured = async () => { S.clearCache(); return S.featuredOf(ROOM, null); };
+// (upnext review privacy F1: a signed-in viewer - the poster's rating key is only theirs; signed out: featured(null))
+const VIEWER = { userId: "viewer-1", username: "viewer1", class: "pleb" };
+const featured = async (viewer = VIEWER) => { S.clearCache(); return S.featuredOf(ROOM, viewer); };
 const events = async (id, what) => (await getQuery("SELECT detail FROM stage_events WHERE slot_id = ? AND what = ? ORDER BY rowid", [id, what])).map((r) => r.detail);
 let admin;
 async function clear() {
@@ -150,12 +153,13 @@ test("⏹ then ▶ (prod's gaps): the new 📼 slot is featured before its first
   assert.equal(until - at, S.UPNEXT_MS);
   assert.equal(S.UPNEXT_MS, 90000);
   assert.equal(nowAt, T, "the server's clock with it (a page's first render has no poll `now` yet)");
-  const rs = await S.roomStage(ROOM, null);
+  const rs = await S.roomStage(ROOM, VIEWER);
   assert.equal(rs.featured.id, b.slot.id, "roomStage (the pad page's first render) names it");
+  assert.equal(rs.featured.next.key, "501", "signed in: the poster's key");
   assert.equal(rs.featured.next.title, "Night of the Living Dead");
   assert.deepEqual(rs.slots, [], "it isn't LISTED - it isn't live");
   // nothing a page gets carries the Plex token, the server's address, a file path or the encoder's
-  const blob = JSON.stringify([f, rs, await S.publicSlots(ROOM), await S.featuredOf(ROOM, null, { front: true })]);
+  const blob = JSON.stringify([f, rs, await S.publicSlots(ROOM), await S.featuredOf(ROOM, null, { front: true }), await S.roomStage(ROOM, null)]);
   for (const bad of [PLEX_TOKEN, FILE, "secret-library-path", process.env.MEDIACTL_URL, "X-Plex", "/library/metadata", "thumb"]) assert.ok(!blob.includes(bad), "no " + bad);
   // the stream publishes: the marker goes, the feature stays
   const pb = await pub(keyOf(last()));
@@ -318,4 +322,107 @@ test("the marker only takes clean values: digits-only keys, plain text, a 📼 s
   await L.stop(admin, ROOM);
   assert.equal(await S.libraryUpNext(b.slot.id, { key: "1", title: "x" }), false, "ended");
   assert.equal((await S.getSlot(b.slot.id)).upnext, null, "ending clears it");
+});
+
+// ── upnext review fixes (each failed on the review build 945c8bfb) ──
+test("review privacy F1: signed out, a starting title's card has no poster and no Plex rating key - featuredOf, roomStage and the homepage's front pad", async () => {
+  const b = await L.play(admin, { room: ROOM, key: "501" });
+  const out = await featured(null);
+  assert.equal(out.id, b.slot.id);
+  assert.equal(out.next.title, "Night of the Living Dead", "the title is public (the 📼 slot's own title says it)");
+  assert.equal(out.next.poster, false);
+  assert.equal("key" in out.next, false, "no rating key for a signed-out viewer / a scraper");
+  const rs = await S.roomStage(ROOM, null);
+  assert.equal(rs.featured.next.poster, false);
+  assert.equal("key" in rs.featured.next, false);
+  S.clearCache();
+  const front = await S.featuredOf(ROOM, null, { front: true });
+  assert.equal("key" in front.next, false);
+  assert.equal((await featured(VIEWER)).next.key, "501", "signed in: the poster through /api/medialib/poster");
+  assert.equal(S.upNextPoster(ROOM), true, "(/api/stage reads the sign-in only while this says so)");
+  assert.equal(await S.featuredOf(ROOM, { userId: "" }).then((f) => "key" in f.next), false, "no user id: signed out");
+});
+
+test("review privacy F1: /api/stage reads the sign-in only while a starting title has a poster - the key for a signed-in viewer, none signed out", async () => {
+  const express = require(path.join(repo, "node_modules", "express"));
+  const B = require(path.join(repo, "bridge"));
+  // no Approved pad anywhere: the handler reads the sign-in only for a reason of its own (as test/dock3-review-server.test.js)
+  const PA = require(path.join(repo, "padaccess"));
+  PA._reset(); await PA.init();
+  for (const sd of rooms.SEEDS) await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES (?, 'members', ?, 'test') ON CONFLICT(room_id) DO UPDATE SET level = 'members'", [sd.room_id, T]);
+  await runQuery("UPDATE pad_access SET level = 'members' WHERE level = 'approved'");
+  PA._reset(); await PA.init();
+  assert.equal(PA.anyApproved(), false);
+  const app = express();
+  app.use(express.json());
+  let reads = 0;
+  const addUser = (req, res, next) => { reads++; const h = req.headers["x-u"]; req.user = h ? { userId: h, username: h, class: "pleb" } : null; next(); };
+  B.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "roomsweb")).register(app, { addUser, isBotToken: (t) => t === "bot" });
+  const srv = await new Promise((ok) => { const x = app.listen(0, "127.0.0.1", () => ok(x)); });
+  const base = "http://127.0.0.1:" + srv.address().port;
+  const slug = require(path.join(repo, "roomsweb")).linkSlug(await rooms.get(ROOM));
+  const get = async (u) => (await fetch(base + "/api/stage?room=" + encodeURIComponent(slug), { headers: u ? { "x-u": u } : {} })).json();
+  try {
+    reads = 0;
+    await get("v1");
+    const base0 = reads;                                             // (whatever the handler reads for reasons of its own - an Approved pad, a cam)
+    const b = await L.play(admin, { room: ROOM, key: "501" });
+    S.clearCache();
+    reads = 0;
+    let d = await get("v1");
+    assert.equal(reads, base0 + 1, "a starting title with a poster: the sign-in is read (once)");
+    assert.equal(d.featured.id, b.slot.id);
+    assert.equal(d.featured.next.key, "501", "signed in: the poster's key");
+    assert.equal(d.featured.next.poster, true);
+    d = await get();
+    assert.equal(d.featured.next.title, "Night of the Living Dead");
+    assert.equal(d.featured.next.poster, false, "signed out: no poster");
+    assert.equal("key" in d.featured.next, false, "...and no rating key");
+    await L.stop(admin, ROOM);
+    const c = await L.play(admin, { room: ROOM, key: "502" });             // no poster in Plex
+    S.clearCache();
+    reads = 0;
+    d = await get("v1");
+    assert.equal(d.featured.id, c.slot.id);
+    assert.equal(reads, base0, "no poster to hand out: no extra sign-in read");
+    assert.equal(d.featured.next.title, "Carnival of Souls");
+  } finally { srv.close(); }
+});
+
+test("review F4: a marker set while the title before kept publishing (its encoder didn't stop) is void once that stream beats on - no 'Coming up next' over a later pause, no let-go at its first drop", async () => {
+  const b = await L.play(admin, { room: ROOM, key: "500" });
+  const p = await pub(keyOf(last()));
+  assert.equal(await feat(b.slot.id), "auto");
+  // the queue / a control asked for the next title, but the old ffmpeg is still on the ingest
+  assert.equal(await S.libraryUpNext(b.slot.id, { key: "501", kind: "movie", title: "Night of the Living Dead", year: 1968, poster: true }), true);
+  for (let i = 0; i < 2; i++) { adv(10000); await beat(p); }       // it keeps beating: 20 s after the marker
+  await done(p);                                                    // ...and pauses / drops
+  assert.equal((await featured()).next, undefined, "a stale marker never reads as up next");
+  adv(80000);                                                       // 100 s after the marker: the ordinary hold, nothing else live
+  await S.autoFeature(ROOM);
+  assert.equal(await feat(b.slot.id), "auto", "held as any dropped auto-feature - never 'up next didn't start'");
+  assert.deepEqual(await events(b.slot.id, "unfeatured"), []);
+  // control: the old title DID stop right after the marker (no beat after it) - up next as before
+  const p2 = await pub(keyOf(last()));
+  assert.equal(p2.status, 302);
+  adv(5000); await beat(p2);
+  assert.equal(await S.libraryUpNext(b.slot.id, { key: "502", kind: "movie", title: "Carnival of Souls", year: 1962 }), true);
+  adv(1000); await done(p2);
+  assert.equal((await featured()).next.title, "Carnival of Souls");
+});
+
+test("review privacy N1: one poster fetch per title for a pad full of viewers - the picture is kept a while by rating key (access still checked per request)", async () => {
+  L._q._posters.clear();
+  posterCalls = 0;
+  const viewers = [admin, await mkUser(), await mkUser(), await mkUser()];
+  const got = await Promise.all(viewers.map((u) => L.poster(u, "501")));
+  for (const r of got) { assert.equal(r.status, 200); assert.deepEqual([...r.body], [1]); }
+  assert.equal(posterCalls, 1, "4 viewers at once: one fetch");
+  await L.poster(admin, "501");
+  assert.equal(posterCalls, 1, "a moment later: still the kept one");
+  await assert.rejects(L.poster(null, "501"), (e) => e.status === 401 || e.status === 403, "signed out: refused before the cache");
+  await assert.rejects(L.poster(admin, "../1"), (e) => e.status === 400);
+  await L.poster(admin, "500");
+  assert.equal(posterCalls, 2, "another title: its own fetch");
 });

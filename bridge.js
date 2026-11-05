@@ -2454,6 +2454,12 @@ function register(app, { isBotToken, addUser }) {
         // out of the list still needs the sign-in read (its rule is per viewer) - it was named to nobody, so the hold never engaged
         if (!home && req.user === undefined && (await MS.featuredCam(R.id))) await new Promise((r) => addUser(req, res, r));
         featured = await MS.featuredOf(R.id, req.user || null, { front: home });
+        // upnext review (privacy F1): a 📼 title that is starting names its poster (a Plex rating key for the site's proxy) only to signed-in
+        // viewers - the sign-in is read only while one with a poster is
+        if (featured && featured.next && req.user === undefined && MS.upNextPoster(R.id)) {
+          await new Promise((r) => addUser(req, res, r));
+          featured = await MS.featuredOf(R.id, req.user || null, { front: home });
+        }
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room

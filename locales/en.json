@@ -4593,6 +4593,7 @@
   "js.stage.upnext.movie": "Movie",
   "js.stage.upnext.episode": "S{season} · E{episode}",
   "js.stage.upnext.tab": "📼 Up next",
+  "js.stagecap.upnext": "Snaps and clips work once the next title is playing",
   "js.stage.mf.tab": "🎙 On the mic ({n})",
   "js.stage.mf.tab_pins": "📌 {n}",
   "js.stage.mf.tab_signin": "🎙 On the mic: sign in to watch",

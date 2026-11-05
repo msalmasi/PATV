@@ -85,7 +85,9 @@
 .st-un-body { display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 5.5);
               min-block-size: 0; padding: calc(var(--u) * 1.5) var(--pad) calc(var(--u) * 2); }
 .st-un-pic { flex: none; position: relative; block-size: min(calc(var(--u) * 58), 100%); aspect-ratio: 2 / 3;
-             border: max(2px, calc(var(--u) * .55)) solid #efe9d8; background: #0a0a0a;
+             border: max(2px, calc(var(--u) * .55)) solid #efe9d8;
+             /* (review nit: while the poster loads - a cold proxy cache - a plain VHS sleeve, not an empty black box) */
+             background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 calc(var(--u) * 1.4), transparent 0 calc(var(--u) * 2.8)), #101014;
              box-shadow: calc(var(--u) * 1.3) calc(var(--u) * 1.3) 0 var(--st-un-shadow); }
 .st-un-pic img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; }
 .st-upnext[data-poster="0"] .st-un-pic { display: none; }
@@ -149,7 +151,7 @@
 .st-un-top, .st-un-foot { transition: opacity .2s ease; }
 
 /* Press Start 2P has no glyphs for these scripts: the pixel lines fall back to the site's own type, bold capitals */
-.st-upnext:is(:lang(ar), :lang(fa), :lang(he), :lang(ur), :lang(hi), :lang(th), :lang(ja), :lang(ko), :lang(zh-CN), :lang(zh-TW), :lang(vi)) :is(.st-un-kick, .st-un-start, .st-un-meta) {
+.st-upnext:is(:lang(ar), :lang(fa), :lang(he), :lang(ur), :lang(hi), :lang(th), :lang(ja), :lang(ko), :lang(zh-CN), :lang(zh-TW), :lang(vi)) :is(.st-un-kick, .st-un-start, .st-un-meta, .st-un-clock) {
   font-family: var(--ds-font, Ubuntu, system-ui, sans-serif); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
 }
 
@@ -186,7 +188,7 @@
   .st-upnext[data-poster="0"] .st-un-kick { font-size: clamp(10px, calc(var(--u) * 5.6), 48px); }
   .st-upnext[data-poster="0"][data-len="s"] .st-un-title { font-size: clamp(16px, calc(var(--u) * 15), 120px); }
   .st-upnext[data-poster="0"][data-len="l"] .st-un-title { font-size: clamp(14px, calc(var(--u) * 11), 96px); }
-  .st-upnext[data-poster="0"][data-len="xl"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 8.6), 80px); -webkit-line-clamp: 2; line-clamp: 2; }
+  .st-upnext[data-poster="0"][data-len="xl"] .st-un-title { font-size: clamp(13px, calc(var(--u) * 8.6), 80px); -webkit-line-clamp: 3; line-clamp: 3; }
   .st-upnext[data-poster="0"] .st-un-meta { font-size: clamp(9px, calc(var(--u) * 3.6), 32px); }
   .st-upnext[data-poster="0"] .st-un-start { font-size: clamp(9px, calc(var(--u) * 3.4), 30px); }
   .st-upnext[data-poster="1"] .st-un-txt { max-inline-size: min(64cqw, calc(var(--u) * 190)); }
@@ -212,8 +214,15 @@
   .st-un-pic { block-size: auto; inline-size: min(52cqw, calc(var(--u) * 46)); }
   .st-upnext[data-poster="1"] .st-un-txt { flex: none; justify-items: center; text-align: center; }
   .st-upnext[data-poster="1"] .st-un-sub { justify-content: center; }
-  .st-un-title { -webkit-line-clamp: 3; line-clamp: 3; }
+  .st-upnext[data-len] .st-un-title { -webkit-line-clamp: 5; line-clamp: 5; }
 }
+
+/* "PLEASE STAND BY" is the message now, not a status line: bigger than "STARTING" (review nit: a 9-10 px line was easy to miss) */
+.st-upnext[data-state="standby"] .st-un-start { font-size: clamp(11px, calc(var(--u) * 4.2), 44px); margin-block-start: calc(var(--u) * 1.8); }
+@container stun (max-height: 230px) { .st-upnext[data-state="standby"] .st-un-start { font-size: clamp(11px, calc(var(--u) * 5.6), 22px); } }
+
+/* the stage's tab for it (stage-room.js renderTabs .stab.off.pending): a hollow dot - featured, not live yet - beside the filled live / grey off-air ones */
+:is(.rm, .hm) .stab.off.pending .dot { background: transparent; box-shadow: inset 0 0 0 2px currentColor; opacity: .75; animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .st-upnext { animation: none; }
@@ -228,4 +237,6 @@
   .st-un-bars, .st-un-castle, .st-un-roll, .st-un-screen::before, .st-un-screen::after { display: none; }
   .st-un-kick, .st-un-title, .st-un-sub, .st-un-start, .st-un-clock, .st-un-bug { color: CanvasText; text-shadow: none; }
   .st-un-rule, .st-un-cur { background: CanvasText; }
+  .st-un-play { forced-color-adjust: none; border-block-color: transparent; border-left-color: CanvasText; }   /* (a ▶, not a ■) */
+  :is(.rm, .hm) .stab.off.pending .dot { forced-color-adjust: none; box-shadow: inset 0 0 0 2px CanvasText; }
 }

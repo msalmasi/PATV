@@ -4,7 +4,7 @@
 //     host   element the buttons render into (under the player)
 //     room   function () -> the pad slug whose stage is showing (the homepage's front pad changes)
 //   bar.update(sel)   called by the stage switcher (stage-room.js onShow) with what's selected:
-//     null (nothing on) | { stream: 'pepe' | <slot id>, label, capture: bool, nsfw: bool, embed: bool }
+//     null (nothing on) | { stream: 'pepe' | <slot id>, label, capture: bool, nsfw: bool, embed: bool, pending?: true (upnext: a 📼 card - the row greyed) }
 //
 // The browser never sends a picture: the server cuts the frame / the last N seconds out of the live
 // HLS on its own disk, or records the next N seconds of the mic stage. A capture is a PREVIEW first (only you see it); "Save" sends it to Pepe, who
@@ -42,13 +42,16 @@
       var mic = !!(sel && sel.stream === 'mic'), micCaps = mic && me && me.mic;
       // The mic selection deliberately still says embed/capture:false. Its own server gates win.
       if (mic && !micCaps) { host.innerHTML = ''; host.classList.add('hide'); return; }
-      if (!mic && (!sel || sel.embed || !sel.stream)) {
+      // upnext (review V3): a 📼 "Coming up next" card (stage-room.js: pending) - the row its stream will have, greyed until it plays (the same
+      // height: nothing under the player moves at the hand-over; never the YouTube / Twitch note)
+      var pend = !mic && !!(sel && sel.pending === true && sel.stream);
+      if (!mic && !pend && (!sel || sel.embed || !sel.stream)) {
         host.innerHTML = sel && sel.embed ? '<span class="stcap-note">YouTube and Twitch streams can\'t be snapped or clipped here.</span>' : '';
         host.classList.toggle('hide', !(sel && sel.embed));
         return;
       }
       host.classList.remove('hide');
-      if (!mic && sel.capture === false) {
+      if (!mic && !pend && sel.capture === false) {
         host.innerHTML = '<span class="stcap-note">📵 ' + esc(sel.label) + ' turned off snaps and clips of their stream.</span>';
         return;
       }
@@ -70,6 +73,7 @@
       if (roomOff || (me && me.signed && !me.eligible)) {
         if (!mic) host.querySelectorAll('.stcap-btn, .stcap-secs').forEach(function (b) { b.disabled = true; if (roomOff) b.title = roomOff; });
       }
+      if (pend) host.querySelectorAll('.stcap-btn, .stcap-secs').forEach(function (b) { b.disabled = true; b.title = _t('js.stagecap.upnext', 'Snaps and clips work once the next title is playing'); });
       if (mic) host.querySelectorAll('.stcap-btn, .stcap-secs').forEach(function (b) {
         var kind = b.classList.contains('stcap-secs') ? 'clip' : b.getAttribute('data-k');
         b.disabled = busy || !micCaps[kind];
@@ -257,7 +261,7 @@
 
     load();
     setInterval(function () { if (!document.hidden) load(); }, 60000);   // 1.99cw: the switches can change
-    return { update: function (s) { var r = !sel || !s || sel.stream !== s.stream || sel.capture !== s.capture || sel.embed !== s.embed || sel.nsfw !== s.nsfw; sel = s; if (meRoom !== (o.room() || '')) load(); else if (r) render(); }, reload: load };
+    return { update: function (s) { var r = !sel || !s || sel.stream !== s.stream || sel.capture !== s.capture || sel.embed !== s.embed || sel.nsfw !== s.nsfw || !sel.pending !== !s.pending; sel = s; if (meRoom !== (o.room() || '')) load(); else if (r) render(); }, reload: load };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.capture = capture;

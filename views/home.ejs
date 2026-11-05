@@ -13,7 +13,9 @@
   const st = stage || { active: false };
   const paid = Array.isArray(slots) ? slots : [];
   const pepeHere_ = typeof pepeHere === 'undefined' ? true : pepeHere !== false;   // 1.99cj: Pepe is in the featured room
-  const live = (!!st.active && pepeHere_) || paid.length > 0;
+  // (upnext review V2: + a 📼 title starting on the front pad's featured stage - the stage is drawn on, its card mounts in place: no 44 px
+  // collapsed stage / OFF AIR slate that jumps open on the first script tick)
+  const live = (!!st.active && pepeHere_) || paid.length > 0 || !!(locals.stageFeatured && locals.stageFeatured.next);
   // 1.99ek: Top Pads (home.topPads: top 5 live pads, the front pick's order) and the shared 🚀 badge (boostmark.js)
   const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) ? tops : [];
   // 1.99hm: 🎧 on Top Pads rows - room-bridge.js is loaded whenever a row or the room widget needs it
@@ -98,7 +100,7 @@
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script>
-<script src="/public/js/stage-capture.js?v=3"></script>
+<script src="/public/js/stage-capture.js?v=4"></script><%# upnext: v4 - a 📼 card greys the row %>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw4">
 <%- include('partials/cosmetics-css') %>

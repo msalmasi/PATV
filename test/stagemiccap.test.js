@@ -591,6 +591,23 @@ test('mic capture UI uses mic gates before embed/capture:false; off hides it and
   s.bar.update({ stream: 'slot-one', capture: true, label: 'Host' }); assert.match(s.host.innerHTML, />last 20 s</);
 });
 
+test('upnext review V3: a 📼 "Coming up next" card (pending) shows the normal Snap / Clip row greyed - never the YouTube / Twitch note; its stream plays: the same row, live', async () => {
+  const s = uiSandbox(); await s.flush();
+  s.bar.update({ stream: 'lib1', label: '📼', embed: true, capture: false, nsfw: false, pending: true });
+  assert.doesNotMatch(s.host.innerHTML, /YouTube|turned off snaps/);
+  assert.equal(s.host.classList.contains('hide'), false);
+  assert.ok(s.button('snap') && s.button('clip'), 'the row its stream will have (the same height: nothing below moves at the hand-over)');
+  assert.equal(s.button('snap').disabled, true); assert.equal(s.button('clip').disabled, true);
+  assert.equal(s.host.querySelector('.stcap-secs').disabled, true);
+  assert.equal(s.button('snap').title, 'Snaps and clips work once the next title is playing');
+  assert.match(s.host.innerHTML, /stcap-price/);
+  s.button('snap').dispatch('click'); await s.flush();
+  assert.equal(s.calls.filter(c => c.url === '/api/stage/capture').length, 0, 'nothing is captured off a card');
+  s.bar.update({ stream: 'lib1', label: 'Admin', embed: false, capture: true, nsfw: false });
+  assert.equal(s.button('snap').disabled, false, 'live: the row works');
+  assert.match(s.button('clip').title, /last 20 s of Admin/);
+});
+
 test('mic capture UI records then cuts then opens a fixed capture preview with localized privacy/audio notes', async () => {
   const s = uiSandbox(); await s.flush(); s.button('clip').dispatch('click'); await s.flush();
   const create = s.calls.find(c => c.url === '/api/stage/capture'); assert.equal(create.body.surface, 'pad'); assert.equal(create.body.stream, 'mic'); assert.equal(create.headers['X-Requested-With'], 'fetch');

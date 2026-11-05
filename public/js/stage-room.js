@@ -242,7 +242,7 @@
     }
     // ── upnext: 📼 "Coming up next" ──
     var UPNEXT_STANDBY_MS = 30000, UPNEXT_HANDOFF_MS = 20000, UPNEXT_POLL_MS = 3000;
-    var upCtl = null, upGone = {}, upTimer = null, upTimerFor = '', upPollT = null;
+    var upCtl = null, upGone = {}, upTimer = null, upTimerFor = '', upFastT = null;
     function srvNow() { return Date.now() + skew; }
     function upBig(n) { return n.kind === 'episode' && n.show ? n.show : n.title || n.show || ''; }
     // "Show – Title" / "Title (1968)" (the tab's title, the ON AIR line)
@@ -252,23 +252,30 @@
     // the featured slot the server says is starting its next title, as a stage entry: the slot this page held (a 📼 queue between two titles)
     // tagged pending, or one it never saw (a fresh ▶ Play, a page loaded mid-gap). A listed (live) slot is the stream itself - the card hands
     // over to it. A pending entry whose up next is over (the server stopped naming it, next.until passed) goes: the defaults again.
+    // upnext review (function F3): the stream published and dropped again between two polls (an encoder colliding with the one before it on
+    // the ingest and retried, an ffmpeg that died right after its first publish) - goLive cleared the server's marker, so the server names the
+    // slot featured with no next while the page never saw it live: the card it had stays (`carried`) until its own until, never the mic stage.
+    // `base` = the ordinary hold a pending copy was made from (the slot this page had listed) - it comes back once the card is over.
     function withPending(list, h) {
-      var n = h && h.next, id = h ? String(h.id) : '';
-      var ok = !!(n && !h.live && srvNow() < n.until && !(upGone[id] >= n.at));
+      var id = h ? String(h.id) : '', srvN = h && !h.live && h.next ? h.next : null;
+      function fresh(n) { return !!(n && srvNow() < n.until && !(upGone[id] >= n.at)); }
       var out = [], have = false;
       for (var i = 0; i < list.length; i++) {
         var s = list[i];
         if (!s || String(s.id) !== id) { if (!(s && s.pending)) out.push(s); continue; }
         have = true;
         if (!s.held) { out.push(s); continue; }
-        if (ok) {
+        var n = fresh(srvN) ? srvN : !srvN && !h.live && s.pending && fresh(s.upnext) ? s.upnext : null;
+        if (n) {
           var c = {}; for (var k in s) if (own(s, k)) c[k] = s[k];
-          c.featured = true; c.pending = true; c.upnext = n; c.title = upFull(n); if (h.by) c.feature_by = h.by;
+          c.base = s.pending ? s.base || null : s;
+          c.featured = true; c.pending = true; c.upnext = n; c.carried = n !== srvN; c.title = upFull(n); if (h.by) c.feature_by = h.by;
           out.push(c);
-        } else if (!s.pending) out.push(s);              // an ordinary hold (a 📼 pause, an OBS reconnect): as before
+        } else if (s.pending) { if (s.base) out.push(s.base); }   // (its card is over: the slot this page had, as an ordinary hold)
+        else out.push(s);                                 // an ordinary hold (a 📼 pause, an OBS reconnect): as before
       }
-      if (ok && !have) out.unshift({ id: id, featured: true, feature_by: h.by, held: true, pending: true, upnext: n, title: upFull(n),
-                                     display: _t('js.stage.upnext.tab', '📼 Up next'), hls: null, nameCss: '' });
+      if (fresh(srvN) && !have) out.unshift({ id: id, featured: true, feature_by: h.by, held: true, pending: true, upnext: srvN, title: upFull(srvN),
+                                              display: _t('js.stage.upnext.tab', '📼 Up next'), hls: null, nameCss: '', base: null, carried: false });
       return out;
     }
     slots = withPending(slots, featHint);
@@ -297,6 +304,23 @@
     function upOverlays(hide) {                     // the player's own overlays sit over the box: out of the way while the card is up
       [o.reconnect, o.unmute].forEach(function (x) { if (x && x.style) x.style.visibility = hide ? 'hidden' : ''; });
     }
+    // upnext review (function F1): a slot this page already plays (a 📼 queue between two titles - the same stream, the same player) keeps its
+    // player UNDER the card: the viewer's sound, picture-in-picture and the player's own fullscreen carry on into the next title, as the
+    // 1.99akf hold did. A fresh slot (a new ▶ Play) has nothing to keep.
+    function upKeep(s) { return !!(s && s.hls && player.running() && typeof player.src === 'function' && player.src() === s.hls); }
+    // the stage's <video> itself is fullscreen / picture-in-picture (not the Dock's in-place fullscreen of the whole stage): nobody would see a
+    // card on the page - and the Dock leaves picture-in-picture when what's showing changes - so that viewer keeps the plain hold; the card
+    // comes on the next poll after they're back
+    function videoAway() {
+      try {
+        var D = document, w = o.wrap, inW = function (x) { return !!(x && x !== w && typeof w.contains === 'function' && w.contains(x)); };
+        if (inW(D.pictureInPictureElement) || inW(D.fullscreenElement) || inW(D.webkitFullscreenElement)) return true;
+        var vs = typeof w.querySelectorAll === 'function' ? w.querySelectorAll('video') : [];
+        for (var i = 0; i < vs.length; i++) if (vs[i].webkitDisplayingFullscreen || vs[i].webkitPresentationMode === 'picture-in-picture' || vs[i].webkitPresentationMode === 'fullscreen') return true;
+      } catch (e) { /* an old engine: the card */ }
+      return false;
+    }
+    function cardOn(s) { return !!(s && s.pending && !(upKeep(s) && videoAway())); }
     function upCard(id, n) {
       var D = document, my = { id: id, key: upKey(n), n: n, leaving: false, timers: [], handing: 0 };
       function el(tag, cls, txt) { var x = D.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; }
@@ -327,13 +351,15 @@
       var foot = el('div', 'st-un-foot'); foot.appendChild(el('span', 'st-un-bug', 'PATV')); scr.appendChild(foot);   // (the station bug: never translated)
       scr.appendChild(el('div', 'st-un-roll'));
       card.appendChild(scr);
-      // the poster: the site's own proxy (signed in), never a broken image - one that doesn't load is the plain card
+      // the poster: the site's own proxy (signed in), never a broken image - one that doesn't load is the plain card, for good (upnext review
+      // V1: the next poll put a failed one back)
+      var picFailed = false;
       function setPic(nn) {
-        var want = !!(nn.poster && nn.key && o.posters);
+        var want = !!(nn.poster && nn.key && o.posters) && !picFailed;
         if (want && !pic) {
           pic = el('div', 'st-un-pic'); var img = el('img');
           img.alt = ''; img.decoding = 'async';
-          img.onerror = function () { card.setAttribute('data-poster', '0'); };
+          img.onerror = function () { picFailed = true; card.setAttribute('data-poster', '0'); };
           img.src = '/api/medialib/poster/' + encodeURIComponent(nn.key);
           pic.appendChild(img); body.insertBefore(pic, tx);
         }
@@ -366,15 +392,24 @@
       my.el = card;
       /** a newer answer for the same title: its moment, a poster that came (signed in) */
       my.update = function (nn) { var at0 = my.n.at; my.n = nn; setPic(nn); if (nn.at !== at0 && card.getAttribute('data-state') !== 'standby') standby(); };
-      /** the stream is listed live: its player started behind the card - fade once it plays (the reconnect overlay hides), at most UPNEXT_HANDOFF_MS */
+      /** the stream is listed live: its player started behind the card - fade once it plays, at most UPNEXT_HANDOFF_MS. "Plays" = the reconnect
+       *  overlay is down AND the picture moves (upnext review F1: a kept player may sit on the last title's frame with no overlay up) */
       my.handoff = function () {
         if (my.handing || my.leaving) return;
         my.handing = Date.now();
+        var t0 = null;
         my.watch = setInterval(function () {
           if (my.leaving) return;
           if (Date.now() - my.handing > UPNEXT_HANDOFF_MS) { my.out(true); return; }   // never played: the player's own "Reconnecting…" again
           if (!player.running()) return;
-          if (!o.reconnect || (o.reconnect.classList && o.reconnect.classList.contains('hide'))) my.out(false);
+          if (o.reconnect && o.reconnect.classList && !o.reconnect.classList.contains('hide')) { t0 = null; return; }
+          var st = null;
+          try { st = player.state ? player.state() : null; } catch (e) { st = null; }
+          if (!st) { my.out(false); return; }                                          // (no playback state to read: the overlay is enough)
+          if (!st.playing) { t0 = null; return; }
+          var tm = Number(st.time) || 0;
+          if (t0 === null) { t0 = tm; return; }
+          if (Math.abs(tm - t0) >= 0.2) my.out(false);
         }, 250);
       };
       my.out = function (fast) {
@@ -398,17 +433,22 @@
       upCtl = upCard(id, n);
     }
     function upHide(fast) { if (upCtl) upCtl.out(fast); }
-    // while a card is up: ask every UPNEXT_POLL_MS, and drop it at next.until (server time) without waiting for a poll
+    // while a card is up: the page's one poll runs every UPNEXT_POLL_MS until "PLEASE STAND BY" (upnext review F5: a second timer beside the
+    // 10 s one doubled the calls; a title that slow isn't worth a 3 s poll for another minute), and the card goes at next.until (server time)
+    // without waiting for a poll
     function upSync() {
       var p = null;
       for (var i = 0; i < slots.length; i++) if (slots[i] && slots[i].pending) { p = slots[i]; break; }
+      if (upFastT) { clearTimeout(upFastT); upFastT = null; }
       if (!p || dead) {
         if (upTimer) { clearTimeout(upTimer); upTimer = null; }
         upTimerFor = '';
-        if (upPollT) { clearInterval(upPollT); upPollT = null; }
+        pollAt(POLL_MS);
         return;
       }
-      if (!upPollT) upPollT = setInterval(poll, UPNEXT_POLL_MS);
+      var fastFor = p.upnext.at + UPNEXT_STANDBY_MS - srvNow();
+      pollAt(fastFor > 0 ? UPNEXT_POLL_MS : POLL_MS);
+      if (fastFor > 0) upFastT = setTimeout(function () { upFastT = null; upSync(); }, fastFor + 50);   // (back to 10 s on time, answers or not)
       var sig = p.id + '@' + p.upnext.at;
       if (upTimerFor === sig) return;
       if (upTimer) clearTimeout(upTimer);
@@ -419,8 +459,14 @@
     function upExpire(id, at) {
       if (dead) return;
       upGone[id] = Math.max(upGone[id] || 0, at);
-      var was = cur();
-      slots = slots.filter(function (s) { return !(s && String(s.id) === id && s.pending); });
+      if (upCtl && upCtl.id === id) upHide(false);
+      var was = cur(), out = [];
+      slots.forEach(function (s) {
+        if (!(s && String(s.id) === id && s.pending)) { out.push(s); return; }
+        // (its card was carried over a publish-and-drop the server still holds as an ordinary feature: the hold this page had before it)
+        if (s.carried && s.base && featHint && featHint.id === id && !featHint.live && !featHint.next) out.push(s.base);
+      });
+      slots = out;
       if (was && !cur()) { chosen = false; pickDefault(); }          // (it was on screen: back on the defaults - mic follows / Pepe's stream)
       else if (!chosen) pickDefault();
       show();
@@ -432,7 +478,7 @@
       if (view !== 'mic') micStop();
       if (!(s && s.cam)) camStop();
       // upnext: the card stays while its slot is on screen (pending, or its stream just listed - the hand-over); anything else: gone
-      if (upCtl && !(s && String(s.id) === upCtl.id && (s.pending || (!s.cam && !s.embed && s.hls)))) upHide(false);
+      if (upCtl && !(s && String(s.id) === upCtl.id && (cardOn(s) || (!s.pending && !s.cam && !s.embed && s.hls)))) upHide(false);
       if (view === 'mic') {                                     // micfollow: 🎙 On the mic (stage-mic.js)
         player.stop(); setEmbed(null);
         var prog = micOn() ? mic : idleProgram();               // mfix: idle during the grace - "nobody is on the mic right now"
@@ -440,8 +486,9 @@
         else micCtl = PATVStageMic.render(o.wrap, prog, { slug: padSlug, onChange: function () { /* the long-poll brings the new program */ } });
         if (o.unmute) o.unmute.classList.add('hide');
         o.onAir && o.onAir(true, '🎙 ' + (prog.count || '') + (prog.pins_n ? ' 📌' + prog.pins_n : ''));
-      } else if (s && s.pending) {                              // upnext: 📼 "Coming up next" until its stream is up
-        player.stop(); setEmbed(null); upShow(s);
+      } else if (cardOn(s)) {                                   // upnext: 📼 "Coming up next" until its stream is up
+        if (!upKeep(s)) player.stop();                          // (review F1: the queue's own player stays under the card)
+        setEmbed(null); upShow(s);
         o.onAir && o.onAir(true, '📼 ' + upFull(s.upnext), { pending: true });
       } else if (s && s.cam) {
         player.stop(); setEmbed(null); camShow(s);
@@ -452,7 +499,7 @@
       } else if (s) {
         setEmbed(null);
         player.setSrc(s.hls, s.whep || null); if (loaded) player.start();
-        if (upCtl && upCtl.id === String(s.id) && loaded) upCtl.handoff();   // upnext: the card fades once this plays
+        if (upCtl && upCtl.id === String(s.id) && loaded && !s.pending) upCtl.handoff();   // upnext: the card fades once this plays
         o.onAir && o.onAir(true, s.title || null);
       } else if (pepeOn && pepeHere && pepeEmbed()) {
         // on air because HIS stream is; an admin chose to show it through YouTube / Twitch
@@ -480,7 +527,8 @@
     function selection() {
       if (view === 'mic' && micShown()) return micCtl ? micCtl.selection() : { stream: 'mic', label: '🎙', embed: true, capture: false, nsfw: false };   // micfollow: never captured
       var s = cur();
-      if (s && s.pending) return { stream: s.id, label: '📼', embed: true, capture: false, nsfw: false };   // upnext: a card - no snaps / clips / watch-minutes
+      // upnext: a card - no snaps / clips / watch-minutes; `pending` = stage-capture.js shows its row greyed (review V3: not the YouTube note)
+      if (cardOn(s)) return { stream: s.id, label: '📼', embed: true, capture: false, nsfw: false, pending: true };
       if (s && s.cam) return { stream: s.id, label: s.display, embed: true, capture: false, nsfw: !!s.nsfw };   // 1.99zc: no snaps / clips / watch-minutes of a cam
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
       if (pepeHere && pepeOn) return { stream: 'pepe', label: _t('js.stage.room.pepe_stream', 'Pepe\'s stream'), embed: false, capture: true, nsfw: false };
@@ -648,7 +696,9 @@
         show();
       }).catch(function () {});
     }
-    var pollTimer = setInterval(poll, 10000);
+    var POLL_MS = 10000, pollEvery = POLL_MS, pollTimer = setInterval(poll, POLL_MS);
+    // (upnext review F5: one poll timer - faster only while a 📼 card is starting, see upSync)
+    function pollAt(ms) { if (dead || ms === pollEvery) return; pollEvery = ms; clearInterval(pollTimer); pollTimer = setInterval(poll, ms); }
     // economy E-0: verified watch-minutes. Every 30 s a signed-in viewer's page says what it is showing
     // (HLS streams only - embeds can't be verified), whether the tab is visible and the video is playing,
     // and where the playhead is. The server credits only consecutive beats from one session per account

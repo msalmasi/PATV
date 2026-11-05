@@ -350,10 +350,30 @@ async function item(user, key) {
   if (it && !isLibAdmin(user)) delete it.file;                        // file paths are for the admins' eyes
   return it;
 }
+// upnext review (privacy N1): a title change on a pad's stage has every signed-in viewer's "Coming up next" card ask for the same poster at
+// once - site -> mediactl -> Plex's photo transcoder each time. A poster is the same picture for everyone: kept here a while by rating key (and
+// one fetch in flight per key). Access is still checked per request; only the picture's bytes are shared.
+const POSTER_TTL_MS = 10 * 60 * 1000, POSTER_MAX = 64, POSTER_MAX_BYTES = 512 * 1024;
+const posterCache = new Map(), posterWait = new Map();     // key -> {at, status, body, type} / key -> Promise
 async function poster(user, key) {
   await mustAccess(user);
   if (!/^\d{1,12}$/.test(String(key))) throw new Refuse(400, "Bad item.");
-  const r = await call("GET", `/poster/${key}`, null, { raw: true });
+  const k = String(key), t = Date.now(), hit = posterCache.get(k);
+  let r = hit && t - hit.at < POSTER_TTL_MS ? hit : null;
+  if (hit && !r) posterCache.delete(k);
+  if (!r) {
+    let p = posterWait.get(k);
+    if (!p) {
+      p = call("GET", `/poster/${k}`, null, { raw: true }).finally(() => posterWait.delete(k));
+      posterWait.set(k, p);
+    }
+    r = await p;
+    if (r.status === 200 && r.body && r.body.length <= POSTER_MAX_BYTES) {
+      posterCache.delete(k);
+      posterCache.set(k, { at: Date.now(), status: 200, body: r.body, type: r.type });
+      while (posterCache.size > POSTER_MAX) posterCache.delete(posterCache.keys().next().value);
+    }
+  }
   if (r.status !== 200) throw new Refuse(404, "No poster.");
   return r;
 }
@@ -897,10 +917,10 @@ function register(app, { addUser, noTimers } = {}) {
   require("./mediaqueue").routes(app, { J, me, timers: !noTimers });
 }
 
-module.exports = { init, register, play, playFor, padState, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
+module.exports = { init, register, play, playFor, padState, stop, pause, resume, seek, search, item, poster, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
                    // 1.99lr: for mediaqueue.js
                    player, mayControl, logControl,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
                          mayControl, logControl, clock, CONTROL_DENIED,
-                         noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; } },   // 1.99acx
+                         noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; }, _posters: posterCache },   // 1.99acx; upnext review: _posters
                    stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys };
