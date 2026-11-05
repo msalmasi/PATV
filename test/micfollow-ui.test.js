@@ -177,9 +177,9 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   // (1.99ajq dockpol fix: + the same script's URL in the Dock's init, behind the same gate - a block swapped in for a front pad whose mic stage
   // this viewer may see loads it then; home-dock.js stageMic)
   assert.equal((home.match(/stage-mic\.js/g) || []).length, 2, "one stage-mic.js include + its URL for a swapped-in block");
-  assert.match(home, /micJs: locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\) \? '\/public\/js\/stage-mic\.js\?v=15' : null/);
+  assert.match(home, /micJs: locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\) \? '\/public\/js\/stage-mic\.js\?v=16' : null/);   // (v16: 1.99?? padppl rework - the clash tag on a tile)
   assert.match(read("public", "js", "home-dock.js"), /if \(!W\.PATVStageMic\) \{ if \(I\.micJs && !micScript\)/);
-  assert.match(home, /<%_ if \(locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\)\) \{ _%>\s*<script src="\/public\/js\/stage-mic\.js\?v=15"><\/script>/, "only for the viewer it is for, with WebRTC");
+  assert.match(home, /<%_ if \(locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\)\) \{ _%>\s*<script src="\/public\/js\/stage-mic\.js\?v=16"><\/script>/, "only for the viewer it is for, with WebRTC");
   assert.match(read("public", "js", "home-dock.js"), /if \(!I\.micStage \|\| !sw \|\| !sw\.setMic \|\| !C \|\| !C\.onStage\) return;/, "setMic only while the page says so");
 });
 

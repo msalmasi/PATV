@@ -85,20 +85,22 @@ async function rebuild() {
 }
 const stale = () => clock() - builtAt > REBUILD_MS;
 
-/** Has Pepe seen Camfrog login `name`? */
-async function seen(name) {
+/** Has Pepe seen Camfrog login `name`? `veil: false` (1.99?? padppl verify - the sign-up hint) leaves out the logins behind veiled
+ *  lines (chat_log_veil): a login only ever seen incognito / hidden never answers "seen" to someone who types it as a new name. */
+async function seen(name, { veil = true } = {}) {
   const l = low(name).replace(/^@/, "");
   if (!LOGIN_RE.test(l)) return false;
   if (stale()) { try { await rebuild(); } catch (e) { /* keep the old set */ } }
   if (SET.has(l)) return true;
-  const p = probes.get(l);
+  const key = veil ? l : l + "|nv";
+  const p = probes.get(key);
   if (p && clock() - p.at < PROBE_TTL) return p.hit;
   let hit = false;
   try {
     const CL = require("./chatlogdb");
-    hit = !!(await CL.read("SELECT 1 AS x FROM chat_log WHERE who = ? LIMIT 1", [l]))[0] || !!(await CL.read("SELECT 1 AS x FROM chat_log_veil WHERE login = ? LIMIT 1", [l]))[0];
+    hit = !!(await CL.read("SELECT 1 AS x FROM chat_log WHERE who = ? LIMIT 1", [l]))[0] || (veil && !!(await CL.read("SELECT 1 AS x FROM chat_log_veil WHERE login = ? LIMIT 1", [l]))[0]);
   } catch (e) { hit = false; }
-  probes.set(l, { hit, at: clock() });
+  probes.set(key, { hit, at: clock() });
   if (probes.size > 5000) probes.delete(probes.keys().next().value);
   return hit;
 }
@@ -153,7 +155,7 @@ async function nameHint(name, userId = null, req = null) {
   try {
     const l = low(name);
     if (!LOGIN_RE.test(l) || isAuto(name)) return null;
-    if (!(await seen(l))) return null;
+    if (!(await seen(l, { veil: false }))) return null;                         // (verify: never from veiled lines - see seen())
     if (userId && (await linkedLoginOf(userId)) === l) return null;            // it IS their linked login - nothing to link
     const v = { name: String(name).trim() };
     return req && req.t && req.t.has && req.t.has("auth.hint.camfrog_name") ? req.t("auth.hint.camfrog_name", v) : HINT.replace("{name}", v.name);

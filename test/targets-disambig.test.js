@@ -115,6 +115,15 @@ test("4. rework: nobody is refused a name Pepe has seen on Camfrog - a gentle hi
   assert.equal(await CF.nameHint("brandnewname", null), null, "a name Pepe never saw: no hint");
   assert.equal(await CF.nameHint("CFauto123", null), null, "CF auto accounts are the login itself");
   assert.equal(await CF.nameHint("tric0n", null), null, "only an exact login - a look-alike gets the tag on the pad, not a hint");
+  // 1.99?? padppl verify: a login Pepe only ever saw behind VEILED lines (chat_log_veil) never answers the hint - typing it as a new
+  // name can't confirm that an incognito / hidden person was there. A named chat line (chat_log.who) still does.
+  await runQuery("CREATE TABLE IF NOT EXISTS chat_log (c INTEGER PRIMARY KEY, rk INTEGER NOT NULL, ts INTEGER NOT NULL, k TEXT NOT NULL, who TEXT, text TEXT, rt TEXT NOT NULL, aud TEXT NOT NULL, d TEXT NOT NULL)");
+  await runQuery("CREATE TABLE IF NOT EXISTS chat_log_veil (c INTEGER PRIMARY KEY, login TEXT NOT NULL, display TEXT, kind TEXT NOT NULL, words TEXT, at INTEGER)");
+  await runQuery("INSERT INTO chat_log_veil (c, login, display, kind, at) VALUES (7001, 'onlyveiledcf', 'onlyveiledcf', 'incognito', 1)");
+  await runQuery("INSERT INTO chat_log (c, rk, ts, k, who, text, rt, aud, d) VALUES (7002, 1, 1, 'chat', 'namedlinecf', 'hi', 'x', 'all', '{}')");
+  assert.equal(await CF.seen("onlyveiledcf"), true, "the server still knows (moderation targets)");
+  assert.equal(await CF.nameHint("onlyveiledcf", null), null, "only seen veiled: no hint");
+  assert.equal(await CF.nameHint("namedlinecf", null), HINT("namedlinecf"), "seen on a named line: the hint");
   // translated when the page has the string
   const tr = Object.assign((k, v) => `T:${k}:${v.name}`, { has: (k) => k === "auth.hint.camfrog_name" });
   assert.equal(await CF.nameHint("tricon", null, { t: tr }), "T:auth.hint.camfrog_name:tricon");
