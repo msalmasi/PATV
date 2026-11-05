@@ -320,7 +320,7 @@
     var _t = tr(ctx), st = [], kids = [];
     if (/^#[0-9a-f]{6}$/.test(f.color || '')) st.push('--fl:' + f.color);
     if (/^#[0-9a-f]{6}$/.test(f.ink || '')) st.push('--fli:' + f.ink);
-    if (f.emoji) kids.push(h('span', { 'class': 'ufl-e' }, [f.emoji]));
+    if (f.emoji) kids.push(h('span', { 'class': 'ufl-e', 'data-e': ctx && ctx.data === false ? null : f.emoji }, [f.emoji]));     // flairfix: data-e - flair.css lifts Segoe's low 📼 (a file: no data-*)
     kids.push(h('span', { 'class': 'ufl-n' }, [f.name]));     // 1.99xm: its own span so a long name ellipsizes
     return h('span', { 'class': 'ufl', title: _t('js.pad.flair', 'Pad flair: {name}', { name: f.name }), style: st.length ? st.join(';') : null }, kids);
   }

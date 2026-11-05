@@ -3,6 +3,14 @@
        background: var(--fl, #66bb6a); color: var(--fli, #111) !important; font: 600 11px/18px var(--ds-font); letter-spacing: 0;
        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; text-transform: none; }
 .ufl-e { font-size: 12px; line-height: 1; flex: none; }
+/* flairfix: the 📼 (Plex) on the pill's centre line on Windows. Segoe UI Emoji draws its cassette at the bottom of its square - ~1.5 px
+   under the other emoji at 12px (2.7 px low at 150% in the owner's people list) - and no box or line-height change moves one glyph alone.
+   The chip's emoji is its data-e (padflair.js, chatlog-core.js, pad-flair.js, casino-ui.js), so that glyph alone takes this face: Segoe
+   UI Emoji itself with its line set higher (ascent / descent 75 / 25 %: 1 px up at 100%, 2 device px at 125%, 3 at 150%). A local()
+   font exists only where it is installed: Apple / Noto emoji, and every other glyph, keep today's place (no UA sniffing); the glyph and
+   its 12px box are the same, so pills keep their sizes. The weight range: never a synthetic bold on the 600 chip. */
+@font-face { font-family: "PATV Emoji Lift"; src: local("Segoe UI Emoji"), local("SegoeUIEmoji"); font-weight: 100 900; ascent-override: 75%; descent-override: 25%; line-gap-override: 0%; }
+.ufl-e[data-e^="\1F4FC"] { font-family: "PATV Emoji Lift", var(--ds-font); }
 /* 1.99xm: the name is its own span (padflair.html / postHtml / the page-JS chips) - text-overflow needs a block, not a flex
    container's bare text run, so a long flair now ends in "…" (full name in the chip's title) instead of being cut mid-letter */
 .ufl-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -338,7 +338,7 @@ test("casino review: the table pages emit act for a Blackjack bet / insurance, t
   assert.match(cc, /body\.cz-chat-dock:not\(\.cz-chat-mini\) \.site-foot \{ margin-inline-end: var\(--czc-w\); \}/);
   assert.match(cc, /body\.cz-chat-sheet\.cz-chat-act:not\(\.cz-chat-mini\) \.cz \.dock \{ inset-block-end: calc\(var\(--czc-sheet\) \+ var\(--ds-sp-2, 8px\)\); \}/);
   assert.match(fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8"), /className: "pm-login cz-pm-role"/);
-  for (const f of ["casino-hm.ejs", "casino-bj.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", f), "utf8"), /flair\.css\?v=4/, f);
+  for (const f of ["casino-hm.ejs", "casino-bj.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", f), "utf8"), /flair\.css\?v=5/, f);   // (flairfix: v5)
   // F8: the table pages are never framed by another site
   assert.match(fs.readFileSync(path.join(repo, "casino", "routes.js"), "utf8"), /res\.set\(\{ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" \}\);/);
 });

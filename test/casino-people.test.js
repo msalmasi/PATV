@@ -245,7 +245,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=7"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
     // (1.99ajw casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
-    for (const s of ["casino-ui.js?v=7", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=11", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9; pausebars: v11 - the pad's current file)
+    for (const s of ["casino-ui.js?v=8", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=11", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9; pausebars: v11 - the pad's current file; flairfix: casino-ui v8)
                      "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
   const chat = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");

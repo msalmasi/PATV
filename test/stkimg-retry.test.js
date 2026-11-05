@@ -123,7 +123,7 @@ test("stkimg: the HTML (downloads, server) render has no retry machinery, no inl
   assert.match(src, /\[stickerImage\(\{ 'class': 'cfstk'/); assert.match(src, /\[mediaImage\(\{ 'class': 'pstk'/); assert.match(src, /mediaImage\(\{ 'class': 'gif'/);
   // every page that loads the renderer asks for the new copy
   for (const f of ["views/room.ejs", "views/home.ejs", "views/partials/pad-chat-history.ejs"])
-    assert.ok(fs.readFileSync(path.join(__dirname, "..", f), "utf8").includes('<script src="/public/js/chatlog-core.js?v=15"></script>'), f);
+    assert.ok(fs.readFileSync(path.join(__dirname, "..", f), "utf8").includes('<script src="/public/js/chatlog-core.js?v=16"></script>'), f);
   assert.ok(fs.readFileSync(path.join(__dirname, "..", "views/room.ejs"), "utf8").includes('<script src="/public/js/pad-picker.js?v=4"></script>'));
   for (const f of ["public/js/home-dock.js", "views/room.ejs", "views/partials/pad-chat-history.ejs"])
     assert.match(fs.readFileSync(path.join(__dirname, "..", f), "utf8"), /cfsticker: function \(set, id\) \{ return '\/media\/cfsticker\/' \+ id \+ '\.webp'; \}/, f + " builds the line's URL for chatlog-core");

@@ -40,9 +40,9 @@ const render = (p, ctxRoom, detail) => ejs.renderFile(path.join(repo, "views", "
 
 test("chips: the name is its own span (server + both page-JS builders), escaped, full name in the title", () => {
   const h = PF.html(LONG);
-  assert.match(h, /^<span class="ufl" [^>]*title="Pad flair: Resident Frog Wrangler Extraordinaire"><span class="ufl-e" aria-hidden="true">🐸<\/span><span class="ufl-n">Resident Frog Wrangler Extraordinaire<\/span><\/span>$/);
+  assert.match(h, /^<span class="ufl" [^>]*title="Pad flair: Resident Frog Wrangler Extraordinaire"><span class="ufl-e" aria-hidden="true" data-e="🐸">🐸<\/span><span class="ufl-n">Resident Frog Wrangler Extraordinaire<\/span><\/span>$/);
   assert.match(PF.html({ ...LONG, name: "<b>", emoji: "" }), /<span class="ufl-n">&lt;b&gt;<\/span>/);
-  assert.match(PF.postHtml(POSTF, "/p/x?flair=9#feed"), /^<a class="pfl-post" [^>]*title="Post flair: Hot takes from the mic"><span class="ufl-e" aria-hidden="true">🔥<\/span><span class="ufl-n">Hot takes from the mic<\/span><\/a>$/);
+  assert.match(PF.postHtml(POSTF, "/p/x?flair=9#feed"), /^<a class="pfl-post" [^>]*title="Post flair: Hot takes from the mic"><span class="ufl-e" aria-hidden="true" data-e="🔥">🔥<\/span><span class="ufl-n">Hot takes from the mic<\/span><\/a>$/);
   for (const f of [["public", "js", "pad-flair.js"]]) {
     const src = rd(...f);
     assert.match(src, /appendChild\(el\('span', 'ufl-n', f\.name\)\)/, f.join("/") + " builds the name span");
@@ -75,7 +75,49 @@ test("flair.css: flair gives way first, the pad keeps a minimum and ellipsizes, 
   assert.ok(fl.k > au.k && au.k > wh.k, "flair shrinks before the author, the author before the pad");
   assert.ok(parseFloat(wh.min) >= 8, "the pad keeps a few letters");
   assert.match(css, /\.fp \.fp-meta > \.fp-where \{[^}]*text-overflow: ellipsis;/);
-  for (const v of [["views", "room.ejs"], ["views", "padSettings.ejs"], ["views", "partials", "feed-js.ejs"]]) assert.match(rd(...v), /flair\.css\?v=4/, v.join("/"));
-  assert.match(rd("views", "partials", "room-feed.ejs"), /pad-flair\.js\?v=3/);
-  assert.match(rd("views", "padSettings.ejs"), /pad-flair\.js\?v=3/);
+  for (const v of [["views", "room.ejs"], ["views", "padSettings.ejs"], ["views", "partials", "feed-js.ejs"]]) assert.match(rd(...v), /flair\.css\?v=5/, v.join("/"));
+  assert.match(rd("views", "partials", "room-feed.ejs"), /pad-flair\.js\?v=4/);
+  assert.match(rd("views", "padSettings.ejs"), /pad-flair\.js\?v=4/);
+});
+
+// flairfix (owner 11-05: "plex flair icon alignment in bridge"): Segoe UI Emoji draws the 📼 at the bottom of its square, ~1.5 px under
+// the other emoji in an 18px pill (2.7 px low at 150%). The chip's emoji is its data-e in every builder, and that glyph alone takes a
+// local() Segoe face with a higher line - Windows only (a local() font exists only where it is installed), the rest untouched.
+test("flair.css: the Plex 📼 alone takes the Windows-only lifted face; every chip builder tags its emoji; nothing else moves", () => {
+  const raw = rd("public", "css", "flair.css"), css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
+  const face = css.match(/@font-face \{ font-family: "PATV Emoji Lift"; ([^}]*)\}/);
+  assert.ok(face, "the lifted face");
+  assert.match(face[1], /^src: local\("Segoe UI Emoji"\), local\("SegoeUIEmoji"\);/, "Segoe UI Emoji itself, local only");
+  assert.doesNotMatch(face[1], /url\(/, "never a download");
+  assert.match(face[1], /font-weight: 100 900;/, "no synthetic bold on the 600 chip");
+  const a = Number(face[1].match(/ascent-override: (\d+)%/)[1]), d = Number(face[1].match(/descent-override: (\d+)%/)[1]);
+  assert.ok(a + d >= 95 && a + d <= 110, "about Segoe's 1.02em emoji square");
+  assert.ok(a - d < 93 - 19, "its baseline sits higher in the 12px box than Ubuntu's metrics (93 / 19 %) put it today");
+  // the selector is the Plex flair's emoji, and the face falls back to today's stack (so no Segoe = today's pixels)
+  const sel = css.match(/\.ufl-e\[data-e\^="\\([0-9A-F]+)"\] \{ ([^}]*)\}/);
+  assert.ok(sel, "the 📼 rule");
+  assert.equal(String.fromCodePoint(parseInt(sel[1], 16)), PF.plexFlair().emoji);
+  assert.equal(sel[2].trim(), 'font-family: "PATV Emoji Lift", var(--ds-font);', "a font only: no transform / top / size - pills keep their sizes");
+  assert.match(css, /\.ufl-e \{ font-size: 12px; line-height: 1; flex: none; \}/, "the emoji box itself is unchanged");
+  assert.equal((css.match(/PATV Emoji Lift/g) || []).length, 2, "the face is used by that one rule");
+  // the chat download inlines .ufl / .ufl-n only (as before): the lift rule and the face never reach it
+  for (const m of css.matchAll(/(^|\})\s*(\.ufl(?:-e|-n)?)\s*\{([^}]*)\}/g)) assert.doesNotMatch(m[3], /PATV Emoji Lift/);
+  // every builder tags the emoji: server chips (pad + post flair), the chat renderer, the "Your flair here" card, the casino menu
+  assert.match(PF.html(PF.plexFlair()), /<span class="ufl-e" aria-hidden="true" data-e="📼">📼<\/span>/);
+  assert.match(PF.postHtml({ ...POSTF, emoji: "📼" }), /<span class="ufl-e" aria-hidden="true" data-e="📼">📼<\/span>/);
+  const CL = require(path.join(repo, "public", "js", "chatlog-core.js"));
+  const node = String(CL.flairNode({ login: "a", patv: { flair: PF.plexFlair() } }, { t: (k, s, v) => s.replace("{name}", v.name) }, CL.htmlH));
+  assert.match(node, /<span class="ufl-e" data-e="📼">📼<\/span>/, "chatlog-core.js");
+  const file = String(CL.flairNode({ login: "a", patv: { flair: PF.plexFlair() } }, { data: false, t: (k, s, v) => s.replace("{name}", v.name) }, CL.htmlH));
+  assert.match(file, /<span class="ufl-e">📼<\/span>/, "a chat download keeps its no-data-* rule");
+  assert.match(rd("public", "js", "pad-flair.js"), /var e = el\('span', 'ufl-e', f\.emoji\); e\.setAttribute\('data-e', f\.emoji\);/);
+  assert.match(rd("public", "js", "casino-ui.js"), /e\.className = "ufl-e"; e\.textContent = f\.emoji; e\.dataset\.e = f\.emoji;/);
+  // cache: flair.css v5 everywhere it loads, the changed scripts bumped
+  for (const v of [["home.ejs"], ["room.ejs"], ["padSettings.ejs"], ["casino-bj.ejs"], ["casino-hm.ejs"], ["partials", "feed-js.ejs"]]) {
+    const src = rd("views", ...v);
+    assert.ok(src.includes("/public/css/flair.css?v=5"), v.join("/"));
+    assert.ok(!/flair\.css\?v=[0-4]\b/.test(src), v.join("/") + ": no old flair.css");
+  }
+  for (const v of [["home.ejs"], ["room.ejs"], ["partials", "pad-chat-history.ejs"]]) assert.ok(rd("views", ...v).includes("/public/js/chatlog-core.js?v=16"), v.join("/"));
+  for (const v of ["casino-bj.ejs", "casino-hm.ejs"]) assert.ok(rd("views", v).includes("/public/js/casino-ui.js?v=8"), v);
 });

@@ -569,7 +569,7 @@
       const fl = document.createElement("span"); fl.className = "ufl"; fl.title = T("who_flair", "Pad flair: {name}", { name: f.name });
       if (/^#[0-9a-f]{6}$/.test(f.color || "")) fl.style.setProperty("--fl", f.color);
       if (/^#[0-9a-f]{6}$/.test(f.ink || "")) fl.style.setProperty("--fli", f.ink);
-      if (f.emoji) { const e = document.createElement("span"); e.className = "ufl-e"; e.textContent = f.emoji; fl.appendChild(e); }
+      if (f.emoji) { const e = document.createElement("span"); e.className = "ufl-e"; e.textContent = f.emoji; e.dataset.e = f.emoji; fl.appendChild(e); }
       const n = document.createElement("span"); n.className = "ufl-n"; n.textContent = f.name; fl.appendChild(n);
       nm.appendChild(fl);
     }

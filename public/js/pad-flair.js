@@ -21,7 +21,7 @@
   function chip(f) {
     var s = el('span', 'ufl');
     s.title = 'Pad flair: ' + f.name;
-    if (f.emoji) s.appendChild(el('span', 'ufl-e', f.emoji));
+    if (f.emoji) { var e = el('span', 'ufl-e', f.emoji); e.setAttribute('data-e', f.emoji); s.appendChild(e); }     // flairfix: data-e (flair.css)
     s.appendChild(el('span', 'ufl-n', f.name));     // 1.99xm: its own span so a long name ellipsizes
     if (HEX.test(f.color || '')) s.style.setProperty('--fl', f.color);
     if (HEX.test(f.ink || '')) s.style.setProperty('--fli', f.ink);
