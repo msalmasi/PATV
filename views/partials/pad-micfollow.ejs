@@ -21,7 +21,7 @@
         <% mf.layouts.forEach((l_) => { %><option value="<%= l_ %>"<%= mf.settings.layout === l_ ? ' selected' : '' %>><%- t('pad.settings.mf.layout.' + l_) %></option><% }) %>
       </select></label>
       <label><%- t('pad.settings.mf.default') %><select name="default_view">
-        <%# dock3 1.99??: a featured stream always beats the mic stage now - 'after_streams' reads like 'first'; offered only where it is the stored value %><% mf.default_views.filter((d_) => d_ !== 'after_streams' || mf.settings.default_view === d_).forEach((d_) => { %><option value="<%= d_ %>"<%= mf.settings.default_view === d_ ? ' selected' : '' %>><%- t('pad.settings.mf.default.' + d_) %></option><% }) %>
+        <%# dock3 1.99akf: a featured stream always beats the mic stage now - 'after_streams' reads like 'first'; offered only where it is the stored value %><% mf.default_views.filter((d_) => d_ !== 'after_streams' || mf.settings.default_view === d_).forEach((d_) => { %><option value="<%= d_ %>"<%= mf.settings.default_view === d_ ? ' selected' : '' %>><%- t('pad.settings.mf.default.' + d_) %></option><% }) %>
       </select></label>
       <%# mfix: recent speakers - how long someone who let go of the mic stays up (a back-and-forth on one mic shows side by side) %>
       <% const mfKeep_ = Array.isArray(mf.keep_recent) ? mf.keep_recent : [0, 1, 2, 5]; %><label><%- t('pad.settings.mf.keep_recent') %><select name="keep_recent">

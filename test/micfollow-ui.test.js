@@ -213,7 +213,7 @@ test("stage-room.js: the default view - a featured stream (dock3: auto too) > Pe
   assert.ok(x.tabs().indexOf('data-v="mic"') < x.tabs().indexOf('data-v="pepe"'), "before Pepe's tab");
   x = switcher({ slots: [{ id: "s1", display: "Stream", featured: true, feature_by: "auto", hls: "x" }] });
   x.sw.setMic(MIC());
-  assert.equal(x.sw.view(), "slot:s1", "dock3 1.99??: an AUTO-featured stream beats the mic stage too (owner item 6 - it used to yield)");
+  assert.equal(x.sw.view(), "slot:s1", "dock3 1.99akf: an AUTO-featured stream beats the mic stage too (owner item 6 - it used to yield)");
   x = switcher({ slots: [{ id: "s1", display: "Stream", featured: true, feature_by: "auto", hls: "x" }] });
   x.sw.setMic(MIC({ default: "after_streams" }));
   assert.equal(x.sw.view(), "slot:s1", "after_streams: any featured stream first");

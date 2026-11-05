@@ -127,7 +127,7 @@ test("hand-over picks the stream that went live first; a dropped stream keeps it
   assert.equal(await feat(c.id), null);
 });
 
-test("dock3 1.99??: featuredOf - the pad's featured slot LIVE OR NOT (a drop keeps it named, live: false), went, never on another pad; null once it ends", async () => {
+test("dock3 1.99akf: featuredOf - the pad's featured slot LIVE OR NOT (a drop keeps it named, live: false), went, never on another pad; null once it ends", async () => {
   const a = await live();
   await S.tick();
   let f = await S.featuredOf(rooms.HOUSE_ROOM, null);
@@ -270,7 +270,7 @@ test("an embed slot (live the moment it opens) is auto-featured when booked", as
   assert.equal(b.slot.feature_by, "auto");
 });
 
-test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad's auto-feature drops and stays off, other pads untouched; the page's ★ (pad_featured)", async (t) => {
+test("dock3 1.99akf (owner item 5): Pepe's stream featured on ONE pad - that pad's auto-feature drops and stays off, other pads untouched; the page's ★ (pad_featured)", async (t) => {
   S._setPepeAir(() => true); t.after(() => S._setPepeAir(null));   // (dock3 review: it counts while his stream is on air - test/dock3-review-server.test.js)
   await S.setConfig({ pepe_feature_pads: {} }, "test");
   const a = await live();                                    // the house pad: auto-featured
@@ -299,7 +299,7 @@ test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad'
   assert.ok(ev.some((e) => e.what === "pepe_featured" && e.actor === "owner1" && e.room_id === rooms.HOUSE_ROOM), "logged with the pad");
 });
 
-test("dock3 1.99??: precedence - a slot featured by hand clears the pad's Pepe feature; refused while Pepe is away (409); the route is the slot buttons' rule", async (t) => {
+test("dock3 1.99akf: precedence - a slot featured by hand clears the pad's Pepe feature; refused while Pepe is away (409); the route is the slot buttons' rule", async (t) => {
   S._setPepeAir(() => true); t.after(() => S._setPepeAir(null));
   await S.setConfig({ pepe_feature_pads: {} }, "test");
   const a = await live();

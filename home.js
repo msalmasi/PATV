@@ -270,7 +270,7 @@ function register(app, { addUser, xpForNextLevel }) {
       const reg = require("./rooms");
       const web = require("./roomsweb");
       const front = await reg.frontRoom(allRooms, { viewer }).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
-      const stage = bridge.stage(front.id);       // (dock3 1.99??: + whether the front pad featured Pepe's stream - the first paint's ★)
+      const stage = bridge.stage(front.id);       // (dock3 1.99akf: + whether the front pad featured Pepe's stream - the first paint's ★)
       const pepeHere = bridge.pepeIn(front.id) !== false;
       const frontReg = await reg.get(front.id).catch(() => null);
       // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges
@@ -293,7 +293,7 @@ function register(app, { addUser, xpForNextLevel }) {
       // stagefix site: + cam slots only for viewers who may see the pad's live room, mine: true on their own (mainstage.slotsFor)
       // stagefix fix: ...and never a cam slot here at all: a cam on a Stage plays only on its own pad page (D-21)
       const slots = (await require("./mainstage").slotsFor(front.id, viewer).catch(() => [])).filter((s) => !(s && s.cam));
-      // dock3 1.99??: the front pad's featured slot, live or not - the stage keeps the mic stage off the default while one is featured and
+      // dock3 1.99akf: the front pad's featured slot, live or not - the stage keeps the mic stage off the default while one is featured and
       // holds it through a short drop (stage-room.js featWins); never a cam slot here (front: true)
       const stageFeatured = await require("./mainstage").featuredOf(front.id, viewer, { front: true }).catch(() => null);
       // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)

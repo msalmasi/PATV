@@ -111,7 +111,7 @@
     var au = el('audio'); au.preload = 'none'; au.setAttribute('playsinline', '');
     // 1.99il: the WebRTC stream plays in its own element (never routed through Web Audio - the meter only taps it)
     var rau = el('audio'); rau.setAttribute('playsinline', ''); rau.autoplay = true;
-    // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... the one with the bars like we have in desktop") 1.99??: iOS has no
+    // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... the one with the bars like we have in desktop") 1.99akf: iOS has no
     // real level (no Web Audio there - the session notes) - the meter is marked rb-nolvl instead of an inline hide: hidden as before
     // everywhere (room-bridge.css), but the Room Dock draws it as the "someone's on the mic" bars (pad-dock.css .rmd-talk)
     if (IOS) { meter.classList.add('rb-nolvl'); vol.style.display = 'none'; }
@@ -175,7 +175,7 @@
       box.classList.toggle('on', playing);
     }
     function setState(t, cls) { state.textContent = t; state.className = 'rb-state' + (cls ? ' ' + cls : ''); }
-    // dock3 1.99??: rb-lvl = the bars show a REAL level right now (an analyser while playing); without it the Room Dock animates them while
+    // dock3 1.99akf: rb-lvl = the bars show a REAL level right now (an analyser while playing); without it the Room Dock animates them while
     // someone holds the mic (iOS, paused, no analyser - pad-dock.css). Toggled only when it changes (this runs every frame).
     var lvlOn = false;
     function lvl(on) { on = !!on; if (on === lvlOn) return; lvlOn = on; meter.classList.toggle('rb-lvl', on); }
@@ -396,7 +396,7 @@
     function stop(msg) {
       clearTimeout(rejoinTimer);
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
-      // (dock3 1.99??: the last frame's inline heights go too - an inline height beats the Dock's animated bars, which run while paused)
+      // (dock3 1.99akf: the last frame's inline heights go too - an inline height beats the Dock's animated bars, which run while paused)
       bars.forEach(function (b) { b.style.height = ''; }); lvl(false);
       mp3Sound = false; rtcSound = false; unstall('mp3'); unstall('rtc'); syncAudio();
       startGen++; rtcClose(); setMode(null);
@@ -639,7 +639,7 @@
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
         if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99ajh dockpop: its full word when it shortens)
-        // (dock3 1.99??: no "not the Camfrog user" tag here any more - owner: "just confusing"; the row's second line (@username / the
+        // (dock3 1.99akf: no "not the Camfrog user" tag here any more - owner: "just confusing"; the row's second line (@username / the
         // Camfrog login) and its 🌐 tell two same-named people apart)
         li._pick = function () { takeName(p, c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });

@@ -2371,7 +2371,7 @@ async function viewFor(snap, R, userId, nameOf, t = now(), surface = "pad") {
                video: x.video, why: x.video === "card" ? (wh && surface !== "capture" ? "off_cam" : x.why || "full") : null, watch,
                ...(x.pin ? { pin: true } : {}), ...(x.recent ? { recent: true } : {}), ...(x.ring ? { ring: true } : {}),
                // (1.99ajw padppl rework: a PATV name that is also another Camfrog login is shown as it is, never swapped for the login;
-               // dock3 1.99??: and without the "not the Camfrog user" tag - owner: "just confusing")
+               // dock3 1.99akf: and without the "not the Camfrog user" tag - owner: "just confusing")
                ...(own && own === x.login ? { mine: true } : {}) });
   }
   // wave2 WP-4 (F.3): the dynamic template over THIS viewer's entries (a tile they reported stays a cell: "hidden for you")

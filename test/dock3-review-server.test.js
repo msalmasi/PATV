@@ -1,4 +1,4 @@
-// dock3 review fixes 1.99?? - the server side of item 5 (★ Feature on Pepe's stage) and item 6 (mic follows never interrupts a featured
+// dock3 review fixes 1.99akf - the server side of item 5 (★ Feature on Pepe's stage) and item 6 (mic follows never interrupts a featured
 // stage), after the correctness / mic-follows reviews. Each test failed on the dock3 build before these fixes:
 //   C1 / S4  Pepe's per-pad feature stood while his stream was OFF AIR: no stream there was ever auto-featured and pepe_src.featured stayed
 //            true (the page parked viewers on his off-air slate) - now it counts while he is in the pad and on air, through a short drop

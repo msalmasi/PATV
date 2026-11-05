@@ -157,7 +157,7 @@ test('a tab switch keeps the float and a stage PiP (same feed, scroll, draft, au
   assert.equal(h.chat.closest('.rmd-float'),null);assert.deepEqual(h.calls.clicks.filter(x=>x.startsWith('tab:')),['tab:live'],'its docked place is Live');assert.equal(h.doc.body.classList.contains('rmd-afloat'),false);
   tabTo(h,'live');h.menuPick('Stage options','Picture-in-picture');await flush();tabTo(h,'feed');
   assert.equal(h.pipWin.closed,false,'the stage PiP survives the tab switch');assert.equal(h.pipDoc.getElementById('rmStage'),h.stage);
-  // (dock3 1.99??: the stage goes fullscreen IN PLACE - it never leaves its panel)
+  // (dock3 1.99akf: the stage goes fullscreen IN PLACE - it never leaves its panel)
   h.pipWin.close();tabTo(h,'live');h.button('Fullscreen',h.stage).click();await flush();assert.ok(h.doc.fullscreenElement===h.stage);assert.ok(h.stage.classList.contains('rmd-full'));assert.ok(h.stage.closest('#padPanel-live')===h.panel);
   tabTo(h,'about');assert.equal(h.stage.classList.contains('rmd-full'),false,'fullscreen goes back');assert.ok(h.doc.fullscreenElement===null);assert.ok(h.stage.closest('#padPanel-live')===h.panel);
   h.controller.destroy();
@@ -383,7 +383,7 @@ test('review: the stage overlay - one source chip node; 🖥️ is a toggle (Exi
   const h=harness();
   assert.ok(h.chatH.querySelector(':scope > .rmd-chat-t')||h.chatH.children.find(c=>c.classList.contains('rmd-chat-t')),'CHAT in its own span');
   const full=h.stage.querySelectorAll('.rmd-ov-bot button').find(b=>b.getAttribute('aria-label')==='Fullscreen');full.click();await flush();
-  // (dock3 1.99??: in place - no fullscreen host, no viewbar: 🖥️ Exit fullscreen is the way out, 💬 Show chat sits beside it in the same bar)
+  // (dock3 1.99akf: in place - no fullscreen host, no viewbar: 🖥️ Exit fullscreen is the way out, 💬 Show chat sits beside it in the same bar)
   assert.equal(full.getAttribute('aria-label'),'Exit fullscreen');assert.ok(h.doc.querySelector('.rmd-fullscreen')===null,'no host');assert.ok(h.doc.fullscreenElement===h.stage);
   const sc=h.stage.querySelector('.rmd-ov-bot .rmd-full-chat');assert.ok(sc&&!sc.hidden,'💬 in the stage bar');const bar=sc.parentNode.children;assert.ok(bar[bar.indexOf(sc)+1]===full,'right before 🖥️');
   full.click();await flush();assert.ok(h.doc.fullscreenElement===null);assert.equal(h.stage.classList.contains('rmd-full'),false);assert.equal(full.getAttribute('aria-label'),'Fullscreen');assert.equal(sc.hidden,true,'💬 only while fullscreen');

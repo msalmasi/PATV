@@ -130,7 +130,7 @@
       || (x.meLogin && u.login && lc(u.login) === lc(x.meLogin)));
   }
   /** 1.99ajn padppl review fix: the block sheet's identity line for a NAMED person - which one this is when names collide (the tricon case):
-   *  "PATV account @x · Camfrog login y" (or "🌐 web, no Camfrog link"). Never for a veil. (dock3 1.99??: no "not the Camfrog user" part
+   *  "PATV account @x · Camfrog login y" (or "🌐 web, no Camfrog link"). Never for a veil. (dock3 1.99akf: no "not the Camfrog user" part
    *  any more - owner: "just confusing"; the account and the login already say which one this is) */
   function whoLine(u) {
     if (!u || u.anon) return null;

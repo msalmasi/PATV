@@ -1,5 +1,5 @@
 "use strict";
-// dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99??: a featured stage - featured
+// dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99akf: a featured stage - featured
 // automatically, by hand or booked, or Pepe's stream featured - always beats the 🎙 mic stage as the default view (stage-room.js featWins),
 // and the races that handed the view to the mic stage are closed:
 //   1. an auto-featured stream yielded to the mic stage (the prod case: every featured stage on 11-03..05 was 'auto')
@@ -116,7 +116,7 @@ test("race 2c: a failed poll, a stale server answer (`stale`) or ok:false never 
   x.answer({ ok: false, error: "x" }); await x.poll(); assert.equal(x.sw.view(), "slot:s1", "ok: false");
 });
 
-// (dock3 review 1.99?? C2: the marker alone - a page loaded during the featured slot's drop - no longer keeps the mic stage off: it showed
+// (dock3 review 1.99akf C2: the marker alone - a page loaded during the featured slot's drop - no longer keeps the mic stage off: it showed
 // Pepe's stream, or his off-air slate, for up to a 📼 pause; test/dock3-review-stage.test.js)
 test("the server's featured marker with nothing to show (not listed for this page) leaves the mic stage the default", () => {
   const x = switcher({ featured: { id: "s9", live: false, by: "owner", went: true } });
@@ -146,7 +146,7 @@ test("race 3: the 🎙 tab never grabs a viewer back off a featured stage; with 
 test("server: /api/stage carries `featured` (live or not, the homepage / cam rule) and answers `stale` on an error; the pages pass the first value in", () => {
   const br = read("bridge.js"), ms = read("mainstage.js"), room = read("views", "room.ejs"), home = read("views", "home.ejs"), hj = read("home.js");
   assert.match(ms, /async function featuredOf\(roomId, viewer, \{ front = false \} = \{\}\)/);
-  // (dock3 review 1.99??: `home` - the front stage, or a Dock's own pad asked with home=1 - test/dock3-review-server.test.js)
+  // (dock3 review 1.99akf: `home` - the front stage, or a Dock's own pad asked with home=1 - test/dock3-review-server.test.js)
   assert.match(br, /featured = await MS\.featuredOf\(R\.id, req\.user \|\| null, \{ front: home \}\)/);
   assert.match(br, /\} catch \(e\) \{ slots = \[\]; stale = true; \}/);
   assert.match(br, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);

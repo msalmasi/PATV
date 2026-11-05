@@ -154,7 +154,7 @@ const DEFAULTS = {
   // already) and now < until (null = until an admin turns it off). While active no user stream is auto-featured
   // anywhere (one that is up is dropped); a pad owner can still feature a slot by hand.
   pepe_feature: null,
-  // dock3 1.99?? (owner 2026-11-05 item 5: the stage's ★ Feature "We just need to add it to Pepe's stage"): Pepe's stream featured on ONE pad
+  // dock3 1.99akf (owner 2026-11-05 item 5: the stage's ★ Feature "We just need to add it to Pepe's stage"): Pepe's stream featured on ONE pad
   // by its owner / staff - room id -> {by, at}. While Pepe is in that pad (bridge.pepeIn) it is that pad's featured stream: one featured
   // stream per pad (featuring it unfeatures the pad's slot; a slot featured by hand / booked / auto clears it), the mic stage never the
   // default over it. Kept while Pepe is away (ignored until he is back).
@@ -410,7 +410,7 @@ function cleanPepeFeature(v) {
   if (from != null && until != null && until <= from) return null;
   return { from, until, at: Number.isNaN(at) ? null : at, by: v.by ? String(v.by).slice(0, 40) : null, note: v.note ? cleanTitle(v.note) : null };
 }
-/** dock3 1.99??: the stored per-pad Pepe features -> {roomId: {by, at}} (bad entries dropped, at most 500 pads). */
+/** dock3 1.99akf: the stored per-pad Pepe features -> {roomId: {by, at}} (bad entries dropped, at most 500 pads). */
 function cleanPadFeatures(v) {
   const out = {};
   if (!v || typeof v !== "object" || Array.isArray(v)) return out;
@@ -422,7 +422,7 @@ function cleanPadFeatures(v) {
   }
   return out;
 }
-// dock3 review 1.99?? (C1 / C4): a pad's Pepe feature COUNTS (holds auto-features off, the ★ on his tab, the page's default over the mic
+// dock3 review 1.99akf (C1 / C4): a pad's Pepe feature COUNTS (holds auto-features off, the ★ on his tab, the page's default over the mic
 // stage) only while he is in that pad AND his stream is on air - it used to stand while he was off air, for good (no stream there was ever
 // auto-featured; the page showed his off-air slate). Through a drop of up to PEPE_PAD_HOLD_MS (an OBS reconnect, a bot restart, rejoining
 // rooms one at a time) it still counts, so a blip never hands the pad to another stream and back. The STORED entry stays either way (the
@@ -435,11 +435,11 @@ function pepeAir() {
   if (pepeAirImpl) return !!pepeAirImpl();
   try { return require("./bridge").pepeOnAir() === true; } catch (e) { return false; }
 }
-/** dock3 1.99??: the pad's stored Pepe feature (its owner / staff pressed ★) -> the entry, or null - counting or not (see padPepeFeatured). */
+/** dock3 1.99akf: the pad's stored Pepe feature (its owner / staff pressed ★) -> the entry, or null - counting or not (see padPepeFeatured). */
 function padPepeStored(roomId, C = CONFIG) {
   return roomId && C && C.pepe_feature_pads ? C.pepe_feature_pads[String(roomId)] || null : null;
 }
-/** dock3 1.99??: Pepe's stream featured on this pad (its owner / staff, the stage's ★) while he is in it - dock3 review: and on air, through a
+/** dock3 1.99akf: Pepe's stream featured on this pad (its owner / staff, the stage's ★) while he is in it - dock3 review: and on air, through a
  *  short drop -> the entry, or null. */
 function padPepeFeatured(roomId, C = CONFIG) {
   const id = String(roomId || ""), e = padPepeStored(id, C);
@@ -451,10 +451,10 @@ function padPepeFeatured(roomId, C = CONFIG) {
   if (since == null) { padPepeGone.set(id, t); return e; }
   return t - since < PEPE_PAD_HOLD_MS ? e : null;
 }
-/** dock3 1.99??: the pad's owner / staff feature Pepe's stream on their pad (the same ★ Feature as a slot's) or stop. One featured stream per
+/** dock3 1.99akf: the pad's owner / staff feature Pepe's stream on their pad (the same ★ Feature as a slot's) or stop. One featured stream per
  *  pad: on unfeatures the pad's featured slot(s) (an auto-feature yields to "system", the rest to the actor - featureByOwner's rule); off
  *  lets auto-feature pick a live stream again. Refused while Pepe isn't in the pad. -> {featured: bool} */
-// (dock3 review 1.99?? C3: the per-pad map is changed INSIDE the serialized setConfig - from the map as it is then - so two ★ presses at once,
+// (dock3 review 1.99akf C3: the per-pad map is changed INSIDE the serialized setConfig - from the map as it is then - so two ★ presses at once,
 // or a ★ and a hand feature on another pad, never lose one pad's entry)
 const padsWith = (roomId, entry) => (C) => {
   const next = { ...(C.pepe_feature_pads || {}) };
@@ -484,7 +484,7 @@ async function setPadPepeFeature(roomId, on, actor) {
   await autoFeature(roomId).catch((e) => console.error("[stage] auto-feature:", e.message));
   return { featured: false };
 }
-/** dock3 1.99??: a slot became this pad's featured stream (by hand, or a booked featured slot that went live - dock3 review: never an
+/** dock3 1.99akf: a slot became this pad's featured stream (by hand, or a booked featured slot that went live - dock3 review: never an
  *  auto-feature) - Pepe's per-pad feature ends (one featured stream per pad). */
 async function clearPadPepe(roomId, actor, why) {
   const id = String(roomId || "");
@@ -543,7 +543,7 @@ function pepeSource(cfg = CONFIG, roomId = null) {
   let twLive = false;
   try { twLive = require("./restream").mainRelayLive(); } catch (err) { /* the relay is optional */ }
   const twitch = { login: pepeTwitchChannel(), url: "https://www.twitch.tv/" + pepeTwitchChannel(), live: twLive };
-  // 1.99lm: an admin featured his stream (the ★ on his tab); dock3 1.99??: or this pad's owner / staff did, on this pad (pad_featured -
+  // 1.99lm: an admin featured his stream (the ★ on his tab); dock3 1.99akf: or this pad's owner / staff did, on this pad (pad_featured -
   // the stage's ★ / ☆ on his tab, stage-room.js pepeAdm)
   // (dock3 review: `featured` = it counts now - here and on air, see padPepeFeatured; pad_featured = this pad features him, counting or not:
   // the manager's ☆ Unfeature stays while he is off air)
@@ -558,7 +558,7 @@ function pepePlayer(st, src = pepeSource()) {
   if (src && src.mode === "embed" && embeds.clean(src.embed)) return { kind: "embed", embed: embeds.clean(src.embed) };
   return { kind: "hls", hls: "https://publicaccess.tv/hls/broadcast.m3u8", whep: typeof st.whep === "string" && st.whep ? st.whep : null };
 }
-// dock3 review 1.99?? (C3): one setConfig at a time, each from the config as the one before it left it - two at once used to each start from the
+// dock3 review 1.99akf (C3): one setConfig at a time, each from the config as the one before it left it - two at once used to each start from the
 // same CONFIG and the later write wiped the other's keys (a ★ on one pad lost another pad's). `patch` may be a function (config -> patch).
 let configQ = Promise.resolve();
 function setConfig(patch, actor) {
@@ -1045,7 +1045,7 @@ async function autoFeature(roomId, t = now()) {
   // its owner's settings allow. One featured before this rule (or by a race) is dropped here; an owner may still feature it.
   for (const c of open.filter((s) => s.source === "cam" && s.featured && s.feature_by === "auto")) await unfeature(c.id, "system", "a cam on the stage is never auto-featured");
   const autos = open.filter((s) => s.featured && s.feature_by === "auto" && s.source !== "cam");
-  // dock3 review 1.99?? (MF3): a feature by hand / booked counts against an auto-feature once that slot is live (or went live) - a featured
+  // dock3 review 1.99akf (MF3): a feature by hand / booked counts against an auto-feature once that slot is live (or went live) - a featured
   // booking that OPENED (lead_min early, nobody publishing yet) used to unfeature the live stream with nothing featured to show; and such a
   // slot is this pad's featured stream: Pepe's pad feature ends (one featured stream per pad)
   const real = open.some((s) => s.featured && s.feature_by !== "auto" && (isLive(s, t) || !!s.went_live));
@@ -1073,7 +1073,7 @@ async function autoFeature(roomId, t = now()) {
   if (!r.changes) return null;
   pubCache.clear();
   await event(next.id, "featured", "system", cur ? "auto: took over from the stream before it" : "auto: live while nothing else was featured", roomId);
-  // (dock3 review 1.99?? C4: an auto-feature never ends a Pepe feature stored for this pad - it only happens while that one doesn't count
+  // (dock3 review 1.99akf C4: an auto-feature never ends a Pepe feature stored for this pad - it only happens while that one doesn't count
   // (he is away / off air past the hold) and it yields to him when he is back: the `why` above)
   await featuredMark(next);                                        // 1.99mt: ⭐ Headliner
   return next.id;
@@ -1111,7 +1111,7 @@ async function featureByOwner(slotId, actor) {
   const s = await getSlot(slotId);
   if (!s || s.settled || !["waiting", "active", "scheduled"].includes(s.status)) throw new Refuse(404, "That slot isn't open.");
   if (s.featured) return { already: true };
-  // dock3 review 1.99?? (MF4): a booking that starts LATER is featured for then - what is featured now stays until it opens / goes live
+  // dock3 review 1.99akf (MF4): a booking that starts LATER is featured for then - what is featured now stays until it opens / goes live
   // (tickFuture, autoFeature); it used to unfeature the live stream and end Pepe's pad feature at once, a day ahead
   const later = s.status === "scheduled";
   const others = later ? [] : await getQuery(`SELECT id, feature_by FROM stage_slots WHERE room_id = ? AND featured = 1 AND settled = 0 AND id != ? AND status IN ${OPEN}`, [s.room_id, s.id]);
@@ -1120,7 +1120,7 @@ async function featureByOwner(slotId, actor) {
   await runQuery("UPDATE stage_slots SET featured = 1, feature_by = 'owner' WHERE id = ? AND settled = 0", [s.id]);
   pubCache.clear();
   await event(s.id, "featured", actor, "by the pad owner", s.room_id);
-  if (!later) await clearPadPepe(s.room_id, actor, "the owner featured a slot");   // (dock3 1.99??: one featured stream per pad)
+  if (!later) await clearPadPepe(s.room_id, actor, "the owner featured a slot");   // (dock3 1.99akf: one featured stream per pad)
   // 1.99mt: ⭐ Headliner - featured by someone else (an owner featuring their own slot doesn't count)
   if (s.went_live) {
     const R = await rooms.get(s.room_id).catch(() => null);
@@ -1274,7 +1274,7 @@ async function tickFuture(t) {
     if (open.length >= RS.slot_count || all[0].n >= C.max_concurrent) continue;
     if (open.some((x) => x.userId === s.userId)) continue;
     if (s.featured && open.some((x) => x.featured)) {
-      // 1.99lm: an auto-feature never holds up a booked featured slot - dock3 review 1.99?? (MF3): nor is it dropped the moment the booking
+      // 1.99lm: an auto-feature never holds up a booked featured slot - dock3 review 1.99akf (MF3): nor is it dropped the moment the booking
       // opens (lead_min early, nobody publishing yet - nothing featured could show for up to lead_min + start_window_min): it yields when
       // the booking goes live (autoFeature). A booking the owner featured ahead of time takes over from a slot featured by hand when it starts.
       const f = open.find((x) => x.featured && x.feature_by !== "auto");
@@ -1288,7 +1288,7 @@ async function tickFuture(t) {
     if (r.changes) {
       pubCache.clear();
       await event(s.id, "opened", "system", "scheduled", s.room_id);
-      // (dock3 review 1.99??: a booked featured slot ends Pepe's pad feature when it goes LIVE - autoFeature - not when it opens early)
+      // (dock3 review 1.99akf: a booked featured slot ends Pepe's pad feature when it goes LIVE - autoFeature - not when it opens early)
       if (embed) require("./golive").slotLive(s);   // 1.99kp: an embed slot is live the moment it opens
       if (embed) await autoFeature(s.room_id, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
       if (!embed) {
@@ -1914,7 +1914,7 @@ async function publicSlots(roomId) {
   try { nameStyle = require("./cosmetics").nameStyle; } catch (e) { /* no cosmetics */ }
   const open = await openSlots(roomId || undefined);
   const rows = open.filter((s) => isLive(s, t));
-  // dock3 1.99??: the room's featured open slot, LIVE OR NOT (a 📼 pause / seek, an OBS reconnect, a missed heartbeat drop it from `list`
+  // dock3 1.99akf: the room's featured open slot, LIVE OR NOT (a 📼 pause / seek, an OBS reconnect, a missed heartbeat drop it from `list`
   // for a moment while it stays featured) - featuredOf() hands it to the page, which holds the view instead of giving it to the mic stage
   const fo = roomId ? featuredPick(open, t) : null;
   const featured = fo ? { id: fo.id, live: isLive(fo, t), by: fo.feature_by || null, went: !!fo.went_live, cam: fo.source === "cam" } : null;
@@ -1940,13 +1940,13 @@ async function publicSlots(roomId) {
   pubCache.set(k, { at: Date.now(), list, camLogins, featured });
   return list;
 }
-/** dock3 review 1.99??: a pad's featured open slot - live first, then one that went live (a drop), then any (a featured booking that opened
+/** dock3 review 1.99akf: a pad's featured open slot - live first, then one that went live (a drop), then any (a featured booking that opened
  *  early while the live stream before it keeps its feature until the booking is live - MF3) -> the slot | null */
 function featuredPick(open, t = now()) {
   const f = (open || []).filter((s) => s && s.featured);
   return f.find((s) => isLive(s, t)) || f.find((s) => s.went_live) || f[0] || null;
 }
-/** dock3 review 1.99?? (MF6): the pad's featured open slot is a 🎬 cam (publicSlots' cache) - /api/stage reads the sign-in then, even while it
+/** dock3 review 1.99akf (MF6): the pad's featured open slot is a 🎬 cam (publicSlots' cache) - /api/stage reads the sign-in then, even while it
  *  isn't listed (dropped): featuredOf names it only to viewers past its rule. */
 async function featuredCam(roomId) {
   if (!roomId) return false;
@@ -1955,7 +1955,7 @@ async function featuredCam(roomId) {
   return !!(c && c.featured && c.featured.cam);
 }
 /**
- * dock3 1.99??: a pad's featured open slot for `viewer`'s page, live or not -> {id, live, by, went} | null (publicSlots' cache, no extra
+ * dock3 1.99akf: a pad's featured open slot for `viewer`'s page, live or not -> {id, live, by, went} | null (publicSlots' cache, no extra
  * query). A featured 🎬 cam slot is named only where the page may show it: never on the homepage's front stage (`front`, D-21), never to a
  * viewer past its rule (padaccess.camVisible) - the same rule as roomStage / slotsFor. The page (stage-room.js) keeps the mic stage off the
  * default while this names something that went live, and holds a featured slot that dropped out of the live list for a moment.
@@ -2030,7 +2030,7 @@ async function roomStage(roomId, viewer) {
     // adultgate site: + a cam slot's name blanked for a viewer the 18+ gate stops (padaccess.adultSlots; off: as is)
     // stagefix: + cam slots only for viewers who may see the live room, and mine: true on the viewer's own cam (slotsFor)
     slots: await slotsFor(roomId, viewer, live), open: shown, free: Math.max(0, RS.slot_count - shown),
-    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live } : null,   // (dock3 1.99??: + went - the page's first featured marker)
+    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live } : null,   // (dock3 1.99akf: + went - the page's first featured marker)
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
@@ -2332,7 +2332,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
       res.json({ ok: true, ...(await featureByOwner(s.id, actor(req))) });
     } catch (e) { fail(res, e); }
   });
-  // dock3 1.99?? (owner item 5): the same ★ Feature on Pepe's stage - his stream as THIS pad's featured stream (its owner / staff: the
+  // dock3 1.99akf (owner item 5): the same ★ Feature on Pepe's stage - his stream as THIS pad's featured stream (its owner / staff: the
   // slot buttons' rule, rooms.canManage). {room: slug | id, on: bool}
   app.post("/api/stage/pepe/feature", addUser, needUser, async (req, res) => {
     try {

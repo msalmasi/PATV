@@ -25,7 +25,7 @@
 // Pepe is in - the API's pepe_here - whichever room his Camfrog window shows. Not in the room: no tab.
 // HLS slots play in the shared video.js player (stage-player.js); embed slots (YouTube / Twitch) are
 // rendered only with the official players, from {p,t,id} re-checked here (never a raw URL).
-// manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot - dock3 1.99?? (owner item 5: "We just need to
+// manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot - dock3 1.99akf (owner item 5: "We just need to
 // add it to Pepe's stage"): and the same ★ Feature / ☆ Unfeature on Pepe's stream, featuring it on THIS pad (POST /api/stage/pepe/feature,
 // the slot buttons' permission; pepeSrc.pad = this pad featured it). Not while he is off air; the site-wide event stays /stage/admin's.
 // 1.99zc: 🎬 a CAM slot (s.cam: someone's live Camfrog cam the pad's owner put on the stage - mainstage camOpen) has no
@@ -36,7 +36,7 @@
 // without it setMic does nothing). Default view: a featured slot > Pepe's stream featured (dock3 review: while he is here and on air) > the mic stage (when someone on
 // it has a picture) > Pepe's stream; the pad's default_view 'tab' keeps the mic stage a tab. A viewer who picked a tab
 // keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
-// dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99??: FEATURED MEANS
+// dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99akf: FEATURED MEANS
 // FEATURED - automatically (1.99lm), by hand or booked, or Pepe's stream (featWins): the mic stage is never the default over
 // it (an auto-feature used to yield to it - every featured stage on prod 11-03..05 was 'auto'; default_view 'after_streams'
 // now reads like 'first'). A featured slot that drops out of /api/stage for a moment (📼 pause / seek, an OBS reconnect, a
@@ -77,11 +77,11 @@
     var tw = x.twitch && typeof x.twitch === 'object' && TW_LOGIN.test(String(x.twitch.login || ''))
       ? { login: String(x.twitch.login), live: x.twitch.live === true } : null;
     var feat = x.featured === true;                       // 1.99lm: an admin featured Pepe's stream (an event)
-    var pad = x.pad_featured === true;                    // dock3 1.99??: ...or this pad's owner / staff did, on this pad
+    var pad = x.pad_featured === true;                    // dock3 1.99akf: ...or this pad's owner / staff did, on this pad
     if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw, featured: feat, pad: pad };
     return { mode: 'stream', twitch: tw, featured: feat, pad: pad };
   }
-  // dock3 1.99??: the server's "this pad's featured slot", live or not (mainstage.featuredOf via /api/stage `featured` and the page's
+  // dock3 1.99akf: the server's "this pad's featured slot", live or not (mainstage.featuredOf via /api/stage `featured` and the page's
   // first render) - {id, live, by, went}; null for none, or one this page may not show (a cam slot on the homepage / past its rule)
   function cleanFeat(x) {
     if (!x || typeof x !== 'object' || x.id == null || !/^[\w-]{1,80}$/.test(String(x.id))) return null;
@@ -93,7 +93,7 @@
     var slots = Array.isArray(o.slots) ? o.slots : [];
     var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, chosen = false;
     var pepeSrc = cleanSrc(o.pepeSrc), ownPepe = false;   // 1.99fv: ownPepe = this viewer chose his own stream over the embed
-    var featHint = cleanFeat(o.featured);                 // dock3 1.99??: the server's featured slot (see cleanFeat)
+    var featHint = cleanFeat(o.featured);                 // dock3 1.99akf: the server's featured slot (see cleanFeat)
     var pepeWhep = typeof o.pepeWhep === 'string' && o.pepeWhep ? o.pepeWhep : null;   // 1.99fd
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
@@ -129,8 +129,8 @@
     function micDefault() {
       return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !featWins();
     }
-    // dock3 1.99??: something featured beats the mic stage - a featured slot in the list (auto, by hand, booked; a held one too) or Pepe's
-    // stream featured (an event / this pad). dock3 review 1.99??: only what this page can SHOW - Pepe's feature while he is in this pad and
+    // dock3 1.99akf: something featured beats the mic stage - a featured slot in the list (auto, by hand, booked; a held one too) or Pepe's
+    // stream featured (an event / this pad). dock3 review 1.99akf: only what this page can SHOW - Pepe's feature while he is in this pad and
     // on air (through a drop of up to PEPE_HOLD_MS: an OBS reconnect never hands the view to the mic stage and back), never while he is off
     // air or away (the viewer sat on "nothing streaming right now" with people on the mic); the server's marker alone (a featured slot this
     // page doesn't list - a page loaded during its drop) no longer counts: it showed Pepe's off-air slate for up to a 📼 pause
@@ -212,7 +212,7 @@
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
     function pickDefault() {
       var f = featured();
-      // dock3 1.99??: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage
+      // dock3 1.99akf: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage
       view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
     }
     pickDefault();
@@ -304,13 +304,13 @@
       }
       return h;
     }
-    // dock3 1.99?? (owner item 5): ★ Feature / ☆ Unfeature on Pepe's stream - the SAME .adm buttons a slot gets (o.manage: the pad's owner,
+    // dock3 1.99akf (owner item 5): ★ Feature / ☆ Unfeature on Pepe's stream - the SAME .adm buttons a slot gets (o.manage: the pad's owner,
     // staff; the Room Dock lists them in the source chip's ▾ as it does a slot's), featuring his stream on this pad. ☆ while this pad features
     // it; nothing while only the site-wide event does (that one is /stage/admin's) or he is off air.
-    // (the old homepage switcher polls without a room: the front pad's slug from the poll - dock3 review 1.99??: from the first render on, o.front)
+    // (the old homepage switcher polls without a room: the front pad's slug from the poll - dock3 review 1.99akf: from the first render on, o.front)
     var lastFront = typeof o.front === 'string' && o.front ? o.front : null;
     function featRoom() { return padSlug || lastFront || ''; }
-    // dock3 review 1.99??: o.manage was worked out for ONE pad - the pad page's, the Dock's block, the old homepage's first front pad; once the
+    // dock3 review 1.99akf: o.manage was worked out for ONE pad - the pad page's, the Dock's block, the old homepage's first front pad; once the
     // old homepage shows another pad (the front page changed) its ★ / ✂ buttons go until a reload (they answered 403 there)
     var manageFor = padSlug || lastFront || '';
     function canAdm() { return !!o.manage && (!manageFor || featRoom() === manageFor); }
@@ -375,7 +375,7 @@
         var act = b.getAttribute('data-act');
         if (!act) return;
         if (act === 'leave') { leave(b); return; }        // stagefix site: 🙈 Take me off this Stage
-        if (act === 'pepe-feature' || act === 'pepe-unfeature') { pepeFeature(b, act === 'pepe-feature'); return; }   // dock3 1.99??
+        if (act === 'pepe-feature' || act === 'pepe-unfeature') { pepeFeature(b, act === 'pepe-feature'); return; }   // dock3 1.99akf
         var ban = b.hasAttribute('data-ban');
         var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
@@ -404,7 +404,7 @@
         .catch(function () { b.disabled = false; alert(_t('js.stage.room.e_net', 'Could not reach the server.')); });
     }
     var dead = false;
-    // dock3 review 1.99??: answers are applied in the order the polls were SENT - an older one that lands after a newer one is dropped (the
+    // dock3 review 1.99akf: answers are applied in the order the polls were SENT - an older one that lands after a newer one is dropped (the
     // 10 s poll in flight when ★ Feature is pressed used to land after the action's own poll and move the view back for up to 10 s)
     var pollSeq = 0, pollApplied = 0, winsSeen = featWins();
     function poll() {
@@ -412,7 +412,7 @@
       var seq = ++pollSeq;
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
-        // dock3 1.99??: a failed / stale answer (the server's catch: `stale`; a refusal: ok false) moves nothing - it used to read as
+        // dock3 1.99akf: a failed / stale answer (the server's catch: `stale`; a refusal: ok false) moves nothing - it used to read as
         // "nothing is live" and hand the view to the mic stage
         if (!g || typeof g !== 'object' || g.ok === false || g.stale === true) return;
         if (seq < pollApplied) return;                                              // (dock3 review: out of date)
@@ -428,7 +428,7 @@
         if (!ns || !pepeSrc || ns.mode !== pepeSrc.mode || JSON.stringify(ns.embed || null) !== JSON.stringify(pepeSrc.embed || null)) ownPepe = false;
         pepeSrc = ns;
         var fresh = Array.isArray(g.slots) ? g.slots : [], nh = cleanFeat(g.featured);
-        // dock3 1.99??: the featured slot of the last poll, not listed this second while the server still names it featured (it dropped for a
+        // dock3 1.99akf: the featured slot of the last poll, not listed this second while the server still names it featured (it dropped for a
         // moment - /api/stage lists only what is live NOW) - HELD: its tab, the view, the player's reconnecting overlay (the same source is a
         // no-op for the player; a cam slot keeps its session). Dropped as soon as the server stops naming it.
         if (wasF && nh && nh.id === String(wasF.id) && !fresh.some(function (s) { return s && String(s.id) === String(wasF.id); })) {
@@ -522,7 +522,7 @@
         if (micTabKey() !== micTabSig) { renderTabs(); if (o.onShow) o.onShow(selection()); }
         return;
       }
-      // mfix: the viewer picked the 🎙 tab and it came back after the grace: theirs again - dock3 1.99??: never over a featured stage
+      // mfix: the viewer picked the 🎙 tab and it came back after the grace: theirs again - dock3 1.99akf: never over a featured stage
       if (micWanted && micOn() && view !== 'mic' && !featWins()) { view = 'mic'; show(); return; }
       if (!chosen && micDefault() !== wasDef) {
         var before = view;

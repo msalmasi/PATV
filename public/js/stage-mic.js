@@ -281,7 +281,7 @@
       // mfix: 📌 on a pinned cam's label (its place is fixed: hand-overs and new speakers never move it)
       var pinTag = el('span', 'mf-pin', '📌'); pinTag.hidden = true; pinTag.setAttribute('title', _t('js.stage.mf.pinned_tag', 'pinned'));
       var pinSr = el('span', 'mf-sr-only');
-      // (dock3 1.99??: no "not the Camfrog user" tag on a tile's name any more - owner: "just confusing")
+      // (dock3 1.99akf: no "not the Camfrog user" tag on a tile's name any more - owner: "just confusing")
       label.appendChild(mic); label.appendChild(pinTag); label.appendChild(name); label.appendChild(tag); label.appendChild(pinSr); label.appendChild(sr);
       var x = btn('mf-x', '✕');
       var rp = btn('mf-x mf-rp', _t('js.stage.mf.report', '⚑'));            // ⚑ viewers (owners have ✕)

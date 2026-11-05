@@ -1,6 +1,6 @@
 "use strict";
 // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile I was talking about wasn't just a mic icon on the name - that's pointless. I meant
-// the one with the bars like we have in desktop") 1.99??: the room audio bar's eq meter (room-bridge.js) is no longer hidden INLINE on iOS - it
+// the one with the bars like we have in desktop") 1.99akf: the room audio bar's eq meter (room-bridge.js) is no longer hidden INLINE on iOS - it
 // is marked rb-nolvl (no real level: no Web Audio on iOS, 1.99bk), which room-bridge.css hides as before and the Room Dock turns into the
 // "someone's on the mic" bars (pad-dock.css .rmd-now.rmd-talk). The real level marks the meter rb-lvl (see pad-dock-pol.test.js for the CSS).
 //   node --test test/dock3-micbars.test.js

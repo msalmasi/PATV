@@ -10,7 +10,7 @@
 //     rename, the OAuth / SSO username pickers all take it; a gentle hint follows ("Is <name> your Camfrog name? Link it in Settings so
 //     people know it's you." - the same words whether or not someone else has that login linked). Existing clashes are listed for admins;
 //     the pad SHOWS a clashing name as it is - a web account's and (rework) a linked login's display name alike. dock3 (owner 2026-11-05:
-//     "we don't need to flair users with 'not the Camfrog user', it's just confusing") 1.99??: no tag on any viewer-facing surface - the
+//     "we don't need to flair users with 'not the Camfrog user', it's just confusing") 1.99akf: no tag on any viewer-facing surface - the
 //     neutral markers (🌐, the login tooltip, the @ list's second line, the block sheet's who line) tell two same-named people apart
 //   node --test test/targets-disambig.test.js
 "use strict";

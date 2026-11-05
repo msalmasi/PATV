@@ -300,7 +300,7 @@ test("stage-room.js: a video slot starts where the broadcast is; polls never reb
 
 test("stage-room.js: the mic stage destroys the player; coming back rebuilds it at the broadcast position (the owner's replay)", () => {
   const since = Date.now() - 40 * 1000;
-  // (dock3 1.99??: an auto-featured video no longer yields to the mic stage by itself - the viewer picks the 🎙 tab here)
+  // (dock3 1.99akf: an auto-featured video no longer yields to the mic stage by itself - the viewer picks the 🎙 tab here)
   let onTab = null;
   const tabs = { innerHTML: "", addEventListener: (k, fn) => { if (k === "click") onTab = fn; } };
   const x = switcher({ tabs, slots: [{ id: "s1", display: "holder", featured: true, feature_by: "auto", embed: { p: "youtube", t: "video", id: "AAAAAAAAAAA" }, since }] });
@@ -330,7 +330,7 @@ test("stage-room.js: the poll's server clock corrects this one (skew)", async ()
 
 test("/api/stage answers the server's clock (now)", () => {
   const src = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
-  assert.match(src, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);   // (dock3 1.99??: + featured / stale; stage(roomId))
+  assert.match(src, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);   // (dock3 1.99akf: + featured / stale; stage(roomId))
   assert.equal(typeof S.clockNow, "function");
   assert.equal(S.clockNow(), T);
 });

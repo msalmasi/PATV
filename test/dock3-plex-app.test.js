@@ -1,5 +1,5 @@
 "use strict";
-// dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: ⚡ Chat apps gets ONE 📼 Plex tile beside 🎧 DJ (pad-dock.js plexApp):
+// dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99akf: ⚡ Chat apps gets ONE 📼 Plex tile beside 🎧 DJ (pad-dock.js plexApp):
 //   * shown while something from Plex plays on this pad's stage (#rmPlexQ), while this viewer may start a play here (o.plexPlay +
 //     plex-play.js - the server's rule: Plex members, the override list, staff, the pad's settings), or while Pepe offers !plex here
 //   * playing: its sheet IS the Plex queue & controls (the same node the Now playing card holds - its own buttons and server checks), with

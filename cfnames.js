@@ -15,7 +15,7 @@
 //   clashOf(acc, login)  the Camfrog login an account's SHOWN name (username or display name) equals but isn't linked to, or null - the
 //                        /admin/users#nameclash list, and mentions.js (a typed "@" never alerts a look-alike)
 // Display names stay free text; bridge.withPatv SHOWS a clashing name (1.99ajw rework: a linked login's display name too - it used to be
-// replaced by the login). dock3 1.99?? (owner 2026-11-05: "it's just confusing"): the pad's "not the Camfrog user" tag is gone - no
+// replaced by the login). dock3 1.99akf (owner 2026-11-05: "it's just confusing"): the pad's "not the Camfrog user" tag is gone - no
 // viewer-facing surface carries u.clash any more.
 // Review fix (LOOK-ALIKES): a name also clashes when it only LOOKS like a seen login - skeleton(): Unicode compatibility forms folded,
 // Cyrillic / Greek letters that look Latin mapped to them, 0 -> o, 1 / I / i / | -> l, rn -> m, vv -> w, and the separators at either end

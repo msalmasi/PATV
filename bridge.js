@@ -808,11 +808,11 @@ function pepeWhep() {
   try { return require("./webrtc").pepeWhep(); } catch (e) { return null; }
 }
 /** 1.99fv: what Pepe's stage plays (mainstage.pepeSource: his stream, or an admin-chosen YouTube / Twitch embed). */
-// (dock3 1.99??: for one pad - roomId - it also says whether that pad's owner / staff featured his stream there: pad_featured)
+// (dock3 1.99akf: for one pad - roomId - it also says whether that pad's owner / staff featured his stream there: pad_featured)
 function pepeSrc(roomId) {
   try { return require("./mainstage").pepeSource(undefined, roomId || null); } catch (e) { return { mode: "stream" }; }
 }
-/** dock3 review 1.99??: Pepe's own stream is on air - stage().active without the rest (mainstage's per-pad Pepe feature counts only then;
+/** dock3 review 1.99akf: Pepe's own stream is on air - stage().active without the rest (mainstage's per-pad Pepe feature counts only then;
  *  stage() itself asks mainstage for pepe_src, so mainstage can't call it). */
 function pepeOnAir() {
   if (HLS.live !== null) return !!HLS.live;
@@ -1410,7 +1410,7 @@ function withPatv(u, C, F = null) {
     // 1.99ajw padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's PATV display name is SHOWN, the same as a
     // web account's, even when it is also a Camfrog login Pepe has seen - it used to be replaced by the login (PATV brocklee258, linked to
     // login ritchiecuh, showed as "ritchiecuh"). dock3 (owner 2026-11-05 item 1: "we don't need to flair users with 'not the Camfrog user',
-    // it's just confusing") - 1.99??: no `clash` tag any more on any viewer-facing surface. Two same-named people stay apart by the
+    // it's just confusing") - 1.99akf: no `clash` tag any more on any viewer-facing surface. Two same-named people stay apart by the
     // neutral markers every surface already has: 🌐 on a web account / a line typed on the website, the Camfrog login as the name's
     // tooltip and as the @ list's second line, "PATV account @x · Camfrog login y" in the block sheet. cfnames.clashOf still feeds the
     // admins' /admin/users#nameclash list and keeps a typed "@" from alerting a look-alike (mentions.js). The ROOM side is
@@ -2257,7 +2257,7 @@ function register(app, { isBotToken, addUser }) {
       // 1.99fu: who's asking only matters while some pad is Approved (this is polled - no sign-in read otherwise)
       if (PA.anyApproved() && req.user === undefined) await new Promise((r) => addUser(req, res, r));
       let R = req.query.room ? await web.resolveRoom(String(req.query.room)) : null;
-      // dock3 review 1.99?? (MF2): ?room=<pad>&home=1 = the homepage Dock's block - THAT pad's stage by the homepage's rules (no cam slot), plus
+      // dock3 review 1.99akf (MF2): ?room=<pad>&home=1 = the homepage Dock's block - THAT pad's stage by the homepage's rules (no cam slot), plus
       // `front` (what the front page shows now: the Dock swaps its block when it changes). Polling with no pad applied a new front pad's stage
       // to the old block - its 🎙 mic stage over its featured stream - until the swap (never, once skipSlug was set).
       const homeQ = !!R && String(req.query.home || "") === "1";
@@ -2288,13 +2288,13 @@ function register(app, { isBotToken, addUser }) {
         if (home) list = list.filter((s) => !(s && s.cam));
         if (list.some((s) => s && s.cam) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
         slots = await MS.slotsFor(R.id, req.user || null, list);
-        // dock3 1.99??: the pad's featured slot, live or not (a cam slot only where this page may show it) - the page holds a featured
-        // stage through a short drop instead of handing the view to the mic stage. dock3 review 1.99?? (MF6): a featured 🎬 cam that dropped
+        // dock3 1.99akf: the pad's featured slot, live or not (a cam slot only where this page may show it) - the page holds a featured
+        // stage through a short drop instead of handing the view to the mic stage. dock3 review 1.99akf (MF6): a featured 🎬 cam that dropped
         // out of the list still needs the sign-in read (its rule is per viewer) - it was named to nobody, so the hold never engaged
         if (!home && req.user === undefined && (await MS.featuredCam(R.id))) await new Promise((r) => addUser(req, res, r));
         featured = await MS.featuredOf(R.id, req.user || null, { front: home });
       }
-    } catch (e) { slots = []; stale = true; }   // (dock3 1.99??: an error says so - an empty list read as "nothing is live" on the page)
+    } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
     // 1.99ajr golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)

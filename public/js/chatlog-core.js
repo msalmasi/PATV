@@ -307,7 +307,7 @@
     if (ctx && ctx.lineHead && !a.title) a.title = shownName(u, ctx);
     if (u.patv) { a.href = linkOf(ctx, '/u/' + encodeURIComponent(u.patv.username)); a.rel = relOf(ctx); }
     var n = h(u.patv ? 'a' : 'span', a, [shownName(u, ctx)]);
-    // (dock3 1.99??: no "not the Camfrog user" tag beside a name any more - owner: "just confusing"; the web mark below and the login tooltip
+    // (dock3 1.99akf: no "not the Camfrog user" tag beside a name any more - owner: "just confusing"; the web mark below and the login tooltip
     // above tell two same-named people apart)
     if (!u.web) return n;
     // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell

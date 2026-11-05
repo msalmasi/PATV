@@ -580,7 +580,7 @@ main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-
   border-color: transparent; background: transparent; box-shadow: none; border-radius: var(--ds-r-md); }
 main.rm.rm-dock :is(#chatH > .rmd-ppl-btn, #chatH > #rmSearchBtn, #chatH > .rmd-chat-more, .rmd-right .rb-mute, .rmd-right .rmd-audio-btn, .rmd-input-row .rmd-extras, #rmAudioBox .rb-play)[aria-expanded="true"] { background: var(--ds-hover); }
 main.rm.rm-dock #rmAudioBox .rb-play { color: var(--ds-ac-2); font-size: var(--ds-fs-lead); }
-/* paused: no "live" eq dots - unless someone holds the mic (dock3 1.99??: then they are the "on the mic" bars, below) */
+/* paused: no "live" eq dots - unless someone holds the mic (dock3 1.99akf: then they are the "on the mic" bars, below) */
 main.rm.rm-dock #rmAudioBox .rb-audio:not(.on) .rmd-now:not(.rmd-talk) > .rb-meter { display: none; }
 /* the people column / sheet: one 36px line, [avatar][name + flair][🎙][📷][⋯] - three fixed slots so the icons line up in columns;
    the flair gives way first (to its emoji alone in a narrow row), then the name */
@@ -909,7 +909,7 @@ main.rm.rm-dock #rmStrip[data-rmd-layout="grid"] .cs-row { block-size: 100%; }
 @media (max-width: 760px) { main.rm.rm-dock #rmStrip > .rmd-pin-size { flex-direction: column; padding: 1px; } main.rm.rm-dock #rmStrip > .rmd-pin-size > .rmd-pin-sz { min-block-size: 14px; min-inline-size: 28px; font-size: 10px; } }
 main.rm.rm-dock #rmStrip > .rmd-placeholder { flex: none; align-self: center; padding: var(--ds-sp-1) var(--ds-sp-2); font-size: var(--ds-fs-xs); }
 
-/* (items 5, 21) a holder chip: [avatar][name + flair] (dock3 1.99??: the 🎙 badge is gone - the eq meter before the chips is the "on the mic"
+/* (items 5, 21) a holder chip: [avatar][name + flair] (dock3 1.99akf: the 🎙 badge is gone - the eq meter before the chips is the "on the mic"
    sign); a ring on the avatar of the one talking now (static under reduced motion); the flair gives way first (to its emoji), then the name */
 main.rm.rm-dock .rmd-holders > .rmd-holder { gap: var(--ds-sp-1); }
 main.rm.rm-dock .rmd-holder > .rmd-person { flex: 0 1 auto; min-inline-size: 0; }
@@ -1283,7 +1283,7 @@ main.rm.rm-dock #rmStage.rmd-embed .rmd-ov-bot > :is(.rmd-icon[aria-disabled="tr
 main.rm.rm-dock .rmd-fullscreen:has(> .rmd-full-media > #rmStage) > .rmd-overlay { inset-block-end: calc(var(--ds-sp-2) + 52px); }
 @media (forced-colors: active) { main.rm.rm-dock :is(.rmd-npbar, #rmdNp) { border: 1px solid CanvasText; } }
 
-/* ── dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... I meant the one with the bars like we have in desktop") 1.99??: the bar's
+/* ── dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... I meant the one with the bars like we have in desktop") 1.99akf: the bar's
    eq meter is the "on the mic" sign on every device - .rmd-now.rmd-talk = someone holds the mic (pad-dock.js mic()). With a real level
    (.rb-lvl: the analyser, desktop / Android while playing) it draws that level, as before; without one (iOS - no Web Audio there, paused, no
    analyser) the bars move by themselves while someone holds the mic; under reduced motion a still eq shape. Nobody on the mic: hidden while
@@ -1303,13 +1303,13 @@ main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(3) { he
 @keyframes rmdEq { from { transform: scaleY(.18); } to { transform: scaleY(1); } }
 @media (forced-colors: active) { main.rm.rm-dock .rb-meter > i { forced-color-adjust: none; background: CanvasText; } }
 
-/* dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: the 📼 Plex app's sheet - ▶ Play from Plex… as one full-width row
+/* dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99akf: the 📼 Plex app's sheet - ▶ Play from Plex… as one full-width row
    under the queue & controls (or the idle line), the !plex tiles below */
 main.rm.rm-dock .rmd-px-row { margin: var(--ds-sp-2) 0; }
 main.rm.rm-dock .rmd-px-row > .rmd-px-play { inline-size: 100%; justify-content: center; }
 @media (pointer: coarse) { main.rm.rm-dock .rmd-px-row > .rmd-px-play { min-block-size: 44px; } }
 
-/* ── dock3 (owner 2026-11-05 item 4: fullscreen on phones; "our controls block the native player controls") 1.99??: the stage goes fullscreen
+/* ── dock3 (owner 2026-11-05 item 4: fullscreen on phones; "our controls block the native player controls") 1.99akf: the stage goes fullscreen
    IN PLACE (pad-dock.js fullStage - nothing moves, so an embed's iframe never reloads): element fullscreen on #rmStage itself, or on an
    iPhone the full-window mode (rmd-fakefull: the same card fixed over the page). 💬 Show chat is the stage bar's own button then, and the
    chat floats inside the stage between its top chip and its bottom bar - never over a native control. ── */
@@ -1341,7 +1341,7 @@ main.rm.rm-dock #rmStage:not(.rmd-full) .rmd-ov-bot > .rmd-full-chat { display: 
 main.rm.rm-dock .rmd-ov-bot > .rmd-full-chat[data-rmd-on="true"] { background: var(--ds-media-chip); }
 /* (item 4) a phone on its side, not fullscreen: the stage was squeezed to ~107px (only the width was checked - the chat's floor won) and an
    embed's iframe to 38-55px under its bar row, too small for its own controls. The Live panel now flows: the stage is the screen's height
-   (the picture + its bar row), the chat a screen high under it - the page scrolls between them. dock3 review 1.99?? (M1): the screen's height
+   (the picture + its bar row), the chat a screen high under it - the page scrolls between them. dock3 review 1.99akf (M1): the screen's height
    UNDER the navbar - a full 100dvh stage started under the 61-65px navbar, so its bar row (⏯, 🔉, the source, 🖥️, ⋯) sat below the fold and a
    sideways phone showed a stream with no control at all until the viewer scrolled (4px: a navbar a little taller than --ds-nav-h). */
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
@@ -1353,7 +1353,7 @@ main.rm.rm-dock .rmd-ov-bot > .rmd-full-chat[data-rmd-on="true"] { background: v
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: calc(100svh - var(--ds-sp-2) - var(--ds-sp-2)); }
 }
 
-/* ── dock3 review 1.99?? (item 4 on phones) ── */
+/* ── dock3 review 1.99akf (item 4 on phones) ── */
 /* (M2) the chat floated inside a fullscreen stage fits its box: the Live panel's log floor (--rmd-log-min, 112-120px - #padPanel-live .rmd-log)
    followed the chat in, so it needed ~306px whatever box it got and spilled over the stage's bar (⏯, 🔉, the source) or off the screen, the
    composer out of reach; on a phone on its side the chat is the column beside the picture (the 45% top of a phone's overlay left a 127px box) */

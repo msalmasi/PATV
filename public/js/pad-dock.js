@@ -51,7 +51,7 @@
     ['!resume', '▶️', 'dj_resume', 'Resume', 0], ['!remove', '↩️', 'dj_remove', 'Remove my last', 0]];
   var DJ_STAFF = [['!dj', '🤖', 'dj_on', 'Auto-DJ on', 0, '!dj on'], ['!dj', '🛑', 'dj_off', 'Auto-DJ off', 0, '!dj off'], ['!shuffle', '🔀', 'dj_shuffle', 'Shuffle', 0],
     ['!repeat', '🔁', 'dj_repeat', 'Repeat', 0], ['!vol', '🔊', 'dj_vol', 'Volume', 1]];
-  // dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: 📼 Plex's chat commands as tiles, like the DJ's - only while Pepe
+  // dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99akf: 📼 Plex's chat commands as tiles, like the DJ's - only while Pepe
   // offers !plex here (d.room.cmds; the site prices / refuses as for a typed one: plexchat.js). Its controls (pause, next, seek...) are the
   // Plex queue & controls' own buttons in the same sheet - no second set. [command, icon, key, words, trailing space, inserted text]
   var PLEX_APPS = [['!plex', '🔎', 'px_find', 'Find a title', 1], ['!plex', '🎞️', 'px_np', 'What’s playing', 0, '!plex np'],
@@ -524,7 +524,7 @@
       if (floatMin) setMin(true); else changed();
     }
     // ── dock3 (owner 2026-11-05 item 4: "I can't full screen a stage chrome mobile from our overlay button. And our controls block the native
-    // player controls where the native full screen button is so I can't use that.") 1.99??: 🖥️ works on every phone, for every stage kind ──
+    // player controls where the native full screen button is so I can't use that.") 1.99akf: 🖥️ works on every phone, for every stage kind ──
     // * the STAGE goes fullscreen IN PLACE - nothing moves (moving it into a fullscreen host reloaded an embed's iframe: the YouTube video
     //   restarted on the way in and again on the way out): element fullscreen on #rmStage itself where the browser has it (Android, iPad,
     //   desktop; the webkit-prefixed calls of older iPads too); a refusal falls back to the full-window mode below, never a dead button
@@ -869,7 +869,7 @@
       // 1.99ajq dockpol (owner items 5, 21): a holder chip is [avatar][name + flair] at every width; the flair shows whole when there is room,
       // and talking() rings the avatar of the one the mic stage says is talking now. Veiled holders: no flair, never a ring.
       // dock3 (owner 2026-11-05 item 2: "the mic indicator in mobile ... wasn't just a mic icon on the name - that's pointless. I meant the one
-      // with the bars like we have in desktop") 1.99??: the 🎙 badge is gone; the "on the mic" sign is the bar's eq meter right before the
+      // with the bars like we have in desktop") 1.99akf: the 🎙 badge is gone; the "on the mic" sign is the bar's eq meter right before the
       // chips on EVERY device - .rmd-talk below: with a real level (desktop / Android playing) the analyser drives it as before; without one
       // (iOS, paused, no analyser) it animates while someone holds the mic (pad-dock.css); a still eq shape under reduced motion.
       holders.slice(0, max).forEach(function (u) {
@@ -1029,7 +1029,7 @@
         box.appendChild(grid);
       }
       // (1.99ajq dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
-      // (dock3 1.99?? (owner item 3): + ONE 📼 Plex tile beside it - the queue & controls, Play from Plex… and Plex's commands in its sheet)
+      // (dock3 1.99akf (owner item 3): + ONE 📼 Plex tile beside it - the queue & controls, Play from Plex… and Plex's commands in its sheet)
       var djOn = musicOn() || !!dj(), pxOn = plexOn();
       if ((djOn || pxOn) && !inPip()) {
         box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', pxOn ? t('apps_media', 'Music & video') : t('apps_music', 'Music'), doc));
@@ -1052,7 +1052,7 @@
       back.querySelector('.rmd-label').textContent = t('dj_back_short', 'Chat apps');
       box.insertBefore(back, layer.head.nextSibling);
     }
-    // ── dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99??: the 📼 Plex app - the tile shows while something from Plex plays
+    // ── dock3 (owner 2026-11-05 item 3: "add plex control to chat app") 1.99akf: the 📼 Plex app - the tile shows while something from Plex plays
     // on this pad's stage (#rmPlexQ, pad-plexq.js), while this viewer may start a play here (o.plexPlay - bridge.js goLiveInfo: Plex members,
     // the override list, staff, the pad's rules; null = not offered) or while Pepe offers !plex here. Its sheet: the Plex queue & controls
     // (the SAME node the Now playing card holds - its buttons and their server checks, can_control) while something plays, then ▶ Play from
@@ -2068,7 +2068,7 @@
     // The overlay shows (rmd-controls-on: opacity) and takes taps (rmd-ov-armed: only its own buttons, never the whole bar - the mic
     // stage's tile controls under the bars stay usable). 1.99ajf dockclean review: a touch that wakes a hidden overlay arms it a moment
     // LATER, so the tap that revealed the pad chip / ⋯ / 🖥️ under the finger doesn't also press it.
-    // dock3 1.99?? (item 4): on touch the bar stays TOUCH_HIDE_MS (a 2.5 s bar was gone before a phone viewer found 🖥️), and it keeps taking
+    // dock3 1.99akf (item 4): on touch the bar stays TOUCH_HIDE_MS (a 2.5 s bar was gone before a phone viewer found 🖥️), and it keeps taking
     // taps until its fade has run (FADE_MS - pad-dock.css --ds-dur-2): a tap on a still-visible 🖥️ never just wakes the bar again
     var armTimer = null, disarmTimer = null, TOUCH_HIDE_MS = 4500, FADE_MS = 250;
     function hideMs() { return lastPtr === 'touch' ? TOUCH_HIDE_MS : HIDE_MS; }

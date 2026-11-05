@@ -74,7 +74,7 @@
      chat: room ? { id: room.id, slug: room.slug, name: room.name, onStage: !!roomOnStage } : null, initial: room && (me || roomLive) ? roomLive : null,
      vt: typeof vt !== 'undefined' ? vt || null : null, signed: !!me, linked: !!(me && me.camfrogUsername), user: me ? me.username : null,
      stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff,
-              featured: locals.stageFeatured || null },   // dock3 1.99??: the front pad's featured slot, live or not (never a cam - home.js)
+              featured: locals.stageFeatured || null },   // dock3 1.99akf: the front pad's featured slot, live or not (never a cam - home.js)
      goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
      staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
      nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null,
@@ -106,10 +106,10 @@
 <link rel="stylesheet" href="/public/css/flair.css?v=4">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=15">
-<link rel="stylesheet" href="/public/css/pad-dock.css?v=10"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: v9 (the stage media bar, the embed row); dock3 1.99??: v10 (the mic bars, the Plex app, fullscreen in place) %>
-<link rel="stylesheet" href="/public/css/home-dock.css?v=6"><%# 1.99ajy dockmedia: v4 (fullscreen fills the screen); homegap: v5 (the call-to-action card fills the stage column); dock3 review 1.99??: v6 (a phone on its side) %>
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=10"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: v9 (the stage media bar, the embed row); dock3 1.99akf: v10 (the mic bars, the Plex app, fullscreen in place) %>
+<link rel="stylesheet" href="/public/css/home-dock.css?v=6"><%# 1.99ajy dockmedia: v4 (fullscreen fills the screen); homegap: v5 (the call-to-action card fills the stage column); dock3 review 1.99akf: v6 (a phone on its side) %>
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
-<script src="/public/js/stage-mic.js?v=17"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile; v17 (dock3 1.99??): no such tag %>
+<script src="/public/js/stage-mic.js?v=17"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile; v17 (dock3 1.99akf): no such tag %>
 <%_ } _%>
 <%_ } _%>
 <style>
@@ -826,7 +826,7 @@
       onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
       onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
       api: '/api/stage', front: frontSlug, slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
-      featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99??
+      featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf
       onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
 <%_ } _%>
@@ -924,7 +924,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=15">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=29"></script><%# v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99??): no clash tag, the mic bars without a real level %>
+<script src="/public/js/room-bridge.js?v=29"></script><%# v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99akf): no clash tag, the mic bars without a real level %>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1179,10 +1179,10 @@
 <%_ if (homeDock_) { _%>
 <script src="/public/js/chatlog-core.js?v=14"></script>
 <script src="/public/js/dock-link.js?v=2"></script>
-<script src="/public/js/pad-dock.js?v=10"></script><%# 1.99ajy dockmedia: v9; dock3 1.99??: v10 %>
+<script src="/public/js/pad-dock.js?v=10"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10 %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=4"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99??): no clash tag in the @ list %>
+<script src="/public/js/home-dock.js?v=4"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>
