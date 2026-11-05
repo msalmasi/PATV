@@ -5,7 +5,7 @@
 //   - every typed moderation name goes through targets.js: a bare name that means two people is a 409 with the choices (Pepe's room
 //     reply prints the error text), cf:<login> / @name / 🌐name / u:<id> are exact
 //   - bridge blocks (Pepe, the owner page, admins) and feed / pad bans (feedstore.ban) agree on who a name is
-//   - the Camfrog-name tag (cfnames.js). 1.99?? padppl rework (owner: "Wouldn't this prevent people legit creating a PATV account with
+//   - the Camfrog-name tag (cfnames.js). 1.99ajw padppl rework (owner: "Wouldn't this prevent people legit creating a PATV account with
 //     their own username? ... I don't like this part."): NOBODY is refused a name Pepe has seen on Camfrog - sign-up, rename, Pepe's
 //     rename, the OAuth / SSO username pickers all take it; a gentle hint follows ("Is <name> your Camfrog name? Link it in Settings so
 //     people know it's you." - the same words whether or not someone else has that login linked). Existing clashes are listed for admins;
@@ -115,7 +115,7 @@ test("4. rework: nobody is refused a name Pepe has seen on Camfrog - a gentle hi
   assert.equal(await CF.nameHint("brandnewname", null), null, "a name Pepe never saw: no hint");
   assert.equal(await CF.nameHint("CFauto123", null), null, "CF auto accounts are the login itself");
   assert.equal(await CF.nameHint("tric0n", null), null, "only an exact login - a look-alike gets the tag on the pad, not a hint");
-  // 1.99?? padppl verify: a login Pepe only ever saw behind VEILED lines (chat_log_veil) never answers the hint - typing it as a new
+  // 1.99ajw padppl verify: a login Pepe only ever saw behind VEILED lines (chat_log_veil) never answers the hint - typing it as a new
   // name can't confirm that an incognito / hidden person was there. A named chat line (chat_log.who) still does.
   await runQuery("CREATE TABLE IF NOT EXISTS chat_log (c INTEGER PRIMARY KEY, rk INTEGER NOT NULL, ts INTEGER NOT NULL, k TEXT NOT NULL, who TEXT, text TEXT, rt TEXT NOT NULL, aud TEXT NOT NULL, d TEXT NOT NULL)");
   await runQuery("CREATE TABLE IF NOT EXISTS chat_log_veil (c INTEGER PRIMARY KEY, login TEXT NOT NULL, display TEXT, kind TEXT NOT NULL, words TEXT, at INTEGER)");
@@ -164,7 +164,7 @@ test("5. existing clashes: listed for admins; the pad SHOWS a clashing name with
   assert.equal(h1.login, "tricon"); assert.equal(h1.loginOwner, "TriconOG"); assert.equal(h1.by, "username");
   const B = require(path.join(repo, "bridge"));
   const C = await B.resolveNames([{ login: "trlcon" }, { login: "tricon" }, { login: "u:har-0002" }]);
-  // 1.99?? rework: the harasser's lines from his alt login 'trlcon' show his PATV display name 'tricon' WITH the tag (it used to be the login)
+  // 1.99ajw rework: the harasser's lines from his alt login 'trlcon' show his PATV display name 'tricon' WITH the tag (it used to be the login)
   const hl = B.withPatv({ login: "trlcon", display: "trlcon" }, C);
   assert.equal(hl.display, "tricon"); assert.equal(hl.clash, "tricon", "shown, tagged 'not the Camfrog user'");
   assert.equal(hl.login, "trlcon", "the login stays (the name's tooltip)");

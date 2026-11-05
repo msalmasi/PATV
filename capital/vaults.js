@@ -47,7 +47,7 @@
 "use strict";
 const C = require("./core");
 const X = require("./lmsr");
-const SR = require("./stakeroom");   // 1.99?? quick1: the room for a stake, in plain words
+const SR = require("./stakeroom");   // 1.99ajw quick1: the room for a stake, in plain words
 
 const VAULTS = ["bank", "house", "mm"];
 const AUTO = "auto", PROTOCOL = "protocol";
@@ -207,13 +207,13 @@ async function transfer(tid, src, dst, amount, why) {
 }
 
 // ── requests ──
-/** 1.99?? quick1 (capital/stakeroom.js): the room every vault has for a stake right now - the stakers' value and NAV at
+/** 1.99ajw quick1 (capital/stakeroom.js): the room every vault has for a stake right now - the stakers' value and NAV at
  *  this moment, less the deposits already queued ahead (they run first at the cut-off). -> stakeroom.roomOf */
 function roomNow(d, k, p, c) {
   const ahead = { bank: 0, house: 0, mm: 0 }, out = { bank: 0, house: 0, mm: 0 };
   const w = autoCapOn(c) ? autoTargets(d, c) : null;
   for (const q of Object.values(d.queue || {})) {
-    // 1.99?? quick1 rework: an unstake queued from a vault (at today's price) says when a full vault may open
+    // 1.99ajw quick1 rework: an unstake queued from a vault (at today's price) says when a full vault may open
     if (q.kind === "withdraw" && q.state === "pending" && VAULTS.includes(q.vault)) { out[q.vault] += Math.trunc((Number(q.shares) || 0) * p[q.vault]); continue; }
     if (q.kind !== "deposit" || q.state !== "pending" || !q.held) continue;
     if (VAULTS.includes(q.vault)) ahead[q.vault] += Math.trunc(Number(q.amount) || 0);
@@ -242,7 +242,7 @@ function stakeRefusal(d, k, p, c, vault, amt, stashRef) {
 async function request(actor, a, t) {
   const c = await C.cfg();
   if (!(await live())) {
-    // 1.99?? quick1: switched off is "paused", said plainly - "launching" only while the book isn't set up yet
+    // 1.99ajw quick1: switched off is "paused", said plainly - "launching" only while the book isn't set up yet
     if (!Number(c.vaults_enabled) && (await C.live())) return { ok: false, code: "paused", error: SR.PAUSED };
     return { ok: false, code: "not_live", error: "🏦 vaults are launching — try again in a few minutes." };
   }
@@ -265,7 +265,7 @@ async function request(actor, a, t) {
   if (kind === "deposit") {
     const amt = Math.trunc(Number(a.amount) || 0);
     if (amt < Number(c.min_move)) return { ok: false, code: "min", error: `stake at least PAT ${fmt(c.min_move)}.` };
-    // 1.99?? quick1: a vault at its staker limit used to take the stake and refund all of it at the cut-off - silently,
+    // 1.99ajw quick1: a vault at its staker limit used to take the stake and refund all of it at the cut-off - silently,
     // as far as the member could tell. Now it is refused here, before any PAT moves, with why and what still has room.
     const k0 = await ctx();
     const full = stakeRefusal(d, k0, prices(d, k0), c, vault, amt, `${s.owner_name}/${s.name}`);
@@ -1487,7 +1487,7 @@ async function publish() {
     heist_log: Array.isArray(c.heist_log) ? c.heist_log.slice(-30) : [], heist_settings: c.heist_settings || null,
     bank_cash: k.cash.bank, mm_cash: k.cash.mm,
     settings: { ceil: Number(c.ceil_apr), floor: Number(c.floor_apr), topup: !!Number(c.topup), staker_max: Number(c.staker_max),
-                // 1.99?? quick1: the smallest stake + staking switched on (stakeroom.fromSnap / the page's paused note)
+                // 1.99ajw quick1: the smallest stake + staking switched on (stakeroom.fromSnap / the page's paused note)
                 min_move: Number(c.min_move), enabled: !!Number(c.vaults_enabled),
                 bank_min: Number(c.auto_bank_min), house_max: Number(c.auto_house_max), mm_max: Number(c.auto_mm_max),
                 cushion: cushionCfg(c).on, cushion_days: cushionCfg(c).days, bonus_cap: await bonusCap(c),

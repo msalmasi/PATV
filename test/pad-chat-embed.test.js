@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? casino2 (owner 2026-11-04, point 18: "Docking chat doesn't stay active between page switches (like going to holdem). Would be nice
+// 1.99ajw casino2 (owner 2026-11-04, point 18: "Docking chat doesn't stay active between page switches (like going to holdem). Would be nice
 // if users could also bring up a chat from the tables."): the pad chat window FRAMED beside a casino table (pad-dock.js o.embed; the table's
 // casino-chat.js) and "the chat follows" (sessionStorage 'patv.chat.follow').
 //   * the frame keeps the window's role on the channel: a pad tab of the pad goes popped ("Chat is open beside a casino table"), the newest

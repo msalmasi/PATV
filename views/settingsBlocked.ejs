@@ -45,7 +45,7 @@
     <% if (!blocks.veils.length) { %><p class="empty"><%- t('settings.blocked.frogs_none') %></p><% } else { %>
     <ul>
       <% blocks.veils.forEach((b) => { %>
-        <%# 1.99?? padppl rework: the frog name it was made on, and that who is behind it stays hidden (it covers every frog name they use) %>
+        <%# 1.99ajw padppl rework: the frog name it was made on, and that who is behind it stays hidden (it covers every frog name they use) %>
         <li><span class="nm"><%- t('settings.blocked.frog_row', { name: b.label }) %><small><%= b.pad && b.pad.title ? b.pad.title : t('settings.blocked.a_pad') %> · <%= day_(b.at) %></small></span>
           <button type="button" class="un" data-block-ref="<%= JSON.stringify({ k: 'vb', id: b.id }) %>" data-block-name="<%= b.label %>" data-block-veil="1" data-block-on="0"><%- t('settings.blocked.unblock') %></button></li>
       <% }) %>

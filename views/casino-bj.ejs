@@ -5,10 +5,10 @@
     action buttons with a countdown ring tied to the server's deadline, deal / flip animations and payout pops, a history sheet,
     spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinobj.js. %>
 <%- include('partials/casino-css') %>
-<%# 1.99?? casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
+<%# 1.99ajw casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=8">
-<link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><%# 1.99?? casino2 rework: the 🚫 Block sheet (block-sheet.js) %>
+<link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><%# 1.99ajw casino2 rework: the 🚫 Block sheet (block-sheet.js) %>
 <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# (the person menu header's pad flair chip) %>
 <style>
   .felt.bj { padding: 18px 16px 64px; border-radius: 28px 28px 50% 50% / 28px 28px 22% 22%; min-height: 470px; }
@@ -83,7 +83,7 @@
     <div class="felt bj" id="cz-felt">
       <div class="bj-shoe" aria-hidden="true"></div>
       <div class="bj-dealer">
-        <%# 1.99?? casino2: Pepe the dealer opens his menu (profile, fairness, history, his stream - casino-ui.js pepeMenu) %>
+        <%# 1.99ajw casino2: Pepe the dealer opens his menu (profile, fairness, history, his stream - casino-ui.js pepeMenu) %>
         <div class="who"><button type="button" class="cz-who" data-pepe="1" aria-haspopup="menu" aria-label="<%- t('casino.pepe_actions') %>"><span class="av" aria-hidden="true"><img src="/public/img/pepe.png" alt=""></span><span class="felt-lbl"><%- t('casino.dealer') %></span></button><span class="val" id="cz-dval"></span></div>
         <span class="cards fan" id="cz-dealer" role="group" aria-label="<%- t('casino.dealer_cards') %>"></span>
       </div>
@@ -150,7 +150,7 @@
   <%- include('partials/casino-chat', { t }) %>
   <% } %>
 </main>
-<% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99?? casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
+<% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99ajw casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
 <script src="/public/js/casino-ui.js?v=6"></script>
 <script src="/public/js/patamount.js?v=1"></script>
 <script src="/public/js/casinobj.js?v=8"></script>

@@ -140,7 +140,7 @@ async function active(roomId, userId, feature = "all", t = now()) {
     if (lb) return { room: lb.room_id, global: lb.room_id === "", userId: String(userId), feature: "all", username: null, reason: lb.reason || "", by: lb.by_name || "", via: "web",
                      created: Number(lb.at) || 0, until: lb.until == null ? null : Number(lb.until) };
     // 1.99ajn padppl: a ban on this person's FROG NAME (padbans.js veil_bans) - THE VEIL RULE: only while they are under a frog name NOW
-    // (veiledNow), never their named activity. 1.99?? padppl rework (owner: "blocking ANY frog name the person uses (essentially blocking
+    // (veiledNow), never their named activity. 1.99ajw padppl rework (owner: "blocking ANY frog name the person uses (essentially blocking
     // the person from using incognito in that pad)"): it is THE PERSON's INCOGNITO BAN - by their account (and linked login), so every
     // frog name they use there, now and later - and it says just that: "You can't post incognito on this pad right now." (incog: no
     // moderator's reason, no end time, nothing about how the moderator saw them)
@@ -151,7 +151,7 @@ async function active(roomId, userId, feature = "all", t = now()) {
   return null;
 }
 
-/** 1.99?? padppl rework: what an incognito ban (a frog-name ban, padbans.js) says to the person - plain, whatever the feature. */
+/** 1.99ajw padppl rework: what an incognito ban (a frog-name ban, padbans.js) says to the person - plain, whatever the feature. */
 const INCOG_REFUSAL = "You can't post incognito on this pad right now.";
 
 /** The refusal text for one block (rowOut) when `feature` was asked for. */

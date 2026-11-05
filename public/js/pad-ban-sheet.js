@@ -9,7 +9,7 @@
 //
 // Review fixes: ONE "⛔ Website ban…" menu item (the sheet picks the scope) and ONE "↩️ Lift website ban…" - not four look-alike items next
 // to Pepe's 🔨 Ban…; one Close when the preview fails; the Camfrog-room note only for a login, and only for a viewer Pepe gives 🔨 Ban…
-// 1.99?? padppl rework (owner: a frog-name ban should cover ANY frog name the person uses): on a frog name the item is "⛔ Incognito ban…" -
+// 1.99ajw padppl rework (owner: a frog-name ban should cover ANY frog name the person uses): on a frog name the item is "⛔ Incognito ban…" -
 // the person behind it can't post incognito in this pad (every frog name, now and later), whoever it is; they see only "You can't post
 // incognito on this pad right now." (never the reason or the end), so the reason box says who reads it.
 //
@@ -164,7 +164,7 @@
         var UNTIL = { '1h': _t('js.ban.until_1h', 'an hour from now'), '1d': _t('js.ban.until_1d', 'this time tomorrow'), '7d': _t('js.ban.until_7d', '7 days from now') };
         r = r.replace(/ until [^(.]+UTC/, dur === 'perm' ? '' : ' until ' + UNTIL[dur]);
         var w = why.value.replace(/\s+/g, ' ').trim();
-        if (w && !pv.veil) r = r.replace(/\.$/, ' (' + w + ').');   // (1.99?? padppl rework: an incognito ban never shows them the reason)
+        if (w && !pv.veil) r = r.replace(/\.$/, ' (' + w + ').');   // (1.99ajw padppl rework: an incognito ban never shows them the reason)
         see.textContent = r;
         var blocked = dur === 'perm' && !w;
         B.go.disabled = blocked;

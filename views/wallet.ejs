@@ -290,7 +290,7 @@
       </div>
       <span class="info"><%- t('wallet.stash.stake_info') %></span>
     </details>
-    <% /* 1.99?? quick1 (capital/stakeroom.js): which vaults take a NEW stake right now - a full one refuses it before any PAT moves */
+    <% /* 1.99ajw quick1 (capital/stakeroom.js): which vaults take a NEW stake right now - a full one refuses it before any PAT moves */
        const SRm_ = locals.stakeRoom || null;
        if (SRm_ && myStashes.length && (SRm_.auto.full || ['bank', 'house', 'mm'].some((k) => SRm_.vaults[k].full))) {
          const cell_ = (k) => { const r_ = k === 'auto' ? SRm_.auto : SRm_.vaults[k]; return VN[k] + ' <b>' + (r_.full ? t('staking.room.full') : r_.fit == null ? t('staking.room.open') : t('staking.room.about', { n: fmt(r_.fit) })) + '</b>'; }; %>

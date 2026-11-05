@@ -40,7 +40,7 @@ test("a Plex user: the third choice with the price, the search panel + rights no
   assert.match(html, /up to 3 paid plays a day/);
   assert.match(html, /Plex members play free: <a href="\/subscriptions">/, "1.99jp: how to play free (1.99jr: /subscriptions)");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
-  assert.match(html, /plex-play\.js\?v=1" defer><\/script><script src="\/public\/js\/stage-plex\.js\?v=4/, "1.99?? casino2: the shared flow first");
+  assert.match(html, /plex-play\.js\?v=1" defer><\/script><script src="\/public\/js\/stage-plex\.js\?v=4/, "1.99ajw casino2: the shared flow first");
   for (const k of ["info", "search", "results", "pick", "msg"]) assert.match(html, new RegExp('data-px="' + k + '"'), "the shared flow finds its " + k);
   assert.match(html, /stage\.css\?v=9/);
   // the ordinary booking fields step aside in 📼 mode
@@ -84,7 +84,7 @@ test("1.99jp: the Plex texts are translated (German render has no English Plex s
 });
 
 test("the scripts: stage-plex.js parses, confirms the price, re-asks when the server's price differs; stage-book.js hands library slots over", () => {
-  // (1.99?? casino2: the search / price / play flow is plex-play.js - shared with the Room Dock's sheet - and stage-plex.js mounts it)
+  // (1.99ajw casino2: the search / price / play flow is plex-play.js - shared with the Room Dock's sheet - and stage-plex.js mounts it)
   const own = fs.readFileSync(path.join(repo, "public", "js", "stage-plex.js"), "utf8");
   const flow = fs.readFileSync(path.join(repo, "public", "js", "plex-play.js"), "utf8");
   assert.doesNotThrow(() => new vm.Script(own, { filename: "stage-plex.js" }));

@@ -177,7 +177,7 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   // (1.99ajq dockpol fix: + the same script's URL in the Dock's init, behind the same gate - a block swapped in for a front pad whose mic stage
   // this viewer may see loads it then; home-dock.js stageMic)
   assert.equal((home.match(/stage-mic\.js/g) || []).length, 2, "one stage-mic.js include + its URL for a swapped-in block");
-  assert.match(home, /micJs: locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\) \? '\/public\/js\/stage-mic\.js\?v=16' : null/);   // (v16: 1.99?? padppl rework - the clash tag on a tile)
+  assert.match(home, /micJs: locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\) \? '\/public\/js\/stage-mic\.js\?v=16' : null/);   // (v16: 1.99ajw padppl rework - the clash tag on a tile)
   assert.match(read("public", "js", "home-dock.js"), /if \(!W\.PATVStageMic\) \{ if \(I\.micJs && !micScript\)/);
   assert.match(home, /<%_ if \(locals\.homeMic && typeof locals\.webrtcCfg === 'function' && locals\.webrtcCfg\(\)\) \{ _%>\s*<script src="\/public\/js\/stage-mic\.js\?v=16"><\/script>/, "only for the viewer it is for, with WebRTC");
   assert.match(read("public", "js", "home-dock.js"), /if \(!I\.micStage \|\| !sw \|\| !sw\.setMic \|\| !C \|\| !C\.onStage\) return;/, "setMic only while the page says so");
@@ -1299,7 +1299,7 @@ test("wave2 pad-reveal.js: PATVReveal.tile posts {room, tile} same-origin / no-s
 test("wave2 room.ejs: pad-reveal.js loads before stage-mic.js (v13 - 1.99ahq stage cover + privacy controls) in the WebRTC block; the pad's ONE 'Show real names' toggle mirrors its state into PATVReveal, takes what the stage learns, and draws its bar on a cover's offer", () => {
   const room = read("views", "room.ejs");
   const blk = room.slice(room.indexOf("locals.webrtcCfg()) { %>"), room.indexOf("<% } %><% if (typeof onairAdmin", room.indexOf("locals.webrtcCfg()) { %>")));
-  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=16"), "pad-reveal.js v2, then stage-mic.js v16 (1.99?? padppl rework: the clash tag on a tile; Room Dock: a PiP window's own visibility; v14 was 1.99ain's auto-hiding corner buttons)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
+  assert.ok(blk.indexOf("/public/js/pad-reveal.js?v=2") >= 0 && blk.indexOf("/public/js/pad-reveal.js?v=2") < blk.indexOf("/public/js/stage-mic.js?v=16"), "pad-reveal.js v2, then stage-mic.js v16 (1.99ajw padppl rework: the clash tag on a tile; Room Dock: a PiP window's own visibility; v14 was 1.99ain's auto-hiding corner buttons)");   // (1.99ahn dead relay: v8 - resuming…; 1.99ahp stable slots: v9; 1.99ahq stage cover: v10; 1.99aid privacy controls S5: v11 - veiled cams; S4: v12 - 👁 View cam; V-1: v13 - 📌 a veiled cam from the picker; S4t: pad-reveal v2)
   const tg = room.slice(room.indexOf("var on = null, bar = null, busy = false"), room.indexOf("function nearBottom()"));
   assert.ok(tg.includes("function mirror() { if (PR) PR.setState(on); }"), "mirrored into PATVReveal");
   assert.ok(/busy = false; on = true; mirror\(\);/.test(tg), "a batch that answers: on");

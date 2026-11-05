@@ -741,7 +741,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           await oauthLink.safeBadge(newUser.userId, 'twitch-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "twitch", req, res);
-          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99?? padppl rework: "Is <name> your Camfrog name?…"
+          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99ajw padppl rework: "Is <name> your Camfrog name?…"
           await runQuery(
             "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -1038,7 +1038,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           await oauthLink.safeBadge(newUser.userId, 'discord-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "discord", req, res);
-          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99?? padppl rework: "Is <name> your Camfrog name?…"
+          await require("./cfnames").hintAfter(req, newUser.userId, newUser.username);   // 1.99ajw padppl rework: "Is <name> your Camfrog name?…"
           await runQuery(
             "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -2610,7 +2610,7 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
     if (await usernames.reservedFor(name, user.userId)) {
       return res.status(409).json({ ok: false, error: "that username belonged to another account - pick another" });
     }
-    // (1.99?? padppl rework, owner: a name Pepe has seen on Camfrog is never refused - here neither; the pad tags a clash, cfnames.clashOf)
+    // (1.99ajw padppl rework, owner: a name Pepe has seen on Camfrog is never refused - here neither; the pad tags a clash, cfnames.clashOf)
     await usernames.ensure();
     await require("./dbUtils").tx(async () => {
       await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);

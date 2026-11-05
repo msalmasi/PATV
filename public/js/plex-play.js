@@ -1,4 +1,4 @@
-// plex-play.js — 1.99?? casino2 (owner 2026-11-04: "Did we ever get the ability for users to start a Plex play from the room?"): "📼 Play from
+// plex-play.js — 1.99ajw casino2 (owner 2026-11-04: "Did we ever get the ability for users to start a Plex play from the room?"): "📼 Play from
 // Plex" - search the library, pick a movie / an episode (or a show's queue), the scope / start point / quality / audio / subtitles, see the
 // price, confirm, play now or (on /stage) book it for later. FACTORED out of stage-plex.js (1.99jn / 1.99lr / 1.99lw - the code below is
 // that flow, unchanged but for where it finds its parts) so /stage's Go-live panel and the Room Dock's 📼 sheet (pad-dock.js) run ONE copy;
@@ -88,7 +88,7 @@
         .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && typeof j.balance === 'number') { balNow = Math.floor(j.balance); drawPrice(); } })
         .catch(function () { /* stays '?' */ });
     }
-    // 1.99?? casino2: staff who run Pepe's on-air may put the new play on his stream too (onair.js: allow_library, the IRL feed wins,
+    // 1.99ajw casino2: staff who run Pepe's on-air may put the new play on his stream too (onair.js: allow_library, the IRL feed wins,
     // audited) - its slot goes on air once it's live (a few seconds); "not live yet" is asked again for about a minute
     var onairBox = host.querySelector('[data-px="onair"]');
     var onairLbl = onairBox ? onairBox.closest('label') : null;

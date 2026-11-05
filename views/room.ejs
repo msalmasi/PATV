@@ -546,7 +546,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=8"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=1"></script><% } %><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99?? casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex) %>
+<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=8"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=1"></script><% } %><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99ajw casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex) %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
@@ -655,7 +655,7 @@
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=16"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99?? padppl rework) v16: the "not the Camfrog user" tag on a tile %>
+  <script src="/public/js/stage-mic.js?v=16"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=21"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -862,12 +862,12 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=13"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog); v13 (1.99?? padppl rework): a linked login's clash tag, folded frog lines (vb) %>
+  <script src="/public/js/chatlog-core.js?v=13"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog); v13 (1.99ajw padppl rework): a linked login's clash tag, folded frog lines (vb) %>
   <script src="/public/js/pad-history.js?v=4"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=4"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-  <script src="/public/js/room-bridge.js?v=28"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list; v27 (1.99ajq dockpol): opts.onCmd (command toasts); v28 (1.99?? padppl rework): the clash tag's explanation for a linked login %>
+  <script src="/public/js/room-bridge.js?v=28"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list; v27 (1.99ajq dockpol): opts.onCmd (command toasts); v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login %>
   <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
@@ -1001,7 +1001,7 @@
           var fl = CLR && !u.veil && !u.anon ? CLR.flairNode(u, rctx, H) : null, nmBox = title.querySelector('.rmd-person-name');
           if (fl && nmBox) nmBox.appendChild(fl);
           // the login as a second line only when it differs from the name everyone sees (never an account key, never a frog name's);
-          // 1.99?? casino2: .two = the avatar spans both lines only when there are two (the header's alignment)
+          // 1.99ajw casino2: .two = the avatar spans both lines only when there are two (the header's alignment)
           var lg = String(u.login || ''), shownName = label(u);
           if (!u.anon && lg && !/^u:/i.test(lg) && !u.acct && lg.toLowerCase() !== String(shownName).toLowerCase()) { title.appendChild(el('small', 'pm-login', lg)); title.classList.add('two'); }
         }
@@ -2248,8 +2248,8 @@
     <% if (dockOn_) { %>
     if (window.PATVPadDock) roomDock = PATVPadDock.init({
       mode: chatOnly ? 'popout' : 'pad', vt: pageVt, room: <%- JSON.stringify(String(room.id)).replace(/</g, '\\u003c') %>,   // 1.99ajh dockpop: the window channel
-      embed: <%= locals.embed ? 'true' : 'false' %>,   // 1.99?? casino2: framed beside a casino table (bridge.js ?embed=1; pad-dock.js checks the frame's parent)
-      plexPlay: <%- !chatOnly_ && locals.plexPlay ? JSON.stringify(locals.plexPlay).replace(/</g, '\\u003c') : 'null' %>, padTitle: <%- JSON.stringify(String(room.name || '')).replace(/</g, '\\u003c') %>,   // 1.99?? casino2: 📼 Play from Plex in the Dock
+      embed: <%= locals.embed ? 'true' : 'false' %>,   // 1.99ajw casino2: framed beside a casino table (bridge.js ?embed=1; pad-dock.js checks the frame's parent)
+      plexPlay: <%- !chatOnly_ && locals.plexPlay ? JSON.stringify(locals.plexPlay).replace(/</g, '\\u003c') : 'null' %>, padTitle: <%- JSON.stringify(String(room.name || '')).replace(/</g, '\\u003c') %>,   // 1.99ajw casino2: 📼 Play from Plex in the Dock
       padHref: '/p/' + encodeURIComponent(slug), toBottom: toBottom, recheck: recheck, onRetire: function (key, fallback) { gone(key, fallback); },
       slug: slug, signed: signedIn, linked: <%= linked ? 'true' : 'false' %>, user: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %>,
       nodes: roomNodes, root: document.querySelector('main.rm'), relay: roomRelay, audio: roomAudio, ptt: roomPtt, mod: roomMod,

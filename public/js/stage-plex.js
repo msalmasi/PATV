@@ -8,14 +8,14 @@
 // 1.99lr: 📼 QUEUES (mediaqueue.js): an episode can start "the rest of its season" / "its whole season" / "the series from
 //   here"; a show can play the whole series; "+ My list" builds a hand-made queue (reorder / remove, then ▶ Play my list).
 //   While a queue plays: ⏮ / ⏭, what's left (move / remove), "+ My list" adds to it, and what it has cost / will cost.
-// 1.99?? casino2: the search / pick / price / play flow moved to plex-play.js (shared with the Room Dock's 📼 sheet); load it first.
+// 1.99ajw casino2: the search / pick / price / play flow moved to plex-play.js (shared with the Room Dock's 📼 sheet); load it first.
 (function () {
   'use strict';
   var root = document.getElementById('sb');
   if (!root || root.getAttribute('data-signed') !== '1') return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var $ = function (id) { return document.getElementById(id); };
-  // (1.99?? casino2: the shared helpers - plex-play.js)
+  // (1.99ajw casino2: the shared helpers - plex-play.js)
   var U = window.PATVPlexPlay && window.PATVPlexPlay.util;
   if (!U) return;
   var fmt = U.fmt, esc = U.esc, hms = U.hms, parseTime = U.parseTime, api = U.api, label = U.label;
@@ -39,7 +39,7 @@
   document.querySelectorAll('input[name=mode]').forEach(function (r) { r.addEventListener('change', onMode); });
   if ($('room') && panel) $('room').addEventListener('change', function () { if (mode() === 'plex') info(); drawPrice(); });
 
-  // 1.99?? casino2: the search / pick / price / play flow is plex-play.js (PATVPlexPlay) - one copy for this panel and the Room Dock's
+  // 1.99ajw casino2: the search / pick / price / play flow is plex-play.js (PATVPlexPlay) - one copy for this panel and the Room Dock's
   // 📼 sheet; this file keeps the choice, the room picker and the slot owner's controls below
   var flow = panel && window.PATVPlexPlay ? window.PATVPlexPlay.mount(panel, {
     roomId: roomId, roomTitle: roomTitle, balance: function () { return $('bal') ? $('bal').textContent : '?'; },

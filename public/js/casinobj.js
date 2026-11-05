@@ -102,7 +102,7 @@
     const els = slots();
     const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
     $("cz-felt").classList.toggle("hr", !!t.high_stakes);
-    // (1.99?? casino2 rework: a result is matched to its seat by seat id - two masked seats can both read "someone" - an older round by name)
+    // (1.99ajw casino2 rework: a result is matched to its seat by seat id - two masked seats can both read "someone" - an older round by name)
     const sameSeat = (s, p) => !!s && (p.seat ? s.seat === p.seat : s.name === p.name);
     const lrOf = (s) => ((lr && lr.players) || []).find((p) => sameSeat(s, p)) || null;
     for (let i = 0; i < SEATS; i++) {
@@ -127,7 +127,7 @@
         const tags = [s.host ? `<span class="tag gold">👑 ${esc(T("host", "host"))}</span>` : "", s.via === "room" ? `<span class="tag blue">🐸 ${esc(T("camfrog", "Camfrog"))}</span>` : "",
                       s.autobet ? `<span class="tag">${esc(T("auto", "auto"))}</span>` : "", s.insured ? `<span class="tag green">${esc(T("insured", "insured"))}</span>` : "",
                       s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : ""].join("");
-        // (1.99?? casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
+        // (1.99ajw casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
         whoHTML = CZ.seatWho(s, CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}${mine ? " · " + esc(T("you", "you")) : ""}</span>` +
                   (tags ? `<span class="tags">${tags}</span>` : "") + "</span>");
       } else {
@@ -196,7 +196,7 @@
 
     dock(t, me, betting);
     if (me && me.my_turn && !prevTurn) CZ.announce(T("your_turn_sr", "Your turn. Hit, stand, or more."));
-    // 1.99?? casino2: the table needs you (your turn, insurance, or your seat's bet while the betting window runs - review: the phone's
+    // 1.99ajw casino2: the table needs you (your turn, insurance, or your seat's bet while the betting window runs - review: the phone's
     // chat sheet covered the chips) starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
     const actNow = !!(me && open && (me.my_turn || me.can_insure ||
       (t.phase === "betting" && t.bet_deadline && me.seat && !(me.bet > 0) && !me.pending && !me.banned && !(t.high_stakes && !me.high_roller))));

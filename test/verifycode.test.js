@@ -1,4 +1,4 @@
-// 1.99?? quick1: "when a user verifies their camfrog login, the verify code is at the top of the page but theres no automatic
+// 1.99ajw quick1: "when a user verifies their camfrog login, the verify code is at the top of the page but theres no automatic
 // scroll up so they might miss it coming up." The link form is in Connections, further down; issuing a code redirected to
 // /settings/account#connections, so the page opened scrolled PAST the code box at the top.
 //   * user.controller.updateCamfrogUsername: a code issued (also the "linked to another account" warning) comes back to

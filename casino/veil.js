@@ -1,4 +1,4 @@
-// casino/veil.js - 1.99?? casino2 rework (the owner, 2026-11-04, asked whether incognito players should be masked at the casino tables:
+// casino/veil.js - 1.99ajw casino2 rework (the owner, 2026-11-04, asked whether incognito players should be masked at the casino tables:
 // "Yes, just show them masked at the table if incognito is on."). A seat whose player is VEILED shows under a LABEL - a frog name or
 // "someone" - with no avatar, no profile link and a seat id of its own, in every web-facing name a table has: the seat, the turn, the
 // host, the felt's last hand, the table's log, the hand history and the fairness record (casino/service.js bjView, casino/holdem.js
@@ -23,7 +23,7 @@
 // Switching it ON mid-session masks the seat at once as "someone", as does sitting down within NAMED_GAP_MS of being shown named at this table (frognames C.2: a frog name
 // never right after their own name). A masked seat's id is "v" + 11 hex of a keyed hash of (table, account, epoch) - never the account's
 // seat hash (service.uidHash is the same for an account at every table, so a masked seat with it could be followed to the named one).
-// 1.99?? casino2 verify: the epoch moves on when a masked seat session STARTS, so a session's id (and frog name) was never shown before
+// 1.99ajw casino2 verify: the epoch moves on when a masked seat session STARTS, so a session's id (and frog name) was never shown before
 // it - not on a fail-closed blip, not in place of a named result. Anything else masked shows "someone" under a random id, never a
 // session's: a result from before the session (or of a person veiled while off the seats) an OLD-CONTENT id (r.ns - kept while any of
 // it is shown masked, so the moment a session starts or ends changes nothing on it; a new one the next time), a seat masked without a
@@ -46,7 +46,7 @@ const crypto = require("crypto");
 const { getQuery } = require("../dbUtils");
 
 const NAMED_GAP_MS = 15 * 60e3, LEAVE_GRACE_MS = 60e3, REFRESH_MS = 2000, ROW_MS = 60e3, KIND_MS = 15e3, MAX_PEOPLE = 40, MAX_NAMES = 6, NAME_MIN = 2;
-// (1.99?? casino2 verify: a name shorter than NAME_MIN is matched on its own terms - maskText; one next to a suit is a card, "K♠")
+// (1.99ajw casino2 verify: a name shorter than NAME_MIN is matched on its own terms - maskText; one next to a suit is a card, "K♠")
 const SUITS = "♠♥♦♣♤♡♢♧";
 const SOMEONE = "someone";
 // the casino's own clock (service.S.hooks.now - the tests move it), the wall clock before the service has loaded
@@ -153,7 +153,7 @@ function prune(T) {
   const ids = Object.keys(T.veil);
   if (ids.length <= MAX_PEOPLE) return;
   // the oldest people no longer at the table and not its host go first; never someone seated
-  // (1.99?? casino2 verify: people whose old rounds stay "someone" (omr) go after everyone else - dropping them would name those again)
+  // (1.99ajw casino2 verify: people whose old rounds stay "someone" (omr) go after everyone else - dropping them would name those again)
   const out = ids.filter((u) => !seated(T, u) && !(T.host && T.host.uid === u))
     .sort((a, b) => ((T.veil[a].omr != null) - (T.veil[b].omr != null)) || (T.veil[a].at || 0) - (T.veil[b].at || 0));
   for (const u of out.slice(0, ids.length - MAX_PEOPLE)) delete T.veil[u];
@@ -189,7 +189,7 @@ function apply(T, uid, kind, t = clock(), o = {}) {
   if (T.players && T.players[uid] && T.players[uid].name) noteName(r, T.players[uid].name);
   if (VEILED(r.k)) {
     if (here && !r.m) {
-      // 1.99?? casino2 verify: a NEW epoch for every masked seat session - its seat id and frog name were never shown before it
+      // 1.99ajw casino2 verify: a NEW epoch for every masked seat session - its seat id and frog name were never shown before it
       r.ep = (r.ep || 0) + 1;
       r.m = 1; r.lab = labelFor(T, uid, r, r.k, t);
       const e0 = T.eng || {};
@@ -266,7 +266,7 @@ function vseat(T, uid, ep) {
   try { key = require("../frognames").secret(); } catch (e) { key = SEAT_KEY_FALLBACK; }
   return "v" + crypto.createHmac("sha256", key).update(`patv/casino-seat/v1\0${T.id}\0${uid}\0${ep || 0}`).digest("hex").slice(0, 11);
 }
-/** 1.99?? casino2 verify: random ids (never a session's keyed id) for what is masked outside a seat session - r.ns: a result of someone
+/** 1.99ajw casino2 verify: random ids (never a session's keyed id) for what is masked outside a seat session - r.ns: a result of someone
  *  shown under their name before (kept while it is in use - apply); r.bs: a seat masked without a session (a fail-closed blip; kept
  *  while that lasts, a new one each time they sit) - never the same as r.ns, so a seat can't be lined up with a result first shown named */
 const rid = (r, f) => { if (!r[f] || !/^[0-9a-f]{11}$/.test(r[f])) r[f] = crypto.randomBytes(6).toString("hex").slice(0, 11); return "v" + r[f]; };
@@ -305,7 +305,7 @@ function pairsOf(T, webOnly, fresh) {
   return out.sort((a, b) => b[0].length - a[0].length);
 }
 /** a text with every masked person's names masked (the chat's own redaction boundaries, chatlogview.redact). o.fresh: a line / reply
- *  being written now - their label in force; else (already written: in place, on the way out) "someone" (1.99?? casino2 verify: a frog
+ *  being written now - their label in force; else (already written: in place, on the way out) "someone" (1.99ajw casino2 verify: a frog
  *  name never lands on a line first shown under the name). o.webOnly: only the masked people who play from the website (a Camfrog room
  *  line / a reply to a Camfrog player - see the top). A one-character name (verify) is matched as written, as a word of its own, never
  *  next to a card's suit ("K♠"). */
@@ -333,7 +333,7 @@ function maskText(T, text, o) {
 const maskLog = (T, log) => (Array.isArray(log) ? log.map((l) => (l && typeof l.text === "string" ? Object.assign({}, l, { text: maskText(T, l.text) }) : l)) : log);
 
 /** which known person an entry of a hand names UNDER THEIR NAME (by the account's seat hash, else - an older entry with no seat id - by
- *  name), or null. 1.99?? casino2 verify: an entry written masked (a session's id, an old-content id) is never matched - it stays as written. */
+ *  name), or null. 1.99ajw casino2 verify: an entry written masked (a session's id, an old-content id) is never matched - it stays as written. */
 function whoOf(T, x, ids) {
   const H = svc().uidHash;
   if (x.seat) { for (const uid of ids) if (x.seat === H(uid)) return uid; return null; }
@@ -344,7 +344,7 @@ function whoOf(T, x, ids) {
 }
 const roundNo = (lr) => { const v = lr ? (lr.round_no != null ? lr.round_no : lr.hand_no) : null; return v == null || !Number.isFinite(Number(v)) ? null : Number(v); };
 /** a hand's summary (last_round: winners / shown / players; a stored round's results) with every entry that still names a person who is
- *  masked now - or a round up to their last seat session's start (omr) - as "someone" under their old-content id (a copy). 1.99?? casino2
+ *  masked now - or a round up to their last seat session's start (omr) - as "someone" under their old-content id (a copy). 1.99ajw casino2
  *  verify: never their label or a session's seat id - a result first shown under the name must not tie to the masked seat. */
 function maskRound(T, lr) {
   if (!lr || typeof lr !== "object" || !T || !T.veil) return lr;

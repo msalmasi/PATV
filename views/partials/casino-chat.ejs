@@ -1,5 +1,5 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
-<%# views/partials/casino-chat.ejs - 1.99?? casino2 (owner point 18): the table's 💬 Chat panel - a pad's chat window framed beside the felt
+<%# views/partials/casino-chat.ejs - 1.99ajw casino2 (owner point 18): the table's 💬 Chat panel - a pad's chat window framed beside the felt
     (public/js/casino-chat.js; the 💬 Chat pill is in partials/casino-top.ejs). Desktop: docked at the inline end; 761-1099px: a float;
     phones: a bottom sheet. The frame comes and goes with the panel (its poll, audio and presence with it). Included by both table pages.
     Review fixes: the table is centred in the room left of the docked panel (and the footer makes room too); the float and the sheet make
@@ -62,7 +62,7 @@
   .cz-chat-menu .pm-pop-i[aria-checked="true"] { color: var(--ds-text-strong, #fff); font-weight: 700; }
   /* the 💬 pill while the chat is open here */
   #cz-chatbtn[aria-expanded="true"] { border-color: var(--gold); background: rgba(255,215,64,.12); color: var(--ds-text-strong, #fff); }
-  /* 1.99?? casino2: a seat's avatar + name as the person menu's button (casino-ui.js seatWho) - the seat's own look */
+  /* 1.99ajw casino2: a seat's avatar + name as the person menu's button (casino-ui.js seatWho) - the seat's own look */
   .cz .cz-who { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; margin: 0; padding: 0; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; cursor: pointer; }
   .cz .bj-dealer .cz-who { flex-direction: row; gap: 8px; }
   .cz .cz-who:hover .plate { border-color: var(--gold); }
@@ -73,7 +73,7 @@
   body.cz-pm .pm-pop.rmd-pm .pm-pop-n .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   body.cz-pm .pm-pop.rmd-pm .pm-pop-n .who { color: var(--ds-text-strong, #fff); }
   body.cz-pm .pm-pop.rmd-pm .pm-pop-n > .cz-pm-role { font-family: var(--ds-font); }   /* (Pepe's role line isn't a Camfrog login) */
-  /* 1.99?? casino2 rework: a masked seat (an incognito / hidden player - casino/veil.js): no picture, a plain frog on a muted disc, on the
+  /* 1.99ajw casino2 rework: a masked seat (an incognito / hidden player - casino/veil.js): no picture, a plain frog on a muted disc, on the
      felt and in its small menu (casino-ui.js avatarHTML / veilMenu), whose one line says only that they play incognito */
   .cz .av.veil { background: radial-gradient(circle at 35% 30%, #4b4b55, #1c1c22); font-size: 22px; text-transform: none; }
   body.cz-pm .pm-pop.rmd-pm .pm-pop-n .av.veil { font-size: 17px; }

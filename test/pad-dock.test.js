@@ -116,7 +116,7 @@ test("Dock CSS stays scoped, token-based and logical; the pad-accent mapping is 
   for(const r of rules) {
     // (1.99ajh dockpop: + the chat window's body, and the person menu's Dock look while the chat floats off Live or is in its own window)
     // (1.99ajh dockpop review: + body.rmd-afloat - a Dock notice moves to the top while the chat floats)
-    // (1.99?? casino2: + body.cz-pm in the person menu's list - a casino table's seats open the same menu)
+    // (1.99ajw casino2: + body.cz-pm in the person menu's list - a casino table's seats open the same menu)
     for(const sel of r.selector.split(/,\s*(?=main\.|body[.:])/))assert.match(sel,/^(main\.rm\.rm-dock|body\.pad-dock-live|body\.rmd-pop|body\.rmd-afloat|body\.rmd-dock-pad|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop\)|body:is\(\.pad-dock-live, \.rmd-afloat, \.rmd-pop, \.cz-pm\) \.pm-pop)/,sel);   // (1.99ajq dockpol: + body.rmd-dock-pad - the pad page's Feed / About in the Dock: no footer)
     assert.doesNotMatch(r.body,/#[0-9a-f]{3,8}\b|--ds-green|(?:margin|padding)-(?:left|right)\s*:|(?:^|;)\s*(?:left|right)\s*:|text-align:\s*(?:left|right)/i);
     // 1.99aiw review: a calc() of --ds-z-* tokens (the banner under the frame layer) is a token value too

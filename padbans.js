@@ -18,7 +18,7 @@
 // thing for a frog name (stored as bridge); staff can make it site-wide. Lists show it as "🐸 <label> · identity hidden", the room event
 // names only the label, admin_audit the real identity (admins only). The live view never flags a veiled entry as banned (wban), so a
 // new frog session can't be matched to an old ban. If the person comes back under their own name and misbehaves, ban that name.
-// 1.99?? padppl rework (owner 2026-11-04, on bans "narrowed to the one frog name": "This could lead to incognito harrassment no? Maybe this
+// 1.99ajw padppl rework (owner 2026-11-04, on bans "narrowed to the one frog name": "This could lead to incognito harrassment no? Maybe this
 // could work by blocking ANY frog name the person uses (essentially blocking the person from using incognito in that pad)"): a frog-name
 // ban IS that - an INCOGNITO BAN on the person behind it, resolved on the server by their account (and linked login), so it covers every
 // frog name they use in that pad, now and later. While it lasts, their website chat / commands / clips / cams there under a frog name are
@@ -138,7 +138,7 @@ function identity(p) {
 function refusalPreview(scope, until, reason) {
   const when = until ? " until " + new Date(until).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
   const why = reason ? " (" + reason + ")" : "";
-  if (scope === "veil") return require("./bridgeblocks").INCOG_REFUSAL;          // 1.99?? padppl rework: the incognito ban's plain words
+  if (scope === "veil") return require("./bridgeblocks").INCOG_REFUSAL;          // 1.99ajw padppl rework: the incognito ban's plain words
   if (scope === "bridge") return "A mod of this room blocked you from talking in it from the website" + when + why + ".";
   if (scope === "pad") return "You can't post in this pad" + when + why + ".";
   return "You can't post on the feed" + when + why + ".";
@@ -161,7 +161,7 @@ async function audit(me, action, p, detail, reason) {
   } catch (e) { console.error("[padbans] audit:", e.message); }
 }
 const eventName = (p) => (p.veil ? `🐸 ${p.label} (identity hidden)` : p.userId ? "@" + p.username : "Camfrog login " + p.login);
-// 1.99?? padppl rework: how a frog-name ban (an incognito ban) is listed - the frog name it was made on, never who
+// 1.99ajw padppl rework: how a frog-name ban (an incognito ban) is listed - the frog name it was made on, never who
 const veilWho = (label) => `🐸 ${label || "someone"} (identity hidden) - incognito ban`;
 
 /** May `me` use `scope` here? (throws) */

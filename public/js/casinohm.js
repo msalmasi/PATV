@@ -79,7 +79,7 @@
                       s.status === "waiting" && inHand ? `<span class="tag">${esc(T("next_hand", "next hand"))}</span>` : "",
                       s.via === "room" ? '<span class="tag blue">🐸</span>' : "", s.host ? '<span class="tag gold">👑</span>' : "",
                       s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : ""].join("");
-        // (1.99?? casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
+        // (1.99ajw casino2: the avatar + plate open the person menu - CZ.seatWho makes them a button when that seat has one)
         html = CZ.seatWho(s, CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}</span><span class="sub">${fmt(s.stack)}</span></span>`) +
                (s.button ? `<span class="dbtn" title="${esc(T("dealer_btn", "Dealer button"))}">D</span>` : "") +
                (tags ? `<span class="st">${tags}</span>` : "") + (s.hand ? `<span class="hand">${esc(handName(s.hand))}</span>` : "");
@@ -146,7 +146,7 @@
       popHand = lr.hand_no;
       if (!was) {
         const delay = CZ.reduced ? 0 : 700;
-        // (1.99?? casino2 rework: a winner is matched to its seat by seat id - two masked seats can both read "someone" - an older hand by name)
+        // (1.99ajw casino2 rework: a winner is matched to its seat by seat id - two masked seats can both read "someone" - an older hand by name)
         const sameSeat = (s, w) => !!s && (w.seat ? s.seat === w.seat : s.name === w.name);
         setTimeout(() => {
           for (const w of lr.winners) {
@@ -192,7 +192,7 @@
 
     dock(t, me, inHand);
     if (me && me.my_turn && !prevTurn) { CZ.announce(T("your_turn_sr_hm", "Your turn. {n} to call.", { n: fmt(t.turn ? t.turn.to_call : 0) })); raiseTouched = false; }
-    // 1.99?? casino2: your turn starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
+    // 1.99ajw casino2: your turn starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
     if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn), act: !!(me && me.my_turn) } }));
     prevTurn = !!(me && me.my_turn);
     if (wantSit && me && open) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats && !hrLocked) openBuy("sit"); }

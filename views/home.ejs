@@ -105,10 +105,10 @@
 <link rel="stylesheet" href="/public/css/flair.css?v=4">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-<link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><%# 1.99ajq dockpol: v7; 1.99?? casino2: v8 (the chat beside a casino table, 📼 Play from Plex) %>
+<link rel="stylesheet" href="/public/css/pad-dock.css?v=8"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex) %>
 <link rel="stylesheet" href="/public/css/home-dock.css?v=3">
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
-<script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99?? padppl rework): the "not the Camfrog user" tag on a tile %>
+<script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile %>
 <%_ } _%>
 <%_ } _%>
 <style>
@@ -902,7 +902,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=28"></script><%# v28 (1.99?? padppl rework): the clash tag's explanation for a linked login %>
+<script src="/public/js/room-bridge.js?v=28"></script><%# v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login %>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>

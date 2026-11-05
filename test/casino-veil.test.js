@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? casino2 rework (the owner, 2026-11-04, on incognito players at the casino tables: "Yes, just show them masked at the table if
+// 1.99ajw casino2 rework (the owner, 2026-11-04, on incognito players at the casino tables: "Yes, just show them masked at the table if
 // incognito is on."): casino/veil.js. A veiled player's seat is MASKED - a frog name or "someone", no picture, a seat id of its own -
 // in every web-facing name the table has, and so on Pepe's OBS board (the table state Pepe polls):
 //   * the table view (seat, turn, host, the felt's last round / hand, the log), the people answer, the lobby, the history and the
@@ -11,7 +11,7 @@
 //   * Camfrog room lines / replies to a Camfrog player keep a ROOM player's name (the room sees them type); a WEBSITE player is their label
 //     there too; a reply to a website player is masked for everyone
 //   * fail closed: a hidden set loading / a failed read masks everyone for that answer only - nothing is kept
-//   * (1.99?? casino2 verify - the review's probes) a seat session's id is a NEW epoch's (never shown before: not on a blip, not in place
+//   * (1.99ajw casino2 verify - the review's probes) a seat session's id is a NEW epoch's (never shown before: not on a blip, not in place
 //     of a named result); what was shown under the name reads "someone" - never the later frog name - and a session's start or end
 //     changes nothing on it; one-character names are masked; a masked room player shows no Camfrog tag
 //   node --test test/casino-veil.test.js      (uses a temp DB)
@@ -339,7 +339,7 @@ test("veil.js: a masked seat id is the table's own (another table, another id); 
   assert.ok(!JSON.stringify(svc.publicView(T)).includes('"veil":{'), "T.veil is server only");
 });
 
-// ── 1.99?? casino2 verify: the review's three probes (each now asserting the safe outcome), and what they led to ──
+// ── 1.99ajw casino2 verify: the review's three probes (each now asserting the safe outcome), and what they led to ──
 const dealRound = async (tid, who) => {
   svc.S.hooks.shoe = () => ["Ts", "9h", "7d", "9s", "8h", "Kc"].concat(E.makeShoe(6).slice(6));
   assert.ok((await A(who[0], "deal", [], { table: tid })).ok);

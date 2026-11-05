@@ -146,7 +146,7 @@ test("review: the sender's own data never tells them whether / when a frog accep
   assert.match(JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"))["wallet.gifts.why"], /We never tell them whether you accepted, but a gift that comes back tells them it wasn't\./);
 });
 
-// 1.99?? padppl rework (owner: a frog-name block covers ANY frog name the person uses): a sender who is under a frog name right now, whom the
+// 1.99ajw padppl rework (owner: a frog-name block covers ANY frog name the person uses): a sender who is under a frog name right now, whom the
 // recipient blocked under a frog name, is withheld - silently, the same answer; under their own name the gift goes through as before
 test("rework: a frog-name block withholds the gifts its person sends while they're incognito - the same answer; named sends untouched", async () => {
   T += 2 * 86400e3;                                          // (a fresh day for alice's limits)

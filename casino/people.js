@@ -1,4 +1,4 @@
-// casino/people.js — 1.99?? casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc."
+// casino/people.js — 1.99ajw casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc."
 // and "users could also bring up a chat from the tables"): a table's seats as the Room Dock's person menu needs them, and the pads the
 // table belongs to (its 💬 Chat). casino/routes.js serves both:
 //   GET /api/casino/t/:id/people   signed-in only, private no-store, RATE_N a minute per account: {ok, pepe, pads, seats}
@@ -12,7 +12,7 @@
 // seats = {<seat hash>: person} (the seat hash = the table view's `seat`, never an account id):
 //   * {me: true, display}                     the viewer's own seat (no menu)
 //   * {bot: true, display, patv}              Pepe's account (the casino's own Pepe menu)
-//   * {veil: true, display}                   1.99?? casino2 rework: a MASKED seat (casino/veil.js - veiled on the bridge: the seat's
+//   * {veil: true, display}                   1.99ajw casino2 rework: a MASKED seat (casino/veil.js - veiled on the bridge: the seat's
 //                                             Camfrog login, the linked login or the account key hidden / incognito; a masked seat session;
 //                                             fails closed while the hidden sets load), keyed by the masked seat's own id - its label
 //                                             (a frog name or "someone") and nothing else: no account, no login, no tip, no avatar
@@ -86,7 +86,7 @@ async function seatsFor(T, user, pads) {
   const meRow = user && user.userId ? byId.get(String(user.userId)) || null : null;
   const me = meRow ? { userId: String(meRow.userId), username: meRow.username, login: meRow.camfrogUsername || null } : null;
   const padBy = new Map((pads || []).map((p) => [p.room, p]));
-  // 1.99?? casino2 review: a pad's room is told only to a viewer who may open it (padaccess.full + the 18+ gate, as the roster) -
+  // 1.99ajw casino2 review: a pad's room is told only to a viewer who may open it (padaccess.full + the 18+ gate, as the roster) -
   // an Approved advert pad or an 18+ pad never says who is in its live room now, nor offers ⚔️ Duel there
   const PA = require("../padaccess");
   try { await PA.init(); } catch (e) { /* the gate below fails closed */ }
@@ -107,7 +107,7 @@ async function seatsFor(T, user, pads) {
     const hash = V.seatOf(T, k), p = (T.players || {})[k] || {}, row = byId.get(String(k)) || {};
     const display = String((e.names && e.names[k]) || p.name || row.displayname || row.username || "?").slice(0, 60);
     if (String(k) === PEPE_ID || (pepe && lc(row.username) === pepe)) { out[hash] = { bot: true, display, patv: row.username ? { username: row.username } : null }; continue; }
-    // 1.99?? casino2 rework: a masked seat (the table view's own mask - routes.js re-read it first) is its label and nothing else
+    // 1.99ajw casino2 rework: a masked seat (the table view's own mask - routes.js re-read it first) is its label and nothing else
     if (V.masked(T, k)) { out[hash] = me && String(k) === me.userId ? { me: true, display: V.label(T, k) } : { veil: true, display: V.label(T, k) }; continue; }
     if (me && String(k) === me.userId) { out[hash] = { me: true, display }; continue; }
     const room = p.via === "room";
@@ -145,7 +145,7 @@ async function seatsFor(T, user, pads) {
   return out;
 }
 
-/** 1.99?? casino2 rework: the viewer's own named blocks (blocks.pageList; null when it can't be read - the menu then offers 🚫 Block) */
+/** 1.99ajw casino2 rework: the viewer's own named blocks (blocks.pageList; null when it can't be read - the menu then offers 🚫 Block) */
 async function blocksOf(user) {
   if (!user || !user.userId) return null;
   try { return await require("../blocks").pageList(user.userId); } catch (e) { return null; }

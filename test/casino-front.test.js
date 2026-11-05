@@ -17,7 +17,7 @@ process.chdir(tmp);
 delete process.env.STAGING;
 const { runQuery } = require(path.join(repo, "dbUtils"));
 const svc = require(path.join(repo, "casino", "service"));
-require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99?? casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
+require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99ajw casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
 
 const set = async (kv) => { for (const [k, v] of Object.entries(kv)) await svc.setSetting(k, v, "test"); return svc.loadSettings(true); };
 

@@ -108,7 +108,7 @@ function harness(extra={}){
   const mos=[];if(extra.mo){win.MutationObserver=class{constructor(f){this.f=f;this.t=null;mos.push(this);}observe(t){this.t=t;}disconnect(){this.t=null;}};}
   if(extra.audio){Object.assign(opts.audio,extra.audio);}
   if(extra.closeWin){win.close=()=>{calls.closed=(calls.closed||0)+1;win.closed=true;};}
-  if(extra.win)extra.win(win,calls);   // 1.99?? casino2: location / parent / sessionStorage before the Dock starts (the chat embed)
+  if(extra.win)extra.win(win,calls);   // 1.99ajw casino2: location / parent / sessionStorage before the Dock starts (the chat embed)
   const timers=new Map();let seq=0;const sandbox={window:win,document:doc,setTimeout:f=>{timers.set(++seq,f);return seq;},clearTimeout:i=>timers.delete(i),Promise,JSON,Date};
   if(extra.bus)vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/dock-link.js'),'utf8'),sandbox);
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/pad-dock.js'),'utf8'),sandbox);

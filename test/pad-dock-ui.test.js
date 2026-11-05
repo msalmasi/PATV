@@ -532,7 +532,7 @@ test('one meaning per icon: the Dock\'s menu items and buttons never use one emo
   const s=require('fs').readFileSync(require('path').join(__dirname,'..','public','js','pad-dock.js'),'utf8');
   const IC={};for(const m of /var IC = \{([^}]*)\}/.exec(s)[1].matchAll(/(\w+): '([^']*)'/g))IC[m[1]]=m[2];
   // (1.99ajq dockpol: ✕ also dismisses a chat notice; 🖼️ pops a pinned cam out too; a Create item and its form's send button share their icon)
-  // (1.99?? casino2: ✕ closes the casino table's chat too; 📼 Play from Plex)
+  // (1.99ajw casino2: ✕ closes the casino table's chat too; 📼 Play from Plex)
   const SAME=[['close','close_cam','close_all','pop_close','dismiss','embed_close'],['redock','return_cam','pop_back'],['cam_menu','stage_menu','chat_menu'],['about','chat_about'],['plex','plex_play'],['settings','front_settings'],['clip','clip_secs','clip_stage'],
     ['pip_stage','pop_cam'],['create_poll','poll_go'],['create_wager','wager_go'],['create_bounty','bounty_go']];
   const group=k=>{const g=SAME.find(x=>x.includes(k));return g?g[0]:k;},by={};

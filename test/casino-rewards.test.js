@@ -76,7 +76,7 @@ test.before(async () => {
     await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, points_balance) VALUES (?, ?, ?, 'x', ?, 1000000)", [id, u, d, cf]);
   }
   svc = require(path.join(repo, "casino", "service"));
-  require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99?? casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
+  require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99ajw casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
   svc.S.hooks.now = () => NOW;
   rewards = require(path.join(repo, "casino", "rewards"));
   rewards.hooks.now = () => NOW;

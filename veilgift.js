@@ -91,7 +91,7 @@ async function send(me, R, ref, rawAmount, key = null) {
   if (!p.userId && !p.login) state = "withheld";
   else if (p.userId) {
     try { if (await require("./blocks").towards(me.userId, p.userId)) state = "withheld"; } catch (e) { state = "withheld"; }
-    // 1.99?? padppl rework (blocks.js): a sender who is under a frog name right now, and whom the recipient blocked under a frog name
+    // 1.99ajw padppl rework (blocks.js): a sender who is under a frog name right now, and whom the recipient blocked under a frog name
     // (any frog name), is withheld too - the same answer, the same padded time (MIN_MS), so it tells the sender nothing
     if (state === "pending") {
       try {

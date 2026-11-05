@@ -1,7 +1,7 @@
 // cfnames.js - 1.99ajn padppl: the CAMFROG-NAME TAG (owner: someone made a PATV account named like a Camfrog user - "tricon" - to
 // harass him). A PATV username is free text with a charset rule, and the only check was at relay time (accountkey.ownsName - only
 // against a LINKED login, and most Camfrog users never link).
-// 1.99?? padppl rework (owner 2026-11-04, on the guard that refused such names: "Wouldn't this prevent people legit creating a PATV
+// 1.99ajw padppl rework (owner 2026-11-04, on the guard that refused such names: "Wouldn't this prevent people legit creating a PATV
 // account with their own username? Or a common username he saw on CF? I don't like this part."): NOBODY is refused a name because Pepe
 // has seen it on Camfrog - sign-up, rename, Pepe's rename and every OAuth / SSO account creation take it. What stays: the "not the
 // Camfrog user" tag wherever such a name shows, the typed-name disambiguation (targets.js, the 409 "which one"), the admin list.
@@ -14,7 +14,7 @@
 //                        whether or not someone else has that login linked (it says nothing about who has it). hintAfter() flashes it.
 //   clashOf(acc, login)  the Camfrog login an account's SHOWN name (username or display name) equals but isn't linked to, or null - the
 //                        page's "not the Camfrog user" tag (u.clash) and the /admin/users#nameclash list
-// Display names stay free text; bridge.withPatv SHOWS a clashing name with the tag (1.99?? rework: a linked login's display name too - it
+// Display names stay free text; bridge.withPatv SHOWS a clashing name with the tag (1.99ajw rework: a linked login's display name too - it
 // used to be replaced by the login).
 // Review fix (LOOK-ALIKES): a name also clashes when it only LOOKS like a seen login - skeleton(): Unicode compatibility forms folded,
 // Cyrillic / Greek letters that look Latin mapped to them, 0 -> o, 1 / I / i / | -> l, rn -> m, vv -> w, and the separators at either end
@@ -25,7 +25,7 @@
 const { getQuery, runQuery } = require("./dbUtils");
 
 const REBUILD_MS = 10 * 60 * 1000, PROBE_TTL = 10 * 60 * 1000, LOGIN_RE = /^[\w.\-]{1,40}$/;
-// (1.99?? rework: only the ADMIN rename tool still refuses a seen login - it exists to end a clash, never to make another one)
+// (1.99ajw rework: only the ADMIN rename tool still refuses a seen login - it exists to end a clash, never to make another one)
 const REFUSAL = "That name is a Camfrog login Pepe has seen - pick another, or Mark OK instead.";
 const HINT = "Is {name} your Camfrog name? Link it in Settings so people know it's you.";
 let clock = () => Date.now();
@@ -85,7 +85,7 @@ async function rebuild() {
 }
 const stale = () => clock() - builtAt > REBUILD_MS;
 
-/** Has Pepe seen Camfrog login `name`? `veil: false` (1.99?? padppl verify - the sign-up hint) leaves out the logins behind veiled
+/** Has Pepe seen Camfrog login `name`? `veil: false` (1.99ajw padppl verify - the sign-up hint) leaves out the logins behind veiled
  *  lines (chat_log_veil): a login only ever seen incognito / hidden never answers "seen" to someone who types it as a new name. */
 async function seen(name, { veil = true } = {}) {
   const l = low(name).replace(/^@/, "");
@@ -130,7 +130,7 @@ async function linkedLoginOf(userId) {
 }
 const isAuto = (name) => { try { return require("./autoaccount").isAutoName(name, { anyCase: true }); } catch (e) { return /^cf/i.test(String(name || "")); } };
 
-/** 1.99?? padppl rework: why the ADMIN rename tool (adminRename) won't give account `userId` the name `name` - a seen login (or a look-alike
+/** 1.99ajw padppl rework: why the ADMIN rename tool (adminRename) won't give account `userId` the name `name` - a seen login (or a look-alike
  *  of one) that isn't the account's own linked login and isn't marked OK - or null. Never asked for a sign-up, a rename, Pepe's rename or
  *  an OAuth / SSO account: those take any free name. */
 async function adminNameRefusal(name, userId = null) {
@@ -148,7 +148,7 @@ async function adminNameRefusal(name, userId = null) {
   return REFUSAL;
 }
 
-/** 1.99?? padppl rework: the gentle hint for an account that just took PATV username `name` (sign-up, rename, an OAuth / SSO account) -
+/** 1.99ajw padppl rework: the gentle hint for an account that just took PATV username `name` (sign-up, rename, an OAuth / SSO account) -
  *  only when `name` is EXACTLY a Camfrog login Pepe has seen and not the account's own linked login; never says whether that login is
  *  linked to anyone. -> the hint's words | null. Never throws. */
 async function nameHint(name, userId = null, req = null) {

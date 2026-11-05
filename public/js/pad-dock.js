@@ -25,7 +25,7 @@
   // (1.99ajh dockpop review: a pad tab answers every heartbeat - "Back in the pad tab" only while one did within 12 s; LISTEN = the window
   // was playing the room when it reloaded: it picks it up again)
   var TAB_FRESH_MS = 12000, LISTEN_KEY = 'patv.dock.listen.', FOCUS_GAP_MS = 15000;
-  // 1.99?? casino2 (owner point 18: "docking chat doesn't stay active between page switches (like going to holdem)"): the chat that
+  // 1.99ajw casino2 (owner point 18: "docking chat doesn't stay active between page switches (like going to holdem)"): the chat that
   // floats on a pad page FOLLOWS to that pad's casino table in the same tab (sessionStorage: this tab only, a noopener tab never gets
   // it) - casino-chat.js reads it there, at most 2 minutes later. EMBED_PATH = the only pages that may frame the chat (casino tables).
   var FOLLOW_KEY = 'patv.chat.follow', EMBED_PATH = /^\/casino\/(?:blackjack|holdem)\/t\/[0-9a-f]{10}$/;
@@ -65,7 +65,7 @@
     if (!root) return null;
     // 1.99ajh dockpop: 'pad' (the pad page), 'popout' (the pad's chat in its own window, /p/<slug>/chat) or 'preview' (the homepage)
     var mode = o.mode === 'popout' || o.mode === 'preview' ? o.mode : 'pad';
-    // 1.99?? casino2: the chat window FRAMED beside a casino table (casino-chat.js frames /p/<slug>/chat?embed=1): the window's role on the
+    // 1.99ajw casino2: the chat window FRAMED beside a casino table (casino-chat.js frames /p/<slug>/chat?embed=1): the window's role on the
     // channel (a pad tab of this pad goes popped, the newest window or frame wins), but ✕, the hand-over and a retire talk to the table page
     // (postMessage, same origin, no chat content) instead of closing a window. Framed by anything but a casino table page: the plain window.
     function embedParent() {
@@ -232,7 +232,7 @@
       var old = layer; layer = null;
       if (old.restore) old.restore();
       old.host.remove();
-      if (embed && old.box && old.box.classList.contains('ds-modal')) toParent({ t: 'patv-chat:tall', on: false });   // 1.99?? casino2 review
+      if (embed && old.box && old.box.classList.contains('ds-modal')) toParent({ t: 'patv-chat:tall', on: false });   // 1.99ajw casino2 review
       if (old.opener && old.opener.getAttribute && old.opener.getAttribute('aria-haspopup')) old.opener.setAttribute('aria-expanded', 'false');
       if (focus !== false && old.opener && old.opener.isConnected) quietFocus(old.opener, old.byPointer);
       if (old.overlay) showTools();
@@ -264,7 +264,7 @@
       head.appendChild(iconBtn('✕', 'close', 'Close', function () { closeLayer(); }, 'ds-btn ghost sm rmd-sheet-x', doc));
       box.appendChild(head); host.appendChild(box); place.appendChild(host);
       layer = { host: host, box: box, head: head, opener: opener || doc.activeElement, byPointer: ptr };
-      // 1.99?? casino2 review: beside a casino table a sheet asks the table page for the height (a phone's chat sheet clipped ⚔️ Duel's stake)
+      // 1.99ajw casino2 review: beside a casino table a sheet asks the table page for the height (a phone's chat sheet clipped ⚔️ Duel's stake)
       if (embed) toParent({ t: 'patv-chat:tall', on: true });
       on(host, 'click', function (e) { if (e.target === host && !foreignModal(doc)) closeLayer(); });
       // (a pointer-opened sheet starts on its box - or its main field - never on ✕ with a ring; Tab still goes to the first control)
@@ -1614,7 +1614,7 @@
       var sched = node('rmSched'), upnext = node('rmGoLive') && node('rmGoLive').querySelector('.upnext');
       if (sched || upnext) menuItem(box, '🗓️', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
       var plex = node('rmPlexQ'); if (plex && !plex.hidden) menuItem(box, '📼', 'plex', 'Plex queue & controls…', function () { external(function () { nodeSheet(t('plex', 'Plex queue & controls…').replace(/…$/, ''), plex, opener, 'plex'); }); });
-      // 1.99?? casino2: start a play from the room (users the /stage rules allow; staff keep ▶️ Play content here below)
+      // 1.99ajw casino2: start a play from the room (users the /stage rules allow; staff keep ▶️ Play content here below)
       if (o.plexPlay && W.PATVPlexPlay && mode === 'pad') menuItem(box, '📼', 'plex_play', 'Play from Plex…', function () { plexSheet(opener); });
       var mbtn = stage && stage.querySelector('.mf-mbtn'), clear = stage && stage.querySelector('.mf-clear'), rep = stage && stage.querySelector('.mf-rbtn');
       if (rep && !rep.hidden) menuItem(box, '⚑', 'mf_report', 'Report someone on the mic stage…', function () { external(function () { rep.click(); }); });
@@ -1624,7 +1624,7 @@
       staffItems(box);
       finishMenu(box, opener);
     }
-    // 1.99?? casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): 📼 Play from Plex… - the flow
+    // 1.99ajw casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): 📼 Play from Plex… - the flow
     // /stage runs (plex-play.js) in a Dock sheet, for THIS pad: search, pick, scope, start point, quality, audio, subtitles, the price and
     // its confirm. The server has the last word (medialib / mediaqueue: Plex members, the override list, staff, the pad's slot rules and
     // limit, the daily caps, the encoder); a refusal shows in the sheet. Book it for later stays on /stage (linked). After a start the stage
@@ -1965,7 +1965,7 @@
     function paintPopBar() {
       if (popWin && popWin.closed) popWin = null;
       var s = popBar && popBar.querySelector('.rmd-popbar-show'); if (s) s.hidden = !popWin;
-      // 1.99?? casino2: the chat is in a frame beside a casino table (another tab, or this one before it came here)
+      // 1.99ajw casino2: the chat is in a frame beside a casino table (another tab, or this one before it came here)
       var tx = popBar && popBar.querySelector('.rmd-popbar-t');
       if (tx) tx.textContent = lastEmbed && !popWin ? t('popped_embed', 'Chat is open beside a casino table') : t('popped', 'Chat is open in its own window');
     }
@@ -2072,7 +2072,7 @@
       else if (m.t === 'pop-open') {
         // a newer window for this pad and account: the newest wins (two windows would poll twice and play the room twice)
         if (playingHere()) o.audio.pause();
-        if (m.embed) retire('pop_moved_embed', 'This chat is open beside a casino table.');    // 1.99?? casino2
+        if (m.embed) retire('pop_moved_embed', 'This chat is open beside a casino table.');    // 1.99ajw casino2
         else retire('pop_moved', 'This chat is open in a newer window.');
       } else if (m.t === 'audio-on') { if (playingHere()) o.audio.pause(); }
     }
@@ -2082,7 +2082,7 @@
       if (audio) o.audio.pause();
       if (link) link.send('handoff', { draft: draft, audio: audio, to: to || '*' });
       saveGeometry();
-      if (embed) { toParent({ t: 'patv-chat:closed', why: 'handoff' }); return; }   // 1.99?? casino2: the table page removes the frame
+      if (embed) { toParent({ t: 'patv-chat:closed', why: 'handoff' }); return; }   // 1.99ajw casino2: the table page removes the frame
       try { W.close(); } catch (e) { /* not a window this site opened */ }
       setTimeout(function () { if (!W.closed) retire('pop_back_done', 'The chat is back in the pad tab.'); }, 400);
     }
@@ -2119,7 +2119,7 @@
       if (mode !== 'pad' || popped || gone_ || !(current && current.kind === 'float')) return;
       try { W.sessionStorage.setItem(FOLLOW_KEY, JSON.stringify({ room: roomKey(), slug: String(o.slug || ''), at: Date.now(), audio: playingHere() ? 1 : 0 })); } catch (e) { /* private mode */ }
     }
-    /** 1.99?? casino2: the frame's side of the table page's postMessage bridge - same origin and the parent window only; nothing of the
+    /** 1.99ajw casino2: the frame's side of the table page's postMessage bridge - same origin and the parent window only; nothing of the
      *  chat crosses it (ready / closed / retired / new / audio go up; pvp / focus come down, and pvp re-checks like the person menu) */
     function embedMsg(e) {
       var P = embedParent();
@@ -2137,7 +2137,7 @@
     /** the window is done (signed out / another account / a newer window): every Dock layer closes and one card says why */
     function retire(key, fallback) {
       if (gone_) return;
-      if (embed) toParent({ t: 'patv-chat:retired', key: String(key || '') });   // 1.99?? casino2: the table page shows why / Bring it here
+      if (embed) toParent({ t: 'patv-chat:retired', key: String(key || '') });   // 1.99ajw casino2: the table page shows why / Bring it here
       // (the page stops its poll and audio and wipes what it shows, then asks for the card - roomDock.gone)
       if (o.onRetire) { try { o.onRetire(key, fallback); } catch (e) { /* the page's own */ } }
       if (!gone_) goneCard(key, fallback);
@@ -2173,7 +2173,7 @@
       var here = W.location || {}, u = null;
       try { u = new W.URL(href, here.href); } catch (x) { return; }
       var same = u.origin === here.origin;
-      // 1.99?? casino2: beside a casino table, sign in and the casino's own pages take the whole tab (the table page, not the frame)
+      // 1.99ajw casino2: beside a casino table, sign in and the casino's own pages take the whole tab (the table page, not the frame)
       if (embed && same && u.pathname === '/login') { var tp = embedParent(); a.setAttribute('href', '/login?next=' + encodeURIComponent(tp ? tp.location.pathname : '/')); a.setAttribute('target', '_top'); return; }
       if (embed && same && /^\/casino(?:\/|$)/.test(u.pathname)) { a.setAttribute('target', '_top'); return; }
       if (same && u.pathname === '/login') { a.setAttribute('href', '/login?next=' + encodeURIComponent(here.pathname)); a.removeAttribute('target'); return; }
@@ -2334,7 +2334,7 @@
       on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
       if (mode === 'pad') {
-        // 1.99?? casino2 (owner point 18): a floating chat follows this tab to the pad's casino table (casino-chat.js) - written when the
+        // 1.99ajw casino2 (owner point 18): a floating chat follows this tab to the pad's casino table (casino-chat.js) - written when the
         // tab leaves while it floats (minimized too) and isn't in its own window (that window already follows), and on a click of a
         // casino link (in case pagehide comes late); this page's own chat is here, so an old mark goes
         try { W.sessionStorage.removeItem(FOLLOW_KEY); } catch (e) { /* private mode */ }
@@ -2397,7 +2397,7 @@
       // 1.99ajh dockpop
       floating: function () { return !!(current && current.kind === 'float'); },
       popped: function () { return popped; }, popWindow: popWindow, canWindow: canWindow, bringBack: bringBack,
-      embedded: function () { return embed; },      // 1.99?? casino2
+      embedded: function () { return embed; },      // 1.99ajw casino2
       gone: function (key, fallback) { goneCard(key || 'pop_gone', fallback || 'You signed out or switched accounts in another tab, so this chat window is closed.'); },
       retitle: retitle,
       // 1.99ajq dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking

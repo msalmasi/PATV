@@ -68,7 +68,7 @@
   .sk button.alt:hover { border-color: var(--ds-gold); filter: none; }
   .sk .hint { margin: 0; }
   .sk .act-box { margin: var(--ds-sp-3) 0; }
-  /* 1.99?? quick1: the room each vault has for a stake (capital/stakeroom.js) */
+  /* 1.99ajw quick1: the room each vault has for a stake (capital/stakeroom.js) */
   .sk .sk-room { margin-top: var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: var(--ds-surface); }
   .sk .sk-room.shut { border-color: var(--ds-warn-ink, #d9a400); }
   .sk .sk-room-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0; font-size: var(--ds-fs-meta); }
@@ -397,7 +397,7 @@
       <p class="info"><%- t('staking.mine.week_help') %></p>
     <% } %>
 
-    <% /* 1.99?? quick1 (capital/stakeroom.js, staking.js `room`): the room each vault has for a stake right now, before you
+    <% /* 1.99ajw quick1 (capital/stakeroom.js, staking.js `room`): the room each vault has for a stake right now, before you
           submit - a full vault's option is disabled with the reason, a too-big amount says how much fits; the server
           refuses the same stakes (nothing moves) and Pepe's chat reply says the same */
        const RM = locals.room || null;
@@ -405,7 +405,7 @@
        const rFit = (k) => !RM ? null : k === 'auto' ? RM.auto.fit : (RM.vaults[k] || {}).fit;
        const rFull = (k) => skPaused || (!!RM && (k === 'auto' ? !!RM.auto.full : !!(RM.vaults[k] || {}).full));
        const rOpenAny = !skPaused && (!RM || RM.anyOpen);
-       // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): the picker keeps the default it always had (Auto, as
+       // 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): the picker keeps the default it always had (Auto, as
        // vaultSelect('auto') did and /wallet's stash form does) - never chosen because a vault is full
        const rDefault = 'auto';
        const rName = (k) => V[k].icon + ' ' + V[k].name;
@@ -442,7 +442,7 @@
       </form>
       <script>
         (function () {
-          // 1.99?? quick1: the reason a stake can't go in, before it's sent (the server checks again)
+          // 1.99ajw quick1: the reason a stake can't go in, before it's sent (the server checks again)
           var f = document.getElementById('stakeForm');
           if (!f) return;
           var sel = f.querySelector('select[name="a3"]'), amt = f.querySelector('input[name="a2"]'), btn = f.querySelector('button[type="submit"]'), why = document.getElementById('stakeWhy');

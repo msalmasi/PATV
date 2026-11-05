@@ -17,7 +17,7 @@
   function say(id, t, bad) { var m = document.getElementById(id); if (!m) return; m.textContent = t || ''; m.style.color = bad ? 'var(--bad, #e55)' : ''; }
   function reload(hash) {
     var next = location.pathname + '?tab=address' + (hash || '#connections');
-    // 1.99?? quick1: on a page already at ?tab=address only the #hash would change - that's no navigation (the page kept
+    // 1.99ajw quick1: on a page already at ?tab=address only the #hash would change - that's no navigation (the page kept
     // showing the form, not the new code). Set the address, then reload, landing where the hash points (no restored scroll).
     if (location.search === '?tab=address') {
       try { history.scrollRestoration = 'manual'; history.replaceState(null, '', next); } catch (e) { location.hash = hash || '#connections'; }
@@ -32,10 +32,10 @@
     e.preventDefault();
     say('pcnCfMsg', 'Getting a code…');
     api('/connect/camfrog', { room: form.elements.room.value, join: form.elements.join && form.elements.join.checked })
-      .then(function () { reload('#pcnCamfrog'); })   // 1.99?? quick1: back to the new code, not the card's top
+      .then(function () { reload('#pcnCamfrog'); })   // 1.99ajw quick1: back to the new code, not the card's top
       .catch(function (err) { say('pcnCfMsg', err.message, true); });
   });
-  // 1.99?? quick1: the page that shows a just-made code (#pcnCamfrog) brings it into view - smooth unless the visitor asked for
+  // 1.99ajw quick1: the page that shows a just-made code (#pcnCamfrog) brings it into view - smooth unless the visitor asked for
   // reduced motion - moves focus to it and reads it out once
   (function revealCode() {
     var box = document.getElementById('pcnCodeBox');
@@ -68,7 +68,7 @@
         if (d.done) {
           say('pcnCfMsg', 'Verified - reloading…');
           var to = '/p/' + encodeURIComponent(d.pad) + '/settings';
-          if (to === location.pathname) reload(); else location.href = to + '?tab=address#connections';   // 1.99?? quick1: a real reload
+          if (to === location.pathname) reload(); else location.href = to + '?tab=address#connections';   // 1.99ajw quick1: a real reload
           return;
         }
         say('pcnCfMsg', d.bridged ? 'Not in the topic yet. Pepe also checks every couple of minutes.' : "The website can't see that room's topic right now - Pepe checks it every couple of minutes while he's in the room.");

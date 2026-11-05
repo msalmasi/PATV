@@ -5,14 +5,14 @@
 //     tricon case: the two never mix), a web line's account key, a veiled roster entry / line -> the hidden person, never said
 //   - effects of a NAMED block: tips refused (tips.transferPat: every tip path - words that never say a block exists), web !duel / !brawl /
 //     !tip refused. A FROG-NAME block (review fix, THE VEIL RULE) acts only on what they do under a frog name - never their named DMs /
-//     tips / people list. 1.99?? padppl rework (owner: "blocking ANY frog name the person uses"): it hides their VEILED activity from the
+//     tips / people list. 1.99ajw padppl rework (owner: "blocking ANY frog name the person uses"): it hides their VEILED activity from the
 //     blocker under any frog name, in any pad - their frog-named lines folded (vb), their frog-named @mentions silent, their web
 //     challenges / tips and gifts while incognito refused / withheld - named activity untouched (no unmasking)
 //   - the same answer whoever is behind a frog name (an account, an unlinked login, nobody); "That's you" only to yourself
 //   - a login block becomes a named block when the login links; the settings list shows frog names by label only
 // Bans - on the exact identity, into the existing stores; a veil ban is its own row (a named re-ban never overwrites it), refuses only
 //   their website bridge and only while they are under a frog name (review fix: never mainstage.isBanned / postRefusal - no visible
-//   effect, no active test). 1.99?? rework: it is the person's INCOGNITO BAN in that pad - every frog name they use there, now and later,
+//   effect, no active test). 1.99ajw rework: it is the person's INCOGNITO BAN in that pad - every frog name they use there, now and later,
 //   "You can't post incognito on this pad right now." - listed as "🐸 label (identity hidden) - incognito ban"; a named ban on someone of
 //   higher rank is refused;
 //   who may: bridge = owner / staff / a room mod with kick, pad = owner / staff, site = staff; a login with no account waits in
@@ -272,7 +272,7 @@ test("a veil ban: its own row, refusals only, no visible effect; a named re-ban 
   const FS = require(path.join(repo, "feedstore"));
   assert.equal(await FS.postRefusal(Object.assign(await FS.account("snk-0001"), {}), [ROOM]), null, "a post is named: never refused by it");
   assert.equal(await require(path.join(repo, "mainstage")).isBanned("snk-0001", ROOM), false, "never the stage / mic-stage reader (it ends streams, takes tiles)");
-  // under a frog name again (Incognito on): their website bridge here is refused - 1.99?? rework: an INCOGNITO ban, in plain words (no
+  // under a frog name again (Incognito on): their website bridge here is refused - 1.99ajw rework: an INCOGNITO ban, in plain words (no
   // moderator's reason, no end time)
   await runQuery(`INSERT INTO incognito_state (login, "on", updated) VALUES ('sneakcf', 1, ?)`, [Date.now()]);
   const a = await BB.active(ROOM, "snk-0001");
@@ -383,7 +383,7 @@ test("review: a frog name's row / line only in a pad the viewer may see; account
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "personref.js"), "utf8"), /let vz = it && it\._vz/);
 });
 
-// ── 1.99?? padppl rework (owner 2026-11-04: "Maybe this could work by blocking ANY frog name the person uses (essentially blocking the person
+// ── 1.99ajw padppl rework (owner 2026-11-04: "Maybe this could work by blocking ANY frog name the person uses (essentially blocking the person
 // from using incognito in that pad), not just a particular frog name they used.") ──
 const INCOG = "You can't post incognito on this pad right now.";
 const incogOn = async (login) => { await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated) VALUES (?, 1, ?)`, [login, Date.now()]); PB._reset(); };

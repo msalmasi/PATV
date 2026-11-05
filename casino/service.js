@@ -20,7 +20,7 @@ const fair = require("./fair");
 const money = require("./money");
 const PATAmount = require("../public/js/patamount");   // 1.99sk: a typed bet - 1,000 / 25k / 1.5m (the page's custom-bet box, chat)
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
-const V = require("./veil");              // 1.99?? casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
+const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -186,13 +186,13 @@ async function emit(T, kind, text, extra) {
   const ts = clock();
   // 1.99ox: every room the table plays in hears it (an event can name its own rooms: a push / a room leaving)
   const rs = roomsOf(T);
-  // 1.99?? casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
+  // 1.99ajw casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
   const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
   const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
                            [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
   if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
   if (text) {
-    // 1.99?? casino2 rework (casino/veil.js): the table's log (the website's) is written with every label in force
+    // 1.99ajw casino2 rework (casino/veil.js): the table's log (the website's) is written with every label in force
     T.log.push({ ts, text: V.maskText(T, String(text), { fresh: true }).slice(0, 240) });   // (verify: fresh - the labels in force)
     if (T.log.length > C.LOG_KEEP) T.log.splice(0, T.log.length - C.LOG_KEEP);
   }
@@ -484,7 +484,7 @@ async function settle(T) {
   if (net) await emit(T, "line", `🏦 House ${net > 0 ? "wins" : "pays out"} ${fmt(Math.abs(net))} PAT this round ${net > 0 ? "into" : "from"} the casino jackpot.`);
   for (const d of drops) await emit(T, "line", dropLine((T.players[d.uid] || {}).name || "someone", d.item));
   // the last round on the felt, and the reveal
-  // 1.99?? casino2 rework: the felt's last round (and casino_rounds.results - the history, the fairness record) is written with a
+  // 1.99ajw casino2 rework: the felt's last round (and casino_rounds.results - the history, the fairness record) is written with a
   // masked player's label + seat id (casino/veil.js); the seat id lets the felt match a result to its seat when two labels are alike
   T.last_round = {
     round_no: n, dealer: d,
@@ -695,7 +695,7 @@ async function cmdStart(actor, room, game, blinds) {
   if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
   const T = newTableObject(actor, room, high);
   S.tables.set(T.id, T);
-  V.enter(T, actor);                 // 1.99?? casino2 rework: the opener's "opened" line and the host name follow their veil
+  V.enter(T, actor);                 // 1.99ajw casino2 rework: the opener's "opened" line and the host name follow their veil
   await save(T);
   await emit(T, "opened", `🂠 ${actor.name} opened a ${high ? "💎 High Roller " : ""}Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
              `Bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} PAT${high ? " (High Rollers only; anyone can watch)" : ""}. Play here or on the web: ${link(T)}`,
@@ -731,7 +731,7 @@ function remember(T, actor) {
   T.players[actor.uid] = { name: actor.name || prev.name || actor.username, username: actor.username || prev.username || null,
                            camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null,
                            room: actor.room || prev.room || null };
-  V.enter(T, actor, { sitting: true });   // 1.99?? casino2 rework: a veiled player's seat is masked before any line names them
+  V.enter(T, actor, { sitting: true });   // 1.99ajw casino2 rework: a veiled player's seat is masked before any line names them
 }
 
 async function cmdBet(T, actor, amount) {
@@ -971,7 +971,7 @@ async function act(actor, verb, args, opts, key) {
   await boot();
   if (!key) return R(false, "missing idempotency key");
   key = String(key).slice(0, 120);
-  // 1.99?? casino2 rework (casino/veil.js): whether the person acting is veiled now - their seat is masked before a line names them
+  // 1.99ajw casino2 rework (casino/veil.js): whether the person acting is veiled now - their seat is masked before a line names them
   if (actor && actor.uid && actor.veil === undefined) actor.veil = await V.kindForActor(actor);
   return locked(async () => {
     const prev = await getQuery("SELECT response FROM casino_actions WHERE key = ?", [key]);
@@ -984,7 +984,7 @@ async function act(actor, verb, args, opts, key) {
       out = R(false, "something went wrong — nothing was charged.");
     }
     const tid = out.table || (opts && opts.table) || null;
-    // 1.99?? casino2 rework (casino/veil.js): a reply that names others (!bj status, "waiting on X") names a masked player by their
+    // 1.99ajw casino2 rework (casino/veil.js): a reply that names others (!bj status, "waiting on X") names a masked player by their
     // label - to a website player always, to a Camfrog player when that player plays from the website
     const VT = tid ? S.tables.get(tid) : null;
     if (VT && out && typeof out.reply === "string") out.reply = V.maskText(VT, out.reply, { webOnly: actor && actor.via === "room", fresh: true });
@@ -1074,7 +1074,7 @@ function bjView(T) {
   const cur = E.currentHand(e);
   const seats = e.seats.map((k) => {
     const p = T.players[k] || {};
-    // 1.99?? casino2 rework (casino/veil.js): a veiled player's seat is masked - its label, its own seat id, veil: 1 (no avatar)
+    // 1.99ajw casino2 rework (casino/veil.js): a veiled player's seat is masked - its label, its own seat id, veil: 1 (no avatar)
     const vl = V.masked(T, k);
     return {
       name: V.nameOf(T, k, e.names[k] || p.name || "?"), via: vl ? "web" : p.via || "web", bet: e.bets[k] || 0, pending: T.pending[k] || 0,
@@ -1122,7 +1122,7 @@ async function meView(T, uid) {
   const cur = e ? E.currentHand(e) : null;
   return Object.assign(base, {
     high_roller: await isHighRoller(uid),
-    seat: T && e.seats.includes(uid) ? V.seatOf(T, uid) : null,         // (1.99?? casino2 rework: a masked seat's own id)
+    seat: T && e.seats.includes(uid) ? V.seatOf(T, uid) : null,         // (1.99ajw casino2 rework: a masked seat's own id)
     host: !!T && T.host.uid === uid,
     bet: e ? e.bets[uid] || 0 : 0, pending: T ? T.pending[uid] || 0 : 0, autobet: !!T && T.autobet.includes(uid),
     lastbet: T ? T.lastbet[uid] || 0 : 0, my_turn: !!cur && cur.key === uid,
@@ -1336,7 +1336,7 @@ async function roomTables() {
   const tables = {}, priv = {};
   for (const T of S.tables.values()) {
     if (!roomsOf(T).length && S.stream.table !== T.id) continue;      // 1.99pc: + the stream table, wherever it plays
-    // 1.99?? casino2 rework: Pepe's OBS board draws this state - a veiled player is masked here, at the source (casino/veil.js)
+    // 1.99ajw casino2 rework: Pepe's OBS board draws this state - a veiled player is masked here, at the source (casino/veil.js)
     if (T.status === "open") await refreshVeil(T);
     tables[T.id] = publicView(T);
     if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
@@ -1375,7 +1375,7 @@ async function fairRecord(tableId, round) {
   const rec = { table: r.table_id, round: r.round_no, commitment: r.commitment, client_seed: r.client_seed, num_decks: r.num_decks,
                 server_seed: r.revealed ? r.server_seed : null, shoe: r.revealed && r.shoe ? JSON.parse(r.shoe) : null,
                 results: r.revealed && r.results ? JSON.parse(r.results) : null, created: r.created, dealt: r.dealt, revealed: r.revealed };
-  // 1.99?? casino2 rework (casino/veil.js): a veiled player in the round reads as their label / "someone" (never the players column)
+  // 1.99ajw casino2 rework (casino/veil.js): a veiled player in the round reads as their label / "someone" (never the players column)
   if (rec.results) {
     let players = [];
     try { players = r.players ? JSON.parse(r.players) : []; } catch (e) { players = []; }
@@ -1389,7 +1389,7 @@ async function fairRecord(tableId, round) {
   return rec;
 }
 
-/** 1.99?? casino2 rework (casino/veil.js): re-read a table's veils (at most every 2 s, shared by every caller); a changed seat mask is
+/** 1.99ajw casino2 rework (casino/veil.js): re-read a table's veils (at most every 2 s, shared by every caller); a changed seat mask is
  *  saved under the mutex (never from inside it - the callers are the routes and Pepe's poll) */
 const persistVeil = (T) => locked(() => (S.tables.get(T.id) === T ? save(T) : null));
 const refreshVeil = (T) => V.refresh(T, persistVeil);
@@ -1410,6 +1410,6 @@ function limits() {
 module.exports = {
   C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
-  uidHash,      // 1.99?? casino2: the table view's seat key (casino/people.js keys its seats the same way)
-  refreshVeil,  // 1.99?? casino2 rework: the routes re-read a table's veils before they answer (casino/veil.js)
+  uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
+  refreshVeil,  // 1.99ajw casino2 rework: the routes re-read a table's veils before they answer (casino/veil.js)
 };

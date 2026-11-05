@@ -16,7 +16,7 @@
   const game = root.dataset.game === "holdem" ? "holdem" : "bj";
   const tableId = root.dataset.table || "";
   const signed = !!root.dataset.signed;
-  const meName = root.dataset.user || "";        // 1.99?? casino2: your PATV name (the 💸 Tip modal's balance line)
+  const meName = root.dataset.user || "";        // 1.99ajw casino2: your PATV name (the 💸 Tip modal's balance line)
 
   async function post(url, body) {
     const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
@@ -144,7 +144,7 @@
   /** the chip labels: 500, 1K, 25K, 1M, 2.5M */
   const short = (n) => (n >= 1e6 ? +(n / 1e6).toFixed(1) + "M" : n >= 1e3 ? +(n / 1e3).toFixed(1) + "K" : String(n));
   function avatarHTML(s, badge) {
-    // 1.99?? casino2 rework: a masked seat (an incognito / hidden player - casino/veil.js) has no picture: a plain frog
+    // 1.99ajw casino2 rework: a masked seat (an incognito / hidden player - casino/veil.js) has no picture: a plain frog
     if (s.veil) return `<span class="av veil" aria-hidden="true">🐸${badge ? `<span class="badge">${badge}</span>` : ""}</span>`;
     const init = esc((String(s.name || "?").trim()[0] || "?"));
     const img = s.avatar ? `<img src="${esc(s.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
@@ -490,12 +490,12 @@
     document.addEventListener("visibilitychange", () => { clearInterval(tm); tm = setInterval(lobby, document.hidden ? 15000 : 4000); if (!document.hidden) lobby(); });
   }
 
-  // ── 1.99?? casino2 (owner: "casino tables need clickable names with the usual tipping etc."): a seat's avatar + name open the Room
+  // ── 1.99ajw casino2 (owner: "casino tables need clickable names with the usual tipping etc."): a seat's avatar + name open the Room
   // Dock's person menu (room-mod.js PATVRoom.mod: 👤 profile, 💸 Tip with its confirm step, ⚔️ Duel / 🥊 Brawl, moderation only where
   // Pepe gives YOU powers in that pad - the server and Pepe re-check every action). The seats come from GET /api/casino/t/:id/people
   // (signed in; /pads for everyone - the 💬 Chat's list, casino-chat.js): asked when the seats or the rooms change and on a click with
   // an answer older than PEOPLE_CLICK_MS (review F4: someone who just went incognito never gets a menu from a 30-s-old answer; a failed
-  // ask opens nothing from an answer older than PEOPLE_FRESH_MS), never by the 1 s poll. 1.99?? casino2 rework (the owner, 2026-11-04:
+  // ask opens nothing from an answer older than PEOPLE_FRESH_MS), never by the 1 s poll. 1.99ajw casino2 rework (the owner, 2026-11-04:
   // "just show them masked at the table if incognito is on"): a veiled player's seat is MASKED by the server (casino/veil.js: a frog name
   // or "someone", no picture, a seat id of its own) and looks like every other seat - every seat but your own is the same button, and a
   // masked one opens a small menu that says only that they play incognito (nothing in it unmasks). Pepe (the dealer, or a seat that is
@@ -536,7 +536,7 @@
     if (!m) {
       const wrap = document.createElement("div"); wrap.hidden = true; wrap.className = "cz-pm-host";   // (update() toggles the section, never this)
       const host = document.createElement("section"); wrap.appendChild(host); document.body.appendChild(wrap);
-      // (1.99?? casino2 rework: the viewer's own named blocks from the people answer - someone you blocked shows ✅ Unblock, no 💸 Tip -
+      // (1.99ajw casino2 rework: the viewer's own named blocks from the people answer - someone you blocked shows ✅ Unblock, no 💸 Tip -
       // and a block / unblock asks again, as the pad's poll does)
       m = window.PATVRoom.mod(host, slug, { signed: true, me: meName || null, dms: true, blk: () => (ppl.d && ppl.d.blk) || null,
                                             onBlock: () => { ppl.at = 0; loadPeople(); } });
@@ -596,11 +596,11 @@
     closePepe();
     m.menu(u, anchor, { pvp: pv });
     document.querySelectorAll(".pm-pop").forEach((menu) => { if (menu._anchor === anchor) headerLike(menu, u); });
-    if (m.relayout) m.relayout();      // (1.99?? casino2 rework: room-mod v16 places it again at its decorated size - never taller than the window)
+    if (m.relayout) m.relayout();      // (1.99ajw casino2 rework: room-mod v16 places it again at its decorated size - never taller than the window)
   }
 
   // Pepe's own menu (the same look): 👤 profile, 🛡️ fairness (the next commitment + the last proof), 📜 history, 📺 his stream; and
-  // (1.99?? casino2 rework) a masked seat's: its frog avatar + label, "incognito player" and one line - nothing that unmasks
+  // (1.99ajw casino2 rework) a masked seat's: its frog avatar + label, "incognito player" and one line - nothing that unmasks
   let pepePop = null;
   function closePepe(refocus) {
     if (!pepePop) return;
@@ -714,7 +714,7 @@
         const d = await r.json();
         if (!d.ok) return;
         setSkew(d.now);
-        peopleSync(d);                 // 1.99?? casino2 (before render: a seat drawn now knows whether it is a button)
+        peopleSync(d);                 // 1.99ajw casino2 (before render: a seat drawn now knows whether it is a button)
         render(d);
         hostTools(d);
         fairness(d.table);
@@ -753,6 +753,6 @@
   window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew,
-                // 1.99?? casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)
+                // 1.99ajw casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)
                 seatWho, personMenu, pepeMenu, people: () => ppl.d, loadPeople, view: () => lastView, me: meName };
 })();

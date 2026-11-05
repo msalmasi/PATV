@@ -19,7 +19,7 @@
 const H = require("./hmengine");
 const fair = require("./fair");
 const money = require("./money");
-const V = require("./veil");              // 1.99?? casino2 rework: a veiled player is masked at the table (casino/veil.js)
+const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (casino/veil.js)
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -84,7 +84,7 @@ function install(core) {
     if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
     const T = newTable(actor, room, sb, bb, high);
     S.tables.set(T.id, T);
-    V.enter(T, actor);               // 1.99?? casino2 rework: the opener's "opened" line and the host name follow their veil
+    V.enter(T, actor);               // 1.99ajw casino2 rework: the opener's "opened" line and the host name follow their veil
     await commitNext(T);
     T.dl.idle = clock() + HC.IDLE_SECS * 1000;
     await save(T);
@@ -118,7 +118,7 @@ function install(core) {
     T.players[actor.uid] = { name: actor.name || prev.name, username: actor.username || prev.username || null,
                              camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null,
                              room: actor.room || prev.room || null };
-    V.enter(T, actor, { sitting: true });   // 1.99?? casino2 rework: a veiled player's seat is masked before any line names them
+    V.enter(T, actor, { sitting: true });   // 1.99ajw casino2 rework: a veiled player's seat is masked before any line names them
   }
 
   async function sit(T, actor, amountArg) {
@@ -253,7 +253,7 @@ function install(core) {
                    `${ev.board.length ? " | Board " + H.cardsStr(ev.board) : ""}.  ${opts.join(" · ")}`, { to: (T.players[ev.who] || {}).camfrog || null });
       } else if (t === "win_uncontested") {
         T.dl.turn = null; T.turn = null;
-        // 1.99?? casino2 rework: the felt's last hand (and casino_rounds.results) is written with a masked player's label + seat id
+        // 1.99ajw casino2 rework: the felt's last hand (and casino_rounds.results) is written with a masked player's label + seat id
         T.last_round = { hand_no: e.hand_no, uncontested: true, board: e.board.slice(), shown: [], pot: ev.amount, rake: 0,
                          winners: [{ name: V.nameOf(T, ev.who, ev.name), seat: V.seatOf(T, ev.who), amount: ev.amount, hand: "everyone folded", pot: "pot" }] };
         dumpWatch(T, ev.who);
@@ -267,7 +267,7 @@ function install(core) {
         T.dl.turn = null; T.turn = null;
         T.sd = { board: ev.board.slice(), shown: ev.reveals.map((r) => ({ name: r.name, cards: r.cards.slice(), hand: r.hand, seat: uidHash(r.who) })),
                  cf: ev.reveals.map((r) => ({ uid: r.who, camfrog: (T.players[r.who] || {}).camfrog || null })),
-                 // 1.99?? casino2 rework: what the felt / history show (the event above is Pepe's, for the Camfrog room)
+                 // 1.99ajw casino2 rework: what the felt / history show (the event above is Pepe's, for the Camfrog room)
                  pub: ev.reveals.map((r) => ({ name: V.nameOf(T, r.who, r.name), cards: r.cards.slice(), hand: r.hand, seat: V.seatOf(T, r.who) })) };
         await emit(T, "showdown", "🃏 SHOWDOWN — " + ev.reveals.map((r) => `${r.name} shows ${H.cardsStr(r.cards)} (${r.hand})`).join("; "),
                    { shown: T.sd.shown });
@@ -504,7 +504,7 @@ function install(core) {
     const e = T.eng;
     const inHand = e.hand_active ? e.players : [];
     const actor = H.currentActor(e);
-    // 1.99?? casino2 rework (casino/veil.js): a veiled player's seat is masked - its label, its own seat id, veil: 1 (no avatar); the last
+    // 1.99ajw casino2 rework (casino/veil.js): a veiled player's seat is masked - its label, its own seat id, veil: 1 (no avatar); the last
     // hand's winners / shown cards match their seat by seat id (two labels can be alike), an older hand by name
     const lr = V.maskRound(T, T.last_round);
     const winners = new Set(((lr || {}).winners || []).map((w) => w.seat || "n:" + w.name));
@@ -547,7 +547,7 @@ function install(core) {
     const c = cardsFor(T, uid);
     const actor = H.currentActor(e);
     return {
-      // (1.99?? casino2 rework: a masked seat's own id - the page outlines your seat by it)
+      // (1.99ajw casino2 rework: a masked seat's own id - the page outlines your seat by it)
       seat: e.seats.includes(uid) ? V.seatOf(T, uid) : null, stack: e.chips[uid] || 0, in_hand: e.hand_active && e.players.includes(uid),
       cards: c ? c.cards : null, folded: c ? c.folded : false, my_turn: actor === uid, leaving: e.leaving.includes(uid),
       host: T.host.uid === uid, high_roller: await isHighRoller(uid),

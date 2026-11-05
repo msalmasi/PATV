@@ -1401,7 +1401,7 @@ function withPatv(u, C, F = null) {
   if (fl) out.patv.flair = require("./padflair").plain(fl);
   if (!u.self) {
     // 1.99ajn padppl (cfnames.js): a PATV name that is ANOTHER Camfrog login Pepe has seen carries `clash` = that login (the page's "not the
-    // Camfrog user" tag). 1.99?? padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's clashing PATV display
+    // Camfrog user" tag). 1.99ajw padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's clashing PATV display
     // name is SHOWN with the tag, the same as a web account's - it used to be replaced by the login (PATV brocklee258, linked to login
     // ritchiecuh, showed as "ritchiecuh" because "brocklee258" is also a login Pepe has seen). Every surface that names people through
     // here gets it alike: chat and 🎙 transcript lines, the people and mic lists, the person-menu header, the @ list, the mic stage
@@ -1705,7 +1705,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
                                 ...(prog ? prog.tiles.filter((x) => !x.cover && !x.veil).map((x) => ({ login: x.login })) : []),   // (wave2 WP-4: a cover names nobody; 1.99aid S5: nor a veiled cam)
                                 // 1.99aht S1: a !transcripts off bar said named shows that name - and its PATV look (chatlogview.barUser)
                                 ...[...items, ...redoItems].map((it) => CV.barUser(it)).filter(Boolean)]);
-  // 1.99?? padppl rework (blocks.js): the frog-named lines of people this viewer blocked under a frog name - whatever frog name, any pad -
+  // 1.99ajw padppl rework (blocks.js): the frog-named lines of people this viewer blocked under a frog name - whatever frog name, any pad -
   // come folded (vb: 1); the keys stay here
   let vbKeys = null;
   if (userId) { try { const vk = await require("./blocks").veilKeysOf(userId); if (vk && vk.size) vbKeys = vk; } catch (e) { vbKeys = null; } }
@@ -1874,13 +1874,13 @@ function bySlug(slug) {
   return null;
 }
 
-/** 1.99?? casino2: the live bridged pad of a Camfrog room id (Pepe is bridging it now and it is that room's current entry), or null -
+/** 1.99ajw casino2: the live bridged pad of a Camfrog room id (Pepe is bridging it now and it is that room's current entry), or null -
  *  the casino tables' people / pads (casino/people.js) ask this instead of reaching into the room map. */
 function liveBridged(roomId) {
   const R = roomId ? rooms.get(String(roomId)) : null;
   return R && !R.offline && isLive(R) && bridgeOk(R.id) ? R : null;
 }
-/** 1.99?? casino2: the gate of a pad's chat window (GET /p/:slug/chat, factored out of it): a bridged Camfrog pad live here, its bridge
+/** 1.99ajw casino2: the gate of a pad's chat window (GET /p/:slug/chat, factored out of it): a bridged Camfrog pad live here, its bridge
  *  perk, this viewer's members-tier access (padaccess.full: the 18+ gate included) and the Room Dock for this viewer. -> {ok, R, info,
  *  slug, platform}; ok false = the pad page renders the right gate. The casino tables' 💬 Chat offers a pad only where this says ok. */
 async function chatGate(user, rawSlug) {
@@ -1901,7 +1901,7 @@ async function chatGate(user, rawSlug) {
   if (!require("./paddock").viewerOn(user)) return no;
   return { ok: true, R: live, info, slug, platform };
 }
-/** 1.99?? casino2: the chat window's EMBED variant (a casino table's 💬 Chat panel frames it): ?embed=1 asked by a same-origin frame.
+/** 1.99ajw casino2: the chat window's EMBED variant (a casino table's 💬 Chat panel frames it): ?embed=1 asked by a same-origin frame.
  *  Sec-Fetch-Dest iframe (or absent: an older browser) and Sec-Fetch-Site same-origin (or absent). Anything else - a top-level
  *  ?embed=1 included - is the plain window, never framed. */
 function chatEmbedAsked(req) {
@@ -1910,7 +1910,7 @@ function chatEmbedAsked(req) {
   return (dest === "" || dest === "iframe") && (site === "" || site === "same-origin");
 }
 
-/** 1.99?? casino2 review F7: the chat embed's "not open to you here" card - framed by this site only (the embed's headers), no chat, no
+/** 1.99ajw casino2 review F7: the chat embed's "not open to you here" card - framed by this site only (the embed's headers), no chat, no
  *  account data; it tells the casino table page (same origin, its parent only) to take the panel down and ask for its pads again */
 function embedClosed(req, res, slug) {
   let t = (k, d) => d;
@@ -2321,7 +2321,7 @@ function register(app, { isBotToken, addUser }) {
   // = staff only). Anything else goes to the pad page, which renders the right gate. The lines, room PM rows, veils, Reveal, presence
   // (?pad=1: this IS the pad's live chat) and every send rule are the pad page's own, checked again by each route. Headers: never
   // cached (rows are per viewer), never indexed, never framed (it has a composer and money actions - pad pages send no frame header).
-  // 1.99?? casino2: ?embed=1 from a same-origin frame (chatEmbedAsked) = the casino tables' 💬 Chat panel - the same page and every
+  // 1.99ajw casino2: ?embed=1 from a same-origin frame (chatEmbedAsked) = the casino tables' 💬 Chat panel - the same page and every
   // rule above; only its frame headers differ (SAMEORIGIN / frame-ancestors 'self', for that variant alone - the window stays DENY)
   app.get("/p/:slug/chat", addUser, async (req, res) => {
     const embed = chatEmbedAsked(req);
@@ -2333,7 +2333,7 @@ function register(app, { isBotToken, addUser }) {
     const gate = await chatGate(req.user, req.params.slug);
     const slug = gate.slug, info = gate.info, platform = gate.platform, live = gate.R;
     const toPad = () => res.redirect(302, "/p/" + encodeURIComponent(slug));
-    // 1.99?? casino2 review F7: the embed whose gate says no (the pad went offline, signed out in another tab, the Room Dock changed) answers
+    // 1.99ajw casino2 review F7: the embed whose gate says no (the pad went offline, signed out in another tab, the Room Dock changed) answers
     // a small card that tells the table page (patv-chat:closed, why 'gate') - never a redirect, which drew the whole pad page in the panel
     if (!gate.ok) return embed ? embedClosed(req, res, slug) : toPad();
     let linked = false, login = null;
@@ -2435,7 +2435,7 @@ function register(app, { isBotToken, addUser }) {
     // chatlog.history is off, for anyone else, or when the archive holds nothing of this room.
     const chatHistory = signedIn && liveOpen && !siteOnly && (R.offline || bridgeLocked) ? await require("./chatloghist").offlineCard(R.id, req.user) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);
-    // 1.99?? casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): the Room Dock's 📼 Play from
+    // 1.99ajw casino2 (owner: "Did we ever get the ability for users to start a Plex play from the room?"): the Room Dock's 📼 Play from
     // Plex sheet (plex-play.js, the flow /stage runs) - /stage's own rules (medialib.goLiveInfo: Plex members, the override list, staff,
     // the price), for a signed-in viewer who may see this pad's live room, while the Dock is theirs; medialib decides again on every play.
     // onair: staff who run Pepe's on-air (onair.operate) may also put it on his stream - not on the pad that already shows his stream.
@@ -2476,7 +2476,7 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       padDockOn: dockOn_,
-      plexPlay,      // 1.99?? casino2: the Dock's 📼 Play from Plex (null = not offered)
+      plexPlay,      // 1.99ajw casino2: the Dock's 📼 Play from Plex (null = not offered)
       vt: vt_,   // 1.99ajh dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
@@ -2625,6 +2625,6 @@ module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === 
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
-  chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99?? casino2 (casino/people.js, the chat embed)
+  chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

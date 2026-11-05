@@ -1,4 +1,4 @@
-// capital/stakeroom.js — 1.99?? quick1: how much room the vaults have for a stake, in plain words (pure: no database).
+// capital/stakeroom.js — 1.99ajw quick1: how much room the vaults have for a stake, in plain words (pure: no database).
 //
 // A member tried three times to stake and "it doesn't go through": every direct stake into the Bank, the House or the
 // Market maker since 10-24 was queued ("goes into the House at the next cut-off"), then refunded IN FULL at the cut-off
@@ -8,7 +8,7 @@
 // before you submit (staking.js -> views/staking.ejs) and Pepe's chat reply is the same text (he relays the site's
 // refusal; his local path, pepe_stakeroom.py, is the same words - its stakeroom_test.py compares the two).
 //
-// 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): a full vault's words no longer point members to Auto as the
+// 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): a full vault's words no longer point members to Auto as the
 // way around the limit (Auto skips it while vault_auto_staker_cap is off) - they say the vault is full, that it has no
 // room, when it's likely to open (unstakes already queued for the next cut-off, else about how much stakers would have
 // to unstake, else no date) and, in one neutral clause, that Auto spreads stakes over the three vaults. "The vault grows
@@ -29,7 +29,7 @@ const LABEL = { bank: "🏦 Bank", house: "🎰 House", mm: "📈 Market maker",
 const fmt = (n) => Math.trunc(Number(n || 0)).toLocaleString("en-US");
 const pct = (f) => `${Math.round((Number(f) || 0) * 100)}%`;
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-// 1.99?? quick1 rework: room comes from unstakes or the protocol adding PAT (Pepe's policy engines) - not from growth
+// 1.99ajw quick1 rework: room comes from unstakes or the protocol adding PAT (Pepe's policy engines) - not from growth
 const WHEN = "Room opens again when stakers unstake or the protocol adds PAT - there's no date for that.";
 const SOON = "Unstakes already queued may open room at the next daily cut-off.";
 
@@ -47,7 +47,7 @@ function fitOf(navV, stakedV, smax, ahead = 0) {
   return Math.max(0, x);
 }
 
-/** 1.99?? quick1 rework: when a vault is likely to take the smallest stake (minMove) again -> {need, soon}, or null (no
+/** 1.99ajw quick1 rework: when a vault is likely to take the smallest stake (minMove) again -> {need, soon}, or null (no
  *  limit, or a limit of 0 that never opens). need = about how much PAT stakers would still have to unstake from it beyond
  *  the unstakes already queued (`out`, PAT at today's price); soon = those queued unstakes alone would open room at the
  *  next cut-off (they wait there if the vault has no free PAT, so "may"). Not full -> {need: 0, soon: false}. */
@@ -66,7 +66,7 @@ function needOf(navV, stakedV, smax, ahead = 0, minMove = 1000, out = 0) {
  * The room of every vault for a stake now -> {smax, autoCap, minMove, vaults: {v: {fit, full, share, need, soon}},
  * auto: {fit, full}, anyOpen}. In: nav / staked per vault (PAT), smax (staker_max), autoCap (Auto deposits obey the
  * limit - Pepe's vault_auto_staker_cap), ahead = PAT of deposits queued per vault, out = PAT of unstakes queued per vault
- * (1.99?? quick1 rework: they only say when a full vault may open - the room itself doesn't count them), minMove (the
+ * (1.99ajw quick1 rework: they only say when a full vault may open - the room itself doesn't count them), minMove (the
  * smallest stake). full = less room than minMove. need / soon: needOf (null with no limit). Auto: no limit while autoCap
  * is off (fit null); under it, about the sum of the vaults' room.
  */
@@ -88,7 +88,7 @@ function roomOf({ nav, staked, smax, autoCap, ahead, out, minMove } = {}) {
            anyOpen: !auto.full || VAULTS.some((v) => !vaults[v].full) };
 }
 
-/** Another DIRECT vault that still has room (the one with the most), or "". 1.99?? quick1 rework: Auto is no longer
+/** Another DIRECT vault that still has room (the one with the most), or "". 1.99ajw quick1 rework: Auto is no longer
  *  offered here as the way around a full vault - autoNote says what it is, neutrally. */
 function elsewhere(room, vault) {
   const open = VAULTS.filter((v) => v !== vault && !room.vaults[v].full).sort((a, b) => (room.vaults[b].fit ?? Infinity) - (room.vaults[a].fit ?? Infinity));
@@ -97,7 +97,7 @@ function elsewhere(room, vault) {
   return f === null ? ` ${LABEL[v]} still takes stakes.` : ` ${LABEL[v]} has room for about PAT ${fmt(f)}.`;
 }
 
-/** 1.99?? quick1 rework: when a full vault is likely to open - the unstakes already queued, else about how much stakers
+/** 1.99ajw quick1 rework: when a full vault is likely to open - the unstakes already queued, else about how much stakers
  *  would have to unstake, else no date. */
 function whenOf(r) {
   if (r && r.soon) return " Unstakes already queued from it may open room at the next daily cut-off.";
@@ -105,7 +105,7 @@ function whenOf(r) {
   return ` ${WHEN}`;
 }
 
-/** 1.99?? quick1 rework: Auto, in one neutral clause (what it does - not "it still takes stakes"), or "" when it can't
+/** 1.99ajw quick1 rework: Auto, in one neutral clause (what it does - not "it still takes stakes"), or "" when it can't
  *  take one either. */
 function autoNote(room) {
   if (!room || room.auto.full) return "";
@@ -157,7 +157,7 @@ function fromSnap(snap) {
   for (const q of snap.queue || []) {
     if (!q || !VAULTS.includes(q.vault) || /^(done|failed|cancel)/i.test(q.state || "")) continue;
     if (q.kind === "deposit") ahead[q.vault] += num(q.amount);
-    // 1.99?? quick1 rework: an unstake queued from a vault, at today's price (when a full vault may open)
+    // 1.99ajw quick1 rework: an unstake queued from a vault, at today's price (when a full vault may open)
     else if (q.kind === "withdraw") out[q.vault] += Math.trunc(num(q.shares) * num((snap.prices || {})[q.vault]));
   }
   return roomOf({ nav: snap.nav, staked: snap.staked, smax: snap.settings.staker_max, autoCap: !!snap.settings.auto_staker_cap,

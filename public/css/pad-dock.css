@@ -450,13 +450,13 @@ main.rm.rm-dock[data-rmd-pip] #rmChat { flex: 1 1 0; }
 main.rm.rm-dock[data-rmd-pip] .rmd-id-name > .pfx-bs { min-inline-size: 0; white-space: nowrap; }
 
 /* ── 1.99ajf dockclean (owner point 35): the person menu (appended to <body>, outside <main>) - one header row: avatar · name · ✕ ── */
-/* (1.99?? casino2: body.cz-pm = a casino table page - its seats open this same menu, so every .pm-pop rule here lists it; selectors only) */
+/* (1.99ajw casino2: body.cz-pm = a casino table page - its seats open this same menu, so every .pm-pop rule here lists it; selectors only) */
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm { inline-size: clamp(260px, calc(100vw - 16px), 320px); padding: var(--ds-sp-1); }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-h { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n { display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--ds-sp-2); align-items: center; min-inline-size: 0; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n > .rmd-person { display: contents; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .av { grid-column: 1; grid-row: 1; inline-size: 32px; block-size: 32px; font-size: var(--ds-fs-meta); }
-/* (1.99?? casino2, the owner's "the user and avatar are not aligned": the avatar spans two rows only when the login line is there -
+/* (1.99ajw casino2, the owner's "the user and avatar are not aligned": the avatar spans two rows only when the login line is there -
    with the name alone, an empty implicit second row took part of the avatar's 32px and the name sat ~8px above the avatar's middle) */
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n:is(.two, :has(> .pm-login)) .av { grid-row: 1 / span 2; }
 body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-n .rmd-person-name { grid-column: 2; display: flex; align-items: center; gap: var(--ds-sp-1); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
@@ -1094,7 +1094,7 @@ body.pad-dock-live.rmd-nav-off main.rm.rm-dock .rmd-ov-top > .rmd-nav-back { dis
   main.rm.rm-dock .rmd-holder > .rmd-mic-b { border: 1px solid CanvasText; }
 }
 
-/* ── 1.99?? casino2: 📼 Play from Plex in a Dock sheet (pad-dock.js plexSheet; plex-play.js - the flow /stage runs) ── */
+/* ── 1.99ajw casino2: 📼 Play from Plex in a Dock sheet (pad-dock.js plexSheet; plex-play.js - the flow /stage runs) ── */
 main.rm.rm-dock .rmd-plex { display: grid; gap: var(--ds-sp-2h); min-inline-size: 0; padding: var(--ds-sp-1) var(--ds-sp-3) var(--ds-sp-3); font-size: var(--ds-fs-sm); }
 main.rm.rm-dock .rmd-plex .hide { display: none; }
 main.rm.rm-dock .rmd-plex .pxnote { margin: 0; font-size: var(--ds-fs-meta); color: var(--ds-gold-text); }
@@ -1123,7 +1123,7 @@ main.rm.rm-dock .rmd-plex .px-list ol { display: grid; gap: var(--ds-sp-1); max-
 main.rm.rm-dock .rmd-plex .px-ctl { display: inline-flex; gap: var(--ds-sp-1); vertical-align: middle; }
 main.rm.rm-dock .rmd-plex .px-onair { display: flex; align-items: center; gap: var(--ds-sp-2); }
 main.rm.rm-dock .rmd-plex .rmd-plex-later { justify-self: start; font-size: var(--ds-fs-meta); }
-/* 1.99?? casino2 review: the Plex sheet's title and ✕ stay in view while its search + pick scroll (this sheet only); the picked result is
+/* 1.99ajw casino2 review: the Plex sheet's title and ✕ stay in view while its search + pick scroll (this sheet only); the picked result is
    marked; the price confirm is a row above the button (plex-play.js inlineConfirm); "Start at" fits its row */
 main.rm.rm-dock .rmd-layer .ds-modal:has(> .rmd-plex) > .ds-modal-h { position: sticky; inset-block-start: calc(-1 * var(--ds-sp-5)); z-index: var(--ds-z-raised); margin-block-start: calc(-1 * var(--ds-sp-5)); padding-block: var(--ds-sp-5) var(--ds-sp-2); background: var(--ds-surface-3); }
 main.rm.rm-dock .rmd-plex .px-it.on { border-color: var(--ds-ac); box-shadow: 0 0 0 1px var(--ds-ac); }
@@ -1132,7 +1132,7 @@ main.rm.rm-dock .rmd-plex .px-pick label:has(> input[data-o]) { flex-wrap: nowra
 main.rm.rm-dock .rmd-plex .px-ask { display: grid; gap: var(--ds-sp-1h); padding: var(--ds-sp-2h); border: 1px solid var(--ds-ac-line); border-radius: var(--ds-r-md); background: var(--ds-sunken); }
 main.rm.rm-dock .rmd-plex .px-ask p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
 main.rm.rm-dock .rmd-plex .px-ask p.px-ask-q { color: var(--ds-text); font-size: var(--ds-fs-sm); font-weight: 700; }
-/* 1.99?? casino2 review: beside a casino table (body.rmd-embed) the table's panel names the pad and links it - the chat's own pad chip goes,
+/* 1.99ajw casino2 review: beside a casino table (body.rmd-embed) the table's panel names the pad and links it - the chat's own pad chip goes,
    the topic gets the row */
 body.rmd-pop.rmd-embed main.rm.rm-dock #chatH > .rmd-chip-chat { display: none; }
 /* (review: a narrow chat window / frame ends its composer's placeholder with an ellipsis - "Message Night Orchar…", not a cut letter) */

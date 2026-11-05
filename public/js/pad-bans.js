@@ -1,6 +1,6 @@
 // pad-bans.js - 1.99ajn padppl: the pad owner page's "⛔ Banned & blocked from the website" list (padbans.js GET /api/rooms/:slug/bans) - ONE
 // merged list of the website bridge blocks, whole-pad bans (one row with the bridge block made with them), bans on Camfrog logins with no
-// PATV account and bans on frog names (1.99?? padppl rework: incognito bans, "🐸 label (identity hidden) - incognito ban"), each with Lift. Staff also see the site-wide frog-name and
+// PATV account and bans on frog names (1.99ajw padppl rework: incognito bans, "🐸 label (identity hidden) - incognito ban"), each with Lift. Staff also see the site-wide frog-name and
 // login bans. Bans are made from the person menu on the pad (pad-ban-sheet.js); the old card's add-by-name form above still works and
 // this list reloads when it changes (patv:bans-changed). textContent only.
 // Review fixes: rows look like Settings → Blocked people (bordered, the button on the right - never a pill in the middle of a sentence);
@@ -39,7 +39,7 @@
         var li = el('li', 'pb-row'), who = el('span', 'pb-who');
         who.appendChild(el('b', null, b.who));
         var parts = String(b.scope || '').split(':'), sc = parts[0];
-        // (1.99?? padppl rework: a frog name's ban is an incognito ban - its who already says so; "this pad" / site-wide, never "website bridge")
+        // (1.99ajw padppl rework: a frog name's ban is an incognito ban - its who already says so; "this pad" / site-wide, never "website bridge")
         var scText = b.incog ? (b.site ? _t('js.pad.bans.sitewide', 'site-wide') : _t('js.pad.bans.this_pad', 'this pad'))
           : (SCOPE[sc] ? SCOPE[sc]() : sc) + (parts[1] ? ' (' + (FEAT[parts[1]] || parts[1]) + ')' : '') + (b.site ? ' · ' + _t('js.pad.bans.sitewide', 'site-wide') : '');
         who.appendChild(el('small', null, scText + ' · ' + (b.until ? _t('js.pad.bans.until', 'until {when}', { when: when(b.until) }) : _t('js.pad.bans.perm', 'until lifted'))

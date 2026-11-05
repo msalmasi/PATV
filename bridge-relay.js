@@ -351,7 +351,7 @@ async function challengeBlocked(u, c, text) {
     if (!acct) return null;
     const B = require("./blocks");
     let hit = await B.towards(u.userId, acct.userId);
-    // 1.99?? padppl rework (blocks.js): while the sender is under a frog name on the website (padbans.veiledNow), a frog-name block by the
+    // 1.99ajw padppl rework (blocks.js): while the sender is under a frog name on the website (padbans.veiledNow), a frog-name block by the
     // person they aim at refuses it too - an incognito harasser can't duel / tip the person who blocked their frog name, whatever frog
     // name they use now. The person aimed at never sees a refused command, so this tells them nothing; named commands are untouched.
     if (!hit) {

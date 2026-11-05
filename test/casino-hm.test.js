@@ -23,7 +23,7 @@ const H = require(path.join(repo, "casino", "hmengine"));
 const E = require(path.join(repo, "casino", "bjengine"));
 const fair = require(path.join(repo, "casino", "fair"));
 const svc = require(path.join(repo, "casino", "service"));
-require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99?? casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
+require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99ajw casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
 const funding = require(path.join(repo, "funding"));
 const parity = require(path.join(__dirname, "casino-hm-parity"));
 

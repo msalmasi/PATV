@@ -235,7 +235,7 @@ function register(app, { isBotToken, addUser }) {
       res.render("wallet", {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
-        // 1.99?? quick1: the room each vault has for a NEW stake (capital/stakeroom.js) - said next to the stash forms
+        // 1.99ajw quick1: the room each vault has for a NEW stake (capital/stakeroom.js) - said next to the stash forms
         stakeRoom: (() => { try { return require("./capital/stakeroom").fromSnap(sk); } catch (e) { return null; } })(),
         borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, settledPositions,
         myLimit: reserveLimit(ln.reserve || null, camfrog || (reserveOn ? me : null), u.level), // only ever the signed-in user's own

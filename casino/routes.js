@@ -11,8 +11,8 @@
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
-//   GET  /api/casino/t/:id/people           1.99?? casino2: the seats for the person menu + the table's pads (signed in; casino/people.js)
-//   GET  /api/casino/t/:id/pads             1.99?? casino2: the table's pads alone (its 💬 Chat; anyone)
+//   GET  /api/casino/t/:id/people           1.99ajw casino2: the seats for the person menu + the table's pads (signed in; casino/people.js)
+//   GET  /api/casino/t/:id/pads             1.99ajw casino2: the table's pads alone (its 💬 Chat; anyone)
 //   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
 //   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
@@ -91,7 +91,7 @@ function noteViewer(T, req) {
   return n;
 }
 /** A table's last rounds from casino_rounds: only revealed ones, only what the felt already showed (results =
- *  the round's public summary; never the `players` column, which holds account ids - 1.99?? casino2 rework: read here only so a
+ *  the round's public summary; never the `players` column, which holds account ids - 1.99ajw casino2 rework: read here only so a
  *  player who is veiled now reads as their label / "someone", casino/veil.js maskRounds; it never leaves the server). */
 async function history(tableId, limit) {
   await svc.ensure();
@@ -137,7 +137,7 @@ function register(app, { isBotToken, addUser }) {
       return res.redirect(svc.frontPath(st, game));
     }
     const title = game === "holdem" ? "Texas Hold'em" : "Blackjack";
-    // 1.99?? casino2 review F8: the tables carry the 💸 Tip modal and the person menu's moderation confirms now - never framed by another
+    // 1.99ajw casino2 review F8: the tables carry the 💸 Tip modal and the person menu's moderation confirms now - never framed by another
     // site (nothing frames them; Pepe's OBS board is its own view; the table's 💬 Chat frame is the other way round)
     res.set({ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" });
     res.locals.og = { title: `${title} with Pepe — publicaccess.tv`,
@@ -169,7 +169,7 @@ function register(app, { isBotToken, addUser }) {
       const hr = (await getQuery("SELECT 1 FROM user_roles WHERE userId = ? AND LOWER(role) = 'high roller'", [actor.uid]).catch(() => []))[0];
       me = { name: actor.name, admin: actor.admin, balance: Number(u.points_balance) || 0, high_roller: !!hr };
     }
-    // 1.99?? casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
+    // 1.99ajw casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
     for (const T of Array.from(svc.S.tables.values())) if (T.status === "open") await svc.refreshVeil(T);
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
     const tables = svc.lobby().map((row) => {
@@ -189,19 +189,19 @@ function register(app, { isBotToken, addUser }) {
     await svc.boot();
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
-    await svc.refreshVeil(T);          // 1.99?? casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
+    await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     const out = { ok: true, now: Date.now(), table: svc.publicView(T), rooms: svc.freshRooms() };
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId) : null;     // only the viewer's own seat / cards
     // D10: each seat's public avatar (both views list seats in T.eng.seats order) and how many web viewers are watching
     const keys = (T.eng && T.eng.seats) || [];
     const seats = out.table.seats || [];
-    // (1.99?? casino2 rework: never on a masked seat - its label, no picture)
+    // (1.99ajw casino2 rework: never on a masked seat - its label, no picture)
     for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = seats[i].veil ? null : await avatarOf(keys[i]);
     out.watching = noteViewer(T, req);
     res.json(out);
   });
 
-  // 1.99?? casino2: the seats as the person menu needs them + the table's pads (casino/people.js) - asked when the seats or the rooms
+  // 1.99ajw casino2: the seats as the person menu needs them + the table's pads (casino/people.js) - asked when the seats or the rooms
   // change and on a click with an old answer, never by the 1-2 s poll. Seats are for signed-in viewers; the pads (the 💬 Chat) for all.
   const people = require("./people");
   app.get("/api/casino/t/:id/people", addUser, async (req, res) => {
@@ -213,7 +213,7 @@ function register(app, { isBotToken, addUser }) {
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
     try {
-      await svc.refreshVeil(T);        // 1.99?? casino2 rework: the same masks as the table view (casino/veil.js)
+      await svc.refreshVeil(T);        // 1.99ajw casino2 rework: the same masks as the table view (casino/veil.js)
       const pads = await people.padsFor(T, req.user);
       const blk = await people.blocksOf(req.user);
       res.json({ ok: true, pepe: await people.pepeInfo(), pads, seats: await people.seatsFor(T, req.user, pads), ...(blk ? { blk } : {}) });

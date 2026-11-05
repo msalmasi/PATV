@@ -615,7 +615,7 @@ test("the earned backfill: knows which went first; refuses an apply without --be
   await C.setMeta("staking_fix", fx2);
 });
 
-test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE any PAT moves - why, what still has room; paused says so", async () => {
+test("1.99ajw quick1: a stake into a vault at its staker limit is refused BEFORE any PAT moves - why, what still has room; paused says so", async () => {
   const SR = require(path.join(repo, "capital", "stakeroom"));
   const keep = await V.load();
   const d = JSON.parse(JSON.stringify(keep));
@@ -638,7 +638,7 @@ test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE 
     const full = await op("vaults", "stake", ANN, { stash: "1", vault: "bank", amount: 5000 }, "stake-full-001");
     assert.equal(full.body.ok, false);
     assert.equal(full.body.code, "full");
-    // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): full, no room, when it's likely to open, Auto in one neutral clause
+    // 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): full, no room, when it's likely to open, Auto in one neutral clause
     assert.match(full.body.error, /^🏦 The 🏦 Bank vault is full right now: stakers may own at most 50% of a vault, and they already own 92% of it, so it has no room for a stake\. Nothing moved - your PAT stays in ann\/nest\. It opens again once stakers unstake about PAT [\d,]+ from it or the protocol adds PAT - there's no date for that\./);
     assert.doesNotMatch(full.body.error, /still takes stakes|doesn't check/);
     assert.match(full.body.error, / 🤖 Auto spreads stakes over the three vaults\.$/);
@@ -652,7 +652,7 @@ test("1.99?? quick1: a stake into a vault at its staker limit is refused BEFORE 
     assert.equal(Object.keys((await V.load()).queue).length, n0, "nothing queued");
     // the website form says the same (actions.js -> service.stashForm), and so does Pepe (he relays `error`)
     assert.match(await SVC.stashForm("u1", ["stake", "nest", "5000", "bank"]), /^🏦 The 🏦 Bank vault is full right now/);
-    // 1.99?? quick1 rework: unstakes queued from the Bank that cover what it's over: it may open at the next cut-off (roomNow
+    // 1.99ajw quick1 rework: unstakes queued from the Bank that cover what it's over: it may open at the next cut-off (roomNow
     // counts them at today's price) - and the stake is still refused now, nothing queued
     {
       const dq = await V.load(), kq = await V.ctx(), pq = V.prices(dq, kq);

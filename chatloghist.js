@@ -260,7 +260,7 @@ async function dress(roomId, items, V, viewer, login, acts) {
   const L = await B.resolveNames([...items.map((it) => it.u), ...items.map((it) => CV.barUser(it))].filter(Boolean));
   let rmNames = null;
   if (items.some((it) => it.rm_at != null && !it.purged)) { try { rmNames = await require("./chatlogmod").rmNames(items); } catch (e) { rmNames = null; } }
-  // 1.99?? padppl rework (blocks.js): a viewer's frog-name blocks fold those people's frog-named lines here too (any frog name, any pad) -
+  // 1.99ajw padppl rework (blocks.js): a viewer's frog-name blocks fold those people's frog-named lines here too (any frog name, any pad) -
   // who is behind an archived frog line comes from chat_log_veil, read only for a viewer who has such a block; only vb: 1 reaches the page
   let vb = null;
   try {

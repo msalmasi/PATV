@@ -292,7 +292,7 @@ async function attachBarNames(items) {
   } catch (e) { /* no identity at hand: "someone" with the tag */ }
   return items;
 }
-/** 1.99?? padppl rework (blocks.js veil blocks): who is behind the archived FROG-NAMED lines among `items` (raw rows: a u.alias, a row id),
+/** 1.99ajw padppl rework (blocks.js veil blocks): who is behind the archived FROG-NAMED lines among `items` (raw rows: a u.alias, a row id),
  *  from chat_log_veil - Map(c -> {login}) for dress's ctx.veilOf, so a viewer's frog-name blocks fold those lines in history and search
  *  as on the live chat. SERVER-ONLY (never serialised: dress turns it into vb: 1 at most). One read per call; never throws. */
 const VEIL_KEY = /^(?:[\w.\-]{1,40}|u:[A-Za-z0-9_-]{1,64})$/i;
@@ -1149,7 +1149,7 @@ function dress(items, ctx) {
         const w = typeof it._vw === "string" ? it._vw : typeof vz.words === "string" ? vz.words : null;
         if (p === "mask" && w) o.text = w;
       } else if (vz && typeof ctx.canReveal === "function" && ctx.canReveal(it)) o.rv = 1;
-      // 1.99?? padppl rework (blocks.js): a FROG-NAMED line (never a hidden bar, never "someone") of a person this viewer blocked under a
+      // 1.99ajw padppl rework (blocks.js): a FROG-NAMED line (never a hidden bar, never "someone") of a person this viewer blocked under a
       // frog name - any frog name, any pad - is folded for them (vb: 1; chatlog-core folds it). ctx.vbKeys = blocks.veilKeysOf(viewer):
       // server-only keys; the page only ever gets the flag
       if (vz && o.self !== 1 && p !== "mask" && o.u && o.u.alias && ctx.vbKeys && ctx.vbKeys.size && ctx.vbKeys.has(String(vz.login || "").toLowerCase())) o.vb = 1;
@@ -1749,7 +1749,7 @@ module.exports = {
   privacyAt, lookOf, lookMove, namedToAnonLately,      // owner-change fix-up (review 2): only a line whose look moves is drawn again
   barLook, barUser, attachBarNames, barNamedToAnonLately, lookAt,   // 1.99aht S1: a !transcripts off bar shows who said it (the words only masked)
   barClip,                                            // 1.99aht RV-1: a bar members may clip (the audio, never the words)
-  veilWho,                                            // 1.99?? padppl rework: archived frog lines' identities for a viewer's frog-name blocks (server-only)
+  veilWho,                                            // 1.99ajw padppl rework: archived frog lines' identities for a viewer's frog-name blocks (server-only)
   tierOf, raiseExp, ensurePremium,                    // CL7: the retention purge (chatlogpurge.js)
   graceOf, lapsedOf, noteFirst, retentionFresh,       // CL7 fix-up
   speakerHashes, kindNow, hubChanged,                 // Train 3 review: every hash a "someone" line could be; the stricter of both stores

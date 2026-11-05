@@ -179,6 +179,6 @@ async function forRoom(R, me = null, tipOf = null) {
 }
 
 module.exports = { note, notePost, notePostNamed, forRoom, sweep, sweepPosted, TTL_MS, POST_TTL_MS, MAX_PER_ROOM,
-  hiddenKey, incognitoOn,          // 1.99?? casino2: the casino tables' veiled seats follow the same rule (casino/people.js)
+  hiddenKey, incognitoOn,          // 1.99ajw casino2: the casino tables' veiled seats follow the same rule (casino/people.js)
   _setClock: (f) => { clock = f || (() => Date.now()); },
   _reset: () => { rooms.clear(); posted.clear(); incogCache.clear(); privCache.clear(); blockCache.clear(); } };

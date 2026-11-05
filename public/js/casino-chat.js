@@ -1,4 +1,4 @@
-// casino-chat.js — 1.99?? casino2 (owner 2026-11-04, point 18: "Docking chat doesn't stay active between page switches (like going to
+// casino-chat.js — 1.99ajw casino2 (owner 2026-11-04, point 18: "Docking chat doesn't stay active between page switches (like going to
 // holdem). Would be nice if users could also bring up a chat from the tables."): a table belongs to pads (the rooms it plays in, then
 // the rooms it is advertised in - casino/people.js `pads`), and 💬 Chat opens THAT pad's chat beside the table.
 //

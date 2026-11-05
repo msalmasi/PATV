@@ -1,9 +1,9 @@
 "use strict";
-// 1.99?? casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc." + a chat from the
+// 1.99ajw casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc." + a chat from the
 // tables): GET /api/casino/t/:id/people and /pads (casino/people.js).
 //   * people: signed in only (401), private no-store, 30 a minute per account; never part of the 1 s poll
 //   * a veiled seat (hidden on the bridge now: the seat's login, a web seat's linked login or its account key; incognito on) is MASKED
-//     (1.99?? casino2 rework, casino/veil.js): {veil: true, display: <its label>} under the masked seat's own id, nothing else - no
+//     (1.99ajw casino2 rework, casino/veil.js): {veil: true, display: <its label>} under the masked seat's own id, nothing else - no
 //     account, no login, no tip; a failing / loading hidden check fails closed (everyone masked for that answer)
 //   * a web seat: its PATV name + tip only, never a Camfrog login (1.99ajf); your own seat {me}; Pepe's account {bot}
 //   * a room seat: its login only while it is a NAMED member of a live pad the table plays in or advertises in AND THE VIEWER MAY OPEN
@@ -244,7 +244,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   const ejs = require(path.join(repo, "node_modules", "ejs"));
   for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=7"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
-    // (1.99?? casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
+    // (1.99ajw casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
     for (const s of ["casino-ui.js?v=6", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=8", "person-sheet.css?v=3",
                      "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
@@ -253,7 +253,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   assert.match(fs.readFileSync(path.join(repo, "views", "partials", "casino-top.ejs"), "utf8"), /id="cz-chatbtn" hidden/);
   assert.match(fs.readFileSync(path.join(repo, "views", "casino-bj.ejs"), "utf8"), /class="cz-who" data-pepe="1"/, "the dealer opens Pepe's menu");
   const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
-  // 1.99?? casino2 rework: every seat is the same button (a masked one too - a plain seat would mark who is incognito); never your own
+  // 1.99ajw casino2 rework: every seat is the same button (a masked one too - a plain seat would mark who is incognito); never your own
   // seat, never for signed-out viewers; a masked seat opens veilMenu (its label, "incognito player", one line - no profile, no tip)
   assert.match(ui, /if \(!signed \|\| !s \|\| !s\.seat \|\| mine\) return inner;/);
   assert.match(ui, /if \(p\.veil\) \{ veilMenu\(anchor, p\); return; \}/);

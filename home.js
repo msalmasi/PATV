@@ -89,7 +89,7 @@ async function loadStats() {
     for (const row of csvc.lobby()) {
       if (csvc.frontOf(st, row.game === "holdem" ? "holdem" : "bj") !== "patv") continue;
       const T = csvc.getTable(row.id);
-      // 1.99?? casino2 verify: the same masks as the table view - its veils re-read first (casino/veil.js; at most every 2 s per table)
+      // 1.99ajw casino2 verify: the same masks as the table view - its veils re-read first (casino/veil.js; at most every 2 s per table)
       if (T) { try { await csvc.refreshVeil(T); } catch (e) { /* the view masks what it knows; a failed read fails closed there */ } }
       const v = T ? csvc.publicView(T) : null;
       out.tables.push({ id: row.id, game: row.game === "holdem" ? "Hold'em" : "Blackjack", featured: false, on_stream: !!row.on_stream,

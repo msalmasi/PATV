@@ -26,7 +26,7 @@
 // to a name. The other way round too: a NAMED block never suppresses an alert from a frog-named line (a named block of a suspect +
 // a missing alert from 🐸V would say V is that suspect). Residual (privacy page): a frog-name block follows the person to their next
 // frog name, so a missing alert can tell the blocker two frog names are the same person - never who.
-// 1.99?? padppl rework (owner 2026-11-04, "blocking ANY frog name the person uses" - an incognito harasser just takes the next frog name):
+// 1.99ajw padppl rework (owner 2026-11-04, "blocking ANY frog name the person uses" - an incognito harasser just takes the next frog name):
 // a frog-name block HIDES THAT PERSON'S VEILED ACTIVITY FROM THE BLOCKER, under ANY frog name, in ANY pad - by their account / login,
 // resolved on the server:
 //   - their frog-named chat / 🎙 lines are folded for the blocker (veilKeysOf -> chatlogview.dress `vb: 1` on the live feed, history and
@@ -76,7 +76,7 @@ function init() {
 
 // ── the cache of "who did this viewer block" (their own list, for menus and folding) ──
 const cache = new Map();          // userId -> {at, v}
-const vcache = new Map();         // 1.99?? padppl rework: userId -> {at, v: Set of the keys behind the frog names they blocked} (server-only)
+const vcache = new Map();         // 1.99ajw padppl rework: userId -> {at, v: Set of the keys behind the frog names they blocked} (server-only)
 function changed(...ids) { for (const id of ids) if (id) { cache.delete(String(id)); vcache.delete(String(id)); } }
 
 /** Named dm_blocks either way between two accounts. */
@@ -151,7 +151,7 @@ async function pageList(viewerId) {
   return { l: [...b.logins].sort(), u: [...b.users].sort() };
 }
 /**
- * 1.99?? padppl rework: the SERVER-ONLY keys of everyone `viewerId` blocked under a frog name - lowercased Camfrog logins and "u:<id>"
+ * 1.99ajw padppl rework: the SERVER-ONLY keys of everyone `viewerId` blocked under a frog name - lowercased Camfrog logins and "u:<id>"
  * account keys (a frog line's identity, _vz.login / chat_log_veil.login, is one of these), the account's CURRENT linked login included, so
  * a person who links / relinks stays covered. Never the viewer's own keys. Cached CACHE_MS. It never leaves the server: pages only get
  * `vb: 1` on a frog-named line (chatlogview.dress). -> Set (empty when none)

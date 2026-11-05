@@ -70,7 +70,7 @@
     };
     if (o.veil) return {
       title: '🚫 ' + _t('js.block.veil_title', 'Block the person behind 🐸 {name}?', { name: n }),
-      // 1.99?? padppl rework (owner: block ANY frog name the person uses): their frog-named activity, under any frog name, in any pad
+      // 1.99ajw padppl rework (owner: block ANY frog name the person uses): their frog-named activity, under any frog name, in any pad
       body: _t('js.block.veil_body', 'Whatever frog name they use, in any pad: their lines are folded for you, their @mentions don\'t alert you, and they can\'t challenge, tip or gift you while they\'re incognito. We block them without telling you who it is; what they do under their own name doesn\'t change. If they bother you under their name, block that name too. They aren\'t told.'),
       note: _t('js.block.veil_note', 'Blocking can show you that two frog names are the same person - never who.'),
       go: _t('js.block.go', '🚫 Block')
@@ -89,7 +89,7 @@
     // (review fix: which person this is - "PATV account @x · Camfrog login y", and "not the Camfrog user" when a web name clashes)
     if (o.who) S.body.appendChild(el('p', 'psh-sub', String(o.who)));
     S.body.appendChild(el('p', 'psh-p', T.body));
-    if (T.note) S.body.appendChild(el('p', 'psh-hint', T.note));          // (1.99?? padppl rework: the accepted residual, said up front)
+    if (T.note) S.body.appendChild(el('p', 'psh-hint', T.note));          // (1.99ajw padppl rework: the accepted residual, said up front)
     if (o.on !== false) S.body.appendChild(el('p', 'psh-hint', o.veil ? _t('js.block.where_veil', 'Undo it from Settings → Blocked people.') : _t('js.block.where', 'Undo it from the same menu, or from Settings → Blocked people.')));
     var B = buttons(S, T.go, o.on === false ? 'go' : 'danger');
     B.go.addEventListener('click', function () {

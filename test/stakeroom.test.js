@@ -1,4 +1,4 @@
-// 1.99?? quick1: "staking seems to fail silently" - a member tried three times; every direct stake into the Bank, the House or
+// 1.99ajw quick1: "staking seems to fail silently" - a member tried three times; every direct stake into the Bank, the House or
 // the Market maker since 10-24 was queued, then refunded in full at the cut-off (stakers already own more of each vault
 // than the staker limit lets in). capital/stakeroom.js says it plainly instead, before any PAT moves:
 //   * fitOf is executeOne's own cap solved for the amount: the largest stake that goes in whole (checked against the
@@ -8,7 +8,7 @@
 //     would have to unstake, else no date), capped (how much fits), Auto under the limit; the text Pepe relays word for
 //     word (pepe_capitalstore._cap_err; the bot's pepe_stakeroom.py is the same words - its stakeroom_test.py compares
 //     the two with PATV_SITE_DIR set)
-//   * 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): no word points to Auto as the way around a full vault
+//   * 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): no word points to Auto as the way around a full vault
 //     (Auto skips the staker limit while vault_auto_staker_cap is off) - one neutral clause says what Auto does; the
 //     picker's default (Auto, as before quick1 and on /wallet) is the same whether a vault is full or not
 //   * /staking: the room line, a full vault's option disabled with the reason, the amount check; every vault full or
@@ -68,7 +68,7 @@ test("roomOf: full / open per vault; Auto has no limit while vault_auto_staker_c
   assert.equal(some.vaults.mm.fit, 0);
   assert.equal(some.auto.fit, 400400, "about the vaults' sum");
   assert.equal(SR.roomOf({ nav: NAV, staked: STAKED, smax: 1, autoCap: true }).vaults.bank.fit, null, "smax 1: no limit anywhere");
-  // 1.99?? quick1 rework: when a full vault is likely to open - about how much stakers would have to unstake (an unstake u
+  // 1.99ajw quick1 rework: when a full vault is likely to open - about how much stakers would have to unstake (an unstake u
   // takes u off NAV and the stakers' value alike, so it adds u to the room), net of the unstakes already queued
   assert.deepEqual(SR.VAULTS.map((v) => r.vaults[v].need), [19345015, 27137671, 7245285], "prod 11-04: about 84% / 56% / 78% of each vault");
   assert.equal(some.vaults.house.need, 600, "room for 400: another 600 out and the 1,000 minimum fits");
@@ -89,7 +89,7 @@ test("refusal: full says why, no room, when it's likely to open, Auto in one neu
   const r = SR.roomOf({ nav: NAV, staked: STAKED, smax: 0.5, autoCap: false, minMove: 1000 });
   const full = SR.refusal(r, "house", 100000, { stash: "lavender/nest" });
   assert.equal(full.code, "full");
-  // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): no "Auto still takes stakes" - the vault is full, it has no
+  // 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): no "Auto still takes stakes" - the vault is full, it has no
   // room, when it's likely to open, and what Auto does
   assert.equal(full.error, "🏦 The 🎰 House vault is full right now: stakers may own at most 50% of a vault, and they already own 78% of it, "
     + "so it has no room for a stake. Nothing moved - your PAT stays in lavender/nest. "
@@ -130,7 +130,7 @@ test("refusal: full says why, no room, when it's likely to open, Auto in one neu
   }
 });
 
-test("1.99?? quick1 rework: no refusal points to Auto as the way around a full vault - random books, Auto under the limit or not", () => {
+test("1.99ajw quick1 rework: no refusal points to Auto as the way around a full vault - random books, Auto under the limit or not", () => {
   let seed = 11;
   const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
   const AUTO_OK = [/^🏦 Staking is full right now: every vault is at its staker limit \(stakers may own at most \d+% of a vault\), so 🤖 Auto can't take stakes either\./,
@@ -172,7 +172,7 @@ test("fromSnap: the room from /staking's snapshot (staking.clean keeps min_move 
   assert.equal(r.vaults.bank.fit, 300000, "the pending 100,000 into the Bank takes its room first");
   assert.equal(r.vaults.house.fit, 400000, "a done one doesn't");
   assert.equal(SR.fromSnap(staking.clean({ settings: {} })), null, "no staker_max: the page can't say");
-  // 1.99?? quick1 rework: an unstake queued from a full vault (shares at the snapshot's price) says it may open at the cut-off
+  // 1.99ajw quick1 rework: an unstake queued from a full vault (shares at the snapshot's price) says it may open at the cut-off
   const full = staking.clean({ prices: { bank: 2, house: 1, mm: 1, auto: 1 }, nav: { bank: 1e6, house: 1e6, mm: 1e6 }, staked: { bank: 9e5, house: 9e5, mm: 3e5 },
                                settings: { staker_max: 0.5, auto_staker_cap: false, min_move: 1000 },
                                queue: [{ id: "q3", stash: "2", vault: "bank", kind: "withdraw", shares: 450000, state: "pending" },
@@ -206,7 +206,7 @@ test("/staking (prod 11-04: every vault full, Auto open): the room line, full va
   assert.match(h, /id="stakeRoom"/);
   assert.match(h, /Room to stake right now:<\/b>\s*<span class="rv full">🏦 Bank <b>full<\/b><\/span><span class="rv full">🎰 House <b>full<\/b><\/span><span class="rv full">📈 Market maker <b>full<\/b><\/span><span class="rv">🤖 Auto <b>open<\/b><\/span>/);
   assert.match(h, /Stakers may own at most <b>50%<\/b> of a vault, and right now they own Bank 92%, House 78%, Market maker 89%\./);
-  // 1.99?? quick1 rework (owner 2026-11-04, "Soften the hint"): when a full vault is likely to open; Auto in one neutral clause
+  // 1.99ajw quick1 rework (owner 2026-11-04, "Soften the hint"): when a full vault is likely to open; Auto in one neutral clause
   assert.match(h, /Market maker 89%\. A stake that doesn't fit is refused before any PAT moves\. A full vault opens again once stakers unstake from it or the protocol adds PAT, so there's no date for it\. About how much stakers would have to unstake first: PAT 19,345,015 from the Bank, PAT 27,137,671 from the House, PAT 7,245,285 from the Market maker\. 🤖 Auto spreads stakes over the three vaults\.<\/p>/);
   assert.doesNotMatch(h, /still takes stakes|doesn't check the limit|grows? on (its|their) own/);
   const f = form(h);
@@ -240,7 +240,7 @@ test("/staking with every vault full (Auto under the limit too) or staking pause
   assert.match(form(old), /<button type="submit">Stake<\/button>/);
 });
 
-test("1.99?? quick1 rework: the vault picker's default never depends on the room; queued unstakes say a vault may open at the cut-off", async () => {
+test("1.99ajw quick1 rework: the vault picker's default never depends on the room; queued unstakes say a vault may open at the cut-off", async () => {
   const sel = (h) => (form(h).match(/<option value="(\w+)"[^>]*\sselected[\s>]/g) || []).map((o) => o.match(/value="(\w+)"/)[1]);
   const roomy = SR.roomOf({ nav: NAV, staked: { bank: 0, house: 0, mm: 0 }, smax: 0.5, autoCap: false, minMove: 1000 });
   const some = SR.roomOf({ nav: { bank: 1e6, house: 1e6, mm: 1e6 }, staked: { bank: 3e5, house: 6e5, mm: 6e5 }, smax: 0.5, autoCap: false, minMove: 1000 });

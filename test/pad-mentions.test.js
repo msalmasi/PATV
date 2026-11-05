@@ -149,7 +149,7 @@ test("veils: a frog-named line alerts under the FROG NAME; a mention OF a frog n
   V.hide(fl2.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
   M.onLines([fl2]); await M._idle();
   assert.equal((await notices("al-1")).length, 1);
-  // 1.99?? padppl rework: whatever frog name he takes next (another session, another pad) - still silent for her
+  // 1.99ajw padppl rework: whatever frog name he takes next (another session, another pad) - still silent for her
   M._sent.clear(); T += 120e3;
   const fl3 = Object.assign(line({ u: { anon: true, display: "someone", veil: "incognito", alias: "Leafy Newt", id: "v-leafy0000001" }, text: "@alicecf new frog" }), { roomId: "other_room", slug: "other-room", name: "Other Room" });
   V.hide(fl3.it, "_vz", { login: "sneakcf", display: "sneakcf", kind: "incognito" });
