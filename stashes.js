@@ -803,7 +803,7 @@ async function mergeAccounts(fromId, toId) {
 // ── the website's /act stash form (wallet.ejs) ──
 const fmt = (n) => Number(n || 0).toLocaleString("en-US");
 /**
- * 1.99akt stashstake: the bracket after a stash's balance - what it has STAKED and what staking paid it, as Pepe's !stash says it.
+ * 1.99aku stashstake: the bracket after a stash's balance - what it has STAKED and what staking paid it, as Pepe's !stash says it.
  * A stake is vault shares (the staking snapshot's positions[id].hold, valued at the day's prices - staking.positionFor /
  * holdValue, the /wallet card's "In vaults"); the PAT left the stash's balance when it was staked. The `staked` column is the
  * 1.90 fee-share stake, zeroed when the vaults went live (Pepe's _vaults_migrate_stakes) and never written since - not shown.
@@ -879,7 +879,7 @@ async function fromForm(userId, words, idem) {
     }
     const mine = (await list()).filter((s) => canUse(s, me));
     if (!mine.length) return "🔐 No stashes yet - create one below.";
-    const sk = await require("./staking").latest().catch(() => null);      // 1.99akt: what each one has staked (its vault shares)
+    const sk = await require("./staking").latest().catch(() => null);      // 1.99aku: what each one has staked (its vault shares)
     return mine.slice(0, 6).map((s) => `🔐 ${s.owner_name}/${s.name}: ${fmt(s.balance)} PAT${stakeNote(sk, s)}`).join(" · ");
   } catch (e) {
     if (e instanceof Refuse) return e.message;
@@ -889,7 +889,7 @@ async function fromForm(userId, words, idem) {
 }
 
 /**
- * 1.99akt stashstake: bot/state's stashes, each with `paid` = what staking paid it ({d7, all, corr} - capital/vaults.paidByStash
+ * 1.99aku stashstake: bot/state's stashes, each with `paid` = what staking paid it ({d7, all, corr} - capital/vaults.paidByStash
  * over stash_moves, the same figure /staking shows) so Pepe's !stash says that as "earned" (the `earned` counter misses the
  * payouts from before staking fix P0.2). A payout is a stash move, so it bumps the rev these answers are keyed by. No `paid`
  * at all when that read failed - Pepe shows the counter then, never a made-up 0.

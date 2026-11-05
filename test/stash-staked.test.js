@@ -1,4 +1,4 @@
-// 1.99akt stashstake: what a stash has STAKED is its vault shares, not the 1.90 `staked` column (owner 2026-11-05: "Showing 0
+// 1.99aku stashstake: what a stash has STAKED is its vault shares, not the 1.90 `staked` column (owner 2026-11-05: "Showing 0
 // staked here when i hit !stash" - plantstash, balance 931,541, earned 20,987, 100,000 🤖 Auto shares ~ PAT 106,653).
 //   * /api/stash/bot/state: each stash carries `paid` = what staking paid it (capital/vaults.paidByStash over stash_moves - the
 //     figure /staking shows), so Pepe's !stash says the same "earned" (the `earned` counter misses the payouts before staking
