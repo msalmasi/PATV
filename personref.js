@@ -10,6 +10,10 @@
 //                          non-enumerable _vz (this room's snapshot only).
 //   {k: "line", c}         a veiled chat line by its feed row -> bridge.revealLookup (the live item's _vz first, then
 //                          chat_log_veil; this room only).
+//   {k: "cseat", t, s}     1.99?? casmask (the 1.99ajw verifier's gap b): a MASKED seat at a site casino table by the masked seat's
+//                          own id (casino/veil.js seatOf - never the account's seat hash) -> the account / login behind it, read from
+//                          the table in memory (a seat that is no longer masked or no longer there: "They aren't at the table any
+//                          more."). No pad: anyone signed in may watch a table.
 //
 // resolve(ref, {R}) -> {kind: "account" | "login" | "veil", userId | null, username | null, login | null, label, veil: bool} | {error}
 // A veiled result's real identity is for the SERVER only: callers never send userId / username / login of a veil to a page.
@@ -70,7 +74,26 @@ function clean(ref) {
   if (k === "user") { const v = String(ref.v || "").trim().replace(/^@/, ""); return NAME_RE.test(v) ? { k, v } : null; }
   if (k === "veil") { const id = String(ref.id || "").trim(); return VEIL_ID_RE.test(id) ? { k, id } : null; }
   if (k === "line") { const c = Math.floor(Number(ref.c)); return c > 0 ? { k, c } : null; }
+  if (k === "cseat") {
+    const t = String(ref.t || "").trim(), s = String(ref.s || "").trim();
+    return CSEAT_T_RE.test(t) && CSEAT_S_RE.test(s) ? { k, t, s } : null;
+  }
   return null;
+}
+const CSEAT_T_RE = /^[0-9a-f]{10}$/, CSEAT_S_RE = /^v[0-9a-f]{11}$/;
+/** 1.99?? casmask: a masked casino seat -> {kind: "veil", userId, username, login, label, room} | {error} (see the top) */
+async function ofCasinoSeat(ref) {
+  const gone = { error: "They aren't at the table any more." };
+  let T = null, V = null;
+  try { T = require("./casino/service").getTable(ref.t); V = require("./casino/veil"); } catch (e) { return gone; }
+  if (!T || !T.eng || !Array.isArray(T.eng.seats)) return gone;
+  const uid = T.eng.seats.map(String).find((u) => V.masked(T, u) && V.seatOf(T, u) === ref.s);
+  if (!uid) return gone;
+  const p = (T.players || {})[uid] || {};
+  const a = await accountById(uid);
+  const login = p.via === "room" && p.camfrog ? low(p.camfrog) : a && a.camfrogUsername ? low(a.camfrogUsername) : null;
+  return { kind: "veil", userId: a ? String(a.userId) : String(uid), username: a ? a.username : null, login: login && LOGIN_RE.test(login) ? login : null,
+           label: String(V.label(T, uid) || "someone").slice(0, 60), room: T.room ? String(T.room) : null, veil: true };
 }
 
 async function resolve(raw, { R = null } = {}) {
@@ -89,6 +112,7 @@ async function resolve(raw, { R = null } = {}) {
     const a = await accountByUsername(ref.v);
     return a ? acctOut(a) : { error: "That account isn't here any more." };
   }
+  if (ref.k === "cseat") return ofCasinoSeat(ref);
   if (!R) return { error: "Which pad?" };
   if (ref.k === "veil") {
     const e = [...(R.members || []), ...(R.mic || [])].find((x) => x && x.anon && x.id === ref.id && x._vz);
@@ -118,6 +142,7 @@ function pageSafe(p) {
  *  frog names stay out of reach of people who can't see it)? Named refs need no pad. Fails closed. */
 async function padOk(raw, viewer, R) {
   const ref = clean(raw);
+  if (ref && ref.k === "cseat") return !!(viewer && viewer.userId);       // (1.99?? casmask: a casino table - no pad, signed in only)
   if (!ref || (ref.k !== "veil" && ref.k !== "line")) return true;
   if (!R || !R.id || !viewer || !viewer.userId) return false;
   try { const PA = require("./padaccess"); if (PA.init) await PA.init(); return !!PA.full({ userId: viewer.userId, class: viewer.class }, R.id); } catch (e) { return false; }

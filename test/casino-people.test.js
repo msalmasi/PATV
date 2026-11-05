@@ -245,7 +245,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=7"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
     // (1.99ajw casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
-    for (const s of ["casino-ui.js?v=6", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=9", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9)
+    for (const s of ["casino-ui.js?v=7", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=9", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9)
                      "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
   const chat = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");
@@ -256,10 +256,12 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   // 1.99ajw casino2 rework: every seat is the same button (a masked one too - a plain seat would mark who is incognito); never your own
   // seat, never for signed-out viewers; a masked seat opens veilMenu (its label, "incognito player", one line - no profile, no tip)
   assert.match(ui, /if \(!signed \|\| !s \|\| !s\.seat \|\| mine\) return inner;/);
-  assert.match(ui, /if \(p\.veil\) \{ veilMenu\(anchor, p\); return; \}/);
-  const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("function veilMenu(") + 700);
-  assert.match(vm, /items: \[\]/, "the masked seat's menu has no items");
-  assert.doesNotMatch(vm, /\/u\/|tip|patv|login/i, "nothing in it that says who");
+  assert.match(ui, /if \(p\.veil\) \{ veilMenu\(anchor, p, seat\); return; \}/);
+  const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("function veilMenu(") + 1300);
+  // (1.99?? casmask gap b: its one item is the frog-name 🚫 Block / ✅ Unblock - casino-veil.test.js drives it)
+  assert.match(vm, /const items = \[\];/);
+  assert.match(vm, /ref: \{ k: "cseat", t: tableId, s: String\(seat\) \}/, "the masked seat's Block: by its own id");
+  assert.doesNotMatch(vm.replace(/PATVBlockSheet/g, ""), /\/u\/|tip|patv|login/i, "nothing in it that says who");
   assert.match(ui, /if \(s\.veil\) return `<span class="av veil" aria-hidden="true">🐸/, "a masked seat has no picture");
   assert.match(ui, /wrap\.hidden = true; wrap\.className = "cz-pm-host"/, "the menu's Manage panel can never show on a table page");
   for (const f of ["casinohm.js", "casinobj.js"]) assert.match(fs.readFileSync(path.join(repo, "public", "js", f), "utf8"), /CZ\.seatWho\(s, CZ\.avatarHTML\(s\)/, f);

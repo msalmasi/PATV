@@ -103,12 +103,25 @@ async function seatsFor(T, user, pads) {
     try { return fl ? require("../padflair").plain(fl) : null; } catch (e) { return null; }
   };
   const V = require("./veil");
+  // 1.99?? casmask (gap b): the keys behind the frog names this viewer blocked (blocks.veilKeysOf - server only; null when it can't be read:
+  // the masked seat's menu then offers 🚫 Block, never ✅ Unblock)
+  let vkeys = null;
+  if (me) { try { vkeys = await require("../blocks").veilKeysOf(me.userId); } catch (e2) { vkeys = null; } }
   for (const k of keys) {
     const hash = V.seatOf(T, k), p = (T.players || {})[k] || {}, row = byId.get(String(k)) || {};
     const display = String((e.names && e.names[k]) || p.name || row.displayname || row.username || "?").slice(0, 60);
     if (String(k) === PEPE_ID || (pepe && lc(row.username) === pepe)) { out[hash] = { bot: true, display, patv: row.username ? { username: row.username } : null }; continue; }
     // 1.99ajw casino2 rework: a masked seat (the table view's own mask - routes.js re-read it first) is its label and nothing else
-    if (V.masked(T, k)) { out[hash] = me && String(k) === me.userId ? { me: true, display: V.label(T, k) } : { veil: true, display: V.label(T, k) }; continue; }
+    // 1.99?? casmask (gap b): + vb: 1 on a FROG-NAMED masked seat whose person this viewer blocked under a frog name (its menu then offers
+    // ✅ Unblock - the same residual the chat's folded frog lines carry: two frog names are the same person, never who). Never on a
+    // "someone" seat (one can follow their named seat by moments - C.2 - so it would tie the two).
+    if (V.masked(T, k)) {
+      if (me && String(k) === me.userId) { out[hash] = { me: true, display: V.label(T, k) }; continue; }
+      const lab = V.label(T, k), seat = { veil: true, display: lab };
+      if (vkeys && vkeys.size && lab !== V.SOMEONE && V.keysOf(String(k), p, row.camfrogUsername || null).some((x) => vkeys.has(x))) seat.vb = 1;
+      out[hash] = seat;
+      continue;
+    }
     if (me && String(k) === me.userId) { out[hash] = { me: true, display }; continue; }
     const room = p.via === "room";
     const login = room && p.camfrog ? String(p.camfrog) : null;

@@ -39,9 +39,13 @@
 // accepted residual, stated on the sheet and the privacy page: folding / a refusal can show the blocker that two frog names are the same
 // person - never who.
 // Every answer to a veil block is the same whoever is behind it (an account, an unlinked login, nobody), apart from "That's you".
-// Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry (Unblock is in Settings → Blocked people).
+// Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry (Unblock is in Settings → Blocked people)
+// - except (1.99?? casmask, the 1.99ajw verifier's gap b) a FROG-NAMED masked casino seat whose person the viewer frog-blocked (people.js
+// vb, {k:'cseat'} below): the same residual a folded frog line already carries (two frog names are the same person - never who); never
+// on a "someone" seat.
 //
 // Routes: POST /api/blocks {ref, on, slug?} (ref = personref.js, or {k:'vb', id} / {k:'lb', v} from the settings list)
+//         (1.99?? casmask: or {k:'cseat', t, s} - a masked casino seat by its own id: Block, and Unblock lifting every frog-name block on that person)
 //         GET  /api/blocks            the viewer's blocks (veils by label only)
 //         GET  /settings/blocked      the page
 "use strict";
@@ -218,9 +222,24 @@ async function set(user, ref, on, { R = null } = {}) {
   const myLogin = user.camfrogUsername ? low(user.camfrogUsername) : await loginOf(me);
   if (p.veil) {
     if ((p.userId && p.userId === me) || (p.login && myLogin && p.login === myLogin)) throw new Refuse(400, "That's you.", "self");
-    if (on === false) throw new Refuse(400, "Unblock frog names from Settings → Blocked people.");
-    await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES (?, ?, ?, ?, ?, ?)",
-      [me, p.userId || null, p.login || null, String(p.label || "someone").slice(0, 60), R ? String(R.id) : null, now()]);
+    // 1.99?? casmask (the 1.99ajw verifier's gap b): a MASKED casino seat ({k:'cseat'}, personref.js) - its menu offers 🚫 Block (a
+    // frog-name block like the chat's) and ✅ Unblock on a frog name the viewer already blocked that way. Unblock lifts every frog-name
+    // block on that person (the block follows them under any frog name); Block adds none when one is already there. The answer is the
+    // same either way, whoever is behind the seat.
+    const seat = !!(ref && ref.k === "cseat");
+    const who = [...(p.userId ? ["blocked_id = ?"] : []), ...(p.login ? ["blocked_login = ?"] : [])];
+    const args = [me, ...(p.userId ? [String(p.userId)] : []), ...(p.login ? [p.login] : [])];
+    if (on === false) {
+      if (!seat) throw new Refuse(400, "Unblock frog names from Settings → Blocked people.");
+      if (who.length) await runQuery(`DELETE FROM veil_blocks WHERE blocker_id = ? AND (${who.join(" OR ")})`, args);
+      changed(me);
+      return { ok: true, blocked: false, veil: true, label: p.label };
+    }
+    const have = seat && who.length ? (await getQuery(`SELECT 1 FROM veil_blocks WHERE blocker_id = ? AND (${who.join(" OR ")}) LIMIT 1`, args))[0] : null;
+    if (!have) {
+      await runQuery("INSERT INTO veil_blocks (blocker_id, blocked_id, blocked_login, label, room_id, created) VALUES (?, ?, ?, ?, ?, ?)",
+        [me, p.userId || null, p.login || null, String(p.label || "someone").slice(0, 60), R ? String(R.id) : p.room ? String(p.room) : null, now()]);
+    }
     changed(me);
     return { ok: true, blocked: true, veil: true, label: p.label };
   }

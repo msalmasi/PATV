@@ -103,6 +103,7 @@ test.before(async () => {
   app.use(express.json());
   app.use((req, res, next) => { const u = req.get("x-test-user"); req.user = u ? users[u] || null : null; next(); });
   require(path.join(repo, "casino", "routes")).register(app, { isBotToken: () => false, addUser: (req, res, next) => next() });
+  require(path.join(repo, "blocks")).register(app, { addUser: (req, res, next) => next() });        // (casmask gap b: the seat's Block)
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -544,4 +545,66 @@ test("casmask (gap c): a closed table no longer in memory keeps its masks - roun
   await runQuery("DELETE FROM casino_tables WHERE id = ?", [tid]); V._reset();
   const none = await get(`/api/casino/fair/${tid}/1`);
   assert.ok(!/\bAnn\b|\bCat\b/.test(none.text) && none.d.results.players.every((p) => p.name === "someone"), "no saved row: masked too");
+});
+
+// ── 1.99?? casmask (the 1.99ajw verifier's gap b): a masked seat's menu offers a FROG-NAME Block (Unblock once blocked) ──
+test("casmask (gap b): a masked seat's Block is a frog-name block by the masked seat's own id - the server finds who and never says; Unblock once blocked (frog names only); signed out: none", async () => {
+  await fresh();
+  const B = require(path.join(repo, "blocks"));
+  await B.init(); await runQuery("DELETE FROM veil_blocks"); B._reset();
+  const post = async (body, uid) => { const r = await fetch(base + "/api/blocks", { method: "POST", headers: H(uid), body: JSON.stringify(body) }); const text = await r.text(); return { status: r.status, text, d: JSON.parse(text) }; };
+  VK.set("u:u2", "incognito");
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(bob, "bet", ["500"], { table: tid })).ok);
+  const vs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil);
+  assert.ok(vs && isFrog(vs.name), "Bob's seat: a frog name");
+  const ref = { k: "cseat", t: tid, s: vs.seat };
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name }, "nothing blocked yet: no vb");
+  assert.equal((await post({ ref, on: true }, null)).status, 401, "signed out: no block");
+  const b1 = await post({ ref, on: true }, "u5");
+  assert.equal(b1.status, 200, b1.text);
+  assert.deepEqual(b1.d, { ok: true, blocked: true, veil: true, label: vs.name });
+  for (const s of ["Bob", "bob", "u2", svc.uidHash("u2")]) assert.ok(!b1.text.includes(s), "the answer never says who: " + s);
+  let rows = await getQuery("SELECT blocked_id, blocked_login, label FROM veil_blocks WHERE blocker_id = 'u5'");
+  assert.deepEqual(rows, [{ blocked_id: "u2", blocked_login: null, label: vs.name }], "a frog-name block on the person behind the seat");
+  B._reset();
+  assert.ok((await B.veilKeysOf("u5")).has("u:u2"), "it hides their veiled activity under ANY frog name (blocks.veilKeysOf)");
+  assert.equal((await B.towards("u2", "u5", { veiled: false })), false, "never a named block (what they do under their own name is untouched)");
+  const b2 = await post({ ref, on: true }, "u5");
+  assert.deepEqual(b2.d, b1.d, "blocking again: the same answer");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM veil_blocks WHERE blocker_id = 'u5'"))[0].n, 1, "and no second row");
+  B._reset();
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name, vb: 1 }, "blocked: the menu offers Unblock");
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u3")).d.seats[vs.seat], { veil: true, display: vs.name }, "only for the blocker");
+  const u1 = await post({ ref, on: false }, "u5");
+  assert.deepEqual(u1.d, { ok: true, blocked: false, veil: true, label: vs.name });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM veil_blocks WHERE blocker_id = 'u5'"))[0].n, 0, "unblocked: every frog-name block on that person lifted");
+  B._reset();
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[vs.seat], { veil: true, display: vs.name });
+  // yourself; a seat id that is no masked seat here (a named seat's hash isn't a masked id at all); another table's id
+  assert.equal((await post({ ref, on: true }, "u2")).d.error, "That's you.");
+  const fake = await post({ ref: { k: "cseat", t: tid, s: "v" + "0".repeat(11) }, on: true }, "u5");
+  assert.deepEqual([fake.status, fake.d.error], [404, "They aren't at the table any more."]);
+  assert.equal((await post({ ref: { k: "cseat", t: tid, s: svc.uidHash("u1") }, on: true }, "u5")).status, 404, "a named seat's hash: refused (named people are blocked by name)");
+  assert.equal((await post({ ref: { k: "cseat", t: "0123456789", s: vs.seat }, on: true }, "u5")).status, 404, "another table");
+  // a "someone" seat (switched on mid-session - C.2): Block, but never vb (a "someone" seat can follow their named seat by moments)
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  VK.set("u:u3", "incognito"); tick(3);
+  const cs = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil && s.name === "someone");
+  assert.ok(cs, "Cat's seat reads 'someone'");
+  const b3 = await post({ ref: { k: "cseat", t: tid, s: cs.seat }, on: true }, "u5");
+  assert.deepEqual(b3.d, { ok: true, blocked: true, veil: true, label: "someone" });
+  B._reset();
+  assert.deepEqual((await get(`/api/casino/t/${tid}/people`, "u5")).d.seats[cs.seat], { veil: true, display: "someone" }, "a 'someone' seat never shows vb");
+  // the page: the masked seat's small menu carries Block / Unblock (the chat's words), nothing that says who; signed-out viewers get no menu
+  const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
+  const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("if (tableId) {", ui.indexOf("function veilMenu(")));
+  assert.match(vm, /ref: \{ k: "cseat", t: tableId, s: String\(seat\) \}, name, veil: true, on, anchor/);
+  assert.match(vm, /bt\("js\.block\.menu", "Block…"\)/);
+  assert.match(vm, /bt\("js\.block\.menu_un", "Unblock"\)/);
+  assert.match(vm, /const on = !p\.vb;/);
+  assert.match(vm, /if \(signed && seat && window\.PATVBlockSheet\)/);
+  assert.doesNotMatch(vm.replace(/PATVBlockSheet/g, ""), /\/u\/|tip|patv|login/i, "no profile, no tip, nothing that says who");
 });

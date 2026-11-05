@@ -583,7 +583,7 @@
     if (!ppl.d || Date.now() - ppl.at > PEOPLE_FRESH_MS) { toast(T("who_retry", "Couldn't load that player just now - try again."), true); return; }
     const p = personOf(seat);
     if (!p || p.me) return;
-    if (p.veil) { veilMenu(anchor, p); return; }
+    if (p.veil) { veilMenu(anchor, p, seat); return; }
     if (p.bot) { pepeMenu(anchor); return; }
     const s = lastView && lastView.table ? (lastView.table.seats || []).find((x) => x.seat === seat) : null;
     const pad = p.pad || null, slug = pad ? pad.slug : "";
@@ -624,7 +624,7 @@
     x.addEventListener("click", () => closePepe(true)); hd.appendChild(x);
     p.appendChild(hd);
     const list = document.createElement("div"); list.className = "pm-pop-l";
-    if ((o.items || []).length) { list.setAttribute("role", "menu"); list.setAttribute("aria-label", o.aria); }    // (a masked seat's has none)
+    if ((o.items || []).length) { list.setAttribute("role", "menu"); list.setAttribute("aria-label", o.aria); }    // (a masked seat's: only Block / Unblock, signed in - casmask)
     for (const [label, href, fn, why] of o.items || []) {
       const b = document.createElement(href ? "a" : "button"); b.className = "pm-pop-i"; b.setAttribute("role", "menuitem"); b.tabIndex = -1;
       b.textContent = label;
@@ -676,11 +676,23 @@
     smallMenu(anchor, { cls: "cz-pepe", aria: T("pepe_menu", "Pepe"), avatar: { name: "Pepe", avatar: "/public/img/pepe.png" }, name: "Pepe",
                         role: T("pepe_role", "the dealer · provably fair"), items });
   }
-  /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who */
-  function veilMenu(anchor, p) {
+  /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who. 1.99?? casmask (the
+   *  1.99ajw verifier's gap b): 🚫 Block… - a FROG-NAME block, the chat's masked-entry item and sheet (block-sheet.js veil: whatever frog
+   *  name they use their veiled activity is hidden from you; the server finds who it is from the masked seat's own id and never says) -
+   *  or ✅ Unblock on a frog name you already blocked that way (the people answer's vb). Signed-out viewers never get this menu. */
+  function veilMenu(anchor, p, seat) {
     const name = String(p.display || "someone");
+    const items = [];
+    const bt = (k, d) => (window.__t ? window.__t(k, d) : d);       // (the chat menu's own words - room-mod.js)
+    if (signed && seat && window.PATVBlockSheet) {
+      const on = !p.vb;
+      items.push([on ? "🚫 " + bt("js.block.menu", "Block…") : "✅ " + bt("js.block.menu_un", "Unblock"), null, () => {
+        window.PATVBlockSheet.open({ ref: { k: "cseat", t: tableId, s: String(seat) }, name, veil: true, on, anchor,
+                                     onDone: () => { ppl.at = 0; loadPeople(); } });
+      }]);
+    }
     smallMenu(anchor, { cls: "cz-veilm", aria: T("veil_menu", "Incognito player {name}", { name }), avatar: { name, veil: 1 }, name,
-                        role: T("veil_role", "incognito player"), items: [],
+                        role: T("veil_role", "incognito player"), items,
                         note: T("veil_note", "Their name and profile stay hidden while they play incognito.") });
   }
   if (tableId) {
