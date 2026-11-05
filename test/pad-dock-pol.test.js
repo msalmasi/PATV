@@ -216,7 +216,7 @@ test("item 17: a pinned cam's ⋯ pops it out - the SAME tile node into Document
 
 // ── items 26, 27, 29, 30: the composer's apps, 🎡 Spin and Create ──
 test("items 26, 27: 💲 Showdown starts the price game (!showdown; !pricegame for an older Pepe); no 😀 tool; 🎡 Spin asks once, then sends !spin through the relay", () => {
-  // (1.99?? dockmedia (owner item 5): Pepe's web relay allows !showdown now - the tile's own command; !pricegame only where a relay lists just that)
+  // (1.99ajy dockmedia (owner item 5): Pepe's web relay allows !showdown now - the tile's own command; !pricegame only where a relay lists just that)
   const h = harness({ data: (d) => { d.room.cmds = { "!spin": 5000, "!showdown": 0, "!pricegame": 0, "!guess": 0 }; } });
   const tools = h.compose.querySelector(".rmd-tools");
   assert.equal(tools.querySelector('[data-rmd-tool="emoji"]'), null, "no 😀 - 🧸 has the Emoji tab");
@@ -286,7 +286,7 @@ test("item 30: ＋ › Create - a poll / wager / bounty form sends the typed com
   h.button("Cancel", sheet).click(); assert.equal(h.calls.send.length, 2, "Cancel sends nothing");
   h.button("Add to the chat").click(); h.button("Bounty…", menuOf(h.doc)).click();
   sheet = h.doc.querySelector(".rmd-layer"); const b2 = sheet.querySelectorAll("input"); b2[0].value = "someone sings it"; b2[1].value = "5k"; sheet.querySelector("select").value = "2d";
-  // (1.99?? dockmedia (owner item 4): a bounty's amount is its reward - "Reward in PAT", never "Stake" (PAT is points))
+  // (1.99ajy dockmedia (owner item 4): a bounty's amount is its reward - "Reward in PAT", never "Stake" (PAT is points))
   assert.match(sheet.textContent, /Reward in PAT/); assert.doesNotMatch(sheet.textContent, /Stake/); assert.equal(b2[1].getAttribute("aria-label"), "Reward in PAT");
   sheet.querySelector("form").dispatchEvent(new Event("submit")); assert.equal(h.calls.send[2], "!bounty someone sings it 5000 by 2d");
   const off = harness({ opts: { linked: false }, data: (d) => { d.room.cmds = { "!poll": 0 }; } }); off.button("Add to the chat").click();

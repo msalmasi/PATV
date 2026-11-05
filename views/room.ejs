@@ -546,7 +546,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
-<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=9"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=9"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=1"></script><% } %><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99ajw casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex); 1.99?? dockmedia: css v9, js v9 (Now playing, the stage media bar, the embed row) %>
+<% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=9"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=9"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=1"></script><% } %><script src="/public/js/pad-picker.js?v=3"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99ajw casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: css v9, js v9 (Now playing, the stage media bar, the embed row) %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <%# 1.99ajf dockclean (owner point 33): no "Pads › p/<slug>" crumb in the Dock - the navbar is how people move between pads %>
   <% if (!dockOn_) { %><div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div><% } %>
@@ -647,13 +647,13 @@
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=10"></script><%# 1.99?? dockmedia: v10 - PATVStage.nativeControls / setNativeControls (the Room Dock draws its own bar) %>
+  <script src="/public/js/stage-player.js?v=10"></script><%# 1.99ajy dockmedia: v10 - PATVStage.nativeControls / setNativeControls (the Room Dock draws its own bar) %>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
   <script src="/public/js/webrtc-client.js?v=6"></script>
-  <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99?? dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
+  <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
   <script src="/public/js/stage-mic.js?v=16"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=21"></script>
@@ -708,7 +708,7 @@
     <%# 1.99lw: the 📼 player - what plays from Plex here, its progress + the queue for everyone; play / pause / seek /
         next / the queue for whoever started it, the pad's owner and the admins (pad-plexq.js, medialib.player) %>
     <div class="plexq" id="rmPlexQ" data-room="<%= room.slug %>" hidden></div>
-    <%# 1.99?? dockmedia: no aria-live on the player (its times redraw every second, the box every 4 s - the Dock keeps it on screen in the Now playing card;
+    <%# 1.99ajy dockmedia: no aria-live on the player (its times redraw every second, the box every 4 s - the Dock keeps it on screen in the Now playing card;
         .pq-msg role=status keeps an action's answer); its rules are .plexq's own, so it looks the same in the Dock's card and sheets as here %>
     <style>
       .plexq { margin: 10px 0 4px; padding: 10px 12px; border: 1px solid #1f3a20; background: rgba(76,175,80,.08); border-radius: 10px; display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
@@ -726,13 +726,13 @@
       .plexq .pq-li { display: inline-flex; gap: 4px; }
       .plexq .pq-li .sact { min-width: 36px; min-height: 32px; padding: 0 8px; }
       .plexq summary { cursor: pointer; color: #bbb; }
-      /* 1.99?? dockmedia (verify): a working control is aria-disabled (it keeps keyboard focus); "1 of 3" never breaks; the jumps' row break
+      /* 1.99ajy dockmedia (verify): a working control is aria-disabled (it keeps keyboard focus); "1 of 3" never breaks; the jumps' row break
          is the Dock sheets' (pad-dock.css) - here the row wraps as it fits */
       .plexq .sact[aria-disabled="true"] { opacity: .5; cursor: default; }
       .plexq .pq-pos { white-space: nowrap; }
       .plexq .pq-br { display: none; }
     </style>
-    <script src="/public/js/pad-plexq.js?v=4" defer></script><%# 1.99?? dockmedia: v3 - the controls group says they are for everyone watching; v4 (verify) - focus kept across a redraw, the same markup never rewritten, ⏮ ⏸ ⏭ ⏹ first, the line's parts in their own spans %>
+    <script src="/public/js/pad-plexq.js?v=4" defer></script><%# 1.99ajy dockmedia: v3 - the controls group says they are for everyone watching; v4 (verify) - focus kept across a redraw, the same markup never rewritten, ⏮ ⏸ ⏭ ⏹ first, the line's parts in their own spans %>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">

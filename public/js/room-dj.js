@@ -91,7 +91,7 @@
       im.src = n.art; a.appendChild(im);
     } else a.textContent = '🎵';
     $('rdjMiniT').textContent = !s.connected ? 'Pepe\'s music is offline right now.' : n ? n.title : 'Nothing playing right now.';
-    // (1.99?? dockmedia: + who asked for it - the Dock's Now playing card shows the compact bar only)
+    // (1.99ajy dockmedia: + who asked for it - the Dock's Now playing card shows the compact bar only)
     $('rdjMiniA').textContent = n && s.connected ? n.artist + (n.by === 'user' ? ' · 🙋 ' + (n.who || 'someone') : '') + (n.playing ? '' : ' · ⏸ paused') : (d.on ? 'Auto-DJ is on' : '');
     m.classList.toggle('paused', !(n && n.playing));
     $('rdjMiniTrack').classList.toggle('hide', !(n && s.connected));
@@ -112,7 +112,7 @@
       words(q, '🔎 Request');
       q.title = 'Request · Search for a song to queue';
       q.addEventListener('click', function () {
-        // (1.99?? dockmedia: the Dock's Now playing card asks first - it opens its DJ sheet with the booth open instead; anywhere else the
+        // (1.99ajy dockmedia: the Dock's Now playing card asks first - it opens its DJ sheet with the booth open instead; anywhere else the
         // booth opens here, as before)
         var go = true;
         try { go = box.dispatchEvent(new CustomEvent('patv:djrequest', { bubbles: true, cancelable: true })); } catch (e) { go = true; }
@@ -123,7 +123,7 @@
       });
       c.appendChild(q);
     }
-    // (1.99?? dockmedia: Pepe's DJ admins steer him from the compact bar too - 🎲 Pepe picks next, 🤖 / 🛑 Auto-DJ: the Dock's music icons; 🎧 is
+    // (1.99ajy dockmedia: Pepe's DJ admins steer him from the compact bar too - 🎲 Pepe picks next, 🤖 / 🛑 Auto-DJ: the Dock's music icons; 🎧 is
     // the DJ booth itself)
     if (me.djAdmin && d.on) c.appendChild(btn('🎲 Pepe picks next', null, 'dj.next', { title: 'Pepe picks the next song' }));
     if (me.djAdmin) c.appendChild(d.on ? btn('🛑 Auto-DJ off', null, 'dj.off') : btn('🤖 Auto-DJ on', null, 'dj.on'));
@@ -184,7 +184,7 @@
       ol.appendChild(li);
     });
   }
-  // 1.99?? dockmedia: a control's icon and words are their own spans (<span class="ic" aria-hidden> <span class="w">) - it reads exactly as
+  // 1.99ajy dockmedia: a control's icon and words are their own spans (<span class="ic" aria-hidden> <span class="w">) - it reads exactly as
   // before, and the Dock's Now playing card can show the icon alone with the words as its name; the tooltip says the words first
   function words(b, label) {
     var m = /^(\S+)\s+([\s\S]*)$/.exec(String(label || ''));
@@ -200,7 +200,7 @@
     var w = words(b, label);
     if (small) { b.appendChild(document.createTextNode(' ')); b.appendChild(el('small', null, small)); }
     b.title = w + (opts && opts.title ? ' · ' + opts.title : '');
-    // (1.99?? dockmedia verify: while Pepe works on a press the controls are aria-disabled, not disabled - a disabled button drops keyboard
+    // (1.99ajy dockmedia verify: while Pepe works on a press the controls are aria-disabled, not disabled - a disabled button drops keyboard
     // focus to <body>; act() refuses while busy either way. data-verb lets render() give focus back to the same control)
     b.disabled = !linked;
     if (busy) b.setAttribute('aria-disabled', 'true');
@@ -288,7 +288,7 @@
   function render() {
     var show = !!(P && P.active);
     box.classList.toggle('hide', !show);
-    // 1.99?? dockmedia: what the booth shows, for the Dock's Now playing card (it shows only while a track is playing or paused - never for
+    // 1.99ajy dockmedia: what the booth shows, for the Dock's Now playing card (it shows only while a track is playing or paused - never for
     // "Nothing playing right now." or Pepe's music offline): off | offline | idle | playing | paused
     box.setAttribute('data-np', !show ? 'off' : !(P.state && P.state.connected) ? 'offline' : !P.state.now ? 'idle' : P.state.now.playing ? 'playing' : 'paused');
     if (!show) return;
@@ -299,7 +299,7 @@
     renderNow(); renderBooth(); renderQueue(); renderCtrls(); renderTools(); renderMini();
     refocus(fk);
   }
-  // 1.99?? dockmedia verify: the controls are rebuilt when what Pepe reports changes (every sync, vote and press) - a control that had keyboard
+  // 1.99ajy dockmedia verify: the controls are rebuilt when what Pepe reports changes (every sync, vote and press) - a control that had keyboard
   // focus gets it back (the same verb in the same row, else the one in its place: ⏸ Pause -> ▶ Resume), so a Tab to 🛑 survives the next sync
   function focusKey() {
     var a = document.activeElement, row = a && a.parentNode;

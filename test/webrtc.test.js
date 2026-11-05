@@ -584,7 +584,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(await render({ ...offFn, avsyncOn: true }), /av-sync\.js/, name + ": never without WebRTC");
   }
   assert.match(await renderHome(on), /stage-lowlat\.js\?v=3"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=21/);   // 1.99ajq dockpol: 20; 1.99ajr golive merged: 21; train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19
-  assert.match(await renderRoom(on), /stage-lowlat\.js\?v=3/);   // 1.99?? dockmedia: v3 (the ⚡ <video> follows PATVStage.nativeControls)
+  assert.match(await renderRoom(on), /stage-lowlat\.js\?v=3/);   // 1.99ajy dockmedia: v3 (the ⚡ <video> follows PATVStage.nativeControls)
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);
   assert.match(book, /Go live from your browser \(camera \/ screen\) — ultra-low latency/);

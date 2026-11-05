@@ -19,7 +19,7 @@ body.pad-dock-live main.rm.rm-dock #padPanel-live { display: flex; flex-directio
 /* (owner points 1-7, 23, 25, 27, 33): on Live these are menu entries, not rows */
 body.pad-dock-live main.rm.rm-dock :is(#rmHero, #padTabs, #rmLiveStat, .crumb) { display: none; }
 main.rm.rm-dock #padPanel-live > :is(#rmGoLive, .oab-row, #rdj) { display: none; }
-main.rm.rm-dock .rm-live > .side > :not(#rmPplCard, #rmdNp) { display: none; }   /* (1.99?? dockmedia: + the Now playing card) */
+main.rm.rm-dock .rm-live > .side > :not(#rmPplCard, #rmdNp) { display: none; }   /* (1.99ajy dockmedia: + the Now playing card) */
 main.rm.rm-dock :is(#rmMicCard, .rm-cvlogin) { display: none; }
 
 /* ── Feed / About: one slim header row - [pad identity] [● Live · Feed · About] [Follow] [▾] (owner point 4) ── */
@@ -1137,7 +1137,7 @@ main.rm.rm-dock .rmd-plex .px-ask p.px-ask-q { color: var(--ds-text); font-size:
 body.rmd-pop.rmd-embed main.rm.rm-dock #chatH > .rmd-chip-chat { display: none; }
 /* (review: a narrow chat window / frame ends its composer's placeholder with an ellipsis - "Message Night Orchar…", not a cut letter) */
 body.rmd-pop main.rm.rm-dock .rmd-input-row input.ds-in { text-overflow: ellipsis; }
-/* ══ 1.99?? dockmedia (the owner's 2026-11-04 media points) ══ */
+/* ══ 1.99ajy dockmedia (the owner's 2026-11-04 media points) ══ */
 /* (item 1) 🎶 Now playing - 1024px and wider a card at the top of the people column while Pepe's DJ or the 📼 Plex player plays here; the
    people list shortens to make room (it scrolls). The id selector: the class would lose to the column's :not(#rmPplCard, #rmdNp) above */
 main.rm.rm-dock .rm-live > .side > #rmdNp { display: grid; align-content: start; gap: var(--ds-sp-2); flex: 0 0 auto; min-block-size: 0; max-block-size: calc(100% - 208px);

@@ -109,7 +109,7 @@ function harness(extra={}){
   if(extra.audio){Object.assign(opts.audio,extra.audio);}
   if(extra.closeWin){win.close=()=>{calls.closed=(calls.closed||0)+1;win.closed=true;};}
   if(extra.win)extra.win(win,calls);   // 1.99ajw casino2: location / parent / sessionStorage before the Dock starts (the chat embed)
-  // 1.99?? dockmedia: extra.setup(parts) adds nodes the page draws (Pepe's DJ booth, the 📼 player, a player) before the Dock starts
+  // 1.99ajy dockmedia: extra.setup(parts) adds nodes the page draws (Pepe's DJ booth, the 📼 player, a player) before the Dock starts
   if(extra.setup)extra.setup({doc,win,make,root,panel,stage,player,vid,body,main:main2,side,ppl,chat,calls,Event});
   const timers=new Map();let seq=0;const sandbox={window:win,document:doc,setTimeout:f=>{timers.set(++seq,f);return seq;},clearTimeout:i=>timers.delete(i),Promise,JSON,Date};
   if(extra.bus)vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../../public/js/dock-link.js'),'utf8'),sandbox);

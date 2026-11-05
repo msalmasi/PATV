@@ -37,7 +37,7 @@ main.rm.rm-dock.rmd-home #rmStage .stabs { margin: 0; }
 main.rm.rm-dock.rmd-home #rmStage .rmd-front-chip { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto; background: var(--ds-media-panel); border-color: var(--ds-ac-line); color: var(--ds-text-strong); }
 /* off air: the 44px slim bar [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff); the chat takes the width */
 main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }
-/* (1.99?? dockmedia (owner item 3): the Dock's 🖥️ fullscreen fills the screen here too - the card's 16:9 / 560px cap and its border (above, and the
+/* (1.99ajy dockmedia (owner item 3): the Dock's 🖥️ fullscreen fills the screen here too - the card's 16:9 / 560px cap and its border (above, and the
    60svh cap at 761-1023px) followed the stage into .rmd-fullscreen, the same <main>, and beat pad-dock.css's .rmd-full-media rule by load order.
    (1,4,1) only while the stage is in fullscreen; never by rescoping the card rule to #hmDock > #rmStage - (2,3,1) would beat the off-air bar's
    aspect-ratio: auto above and grow the 44px slim bar to 16:9) */

@@ -30,7 +30,7 @@
   // it) - casino-chat.js reads it there, at most 2 minutes later. EMBED_PATH = the only pages that may frame the chat (casino tables).
   var FOLLOW_KEY = 'patv.chat.follow', EMBED_PATH = /^\/casino\/(?:blackjack|holdem)\/t\/[0-9a-f]{10}$/;
   // the icons the Dock's own controls use (a proxied menu item that brings one of them shows • instead: one meaning per icon)
-  var DOCK_ICONS = Object.keys(IC).map(function (k) { return IC[k].replace(/\uFE0F/g, ''); }).concat(['📸', '🎬', '✂', '▶', '🎦', '⬇', '📅', '📜', '🔍', '👥', '🎚', '💬', '📌', '🎥', '🗓', '🎫', '🚀', '⏯', '🔉', '🔇', '🎶']);   // (1.99?? dockmedia: + ⏯ 🔉 🔇 - the stage's own media controls - and 🎶 Now playing)
+  var DOCK_ICONS = Object.keys(IC).map(function (k) { return IC[k].replace(/\uFE0F/g, ''); }).concat(['📸', '🎬', '✂', '▶', '🎦', '⬇', '📅', '📜', '🔍', '👥', '🎚', '💬', '📌', '🎥', '🗓', '🎫', '🚀', '⏯', '🔉', '🔇', '🎶']);   // (1.99ajy dockmedia: + ⏯ 🔉 🔇 - the stage's own media controls - and 🎶 Now playing)
   /** a proxied label's leading emoji (the Dock draws its own icon): "🎬 1/2 slots in use" -> "1/2 slots in use" */
   function noIcon(s) { try { return String(s || '').replace(/^(?:\p{Extended_Pictographic}\uFE0F?\s*)+/u, ''); } catch (e) { return String(s || ''); } }
   // 1.99ajf dockclean (owner point 17): the Apps sheet - the room's games and tools, each only when Pepe offers it here (d.room.cmds).
@@ -39,7 +39,7 @@
   // (1.99ajq dockpol (owner item 26): 💲 Showdown STARTS the price game - !guess only joins a running one. The tile inserts '!showdown' where
   // Pepe's web relay offers it, else '!pricegame', the relay's allowed name for the same handler - and shows the one it inserts (appList);
   // !guess stays typeable)
-  // (1.99?? dockmedia (owner item 5): '!showdown' is the tile's own command now - Pepe's web relay allows it (pepe_relaycmd.py CMD_ALLOW);
+  // (1.99ajy dockmedia (owner item 5): '!showdown' is the tile's own command now - Pepe's web relay allows it (pepe_relaycmd.py CMD_ALLOW);
   // '!pricegame' is only the fallback for an older Pepe whose relay lists just that name)
   var APPS = [['!spin', '🎡', 'spin', 'Spin', 0], ['!heist', '💰', 'heist', 'Heist', 1], ['!duel', '⚔️', 'duel', 'Duel', 1], ['!brawl', '🥊', 'brawl', 'Brawl', 1],
     ['!arena', '🏟️', 'arena', 'Arena', 1], ['!bj', '🃏', 'bj', 'Blackjack', 1], ['!holdem', '♠️', 'holdem', 'Hold’em', 1], ['!pictionary', '🎨', 'pictionary', 'Pictionary', 0],
@@ -216,7 +216,7 @@
       if (W.PATVAvSync && W.PATVAvSync.surfaceChanged) W.PATVAvSync.surfaceChanged(node('rmFeed'));
       if (o.wake) o.wake();
       if (W.PATVChipFit && W.PATVChipFit.run) W.PATVChipFit.run();
-      paintFull(); paintMedia();      // (1.99?? dockmedia: a cam on my stage / back - the bar's media controls follow)
+      paintFull(); paintMedia();      // (1.99ajy dockmedia: a cam on my stage / back - the bar's media controls follow)
       // (1.99ajh dockpop: the stage takes the freed height while the chat floats or is in its own window; body.rmd-afloat keeps a person
       // menu opened from the floating chat in its Dock look on Feed / About)
       var afloat = !!(current && current.kind === 'float');
@@ -508,7 +508,7 @@
       if (floatMin) setMin(true); else changed();
     }
     function full(n) {
-      // (1.99?? dockmedia verify: iPhone Safari has no element fullscreen - the stage's player goes fullscreen itself, as video.js's own ⛶ did
+      // (1.99ajy dockmedia verify: iPhone Safari has no element fullscreen - the stage's player goes fullscreen itself, as video.js's own ⛶ did
       // (video.js -> the <video>'s webkitEnterFullscreen; the ⚡ <video> directly); anything else says it can't, as before)
       if (n && n === stage && !(D.documentElement && D.documentElement.requestFullscreen) && nativeFull()) return;
       redock(); if (!n) return;
@@ -519,7 +519,7 @@
       host.appendChild(media); host.appendChild(overlay);
       current = { kind: 'full', host: host, moves: [], focus: D.activeElement };
       current.moves.push(movable(n, media, t('media_away', 'The player is in another view.')));
-      // (1.99?? dockmedia verify: the toggle's NAME follows its words - "Hide chat" read as "Show chat, pressed" was a label-in-name miss; the
+      // (1.99ajy dockmedia verify: the toggle's NAME follows its words - "Hide chat" read as "Show chat, pressed" was a label-in-name miss; the
       // state rides on data-rmd-on, the words say it)
       var toggle = button('💬', 'show_chat', 'Show chat', function () {
         if (overlay.hidden) {
@@ -886,7 +886,7 @@
     function dj() { var n = node('rdj'); return n && !n.classList.contains('hide') ? n : null; }
     // (1.99ajq dockpol fix (review, item 26): the 💲 Showdown tile shows the command it puts in the composer - '!showdown' once Pepe's web relay
     // offers that name (it lists exactly what it lets through), until then '!pricegame', the same game's allowed alias)
-    // (1.99?? dockmedia (owner item 5): '!showdown' first - the relay offers it from this release on; '!pricegame' only where an older Pepe
+    // (1.99ajy dockmedia (owner item 5): '!showdown' first - the relay offers it from this release on; '!pricegame' only where an older Pepe
     // lists just that name)
     function appList() {
       return APPS.map(function (a) {
@@ -930,13 +930,13 @@
       }
       box.appendChild(el('p', 'ds-fine rmd-apps-f', t('apps_more', 'Type ! in the chat for every command'), doc));
     }
-    // (1.99?? dockmedia (owner item 1): opts.expand - from the Now playing card: no "‹ Chat apps" (it didn't come from there) and the booth
+    // (1.99ajy dockmedia (owner item 1): opts.expand - from the Now playing card: no "‹ Chat apps" (it didn't come from there) and the booth
     // OPEN (its own ▾ toggle, proxied; closed again on the way out if the Dock opened it - patvDjOpen ends where it was))
     function djSheet(opener, opts) {
       opts = opts || {};
       var box = sheet(t('dj_title', '🎧 DJ'), opener), doc = box.ownerDocument, booth = dj();
       layer.kind = 'dj';
-      // (1.99?? dockmedia verify: from the Now playing header the sheet starts on its top - the booth's song search is 🔎 Request's, which
+      // (1.99ajy dockmedia verify: from the Now playing header the sheet starts on its top - the booth's song search is 🔎 Request's, which
       // focuses it itself; a phone's keyboard never pops up for a look at the booth)
       if (opts.expand && !opts.request) layer.noField = true;
       if (!opts.expand) {
@@ -964,13 +964,13 @@
         var g3 = el('div', 'rmd-apps', null, doc); staffList.forEach(function (a) { appTile(g3, a, doc); }); box.appendChild(g3);
       }
     }
-    // ── 1.99?? dockmedia (owner item 1): 🎶 Now playing - Pepe's DJ (#rdj, room-dj.js) and the 📼 Plex player (#rmPlexQ, pad-plexq.js) while
+    // ── 1.99ajy dockmedia (owner item 1): 🎶 Now playing - Pepe's DJ (#rdj, room-dj.js) and the 📼 Plex player (#rmPlexQ, pad-plexq.js) while
     // either plays on this pad. 1024px and wider: a card at the top of the people column (the list shortens, pad-dock.css); narrower: a 40px
     // bar under the stage that opens the same controls in a sheet. The ORIGINAL nodes move in (their handlers, prices, votes and server
     // checks stay theirs; nothing new is fetched); destroy() puts them back. Nothing shows while nothing plays - a booth that says "Nothing
     // playing right now." or offline (data-np idle / offline / off) is not playing; a paused track or a Plex queue between titles is. ──
     var np = null;
-    // (1.99?? dockmedia verify: the booth answers every press in #rdjSay - "Sending to Pepe…", the vote count, a refusal - and that line lives in
+    // (1.99ajy dockmedia verify: the booth answers every press in #rdjSay - "Sending to Pepe…", the vote count, a refusal - and that line lives in
     // the full booth. While the booth is compact in the card / the Now playing sheet the line sits right under its controls (the same node,
     // its role=status with it), and goes back into the full booth when that opens)
     var sayMark = null;
@@ -1311,7 +1311,7 @@
       return s;
     }
     /** an amount field + presets; the primary button says the amount, and a million or more asks once more (as the duel sheet) */
-    // (1.99?? dockmedia (owner item 4): `labels` - {field, group, sure} - a bounty's amount is its REWARD, not a stake; the wager and the
+    // (1.99ajy dockmedia (owner item 4): `labels` - {field, group, sure} - a bounty's amount is its REWARD, not a stake; the wager and the
     // duel / brawl forms keep "Stake in PAT". The amount checks' own words (stake_bad / stake_big) are neutral and stay)
     function stakeField(doc, form, go, verbKey, verb, presets, start, labels) {
       var L = labels || {}, fieldL = L.field || t('stake_custom', 'Stake in PAT');
@@ -1737,7 +1737,7 @@
       finishMenu(box, opener);
     }
     function tabs() { var n = node('rmTabs'); return n ? Array.prototype.slice.call(n.querySelectorAll('.stab')) : []; }
-    // (1.99?? dockmedia verify: a stage tab is <span class="n">name</span><span class="src">YouTube</span> - read as "name · YouTube"; its text
+    // (1.99ajy dockmedia verify: a stage tab is <span class="n">name</span><span class="src">YouTube</span> - read as "name · YouTube"; its text
     // alone ran them together, and the embed row shows the chip all the time)
     function tabLabel(tb) {
       var n = tb && tb.querySelector && tb.querySelector('.n'), sc = tb && tb.querySelector && tb.querySelector('.src');
@@ -1800,7 +1800,7 @@
     function stageMenu(opener) {
       var box = menu(opener, t('stage_menu', 'Stage options'));
       var ll = lowlat();
-      // (1.99?? dockmedia verify: a stage under 480px wide has no room for 📸 / 🎬 beside the source chip (pad-dock.css folds them) - they are
+      // (1.99ajy dockmedia verify: a stage under 480px wide has no room for 📸 / 🎬 beside the source chip (pad-dock.css folds them) - they are
       // here then, the same controls)
       [[snapBtn, '📸', 'snap', 'Snap'], [clipBtn, '🎬', 'clip_stage', 'Clip']].forEach(function (x) {
         var b = x[0]; if (!b || b.hidden || b.getClientRects().length || !stage || !stage.getClientRects().length) return;
@@ -1809,7 +1809,7 @@
       });
       if (ll) menuItem(box, '⚡', 'lowlat', 'Low latency', function () { ll.click(); }, { role: 'menuitemcheckbox', checked: ll.getAttribute('aria-pressed') === 'true', tip: ll.title });
       menuItem(box, IC.pip, 'pip_stage', 'Picture-in-picture', function () { pop(stageMedia()); });
-      // (1.99?? dockmedia (item 2e): a video.js stream that carries captions / subtitles gets the switch video.js's own bar had - 🔤, since 💬
+      // (1.99ajy dockmedia (item 2e): a video.js stream that carries captions / subtitles gets the switch video.js's own bar had - 🔤, since 💬
       // is Show chat; none of today's streams (OBS, mediactl HLS) carry text tracks)
       var cc = captionTracks();
       if (cc.length) menuItem(box, '🔤', 'captions', 'Captions', function () { var showing = cc.some(function (x) { return x.mode === 'showing'; }); cc.forEach(function (x, i) { x.mode = !showing && i === 0 ? 'showing' : 'disabled'; }); }, { role: 'menuitemcheckbox', checked: cc.some(function (x) { return x.mode === 'showing'; }) });
@@ -1820,7 +1820,7 @@
       if (sched || upnext) menuItem(box, '🗓️', 'schedule', 'Stage schedule…', function () { scheduleSheet(opener); });
       // 1.99ajw casino2: start a play from the room (users the /stage rules allow; staff keep ▶️ Play content here below)
       if (o.plexPlay && W.PATVPlexPlay && mode === 'pad') menuItem(box, '📼', 'plex_play', 'Play from Plex…', function () { plexSheet(opener); });
-      // (1.99?? dockmedia (owner item 1): no "📼 Plex queue & controls…" here - the Now playing card (1024px and wider) or bar is its one place)
+      // (1.99ajy dockmedia (owner item 1): no "📼 Plex queue & controls…" here - the Now playing card (1024px and wider) or bar is its one place)
       var mbtn = stage && stage.querySelector('.mf-mbtn'), clear = stage && stage.querySelector('.mf-clear'), rep = stage && stage.querySelector('.mf-rbtn');
       if (rep && !rep.hidden) menuItem(box, '⚑', 'mf_report', 'Report someone on the mic stage…', function () { external(function () { rep.click(); }); });
       if ((mbtn && !mbtn.hidden) || (clear && !clear.hidden)) menuGroup(box, 'g_managers', 'Managers');
@@ -1833,7 +1833,7 @@
     // /stage runs (plex-play.js) in a Dock sheet, for THIS pad: search, pick, scope, start point, quality, audio, subtitles, the price and
     // its confirm. The server has the last word (medialib / mediaqueue: Plex members, the override list, staff, the pad's slot rules and
     // limit, the daily caps, the encoder); a refusal shows in the sheet. Book it for later stays on /stage (linked). After a start the stage
-    // picks the slot up and the 🎶 Now playing card / bar shows it (1.99?? dockmedia). o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
+    // picks the slot up and the 🎶 Now playing card / bar shows it (1.99ajy dockmedia). o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
     function plexSheet(opener) {
       var pp = o.plexPlay; if (!pp || !W.PATVPlexPlay) return;
       external(function () {
@@ -1908,7 +1908,7 @@
       // (keyboard focus keeps it up; a mouse click that left focus on a button doesn't pin it)
       var a = doc.activeElement, kb = false;
       try { kb = !!(a && a.matches && a.matches(':focus-visible')); } catch (e) { kb = true; }
-      // (1.99?? dockmedia verify: + a paused stream - video.js kept its bar up while paused; a frozen frame with nothing on it reads as a stall)
+      // (1.99ajy dockmedia verify: + a paused stream - video.js kept its bar up while paused; a frozen frame with nothing on it reads as a stall)
       return overBar || (kb && ovTop && (ovTop.contains(a) || ovBot.contains(a))) || !!(layer && layer.overlay) || stage.classList.contains('rmd-paused');
     }
     // The overlay shows (rmd-controls-on: opacity) and takes taps (rmd-ov-armed: only its own buttons, never the whole bar - the mic
@@ -1927,7 +1927,7 @@
     }
     function hideTools() { clearTimeout(autoTimer); if (!overlayHot()) offTools(); }
 
-    // ── 1.99?? dockmedia (owner item 2): the overlay and the player's own controls never overlap ──
+    // ── 1.99ajy dockmedia (owner item 2): the overlay and the player's own controls never overlap ──
     // Decision (per source): the players the site draws - video.js HLS (Pepe's stream, an HLS slot, Plex - an HLS slot) and the ⚡ WebRTC
     // <video> - run WITHOUT their native controls in the Dock (stage-player.js / stage-lowlat.js read PATVStage.nativeControls; the cam-slot
     // WHEP video never had any) and the Dock's bottom bar carries ⏯ / 🔉 + volume / LIVE; fullscreen stays 🖥️, picture-in-picture the
@@ -2061,7 +2061,7 @@
       slimText = el('span', 'rmd-slim-t'); slimText.appendChild(el('span', 'rmd-slim-a', t('nothing_on', 'Nothing on stage right now')));
       if (mode === 'preview' && pv.nextUp) { var sep = el('span', 'rmd-slim-sep', ' · '); sep.setAttribute('aria-hidden', 'true'); slimText.appendChild(sep); slimText.appendChild(el('span', 'rmd-slim-b', pv.nextUp)); }
       ovTop.appendChild(slimText);
-      // (1.99?? dockmedia (owner item 2): [⏯][🔉][volume][LIVE] first - only while the Dock drives the player, paintMedia)
+      // (1.99ajy dockmedia (owner item 2): [⏯][🔉][volume][LIVE] first - only while the Dock drives the player, paintMedia)
       ovBot.appendChild(buildMedia());
       srcHost = el('span', 'rmd-src-host'); ovBot.appendChild(srcHost);
       ovBot.appendChild(el('span', 'rmd-ov-gap'));
@@ -2103,7 +2103,7 @@
       on(stage, 'pointerleave', function () { clearTimeout(autoTimer); autoTimer = setTimeout(function () { if (!overlayHot()) offTools(); }, HIDE_MS); });
       on(stage, 'focusin', function () { showTools(); });
       on(stage, 'patv:stagechange', function (e) { stageChanged(e.detail); paintSource(); paintCapture(); paintMedia(); });
-      // (1.99?? dockmedia (owner item 2): a player the stage starts later gets its native controls turned off too; the bar follows the source,
+      // (1.99ajy dockmedia (owner item 2): a player the stage starts later gets its native controls turned off too; the bar follows the source,
       // the embed and the tap-to-unmute layer)
       observe(node('rmVideo'), function () { nativeOff(); paintMedia(); }, { childList: true, subtree: true });
       observe(node('rmEmbed'), paintMedia, { childList: true, attributes: true, attributeFilter: ['class'] });
@@ -2127,7 +2127,7 @@
       if (strip) { stage.appendChild(strip); strip.classList.add('rmd-strip'); }
       observe(node('rmCap'), paintCapture, { childList: true, subtree: true, attributes: true });
       observe(srcBox, paintSource, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected', 'class'] });
-      // (1.99?? dockmedia: no native controls in the Dock - the players read the flag when they start; the ones already running are told)
+      // (1.99ajy dockmedia: no native controls in the Dock - the players read the flag when they start; the ones already running are told)
       var PS = W.PATVStage = W.PATVStage || {};
       if (typeof PS.setNativeControls === 'function') PS.setNativeControls(false); else PS.nativeControls = false;
       nativeOff(); paintMedia();
@@ -2675,7 +2675,7 @@
       ready = true; stage = node('rmStage'); chat = node('rmChat'); strip = node('rmStrip'); compose = node('rmCompose');
       panel = node('padPanel-live'); template = node('rmdId');
       side = root.querySelector('.rm-live > .side'); if (side) side.classList.add('rmd-side');
-      buildNp();      // (1.99?? dockmedia (owner item 1): Pepe's DJ / the 📼 Plex player, while either plays - the pad page only)
+      buildNp();      // (1.99ajy dockmedia (owner item 1): Pepe's DJ / the 📼 Plex player, while either plays - the pad page only)
       // 1.99ajh dockpop: the window is the chat card alone (no stage, header, strip or tabs); the homepage has no pad header, strip or tabs
       if (mode === 'pad') buildHeader();
       if (stage && mode !== 'popout') buildStage();
@@ -2758,7 +2758,7 @@
       // 1.99ajq dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking
       toast: function (text, opts) { return chatToast(text, opts); }, cmd: cmdToast, talking: talking,
       destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); });
-        // (1.99?? dockmedia: the booth back before .rm-live, the 📼 player back into #rmGoLive - where the page drew them)
+        // (1.99ajy dockmedia: the booth back before .rm-live, the 📼 player back into #rmGoLive - where the page drew them)
         if (np) { if (sayMark && sayMark.parentNode) { sayMark.parentNode.insertBefore(node('rdjSay'), sayMark); sayMark.remove(); } sayMark = null; np.moves.slice().reverse().forEach(restore); np.card.remove(); if (np.bar) np.bar.remove(); np = null; } clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
     };
   }

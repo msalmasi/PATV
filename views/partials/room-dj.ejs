@@ -32,7 +32,7 @@
   .rdj button.b { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: var(--ds-text);
                   font: inherit; font-size: 13px; cursor: pointer; min-height: 36px; }
   .rdj button.b:hover:not(:disabled, [aria-disabled="true"]), .rdj button.b:focus-visible { border-color: #8e5bd8; background: #1f1730; }
-  .rdj button.b:is(:disabled, [aria-disabled="true"]) { opacity: .5; cursor: default; }   /* (1.99?? dockmedia verify: busy = aria-disabled, it keeps focus) */
+  .rdj button.b:is(:disabled, [aria-disabled="true"]) { opacity: .5; cursor: default; }   /* (1.99ajy dockmedia verify: busy = aria-disabled, it keeps focus) */
   .rdj button.b.go { background: #2a1a45; border-color: #6c45a8; color: #f1e6ff; font-weight: bold; }
   .rdj button.b small { color: #aaa; font-weight: normal; }
   .rdj button.b.go small { color: #d6c2f2; }
@@ -177,4 +177,4 @@
   </div>
   </div>
 </section>
-<script src="/public/js/room-dj.js?v=6" defer></script><%# 1.99?? dockmedia: v5 - data-np (what the booth shows), the controls' icon / words spans, Auto-DJ in the compact bar for DJ admins, the cancelable Request; v6 (verify) - focus kept across a rebuild, busy = aria-disabled %>
+<script src="/public/js/room-dj.js?v=6" defer></script><%# 1.99ajy dockmedia: v5 - data-np (what the booth shows), the controls' icon / words spans, Auto-DJ in the compact bar for DJ admins, the cancelable Request; v6 (verify) - focus kept across a rebuild, busy = aria-disabled %>

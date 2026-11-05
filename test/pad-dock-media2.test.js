@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? dockmedia (the owner's 2026-11-04 media points): the Room Dock's 🎶 Now playing card / bar (Pepe's DJ booth + the 📼 Plex player
+// 1.99ajy dockmedia (the owner's 2026-11-04 media points): the Room Dock's 🎶 Now playing card / bar (Pepe's DJ booth + the 📼 Plex player
 // moved in), the stage's own media controls (no native player controls under the Dock's bar; a solid row under an embed), the players'
 // nativeControls flag, room-dj.js's data-np / icon + words / cancelable Request, the homepage fullscreen and the Bounty's Reward.
 //   node --test test/pad-dock-media2.test.js
@@ -359,7 +359,7 @@ test("item 4: ＋ › Create › Bounty… - Reward in PAT (never Stake); the wa
   assert.match(h.doc.querySelector(".rmd-layer").textContent, /Stake in PAT/);
 });
 
-// ── 1.99?? dockmedia verify: the review fixes ──
+// ── 1.99ajy dockmedia verify: the review fixes ──
 test("verify: the booth's answer line (#rdjSay) sits under its compact controls in the card, goes back into the full booth in the DJ sheet and on destroy()", () => {
   const log = [];
   let B, say;

@@ -48,14 +48,14 @@
     if (!last || !last.on) return;
     var p = pos(), d = last.duration || 0;
     var el = box.querySelector('.pq-times');
-    // (1.99?? dockmedia: the time left is its own span - the Room Dock's Now playing card shows "now / length" on the button row)
+    // (1.99ajy dockmedia: the time left is its own span - the Room Dock's Now playing card shows "now / length" on the button row)
     if (el) el.innerHTML = '<span>' + hms(p) + '</span><span class="muted">' + (d ? '<span class="pq-left">−' + hms(d - p) + ' · </span><span class="pq-len">' + hms(d) + '</span>' : '') + '</span>';
     var r = box.querySelector('.pq-scrub');
     if (r && !dragging) { r.value = Math.floor(p); r.setAttribute('aria-valuetext', hms(p)); }
     var bar = box.querySelector('.pq-bar span');
     if (bar) bar.style.width = (d ? Math.min(100, 100 * p / d) : 0).toFixed(2) + '%';
   }
-  // 1.99?? dockmedia: a control that had keyboard focus keeps it across a redraw (the box is rewritten when what it shows changes - the
+  // 1.99ajy dockmedia: a control that had keyboard focus keeps it across a redraw (the box is rewritten when what it shows changes - the
   // Room Dock's Now playing card keeps it on screen, so a Tab to ⏹ must not fall to <body> on the next poll); ⏸ / ▶ are one control
   function focusKey() {
     var a = document.activeElement; if (!a || a === box || !box.contains(a)) return null;
@@ -74,8 +74,8 @@
     box.hidden = !j.on;
     if (!j.on) { box.innerHTML = ''; lastH = ''; box.removeAttribute('data-state'); return; }
     var q = j.queue, can = j.can_control, paused = j.state === 'paused', d = j.duration || 0;
-    box.setAttribute('data-state', paused ? 'paused' : j.state === 'waiting' ? 'waiting' : 'playing');   // (1.99?? dockmedia: for the Dock's card header)
-    // (1.99?? dockmedia: each part of the line is its own span - pq-pos / pq-st / pq-by - and 📼 its own (aria-hidden): the Dock's card shows the
+    box.setAttribute('data-state', paused ? 'paused' : j.state === 'waiting' ? 'waiting' : 'playing');   // (1.99ajy dockmedia: for the Dock's card header)
+    // (1.99ajy dockmedia: each part of the line is its own span - pq-pos / pq-st / pq-by - and 📼 its own (aria-hidden): the Dock's card shows the
     // title on one line under its own 📼 Plex header, the state in that header)
     var h = '<div class="pq-now"><b><span class="pq-ic" aria-hidden="true">📼 </span>' + esc(j.title || _t('js.plexq.starting', 'Starting…')) + '</b>' +
       (q ? ' <span class="muted pq-pos">· ' + esc(_t('js.plexq.pos', '{n} of {count}', { n: q.pos + 1, count: q.count })) + '</span>' : '') +
@@ -86,9 +86,9 @@
       : '<div class="pq-bar" role="progressbar" aria-label="' + esc(_t('js.plexq.progress', 'Progress')) + '"><span></span></div>';
     h += '<div class="pq-times"></div>';
     if (can) {
-      // (1.99?? dockmedia: the group says whose playback it is - a Plex ⏸ pauses everyone's stage, the Dock's stage ⏯ only this viewer's)
+      // (1.99ajy dockmedia: the group says whose playback it is - a Plex ⏸ pauses everyone's stage, the Dock's stage ⏯ only this viewer's)
       h += '<div class="pq-ctl" role="group" aria-label="' + esc(_t('js.plexq.controls_all', 'Controls for everyone watching')) + '">' +
-        // (1.99?? dockmedia: ⏮ ⏸ ⏭ ⏹ together first, then the jumps - a narrow sheet puts −30 s … +30 s on a row of their own (pq-br), never ⏹ alone)
+        // (1.99ajy dockmedia: ⏮ ⏸ ⏭ ⏹ together first, then the jumps - a narrow sheet puts −30 s … +30 s on a row of their own (pq-br), never ⏹ alone)
         (q ? '<button type="button" class="sact" data-q="prev"' + (q.pos > 0 ? '' : ' disabled') + ' aria-label="' + esc(_t('js.plexq.prev_aria', 'Previous title')) + '">⏮</button>' : '') +
         (paused ? '<button type="button" class="sact primary" data-q="resume" aria-label="' + esc(_t('js.plexq.resume', '▶ Resume')) + '">▶</button>'
                 : '<button type="button" class="sact" data-q="pause" aria-label="' + esc(_t('js.plexq.pause', '⏸ Pause')) + '">⏸</button>') +
@@ -115,7 +115,7 @@
           esc(l.username || '?') + ' ' + esc(ACTIONS[l.action] || l.action) + (l.detail ? ' <span class="muted">' + esc(l.detail) + '</span>' : '') + '</li>';
       }).join('') + '</ul></details>';
     }
-    // (1.99?? dockmedia: the same markup is not written again - nothing moves under a pointer or a keyboard; an action always redraws (act))
+    // (1.99ajy dockmedia: the same markup is not written again - nothing moves under a pointer or a keyboard; an action always redraws (act))
     if (h === lastH && box.firstChild) { drawTimes(); return; }
     lastH = h;
     var openQ = box.querySelector('details.pq-q'), openL = box.querySelector('details.pq-log');
@@ -136,7 +136,7 @@
     }).catch(function () { box.hidden = true; });
   }
   function say(t) { var m = box.querySelector('.pq-msg'); if (m) m.textContent = t || ''; }
-  // (1.99?? dockmedia: a pressed control is aria-disabled while it works, not disabled - a disabled button drops keyboard focus to <body>)
+  // (1.99ajy dockmedia: a pressed control is aria-disabled while it works, not disabled - a disabled button drops keyboard focus to <body>)
   function act(url, body, btn) {
     busy = true; lastH = '';
     if (btn) btn.setAttribute('aria-disabled', 'true');

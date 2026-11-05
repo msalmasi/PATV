@@ -157,7 +157,7 @@
     return { stats: function () { return { rebuffers: st.rebuffers, jumps: st.jumps, margin: st.margin, rate: st.rate, lead: st.lead, low: st.low, td: st.td }; } };
   }
 
-  // 1.99?? dockmedia (owner item 2): the Room Dock draws its own play / pause / volume / LIVE bar - PATVStage.nativeControls === false (set by
+  // 1.99ajy dockmedia (owner item 2): the Room Dock draws its own play / pause / volume / LIVE bar - PATVStage.nativeControls === false (set by
   // pad-dock.js before its players start; setNativeControls(on) tells the running ones) leaves video.js's control bar off: no bar under the
   // Dock's, no click-to-pause, no second fullscreen. Everywhere else (/stage, a pad without the Dock) the default is ON, as before.
   var running = [];
@@ -245,7 +245,7 @@
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.player = player;
   window.PATVStage.liveSync = liveSync;
-  window.PATVStage.setNativeControls = setNativeControls;      // 1.99?? dockmedia
+  window.PATVStage.setNativeControls = setNativeControls;      // 1.99ajy dockmedia
   window.PATVStage._pt = { withPt: withPt, notePt: notePt, addQ: addQ };   // tests
   window.PATVStage._nativeHls = nativeHls;
   window.PATVStage._live = { step: liveStep, state: liveState, rebuffered: rebuffered, LIVE: LIVE };   // tests

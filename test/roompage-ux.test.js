@@ -144,7 +144,7 @@ test("DJ booth: collapsed by default - the compact bar, an expand toggle wired t
   const full = html.slice(html.indexOf('id="rdjFull"'), html.indexOf("</section>", html.indexOf('id="rdjFull"')));
   for (const id of ["rdjQueue", "rdjVibe", "rdjSo", "rdjAdmin", "rdjFind"]) assert.match(full, new RegExp('id="' + id + '"'), id + " is in the full booth");
   assert.match(html, /\.rdj\.collapsed \.full \{ display: none; \}/);
-  assert.match(html, /room-dj\.js\?v=6/);   // 1.99bz vibe votes bumped the cache-buster; 1.99?? dockmedia: v5 (data-np, icon / words spans, Auto-DJ in the compact bar, the cancelable Request); v6 (verify: focus kept across a rebuild)
+  assert.match(html, /room-dj\.js\?v=6/);   // 1.99bz vibe votes bumped the cache-buster; 1.99ajy dockmedia: v5 (data-np, icon / words spans, Auto-DJ in the compact bar, the cancelable Request); v6 (verify: focus kept across a rebuild)
   const js = fs.readFileSync(path.join(repo, "public", "js", "room-dj.js"), "utf8");
   assert.match(js, /patvDjOpen/);
   assert.match(js, /try \{ localStorage\.setItem/);
