@@ -446,7 +446,10 @@ async function capture(user, req, { room, stream, kind, secs, surface } = {}) {
 async function captureMic(u, req, R, kind, secs, surface) {
   // review fix: the engine's gates (stagecap_mic, home surface, pad access, bridge permission, !snap / !clip) run before
   // anything is written - a refusal, and every request while the switch is off, costs no row and no cooldown.
-  await micEngine().gate(R, u, kind, surface, { live: true });   // review fix 2: + Pepe live (the engine's start checks it too)
+  // audiogate2: + the request's network (memory only, with the job): a clip records the room audio, which a network ban stops
+  let net = null;
+  try { net = req ? require("./netban").reqNet(req) : null; } catch (_) { net = null; }
+  await micEngine().gate(R, u, kind, surface, { live: true, net });   // review fix 2: + Pepe live (the engine's start checks it too)
   const want = kind === "clip" ? ([10, 20, 30].includes(Number(secs)) ? Number(secs) : CLIP_DEFAULT) : 0;
   const id = "c" + crypto.randomBytes(10).toString("hex"), t = NOW();
   const cap = { id, source: "mic", kind: kind === "clip" ? "clip" : "photo" };
@@ -466,7 +469,7 @@ async function captureMic(u, req, R, kind, secs, surface) {
   if (req) { try { auditCtx.set(id, require("./contentaudit").fromRequest(req)); } catch (_) { /* optional audit context */ } }
   let job;
   try {
-    job = await micEngine().start({ id, R, user: u, kind, secs: want, surface, out: previewFile(cap), tmpDir: tmpDir() }, {
+    job = await micEngine().start({ id, R, user: u, kind, secs: want, surface, out: previewFile(cap), tmpDir: tmpDir(), net }, {
       cutting: () => runQuery("UPDATE stage_captures SET state = 'cutting', updated = ? WHERE id = ? AND state = 'recording'", [NOW(), id])
     });
   } catch (e) {
@@ -523,9 +526,9 @@ async function failMic(c, message = MIC_TEXT.failed) {
   dropPreview(c);
   auditCtx.delete(c.id);
 }
-async function ensureMic(c) {
+async function ensureMic(c, { net = null } = {}) {
   if (!c || c.source !== "mic" || !["recording", "cutting", "preview", "saving"].includes(c.state)) return;
-  const why = await micEngine().recheck(c);
+  const why = await micEngine().recheck(c, { net });       // (audiogate2: net = the asking request's network, when there is one)
   if (!why) return;
   await failMic(c, MIC_TEXT.revoked);
   throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
@@ -961,7 +964,10 @@ function register(app, { addUser, isBotToken, noTimers }) {
       await init();
       const c = await row(req.params.id);
       if (!req.user || !c || c.user_id !== req.user.userId || !["preview", "saving"].includes(c.state)) return res.status(404).send("Not found.");
-      await ensureMic(c);
+      // audiogate2: a mic clip's preview plays the pad's room audio - a pad / bridge / network ban stops it (as an access loss does)
+      let net = null;
+      try { net = require("./netban").reqNet(req); } catch (_) { net = null; }
+      await ensureMic(c, { net });
       const p = previewFile(c);
       if (!fs.existsSync(p)) return res.status(410).send("Expired.");
       res.set("X-Content-Type-Options", "nosniff");

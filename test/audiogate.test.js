@@ -1076,3 +1076,61 @@ test("audiogate2: a ban that runs out lets them back in - nothing about it is re
     close(s);
   } finally { await clearBans(); }
 });
+
+test("audiogate2: a 🔊 mic-clip preview - a pad ban or a network ban refuses its view, audio and Post with the access loss's answer (no_access); Discard still works; lifted, it plays", async () => {
+  await bansReady();
+  const MC = require(path.join(repo, "micclip"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ag2-mc-")); MC._setDir(dir);
+  const id = "w00112233445566ff";
+  fs.writeFileSync(MC.fileOf(id), Buffer.from("fake-m4a-of-a-pad-mic-turn"));
+  MC._clips.set(id, { id, roomId: PADS.mem.id, slug: PADS.mem.slug, userId: U.eve.userId, username: U.eve.username, login: "bobcf", tx: "t2",
+                      state: "ready", status: "ok", done: Date.now(), ts: Date.now(), secs: 3, text: "the words", viewerOk: true, cost: 0, save: null });
+  const base2 = "/api/rooms/" + PADS.mem.slug + "/micclip/" + id;
+  const get = (p, ip) => fetch(base + p, { headers: H2(U.eve, ip) }).then(async (r) => ({ status: r.status, text: await r.text() }));
+  const jpost = (p, body = {}, ip) => fetch(base + p, { method: "POST", headers: Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, H2(U.eve, ip)), body: JSON.stringify(body) })
+    .then(async (r) => ({ status: r.status, d: await r.json().catch(() => null) }));
+  try {
+    assert.equal((await get(base2 + "/audio")).status, 200);
+    await padBan(U.eve, PADS.mem);
+    const au = await get(base2 + "/audio"), vw = await get(base2), sv = await jpost(base2 + "/save");
+    assert.deepEqual([au.status, vw.status, sv.status], [403, 403, 403]);
+    assert.ok(!vw.text.includes("the words"));
+    assert.equal(JSON.parse(au.text).code, "no_access");
+    assert.equal(sv.d.code, "no_access");
+    await padUnban(U.eve, PADS.mem);
+    assert.equal((await get(base2 + "/audio")).status, 200, "lifted: it plays");
+    // a network ban too
+    await NB.setOn(U.staff, true);
+    await NB.banTyped(U.staff, { ip: NET_A, scope: "pad", roomId: PADS.mem.id, days: 1 });
+    assert.equal((await get(base2 + "/audio", NET_A)).status, 403);
+    assert.equal((await get(base2 + "/audio", NET_B)).status, 200);
+    assert.equal((await jpost(base2 + "/discard", {}, NET_A)).status, 200, "they can still throw it away");
+  } finally { MC._clips.delete(id); await clearBans(); }
+});
+
+test("audiogate2: a mic-stage capture - the gate refuses a CLIP (the room audio) under a pad ban or a network ban with the access loss's \"denied\", never a snap (pictures only); the preview's recheck too; staff pass a network ban; lifted, it passes", async () => {
+  await bansReady();
+  const M = require(path.join(repo, "stagemiccap"));
+  const room = { id: PADS.mem.id };
+  M.configure({ config: () => ({ stagecap_mic: true }), killed: () => null, roomOff: () => null, eligibility: () => null, bridgeOk: () => true,
+    liveShown: () => true, full: async () => true, block: async () => null, clipSwitch: () => true,
+    account: async () => U.eve, resolveRoom: async () => room, people: async () => [], cards: async () => [], veiledPeople: async () => [] });
+  const netA = { ip: NET_A, hash: NB.netHash(NET_A) };
+  const cap = { id: "c0", user_id: U.eve.userId, room_id: room.id, kind: "clip" };
+  try {
+    await M.gate(room, U.eve, "clip", "pad");
+    assert.equal(await M.recheck(cap), null);
+    await padBan(U.eve, PADS.mem);
+    await assert.rejects(M.gate(room, U.eve, "clip", "pad"), (e) => e.refuse === true && e.message === M._test.MSG.denied);
+    await M.gate(room, U.eve, "snap", "pad");                 // a snap has no audio
+    assert.equal(await M.recheck(cap), M._test.MSG.revoked, "the preview's check (as an access loss)");
+    await padUnban(U.eve, PADS.mem);
+    await M.gate(room, U.eve, "clip", "pad");
+    await NB.setOn(U.staff, true);
+    await NB.banTyped(U.staff, { ip: NET_A, scope: "pad", roomId: PADS.mem.id, days: 1 });
+    await assert.rejects(M.gate(room, U.eve, "clip", "pad", { net: netA }), (e) => e.message === M._test.MSG.denied);
+    await M.gate(room, U.eve, "clip", "pad", { net: { ip: NET_B, hash: NB.netHash(NET_B) } });
+    assert.equal(await M.recheck(cap, { net: netA }), M._test.MSG.revoked);
+    await M.gate(room, U.staff, "clip", "pad", { net: netA });    // staff pass a network ban
+  } finally { M.configure(M._test.defaults); await clearBans(); }
+});

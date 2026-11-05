@@ -1060,3 +1060,31 @@ test("storage: stage_captures(media_id) is indexed and every media-id lookup (tr
   assert.match(await plan("DELETE FROM stage_capture_people WHERE capture_id IN (SELECT id FROM stage_captures WHERE media_id = ?)", ["m1"]),
     /USING INDEX stage_captures_media/);
 });
+
+// audiogate2 (listenban.js): a mic-stage CLIP records the pad's room audio - a pad ban / whole-bridge block / network ban stops it like an
+// access loss; a snap (pictures only) isn't touched
+test("audiogate2: a mic-stage clip carries the request's network into the engine (memory only); under a pad ban the capture route refuses a clip with the access loss's answer (a snap still works) and the clip's preview stops playing", async (t) => {
+  const f = await micJobs(t);
+  const NB = require(path.join(repo, "netban"));
+  await require(path.join(repo, "feedstore")).init();
+  SC._hits.clear();
+  const r = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10, surface: "pad" }, U.staff, H(U.staff, { "cf-connecting-ip": "198.51.100.7" }));
+  assert.equal(r.status, 200, r.d.error);
+  const j = f.jobs.get(r.d.capture.id);
+  assert.equal(j.opts.net && j.opts.net.hash, NB.netHash("198.51.100.7"), "the trusted address's network rides with the job");
+  j.finish();
+  const c = await waitCap(r.d.capture.id, "preview");
+  assert.equal((await fetch(base + "/api/stage/captures/" + c.id + "/preview", { headers: H(U.staff) })).status, 200);
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, by, at, until) VALUES (?, ?, ?, 'test', ?, NULL)", [U.staff.userId, ROOM.id, U.staff.username, Date.now()]);
+  try {
+    SC._hits.clear();
+    const refused = await post("/api/stage/capture", { room: ROOM.slug, stream: "mic", kind: "clip", secs: 10, surface: "pad" }, U.staff);
+    assert.equal(refused.status, 403);
+    assert.equal(refused.d.error, require(path.join(repo, "stagemiccap"))._test.MSG.denied);
+    SC._hits.clear();
+    const s = await snap(U.staff, "mic", { surface: "pad" });
+    assert.equal(s.status, 200, "a snap has no audio: " + s.d.error);
+    assert.equal((await fetch(base + "/api/stage/captures/" + c.id + "/preview", { headers: H(U.staff) })).status, 403, "the clip's preview");
+    await SC.discard(U.staff, s.d.capture.id).catch(() => {});
+  } finally { await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [U.staff.userId]); SC._hits.clear(); }
+});

@@ -74,6 +74,12 @@ let deps = {
   cards: async id => (await require("./dbUtils").getQuery("SELECT login FROM stage_capture_cards WHERE capture_id = ?", [id])).map(x => x.login),
   full: async (u, id) => { const p = require("./padaccess"); await p.init(); return p.full(u, id); },
   block: (id, u, kind) => require("./bridgeblocks").refusal(id, u, kind),
+  // audiogate2 (listenban.js): a clip records the pad's room audio - a pad ban, a whole-bridge block or a network ban (net = the request's
+  // network, memory only) stops it like an access loss; a check that fails lets it through (no answer is not a no)
+  listenBan: async (id, u, net) => {
+    try { return !!(await require("./listenban").refusal({ roomId: id, user: u, net: net || null })); }
+    catch (_) { console.error("[stagemiccap] audiogate2: 1 ban check failed - let through"); return false; }
+  },
   clipSwitch: id => require("./bridge").clipSwitch(id), clipOffText: id => require("./bridge").clipOffText(id),
   liveShown: id => { try { const B = require("./bridge"), r = B._rooms.get(id); return !!r && B.isLiveShown(r); } catch (_) { return false; } },
   // review fix 2: the 💎 Prime Time Plus bridge perk alone (what bridge.bridgeOk asks; failing closed here) - no liveness in it
@@ -345,7 +351,7 @@ async function loadCovers(tiles) {
     try { t.cover = await coverFor({ avatar: t.coverUrl }); } catch (_) { t.cover = null; }
   }));
 }
-async function gate(R, user, kind, surface, { live = false } = {}) {
+async function gate(R, user, kind, surface, { live = false, net = null } = {}) {
   if (!R || !user || !user.userId) throw refuse("Sign in first.", 401);
   if (deps.config().stagecap_mic !== true) throw refuse("disabled");
   if (surface === "home") throw refuse("home");
@@ -359,6 +365,8 @@ async function gate(R, user, kind, surface, { live = false } = {}) {
   if (!(await deps.full(user, R.id))) throw refuse("denied");
   const block = await deps.block(R.id, user.userId, kind === "clip" ? "clips" : "snapshots");
   if (block) throw refuse(typeof block === "string" ? block : block.error || "unavailable");
+  // audiogate2: a clip is the room audio too - banned from hearing the pad, the access loss's answer (a snap is pictures only)
+  if (kind === "clip" && (await deps.listenBan(R.id, user, net))) throw refuse("denied");
   if (kind === "clip" && deps.clipSwitch(R.id) !== true) throw refuse(deps.clipOffText(R.id));
 }
 async function availability(R, user, surface, translate) {
@@ -370,10 +378,10 @@ async function availability(R, user, surface, translate) {
   }
   return view;
 }
-async function recheck(capture) {
+async function recheck(capture, { net = null } = {}) {
   try {
     const u = await deps.account(capture.user_id), R = await deps.resolveRoom(capture.room_id);
-    await gate(R, u, capture.kind === "clip" ? "clip" : "snap", "pad");
+    await gate(R, u, capture.kind === "clip" ? "clip" : "snap", "pad", { net });     // (audiogate2: + the asking request's network)
     // mic keep review: the name cards too - someone shown only by name who has gone private / hidden since the preview isn't published
     const drawn = await deps.people(capture.id), cards = await deps.cards(capture.id);
     // (1.99aid privacy controls V-1: a cam drawn under a frog name - still incognito, never published once they show by name)
@@ -686,7 +694,7 @@ async function sample(job) {
     const at = (deps.now() - job.started) / 1000;
     privateSample(job).catch(() => {});
     const user = await deps.account(job.user.userId);
-    await gate(job.R, user, job.kind, job.surface, { live: true });   // review fix 2: a recording needs Pepe live
+    await gate(job.R, user, job.kind, job.surface, { live: true, net: job.net });   // review fix 2: a recording needs Pepe live (audiogate2: + its network)
     const p = await programFor(job.R, user);
     if (!usable(p)) throw refuse("empty", 409);
     const current = new Map((await tilesFor(p, job.R, user, { covers: false })).map(t => [t.id, t]));   // (fix 3: no picture waits)
@@ -845,7 +853,7 @@ async function clip(job, hooks) {
     } catch (_) { audioEnded = true; chunks.push({ hm: null }); }
   };
   tap.end = () => { audioEnded = true; };
-  job.untap = deps.audioTap(job.R.id, tap, job.user);
+  job.untap = deps.audioTap(job.R.id, tap, job.user, { net: job.net || null });   // (audiogate2: a network ban ends the tap too)
   privateSample(job).catch(() => {});
   const elapsed = await new Promise(resolve => {
     let finished = false;
@@ -917,7 +925,7 @@ async function clip(job, hooks) {
 }
 async function start(opts, hooks = {}) {
   const { R, user } = opts, kind = opts.kind === "clip" ? "clip" : "snap", secs = [10, 20, 30].includes(Number(opts.secs)) ? Number(opts.secs) : 20;
-  await gate(R, user, kind, opts.surface, { live: true });   // review fix 2: a capture starts only while Pepe is live
+  await gate(R, user, kind, opts.surface, { live: true, net: opts.net });   // review fix 2: a capture starts only while Pepe is live
   const program = await programFor(R, user); if (!usable(program)) throw refuse("empty", 409);
   // 1.99ahq review fix 3 (FID-1): no picture here - a slow photo never delays the recording or opens a cam reader after a consent read
   // it outlasted (a snap loads its covers with its final frame, a clip at its cut: loadCovers)
@@ -941,7 +949,7 @@ async function start(opts, hooks = {}) {
   const done = Promise.resolve().then(() => kind === "snap" ? snap(job) : clip(job, hooks)).then(async info => {
     if (job.cancelled) throw refuse("failed", 409);
     const current = await deps.account(user.userId);
-    await gate(R, current, kind, job.surface);
+    await gate(R, current, kind, job.surface, { net: job.net });
     for (const login of info.people) if (!(await consent(login, current.userId))) throw refuse("revoked");
     for (const l of info.people) await deps.note(kind, R.id, l, user.userId);
     return info;

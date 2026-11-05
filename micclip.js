@@ -204,7 +204,16 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   // audiogate (review F4): the preview is the pad's room audio (and its 🎙 words) - its view, audio and Post answer to the same
   // audience rule as the live room (padaccess.full for who you are now + the pad's 💎 bridge perk), not only "your own clip": a
   // member removed from an Approved pad (or no longer its owner / staff) stops getting it. Discard (hear: false) still works.
-  const mine = (req, res, { hear = true } = {}) => {
+  // audiogate2 (listenban.js): + a pad ban, a whole-bridge block or a network ban on the clipper - the same answer as an access loss
+  // (no_access); a ban check that fails lets it play (no answer is not a no)
+  const NO_ACCESS = "You can't hear this pad's room any more.";
+  const listenBanned = async (req, roomId) => {
+    let net = null;
+    try { net = require("./netban").reqNet(req); } catch (e) { net = null; }
+    try { return !!(await require("./listenban").refusal({ roomId, user: req.user, net })); }
+    catch (e) { console.error("[micclip] audiogate2: 1 ban check failed - let in"); return false; }
+  };
+  const mine = async (req, res, { hear = true } = {}) => {
     const c = clips.get(String(req.params.id || ""));
     const R = bySlug(req.params.slug);
     if (!c || !R || c.roomId !== R.id || !req.user || c.userId !== req.user.userId) { res.status(404).json({ ok: false, error: "No such clip." }); return null; }
@@ -212,8 +221,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (hear) {
       let perk = true;
       try { perk = require("./bridge").bridgeOk(R.id); } catch (e) { perk = true; }
-      if (!perk || !require("./padaccess").full(req.user, R.id)) {
-        res.status(403).json({ ok: false, code: "no_access", error: "You can't hear this pad's room any more." });
+      if (!perk || !require("./padaccess").full(req.user, R.id) || (await listenBanned(req, R.id))) {
+        res.status(403).json({ ok: false, code: "no_access", error: NO_ACCESS });
         return null;
       }
     }
@@ -238,6 +247,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (aw) return res.status(aw.status).json({ ok: false, code: aw.code, error: aw.error });
       const blk = await require("./bridgeblocks").refusal(R.id, u.userId, "clips");      // 1.99zf: a bridge block on clips
       if (blk) return res.status(403).json({ ok: false, code: "blocked", error: blk, blocked: true, feature: "clips" });
+      // audiogate2: a preview is the pad's room audio - banned from hearing it (a pad ban, a network ban), nothing is asked of Pepe
+      if (await listenBanned(req, R.id)) return res.status(403).json({ ok: false, code: "no_access", error: NO_ACCESS });
       const tx = String((req.body || {}).tx || "");
       // CL3 (decision 13) + fix-up: the 🎙 line is looked up in the clipper's OWN view of the pad (access, the bridge perk, the
       // public floors, the hidden set and !transcripts off) - nothing outside it is looked at, so ONE answer covers a line that
@@ -328,37 +339,45 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 
   // 3. the requester's view + the audio
-  app.get("/api/rooms/:slug/micclip/:id", addUser, (req, res) => {
+  // (audiogate2: mine() is async now - its ban check; a throw answers 500 instead of escaping express 4)
+  const fail500 = (res, e, what) => { console.error("[micclip] " + what + ":", e && e.message); if (!res.headersSent) res.status(500).json({ ok: false, error: "Something went wrong." }); };
+  app.get("/api/rooms/:slug/micclip/:id", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const x = mine(req, res);
-    if (x) res.json(view(x.c, req.params.slug));
+    try {
+      const x = await mine(req, res);
+      if (x) res.json(view(x.c, req.params.slug));
+    } catch (e) { fail500(res, e, "view"); }
   });
-  app.get("/api/rooms/:slug/micclip/:id/audio", addUser, (req, res) => {
-    const x = mine(req, res);
-    if (!x) return;
-    const f = fileOf(x.c.id);
-    if (x.c.state !== "ready" || NOW() - x.c.done >= PREVIEW_TTL || !f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "That clip expired." });
-    res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex", "Cross-Origin-Resource-Policy": "same-origin" });
-    res.type("audio/mp4");
-    res.sendFile(f, { acceptRanges: true });
+  app.get("/api/rooms/:slug/micclip/:id/audio", addUser, async (req, res) => {
+    try {
+      const x = await mine(req, res);
+      if (!x) return;
+      const f = fileOf(x.c.id);
+      if (x.c.state !== "ready" || NOW() - x.c.done >= PREVIEW_TTL || !f || !fs.existsSync(f)) return res.status(410).json({ ok: false, error: "That clip expired." });
+      res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex", "Cross-Origin-Resource-Policy": "same-origin" });
+      res.type("audio/mp4");
+      res.sendFile(f, { acceptRanges: true });
+    } catch (e) { fail500(res, e, "audio"); }
   });
-  app.post("/api/rooms/:slug/micclip/:id/discard", addUser, express.json({ limit: "4kb" }), (req, res) => {
+  app.post("/api/rooms/:slug/micclip/:id/discard", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     if (!jsonOnly(req, res)) return;
-    const x = mine(req, res, { hear: false });       // (audiogate F4: throwing your own clip away needs no access)
-    if (!x) return;
-    if (x.c.save) return res.status(409).json({ ok: false, error: "It's being posted." });
-    // 1.99sh: discarding a request still in flight withdraws its job too (if Pepe hasn't taken it yet)
-    const j = relay._jobs.get(x.c.id);
-    if (j && j.state === "pending") relay._jobs.delete(x.c.id);
-    drop(x.c);
-    res.json({ ok: true });
+    try {
+      const x = await mine(req, res, { hear: false });       // (audiogate F4: throwing your own clip away needs no access)
+      if (!x) return;
+      if (x.c.save) return res.status(409).json({ ok: false, error: "It's being posted." });
+      // 1.99sh: discarding a request still in flight withdraws its job too (if Pepe hasn't taken it yet)
+      const j = relay._jobs.get(x.c.id);
+      if (j && j.state === "pending") relay._jobs.delete(x.c.id);
+      drop(x.c);
+      res.json({ ok: true });
+    } catch (e) { fail500(res, e, "discard"); }
   });
 
   // 4. Post = the website action "micclip.save" (Pepe charges !clip as the viewer, then publishes it)
   app.post("/api/rooms/:slug/micclip/:id/save", addUser, express.json({ limit: "4kb" }), async (req, res) => {
     if (!jsonOnly(req, res)) return;
     try {
-      const x = mine(req, res);
+      const x = await mine(req, res);
       if (!x) return;
       const { c, R } = x;
       const u = await me(req);
