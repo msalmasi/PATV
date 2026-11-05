@@ -209,9 +209,12 @@ test("dock3 item 2 + pausebars: the bars' CSS - shown with holders only while PL
   // (micvad 1.99akk: ...while it has no real level - Pepe's levels on the MP3 relay / ⚡'s getStats mark an iOS meter rb-lvl too)
   assert.match(rb, /\.rb-meter\.rb-nolvl:not\(\.rb-lvl\) \{ display: none; \}/, "iOS outside the Dock: hidden as before without a real level");
   assert.match(js, /if \(IOS\) \{ meter\.classList\.add\('rb-nolvl'\); vol\.style\.display = 'none'; \}/, "no inline hide on iOS (an inline style beats every rule)");
-  assert.match(js, /var an = mode === 'rtc' \? rtcAnalyser : analyser;\n\s+if \(!an \|\| !playing\) \{\n\s+var want = lvWanted\(\), r = [^\n]+\n\s+lvSrc\(r \? want : ''\); lvl\(!!r\);/, "rb-lvl: the analyser, else a real level from elsewhere (micvad 1.99akk), before the early return");
+  // (micvad review fix: Pepe's levels / ⚡'s polls drive a timer, not the analyser's animation frames; 'quiet' = flat without rb-lvl)
+  assert.match(js, /var an = mode === 'rtc' \? rtcAnalyser : analyser;\n\s+if \(!an \|\| !playing\) \{\n[\s\S]{0,1600}?var real = x\.s === 'lv' \|\| x\.s === 'rest';\n\s+lvSrc\(real \? want : ''\); lvl\(real\);/, "rb-lvl: the analyser, else a real level from elsewhere (micvad 1.99akk), before the early return");
   assert.match(js, /lvSrc\('an'\); lvl\(true\);/, "the analyser's frames: rb-lvl");
-  assert.match(js, /playing = false; cancelAnimationFrame\(raf\);[^\n]*\n[^\n]*\n\s+bars\.forEach\(function \(b\) \{ b\.style\.height = ''; \}\); lvl\(false\);/, "stop() clears the last frame's heights and rb-lvl");
+  assert.match(js, /playing = false; cancelAnimationFrame\(raf\);[^\n]*\n[^\n]*\n\s+lvBars\('', false\); lvl\(false\);/, "stop() clears the last frame's heights and rb-lvl");
+  assert.match(js, /function lvBars\(h, held\) \{ bars\.forEach\(function \(b\) \{ b\.style\.height = h; b\.style\.animation = held \? 'none' : ''; b\.style\.transform = held \? 'none' : ''; \}\); \}/,
+    "(lvBars('', false): the inline heights and the quiet hold go - the Dock's own rules are back)");
 });
 
 // ── item 15 / 17: the cam strip's size; a pinned cam pops out ──

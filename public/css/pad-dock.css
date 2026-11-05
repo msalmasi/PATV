@@ -1288,7 +1288,8 @@ main.rm.rm-dock .rmd-fullscreen:has(> .rmd-full-media > #rmStage) > .rmd-overlay
    eq meter is the "on the mic" sign on every device - .rmd-now.rmd-talk = someone holds the mic (pad-dock.js mic()). With a real level
    (.rb-lvl: the analyser, desktop / Android while playing; micvad 1.99akk: on iOS Pepe's levels on the MP3 relay or ⚡'s own receiver level,
    room-bridge.js) it draws that level, as before; without one (no source, paused, no analyser) the bars move by themselves while someone
-   holds the mic; under reduced motion a still eq shape. Nobody on the mic: hidden while paused (1.99ajf), the real level while playing
+   holds the mic (micvad review fix: while Pepe's levels are on their way - connecting, the first moments - room-bridge.js holds them flat
+   inline, animation: none, without rb-lvl); under reduced motion a still eq shape. Nobody on the mic: hidden while paused (1.99ajf), the real level while playing
    (iOS without a real level: hidden - room-bridge.css .rb-nolvl:not(.rb-lvl)). pausebars (owner 2026-11-05: "Let's remove them
    from paused audio anyway"): only while PLAYING (.rb-audio.on) - paused, no bars on any device, holders or not (above). ── */
 main.rm.rm-dock #rmAudioBox .rb-audio.on .rmd-now.rmd-talk > .rb-meter { display: inline-flex; }

@@ -124,3 +124,53 @@ test("the retried post (prev + cur, one lv) and a join right at the start", { sk
   assert.ok(merged > 0, "the fixture has the merged retry (2 ticks of levels in one post)");
   assert.equal(L.recs, FX.posts.length);
 });
+
+// micvad review fix: a NEW encoder under a framed listener - Pepe restarted (every bot deploy) or the MP3 bitrate changed. The old
+// stream's last post ends mid-frame; the new one starts on its own first header. A decoder lets the cut-short frame swallow the new
+// stream's first bytes, finds the next header 3 frames confirm (Chromium's MP3 parser) and plays on at the media time it had; the
+// page must do the same and pin every new-stream level to the new stream's frames - shifted by exactly where the decoder resumed.
+function across(LV, oldPosts, newPosts, primeOld) {
+  const b = (p) => Buffer.from(p.data, "base64");
+  const res = { out: [], write(x) { this.out.push(Buffer.from(x)); } };
+  AL.open(res, { recent: primeOld.map((p) => ({ buf: b(p), lv: AL.clean(p.lv, b(p).length) })) });
+  for (const p of oldPosts.concat(newPosts)) res.framed(b(p), AL.clean(p.lv, b(p).length));
+  const wire = Buffer.concat(res.out), L = LV.session();
+  for (let o = 0; o < wire.length; o += 257) LV.feed(L, new Uint8Array(wire.subarray(o, o + 257)), () => {});
+  // independently: the listener's frames up to the cut (the old part, from its cut header), then where the decoder resumes
+  const oldBytes = Buffer.concat(primeOld.concat(oldPosts).map(b)).subarray((primeOld.concat(oldPosts)[0].lv || {}).h || 0);
+  let i = 0, T = 0;
+  while (i + 4 <= oldBytes.length) {
+    const h = oldBytes.readUInt32BE(i), ver = (h >>> 19) & 3, bri = (h >>> 12) & 15, sri = (h >>> 10) & 3;
+    const r = SR[ver][sri], k = MP3[ver === 3 ? 1 : 2][bri];
+    T += (ver === 3 ? 1152 : 576) / r; i += Math.floor((ver === 3 ? 144 : 72) * k * 1000 / r) + ((h >>> 9) & 1);
+  }
+  const skip = i - oldBytes.length;                    // the cut-short frame's missing bytes: the decoder takes them from the new stream
+  const nb = newPosts.map(b), abs = walkAll(nb), starts = [];
+  let pos = 0, tt = 0;
+  const all = Buffer.concat(nb);
+  while (pos + 4 <= all.length) {
+    const h = all.readUInt32BE(pos), ver = (h >>> 19) & 3, bri = (h >>> 12) & 15, sri = (h >>> 10) & 3;
+    const r = SR[ver][sri], k = MP3[ver === 3 ? 1 : 2][bri];
+    starts.push([pos, tt]); tt += (ver === 3 ? 1152 : 576) / r; pos += Math.floor((ver === 3 ? 144 : 72) * k * 1000 / r) + ((h >>> 9) & 1);
+  }
+  const resume = starts.find(([o]) => o >= skip);      // the first new header at or past them
+  return { L, T, skip, resume, abs };
+}
+
+test("review fix: a new encoder under a framed listener, and the first listener after one - pinned to the new stream's frames", { skip: !FX && "no fixture" }, () => {
+  const LV = pageLv();
+  const posts = FX.posts;
+  for (const [name, oldPosts, primeOld] of [["a listener across a new encoder", posts.slice(20, 26), posts.slice(18, 20)],
+                                            ["the first listener after one (the hub's old post as the prime)", [], posts.slice(26, 27)]]) {
+    const { L, T, skip, resume, abs } = across(LV, oldPosts, posts.slice(0, 12), primeOld);
+    assert.equal(L.bad, false, name + ": not given up");
+    assert.ok(skip > 0 && resume[0] > 0, name + ": (the old stream really ends mid-frame)");
+    const shift = T - resume[1];                       // listener media time = Pepe's new-stream time + shift
+    const newLv = [];
+    for (let i = 0; i < 12; i++) { const lv = posts[i].lv; if (lv.d) newLv.push(abs[i].tf + lv.a / 1000); }
+    const got = L.ring.slice(-newLv.length).map((e) => e.g);
+    assert.equal(got.length, newLv.length);
+    got.forEach((g, k) => assert.ok(Math.abs(g - (newLv[k] + shift)) < 1e-6, `${name}: level ${k} at ${g} vs ${newLv[k] + shift}`));
+    assert.equal(L.resyncs, 1, name + ": found its way back once");
+  }
+});

@@ -47,6 +47,7 @@ const PADS = {
   adult: { id: "adult.Room", slug: "adult-room", level: "public", adult: true },
   quiet: { id: "quiet.Room", slug: "quiet-room", level: "public", audio: false },
   stale: { id: "stale.Room", slug: "stale-room", level: "public" },
+  gone: { id: "gone.Room", slug: "gone-room", level: "public" },
 };
 const users = new Map();
 const U = {};
@@ -272,3 +273,33 @@ test("privacy: a level record is {h, a, d} only - nobody's name or id - and the 
   fr.req.destroy();
   await sleep(30);
 });
+
+// (last: it waits 1.6 s, and the other tests' framed primes rely on fresh posts)
+test("review fix: a framed prime never starts on a stream that went away (Pepe restarted: a new encoder) - the first fresh post's header",
+  { skip: !FX && "no fixture" }, async () => {
+    // the hub keeps the newest post until the room's hub closes; minutes later a NEW encoder starts (a Pepe deploy, a bitrate
+    // change) - a framed listener primed with the old stream's cut-short last frame would count frames the decoder never plays
+    const old = FX.posts[30], now = Date.now();
+    const res = { out: [], write(b) { this.out.push(Buffer.from(b)); } };
+    AL.open(res, { recent: [{ buf: data(old), at: now - 60000, lv: AL.clean(old.lv, data(old).length) }] }, now);
+    assert.equal(res.out.length, 0, "a remembered post from 60 s ago is no prime");
+    res.framed(data(FX.posts[0]), AL.clean(FX.posts[0].lv, data(FX.posts[0]).length));
+    assert.deepEqual(records(Buffer.concat(res.out)).map((r) => r.type), [1, 2]);
+    assert.deepEqual(records(Buffer.concat(res.out))[0].payload, data(FX.posts[0]).subarray(FX.posts[0].lv.h), "the new stream's first post, cut at its header");
+    const fresh = { out: [], write(b) { this.out.push(Buffer.from(b)); } };
+    AL.open(fresh, { recent: [{ buf: data(old), at: now - 300, lv: AL.clean(old.lv, data(old).length) }] }, now);
+    assert.equal(records(Buffer.concat(fresh.out)).length, 2, "a fresh one still primes (cut at its header)");
+    // the same through the relay: the room's last post, then 1.6 s of nothing, then a listener
+    await relay("gone", [FX.posts[25]], 700);
+    await sleep(1600);
+    const fr = await open("/p/gone-room/audio?lv=1");
+    const raw = await open("/p/gone-room/audio");
+    await sleep(60);
+    assert.equal(fr.bytes().length, 0, "framed: nothing from the stream that stopped");
+    assert.deepEqual(raw.bytes(), data(FX.posts[25]), "(a raw listener keeps today's prime: the newest post, however old)");
+    await relay("gone", [FX.posts[0]], 701);
+    await sleep(80);
+    assert.deepEqual(records(fr.bytes())[0].payload, data(FX.posts[0]).subarray(FX.posts[0].lv.h));
+    fr.req.destroy(); raw.req.destroy();
+    await sleep(30);
+  });

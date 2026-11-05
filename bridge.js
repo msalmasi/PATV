@@ -2122,7 +2122,7 @@ function register(app, { isBotToken, addUser }) {
                           Connection: "keep-alive", ...(framed ? { "X-Audio-Frames": "1" } : {}) });
     res.flushHeaders();
     try { req.socket.setNoDelay(true); } catch (e) { /* not a TCP socket */ }
-    if (framed) require("./audiolv").open(res, a);
+    if (framed) require("./audiolv").open(res, a, Date.now());     // (micvad review fix: a framed prime only from fresh posts)
     else for (const r of a.recent) res.write(r.buf);
     res.agViewer = req.user && req.user.userId ? req.user : null;     // adultgate site: audioRecheck asks the gate again for this account
     a.listeners.add(res);

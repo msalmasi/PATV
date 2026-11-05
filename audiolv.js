@@ -20,6 +20,11 @@ const KEYS = new Set(["v", "h", "a", "d"]);
 const A_MAX_MS = 10000;
 const REC_MAX = 0xffffff;
 const T_MP3 = 1, T_LV = 2;
+// review fix: a framed prime only from posts this fresh. bridge.js keeps the room's newest post until its hub closes - after
+// Pepe restarts (every bot deploy) that is the OLD encoder's last post, whose cut-short last frame the new stream never
+// completes; a session primed with it would count frames the decoder doesn't play. Pepe posts every 0.25 s; a restart is far
+// longer than this (a raw listener keeps today's prime - the decoder resyncs and nothing is counted).
+const PRIME_MAX_MS = 1500;
 
 /** Pepe's lv for a post of `len` MP3 bytes -> a FRESH {h?, a?, d} (nothing else can ride along) | null (any doubt). */
 function clean(lv, len) {
@@ -55,9 +60,10 @@ function rec(type, payload) {
  * Turn an MP3 relay response into a framed one: res.framed(buf, lv) for the broadcast, then the prime from hub.recent - cut at
  * the first remembered post whose lv names a header (that header becomes byte 0, its lv h: 0), the later ones as they came.
  * No remembered post names one (an old Pepe, levels off on his side): the prime goes out as plain MP3 records and the page,
- * which can't line it up, never shows levels for this session. Nothing remembered: the first post that names a header is cut.
+ * which can't line it up, never shows levels for this session. Nothing remembered - or only posts older than PRIME_MAX_MS
+ * (a stream that went away): the first post that names a header is cut.
  */
-function open(res, hub) {
+function open(res, hub, now) {
   let started = false;
   const send = (buf, lv) => {
     if (!buf || !buf.length) return;
@@ -73,9 +79,10 @@ function open(res, hub) {
     if (lv && buf.length <= REC_MAX) res.write(rec(T_LV, lv));
   };
   res.framed = send;
-  const recent = (hub && hub.recent) || [];
+  const at = typeof now === "number" ? now : Date.now();
+  const recent = ((hub && hub.recent) || []).filter((r) => r && !(typeof r.at === "number" && at - r.at > PRIME_MAX_MS));
   const first = recent.findIndex((r) => r && r.lv && r.lv.h != null);
   for (const r of first >= 0 ? recent.slice(first) : recent) send(r.buf, r.lv);
 }
 
-module.exports = { clean, rec, open, T_MP3, T_LV, A_MAX_MS };
+module.exports = { clean, rec, open, T_MP3, T_LV, A_MAX_MS, PRIME_MAX_MS };

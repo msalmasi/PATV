@@ -56,7 +56,7 @@ function stream() {
 function load({ ua = IPHONE, mse = true, reduce = false, audioCtx = false, framed = true, ticket = null, session = null, quota = false } = {}) {
   const clock = { t: 1000000 };
   class FakeDate extends Date { static now() { return clock.t; } }
-  const rafs = new Map(), intervals = new Map(), ctrls = [], fetches = [], sources = [], appended = [];
+  const rafs = new Map(), intervals = new Map(), timers = new Map(), ctrls = [], fetches = [], sources = [], appended = [], docOn = {};
   let ids = 0;
   const win = { addEventListener() {} };
   const audioStream = stream();
@@ -100,10 +100,11 @@ function load({ ua = IPHONE, mse = true, reduce = false, audioCtx = false, frame
   if (ticket) win.PATVRtc = { listen: async (url, el) => { el.srcObject = {}; return session; } };
   const mm = () => ({ matches: !!reduce });
   win.matchMedia = mm;
-  const ctx = { window: win, document: { createElement: fakeEl, addEventListener() {}, hidden: false }, navigator: { userAgent: ua, maxTouchPoints: 0 },
+  const doc = { createElement: fakeEl, addEventListener(t, fn) { (docOn[t] = docOn[t] || []).push(fn); }, hidden: false };
+  const ctx = { window: win, document: doc, navigator: { userAgent: ua, maxTouchPoints: 0 },
     fetch: win.fetch, URL: win.URL, AbortController: win.AbortController, matchMedia: mm, Date: FakeDate, Math, JSON, Uint8Array, TextDecoder,
     sessionStorage: { getItem: () => null, setItem() {} }, localStorage: { getItem: () => null, setItem() {} },
-    setTimeout: () => 0, clearTimeout() {},
+    setTimeout: (fn, ms) => { const id = ++ids; timers.set(id, { fn, ms }); return id; }, clearTimeout: (id) => { timers.delete(id); },
     setInterval: (fn, ms) => { const id = ++ids; intervals.set(id, { fn, ms }); return id; }, clearInterval: (id) => { intervals.delete(id); },
     requestAnimationFrame: (fn) => { const id = ++ids; rafs.set(id, fn); return id; }, cancelAnimationFrame: (id) => { rafs.delete(id); }, console };
   win.document = ctx.document;
@@ -116,8 +117,15 @@ function load({ ua = IPHONE, mse = true, reduce = false, audioCtx = false, frame
   const audios = box.children.filter((c) => c.tagName === "audio");
   const meter = kid("rb-meter");
   return {
-    p, box, meter, bars: meter.children, au: audios[0], rau: audios[1], clock, rafs, intervals, ctrls, fetches, sources, appended, audioStream, win,
-    frame() { const fns = [...rafs.values()]; rafs.clear(); fns.forEach((fn) => fn()); },
+    p, box, meter, bars: meter.children, au: audios[0], rau: audios[1], clock, rafs, intervals, timers, ctrls, fetches, sources, appended, audioStream, win, doc,
+    // the meter's next wake: an analyser's animation frame, or (micvad review fix) the level path's timer
+    frame() {
+      const fns = [...rafs.values()]; rafs.clear();
+      for (const [id, t] of [...timers]) if (t.fn.name === "meterLoop") { timers.delete(id); fns.push(t.fn); }
+      fns.forEach((fn) => fn());
+    },
+    meterTimers() { return [...timers.values()].filter((t) => t.fn.name === "meterLoop"); },
+    docFire(t) { (docOn[t] || []).forEach((fn) => fn({ type: t })); },
     heights() { return meter.children.map((b) => b.style.height || ""); },
     polls() { return [...intervals.values()].filter((x) => x.ms === 100); },
     LV: win.PATVRoom._lv,
@@ -162,8 +170,11 @@ test("&lv=1 only where it can be used: an MSE player with no analyser and no red
 test("records across 1-byte reads: the MP3 appended byte-exact; the level at currentTime draws the bars", async () => {
   const P = load();
   await playMp3(P);
-  assert.equal(lvl(P), true, "asked for levels: flat bars while it buffers (no animated flash)");
+  // asked for levels: flat bars while it buffers (no animated flash) - but no rb-lvl until a real level (review fix: a meter the
+  // Dock hides - iPhone, nobody on the mic - stays hidden instead of showing flat dots that vanish if no levels come)
+  assert.equal(lvl(P), false);
   assert.deepEqual(P.heights(), ["", "", "", "", ""].map(() => "2px"));
+  assert.ok(P.bars.every((b) => b.style.animation === "none" && b.style.transform === "none"), "the Dock's animated bars held flat");
   const mp3a = frames(10), mp3b = frames(10);
   const wire = Buffer.concat([AL.rec(1, mp3a), AL.rec(2, { h: 0, a: 0, d: "9900" }), AL.rec(7, Buffer.from("future")),
     AL.rec(1, mp3b), AL.rec(2, { h: 0, a: 0, d: "05" })]);
@@ -183,15 +194,17 @@ test("records across 1-byte reads: the MP3 appended byte-exact; the level at cur
   P.au.currentTime = 0.24 + 0.15;                     // 2nd post: its levels start at its own header (0.24 s)
   P.frame();
   assert.deepEqual(P.heights(), H(P, 5, Math.round(2.4) + 1), "the second post's 2nd digit (5)");
-  // past every level: rest for up to 1 s, then 1.99akf's bars
-  P.au.currentTime = 2;
+  // past every level: rest for up to 1 s of PLAYED audio (review fix: media time - a stall never falls back), then 1.99akf's bars
+  P.au.currentTime = 0.9;
   P.clock.t += 500; P.frame();
   assert.ok(lvl(P), "a moment without a level: flat bars");
+  assert.deepEqual(P.heights(), ["2px", "2px", "2px", "2px", "2px"]);
+  P.au.currentTime = 1.5;
   P.clock.t += 600; P.frame();
-  assert.equal(lvl(P), false, "stale > 1 s: rb-lvl off (1.99akf's bars)");
+  assert.equal(lvl(P), false, "stale > 1 s of audio: rb-lvl off (1.99akf's bars)");
   assert.deepEqual(P.heights(), ["", "", "", "", ""]);
   assert.equal(P.meter.getAttribute("data-lv"), "");
-  assert.ok(P.rafs.size, "it keeps looking (the levels may come back)");
+  assert.equal(P.meterTimers().length + P.rafs.size, 0, "nothing coming: parked (no wake-ups) until a level record arrives");
   P.audioStream.push(Buffer.concat([AL.rec(1, frames(100)), AL.rec(2, { h: 0, a: 0, d: "f".repeat(30) })]));
   await settle();
   P.au.currentTime = 0.48 + 1;
@@ -205,7 +218,7 @@ test("records across 1-byte reads: the MP3 appended byte-exact; the level at cur
   assert.equal(lvl(P), false);
   assert.deepEqual(P.heights(), ["", "", "", "", ""]);
   assert.equal(P.box.rbDebug().lv.framed, false);
-  assert.equal(P.rafs.size, 0, "no loop while paused");
+  assert.equal(P.rafs.size + P.meterTimers().length, 0, "no loop while paused");
 });
 
 test("a level record that doesn't match the frames counted (or a dropped append) = no levels for the session", async () => {
@@ -216,7 +229,7 @@ test("a level record that doesn't match the frames counted (or a dropped append)
   P.au.fire("playing"); P.frame();
   assert.equal(P.box.rbDebug().lv.bad, true, "the record says h 0, the walk found no header there");
   assert.equal(lvl(P), false);
-  assert.equal(P.rafs.size, 0, "the loop stops: 1.99akf's bars");
+  assert.equal(P.rafs.size + P.meterTimers().length, 0, "the loop stops: 1.99akf's bars");
   assert.ok(P.appended.length, "the audio itself still plays");
   const Q = load({ quota: true });
   await playMp3(Q);
@@ -256,7 +269,7 @@ test("the pure pieces: header table, the walk across split headers, fromPeak wit
   assert.equal(L.fromPeak(1), 15); assert.equal(L.fromPeak(0.5), 13); assert.equal(L.fromPeak(0.01), 1);
   assert.equal(L.fromPeak(0.12, 0.5), 0, "a third or less of the last: silence at once");
   assert.equal(L.fromPeak(0.2, 0.5), 10);
-  assert.deepEqual({ ...L.digitAt([{ g: 1, d: "0a" }], 1.15) }, { v: 10, k: 11 });
+  assert.deepEqual({ ...L.digitAt([{ g: 1, d: "0a" }], 1.15) }, { v: 10, k: 11, end: 1.2 });
   assert.equal(L.digitAt([{ g: 1, d: "0a" }], 1.2), null);
   assert.equal(L.digitAt([{ g: 1, d: "0a" }], 0.99), null);
   assert.deepEqual(Array.from(L.heights(0, 3)), [2, 2, 2, 2, 2]);
@@ -269,7 +282,9 @@ function report(level, tsd) {
 }
 function rtcSession(reports) {
   const q = reports.slice();
-  return { closed: false, close() { this.closed = true; }, onfail: null, pc: { getStats: () => Promise.resolve(q.length ? q.shift() : report(undefined)) } };
+  const s = { closed: false, calls: 0, close() { this.closed = true; }, onfail: null,
+    pc: { getStats: () => { s.calls++; return Promise.resolve(q.length ? q.shift() : report(undefined)); } } };
+  return s;
 }
 async function playRtc(P) {
   P.p.listen("alpha");
@@ -307,7 +322,7 @@ test("⚡: no audioLevel, or totalSamplesDuration stuck, 3 polls running -> give
   await poll(none);
   assert.equal(none.polls().length, 0, "given up");
   none.frame();
-  assert.equal(lvl(none), false); assert.equal(none.rafs.size, 0);
+  assert.equal(lvl(none), false); assert.equal(none.rafs.size + none.meterTimers().length, 0);
   const stuck = load({ ticket: { ok: true, whep: "x", levels: true }, session: rtcSession([report(0.4, 5), report(0.4, 5), report(0.4, 5), report(0.4, 5)]) });
   await playRtc(stuck);
   await poll(stuck); await poll(stuck); await poll(stuck);
@@ -339,4 +354,98 @@ test("⚡: no polling when the ticket says levels: false, with an analyser, or a
   await playRtc(stopped);
   stopped.p.listen("alpha");                        // pause
   assert.equal(stopped.polls().length, 0, "paused: no polling");
+});
+
+// -- micvad review fixes --
+test("a new encoder mid-session (Pepe restarted, the bitrate changed): the walk finds its way back as a decoder does", async () => {
+  // the old stream's last post ends mid-frame (every post does); the new stream starts on its own first header. A decoder (Chromium's
+  // MP3 parser) lets the cut-short frame swallow the new stream's first bytes, finds the next header 3 frames confirm and plays on
+  // at the media time it had - the new stream's frame 1 is lost. The page counts the same and pins the levels from there.
+  const tail = Buffer.concat([frames(10), FRAME.subarray(0, 100)]);          // 10 frames + one cut short (11 counted = 0.264 s)
+  const wire = Buffer.concat([AL.rec(1, tail), AL.rec(2, { h: 0, a: 0, d: "99" }), AL.rec(1, frames(20)), AL.rec(2, { h: 0, a: 0, d: "5555" })]);
+  const P = load();
+  const S = P.LV.session();
+  for (const b of wire) P.LV.feed(S, new Uint8Array([b]), () => {});
+  assert.equal(S.bad, false, "not given up");
+  assert.equal(S.ring.length, 2);
+  assert.ok(Math.abs(S.ring[1].g - (0.264 - 0.024)) < 1e-9, `the new stream's levels from its (lost) first frame: ${S.ring[1].g}`);
+  assert.ok(Math.abs(S.T - (0.264 + 19 * 0.024)) < 1e-9, "its frames 2..20 counted from 0.264 s");
+  await playMp3(P);
+  P.audioStream.push(wire);
+  await settle();
+  P.au.fire("playing"); P.au.currentTime = 0.30; P.frame();
+  assert.equal(P.box.rbDebug().lv.bad, false);
+  assert.ok(lvl(P)); assert.deepEqual(P.heights(), H(P, 5, 2), "the new stream's level at 0.30 s");
+  // a stream that never finds its way back (no header chain where its level record says): given up, as before
+  const Q = P.LV.session();
+  P.LV.feed(Q, new Uint8Array(Buffer.concat([AL.rec(1, tail), AL.rec(2, { h: 0, a: 0, d: "99" }), AL.rec(1, Buffer.alloc(400, 7)), AL.rec(2, { h: 0, a: 0, d: "5" })])), () => {});
+  assert.equal(Q.bad, true);
+});
+
+test("the level path's loop: a timer at the level frames' edges (no per-frame work), parked while nothing is coming", async () => {
+  const P = load();
+  await playMp3(P);
+  P.audioStream.push(Buffer.concat([AL.rec(1, frames(50)), AL.rec(2, { h: 0, a: 0, d: "9".repeat(12) })]));   // 1.2 s of levels
+  await settle();
+  P.au.fire("playing");
+  P.au.currentTime = 0.05; P.frame();
+  assert.ok(lvl(P));
+  assert.equal(P.rafs.size, 0, "no animation frames for Pepe's levels");
+  assert.deepEqual(P.meterTimers().map((t) => t.ms), [52], "the next wake: this level frame's end (0.1 s) + 2 ms");
+  P.au.currentTime = 3; P.frame();
+  assert.equal(lvl(P), false, "levels stopped (> 1 s of audio past them): 1.99akf's bars");
+  assert.equal(P.meterTimers().length, 0, "parked");
+  // a level record pinned ahead of the playhead wakes it, for exactly when it starts
+  P.audioStream.push(Buffer.concat([AL.rec(1, frames(200)), AL.rec(2, { h: 0, a: 2000, d: "9999" })]));     // g = 1.2 + 2 = 3.2 s
+  await settle();
+  assert.deepEqual(P.meterTimers().map((t) => t.ms), [202], "woken for the level at 3.2 s");
+  P.au.currentTime = 3.25; P.frame();
+  assert.ok(lvl(P)); assert.deepEqual(P.heights(), H(P, 9, 32));
+});
+
+test("a stall stops the audio's clock: the bars rest (flat, rb-lvl) however long it lasts; 1.99akf's only after 1 s of PLAYED audio", async () => {
+  const P = load();
+  await playMp3(P);
+  P.audioStream.push(Buffer.concat([AL.rec(1, frames(50)), AL.rec(2, { h: 0, a: 0, d: "9".repeat(12) })]));
+  await settle();
+  P.au.fire("playing"); P.au.currentTime = 1.15; P.frame();
+  assert.ok(lvl(P));
+  P.au.fire("waiting");                           // buffering
+  P.clock.t += 10000; P.frame();
+  assert.ok(lvl(P), "10 s of buffering: still the real meter, flat"); assert.deepEqual(P.heights(), ["2px", "2px", "2px", "2px", "2px"]);
+  P.au.fire("playing"); P.au.currentTime = 1.5;   // (a stall the browser never announced looks the same: the clock doesn't move)
+  P.clock.t += 10000; P.frame();
+  assert.ok(lvl(P), "the playhead only 0.35 s past the last level: rest");
+  P.au.currentTime = 2.2; P.frame();
+  assert.equal(lvl(P), false, "1.05 s of played audio without a level: 1.99akf's bars");
+  // never a level at all (an old Pepe on a new site): quiet (no rb-lvl) for the first 1.5 s of audio, then 1.99akf's
+  const Q = load();
+  await playMp3(Q);
+  Q.audioStream.push(AL.rec(1, frames(100)));
+  await settle();
+  Q.au.fire("playing"); Q.au.currentTime = 0.2; Q.frame();
+  assert.equal(lvl(Q), false); assert.deepEqual(Q.heights(), ["2px", "2px", "2px", "2px", "2px"], "quiet: flat, no rb-lvl");
+  Q.au.currentTime = 1.8; Q.frame();
+  assert.equal(lvl(Q), false); assert.deepEqual(Q.heights(), ["", "", "", "", ""], "then 1.99akf's bars (no inline heights)");
+  assert.ok(Q.bars.every((b) => !b.style.animation && !b.style.transform), "the Dock's animation is theirs again");
+});
+
+test("⚡ in a hidden page: no getStats and no drawing; shown again, it rests until the next poll (no 1.99akf flash)", async () => {
+  // (hidden = the document the player shows in: the Dock's own window has its own - box.ownerDocument, else the page's)
+  const sess = rtcSession([report(0.5, 1), report(0.5, 1.1), report(0.5, 1.2), report(0.5, 1.3)]);
+  const P = load({ ticket: { ok: true, whep: "x", ready: true, levels: true }, session: sess });
+  await playRtc(P);
+  await poll(P);
+  assert.ok(lvl(P)); assert.equal(sess.calls, 1);
+  P.doc.hidden = true;
+  for (let i = 0; i < 5; i++) await poll(P);
+  assert.equal(sess.calls, 1, "hidden: no getStats");
+  assert.equal(P.polls().length, 1, "(the poll isn't given up)");
+  P.clock.t += 5000; P.frame();
+  assert.deepEqual(P.meterTimers().map((t) => t.ms), [1000], "hidden: the bars' loop only looks once a second");
+  P.doc.hidden = false;
+  P.frame();
+  assert.ok(lvl(P), "shown again: the real meter, resting"); assert.deepEqual(P.heights(), ["2px", "2px", "2px", "2px", "2px"]);
+  await poll(P);
+  assert.equal(sess.calls, 2); assert.deepEqual(P.heights(), H(P, 13, 2), "the next poll's level");
 });

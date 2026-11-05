@@ -98,11 +98,13 @@
   //     after the frame whose header is at byte h. The page walks the MP3 frame headers of everything it appends (the session starts
   //     on one), so it knows each header's media time - and reads the level at <audio>.currentTime: what you hear, never early.
   //   * ⚡ (WebRTC): the browser's own received audioLevel (getStats every 100 ms), when the ticket says levels: true.
-  // Any doubt (a header that doesn't match, a dropped append, an old Pepe, the setting off, stale numbers) falls back to 1.99akf.
+  // Any doubt (a level record no frame chain matches, a dropped append, an old Pepe, the setting off, stale numbers) falls back to
+  // 1.99akf. A new encoder mid-stream (Pepe restarted, the bitrate changed: the old stream's last frame is cut short) is no doubt -
+  // the walk finds its way back the way the decoder does (lvScan) and the level records are pinned again (review fix).
   var LV_RATES = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
   var LV_KBPS1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
   var LV_KBPS2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
-  var LV_REC_MAX = 1048576, LV_RING_MAX = 200;
+  var LV_REC_MAX = 1048576, LV_RING_MAX = 200, LV_RESYNC_MAX = 20;
   function lvHeader(b) {               // 4 header bytes -> {size, spf, rate} | null (pepe_audiolv.header's table)
     var h = ((b[0] << 24) >>> 0) + (b[1] << 16) + (b[2] << 8) + b[3];
     var ver = (h >>> 19) & 3, layer = (h >>> 17) & 3, bri = (h >>> 12) & 15, sri = (h >>> 10) & 3;
@@ -111,22 +113,61 @@
     return { size: Math.floor((ver === 3 ? 144 : 72) * k * 1000 / rate) + ((h >>> 9) & 1), spf: ver === 3 ? 1152 : 576, rate: rate };
   }
   function lvSession() {
-    return { part: null, skip: 0, hp: [], T: 0, first: null, tFirst: null, ring: [], bad: false, raw: false, recs: 0, hitAt: 0 };
+    return { part: null, skip: 0, hp: [], T: 0, first: null, tFirst: null, hs: [], hsT: [], p: null, scan: false, resyncs: 0,
+      ring: [], bad: false, raw: false, recs: 0, hitT: null, t0: null };
   }
-  // the MP3 bytes of one type-1 record: first = where the first header STARTING in it is (null: none), tFirst = its media time
+  // A decoder that loses the frame chain (a frame cut short by a new encoder) looks for the next header that 3 frames in a row
+  // confirm - Chromium's MP3 parser does exactly this - and plays on at the media time it had. -> that header's offset | -1
+  // (at the record's end a shorter chain that runs past it counts: the next record's walk checks the rest)
+  function lvScan(p, from) {
+    for (var c = Math.max(0, from); c + 4 <= p.length; c++) {
+      if (p[c] !== 0xff) continue;
+      var pos = c, n = 0, hd;
+      while (n < 3 && pos + 4 <= p.length && (hd = lvHeader(p.subarray(pos, pos + 4)))) { pos += hd.size; n++; }
+      if (n === 3 || (n && pos + 4 > p.length)) return c;
+    }
+    return -1;
+  }
+  // the MP3 bytes of one type-1 record: first = where the first header STARTING in it is (null: none), tFirst = its media time;
+  // hs / hsT = every header the walk went through in it and its media time (a level record is pinned to one of them)
   function lvWalk(L, p) {
-    L.first = null; L.tFirst = null;
+    L.first = null; L.tFirst = null; L.hs = []; L.hsT = []; L.p = p;
     if (L.bad) return;
     var i = 0, n = p.length;
+    if (L.scan) {                                      // lost at the end of the last record: still looking, as the decoder is
+      var r0 = lvScan(p, 0);
+      if (r0 < 0) return;
+      L.scan = false; L.skip = 0; L.hp = []; i = r0;
+    }
     while (i < n) {
       if (L.skip) { var k = Math.min(L.skip, n - i); i += k; L.skip -= k; continue; }
-      if (!L.hp.length && L.first === null) { L.first = i; L.tFirst = L.T; }
+      var at = i - L.hp.length;                        // (< 0: the header began in the record before)
       while (L.hp.length < 4 && i < n) L.hp.push(p[i++]);
       if (L.hp.length < 4) break;
       var hd = lvHeader(L.hp); L.hp = [];
-      if (!hd) { L.bad = true; return; }
+      if (!hd) {                                       // not a header: find the way back (the media time so far stands)
+        if (++L.resyncs > LV_RESYNC_MAX) { L.bad = true; return; }
+        var r = lvScan(p, Math.max(0, at + 1));
+        if (r < 0) { L.scan = true; return; }
+        i = r; continue;
+      }
+      if (at >= 0) { L.hs.push(at); L.hsT.push(L.T); if (L.first === null) { L.first = at; L.tFirst = L.T; } }
       L.T += hd.spf / hd.rate; L.skip = hd.size - 4;
     }
+  }
+  // the media time of the frame at byte h of the last record: a header the walk went through, or - the frames a decoder skipped
+  // while it found its way back (the new stream's first ones, swallowed by the cut-short frame) - counted back from the first
+  // header both chains share. null: no such chain (not the stream we counted)
+  function lvPin(L, h) {
+    var x = L.hs.indexOf(h);
+    if (x >= 0) return L.hsT[x];
+    var p = L.p, pos = h, dur = 0, hd;
+    for (var g = 0; p && g < 64 && pos + 4 <= p.length && (hd = lvHeader(p.subarray(pos, pos + 4))); g++) {
+      dur += hd.spf / hd.rate; pos += hd.size;
+      var y = L.hs.indexOf(pos);
+      if (y >= 0) return L.hsT[y] - dur;
+    }
+    return null;
   }
   function lvText(p) {
     if (window.TextDecoder) { try { return new TextDecoder().decode(p); } catch (e) { /* below */ } }
@@ -138,10 +179,11 @@
     if (L.bad) return;
     var j = null; try { j = JSON.parse(lvText(p)); } catch (e) { j = null; }
     if (!j || typeof j !== 'object') { L.bad = true; return; }
-    var h = j.h == null ? null : j.h;
-    if (h !== L.first) { L.bad = true; return; }            // not the stream we counted (a new encoder, a duplicate, an old Pepe)
-    if (h === null || typeof j.d !== 'string' || !/^[0-9a-f]{1,64}$/.test(j.d) || typeof j.a !== 'number' || !isFinite(j.a)) return;
-    L.ring.push({ g: L.tFirst + j.a / 1000, d: j.d });
+    if (j.h == null) return;                                 // no header in that post: nothing to pin (and no digits)
+    var tH = typeof j.h === 'number' ? lvPin(L, j.h) : null;
+    if (tH === null || L.resyncs > LV_RESYNC_MAX) { L.bad = true; return; }   // not the stream we counted (a duplicate, an old Pepe)
+    if (typeof j.d !== 'string' || !/^[0-9a-f]{1,64}$/.test(j.d) || typeof j.a !== 'number' || !isFinite(j.a)) return;
+    L.ring.push({ g: tH + j.a / 1000, d: j.d });
     if (L.ring.length > LV_RING_MAX) L.ring.splice(0, L.ring.length - LV_RING_MAX);
   }
   // fetched bytes -> records (a partial one waits for the next read); mp3(bytes) gets each MP3 payload to append
@@ -159,13 +201,19 @@
     }
     if (o < buf.length) L.part = buf.slice(o);
   }
-  // the level frame playing at media time t -> {v: 0..15, k: its index} | null
+  // the level frame playing at media time t -> {v: 0..15, k: its index, end: the media time it ends} | null
   function lvAt(ring, t) {
     for (var x = ring.length - 1; x >= 0; x--) {
       var e = ring[x], i = Math.floor((t - e.g) * 10 + 1e-9);
-      if (i >= 0 && i < e.d.length) return { v: parseInt(e.d.charAt(i), 16), k: Math.round(e.g * 10) + i };
+      if (i >= 0 && i < e.d.length) return { v: parseInt(e.d.charAt(i), 16), k: Math.round(e.g * 10) + i, end: e.g + (i + 1) / 10 };
     }
     return null;
+  }
+  // the media time the next level after t starts | null
+  function lvNext(ring, t) {
+    var best = null;
+    for (var x = 0; x < ring.length; x++) if (ring[x].g > t && (best === null || ring[x].g < best)) best = ring[x].g;
+    return best;
   }
   // ⚡: the receiver's audioLevel (0..1, peak-ish) -> 0..15. libwebrtc lets the peak decay to a quarter per update once the sound
   // stops, so a drop to a third or less is silence at once (the stop shows ~190 ms after the audio, not ~400)
@@ -271,18 +319,27 @@
     var lvlOn = false;
     function lvl(on) { on = !!on; if (on === lvlOn) return; lvlOn = on; meter.classList.toggle('rb-lvl', on); }
     // micvad 1.99akk: where the level comes from right now - 'an' (an analyser), 'lv' (Pepe's levels, MP3), 'st' (⚡ getStats), ''
-    var lvSrcNow = '', lvDrawn = null, auWait = false, rauWait = false, auSoundAt = 0, rauSoundAt = 0, stPoll = null, rtcLevels = false;
+    var lvSrcNow = '', lvDrawn = null, auWait = false, rauWait = false, rauSoundAt = 0, stPoll = null, rtcLevels = false, lvTimer = null;
     function lvSrc(s) { if (s === lvSrcNow) return; lvSrcNow = s; meter.setAttribute('data-lv', s); }
+    function lvBars(h, held) { bars.forEach(function (b) { b.style.height = h; b.style.animation = held ? 'none' : ''; b.style.transform = held ? 'none' : ''; }); }
     function lvClear() {
       if (lvDrawn === null) return;
-      lvDrawn = null; bars.forEach(function (b) { b.style.height = ''; });
+      lvDrawn = null; lvBars('', false);
     }
     function lvDraw(r) {
       var key = r.v + ':' + (r.v ? r.k : 0);
       if (key === lvDrawn) return;                      // heights change only with the level frame
+      if (lvDrawn === 'quiet') lvBars('', false);
       lvDrawn = key;
       var hs = lvHeights(r.v, r.k);
       for (var i = 0; i < bars.length; i++) bars[i].style.height = hs[i] + 'px';
+    }
+    // review fix: before the first real level (connecting, the first moments of sound) the bars are held flat WITHOUT rb-lvl - where
+    // the Dock shows the meter (someone holds the mic) flat dots instead of a flash of 1.99akf's animation; where it hides it (iPhone,
+    // nobody on the mic) it stays hidden, so nothing appears just to vanish again (the bar's words never jump)
+    function lvQuiet() {
+      if (lvDrawn === 'quiet') return;
+      lvDrawn = 'quiet'; lvBars('2px', true);
     }
     var LV_REST = { v: 0, k: 0 };
     // is a non-analyser level on its way (so the loop runs)? 'lv' | 'st' | ''
@@ -292,34 +349,58 @@
       if (mode === 'rtc' && stPoll && rtcSess) return 'st';
       return '';
     }
-    // fresh -> the level; just started / a moment without one / a stall -> rest (flat bars); past that -> null (1.99akf's bars)
-    function lvGrace(hitAt, soundAt, now) { return hitAt ? now - hitAt <= 1000 : (!soundAt || now - soundAt <= 1500); }
+    function lvMs(s) { return Math.max(10, Math.min(1000, Math.ceil(s * 1000 - 1e-6) + 2)); }   // (+2 ms: past the edge, not on it)
+    // Pepe's level now -> {s: 'lv' (r: the level) | 'rest' (flat, rb-lvl: a moment without one) | 'quiet' (flat, no rb-lvl: none yet)
+    // | '' (1.99akf's bars), wake: ms until it can change | null (only new data can change it)}. review fix: "a moment" is MEDIA
+    // time - while the audio stalls nothing is audible and its clock stops, so the bars rest however long it lasts
     function lvNow() {
-      var L = mse && mse.lv, now = Date.now();
-      if (L === undefined) return LV_REST;              // asked for levels, the answer's headers aren't in yet
-      if (!L || L.bad) return null;
-      var t = au.currentTime;
+      var L = mse && mse.lv;
+      if (L === undefined) return { s: 'quiet', wake: 100 };          // asked for levels, the answer's headers aren't in yet
+      if (!L || L.bad) return { s: '', wake: null };
+      var t = au.currentTime, rate = au.playbackRate > 0 ? au.playbackRate : 1;
       while (L.ring.length && L.ring[0].g + L.ring[0].d.length / 10 < t - 1) L.ring.shift();   // (played more than 1 s ago)
-      var r = mp3Sound && !auWait ? lvAt(L.ring, t) : null;
-      if (r) { L.hitAt = now; return r; }
-      return lvGrace(L.hitAt, mp3Sound ? auSoundAt : 0, now) ? LV_REST : null;
+      // (not audible - connecting, buffering: 'playing' kicks it; the slow wake is only a safety net)
+      if (!mp3Sound || auWait) return { s: L.hitT === null ? 'quiet' : 'rest', wake: 250 };
+      if (L.t0 === null) L.t0 = t;
+      var r = lvAt(L.ring, t);
+      if (r) { L.hitT = t; return { s: 'lv', r: r, wake: lvMs((r.end - t) / rate) }; }
+      var nx = lvNext(L.ring, t), wake = nx === null ? null : lvMs((nx - t) / rate);
+      if (L.hitT !== null ? t - L.hitT <= 1 : t - L.t0 <= 1.5) return { s: L.hitT === null ? 'quiet' : 'rest', wake: wake === null ? 100 : Math.min(wake, 100) };
+      return { s: '', wake: wake };
     }
+    // ⚡: each poll draws at once (lvKick); the wake only notices a poll that didn't come
     function stNow() {
       var P = stPoll, now = Date.now();
-      if (!P) return null;
-      if (rtcSound && !rauWait && P.at && now - P.at <= 400) { P.hitAt = now; return { v: P.v, k: P.n }; }
-      return lvGrace(P.hitAt, rtcSound ? rauSoundAt : 0, now) ? LV_REST : null;
+      if (!P) return { s: '', wake: null };
+      if (rtcSound && !rauWait && P.at && now - P.at <= 400) { P.hitAt = now; return { s: 'lv', r: { v: P.v, k: P.n }, wake: 450 }; }
+      var soundAt = rtcSound ? rauSoundAt : 0;
+      if (P.hitAt ? now - P.hitAt <= 1000 : (!soundAt || now - soundAt <= 1500)) return { s: P.hitAt ? 'rest' : 'quiet', wake: 100 };
+      return { s: '', wake: null };
     }
+    // new data (a level record, a poll, the audio starting / stalling): look now. Not while an analyser's animation-frame loop runs
+    function lvKick() { if (playing && raf === null) meterLoop(); }
+    // review fix: the document the player shows in is hidden (a background tab; the Dock's own window has its own document -
+    // ownerDocument, not the page's) - nothing to see: no drawing, no ⚡ polls (and no misses counted)
+    var lvAway = false;
+    function lvHidden() { var d = box.ownerDocument || document; return !!(d && d.hidden); }
     function meterLoop() {
-      cancelAnimationFrame(raf); raf = null;          // (one loop, however often it's kicked)
+      cancelAnimationFrame(raf); raf = null; clearTimeout(lvTimer); lvTimer = null;   // (one loop, however often it's kicked)
       var an = mode === 'rtc' ? rtcAnalyser : analyser;
       if (!an || !playing) {
-        var want = lvWanted(), r = want === 'lv' ? lvNow() : want === 'st' ? stNow() : null;
-        lvSrc(r ? want : ''); lvl(!!r);
-        if (r) lvDraw(r); else lvClear();
-        if (want) raf = requestAnimationFrame(meterLoop);
+        // micvad review fix: Pepe's levels change 10 times a second and a poll 10 times a second - a timer at the next change
+        // (never every display frame), parked while nothing can change and while the page is hidden
+        var want = lvWanted();
+        if (want && lvHidden()) { lvAway = true; lvTimer = setTimeout(meterLoop, 1000); return; }   // (a slow look until it shows)
+        // shown again: a fresh moment of rest until the next poll - not a flash of 1.99akf's bars for polls that couldn't come
+        if (lvAway) { lvAway = false; if (stPoll && stPoll.hitAt) stPoll.hitAt = Date.now(); }
+        var x = want === 'lv' ? lvNow() : want === 'st' ? stNow() : { s: '', wake: null };
+        var real = x.s === 'lv' || x.s === 'rest';
+        lvSrc(real ? want : ''); lvl(real);
+        if (x.s === 'lv') lvDraw(x.r); else if (x.s === 'rest') lvDraw(LV_REST); else if (x.s === 'quiet') lvQuiet(); else lvClear();
+        if (want && x.wake !== null) lvTimer = setTimeout(meterLoop, x.wake);
         return;
       }
+      if (lvDrawn === 'quiet') lvBars('', false);
       lvSrc('an'); lvl(true); lvDrawn = 'an';
       var d = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d);
       var n = bars.length, span = Math.max(1, Math.floor(d.length / n));
@@ -381,7 +462,7 @@
           var b = au.buffered;
           if (b.length && au.currentTime - b.start(0) > 30) { m.sb.remove(0, au.currentTime - 10); return; }   // keep memory small
           m.sb.appendBuffer(m.q.shift());
-        } catch (e) { if (e && e.name === 'QuotaExceededError') { m.q.length = 0; if (m.lv) m.lv.bad = true; } }   // (frames dropped: no levels)
+        } catch (e) { if (e && e.name === 'QuotaExceededError') { m.q.length = 0; if (m.lv) { m.lv.bad = true; lvKick(); } } }   // (frames dropped: no levels)
       }
       ms.addEventListener('sourceopen', function () {
         if (mse !== m) return;
@@ -391,13 +472,19 @@
           if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
           var hdr = null; try { hdr = r.headers && r.headers.get ? r.headers.get('X-Audio-Frames') : null; } catch (e) { hdr = null; }
           m.lv = m.lvReq && hdr === '1' ? lvSession() : null;
+          if (m.lvReq) lvKick();                          // (not framed: 1.99akf's bars at once)
           var rd = r.body.getReader();
           function append(b) { m.q.push(b); }
           function next() {
             return rd.read().then(function (x) {
               if (mse !== m) { try { rd.cancel(); } catch (e) { /* gone */ } return; }
               if (x.done) { if (playing) stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); return; }
-              if (m.lv) lvFeed(m.lv, x.value, append); else m.q.push(x.value);
+              var L = m.lv;
+              if (L) {
+                var n0 = L.recs, b0 = L.bad;
+                lvFeed(L, x.value, append);
+                if (L.recs !== n0 || L.bad !== b0) lvKick();   // (a level record: the loop may be parked)
+              } else m.q.push(x.value);
               pump();
               return next();
             });
@@ -427,7 +514,7 @@
       var sess = rtcSess;
       if (rtcAnalyser || reduce || !rtcLevels || !sess || !sess.pc || typeof sess.pc.getStats !== 'function') return;
       var P = stPoll = { timer: null, pending: false, prev: null, miss: 0, tsd: null, v: 0, n: 0, at: 0, hitAt: 0 };
-      function miss() { if (++P.miss >= 3 && stPoll === P) stStop(); }
+      function miss() { if (++P.miss >= 3 && stPoll === P) { stStop(); lvKick(); } }
       function read(rep) {
         var level = null, tsd = null;
         try {
@@ -445,9 +532,10 @@
         if (level === null || !isFinite(level) || stuck) { miss(); return; }
         P.miss = 0;
         P.v = lvFromPeak(level, P.prev); P.prev = level; P.n++; P.at = Date.now();
+        lvKick();
       }
       P.timer = setInterval(function () {
-        if (stPoll !== P || P.pending) return;
+        if (stPoll !== P || P.pending || lvHidden()) return;
         if (rtcSess !== sess) { stStop(); return; }
         var pr = null;
         try { pr = sess.pc.getStats(); } catch (e) { pr = null; }
@@ -584,9 +672,9 @@
     }
     function stop(msg) {
       clearTimeout(rejoinTimer);
-      playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
+      playing = false; cancelAnimationFrame(raf); raf = null; clearTimeout(lvTimer); lvTimer = null; clearInterval(waitTimer); setRate(1);
       // (dock3 1.99akf: the last frame's inline heights go too - an inline height beats the Dock's animated bars, which run while paused)
-      bars.forEach(function (b) { b.style.height = ''; }); lvl(false);
+      lvBars('', false); lvl(false);
       lvDrawn = null; lvSrc(''); auWait = false; rauWait = false;     // (micvad 1.99akk: the levels go with the fetch / the ⚡ session)
       mp3Sound = false; rtcSound = false; unstall('mp3'); unstall('rtc'); syncAudio();
       startGen++; rtcClose(); setMode(null);
@@ -605,15 +693,15 @@
       store('patvRoomVol', vol.value); applyVolume(); paint();
     });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
-    au.addEventListener('waiting', function () { auWait = true; stalled('mp3'); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
-    au.addEventListener('playing', function () { auWait = false; auSoundAt = Date.now(); unstall('mp3'); mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    au.addEventListener('waiting', function () { auWait = true; stalled('mp3'); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); lvKick(); });
+    au.addEventListener('playing', function () { auWait = false; unstall('mp3'); mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
     au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
-    rau.addEventListener('playing', function () { rauWait = false; rauSoundAt = Date.now(); unstall('rtc'); rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    rau.addEventListener('playing', function () { rauWait = false; rauSoundAt = Date.now(); unstall('rtc'); rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
     ['pause', 'ended'].forEach(function (kind) {
       au.addEventListener(kind, function () { unstall('mp3'); mp3Sound = false; syncAudio(); });
       rau.addEventListener(kind, function () { unstall('rtc'); rtcSound = false; syncAudio(); });
     });
-    rau.addEventListener('waiting', function () { rauWait = true; stalled('rtc'); });
+    rau.addEventListener('waiting', function () { rauWait = true; stalled('rtc'); lvKick(); });
     function setRate(r) {
       try {
         if (au.playbackRate === r) return;
@@ -667,7 +755,7 @@
       var sess = null; try { sess = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { sess = null; }
       var L = mse && mse.lv;
       return { ios: IOS, mse: useMse, mode: mode, rtc: !!rtcSess, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
-        lv: { framed: !!L, bad: !!(L && L.bad), recs: L ? L.recs : 0, src: lvSrcNow, stats: !!stPoll },
+        lv: { framed: !!L, bad: !!(L && L.bad), recs: L ? L.recs : 0, resyncs: L ? L.resyncs : 0, src: lvSrcNow, stats: !!stPoll, timer: lvTimer !== null },
         ahead: ahead(), rate: au.playbackRate, paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
     };
     var painted = false, offWhy = null;
@@ -1383,5 +1471,5 @@
 
   window.PATVRoom = { audio: audio, relay: relay, ptt: ptt, clipStatus: clipStatus, _ios: IOS,
     // micvad 1.99akk: the pure pieces of the level path, for the tests (test/micvad-player.test.js, micvad-contract.test.js)
-    _lv: { header: lvHeader, session: lvSession, walk: lvWalk, feed: lvFeed, digitAt: lvAt, fromPeak: lvFromPeak, heights: lvHeights } };
+    _lv: { header: lvHeader, session: lvSession, walk: lvWalk, scan: lvScan, feed: lvFeed, digitAt: lvAt, next: lvNext, fromPeak: lvFromPeak, heights: lvHeights } };
 })();
