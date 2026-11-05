@@ -220,7 +220,7 @@ test("1.99aiw dock: review - an unchanged catalog list writes nothing", async ()
   assert.equal(changed.descr, "Renamed frog"); assert.ok(changed.updated > before.u, "a changed list is written");
 });
 
-// stkimg 1.99?? (owner 2026-11-05: stickers in the picker with only their caption until a reload): a sticker's chat line reaches the page
+// stkimg 1.99akg (owner 2026-11-05: stickers in the picker with only their caption until a reload): a sticker's chat line reaches the page
 // ~30 s before Pepe uploads a picture the site hasn't seen; that first request 404s and the browser (or Cloudflare's 3-minute 404 cache
 // on a .webp path) kept the failed URL - the picker's tile was the same URL. The picker now asks for src + "?v=" + v (v = the picture's
 // file's first 8 hex), the media route ignores ?v / ?r, and a miss is never kept (no-store). src stays the plain URL: a page loaded

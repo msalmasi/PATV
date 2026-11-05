@@ -414,7 +414,7 @@
     }, { once: true });
     return img;
   }
-  // stkimg 1.99??: a Camfrog sticker's line can reach the chat before its picture reaches the site - Pepe uploads a picture the site
+  // stkimg 1.99akg: a Camfrog sticker's line can reach the chat before its picture reaches the site - Pepe uploads a picture the site
   // hasn't seen ~30 s after he learns it (pepe_sticker.py STICKER_SYNC_SOON; his 10-minute sync if that one was missed) - so its first
   // request 404s. The line shows its words ("[sticker]") as before and asks again ~35 s, ~90 s and ~11 min after that miss, each time
   // under a fresh ?r= (a URL this page never asked for: a browser or an edge that kept the failed one can't answer with it). One timer

@@ -11,7 +11,7 @@
   function t(k, d, v) { return tr('js.pad.picker.' + k, d, v); }
   var EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '🙃', '😉', '😍', '🥰', '😘', '😎', '🤔', '🤨', '😐', '🙄', '😏', '😴', '😢', '😭', '😤', '😡', '🤯', '😱', '🥳', '🤗', '🫡', '🤫', '🤭', '🫠', '🥹', '💀', '👻', '👀', '💚', '❤️', '💜', '💙', '💛', '💔', '✨', '⭐', '🔥', '💯', '🎉', '🎊', '👏', '🙌', '👍', '👎', '🤝', '🙏', '💪', '👋', '✌️', '🤘', '🫶', '🤷', '🤦', '🐸', '🐈', '🐕', '🦊', '🐼', '🦋', '🌻', '🌈', '🌙', '☀️', '🍿', '🍕', '☕', '🎵', '🎶', '🎤', '🎬', '🎮', '🎲', '🎁', '🏆'];
   function available(data, o) { return !!(o && o.signed && o.relay && data && data.room && data.room.relay); }
-  // stkimg 1.99??: a Camfrog tile's picture URL -> the fresh one its next showing asks for, once it failed (this page, every sheet)
+  // stkimg 1.99akg: a Camfrog tile's picture URL -> the fresh one its next showing asks for, once it failed (this page, every sheet)
   var HAS = Object.prototype.hasOwnProperty, retryTile = {};
   var voiceList = null;
   function voices() {
@@ -61,7 +61,7 @@
           show(rows);
         }).catch(function () { if (connected(g)) note(t('unavailable', 'Could not load this right now. Try again.')); });
     }
-    // (stkimg 1.99??: again = a Camfrog tile - one that failed is asked for once more, under a fresh ?r=, the next time the sheet shows it)
+    // (stkimg 1.99akg: again = a Camfrog tile - one that failed is asked for once more, under a fresh ?r=, the next time the sheet shows it)
     function picture(parent, src, label, again) {
       var image = el('img'); image.src = again && HAS.call(retryTile, src) ? retryTile[src] : src; image.alt = label; image.loading = 'lazy'; image.decoding = 'async';
       image.style.inlineSize = '100%'; image.style.blockSize = '88px'; image.style.objectFit = 'contain'; image.style.borderRadius = 'var(--ds-r-sm)';
@@ -111,7 +111,7 @@
         var items = grid();
         rows.forEach(function (r) {
           if (!r || !/^\d{1,10}$/.test(String(r.id)) || !/^\d{1,10}$/.test(String(r.set)) || r.src !== '/media/cfsticker/' + r.id + '.webp') return;
-          // (stkimg 1.99??: asked for under ?v= the picture's version - 8 lower-case hex, cfstickers.js - so a new picture is a new URL; a
+          // (stkimg 1.99akg: asked for under ?v= the picture's version - 8 lower-case hex, cfstickers.js - so a new picture is a new URL; a
           // row without one (a server from before this release) is the plain URL, as before)
           var src = typeof r.v === 'string' && /^[a-f0-9]{8}$/.test(r.v) ? r.src + '?v=' + r.v : r.src;
           var desc = String(r.desc || t('sticker', 'Sticker')).slice(0, 240);

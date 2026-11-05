@@ -1,4 +1,4 @@
-// stkimg 1.99?? (owner 2026-11-05: "new camfrog stickers get added ... but when do they get 'loaded'"): a Camfrog sticker's chat line can
+// stkimg 1.99akg (owner 2026-11-05: "new camfrog stickers get added ... but when do they get 'loaded'"): a Camfrog sticker's chat line can
 // reach the page ~30 s before Pepe uploads a picture the site hasn't seen (pepe_sticker.py STICKER_SYNC_SOON; his 10-minute sync if that
 // one was missed), so the line's first request 404s. chatlog-core.js (every chat renderer: the pad page and its chat window, the homepage
 // Dock, scrollback / search) shows the line's words and asks again ~35 s, ~90 s and ~11 min after that miss under a fresh ?r=, one timer

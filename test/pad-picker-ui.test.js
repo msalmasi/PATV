@@ -32,7 +32,7 @@ test("stickers use the existing outbox once and preserve the typed draft",async(
     {id:42,set:1642,desc:"Friendly frog",src:"/media/cfsticker/42.webp",v:"0123abcd"},
     {id:43,set:1642,desc:"bad source",src:"https://elsewhere.invalid/p.png",v:"0123abcd"},
     {id:"42] extra",set:1642,desc:"bad token",src:"/media/cfsticker/42] extra.webp"},
-    // stkimg 1.99??: src is still exactly the site's own plain URL of THIS sticker (a versioned src, another id or a query is refused);
+    // stkimg 1.99akg: src is still exactly the site's own plain URL of THIS sticker (a versioned src, another id or a query is refused);
     // v (8 lower-case hex) is added as ?v=, anything else in it is left out (the plain URL)
     {id:44,set:1642,desc:"versioned src",src:"/media/cfsticker/44.webp?v=0123abcd"},{id:45,set:1642,desc:"other id",src:"/media/cfsticker/46.webp",v:"0123abcd"},
     {id:47,set:1642,desc:"upper hex",src:"/media/cfsticker/47.webp",v:"0123ABCD"},{id:48,set:1642,desc:"short token",src:"/media/cfsticker/48.webp",v:"0123abc"},

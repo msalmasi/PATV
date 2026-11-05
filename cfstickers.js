@@ -30,7 +30,7 @@ function init() {
   return ready;
 }
 const enabled = () => require("./paddock").current().cfg.cfstickers === true;
-// stkimg 1.99??: v = the picture's version - the first 8 hex of its file (a random name, nothing else in it). A sticker's chat line
+// stkimg 1.99akg: v = the picture's version - the first 8 hex of its file (a random name, nothing else in it). A sticker's chat line
 // reaches the page ~30 s before Pepe uploads a picture the site hasn't seen, so that first request 404s; a browser or an edge that
 // kept the failed URL left the picker's tile, the very same URL, a caption until a reload. The picker asks for src + "?v=" + v: a new
 // picture = a new URL (an old failure or an old cached picture never sticks); the media route ignores the query. src stays the plain
@@ -141,7 +141,7 @@ function register(app, { isBotToken, addUser }) {
       await init(); res.json(catalog());
     } catch (e) { fail(res, e); }
   });
-  // (stkimg 1.99??: ?v= (the picker's version) and ?r= (a chat line's retry) are ignored - the id alone picks the picture. A "not
+  // (stkimg 1.99akg: ?v= (the picker's version) and ?r= (a chat line's retry) are ignored - the id alone picks the picture. A "not
   // here" is never kept - no-store: the picture may arrive seconds later, and a browser or Cloudflare (404s on a .webp path, 3 min by
   // default) must ask again)
   app.get("/media/cfsticker/:id.webp", async (req, res) => {
