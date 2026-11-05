@@ -579,8 +579,13 @@
       }
       return null;
     }
-    function l3Sync() {
+    // the off-air slate: nothing on this stage and a booked 📼 start within the hour - the stage box opens for it (onAir(true, …, {slate}): the page
+    // says OFF AIR, the slate fills the player)
+    function slateWant() { var t = srvNow(); return !!(coming && coming.at && coming.next && coming.at - t <= SLATE_MS && coming.at - t > -60000); }
+    function idleNow() { return !cur() && view !== 'mic' && !(pepeOn && pepeHere); }
+    function l3Sync(fromShow) {
       if (dead) { l3Off(); slateOff(); return; }
+      if (!fromShow && (idleNow() && slateWant()) !== !!slate) { show(); return; }   // (the slate's hour came / went: the stage box follows)
       var w = l3Want();
       if (!w) l3Off();
       else {
@@ -599,8 +604,7 @@
         l3.tag.textContent = w.tag; l3.title.textContent = w.title; l3.when.textContent = w.when;
       }
       // the slate: nothing on this stage (the "nothing streaming" view) and a booked 📼 start within the hour
-      var s = cur(), idle = !s && view !== 'mic' && !(pepeOn && pepeHere);
-      if (idle && coming && coming.at && coming.next && coming.at - srvNow() <= SLATE_MS && coming.at - srvNow() > -60000) {
+      if (idleNow() && slateWant()) {
         if (!slate) {
           var D2 = document; slate = D2.createElement('div'); slate.className = 'st-slate'; slate.setAttribute('role', 'status');
           var sk = D2.createElement('p'); sk.className = 'st-slate-kick'; var st2 = D2.createElement('p'); st2.className = 'st-slate-title';
@@ -659,7 +663,8 @@
       } else {
         setEmbed(null); player.stop();
         var any = slots.length > 0;
-        o.onAir && o.onAir(any, any ? (pepeHere ? _t('js.stage.room.pepe_off_pick', 'Pepe\'s stream is off air - pick a stream above') : _t('js.stage.room.pick', 'pick a stream above')) : _t('js.stage.room.nothing', 'nothing streaming right now'));
+        if (slateWant()) o.onAir && o.onAir(true, null, { slate: true });   // upnext2 (D): the slate names a booked 📼 start (l3Sync draws it)
+        else o.onAir && o.onAir(any, any ? (pepeHere ? _t('js.stage.room.pepe_off_pick', 'Pepe\'s stream is off air - pick a stream above') : _t('js.stage.room.pick', 'pick a stream above')) : _t('js.stage.room.nothing', 'nothing streaming right now'));
       }
       renderTabs();
       // 1.99aal: 🟣 admins - Pepe's Twitch relay switch on his stream's player (twitch-btn.js, only on admins' pages)
@@ -668,7 +673,7 @@
       if (window.PATVOnAirBar && pepeHere) window.PATVOnAirBar.sync(o.wrap.parentNode || o.wrap);
       if (o.onShow) o.onShow(selection());
       upSync();
-      l3Sync();                                                // upnext2 (D): the lower-third / the off-air slate
+      l3Sync(true);                                            // upnext2 (D): the lower-third / the off-air slate
     }
     // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from
     // his HLS on the server even while the page shows an admin-chosen embed, so it counts while HLS is on air.

@@ -817,11 +817,13 @@
       featured: <%- JSON.stringify(RS.featured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf: the pad's featured slot, live or not (stage-room.js featWins / the hold)
       posters: <%= signedIn_ ? 'true' : 'false' %>,   // upnext: the "Coming up next" card's poster - the /api/medialib/poster proxy is for signed-in viewers
       onPoll: slotsMoved,                             // newstream 1.99ala
-      onAir: function (on) {
+      onAir: function (on, sub, x) {
+        // upnext2 (D): the off-air slate naming a booked 📼 start ({slate: true}) opens the stage box for it - still OFF AIR, nothing live
+        var air = on && !(x && x.slate);
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
-        stagePill.className = 'live' + (on ? '' : ' off');
-        stagePillText.textContent = on ? _t('js.pad.stage.on_air', 'ON AIR') : _t('js.pad.stage.off_air', 'OFF AIR');
-        stageOn(on);                                  // newstream 1.99ala: the Live tab's dot + "Live on the stage now"
+        stagePill.className = 'live' + (air ? '' : ' off');
+        stagePillText.textContent = air ? _t('js.pad.stage.on_air', 'ON AIR') : _t('js.pad.stage.off_air', 'OFF AIR');
+        stageOn(air);                                 // newstream 1.99ala: the Live tab's dot + "Live on the stage now"
       }
     });
   })();

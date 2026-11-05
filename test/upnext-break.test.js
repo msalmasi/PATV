@@ -657,3 +657,19 @@ test("E (the investigation's API gap): adding to a running queue is its starter'
   // the pad's owner still controls it (⏭ / remove) - only adding is the starter's
   assert.equal((await Q.edit(owner, ROOM, { op: "remove", index: 3 })).ok, true);
 });
+
+test("B (instant): ⏭ - the marker is set while the old encoder is still letting go (the slot still reads live); its publish_done is when the card shows, so the pages are told again then", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 5 }, "test", { maxSlots: 4, maxPrice: 0 });
+  const t0 = T;
+  await Q.startFor(admin, { room: ROOM, key: "911", scope: "season" });
+  T = t0 + 5000; await L.watch();
+  const k = keyOf(last()), p1 = await pub(k);
+  const v0 = S.stageVer(ROOM);
+  await Q.next(admin, ROOM);
+  assert.equal(S.stageVer(ROOM), v0 + 1, "the marker");
+  assert.equal((await featured()).live, true, "...but the old stream still publishes: no card yet");
+  await unpub(k, p1.cid);
+  assert.equal(S.stageVer(ROOM), v0 + 2, "its publish_done: the card is on now - the pages ask again");
+  assert.equal((await featured()).next.episode, 2);
+  await L.pause(admin, ROOM).catch(() => null);                 // (nothing on - a 📼 pause / a plain drop never bumps it)
+});

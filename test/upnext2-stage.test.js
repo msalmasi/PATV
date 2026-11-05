@@ -272,11 +272,22 @@ test("D: the off-air slate names a booked 📼 start within the hour while nothi
   assert.match(s.children[0].textContent, /^Coming up at /);
   assert.equal(s.children[1].textContent, "The Show · S1E2 · Second");
   assert.equal(s.children[2].textContent, "PATV");
+  assert.deepEqual(x.air[x.air.length - 1], [true, null, { slate: true }], "the stage box opens for it - the page still says OFF AIR (room.ejs onAir)");
+  const ro = read("views", "room.ejs");
+  assert.match(ro, /var air = on && !\(x && x\.slate\);/);
+  assert.match(ro, /stagePillText\.textContent = air \? _t\('js\.pad\.stage\.on_air', 'ON AIR'\) : _t\('js\.pad\.stage\.off_air', 'OFF AIR'\);/);
+  assert.match(ro, /stageOn\(air\);/, "nothing live: no Live-tab dot");
   x.answer(ans([LIBP()], { id: "lib1", live: true, by: "auto", went: true }, { now: x.now(), pepe_here: false, active: false }));
   await x.poll();
   assert.equal(slateOf(x), null, "a stream on the stage: no slate");
-  const far = switcher({ slots: [], pepeOn: false, pepeHere: false, coming: { at: T0 + 90 * 60000, next: NEXT_EP } });
+  assert.deepEqual(x.air[x.air.length - 1].slice(0, 1), [true]);
+  assert.equal(x.air[x.air.length - 1][2], null, "on air for real");
+  const far = switcher({ slots: [], pepeOn: false, pepeHere: false, coming: { at: T0 + 61 * 60000, next: NEXT_EP } });
   assert.equal(slateOf(far), null, "more than an hour out: not yet");
+  assert.deepEqual(far.air[far.air.length - 1], [false, "nothing streaming right now", null]);
+  await far.adv(65000);
+  assert.ok(slateOf(far), "its hour came: the slate (and the stage box) without waiting for a poll");
+  assert.deepEqual(far.air[far.air.length - 1], [true, null, { slate: true }]);
 });
 
 test("D: the poll - every 5 s while a 📼 title is on screen, every 3 s from 15 s before its end; 10 s otherwise", async () => {

@@ -1626,6 +1626,9 @@ async function rtmpCallback(f) {
       try { require("./stageaudio").stop(s.id); } catch (e) { /* none */ }   // 1.99aay
       await runQuery("UPDATE stage_slots SET publishing = 0, last_live = ? WHERE id = ? AND settled = 0", [t, s.id]);
       pubCache.clear();
+      // upnext2: a 📼 slot whose next title is already named (⏭ / ⏮: the marker is set while the old encoder is still letting go) - the card
+      // shows from THIS moment on, so its pages are told now (the wake at the marker found the old stream still live)
+      if (s.source === "library" && !s.settled && upnextOf(s)) stageBump(s.room_id || rooms.HOUSE_ROOM);
       return { status: 200 };
     }
     if (s.status === "ended" || s.settled) { clients.delete(cid); return { status: 403 }; }   // cut / over: drop it
