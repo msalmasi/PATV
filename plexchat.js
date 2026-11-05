@@ -18,6 +18,8 @@
 //   POST /api/medialib/bot   {password, op, as: {login} | {user_id}, room, via: room | web, ...}
 //     search    {q, year?, season?, episode?, target: stage | cam}  -> {rows (<= 5), free, how, per_hour, state, target, pad}
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace}
+//               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
+//                goes on with its feature and card - medialib.playFor / mediaqueue.startFor {replace: true}; -> + replaced {title, queue})
 //     control   {action: pause | resume | stop | seek | seek_rel | next | prev, value}
 //     np        {target?}                                             -> the pad's 📼 player (read-only view) + the on-air label
 //     continue  {show?}                                               -> the speaker's next episode (last 14 days) as one row
@@ -37,7 +39,7 @@ const PA = () => require("./padaccess");
 const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_library", "busy_queue", "slot_taken", "site_full", "encoder_busy",
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
-  "not_found", "error"];
+  "not_found", "error", "replace_gone"];
 const OPS = new Set(["search", "play", "control", "np", "continue", "rpm"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
@@ -105,6 +107,11 @@ function failBody(e) {
   const refusal = !!(e && (e.refuse || e instanceof Fail));
   const out = { ok: false, code, error: refusal && code !== "error" ? String(e.message || "Something went wrong.").slice(0, 300) : "Something went wrong." };
   for (const k of ["price", "estimate", "cap", "max", "busy", "max_minutes", "by"]) if (x[k] != null) out[k] = x[k];
+  // plexreplace: a busy pad says what's on and whether this speaker may replace it (Pepe offers "play X instead?" then)
+  if (x.can_replace != null) out.can_replace = !!x.can_replace;
+  if (x.playing != null) out.playing = String(x.playing).slice(0, 120);
+  if (x.playing_queue != null) out.playing_queue = !!x.playing_queue;
+  if (x.playing_left != null) out.playing_left = Math.max(0, Math.floor(Number(x.playing_left) || 0));
   if (e && e.price != null && out.price == null) out.price = e.price;
   if (e && e.label) out.label = String(e.label).slice(0, 120);
   if (code === "pat") {                       // shop.chargeService: "That costs X PAT and you have Y."
@@ -268,14 +275,16 @@ async function opPlay(user, b, ctx) {
     return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
   const S = conf().get();
+  const rep = b.mode === "replace" ? { replace: true } : {};            // plexreplace: Pepe's "play X instead?" + yes
+  const replaced = (r) => (r && r.replaced ? { replaced: { title: r.replaced.title || null, queue: !!r.replaced.queue } } : {});
   if (scope === "title" || (scope === "episode" && S.library_queue === false)) {
-    const r = await ML().playFor(user, { room: R.id, key, ...(price !== undefined ? { price } : {}) });
-    return { ok: true, target: "stage", title: r.title, price: r.price || 0, queue: false, pad: { id: R.id, title: R.title || R.id } };
+    const r = await ML().playFor(user, { room: R.id, key, ...(price !== undefined ? { price } : {}), ...rep });
+    return { ok: true, target: "stage", title: r.title, price: r.price || 0, queue: false, pad: { id: R.id, title: R.title || R.id }, ...replaced(r) };
   }
   const estimate = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
-  const r = await MQ().startFor(user, { room: R.id, key, scope, ...(estimate !== undefined ? { estimate } : {}) });
+  const r = await MQ().startFor(user, { room: R.id, key, scope, ...(estimate !== undefined ? { estimate } : {}), ...rep });
   return { ok: true, target: "stage", title: r.title, price: r.price || 0, queue: true, items: r.items, total_sec: r.total_sec, estimate: r.estimate || 0,
-           per_hour: r.per_hour || 0, pad: { id: R.id, title: R.title || R.id } };
+           per_hour: r.per_hour || 0, pad: { id: R.id, title: R.title || R.id }, ...replaced(r) };
 }
 
 async function opControl(user, b) {
@@ -366,7 +375,7 @@ async function audit(user, b, ctx, op, r) {
   try {
     const room = b.target === "cam" ? rooms().HOUSE_ROOM : (r.pad && r.pad.id) || b.room;
     const how = (ctx.via === "web" ? "web chat" : "room chat") + (ctx.login ? " as " + clean(ctx.login, 40) : "");
-    const what = op === "play" ? `${b.target === "cam" ? "cam " : ""}${b.mode === "next" ? "next " : ""}play ${clean(b.key, 12)}${r.title ? " -> " + clean(r.title, 80) : ""}`
+    const what = op === "play" ? `${b.target === "cam" ? "cam " : ""}${b.mode === "next" ? "next " : b.mode === "replace" && b.target !== "cam" ? "instead " : ""}play ${clean(b.key, 12)}${r.title ? " -> " + clean(r.title, 80) : ""}`
       : `${clean(b.action, 12)}${b.value != null ? " " + clean(b.value, 12) : ""}`;
     await ML().logControl(user, String(room || ""), "pepe", `${how}: ${what}`.slice(0, 160));
   } catch (e) { /* the log never blocks a play */ }

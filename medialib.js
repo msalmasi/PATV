@@ -378,14 +378,22 @@ async function poster(user, key) {
   return r;
 }
 
-// open a library slot + start the stream at `offset` (s). -> {slot, play_id}
-async function startOn(user, R, it, o) {
+// open a library slot + start the stream at `offset` (s). -> {slot, replaced}
+// plexreplace: x.replace = what's on the pad (replaceTarget) - its slot ends and this one opens in one step (mainstage.libraryOpen
+// opts.replace: the feature and the "Coming up next" card carry straight over), THEN its encoder stops and its play / queue closes (retire),
+// then the new title's encoder starts (media-control takes one stream per stage: the old one has to be off first). x.swap = a slot id to take
+// over the same way without anything to retire (restart: a resume on a fresh slot after media-control forgot the stream).
+async function startOn(user, R, it, o, x = {}) {
   const left = Math.max(60, (it.duration || 0) - o.offset);
   const title = "📼 " + fmtTitle(it);
-  const opened = await stage.libraryOpen(user, { room: R.id, title, minutes: Math.ceil(left / 60) + SLACK_MIN });
+  const rep = x.replace || null, swapId = rep ? rep.slot_id : x.swap || null;
+  const opened = await stage.libraryOpen(user, { room: R.id, title, minutes: Math.ceil(left / 60) + SLACK_MIN,
+    ...(swapId ? { replace: swapId, reason: rep ? "library_replaced" : "library_restart", upnext: upNextInfo(it), actor: x.actor || null } : {}) });
+  if (rep) await retire(user, R, rep);
   // upnext (owner 2026-11-05): the new slot is the pad's featured stage from now - a "Coming up next" card until its first frame (the
-  // encoder probes the file and starts ffmpeg first: 1-6 s, more after a ⏹ of a title still shutting down)
-  await stage.libraryUpNext(opened.slot.id, upNextInfo(it)).catch((e) => console.error("[medialib] up next:", e.message));
+  // encoder probes the file and starts ffmpeg first: 1-6 s, more after a ⏹ of a title still shutting down). (plexreplace: a swap has its
+  // marker from the open itself)
+  if (!swapId) await stage.libraryUpNext(opened.slot.id, upNextInfo(it)).catch((e) => console.error("[medialib] up next:", e.message));
   const body = { rtmp: stage.RTMP_PUBLIC, key: opened.key, ratingKey: String(it.key), offset: o.offset, quality: o.quality,
                  audio: o.audio, sub: o.sub, title: fmtTitle(it) };
   try {
@@ -395,7 +403,51 @@ async function startOn(user, R, it, o) {
     throw e;
   }
   keys.set(R.id, opened.key);
-  return opened.slot;
+  return { slot: opened.slot, replaced: opened.replaced || null };
+}
+
+// ── plexreplace: ▶ "Play this instead" (owner 2026-11-05) ──
+// A pick while something from the library is on the pad replaces it in ONE request: play / playFor / the queue's start take
+// {replace: true}; who may = whoever may start the new play (every rule of a fresh one: access, the pad, the daily cap, the price they
+// confirmed, the pad's limit) AND control what's on (mayControl: its starter, the pad's owner / site staff, the library admins). Anyone
+// else keeps the busy refusal (which now says what's on and whether a replace would be allowed - the sheet and Pepe offer it then).
+// A 📼 QUEUE on the pad is replaced as a whole (it ends 'replaced by <who>', like ⏹ would end it): its titles are its starter's, billed per
+// hour as they play - splicing someone's pick into it would bill them for a title they never chose; its starter has ⏭ / "+ Add to the
+// queue" for "after this one". Everything that can refuse runs BEFORE anything stops; the old title keeps playing until the new slot exists.
+/** What a replace on R would take off -> {slot_id, s, q, starter, by, title, left (queue titles after this one)} | {busy: true} (a queue
+ *  that is starting) | null (nothing from the library is on) */
+async function onNow(R) {
+  const s = await session(R.id);
+  const q = await require("./mediaqueue").activeFor(R.id);
+  if (!s && !q) return null;
+  if ((s && s.queue_id && !q) || (s && q && Number(s.queue_id) !== Number(q.id))) return { busy: true };
+  const p = s ? (await getQuery("SELECT user_id, username FROM media_plays WHERE id = ?", [s.play_id]))[0] || {} : {};
+  const cur = q ? q.items[q.pos] : null;
+  return { slot_id: q ? q.slot_id : s.slot_id, s: s || null, q: q || null, starter: q ? q.user_id : p.user_id || null,
+           by: q ? q.username : p.username || (s && s.by_user) || null, title: s ? s.title : cur ? fmtTitle(cur) : null,
+           left: q ? Math.max(0, q.items.length - q.pos - 1) : 0 };
+}
+/** The replace's target, for a user who may control it -> the onNow() view | null (nothing on: an ordinary play). Throws control_denied. */
+async function replaceTarget(user, R) {
+  const cur = await onNow(R);
+  if (!cur || cur.busy) return null;                                  // (a starting queue: preflight says busy)
+  if (!(await mayControl(user, R.id, cur.starter))) {
+    const open = conf.on.library() || isLibAdmin(user);
+    throw new Refuse(403, open ? CONTROL_DENIED : "Playing from Plex isn't open right now.", { code: open ? "control_denied" : "off", by: cur.by || null, playing: cur.title || null });
+  }
+  return cur;
+}
+const wantsReplace = (b) => !!b && (b.replace === true || b.replace === 1 || b.replace === "1" || b.replace === "true");
+/** After the swap committed (the old slot ended 'library_replaced', the new one is open and featured): the old encoder off, its play closed
+ *  (its held charge settled as it went - routed once it was on the stage), a queue ended - inside the pad's lock. Never throws. */
+async function retire(user, R, rep) {
+  try {
+    if (rep.q) { await require("./mediaqueue")._retire(rep.q, user); return; }
+    let pos = null;
+    try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
+    catch (e) { console.warn("[medialib] replace: media-control stop:", conf.errLine(e)); }
+    await dropSession(rep.s, "replaced by " + user.username, pos != null ? pos : rep.s.position);
+  } catch (e) { console.error("[medialib] replace: closing what was on:", conf.errLine(e)); }
 }
 
 // mediactl's streams right now (null = can't be reached) + its cap
@@ -418,15 +470,18 @@ async function streamsNow() {
  * Play a title on a pad. b = {room, key, offset, quality, audio, sub, price (the price the user confirmed)}.
  * Internal: b._carry = {play} - a resume on a fresh slot, carrying the original play's charge (no new charge).
  */
-async function play(user, b = {}) {
+async function play(user, b = {}, how = {}) {
   await init();
   const carry = b._carry || null;
   // a carried play (a resume on a fresh slot) was allowed when it started; anything else asks now
   const A = carry ? { ok: true, free: true, how: carry.access || "carried" } : await mustAccess(user);
   const R = await roomOf(b.room);
   if (!R) throw new Refuse(404, "No such pad.", { code: "pad" });
+  // plexreplace: a replace runs under the pad's 📼 lock (mediaqueue's: the queue watcher and its controls wait for it)
+  if (wantsReplace(b) && !carry && !how.locked) return require("./mediaqueue")._lock(R.id, () => play(user, b, { ...how, locked: true }));
+  const rep = wantsReplace(b) && !carry ? await replaceTarget(user, R) : null;
   const paidRules = !A.free || (!isLibAdmin(user) && !carry);
-  await preflight(user, A, R, { carry: !!carry });
+  await preflight(user, A, R, { carry: !!carry, replacing: rep });
   const it = await fetchItem(b.key);
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.", { code: "bad" });
   const S = conf.get();
@@ -448,17 +503,17 @@ async function play(user, b = {}) {
     if (b.price == null || b.price === "") throw new Refuse(400, `This costs ${fmtPat(q.price)} PAT - confirm the price to play it.`, { price: q.price, code: "price" });
     if (Math.floor(Number(b.price)) !== q.price) throw new Refuse(409, `The price is ${fmtPat(q.price)} PAT now - confirm it again.`, { price: q.price, code: "price" });
   }
-  // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word
-  if (paidRules || q.price > 0) await needEncoder();
+  // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word (plexreplace: the one it replaces is free)
+  if (paidRules || q.price > 0) await needEncoder(rep ? R.id : null);
   let order = null;
   if (q.price > 0) {
     order = await require("./shop").chargeService({ userId: user.userId, username: user.username, price: q.price, source: "medialib", hold: true,
       title: `📼 Play from Plex: ${fmtTitle(it)} on ${R.title || R.id}`,
       note: `${q.hours} h × ${fmtPat(q.per_hour)} PAT - held until it's on the stage, refunded if it never gets there` });
   }
-  let slot;
+  let slot, swapped = null;
   try {
-    slot = await startOn(user, R, it, o);
+    ({ slot, replaced: swapped } = await startOn(user, R, it, o, { replace: rep, swap: how.swap || null, actor: how.actor || null }));
   } catch (e) {
     if (order) {
       const back = await require("./shop").refundService(order.order_id, "📼 it didn't start: " + String(e.message || "error").slice(0, 120), "system").catch(() => false);
@@ -480,28 +535,43 @@ async function play(user, b = {}) {
                   VALUES (?, ?, ?, ?, ?, 'playing', ?, ?, ?, ?, ?)`,
                  [R.id, slot.id, p.id, String(it.key), fmtTitle(it), user.username, t, t, o.offset, it.duration || null]);
   require("./plexpad").noteItem(it).catch(() => {});                   // 1.99nj: its metadata for the 📼 pad achievements
+  if (rep) await logControl(user, R.id, "replace", `${rep.title || "?"} → ${fmtTitle(it)}`, { play_id: p.id, queue_id: rep.q ? rep.q.id : null });
   console.log(`[medialib] ${user.username} (${A.how}) plays "${fmtTitle(it)}" (${it.key}) on ${R.id} at ${o.offset}s, ${o.quality}p - play #${p.id}` +
-              (q.price ? `, ${q.price} PAT held (order ${order.order_id})` : carry ? ` (carries play #${carry.id})` : ", free"));
+              (q.price ? `, ${q.price} PAT held (order ${order.order_id})` : carry ? ` (carries play #${carry.id})` : ", free") +
+              (rep ? ` - replaced "${rep.title}"${rep.q ? ` (queue #${rep.q.id})` : ""} on slot ${rep.slot_id}` : ""));
   return { ok: true, play_id: p.id, slot: { id: slot.id, stream: slot.stream, hls: slot.hls }, title: fmtTitle(it), price: q.price,
-           order_id: order ? order.order_id : null };
+           order_id: order ? order.order_id : null,
+           ...(rep ? { replaced: { title: rep.title || null, queue: !!rep.q, slot_id: rep.slot_id, feature: swapped ? swapped.carried || null : null } } : {}) };
 }
 
 /**
  * The pad rules for a new play / queue (shared with mediaqueue.js): one library stream per pad (a 📼 queue holds its pad
  * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
  */
-async function preflight(user, A, R, { carry = false } = {}) {
+async function preflight(user, A, R, { carry = false, replacing = null } = {}) {
   // 1.99ajk plexchat: each refusal carries a stable code (plexchat.js words it in the room's language); the texts are unchanged.
   // A pad whose 📼 queue is on reads busy_queue (a queue's title has a session too): Pepe can offer "queue it next" for that one
-  const queued = (await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id])).length > 0;
-  if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.", { code: queued ? "busy_queue" : "busy_library" });
-  if (queued) {
-    throw new Refuse(409, "This pad is already playing a queue from the library - stop it first.", { code: "busy_queue" });
+  // plexreplace: `replacing` (replaceTarget) is what this play takes off - only THAT may be on; the busy refusal says what's on and whether
+  // this user may replace it (can_replace: the sheet's "▶ Play this instead", Pepe's "play X instead?")
+  const rep = replacing && !carry ? replacing : null;
+  const qs = await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state IN ('active','starting')", [R.id]);
+  const queued = qs.length > 0;
+  const otherQ = qs.filter((x) => !(rep && rep.q && Number(x.id) === Number(rep.q.id)));
+  const s = await session(R.id);
+  const busy = async (msg, code) => {
+    const cur = await onNow(R).catch(() => null);
+    const can = !!(cur && !cur.busy && user && user.userId && (await mayControl(user, R.id, cur.starter)));
+    return new Refuse(409, msg, { code, can_replace: can, ...(cur && !cur.busy && cur.title ? { playing: cur.title, playing_queue: !!cur.q, playing_left: cur.left } : {}) });
+  };
+  if (s && !(rep && s.slot_id === rep.slot_id)) throw await busy("This pad is already playing from the library - stop it first.", queued ? "busy_queue" : "busy_library");
+  if (otherQ.length) {
+    throw await busy("This pad is already playing a queue from the library - stop it first.", "busy_queue");
   }
   if (isLibAdmin(user) || carry) return;
   if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.", { code: "pad" });
   if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.", { code: "banned" });
-  const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
+  const mine = (await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]))
+    .filter((x) => !(rep && x.id === rep.slot_id));                   // (plexreplace: your own 📼 slot that this one takes over from)
   if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.", { code: "has_slot" });
   const S0 = conf.get();
   const member = isMemberHow(A.how);
@@ -510,18 +580,20 @@ async function preflight(user, A, R, { carry = false } = {}) {
   if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.", { code: "cap", cap });
 }
 // streams in use: mediactl's playing ones + 1.99lr the 📼 queues between two titles (a queue holds its encoder)
-async function busyOf(live) {
+async function busyOf(live, exceptRoom = null) {
   const names = new Set(live.filter((x) => x.state === "playing").map((x) => x.stage));
   const qs = await safeQuery(`SELECT q.room_id, s.state FROM media_queues q LEFT JOIN media_sessions s ON s.room_id = q.room_id
                               WHERE q.state IN ('active','starting')`, []);
   for (const q of qs) if (q.state !== "paused") names.add(stageName(q.room_id));
+  if (exceptRoom) names.delete(stageName(exceptRoom));               // plexreplace: the stream a replace stops first
   return names.size;
 }
-/** A free encoder (MEDIACTL_MAX_STREAMS) before anyone pays; mediactl still has the last word. */
-async function needEncoder() {
+/** A free encoder (MEDIACTL_MAX_STREAMS) before anyone pays; mediactl still has the last word. exceptRoom: a replace on that pad (its stream
+ *  comes off first, so it doesn't count). */
+async function needEncoder(exceptRoom = null) {
   const live = await streamsNow();
   if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.", { code: "encoder_down" });
-  const busy = await busyOf(live);
+  const busy = await busyOf(live, exceptRoom);
   if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`, { code: "encoder_busy", busy, max: live.max });
   return live;
 }
@@ -598,6 +670,7 @@ async function restart(user, room, offset, how) {
   const open = slot && !slot.settled && ["waiting", "active"].includes(slot.status);
   const name = encodeURIComponent(stageName(R.id));
   const pos = offset == null ? (s.position || 0) : Math.max(0, Math.min(Math.floor(Number(offset) || 0), Math.max(0, (s.duration || 0) - 30)));
+  let swap = null;
   if (open) {
     try {
       const r = how === "resume" && offset == null ? await must("POST", `/streams/${name}/resume`, {}) : await must("POST", `/streams/${name}/seek`, { offset: pos });
@@ -609,7 +682,9 @@ async function restart(user, room, offset, how) {
       if (!(e.status === 409 || e.status === 404)) throw e;     // mediactl forgot it (restarted): start it again below
       // 1.99lr: a 📼 queue keeps its slot: the same title starts again at `pos` with a fresh key
       if (s.queue_id) return { ...(await require("./mediaqueue").restartCurrent(s, pos, user.username)), same_slot: true };
-      await stage.end(s.slot_id, "library_restart", user.username).catch(() => {});
+      // plexreplace: the fresh slot TAKES OVER from this one (mainstage.libraryOpen opts.replace, reason 'library_restart'): its feature and
+      // the card carry over - it used to end here first, and the pad sat with nothing featured until the new slot published
+      swap = s.slot_id;
     }
   }
   if (s.queue_id) throw new Refuse(409, "This queue's slot has ended - start the queue again.");
@@ -622,8 +697,10 @@ async function restart(user, room, offset, how) {
   // the new play stays the starter's (their controls, their log line), whoever pressed resume / seek
   const owner = p.user_id && p.user_id !== user.userId ? { userId: p.user_id, username: p.username, class: null } : user;
   try {
-    return { ...(await play_(owner, { room: R.id, key: s.rating_key, offset: pos, quality: p.quality, audio: p.audio, sub: p.sub, _carry: carry })), same_slot: false };
+    return { ...(await play_(owner, { room: R.id, key: s.rating_key, offset: pos, quality: p.quality, audio: p.audio, sub: p.sub, _carry: carry },
+                             swap ? { swap, actor: user.username } : {})), same_slot: false };
   } catch (e) {
+    if (swap) await stage.end(swap, "library_restart", user.username).catch(() => {});   // (plexreplace: the swap didn't happen - it ends as before)
     // couldn't start again: a charge that was still held goes back to its first play and is settled there
     if (carry.charge === "held") {
       await runQuery("UPDATE media_plays SET charge = 'held' WHERE id = ? AND charge = 'moved'", [p.id]);
@@ -632,7 +709,7 @@ async function restart(user, room, offset, how) {
     throw e;
   }
 }
-const play_ = (u, b) => play(u, b);
+const play_ = (u, b, how) => play(u, b, how);
 /**
  * 1.99ajk plexchat: the ONE entry point for a member's play (the /stage ▶ route, Pepe's chat - plexchat.js - and the Room Dock):
  * the pad's visibility (seesPad - an Approved pad they aren't inside reads as no such pad) first, then play() with every rule.
@@ -647,8 +724,8 @@ async function playFor(user, b = {}) {
 }
 /**
  * 1.99ajk plexchat: what a pad's stage looks like to `user` right now, for Pepe's chat answer (side-effect free: reads only).
- * -> null (no such pad) | {room, library: {title, queue, starter_is_you, by, per_hour, next} | null, slot_taken, own_slot,
- *    daily_left, free, how}. Titles only - never a file.
+ * -> null (no such pad) | {room, library: {title, queue, starter_is_you, by, per_hour, next, can_add, can_replace, left} | null, slot_taken,
+ *    own_slot, daily_left, free, how}. Titles only - never a file.
  */
 async function padState(user, room) {
   await init();
@@ -666,7 +743,11 @@ async function padState(user, room) {
                 by: q ? q.username : p.username || (s && s.by_user) || null, per_hour: q ? Number(q.per_hour) || 0 : null,
                 next: nxt ? fmtTitle(nxt) : null, state: s ? s.state : "waiting",
                 // 1.99ajk plexchat review: may THIS speaker queue a title on it (mediaqueue.mayGrow - one rule)? Pepe says no up front
-                can_add: q ? !!(await require("./mediaqueue").mayGrow(user, q)) : false };
+                can_add: q ? !!(await require("./mediaqueue").mayGrow(user, q)) : false,
+                // plexreplace: may THIS speaker replace it ("play X instead?" - mayControl; a queue that is still starting: no) + the queue's
+                // titles after this one (a replace ends them too)
+                can_replace: !!(user && user.userId && !(s && s.queue_id && !q) && (await mayControl(user, R.id, starter))),
+                left: q ? Math.max(0, q.items.length - q.pos - 1) : 0 };
   }
   const open = await safeQuery(`SELECT id, source FROM stage_slots WHERE room_id = ? AND status IN ${OPEN_STATES}`, [R.id]);
   const RS = await rooms.stageSettings(R.id).catch(() => null);
@@ -733,7 +814,18 @@ async function mine(user, roomId) {
   // 1.99lr: my 📼 queues (running, or ended in the last few minutes - "you're out of PAT" and the like)
   out.queue_on = S.library_queue !== false;
   out.queues = await require("./mediaqueue").views({ userId: user.userId, recent: true });
-  if (roomId) out.room = roomId;
+  if (roomId) {
+    out.room = roomId;
+    // plexreplace: what's on THIS pad (a pad the user sees) and whether a pick may replace it - the sheet's button reads "▶ Play this instead"
+    try {
+      const R = await roomOf(roomId);
+      const cur = R && (await stage.seesPad(user, R.id)) ? await onNow(R) : null;
+      if (cur && !cur.busy) {
+        out.on_pad = { title: cur.title || null, queue: !!cur.q, left: cur.left, by: cur.by || null, mine: !!(cur.starter && cur.starter === user.userId),
+                       can_replace: !!(A.ok && (await mayControl(user, R.id, cur.starter))) };
+      } else if (cur && cur.busy) out.on_pad = { title: null, queue: true, left: 0, by: null, mine: false, can_replace: false };
+    } catch (e) { /* the sheet still works: the server refuses a busy pad with can_replace */ }
+  }
   return out;
 }
 
@@ -836,6 +928,10 @@ async function watch(only = null) {
       const m = live ? live.find((x) => x.stage === name) : undefined;
       // 1.99lr: a 📼 queue's title - the queue moves on by itself (mediaqueue.js)
       if (s.queue_id) { if (await require("./mediaqueue").onWatch(s, slot, m, live)) n++; continue; }
+      // plexreplace: a ▶ "Play this instead" may have taken this title off while this look was on its way (its slot ended, the session row
+      // went, the pad's encoder now plays the new title) - only the session that is still the pad's is acted on (its stop would cut the new one)
+      const still = await session(s.room_id).catch(() => null);
+      if (!still || Number(still.play_id) !== Number(s.play_id)) continue;
       // on the stage: a held charge is routed now
       if (slot && slot.went_live) await settle(s.play_id, true).catch((e) => console.error("[medialib] settle:", conf.errLine(e)));
       if (!slot || slot.settled || slot.status === "ended") {
@@ -922,5 +1018,6 @@ module.exports = { init, register, play, playFor, padState, stop, pause, resume,
                    player, mayControl, logControl,
                    _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat,
                          mayControl, logControl, clock, CONTROL_DENIED,
-                         noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; }, _posters: posterCache },   // 1.99acx; upnext review: _posters
+                         noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; }, _posters: posterCache,   // 1.99acx; upnext review: _posters
+                         onNow, replaceTarget, retire, wantsReplace },                                   // plexreplace
                    stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys };

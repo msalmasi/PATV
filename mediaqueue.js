@@ -349,16 +349,17 @@ async function stopEncoder(roomId) {
   catch (e) { return null; }
 }
 
-/** End a queue (inside the lock): the current title, the slot, the row. */
-async function endQueue(q, reason, { notice = null, by = "system", stageReason = null } = {}) {
+/** End a queue (inside the lock): the current title, the slot, the row. plexreplace: slotDone = its slot already ended (a ▶ "Play this
+ *  instead" took it over - mainstage.libraryOpen opts.replace); how = what the current title's play row says ("stopped" / "replaced"). */
+async function endQueue(q, reason, { notice = null, by = "system", stageReason = null, slotDone = false, how = "stopped" } = {}) {
   const s = await I().session(q.room_id);
   if (s && Number(s.queue_id) === Number(q.id)) {
     const pos = await stopEncoder(q.room_id);
-    await finishTitle(q, s, "stopped", { pos: pos != null ? pos : s.position, by: by === "system" ? null : by });
+    await finishTitle(q, s, how, { pos: pos != null ? pos : s.position, by: by === "system" ? null : by });
   } else {
     try { await I().call("POST", `/streams/${encodeURIComponent(stageName(q.room_id))}/stop`, {}); } catch (e) { /* best effort */ }
   }
-  await stage.end(q.slot_id, stageReason || (reason === "finished" ? "library_done" : "library_stopped"), by).catch(() => {});
+  if (!slotDone) await stage.end(q.slot_id, stageReason || (reason === "finished" ? "library_done" : "library_stopped"), by).catch(() => {});
   await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = ?, updated = ? WHERE id = ? AND state IN ('active','starting')",
                  [NOW(), String(reason || "ended").slice(0, 120), notice, NOW(), q.id]);
   q.state = "ended";
@@ -578,14 +579,17 @@ async function bookFor(user, b = {}) {
 async function launch(user, A, R, b, booked) {
   const S = conf.get();
   {
-    await I().preflight(user, A, R);
+    // plexreplace: {replace: true} - this queue takes over from what's on (medialib.replaceTarget: you may control it, else control_denied);
+    // every refusal below comes first, the old title stops only once the new slot exists (medialib.retire)
+    const rep = !booked && I().wantsReplace(b) ? await I().replaceTarget(user, R) : null;
+    await I().preflight(user, A, R, { replacing: rep });
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
     if (pv.estimate > 0 && !booked) {
       if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate, code: "estimate" });
       if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
     }
-    if (!I().isLibAdmin(user) || pv.per_hour > 0) await I().needEncoder();
+    if (!I().isLibAdmin(user) || pv.per_hour > 0) await I().needEncoder(rep ? R.id : null);
     const first = built.first && String(built.first.key) === built.items[0].key ? built.first : await I().fetchItem(built.items[0].key);
     if (!first || !["movie", "episode"].includes(first.type) || !first.file) throw refuse(400, "The first title has no playable file.", { code: "bad" });
     const o = {
@@ -601,7 +605,9 @@ async function launch(user, A, R, b, booked) {
       opened = { key, slot: { id: sl.id, stream: sl.stream, hls: null } };
     } else {
       opened = await stage.libraryOpen(user, { room: R.id, title: "📼 " + fmtTitle(first),
-                                               minutes: Math.min(24 * 60, Math.ceil(built.total_sec / 60) + I().SLACK_MIN) });
+                                               minutes: Math.min(24 * 60, Math.ceil(built.total_sec / 60) + I().SLACK_MIN),
+                                               ...(rep ? { replace: rep.slot_id, upnext: L().upNextInfo(first) } : {}) });
+      if (rep) await I().retire(user, R, rep);                      // (the old encoder off, its play / queue closed - before this key is kept)
     }
     L()._keys.set(R.id, opened.key);
     const t = NOW();
@@ -622,10 +628,12 @@ async function launch(user, A, R, b, booked) {
       L()._keys.delete(R.id);
       throw e;
     }
+    if (rep) await I().logControl(user, R.id, "replace", `${rep.title || "?"} → ${r.title}`, { play_id: r.play_id, queue_id: q.id });
     console.log(`[mediaqueue] ${user.username} (${A.how}) queued ${built.items.length} titles (${built.scope}, ${Math.round(built.total_sec / 60)} min) on ${R.id} - queue #${q.id}` +
-                (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free"));
+                (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free") + (rep ? ` - replaced "${rep.title}"${rep.q ? ` (queue #${rep.q.id})` : ""} on slot ${rep.slot_id}` : ""));
     return { ok: true, queue_id: q.id, slot: { id: opened.slot.id, stream: opened.slot.stream, hls: opened.slot.hls }, title: r.title, price: r.price,
-             items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate, per_hour: pv.per_hour };
+             items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate, per_hour: pv.per_hour,
+             ...(rep ? { replaced: { title: rep.title || null, queue: !!rep.q, slot_id: rep.slot_id, feature: opened.replaced ? opened.replaced.carried || null : null } } : {}) };
   }
 }
 
@@ -862,6 +870,15 @@ async function step(user, room, dir) {
 const next = (user, room) => step(user, room, 1);
 const prev = (user, room) => step(user, room, -1);
 
+/** plexreplace: a ▶ "Play this instead" took this queue's slot over (inside the pad's lock - medialib.retire): the title on now stops, its
+ *  play closes ("replaced by <who>"), the queue ends - its slot already ended 'library_replaced' with the swap. */
+async function retireForReplace(q0, user) {
+  const q = await load(q0.id);
+  if (!q || !["active", "starting"].includes(q.state)) return false;
+  await endQueue(q, `replaced by ${user.username}`, { by: user.username, slotDone: true, how: "replaced" });
+  return true;                             // (the control log's line is the play's own "replace": <what was on> → <the new title>)
+}
+
 async function stop(user, q0, reason = "stopped") {
   if (!(await canControl(user, q0))) throw refuse(403, I().CONTROL_DENIED);
   return withLock(q0.room_id, async () => {
@@ -968,4 +985,5 @@ function routes(app, { J, me, timers = true }) {
 
 module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostFor, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
                    buildQueue, capQueue, totalSec, estimate, hoursNeeded, pickTracks, prefsFrom, sortEps, slim, SCOPES, _setClock,
-                   _fast: (on) => { fastOn = !!on; } };
+                   _fast: (on) => { fastOn = !!on; },
+                   _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)

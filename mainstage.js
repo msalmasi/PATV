@@ -905,6 +905,16 @@ async function book(user, opts = {}) {
 let libraryIdleMin = 30;
 const idleMinFor = (s, C = CONFIG) => (s && s.source === "library" ? Math.max(C.idle_grace_min, libraryIdleMin) : C.idle_grace_min);
 function setLibraryIdle(min) { const n = Math.floor(Number(min)); if (Number.isFinite(n) && n >= 1 && n <= 24 * 60) libraryIdleMin = n; return libraryIdleMin; }
+// plexreplace (owner 2026-11-05: "a one-step 'play this instead', which replaces the current title in a single request so the feature and the
+// card carry straight over. Build it."): opts.replace = the pad's open 📼 slot that this one takes over from - it ends (opts.reason, default
+// 'library_replaced') and the new slot opens in ONE transaction, the way book()'s video replace does (1.99ajr golive): a new slot that can't
+// open leaves the old one on, and nothing between the two can see a pad with no featured slot. The new slot is born with what was the old
+// one's: its feature (a hand / booked feature as it was; an auto-feature as the new slot's own auto-feature, PENDING - opts.upnext is its
+// "Coming up next" marker from the same moment, so mainstage.autoFeature holds it UPNEXT_MS like any title that is starting, whatever else
+// on the pad is live) and a person's "never auto-feature this slot" (auto_off: the same 📼 play, another title - as a queue's next title keeps
+// it on its one slot). The old slot's effects (relays, its 'ended' event, autoFeature - which finds the new slot holding the feature) run
+// once that committed. medialib's ▶ "Play this instead" (and a resume on a fresh slot after media-control forgot the stream: 'library_restart')
+// use it. -> + replaced: {id (the old slot), prev: {featured, feature_by, auto_off}, carried (the feature it took: auto / owner / ...)} | null
 async function libraryOpen(user, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
@@ -919,25 +929,63 @@ async function libraryOpen(user, opts = {}) {
   const key = newKey();
   const id = uuidv4();
   const t = now();
+  const swapId = opts.replace ? String(opts.replace).slice(0, 64) : null;
+  const swapWhy = /^library_[a-z_]{1,30}$/.test(String(opts.reason || "")) ? String(opts.reason) : "library_replaced";
+  const marker = swapId ? upnextClean(opts.upnext, t) : null;
+  const actor = (opts.actor && String(opts.actor).slice(0, 60)) || user.username;   // (a resume on a fresh slot: whoever pressed it)
+  let replaced = null, carried = null;
   await tx(async () => {
-    const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId]);
+    // plexreplace: the statements run in an order where a reader (a page's /api/stage poll, the tick's autoFeature - reads are never held by
+    // a transaction on the shared connection) never sees the pad without its featured slot: the new slot is inserted while the old one is
+    // still on; ONE statement moves the feature from the old slot to the new; only then does the old one settle. Writes from outside wait at
+    // the gate and then meet the guarded statements as always (never a second featured slot in the pad).
+    let old = null;
+    if (swapId) {
+      old = (await getQuery("SELECT * FROM stage_slots WHERE id = ?", [swapId]))[0];
+      if (!old || old.settled || old.source !== "library" || (old.room_id || rooms.HOUSE_ROOM) !== roomId || !["waiting", "active"].includes(old.status)) {
+        throw new Refuse(409, "What was playing has just ended - pick it again.", "replace_gone");
+      }
+    }
+    const open = (await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId])).filter((s) => !old || s.id !== old.id);
     if (open.some((s) => s.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library - stop it first.", "busy_library");
     const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
-    if (all[0].n >= C.max_concurrent) throw new Refuse(409, `The site already has ${all[0].n} streams open (the most at once) - end one first.`, "site_full");
+    const n = all[0].n - (old ? 1 : 0);                                // (the slot it takes over from frees its place)
+    if (n >= C.max_concurrent) throw new Refuse(409, `The site already has ${n} streams open (the most at once) - end one first.`, "site_full");
     if (open.length >= RS.slot_count) throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken.` : "This pad's stage slot is taken - end it first.", "slot_taken");
     const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [user.userId]))[0];
     if (!u) throw new Refuse(404, "Couldn't find your account.");
     const stream = STREAM_PREFIX + crypto.randomBytes(8).toString("hex");
     await runQuery(`INSERT INTO stage_slots (id, userId, username, displayname, status, created, max_minutes, price_per_min, held,
-                    key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, source)
-                    VALUES (?, ?, ?, ?, 'waiting', ?, ?, 0, 0, ?, ?, 'room_flow', ?, 'slot', 0, NULL, 'stream', NULL, ?, ?, 'library')`,
-                   [id, user.userId, u.username, u.displayname || u.username, t, minutes, sha(key), stream, roomId, t, title]);
+                    key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, source, auto_off, upnext)
+                    VALUES (?, ?, ?, ?, 'waiting', ?, ?, 0, 0, ?, ?, 'room_flow', ?, 'slot', 0, NULL, 'stream', NULL, ?, ?, 'library', ?, ?)`,
+                   [id, user.userId, u.username, u.displayname || u.username, t, minutes, sha(key), stream, roomId, t, title,
+                    old && old.auto_off ? 1 : 0, marker ? JSON.stringify(marker) : null]);
+    if (old) {
+      // plexreplace: the old slot's feature carries over - one statement takes it off the old slot and puts it on the new (guarded like
+      // book()'s: never while another slot in the pad is featured). An auto one needs the marker (pending = held UPNEXT_MS); without one
+      // it's left to autoFeature as any new slot
+      if (old.featured && old.feature_by && (old.feature_by !== "auto" || marker)) {
+        const r = await runQuery(`UPDATE stage_slots SET featured = CASE WHEN id = ? THEN 1 ELSE 0 END, feature_by = CASE WHEN id = ? THEN ? ELSE feature_by END
+                                  WHERE id IN (?, ?) AND settled = 0 AND NOT EXISTS (SELECT 1 FROM stage_slots o WHERE o.room_id = ? AND o.id NOT IN (?, ?)
+                                  AND o.featured = 1 AND o.settled = 0 AND o.status IN ${OPEN})`,
+                                 [id, id, old.feature_by, id, old.id, roomId, id, old.id]);
+        if (r && r.changes) carried = old.feature_by;
+      }
+      replaced = await endSettle(old.id, swapWhy, actor);           // (its settle is part of THIS transaction: a failure rolls the new slot back)
+      if (!replaced) throw new Refuse(409, "What was playing has just ended - pick it again.", "replace_gone");
+      replaced.prev = { featured: !!old.featured, feature_by: old.feature_by || null, auto_off: !!old.auto_off };   // (what it had before the move)
+    }
   });
   pubCache.clear();
-  await event(id, "library", user.username, `📼 ${title || "library"} (${minutes} min max)`, roomId);
+  if (replaced) await endEffects(replaced, swapWhy, actor);             // plexreplace: now that it committed (its autoFeature keeps the new slot)
+  await event(id, "library", user.username, `📼 ${title || "library"} (${minutes} min max)` + (replaced ? `, replaced ${replaced.res.id}` : ""), roomId);
+  if (carried) {
+    await event(id, "featured", "system", carried === "auto" ? `auto: 📼 up next - carried over from ${replaced.res.id} (${swapWhy})`
+      : `carried over from ${replaced.res.id} (${swapWhy}, featured by ${carried})`, roomId);
+  }
   const sl = await getSlot(id);
   const lk = libKey(sl && sl.stream, key);                              // 1.99abc
-  return { slot: view(sl), key: lk, rtmp: { server: RTMP_PUBLIC, key: lk } };
+  return { slot: view(sl), key: lk, rtmp: { server: RTMP_PUBLIC, key: lk }, replaced: replaced ? { id: replaced.res.id, prev: replaced.prev, carried } : null };
 }
 /** A library slot needs more time (seeking back, a long pause): raise its max_minutes. */
 async function libraryExtend(slotId, minutes) {
