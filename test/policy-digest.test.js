@@ -8,6 +8,9 @@
 //   * live: result.p31 before == after; one wf-digest inbox row per owner account and one ops alert per ref; the audit notice only
 //     with problems; a second afterEpoch / the retry sends nothing; a crash after the commit is sent once by the retry; the run's
 //     conservation unchanged
+//   * review of PO-4: a broken P3.1 read never aborts the settlement (p31 null); a crash mid-send leaves the notice unmarked and
+//     the retry sends it once; the staging Monday (his simulated ts after his real done: no "legs took" problem) - a pending
+//     tagged audit is finished by an untagged pass at +2 h
 //   NODE_PATH=G:/PATV/node_modules node --test test/policy-digest.test.js
 "use strict";
 const test = require("node:test");
@@ -317,11 +320,14 @@ test("live: the site's own epoch -> result.p31 before == after; one wf-digest ro
   assert.equal(alerts.length, a0 + 1);
   // a crash between the commit and the digest (the next week): the retry pass sends it once
   const NEXT = MON + 7 * 86400, EID2 = "W2026-11-16";
-  const orig = DG.afterEpoch;
+  const orig = DG.afterEpoch, origP31 = DG.p31Base;
   DG.afterEpoch = async () => { throw new Error("crash after the commit"); };
+  DG.p31Base = () => { throw new Error("a broken monitoring read"); };     // review of PO-4: the P3.1 read never aborts a settlement
   let r2;
-  try { r2 = await A.runTreasuryEpoch(EID2, NEXT); } finally { DG.afterEpoch = orig; }
+  try { r2 = await A.runTreasuryEpoch(EID2, NEXT); } finally { DG.afterEpoch = orig; DG.p31Base = origP31; }
   assert.equal(r2.ok, true);
+  assert.deepEqual(r2.result.p31, { before: null, after: null }, "the P3.1 read failed: logged, null, the epoch settled");
+  assert.equal(r2.result.conserved, true);
   assert.equal(await DG.row(EID2), null, "no audit row: the crash");
   const sent = await DG.retryLive();
   assert.deepEqual(sent, [EID2]);
@@ -353,4 +359,53 @@ test("live: an epoch with a problem sends the audit notice (problems only) to th
   assert.equal(rows[0].body, `🏛️ Staking payouts ${eid}: 1 problem(s) - 1 paid stash(es) got no payout notice: 9`);
   assert.ok(alerts.slice(a0).some((a) => a.source === "staking-digest" && a.ref === `wf-audit:${eid}`));
   assert.equal((await DG.afterEpoch(eid, null)).sent.audit, false, "once");
+});
+
+test("review of PO-4: a crash while a live notice goes out leaves it unmarked - the retry sends it, once", async () => {
+  const eid = "W2026-11-30";
+  const plan = { epoch: eid, boundary: Date.UTC(2026, 10, 30, 4) / 1000, ts: Date.UTC(2026, 10, 30, 4, 5) / 1000, days: 7.0, staker_share: 0.2,
+                 vaults: { house: { surplus: 3000, stakers_share: 600, apr_cap: 600, staked: 0, stakers: 600, stakers_n: 1, fed: 1200, incentives: 1200, price: 2.0 } },
+                 legs: [{ tid: `wf-${eid}-house-stk-9`, src: "jackpot", dst: "stash:9", amt: 600, why: "waterfall stakers", vault: "house" },
+                        { tid: `wf-${eid}-house-fed`, src: "jackpot", dst: "reserve", amt: 1200, why: "waterfall fed", vault: "house" },
+                        { tid: `wf-${eid}-house-inc`, src: "jackpot", dst: "incentives", amt: 1200, why: "waterfall incentives", vault: "house" }], totals: {} };
+  await C.putRun("treasury", eid, { state: "done", boundary: plan.boundary, via: "site", inputs: { cfg: {}, vaults: {}, journal: [] }, plan,
+                                    result: { done_legs: plan.legs.map((l) => l.tid), conserved: true } });
+  const origAdd = inbox.addSafe;
+  inbox.addSafe = async () => { throw new Error("crash mid-send"); };
+  let out;
+  try { out = await DG.afterEpoch(eid, null); } finally { inbox.addSafe = origAdd; }
+  assert.equal(out, null, "the crash (afterEpoch never throws)");
+  assert.equal((await DG.row(eid)).audit_sent_at, null, "not marked: it didn't go out");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref = ?", [`wf-audit:${eid}`]))[0].n, 0);
+  assert.ok((await DG.retryLive()).includes(eid));
+  assert.deepEqual((await getQuery("SELECT user_id FROM inbox WHERE ref = ? ORDER BY user_id", [`wf-audit:${eid}`])).map((r) => r.user_id), ["u3", "u4"]);
+  assert.ok((await DG.row(eid)).audit_sent_at, "marked once it went out");
+  assert.ok(!(await DG.retryLive()).includes(eid), "once");
+});
+
+test("review of PO-4: the staging Monday - a simulated at (his plan's ts) after his real done gives no 'legs took' problem; the pending tagged audit is finished by an untagged pass at +2 h", async () => {
+  const eid = "W2026-11-30-p4z";
+  const at = Date.UTC(2026, 10, 30, 4, 5) / 1000;                 // the rehearsal's simulated Monday: his plan's ts
+  const done = MON - 3 * 86400;                                   // his real done, days BEFORE it (took < 0 on both sides)
+  await pepeWeek(eid, at, done);
+  assert.equal(await DG.shadowAudit(eid, done + 700), "pending");
+  const got = await DG.pepeRecord(eid, done);
+  assert.ok(Number(got.rec.ts) > Number(got.rec.done));
+  assert.deepEqual(DG.auditRecord(got.rec, { now: got.rec.done }).problems, [], "no problem: Pepe sends no audit notice either");
+  await pepeNotices(eid, got.rec);                                // his digest (and no audit row)
+  assert.equal(await DG.shadowAudit(eid, done + 730), "pending");
+  assert.equal((await DG.row(eid)).digest_match, null, "a pending audit is rebuilt at most once a minute (not on every 15 s pass)");
+  assert.equal(await DG.shadowAudit(eid, done + 800), "pending", "his audit row may still come");
+  assert.equal((await DG.row(eid)).digest_match, 1);
+  // the test clock is cleared and the tagged ticks stopped: the next UNTAGGED pass finishes it on the real clock
+  SCH._setRealClock(() => done + 2 * 3600 + 1);
+  try {
+    const out = await SCH.digestPass(done + 2 * 3600 + 1, await SCH.clockInfo(done + 2 * 3600 + 1), { mode: "shadow" });
+    assert.ok(out.includes(`shadow audit ${eid} final`), JSON.stringify(out));
+  } finally { SCH._setRealClock(null); }
+  const r = await DG.row(eid);
+  assert.equal(r.state, "final");
+  assert.equal(r.audit_match, 1, "neither side sent an audit notice");
+  assert.equal(r.digest_match, 1);
+  assert.deepEqual(r.audit.problems, []);
 });

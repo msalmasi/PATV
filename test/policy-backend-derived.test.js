@@ -3,7 +3,7 @@
 //   * "derived dual read clean since <day>" (PASS: the latest final row clean, "N days in a row, Mondays: ..."; FAIL: its blocking)
 //   * "shadow audit = Pepe's (<eid>)" (PASS both match, WARN pending, FAIL a mismatch) and the INFO "staking readers" line
 //   * the engines' "shadow periods clean" line ignores the derived rows; a database without policy_epoch_audit still works; the
-//     tool writes nothing (no CREATE, no INSERT)
+//     tool writes nothing (no CREATE, no INSERT); "recorded every day" starts at the first row or a later --since (review of PO-4)
 //   NODE_PATH=G:/PATV/node_modules node --test test/policy-backend-derived.test.js
 "use strict";
 const test = require("node:test");
@@ -72,8 +72,8 @@ function schemaOf(dir) {
     });
   });
 }
-function preflight(dir) {
-  const r = spawnSync(process.execPath, [path.join(repo, "tools", "policy-backend.js"), "preflight", `--dir=${dir}`, "--json"], { encoding: "utf8", env: Object.assign({}, process.env, { STAGING: "" }) });
+function preflight(dir, extra = []) {
+  const r = spawnSync(process.execPath, [path.join(repo, "tools", "policy-backend.js"), "preflight", `--dir=${dir}`, "--json", ...extra], { encoding: "utf8", env: Object.assign({}, process.env, { STAGING: "" }) });
   const m = /^\[$/m.exec(r.stdout || "");                          // the JSON (after the database's own start-up lines)
   assert.ok(m, `${r.status} ${r.stderr} ${r.stdout}`);
   return JSON.parse(r.stdout.slice(m.index));
@@ -121,6 +121,20 @@ test("preflight: a missing day FAILs; the latest row not clean FAILs with its bl
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "pb-derived-3-"));
   await makeDb(dir2, { derived: [{ day: days(1)[0], ok: 1 }], audits: [{ eid: "W2026-11-02", state: "final", am: 1, dm: 0 }] });
   assert.equal(line(preflight(dir2), /^shadow audit = Pepe's/).level, "FAIL");
+});
+
+test("preflight (review of PO-4): 'recorded every day' starts at the first derived row, or at --since when that is later", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-derived-5-"));
+  const ds = days(6);
+  await makeDb(dir, { derived: ds.slice(3).map((day) => ({ day, ok: 1 })) });          // PO-4 deployed 3 days ago
+  // an older --since (the H1 evidence window): not a FAIL for the days before PO-4 ran
+  const old = line(preflight(dir, [`--since=${ds[0]}`]), /^derived dual read recorded every day /);
+  assert.equal(old.level, "PASS", JSON.stringify(old));
+  assert.ok(old.check.includes(`${ds[3]}..${ds[5]}`), old.check);
+  // a later --since narrows it
+  const late = line(preflight(dir, [`--since=${ds[4]}`]), /^derived dual read recorded every day /);
+  assert.equal(late.level, "PASS", JSON.stringify(late));
+  assert.ok(late.check.includes(`${ds[4]}..${ds[5]}`), late.check);
 });
 
 test("preflight: before the first row 'not running yet'; a database without policy_epoch_audit still works", async () => {

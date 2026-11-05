@@ -192,8 +192,9 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
       if (x.surplus > 0) redeemed[v] = -(await protocolBook(v, -x.surplus, `wf-${eid}-${v}`));
     }
     // PO-4 (1.99??): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
-    // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing
-    const p31Before = await p31Now(plan, []);
+    // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing, and
+    // (review of PO-4) a monitoring read never aborts the settlement: an error is logged and that side is null
+    const p31Before = await p31Safe(eid, plan, []);
     const doneLegs = [];
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);
@@ -205,7 +206,7 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
       doneLegs.push(leg.tid);
     }
     const after = await base();
-    const p31After = await p31Now(plan, doneLegs);
+    const p31After = await p31Safe(eid, plan, doneLegs);
     const incAfter = await P.balance("incentives");
     if (E.epochId(nowS, E.C(inputs).hour()) === eid) {               // _tr_finish: the week being settled is this week
       await C.effect(`week_share:${eid}`, { engine: "treasury", period: eid, kind: "week_share",
@@ -248,6 +249,10 @@ async function p31Now(plan, done) {
   const bal = { jackpot: await require("../capital/core").houseBalance() };
   for (const k of require("./digest").TR_WEEKLY_POOLS) bal[k] = await P.balance(k);
   return require("./digest").p31Base(bal, { legs: plan.legs || [], done_legs: done }, null);
+}
+/** p31Now, never throwing (Pepe's try / except around his monitoring): an error -> null, logged. */
+async function p31Safe(eid, plan, done) {
+  try { return await p31Now(plan, done); } catch (e) { console.error(`[policy] epoch ${eid}: the P3.1 base: ${e && e.message}`); return null; }
 }
 
 const VLABEL = { house: "🎰 House", bank: "🏦 Bank", mm: "📈 Market maker" };
@@ -312,9 +317,6 @@ async function runTreasuryDaily(did, nowS, { actor = "schedule", via = "site", l
     const before = await base();
     const acc = { to_wallet: 0 };                                    // PO-0b (a): closed stashes' credits paid to wallets
     await bankSample("treasury", did, null, nowS);
-    // PO-4 (1.99??): the fix-plan P3.1 conservation base (policy/digest.js p31Base: the House + the weekly pools + the stash legs
-    // that landed) read before and after the legs - a read only, kept on the result for the weekly audit; it moves nothing
-    const p31Before = await p31Now(plan, []);
     const doneLegs = [];
     for (const leg of plan.legs) {
       await transfer(leg.tid, leg.src, leg.dst, leg.amt, leg.why, acc);

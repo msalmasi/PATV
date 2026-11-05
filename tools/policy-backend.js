@@ -306,8 +306,11 @@ function derivedChecks(s, now = Date.now()) {
   const yesterday = utcDay(now - DAY_MS);
   if (!rows.length) add("INFO", "derived dual read recorded every day", "not running yet (no shadow:derived row)");
   else {
+    // from the first derived row, or --since when that is later (review of PO-4: an older --since, e.g. H1's 2026-10-30, would
+    // FAIL every day before PO-4 was deployed)
     const since = s.evidence && s.evidence.since ? s.evidence.since : null;
-    let from = since && /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : rows[0].period.slice(1);
+    const first = rows[0].period.slice(1);
+    const from = since && /^\d{4}-\d{2}-\d{2}$/.test(since) && since > first ? since : first;
     const have = new Set(rows.map((r) => r.period.slice(1)));
     const days = [];
     for (let t = Date.parse(from + "T00:00:00Z"); utcDay(t) <= yesterday && days.length < 120; t += DAY_MS) days.push(utcDay(t));

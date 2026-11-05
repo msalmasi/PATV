@@ -1314,32 +1314,59 @@ function publicRecord(plan, track, doneS, state = "done") {
  * state: "done", done: result.done_s}. waterfall = the last 8 plain "W<date>" records (a tagged "W...-r1" is dropped from the list,
  * as waterfallFrom drops it); wf_settled = settledFrom of every done record, tagged ones included (the last 16). Works with no
  * capital push at all (c = DEFAULT_CFG + the site-owned settings).
+ * Review of PO-4: it never throws (the capital cut-off awaits it inside its one transaction that moves PAT - an error here, e.g. the
+ * policy tables unreadable, gives back `c`: Pepe's push, today's path, and is logged at most every 10 minutes); it reads only
+ * the newest rows (the 16 newest weekly periods + the 8 newest plain "W<date>" ones - all the readers keep) and renders a
+ * settled site-run row once per process (WF_MEMO: a done row's plan / inputs never change; a rollback re-runs it under a new
+ * done time).
  */
+const WF_MEMO = new Map();                // "<period>|<done>" -> the publicRecord of a site-run row, as JSON (each call gets its own copy)
+let wfErrAt = 0;
 async function wfView(c) {
-  const PC = require("../policy/core");
-  if (((await PC.engines()).treasury || {}).mode !== "live") return c;
-  const E = require("../policy/engines");
-  const { getQuery } = require("../dbUtils");
-  const rows = await getQuery("SELECT period, state, boundary, via, inputs, plan, result, done FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%' AND state IN ('done', 'handed')");
-  const recs = [];
-  for (const r of rows) {
-    const res = PC.parse(r.result, {}) || {};
-    if (r.state === "done" && r.via === "site") {
-      const plan = PC.parse(r.plan, null);
-      if (!plan) continue;
-      let tr = null;
-      try { tr = E.trackOf(PC.parse(r.inputs, {}) || {}, plan); } catch (e) { tr = null; }
-      recs.push(publicRecord(plan, tr, Number(r.done) > 0 ? Number(r.done) / 1000 : null));
-    } else if (res.public && typeof res.public === "object") {
-      recs.push(Object.assign({}, res.public, { epoch: r.period, state: "done" }, res.public.done == null && res.done_s != null ? { done: res.done_s } : {}));
-    } else {
-      const b = Number(r.boundary !== null && r.boundary !== undefined ? r.boundary : res.boundary);
-      recs.push({ epoch: r.period, boundary: Number.isFinite(b) && b > 0 ? b : null, state: "done", done: res.done_s ?? null });
+  try {
+    const PC = require("../policy/core");
+    if (((await PC.engines()).treasury || {}).mode !== "live") return c;
+    const E = require("../policy/engines");
+    const { getQuery } = require("../dbUtils");
+    const sel = "SELECT period, state, boundary, via, inputs, plan, result, done FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%' AND state IN ('done', 'handed')";
+    const seen = new Set();
+    const rows = [];
+    for (const r of [].concat(await getQuery(`${sel} ORDER BY period DESC LIMIT 16`),
+                              await getQuery(`${sel} AND period GLOB 'W[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' ORDER BY period DESC LIMIT 8`))) {
+      if (seen.has(r.period)) continue;
+      seen.add(r.period);
+      rows.push(r);
     }
+    const recs = [];
+    for (const r of rows) {
+      const res = PC.parse(r.result, {}) || {};
+      if (r.state === "done" && r.via === "site") {
+        const mk = `${r.period}|${r.done}`;
+        let js = WF_MEMO.get(mk);
+        if (js === undefined) {
+          const plan = PC.parse(r.plan, null);
+          if (!plan) continue;
+          let tr = null;
+          try { tr = E.trackOf(PC.parse(r.inputs, {}) || {}, plan); } catch (e) { tr = null; }
+          js = JSON.stringify(publicRecord(plan, tr, Number(r.done) > 0 ? Number(r.done) / 1000 : null));
+          if (WF_MEMO.size >= 64) WF_MEMO.delete(WF_MEMO.keys().next().value);
+          WF_MEMO.set(mk, js);
+        }
+        recs.push(JSON.parse(js));
+      } else if (res.public && typeof res.public === "object") {
+        recs.push(Object.assign({}, res.public, { epoch: r.period, state: "done" }, res.public.done == null && res.done_s != null ? { done: res.done_s } : {}));
+      } else {
+        const b = Number(r.boundary !== null && r.boundary !== undefined ? r.boundary : res.boundary);
+        recs.push({ epoch: r.period, boundary: Number.isFinite(b) && b > 0 ? b : null, state: "done", done: res.done_s ?? null });
+      }
+    }
+    recs.sort((a, b) => (Number(a.boundary) || 0) - (Number(b.boundary) || 0));
+    return Object.assign({}, c, { waterfall: recs.filter((r) => /^W\d{4}-\d{2}-\d{2}$/.test(String(r.epoch || ""))).slice(-8),
+                                  wf_settled: settledFrom(recs).slice(-16), wf_source: "policy_runs" });
+  } catch (e) {
+    if (Date.now() - wfErrAt > 600000) { wfErrAt = Date.now(); console.error("[capital] the weekly records (policy_runs) - read Pepe's push instead:", e && e.message); }
+    return c;
   }
-  recs.sort((a, b) => (Number(a.boundary) || 0) - (Number(b.boundary) || 0));
-  return Object.assign({}, c, { waterfall: recs.filter((r) => /^W\d{4}-\d{2}-\d{2}$/.test(String(r.epoch || ""))).slice(-8),
-                                wf_settled: settledFrom(recs).slice(-16), wf_source: "policy_runs" });
 }
 /** P1.1 / D2: the weekly bonus cap (econ_cfg wf_staker_cap_pct, % APR on the staked value; 0 = NO cap) as a fraction -
  *  what Pepe pushed with his capital config (c.wf_staker_cap_pct), else his policy push's econ_cfg, else the site's
@@ -1502,4 +1529,4 @@ module.exports = { VAULTS, AUTO, PROTOCOL, CASH, LABEL, SITE_KEYS, load, store, 
                    AUDIT, CUSHION_SLACK, CUSHION_KEEP_DAYS, CUSHION_MAX_DAYS, PD_KEEP, PD_SLACK, LATE_MONDAY, lookThrough, accruePatDays, patDaysNow, pdPartial, pdWhole, pdFirstWeek, lastSettled, settledFrom,
                    lateMonday, settlesAt, autoCapOn, stakerRoom, capAutoLegs, autoCappedLegs,
                    stakerApr, stakerSoFar, waterfallFrom, wfRowD2, WEIGHTINGS, paidByStash, bonusCap, addCost, backfillCost, queueWhole, impliedHoldings, holdingOf, replayCeiling, REPLAY_CEIL,
-                   PAID_VIA, CORR_VIA, publicRecord, wfView, WF_KEEP };
+                   PAID_VIA, CORR_VIA, publicRecord, wfView, WF_KEEP, _wfForget: () => { WF_MEMO.clear(); wfErrAt = 0; } };

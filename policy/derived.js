@@ -167,7 +167,11 @@ function fingerprint(values, inputs) {
  *   lotto       lotto_pot rows "bot:<ref>" (his _lotto_pot_adjust): why = the row's why
  * Not reproducible: the escrow settle fee legs (pepe_escrowstore: "escrow fees (<ref>)" - the site's settle rows carry no vault
  * leg of Pepe's), a why of None (Pepe names the caller's frame), his standalone / local-pools modes. -> {days}
+ * NOT CLOSE (review of PO-4, prod 11-04): prod's lotto_pot has no "bot:" rows (its moves are lt:c / lt:w / impo), so the lotto
+ * source maps nothing; the jackpot-adjust rows are EVERY House adjust Pepe makes (blackjack payouts, lotto fees, ...) while his
+ * _vault_log logs few of them. The site's flows differ from his (mostly {}) on most days - whitelisted, display only.
  */
+const LEDGER_WARNED = new Set();
 async function siteLedger(since, asOf, tz = TZ_DEFAULT) {
   const { getQuery } = require("../dbUtils");
   const days = {};
@@ -183,7 +187,15 @@ async function siteLedger(since, asOf, tz = TZ_DEFAULT) {
     const w = String(why == null || why === "" ? "other" : why);
     side[w] = (Object.prototype.hasOwnProperty.call(side, w) ? side[w] : 0) + Math.abs(a);
   };
-  const safe = async (sql, params) => { try { return await getQuery(sql, params); } catch (e) { return []; } };
+  // a source that can't be read gives nothing (flows is display only), said once per process (review of PO-4: not silently) -
+  // except a table this database doesn't have (a test database, a site without lotto)
+  const safe = async (sql, params) => {
+    try { return await getQuery(sql, params); } catch (e) {
+      const m = String((e && e.message) || e);
+      if (!/no such table/i.test(m) && !LEDGER_WARNED.has(m)) { LEDGER_WARNED.add(m); console.warn(`[policy] derived flows: a ledger source failed (${m.slice(0, 160)}) - left out`); }
+      return [];
+    }
+  };
   for (const r of await safe(`SELECT l.ts AS ts, l.pool AS pool, l.amount AS amount, m.kind AS kind, m.flow AS flow, m.why AS why
                               FROM pool_move_legs l JOIN pool_moves m ON m.key = l.move_key
                               WHERE m.via = 'pepe' AND l.pool IN ('bank', 'mm') AND l.ts >= ? AND l.ts <= ? ORDER BY l.ts, l.move_key, l.i`, [lo, hi])) {

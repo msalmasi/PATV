@@ -576,9 +576,11 @@ derived value for a decision until H2a: the loans desk's `cfgAge() > 7200` refus
 
 **The flows whitelist** (the one new `WHITELIST` entry: plan / derived / derived / `flows`). Pepe's `flows` comes from his own vault
 flow ledger. That ledger holds only the moves he makes himself, tagged with flow names or his caller's frame name, and is mostly
-`{}`. The site rebuilds it best-effort (`siteLedger`), but the cut-off only copies it into the epoch record for /staking, and no
-PAT path reads it. `test/policy-derived.test.js: flows is display-only` proves this two ways: a source scan, and two cut-offs whose
-flows differ writing the same money rows. So a flows difference is excused, and every other difference blocks.
+`{}`. The site rebuilds it best-effort (`siteLedger`), and the rebuild is NOT close: on prod `lotto_pot` has no `bot:` rows (the
+lotto source maps nothing), and the `jackpot-adjust` rows are every House adjust Pepe makes (blackjack payouts, lotto fees, ...),
+most of which his `_vault_log` never logs. So expect a whitelisted `flows…` entry on most days' rows. That is fine: the cut-off
+only copies flows into the epoch record for /staking, and no PAT path reads it. `test/policy-derived.test.js: flows is display-only` proves this two ways: a source scan, and two cut-offs whose
+flows differ writing the same PAT rows. So a flows difference is excused, and every other difference blocks.
 
 **When a row is final** (policy_sims `shadow:derived:<D>`, mode `shadow`, engine `derived`, the shadow-report shape: site_inputs
 {asof, push_at, fp, the inputs summary, funding, attempts}, site_plan, pepe_plan, total_diff, whitelisted / blocking {plan},
@@ -590,7 +592,8 @@ truncated, ok; boundary_ts = the push's time).
   unclean attempt with no fingerprint, so it is never "stable".
 - An unclean attempt whose fingerprint differs from the final clean one is noted `state moved between push and read`.
 - At the day's end the next day's first pass closes it: `ok = 0` with `final: "no clean attempt by the day's end"`, or
-  `"no fresh capital push"` when nothing was compared all day.
+  `"no fresh capital push"` when nothing was compared all day. It also closes any older untagged day an outage across more than
+  one day boundary left open. A tagged rehearsal row (`D…-<tag>`) is never closed this way.
 - A final row is never rewritten. `capital_meta` `derived` keeps the last attempt's values for display.
 
 **The weekly audit and digest (policy/digest.js, table `policy_epoch_audit`).**
@@ -605,14 +608,23 @@ truncated, ok; boundary_ts = the push's time).
   It then renders the audit notice and digest Pepe would send and compares them with his own rows, `wf-audit:<eid>` and
   `wf-digest:<eid>`. The audit matches when the title is exact and the problems are equal as a multiset, with a cut last item
   compared as a prefix. The digest matches when the text is exact after his trailing replay-audit line is split off. The row is
-  final once both of his rows are seen, or 2 hours after his done (a row still missing means he sent none). It sends nothing.
+  final once both of his rows are seen, or 2 hours after his done (a row still missing means he sent none). Every pass that runs
+  PO-4 also finishes any other shadow audit still pending (an outage past its week, a tagged rehearsal), on the real clock. It
+  sends nothing.
+- Reading a mismatch: the site counts a stash as notified only when its `wf:<eid>:s<id>` row landed in inbox / inbox_pending,
+  while Pepe counts it as soon as he called notify_user. A payout-notice push that was lost, or landed more than 2 hours late,
+  gives "N paid stash(es) got no payout notice" on the site's side only, so audit_match = 0. Check
+  `SELECT ref FROM inbox WHERE ref LIKE 'wf:<eid>:s%'` (and inbox_pending) against the paid stashes before calling it a real
+  difference.
   Pepe's P3.1 sums (`conserved`, `pools_before/after`) are not pushed, so they are `na`. They are info only and not in his notice.
 - LIVE (dormant until the treasury engine runs here; the first one is Mon 11-23): after `runTreasuryEpoch` commits, the audit
   notice (problems only) and the digest (when `track.pool > 0`) go to every Pepe-owner account's inbox. They carry Pepe's title
   and text, link /admin/economy, and refs `wf-audit:<eid>` / `wf-digest:<eid>`, plus `opsalerts` source `staking-digest`. Each
-  is sent once, claimed through `audit_sent_at` / `digest_sent_at`. The scheduler retries a site-run week without them for 7
-  days. The epoch's result also carries `p31 {before, after}`: the P3.1 base read before and after the legs, equal when
-  conserved. The replay-audit line stays Pepe's until PO-8 (the site's digest has none).
+  is recorded as sent in `audit_sent_at` / `digest_sent_at` only after it went out, so a crash mid-send is resent by the retry
+  (harmless: the inbox keeps one row per account and ref, and opsalerts files it under the same ref). The scheduler retries a
+  site-run week without them for 7 days. The epoch's result also carries `p31 {before, after}`: the P3.1 base read before and
+  after the legs, equal when conserved, and `null` on a side whose read failed (logged; a monitoring read never aborts the
+  settlement). The replay-audit line stays Pepe's until PO-8 (the site's digest has none).
 
 **Readers on `policy_runs`** (capital/vaults.js `wfView` / `publicRecord`). While the treasury engine isn't live, every reader gets
 Pepe's push object unchanged: lateMonday, publish (/staking's list, staking_state), lastSettled / patDaysNow, and capital/watch
@@ -621,7 +633,9 @@ weekly / trackCap / adminData. Once it is live they get the treasury's weekly ro
 - a handed row is the push row that the cutover now keeps (`result.public`, `done_s`);
 - a tagged run is dropped from the list but counted by lastSettled.
 
-This works with no capital push at all.
+This works with no capital push at all. `wfView` never throws: the capital cut-off awaits it inside its one transaction that moves PAT,
+so an error there (the policy tables unreadable) gives the readers Pepe's push instead, logged at most every 10 minutes. It
+reads only the 16 newest weekly periods and the 8 newest plain ones, which is all the readers keep.
 
 **The H2a gate-5 reading (Mon 11-09, or 11-16).**
 - `node tools/policy-backend.js preflight` should show these two lines PASS:
@@ -630,8 +644,8 @@ This works with no capital push at all.
 - `sqlite3 -readonly myapp.db "SELECT key, ok, blocking FROM policy_sims WHERE engine='derived' ORDER BY period"`
 - `sqlite3 -readonly myapp.db "SELECT eid, via, audit_match, digest_match FROM policy_epoch_audit"`
 
-"Recorded every day" must PASS from the first row. The engines' "shadow periods clean" line counts only treasury, monetary and
-burn.
+"Recorded every day" must PASS from the first row (it starts at the first derived row, or at `--since` when that is later). The
+engines' "shadow periods clean" line counts only treasury, monetary and burn.
 
 **Staging: a test-clock Monday** (the first real Monday comes after the prod deadline). The site runs PO-4 and PepeBeta is
 unchanged.
@@ -643,6 +657,11 @@ unchanged.
       for `policy-inject.result.json` ok. That runs the real legs, the boundary handshake, his report, notices, audit and digest.
    3. `POST /api/policy/admin/tick {at: <Mon 04:31Z>, tag: "p4a"}`.
    4. After 10 minutes or more (his next capital push and his notices), tick again.
-   5. Expect `shadow:derived:D2026-11-09-p4a` ok = 1 and `policy_epoch_audit` `W2026-11-09-p4a` via shadow with audit_match = 1
-      and digest_match = 1. Both sides show the same "legs took N min" problem, because the run's `at` is simulated.
-3. Clear the clock again.
+   5. Expect `shadow:derived:D2026-11-09-p4a` ok = 1, and `policy_epoch_audit` `W2026-11-09-p4a` via shadow, state `pending`,
+      digest_match = 1, audit_match NULL. Neither side has a problem: his plan's `ts` is the simulated Monday while his `done` is
+      the real (earlier) time, so "legs took" is negative on both sides and he sends no `wf-audit` row. With no audit row from
+      him, the audit is only final 2 hours (real) after his done.
+3. Clear the clock again: `POST /api/policy/admin/test-clock {at: null}`.
+4. At least 2 hours (real) after his done (`record.done` in `policy-inject.result.json`), the next untagged pass finishes the
+   pending audit on the real clock (or tick once more: `POST /api/policy/admin/tick {at: <Mon 04:31Z>, tag: "p4a", engines: []}`,
+   which runs PO-4 only). Expect `W2026-11-09-p4a` state `final`, audit_match = 1 and digest_match = 1.

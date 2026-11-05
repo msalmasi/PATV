@@ -9,6 +9,8 @@
 //     cross-checks the site's own record (its notices present: no notice finding); trackCap = engines.trackOf; adminData's
 //     waterfall = the last site record
 //   * shadow, with a push: wfView hands back the very same object - every reader reads what it read before
+//   * review of PO-4: wfView never throws (an unreadable policy table -> Pepe's push, today's path) and reads only the newest rows
+//     (the 8 newest plain weeks, the 16 newest settled)
 //   NODE_PATH=G:/PATV/node_modules node --test test/staking-readers.test.js
 "use strict";
 const test = require("node:test");
@@ -233,4 +235,31 @@ test("live, NO capital push: publish / lastSettled / lateMonday / weekly / track
     assert.ok(!f.some((x) => x.vault === "notices"), JSON.stringify(f));
     assert.ok(!f.some((x) => x.code === "I6" && x.vault === "house"), "the stashes received what the record says");
   }
+});
+
+test("review of PO-4: wfView never throws (an unreadable policy table gives Pepe's push back) and reads only the newest weekly rows", async () => {
+  assert.equal((await C.engines()).treasury.mode, "live");
+  const c = await CC.cfg();
+  // (a) the cut-off awaits it inside its transaction that moves PAT: an error is today's path, never a throw
+  const orig = C.engines;
+  C.engines = async () => { throw new Error("policy_engines is locked"); };
+  try { assert.equal(await V.wfView(c), c, "the error: c itself"); } finally { C.engines = orig; }
+  // (b) a long history: 30 older handed weeks + tagged re-runs - the readers keep the 8 newest plain weeks and the 16 newest settled
+  for (let n = 6; n < 36; n++) {
+    await C.putRun("treasury", wk(n).eid, { state: "handed", via: "pepe", boundary: wk(n).b, result: { incentives_after: 1, boundary: wk(n).b, done_s: wk(n).b + 300 } });
+  }
+  for (const n of [2, 3]) await C.putRun("treasury", `${wk(n).eid}-r9`, { state: "handed", via: "pepe", boundary: wk(n).b + 60, result: { boundary: wk(n).b + 60, done_s: wk(n).b + 900 } });
+  const all = (await getQuery("SELECT period, boundary FROM policy_runs WHERE engine = 'treasury' AND period LIKE 'W%' AND state IN ('done', 'handed')"))
+    .sort((a, b) => Number(a.boundary) - Number(b.boundary));
+  assert.ok(all.length > 30);
+  V._wfForget();
+  const cw = await V.wfView(c);
+  const plain = all.filter((r) => /^W\d{4}-\d{2}-\d{2}$/.test(r.period)).map((r) => r.period);
+  assert.deepEqual(cw.waterfall.map((r) => r.epoch), plain.slice(-8), "the 8 newest plain weeks, oldest first");
+  assert.deepEqual(cw.wf_settled.map((r) => r.epoch), all.map((r) => r.period).slice(-16), "the 16 newest settled, tagged ones included");
+  // (c) a settled site-run row is rendered once per process (the memo), and every call gets its own copy
+  const a = await V.wfView(c), b = await V.wfView(c);
+  const ra = a.waterfall.find((r) => r.epoch === EID), rb = b.waterfall.find((r) => r.epoch === EID);
+  assert.deepEqual(ra, rb);
+  assert.notEqual(ra, rb);
 });

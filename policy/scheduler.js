@@ -696,26 +696,32 @@ const attemptRec = (x) => Object.assign({ push_at: x.push_at, n: x.n || 0, block
  * clock is set and the pass has no tag (a clock jump never uses up a real day's row). A push is compared once: received after
  * the eligibility moment (real clock) and at most DERIVED_PUSH_FRESH_S old. Final: a clean attempt (ok 1); the same blocking list
  * AND site fingerprint twice in a row (ok 0, "stable difference"); DERIVED_MAX_ATTEMPTS unclean; the day's end (the last attempt,
- * or "no fresh capital push"). A final row is never rewritten. Never throws; moves nothing. -> "derived <D> ..." | null
+ * or "no fresh capital push" - closed by the next day's first pass, which also closes any older untagged day an outage left
+ * open). A final row is never rewritten. Never throws; moves nothing. -> "derived <D> ..." | null
  */
 async function derivedPass(nowS, info) {
   try {
     if (C._testOffset() !== 0 && !info.sfx) return null;
-    // the day before: final at its end (untagged only)
+    // the days before: final at their end (untagged only) - yesterday, and (review of PO-4) any older day an outage across more
+    // than one day boundary left open; once per day per process
     if (!info.sfx) {
       const P = E.dayId(info.db - 86400, info.hour);
       if (!derivedDone.has(P)) {
-        const r = await derivedRow(P);
-        if (r && (r.ok === null || r.ok === undefined)) {
+        const { getQuery } = require("../dbUtils");
+        const open = await getQuery("SELECT period FROM policy_sims WHERE engine = 'derived' AND ok IS NULL AND length(period) = ? AND period < ? ORDER BY period",
+                                    [String(info.did).length, String(info.did)]);
+        for (const { period } of open) {
+          const r = await derivedRow(period);
+          if (!r || (r.ok !== null && r.ok !== undefined)) continue;
           const si = r.site_inputs || {};
           const none = !(si.attempts || []).length;
           const why = none ? "no fresh capital push" : "no clean attempt by the day's end";
-          await putDerived(P, { site_inputs: Object.assign({}, si, { final: why }), site_plan: r.site_plan, pepe_plan: r.pepe_plan, total_diff: r.total_diff,
-                                whitelisted: (r.whitelisted || {}).plan, blocking: none ? [why] : (r.blocking || {}).plan, truncated: !!r.truncated, ok: 0,
-                                boundary_ts: r.boundary_ts });
-          console.warn(`[policy] derived ${P}: NOT clean (${why})`);
+          await putDerived(period, { site_inputs: Object.assign({}, si, { final: why }), site_plan: r.site_plan, pepe_plan: r.pepe_plan, total_diff: r.total_diff,
+                                     whitelisted: (r.whitelisted || {}).plan, blocking: none ? [why] : (r.blocking || {}).plan, truncated: !!r.truncated, ok: 0,
+                                     boundary_ts: r.boundary_ts });
+          console.warn(`[policy] derived ${period}: NOT clean (${why})`);
         }
-        derivedDone.add(P);                                          // a past day: closed now, or never had a row (nothing more to do)
+        derivedDone.add(P);                                          // the past days: closed now, or never had a row (nothing more to do)
       }
     }
     const Dd = info.did;
@@ -772,7 +778,8 @@ async function derivedPass(nowS, info) {
   }
 }
 /** PO-4: the weekly audit - shadow (Pepe's settled record of this week and the last, compared with his notices; it sends nothing)
- *  or, once the treasury is live here, the retry of the site's own audit / digest. Same test-clock rule as derivedPass. */
+ *  or, once the treasury is live here, the retry of the site's own audit / digest. Same test-clock rule as derivedPass. In shadow
+ *  it also finishes any other shadow audit still pending (an outage past its week, a tagged rehearsal once its ticks stopped). */
 async function digestPass(nowS, info, eng) {
   try {
     if (C._testOffset() !== 0 && !info.sfx) return null;
@@ -784,7 +791,14 @@ async function digestPass(nowS, info, eng) {
       return out;
     }
     const base = E.epochId(nowS, info.hour);
-    for (const eid of [info.eid, (prevEpochId(base) || "") + info.sfx]) {
+    const eids = [info.eid, (prevEpochId(base) || "") + info.sfx];
+    // review of PO-4: any other shadow audit still pending (an outage past its week; a tagged rehearsal once its ticks stopped -
+    // the staging Monday) is finished on the real clock too, by whichever pass runs next
+    await DG.init();
+    for (const r of await require("../dbUtils").getQuery("SELECT eid FROM policy_epoch_audit WHERE via = 'shadow' AND state = 'pending' ORDER BY eid LIMIT 8")) {
+      if (!eids.includes(r.eid)) eids.push(r.eid);
+    }
+    for (const eid of eids) {
       if (!/^W\d{4}-\d{2}-\d{2}/.test(eid)) continue;
       if (DG.isFinal(eid)) continue;
       const st = await DG.shadowAudit(eid, realS());

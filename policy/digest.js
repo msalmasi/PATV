@@ -21,8 +21,8 @@
 //   LIVE (dormant until the treasury engine is live, H2a): policy/apply.js runTreasuryEpoch calls afterEpoch(eid, res) once its
 //     settlement committed - the audit notice (problems only) and the digest (track.pool > 0) to every Pepe-owner account's inbox
 //     (Pepe's exact title / text, link /admin/economy, refs wf-audit:<eid> / wf-digest:<eid>) + opsalerts (source "staking-digest").
-//     Once per eid (the inbox's one row per (user, ref), opsalerts per ref, audit_sent_at / digest_sent_at guarded); the
-//     scheduler's retry covers a crash between the commit and the digest (7 days, Pepe's rule). Notices are not PAT.
+//     Once per eid (the inbox's one row per (user, ref), opsalerts per ref, audit_sent_at / digest_sent_at set once it went out);
+//     the scheduler's retry covers a crash between the commit and the digest, or mid-send (7 days, Pepe's rule). Not PAT.
 //   policy_epoch_audit   eid PK, via (shadow | site), state (pending | final), audit {problems, info, bind, na}, notice / digest
 //                        ({title, text} | null: what the site would send / sent), pepe {audit_title, audit_body, digest_title,
 //                        digest_body, seen_at} (shadow), audit_match / digest_match (1 = Pepe's, 0 = not, null = not compared
@@ -44,6 +44,7 @@ const TEXT_MAX = 590;                       // the notices' text cut (Pepe: [:59
 const TITLE_MAX = 120;
 const SHADOW_WAIT_S = 600;                  // Pepe's notices are pushed async: compare at least this long after his done
 const SHADOW_FINAL_S = 2 * 3600;            // ...and final this long after it (a row still missing = he sent none)
+const SHADOW_EVERY_S = 60;                  // review of PO-4: a pending audit is rebuilt at most this often (not on every 15 s pass)
 const RETRY_DAYS = 7;                       // the live retry: a site-run record with no audit, within 7 days (Pepe's rule)
 const PEPE_LOGINS = new Set(["pepefrog", "pepebeta"]);   // notify_user to his own login sends nothing but counts as sent
 const ALINE_MARK = " 🔎 Staking audit: ";
@@ -441,10 +442,12 @@ function evaluate(rec, inputs) {
 
 const finalMemo = new Set();   // eids this process saw final (no query per 15 s pass)
 const pendingSig = new Map();  // eid -> what the last pending write said
+const lastEval = new Map();    // eid -> when (real s) a pending audit was last rebuilt
 /**
  * SHADOW (via "shadow"): Pepe's settled epoch `eid` audited by the site and compared with his own notices. Starts once his push
  * says it is done and SHADOW_WAIT_S passed (real clock: his notices are pushed async); final once both of his rows were seen, or
- * SHADOW_FINAL_S after his done (a row still missing = he sent none). Sends nothing. -> the row's state | null (not yet)
+ * SHADOW_FINAL_S after his done (a row still missing = he sent none); a pending row is rebuilt at most every SHADOW_EVERY_S.
+ * Sends nothing. -> the row's state | null (not yet)
  */
 async function shadowAudit(eid, realNowS = Date.now() / 1000) {
   if (finalMemo.has(eid)) return "final";
@@ -455,6 +458,8 @@ async function shadowAudit(eid, realNowS = Date.now() / 1000) {
   const doneS = await pepeDone(eid);
   if (!doneS || realNowS < doneS + SHADOW_WAIT_S) return null;
   const late = realNowS >= doneS + SHADOW_FINAL_S;
+  if (have && have.state === "pending" && !late && realNowS - (lastEval.has(eid) ? lastEval.get(eid) : -Infinity) < SHADOW_EVERY_S) return "pending";
+  lastEval.set(eid, realNowS);
   const got = await pepeRecord(eid, doneS);
   const pepe = await pepeRows(eid);
   const seen = { audit_title: pepe.audit ? pepe.audit.title : null, audit_body: pepe.audit ? pepe.audit.body : null,
@@ -528,16 +533,18 @@ async function afterEpoch(eid, res = null) {
     const cur = (await row(eid)) || {};
     const { runQuery } = require("../dbUtils");
     const sent = { audit: false, digest: false };
-    // each notice once: claimed by the sent_at column (a second afterEpoch / the retry finds it set)
-    const claim = async (col) => {
+    // each notice once: recorded by the sent_at column AFTER it went out (review of PO-4: a crash between the two resends it on
+    // the retry - harmless, the inbox keeps one row per (account, ref) and opsalerts files it under the same ref - where marking
+    // it first would lose it for good); a second afterEpoch / the retry finds it set
+    const mark = async (col) => {
       const u = await runQuery(`UPDATE policy_epoch_audit SET ${col} = ?, updated = ? WHERE eid = ? AND ${col} IS NULL`, [Date.now(), Date.now(), String(eid)]);
       return !!(u && u.changes);
     };
     const notice = cur.notice || ev.notice, digest = cur.digest || ev.digest;
-    if (notice && !cur.audit_sent_at && (await claim("audit_sent_at"))) { await sendNotice(`wf-audit:${eid}`, notice); sent.audit = true; }
-    if (digest && !cur.digest_sent_at && (await claim("digest_sent_at"))) { await sendNotice(`wf-digest:${eid}`, digest); sent.digest = true; }
-    if (!notice && !cur.audit_sent_at) await claim("audit_sent_at");          // nothing to send: done with it
-    if (!digest && !cur.digest_sent_at) await claim("digest_sent_at");
+    if (notice && !cur.audit_sent_at) { await sendNotice(`wf-audit:${eid}`, notice); sent.audit = await mark("audit_sent_at"); }
+    if (digest && !cur.digest_sent_at) { await sendNotice(`wf-digest:${eid}`, digest); sent.digest = await mark("digest_sent_at"); }
+    if (!notice && !cur.audit_sent_at) await mark("audit_sent_at");           // nothing to send: done with it
+    if (!digest && !cur.digest_sent_at) await mark("digest_sent_at");
     if (sent.audit || sent.digest) console.log(`[policy] staking ${eid}: ${sent.audit ? "audit notice" : ""}${sent.audit && sent.digest ? " + " : ""}${sent.digest ? "digest" : ""} sent`);
     return { audit: ev.audit, sent };
   } catch (e) {
@@ -564,4 +571,4 @@ async function recent(limit = 8) {
 
 module.exports = { auditRecord, auditNotice, digestOf, matchDigest, matchAudit, p31Base, stashPayouts, evaluate, pepeRecord, shadowAudit, afterEpoch, retryLive,
                    recent, row, init, storedBody, storedTitle, fixed, fmtG, cpLen, cpSlice, TR_WEEKLY_POOLS, TR_DAILY_POOLS, TR_VAULT_LABEL, SHADOW_WAIT_S,
-                   SHADOW_FINAL_S, RETRY_DAYS, TEXT_MAX, PEPE_LOGINS, isFinal: (eid) => finalMemo.has(eid), _forget: () => { finalMemo.clear(); pendingSig.clear(); } };
+                   SHADOW_FINAL_S, RETRY_DAYS, TEXT_MAX, PEPE_LOGINS, isFinal: (eid) => finalMemo.has(eid), _forget: () => { finalMemo.clear(); pendingSig.clear(); lastEval.clear(); } };

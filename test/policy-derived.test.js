@@ -7,9 +7,10 @@
 //   * the dual read: clean after 1 attempt; a stable difference (same list + fingerprint twice) final not clean; state that moved
 //     then a clean attempt -> clean, the earlier attempt noted; a flows-only difference whitelisted; no fresh push all day; nothing
 //     before 04:30 / the cut-off; the test clock (untagged: nothing; a tag: D...-<tag>); a final row never rewritten; a stale
-//     funding sync not compared
+//     funding sync not compared; (review of PO-4) after an outage across more than one day boundary the older open days close
+//     too, a tagged rehearsal row aside; the gather book carries every one of Pepe's loan / market filters
 //   * flows is display-only (the WHITELIST's proof): no reader of `.flows` but the cut-off's snapshot, publish's epochs and
-//     staking.js clean; two cut-offs whose flows differ write the same money rows
+//     staking.js clean; two cut-offs whose flows differ write the same PAT rows
 //   * PO-4 moves NO PAT: a day of derived + digest passes leaves wallets, pools, the House and the stashes as they were, writes no
 //     policy_runs / policy_effects row, no inbox row and no ops alert
 //   NODE_PATH=G:/PATV/node_modules node --test test/policy-derived.test.js
@@ -72,6 +73,10 @@ async function seedBook() {
   await CC.save("market", { id: 12, status: "open", model: "lmsr", seed_from: "mm", seed: 34659, b: 100.0, q: { yes: 0.0, no: 0.0 }, pool: 34659.0, options: ["yes", "no"] });
   await CC.save("market", { id: 13, status: "open", model: "lmsr", seed_from: "reserve", seed: 999999, b: 100.0, q: { yes: 0.0, no: 0.0 }, pool: 999999.0, options: ["yes", "no"] });
   await CC.save("market", { id: 14, status: "resolved", model: "lmsr", seed_from: "mm", seed: 555555, b: 100.0, q: { yes: 0.0, no: 0.0 }, pool: 0.0, options: ["yes", "no"] });
+  // review of PO-4: the rest of Pepe's filters - a written-off loan, a paid-out market and an AMM market count for nothing
+  await CC.save("loan", { id: 5, status: "active", funded_by: "bank", principal: 200000, paid: 0, owed: 200000, written_off: true, borrower: "loaner_e" });
+  await CC.save("market", { id: 15, status: "settling", model: "lmsr", seed_from: "mm", seed: 111111, b: 100.0, q: { yes: 0.0, no: 0.0 }, pool: 111111.0, options: ["yes", "no"], paid_out: true });
+  await CC.save("market", { id: 16, status: "open", model: "amm", seed_from: "mm", seed: 222222, pool: 222222.0, options: ["yes", "no"] });
 }
 async function setCutoff(ts) {
   const d = await V.load();
@@ -163,8 +168,8 @@ test("gather: the site's own tables give the hand-checked derived state (Pepe's 
   const at = day(2026, 11, 9, 4, 35);
   const inp = await D.gather(at);
   assert.equal(inp.pools.bank, 22900000);
-  assert.equal(inp.bank_nav, 22900000 + 88000, "only the bank-funded, uninsured loan counts: 100,000 - 12,000 paid");
-  assert.equal(inp.mm_seeds, 765341 + 34659, "the open LMSR markets seeded from mm");
+  assert.equal(inp.bank_nav, 22900000 + 88000, "only the bank-funded, uninsured, not written-off loan counts: 100,000 - 12,000 paid");
+  assert.equal(inp.mm_seeds, 765341 + 34659, "the open LMSR markets seeded from mm (not paid out; an AMM market counts for nothing)");
   assert.deepEqual(inp.bank_lent, [[MON - 45 * 86400, 9 * M], [MON - 10 * 86400, 50000], [MON - 86400, 1500000]], "Pepe's samples + the site's effect, by time");
   assert.deepEqual(inp.fed_loans.map((r) => r.id).sort(), ["FL1", "FL2", "FL3"]);
   assert.deepEqual(inp.rloan, { base: 12000, per_level: 2500 });
@@ -455,7 +460,7 @@ test("the test clock: an untagged pass writes nothing; /admin/tick with a tag wr
   }
 });
 
-test("PO-4 moves NO PAT: a day of derived + digest passes writes no money row, no policy run / effect, no inbox row, no ops alert", async () => {
+test("PO-4 moves NO PAT: a day of derived + digest passes writes no PAT row, no policy run / effect, no inbox row, no ops alert", async () => {
   const sums = async () => ({
     wallets: (await getQuery("SELECT COALESCE(SUM(points_balance), 0) AS s FROM users"))[0].s,
     pools: JSON.stringify(await getQuery("SELECT pool, balance FROM pool_balances ORDER BY pool").catch(async () => (await P.exportState()).pools || null)),
@@ -477,7 +482,7 @@ test("PO-4 moves NO PAT: a day of derived + digest passes writes no money row, n
     await SCH.pass(t);
   }
   assert.equal((await row("D2026-11-18")).ok, 1);
-  assert.deepEqual(await sums(), before, "wallets, pools, the House, the stashes, money rows, runs, effects, inbox");
+  assert.deepEqual(await sums(), before, "wallets, pools, the House, the stashes, PAT rows, runs, effects, inbox");
   assert.equal(alerts.length, a0, "no ops alert");
 });
 
@@ -487,4 +492,25 @@ test("view(): the derived rows (latest + 14 days) and the weekly audits", async 
   assert.equal(v.derived.latest.period, v.derived.rows[0].period);
   assert.ok(Array.isArray(v.epoch_audits));
   assert.ok(v.whitelist.some((w) => w.engine === "derived" && w.field === "flows"));
+});
+
+test("review of PO-4: an outage across more than one day boundary - the older open days are closed too (a tagged rehearsal row aside)", async () => {
+  SCH._resetPassClock();
+  const d1 = day(2026, 11, 25, 4);
+  await setCutoff(d1 + 5);
+  real = d1 + 2000;
+  await pushAt(d1 + 2000 - 3600);                                   // an hour old: the row opens, nothing compared
+  await passAt(d1 + 2000);
+  assert.equal((await row("D2026-11-25")).ok, null);
+  await passAt(d1 + 2000, "x9");                                    // a tagged rehearsal row, left open
+  assert.equal((await row("D2026-11-25-x9")).ok, null);
+  // the scheduler is down all of 11-26 and 11-27: the first pass of 11-28 closes 11-25 (two boundaries back), not the tagged row
+  const d4 = day(2026, 11, 28, 4);
+  real = d4 + 60;
+  await passAt(d4 + 60);
+  const r = await row("D2026-11-25");
+  assert.equal(r.ok, 0);
+  assert.equal(parse(r.site_inputs).final, "no fresh capital push");
+  assert.deepEqual(parse(r.blocking).plan, ["no fresh capital push"]);
+  assert.equal((await row("D2026-11-25-x9")).ok, null, "a tagged rehearsal row is left alone");
 });
