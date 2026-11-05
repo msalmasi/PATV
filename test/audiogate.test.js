@@ -1340,14 +1340,15 @@ test("audiogate2: a mic-stage capture - the gate refuses a CLIP (the room audio)
     await padBan(U.eve, PADS.mem);
     await assert.rejects(M.gate(room, U.eve, "clip", "pad"), (e) => e.refuse === true && e.message === M._test.MSG.denied);
     await M.gate(room, U.eve, "snap", "pad");                 // a snap has no audio
-    assert.equal(await M.recheck(cap), M._test.MSG.revoked, "the preview's check (as an access loss)");
+    assert.equal(await M.recheck(cap), M._test.MSG.denied, "the preview's check: the access loss's answer (review R-F4: never \"someone turned off captures\")");
+    assert.equal(M.DENIED, M._test.MSG.denied);
     await padUnban(U.eve, PADS.mem);
     await M.gate(room, U.eve, "clip", "pad");
     await NB.setOn(U.staff, true);
     await NB.banTyped(U.staff, { ip: NET_A, scope: "pad", roomId: PADS.mem.id, days: 1 });
     await assert.rejects(M.gate(room, U.eve, "clip", "pad", { net: netA }), (e) => e.message === M._test.MSG.denied);
     await M.gate(room, U.eve, "clip", "pad", { net: { ip: NET_B, hash: NB.netHash(NET_B) } });
-    assert.equal(await M.recheck(cap, { net: netA }), M._test.MSG.revoked);
+    assert.equal(await M.recheck(cap, { net: netA }), M._test.MSG.denied);
     await M.gate(room, U.staff, "clip", "pad", { net: netA });    // staff pass a network ban
   } finally { M.configure(M._test.defaults); await clearBans(); }
 });

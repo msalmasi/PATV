@@ -366,7 +366,8 @@ async function gate(R, user, kind, surface, { live = false, net = null } = {}) {
   const block = await deps.block(R.id, user.userId, kind === "clip" ? "clips" : "snapshots");
   if (block) throw refuse(typeof block === "string" ? block : block.error || "unavailable");
   // audiogate2: a clip is the room audio too - banned from hearing the pad, the access loss's answer (a snap is pictures only)
-  if (kind === "clip" && (await deps.listenBan(R.id, user, net))) throw refuse("denied");
+  // (review fix, regression F4: marked - a recheck says it as that, never as someone else's choice, and stagecap keeps the preview)
+  if (kind === "clip" && (await deps.listenBan(R.id, user, net))) throw Object.assign(refuse("denied"), { listenBan: true });
   if (kind === "clip" && deps.clipSwitch(R.id) !== true) throw refuse(deps.clipOffText(R.id));
 }
 async function availability(R, user, surface, translate) {
@@ -393,7 +394,7 @@ async function recheck(capture, { net = null } = {}) {
       if (!(await (card && !v ? cardConsent(login, u.userId) : consent(login, u.userId, v ? { sess: null } : null)))) return MSG.revoked;
     }
     return null;
-  } catch (_) { return MSG.revoked; }
+  } catch (e) { return e && e.listenBan ? MSG.denied : MSG.revoked; }   // (audiogate2 review: a listening ban = the access loss's answer)
 }
 
 function loopback(ip) {
@@ -958,6 +959,7 @@ async function start(opts, hooks = {}) {
   return { ready_by: job.deadline, done, cancel: () => cancel(job.id) };
 }
 module.exports = { configure, init, start, gate, cancel, stop: cancel, availability, recheck, programFor, rtspAuth,
+  DENIED: MSG.denied,                         // audiogate2 review: recheck's answer for a ban on hearing the pad (stagecap keeps the preview)
   rects, coverArt, renderFrame, audioPlan, shifts, composeArgs, sanitize,
   slotCells, CELLS, COLS,                     // 1.99ahp stable slots: the cells of a stable program (stage-mic.js has the same)
   consent,                                    // mic keep: storykeep's per-person recheck at save / post (the engine's own rule)

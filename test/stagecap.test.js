@@ -1063,7 +1063,7 @@ test("storage: stage_captures(media_id) is indexed and every media-id lookup (tr
 
 // audiogate2 (listenban.js): a mic-stage CLIP records the pad's room audio - a pad ban / whole-bridge block / network ban stops it like an
 // access loss; a snap (pictures only) isn't touched
-test("audiogate2: a mic-stage clip carries the request's network into the engine (memory only); under a pad ban the capture route refuses a clip with the access loss's answer (a snap still works) and the clip's preview stops playing", async (t) => {
+test("audiogate2: a mic-stage clip carries the request's network into the engine (memory only); under a pad ban the capture route refuses a clip with the access loss's answer (a snap still works) and the clip's preview stops playing - kept, with that answer (review R-F4), and plays again once the ban is lifted", async (t) => {
   const f = await micJobs(t);
   const NB = require(path.join(repo, "netban"));
   await require(path.join(repo, "feedstore")).init();
@@ -1084,7 +1084,15 @@ test("audiogate2: a mic-stage clip carries the request's network into the engine
     SC._hits.clear();
     const s = await snap(U.staff, "mic", { surface: "pad" });
     assert.equal(s.status, 200, "a snap has no audio: " + s.d.error);
-    assert.equal((await fetch(base + "/api/stage/captures/" + c.id + "/preview", { headers: H(U.staff) })).status, 403, "the clip's preview");
+    const pv = await fetch(base + "/api/stage/captures/" + c.id + "/preview", { headers: H(U.staff) });
+    assert.equal(pv.status, 403, "the clip's preview");
+    // review R-F4: the ban's own answer (the access loss's), never "someone in this capture turned off captures" - and the preview KEPT
+    assert.equal((await pv.json()).error, require(path.join(repo, "stagemiccap"))._test.MSG.denied);
+    assert.equal((await getQuery("SELECT state FROM stage_captures WHERE id = ?", [c.id]))[0].state, "preview", "kept while banned");
+    assert.equal((await get("/api/stage/captures/" + c.id, U.staff)).status, 403, "its status poll: refused, not failed");
+    await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [U.staff.userId]);
+    assert.equal((await fetch(base + "/api/stage/captures/" + c.id + "/preview", { headers: H(U.staff) })).status, 200, "lifted: it plays again");
     await SC.discard(U.staff, s.d.capture.id).catch(() => {});
+    await SC.discard(U.staff, c.id).catch(() => {});
   } finally { await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [U.staff.userId]); SC._hits.clear(); }
 });

@@ -225,6 +225,9 @@ const MIC_TEXT = {
   revoked: "Someone in this capture turned off captures of their cam.",
   delete_denied: "Only the pad’s owner, an admin, the person who took it or someone shown on camera can delete this."
 };
+/** audiogate2 review (regression F4): what a mic capture's recheck answer says - a ban on hearing the pad (stagemiccap.DENIED) as the
+ *  access loss's own words, anything else as a capture taken back. */
+const micRefusal = (why) => (why === micEngine().DENIED ? refuse(403, micEngine().DENIED, "stagecap.mic.denied") : refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked"));
 function micText(req, message) {
   const key = Object.keys(MIC_TEXT).find(k => MIC_TEXT[k] === message);
   return key && req && req.t ? req.t("stagecap.mic." + key) : message;
@@ -530,6 +533,9 @@ async function ensureMic(c, { net = null } = {}) {
   if (!c || c.source !== "mic" || !["recording", "cutting", "preview", "saving"].includes(c.state)) return;
   const why = await micEngine().recheck(c, { net });       // (audiogate2: net = the asking request's network, when there is one)
   if (!why) return;
+  // audiogate2 review (regression F4): banned from hearing the pad - refused with that answer and KEPT (lifted, it plays again, as the
+  // 🔊 mic-clip preview); never dropped with a text that blames someone in the capture
+  if (why === micEngine().DENIED) throw micRefusal(why);
   await failMic(c, MIC_TEXT.revoked);
   throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
 }
@@ -564,7 +570,7 @@ async function save(user, id, idem) {
       const current = await row(c.id);
       if (current.state === "saving" || current.state === "done") return current;
       if (current.state !== "preview") throw refuse(410, "That preview expired - take a fresh one.");
-      if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+      { const w = await micEngine().recheck(current); if (w) throw micRefusal(w); }
     }
     const actions = require("./actions");
     let aid;
@@ -693,11 +699,11 @@ async function publishCapture(id, username, { hours, byAnon, by } = {}) {
           return { media_id: current.media_id, expires: m ? m.expires : null, again: true };
         }
         if (current.state !== "saving") return null;
-        if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+        { const w = await micEngine().recheck(current); if (w) throw micRefusal(w); }
         await insertMedia();
         // Recheck after the asynchronous insert too. A revocation rolls back the new media and
         // the file move; a competing failed/discarded state can never be overwritten with done.
-        if (await micEngine().recheck(current)) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
+        { const w = await micEngine().recheck(current); if (w) throw micRefusal(w); }
         const changed = await runQuery("UPDATE stage_captures SET state = 'done', media_id = ?, updated = ? WHERE id = ? AND state = 'saving'", [mid, t, c.id]);
         if (!changed.changes) throw refuse(403, MIC_TEXT.revoked, "stagecap.mic.revoked");
         return { media_id: mid, expires };
