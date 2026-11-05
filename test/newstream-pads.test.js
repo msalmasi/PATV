@@ -195,16 +195,20 @@ test("3c: a swap keeps the viewer's place - the first link in view stays where i
     timer(); await new Promise((r) => setTimeout(r, 5));
     return scrolled;
   }
-  // the viewer reads the schedule; a card above it grew (a stream went live: its Now row) - 51 px
-  const before = { padsAll: sec("padsAll", -400, 80, [["/p/a", -300], ["/p/z", 20]]), padsSched: sec("padsSched", 80, 600, [["/stage", 120]]) };
-  const after = { padsAll: sec("padsAll", -400, 131, [["/p/new", -350], ["/p/a", -249], ["/p/z", 71]]), padsSched: sec("padsSched", 131, 651, [["/stage", 171]]) };
-  assert.deepEqual(await run({ scrollY: 900, before, after }), [[0, 51]], "the link that was first in view is back where it was");
+  // the viewer reads the schedule at the foot of the page (the review's case); a card above it grew - a stream went live: its Now row, 51 px
+  const before = { padsAll: sec("padsAll", -400, 300, [["/p/a", -300], ["/p/z", 20]]), padsSched: sec("padsSched", 300, 800, [["/stage", 340]]) };
+  const after = { padsAll: sec("padsAll", -400, 351, [["/p/new", -350], ["/p/a", -249], ["/p/z", 20]]), padsSched: sec("padsSched", 351, 851, [["/stage", 391]]) };
+  assert.deepEqual(await run({ scrollY: 900, before, after }), [[0, 51]], "the schedule stays where it was read");
+  // reading the cards (the section across the middle of the window): a card ABOVE the window grew - the first link in view is held
+  const cards = { padsAll: sec("padsAll", -400, 700, [["/p/a", -300], ["/p/z", 20], ["/p/y", 380]]), padsSched: sec("padsSched", 700, 1200, [["/stage", 740]]) };
+  const grew = { padsAll: sec("padsAll", -400, 751, [["/p/a", -249], ["/p/z", 71], ["/p/y", 431]]), padsSched: sec("padsSched", 751, 1251, [["/stage", 791]]) };
+  assert.deepEqual(await run({ scrollY: 900, before: cards, after: grew }), [[0, 51]]);
   // the cards re-sort (live pads first): the card the viewer was on stays under them
-  const resort = { padsAll: sec("padsAll", -400, 80, [["/p/z", -300], ["/p/new", -200], ["/p/a", 30]]), padsSched: sec("padsSched", 80, 600, [["/stage", 120]]) };
-  assert.deepEqual(await run({ scrollY: 900, before, after: resort }), [[0, -320]]);
+  const resort = { padsAll: sec("padsAll", -400, 700, [["/p/z", -300], ["/p/y", -200], ["/p/a", 30]]), padsSched: sec("padsSched", 700, 1200, [["/stage", 740]]) };
+  assert.deepEqual(await run({ scrollY: 900, before: cards, after: resort }), [[0, -320]]);
   // that card is gone: the section it was in holds still instead
-  const gone = { padsAll: sec("padsAll", -460, 20, [["/p/a", -360]]), padsSched: sec("padsSched", 20, 540, [["/stage", 60]]) };
-  assert.deepEqual(await run({ scrollY: 900, before, after: gone }), [[0, -60]]);
+  const gone = { padsAll: sec("padsAll", -460, 640, [["/p/a", -360], ["/p/y", 320]]), padsSched: sec("padsSched", 640, 1140, [["/stage", 680]]) };
+  assert.deepEqual(await run({ scrollY: 900, before: cards, after: gone }), [[0, -60]]);
   // at the top of the page nothing is scrolled (the list grows below the fold as before); nothing moved: nothing either
   assert.deepEqual(await run({ scrollY: 0, before, after }), []);
   assert.deepEqual(await run({ scrollY: 900, before, after: before }), []);

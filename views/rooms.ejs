@@ -270,21 +270,25 @@
     }
     // (review F6: whole sections are replaced, so the browser's own scroll anchoring can't hold the viewer's place - a card that grew above them
     // pushed what they read down, and the cards re-sort live first. The first link in view (else the first section that starts in view) is
-    // measured before and after and the page scrolled by the difference; at the top of the page nothing is scrolled)
+    // measured before and after and the page scrolled by the difference; at the top of the page nothing is scrolled). The place is the
+    // section across the middle of the window - the one being read (the schedule at the foot of the page, not the card edge above it) - and
+    // in it the first link in view (else the section's own top).
     function links(sec) { return sec && sec.querySelectorAll ? sec.querySelectorAll('a[href]') : []; }
     function place() {
-      var vh = window.innerHeight || 0;
+      var vh = window.innerHeight || 0, mid = vh / 2, at = null;
       for (var i = 0; i < IDS.length; i++) {
         var sec = document.getElementById(IDS[i]); if (!sec) continue;
         var r = sec.getBoundingClientRect(); if (r.bottom <= 0) continue; if (r.top >= vh) break;
-        var ls = links(sec), seen = {};
-        for (var j = 0; j < ls.length; j++) {
-          var h = ls[j].getAttribute('href'), n = seen[h] = (seen[h] || 0) + 1, t = ls[j].getBoundingClientRect().top;
-          if (t >= 0 && t < vh) return { id: IDS[i], href: h, n: n, top: t, secTop: r.top };
-        }
-        if (r.top >= 0) return { id: IDS[i], href: null, top: r.top, secTop: r.top };
+        at = { sec: sec, id: IDS[i], r: r };
+        if (r.bottom > mid) break;
       }
-      return null;
+      if (!at) return null;
+      var ls = links(at.sec), seen = {};
+      for (var j = 0; j < ls.length; j++) {
+        var h = ls[j].getAttribute('href'), n = seen[h] = (seen[h] || 0) + 1, t = ls[j].getBoundingClientRect().top;
+        if (t >= 0 && t < vh) return { id: at.id, href: h, n: n, top: t, secTop: at.r.top };
+      }
+      return { id: at.id, href: null, top: at.r.top, secTop: at.r.top };
     }
     function hold(k) {
       var sec = k && document.getElementById(k.id); if (!sec) return;

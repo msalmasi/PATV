@@ -4,8 +4,8 @@
 // once when it comes back) for a short signature of what its cards show that moves with a stage; only when the signature changes does it
 // fetch itself again and swap its sections (rooms.ejs).
 //
-// The signature covers, per pad /p lists (review L1) that this viewer may see: its live slots (id, live, featured, title, mode), its next bookings (the cards list four),
-// whether its Camfrog room is live and Pepe is in it - plus Pepe on air. Never headcounts (they move all the time; a swap brings them along).
+// The signature covers, per pad /p lists (review L1) that this viewer may see: its live slots (id, live, featured, title, mode), its next
+// bookings (the cards list four), whether its Camfrog room is live and Pepe is in it - plus Pepe on air. Never headcounts (they move all the time; a swap brings them along).
 // One cached snapshot (SNAP_MS) serves every viewer: mainstage.guide() (two reads), bridge.summary(false) and Pepe's state - the same calls
 // the /p page makes, once per SNAP_MS for the whole site instead of once per viewer per poll. The /p page renders its first signature from the
 // same snapshot (sigFor), so an unchanged list never refetches.
