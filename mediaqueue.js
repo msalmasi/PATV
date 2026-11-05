@@ -512,12 +512,14 @@ async function resumeTitle(q, s, pos) {
   console.log(`[mediaqueue] queue #${q.id}: "${s.title}" started again at ${off}s (media-control had lost it)`);
   return { ok: true, position: off };
 }
-function restartCurrent(s, pos) {
-  return withLock(s.room_id, async () => {
+// (plexreplace review fix: medialib's resume / seek now run under the pad's lock themselves - {locked: true}, never a second wait on it)
+function restartCurrent(s, pos, _by = null, { locked = false } = {}) {
+  const run = async () => {
     const q = await load(s.queue_id);
     if (!q || q.state !== "active") throw refuse(404, "This queue has ended.");
     return resumeTitle(q, s, pos);
-  });
+  };
+  return locked ? run() : withLock(s.room_id, run);
 }
 /** Active queues with no title on (waiting for an encoder, or the site stopped between two titles). */
 async function watchIdle() {
@@ -581,7 +583,7 @@ async function launch(user, A, R, b, booked) {
   {
     // plexreplace: {replace: true} - this queue takes over from what's on (medialib.replaceTarget: you may control it, else control_denied);
     // every refusal below comes first, the old title stops only once the new slot exists (medialib.retire)
-    const rep = !booked && I().wantsReplace(b) ? await I().replaceTarget(user, R) : null;
+    const rep = !booked && I().wantsReplace(b) ? await I().replaceTarget(user, R, I().replaceWant(b)) : null;
     await I().preflight(user, A, R, { replacing: rep });
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);

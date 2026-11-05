@@ -39,7 +39,7 @@ const PA = () => require("./padaccess");
 const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_library", "busy_queue", "slot_taken", "site_full", "encoder_busy",
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
-  "not_found", "error", "replace_gone"];
+  "not_found", "error", "replace_gone", "replace_changed", "play_changed"];
 const OPS = new Set(["search", "play", "control", "np", "continue", "rpm"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
@@ -112,6 +112,7 @@ function failBody(e) {
   if (x.playing != null) out.playing = String(x.playing).slice(0, 120);
   if (x.playing_queue != null) out.playing_queue = !!x.playing_queue;
   if (x.playing_left != null) out.playing_left = Math.max(0, Math.floor(Number(x.playing_left) || 0));
+  if (x.playing_slot != null) out.playing_slot = String(x.playing_slot).slice(0, 64);   // (review fix: the slot Pepe names with the yes)
   if (e && e.price != null && out.price == null) out.price = e.price;
   if (e && e.label) out.label = String(e.label).slice(0, 120);
   if (code === "pat") {                       // shop.chargeService: "That costs X PAT and you have Y."
@@ -275,7 +276,10 @@ async function opPlay(user, b, ctx) {
     return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
   const S = conf().get();
-  const rep = b.mode === "replace" ? { replace: true } : {};            // plexreplace: Pepe's "play X instead?" + yes
+  // plexreplace: Pepe's "play X instead?" + yes. Review fix: replace_slot = the slot his question named (padState library.slot_id / a busy
+  // refusal's playing_slot) - the site refuses replace_changed if something else is on by the yes; an older Pepe without it: whatever is on
+  const slotArg = typeof b.replace_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(b.replace_slot) ? b.replace_slot : null;
+  const rep = b.mode === "replace" ? { replace: slotArg || true } : {};
   const replaced = (r) => (r && r.replaced ? { replaced: { title: r.replaced.title || null, queue: !!r.replaced.queue } } : {});
   if (scope === "title" || (scope === "episode" && S.library_queue === false)) {
     const r = await ML().playFor(user, { room: R.id, key, ...(price !== undefined ? { price } : {}), ...rep });

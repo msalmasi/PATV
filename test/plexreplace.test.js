@@ -308,7 +308,7 @@ test("who: the starter, the pad's owner and the library admins may replace; anyo
     assert.deepEqual([st.library.title, st.library.can_replace], ["Charade (1963)", false]);
     assert.equal((await L.padState(owner, ROOM)).library.can_replace, true);
     assert.equal((await L.mine(bob, ROOM)).on_pad.can_replace, false);
-    assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: true, can_replace: true });
+    assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: true, can_replace: true, slot_id: r3.slot.id });
     // nothing on: a replace is an ordinary play
     await L.stop(admin, ROOM);
     const r4 = await L.playFor(bob, { room: ROOM, key: "501", replace: true });
@@ -349,7 +349,7 @@ test("a 📼 QUEUE is replaced as a whole (it ends 'replaced by'), a queue can r
   await pub(keyOf(last()));
   assert.equal(await feat(q.slot.id), "auto");
   assert.equal((await L.padState(admin, ROOM)).library.left, 2);
-  assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "The Show — S1E1 Pilot", queue: true, left: 2, by: admin.username, mine: true, can_replace: true });
+  assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "The Show — S1E1 Pilot", queue: true, left: 2, by: admin.username, mine: true, can_replace: true, slot_id: q.slot.id });
   const w = watchFeature();
   const r = await L.playFor(admin, { room: ROOM, key: "501", replace: true });
   const seen = await w.stop();
@@ -438,7 +438,7 @@ test("the routes the sheet calls: POST /api/medialib/play answers a busy pad wit
     const a = await L.play(admin, { room: ROOM, key: "500" });
     await pub(keyOf(last()));
     const m = await get(owner, "/api/medialib/mine?room=" + encodeURIComponent(ROOM));
-    assert.deepEqual(m.on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: false, can_replace: true }, "the pad's owner may change it");
+    assert.deepEqual(m.on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: false, can_replace: true, slot_id: a.slot.id }, "the pad's owner may change it");
     let r = await post(owner, "/api/medialib/play", { room: ROOM, key: "501" });
     assert.equal(r.status, 409);
     assert.deepEqual([r.j.ok, r.j.code, r.j.can_replace, r.j.playing, r.j.playing_queue], [false, "busy_library", true, "Charade (1963)", false]);
@@ -482,4 +482,217 @@ test("Pepe's chat: op play mode replace is ONE request (the feature carries); a 
     assert.equal(r.ok, true, JSON.stringify(r));
     assert.deepEqual([r.queue, r.replaced], [true, { title: "Night of the Living Dead (1968)", queue: false }]);
   } finally { await conf.set({ library_users: "" }, "test"); }
+});
+
+// ── review fixes (the race + perms reviews of the plexreplace build) ──
+// hold the next media-control request matching `re` ("METHOD /path") until released - a control "in flight"
+function holdMediactl(re) {
+  const orig = server.listeners("request");
+  let held = null, release = null;
+  const gate = new Promise((ok) => { release = ok; });
+  server.removeAllListeners("request");
+  server.on("request", async (req, res) => {
+    if (!held && re.test(req.method + " " + req.url)) { held = req.method + " " + req.url; await gate; }
+    for (const f of orig) f.call(server, req, res);
+  });
+  return { held: () => held, release: () => release(), restore() { release(); server.removeAllListeners("request"); for (const f of orig) server.on("request", f); } };
+}
+const until = async (fn, ms = 3000) => { for (let i = 0; i < ms / 5 && !fn(); i++) await new Promise((r) => setTimeout(r, 5)); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const bal = async (u) => (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [u.userId]))[0].b;
+
+test("a replace names what it replaces (replace: <its slot id>): what's on changed -> replace_changed (what's on now) and nothing stops; two controllers at once -> ONE swap, the other is asked again; the target ended with nothing on -> an ordinary play", async () => {
+  const alice = await mkUser(), bob = await mkUser();
+  await conf.set({ library_users: alice.username + "," + bob.username }, "test");
+  try {
+    const a = await L.playFor(alice, { room: ROOM, key: "500" });
+    await pub(keyOf(last()));
+    // the sheet, Pepe and the busy refusal carry the slot a replace would take off - for someone who may replace it
+    assert.equal((await L.mine(owner, ROOM)).on_pad.slot_id, a.slot.id);
+    assert.equal((await L.padState(owner, ROOM)).library.slot_id, a.slot.id);
+    await assert.rejects(L.playFor(owner, { room: ROOM, key: "501" }), (e) => e.extra.code === "busy_library" && e.extra.playing_slot === a.slot.id);
+    assert.equal((await L.mine(bob, ROOM)).on_pad.slot_id, undefined, "may not replace: no slot id");
+    assert.equal((await L.padState(bob, ROOM)).library.slot_id, undefined);
+    await assert.rejects(L.playFor(bob, { room: ROOM, key: "501" }), (e) => e.extra.code === "busy_library" && e.extra.playing_slot === undefined);
+    // race review A: two controllers both confirmed "instead of Charade" - ONE swap; the other is refused with what's on now (asked again)
+    const rs = await Promise.allSettled([L.playFor(admin, { room: ROOM, key: "502", replace: a.slot.id }),
+                                         L.playFor(owner, { room: ROOM, key: "501", replace: a.slot.id })]);
+    const won = rs.find((x) => x.status === "fulfilled"), lost = rs.find((x) => x.status === "rejected");
+    assert.ok(won && lost, "one swap, one refusal: " + JSON.stringify(rs.map((x) => x.status === "fulfilled" ? "ok" : x.reason.message)));
+    assert.equal(won.value.replaced.title, "Charade (1963)");
+    const e = lost.reason;
+    assert.deepEqual([e.status, e.extra.code, e.extra.can_replace, e.extra.playing, e.extra.playing_queue, e.extra.playing_slot],
+                     [409, "replace_changed", true, won.value.title, false, won.value.slot.id]);
+    const adminWon = won === rs[0];
+    assert.equal(onEncoder().ratingKey, adminWon ? "502" : "501", "the first swap's title plays on");
+    assert.equal((await S.getSlot(won.value.slot.id)).status, "waiting", "...and its slot");
+    assert.equal(await feat(won.value.slot.id), "auto");
+    assert.equal((await openLib()).length, 1);
+    // asked again with what's on now: it goes through
+    const who2 = adminWon ? owner : admin;
+    const r2 = await L.playFor(who2, { room: ROOM, key: "500", replace: won.value.slot.id });
+    assert.equal(r2.replaced.title, won.value.title);
+    await pub(keyOf(last()));
+    // perms review PROBE 1 (stale consent): confirmed "instead of <r2>", but r2 stopped and bob started his own - the yes never takes bob's off
+    await L.stop(who2, ROOM);
+    const b = await L.playFor(bob, { room: ROOM, key: "502" });
+    await pub(keyOf(last()));
+    await assert.rejects(L.playFor(owner, { room: ROOM, key: "501", replace: r2.slot.id }),
+                         (x) => x.status === 409 && x.extra.code === "replace_changed" && x.extra.playing === "Carnival of Souls (1962)" && x.extra.playing_slot === b.slot.id);
+    assert.equal((await S.getSlot(b.slot.id)).status, "active", "bob's title plays on");
+    assert.equal(onEncoder().ratingKey, "502");
+    // Pepe's op carries it the same way (replace_slot) and hears the refusal's fields
+    const pc = await PC.handle({ op: "play", as: { user_id: owner.userId }, room: ROOM, key: "501", scope: "title", mode: "replace", replace_slot: r2.slot.id, via: "room" });
+    assert.deepEqual([pc.ok, pc.code, pc.can_replace, pc.playing, pc.playing_slot], [false, "replace_changed", true, "Carnival of Souls (1962)", b.slot.id]);
+    const pc2 = await PC.handle({ op: "play", as: { user_id: owner.userId }, room: ROOM, key: "501", scope: "title", mode: "replace", replace_slot: b.slot.id, via: "room" });
+    assert.deepEqual([pc2.ok, pc2.replaced && pc2.replaced.title], [true, "Carnival of Souls (1962)"]);
+    // the target ended and nothing is on: an ordinary play
+    await L.stop(owner, ROOM);
+    const r3 = await L.playFor(alice, { room: ROOM, key: "500", replace: b.slot.id });
+    assert.equal(r3.ok, true);
+    assert.equal(r3.replaced, undefined);
+    // a 📼 queue that moved on to its next title keeps its slot - a replace aimed at it still goes through
+    await L.stop(alice, ROOM);
+    const q = await Q.start(admin, { room: ROOM, key: "911", scope: "season" });
+    await pub(keyOf(last()));
+    await Q.next(admin, ROOM);
+    assert.equal((await L.mine(admin, ROOM)).on_pad.title, "The Show — S1E2 Second");
+    const r4 = await L.playFor(admin, { room: ROOM, key: "501", replace: q.slot.id });
+    assert.deepEqual([r4.replaced.title, r4.replaced.queue], ["The Show — S1E2 Second", true]);
+  } finally { await conf.set({ library_users: "" }, "test"); }
+});
+
+test("the single-play controls hold the pad's lock: a ⏹ / pause in flight when a replace comes finishes first; a ⏹ / pause authorised on the OLD play that lands after a replace never touches the new one", async () => {
+  const alice = await mkUser();
+  await conf.set({ library_users: alice.username }, "test");
+  let h = null;
+  try {
+    // perms review PROBE 2b: alice's ⏹ is at media-control when the owner's replace (confirmed "instead of Charade") comes
+    const a = await L.playFor(alice, { room: ROOM, key: "500" });
+    await pub(keyOf(last()));
+    h = holdMediactl(/^POST \/streams\/.*\/stop$/);
+    const p = L.stop(alice, ROOM);
+    await until(() => h.held());
+    assert.ok(h.held(), "alice's stop reached media-control");
+    const rp = L.playFor(owner, { room: ROOM, key: "501", replace: a.slot.id });
+    await sleep(50);
+    h.release();
+    await p;
+    const r = await rp;
+    h.restore(); h = null;
+    assert.equal(r.ok, true);
+    assert.equal(r.replaced, undefined, "the stop came first: nothing left to replace - an ordinary play");
+    assert.equal((await S.getSlot(a.slot.id)).end_reason, "library_stopped");
+    assert.equal(onEncoder() && onEncoder().ratingKey + "/" + onEncoder().state, "501/playing", "the new title's encoder is on - alice's ⏹ never reached it");
+    assert.equal((await S.getSlot(r.slot.id)).status, "waiting");
+    assert.equal((await featured()).id, r.slot.id);
+    await pub(keyOf(last()));
+    // the other order: the replace is mid-way (its stop of the old title held at media-control) when a ⏹ / pause authorised on the OLD play comes
+    await L.stop(owner, ROOM);
+    const a2 = await L.playFor(alice, { room: ROOM, key: "500" });
+    await pub(keyOf(last()));
+    h = holdMediactl(/^POST \/streams\/.*\/stop$/);
+    const rp2 = L.playFor(owner, { room: ROOM, key: "502", replace: a2.slot.id });
+    await until(() => h.held());
+    assert.ok(h.held(), "the replace is stopping the old title");
+    const sp = L.stop(alice, ROOM).then(() => "stopped", (x) => x);
+    const pp = L.pause(alice, ROOM).then(() => "paused", (x) => x);
+    await sleep(50);
+    h.release();
+    const r2 = await rp2;
+    const se = await sp, pe = await pp;
+    h.restore(); h = null;
+    for (const x of [se, pe]) assert.ok(x instanceof Error && x.status === 409 && x.extra && x.extra.code === "play_changed", "refused: " + (x && (x.message || x)));
+    assert.equal(onEncoder() && onEncoder().ratingKey + "/" + onEncoder().state, "502/playing", "the new title plays on - not stopped, not paused");
+    assert.equal((await S.getSlot(r2.slot.id)).status, "waiting");
+    assert.deepEqual((await getQuery("SELECT slot_id, state FROM media_sessions WHERE room_id = ?", [ROOM])).map((x) => [x.slot_id, x.state]), [[r2.slot.id, "playing"]]);
+    // a pause in flight when a replace comes: the replace waits, then swaps the (paused) title for a playing one
+    await pub(keyOf(last()));
+    h = holdMediactl(/^POST \/streams\/.*\/pause$/);
+    const pz = L.pause(owner, ROOM);
+    await until(() => h.held());
+    assert.ok(h.held(), "the pause reached media-control");
+    const rp3 = L.playFor(owner, { room: ROOM, key: "500", replace: r2.slot.id });
+    await sleep(50);
+    h.release();
+    await pz;
+    const r3 = await rp3;
+    h.restore(); h = null;
+    assert.equal(r3.replaced.title, "Carnival of Souls (1962)");
+    assert.equal(onEncoder().ratingKey + "/" + onEncoder().state, "500/playing", "the pause landed on the old title, not the new one");
+    assert.deepEqual((await getQuery("SELECT state FROM media_sessions WHERE room_id = ?", [ROOM])).map((x) => x.state), ["playing"]);
+  } finally { if (h) h.restore(); await conf.set({ library_users: "" }, "test"); }
+});
+
+test("the single-play watcher holds the pad's lock: a replace that lands after its re-check (the old title just ended in media-control) waits for it - the watcher never cuts the new title", async () => {
+  const a = await L.play(admin, { room: ROOM, key: "500" });
+  await pub(keyOf(last()));
+  mstreams._streams.get(stageName()).state = "ended";               // the credits rolled; the watcher's look sees it
+  const realEnd = S.end;
+  let rp = null;
+  S.end = async (id, reason, actor) => {
+    if (!rp && id === a.slot.id) {                                     // race review D: the replace comes right after the watcher's re-check
+      rp = L.playFor(admin, { room: ROOM, key: "501", replace: a.slot.id });
+      await Promise.race([rp.catch(() => {}), sleep(1000)]);           // (it finishes now - or waits for the watcher's lock)
+    }
+    return realEnd(id, reason, actor);
+  };
+  try { await L.watch(); } finally { S.end = realEnd; }
+  const r = await rp;
+  assert.equal(r.ok, true);
+  assert.equal(onEncoder() && onEncoder().ratingKey + "/" + onEncoder().state, "501/playing", "the new title's encoder is on");
+  assert.equal((await S.getSlot(a.slot.id)).end_reason, "library_done", "the old title ended as it did");
+  assert.equal((await S.getSlot(r.slot.id)).status, "waiting");
+  assert.equal((await featured()).id, r.slot.id, "the new title is the pad's featured stage (its card)");
+  await L.watch();
+  assert.equal((await S.getSlot(r.slot.id)).status, "waiting", "the next look leaves it alone (not library_lost)");
+  assert.equal(onEncoder().ratingKey, "501");
+});
+
+test("media-control refusing the new title after the swap (the known limit): the old title is off ('library_replaced'), the new slot ends 'library_failed', the PAT comes back - and the feature moves on to the other live stream", async () => {
+  const payer = owner;                                               // (the pad's owner: may control the admin's play, pays like anyone)
+  await runQuery("UPDATE users SET points_balance = 1000000 WHERE userId = ?", [owner.userId]);
+  const a = await L.play(admin, { room: ROOM, key: "500" });
+  await pub(keyOf(last()));
+  const u = await mkUser();
+  const bk = await S.book(u, { minutes: 30, room: ROOM });
+  await pub(bk.key);
+  assert.equal(await feat(a.slot.id), "auto");
+  await conf.set({ library_price: 1000 }, "test");
+  const b0 = await bal(payer);
+  const had = new Set((await getQuery("SELECT id FROM stage_slots WHERE room_id = ?", [ROOM])).map((x) => x.id));
+  const realStart = mstreams.start;
+  mstreams.start = async function (stage, b) { if (String(b.ratingKey) === "501") { const e = new Error("the encoder refused"); e.status = 500; throw e; } return realStart.call(this, stage, b); };
+  let err = null;
+  try { await L.playFor(payer, { room: ROOM, key: "501", replace: a.slot.id, price: 2000 }); } catch (e) { err = e; } finally { mstreams.start = realStart; }
+  assert.ok(err, "refused");
+  assert.equal(err.status, 502);
+  assert.match(err.message, /refunded/i);
+  assert.equal((await S.getSlot(a.slot.id)).end_reason, "library_replaced", "the old title is off - the swap happened");
+  assert.equal(onEncoder(), null, "no encoder on the pad");
+  const nw = (await getQuery("SELECT id, status, end_reason FROM stage_slots WHERE room_id = ? AND source = 'library'", [ROOM])).filter((x) => !had.has(x.id));
+  assert.deepEqual(nw.map((x) => [x.status, x.end_reason]), [["ended", "library_failed"]]);
+  assert.equal(await bal(payer), b0, "the held PAT came back");
+  assert.equal(await feat(bk.slot.id), "auto", "the other live stream has the pad's feature");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM media_sessions WHERE room_id = ?", [ROOM]))[0].n, 0);
+  assert.equal((await getQuery("SELECT end_reason FROM media_plays WHERE slot_id = ?", [a.slot.id]))[0].end_reason, "replaced by " + payer.username);
+});
+
+test("an auto-feature carried as PENDING whose new title never publishes: held UPNEXT_MS, then the other live stream takes it (the hold isn't forever)", async () => {
+  const a = await L.play(admin, { room: ROOM, key: "500" });
+  await pub(keyOf(last()));
+  const u = await mkUser();
+  const bk = await S.book(u, { minutes: 30, room: ROOM });
+  const pk = await pub(bk.key);
+  const r = await L.playFor(admin, { room: ROOM, key: "501", replace: a.slot.id });
+  assert.equal(await feat(r.slot.id), "auto");
+  adv(60000);
+  await S.rtmpCallback({ call: "update_publish", app: "stage", name: pk.key, addr: "1.2.3.4", clientid: pk.cid });
+  await S.autoFeature(ROOM);
+  assert.equal(await feat(r.slot.id), "auto", "60 s: still held for the title that is starting");
+  adv(31000);
+  await S.rtmpCallback({ call: "update_publish", app: "stage", name: pk.key, addr: "1.2.3.4", clientid: pk.cid });
+  await S.autoFeature(ROOM);
+  assert.equal(await feat(bk.slot.id), "auto", "past UPNEXT_MS: the live stream has it");
+  assert.equal(await feat(r.slot.id), null);
 });
