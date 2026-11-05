@@ -244,6 +244,17 @@
       // ☆ Unfeature, Pepe's feature - so it is not everyone's default, at load or at a poll)
       view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
     }
+    // newstream 1.99ala (review F2): the pad page's "Live on the stage now · Watch ›" line (room.ejs) - THIS viewer's pick, as a tab click: the
+    // first live stream while the stage shows nothing (Pepe's off-air slate, a pad he isn't in). Never over a stream on screen, Pepe's stream
+    // or the mic stage; never a 🎬 cam (it opens a live session) or a 📼 card. -> whether it moved
+    function watchLive() {
+      if (dead || cur() || view === 'mic' || (pepeOn && pepeHere)) return false;
+      for (var i = 0; i < slots.length; i++) {
+        var s = slots[i];
+        if (s && !s.cam && !s.pending && (s.hls || s.embed)) { view = 'slot:' + s.id; chosen = true; micWanted = false; show(); return true; }
+      }
+      return false;
+    }
     // ── upnext: 📼 "Coming up next" ──
     var UPNEXT_STANDBY_MS = 30000, UPNEXT_HANDOFF_MS = 20000, UPNEXT_POLL_MS = 3000;
     var upCtl = null, upGone = {}, upTimer = null, upTimerFor = '', upFastT = null;
@@ -823,7 +834,7 @@
       try { micStop(); } catch (e) { /* gone */ } try { camStop(); } catch (e) { /* gone */ }
       try { player.stop(); } catch (e) { /* gone */ } try { setEmbed(null); } catch (e) { /* gone */ }
     }
-    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic, destroy: destroy };
+    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic, destroy: destroy, watchLive: watchLive };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.switcher = switcher;

@@ -632,7 +632,7 @@
   </nav>
   <%# newstream 1.99ala: the pad's stage went on air AFTER this page loaded while the viewer is on Feed / About - one line under the tabs
       (the stage script below shows it; Live opens on click; ✕ hides it for this visit). The Live tab's red dot follows the stage too. %>
-  <% if (PT_.tabs.indexOf('live') >= 0) { %><p class="plive" id="padLiveNote" hidden><a href="?tab=live" data-pad-tab="live"><span class="pdot" aria-hidden="true"></span><span><%- t('pad.tab.live_now', { watch: '<b>' + t('pad.tab.live_now_watch') + '</b>' }) %></span></a><button type="button" id="padLiveNoteX" aria-label="<%- t('pad.tab.live_now_hide') %>" title="<%- t('pad.tab.live_now_hide') %>">✕</button></p><% } %>
+  <% if (PT_.tabs.indexOf('live') >= 0) { %><p class="plive" id="padLiveNote" hidden><a href="?tab=live" data-pad-tab="live" id="padLiveNoteGo"><span class="pdot" aria-hidden="true"></span><span><%- t('pad.tab.live_now', { watch: '<b>' + t('pad.tab.live_now_watch') + '</b>' }) %></span></a><button type="button" id="padLiveNoteX" aria-label="<%- t('pad.tab.live_now_hide') %>" title="<%- t('pad.tab.live_now_hide') %>">✕</button></p><% } %>
   <% } %>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <% if (dockOn_) { %><h1 class="ds-sr-only"><%= room.name %></h1><% } %>
@@ -790,6 +790,9 @@
     if (liveNote) {
       var noteX = document.getElementById('padLiveNoteX');
       if (noteX) noteX.addEventListener('click', function () { noteGone = true; liveNote.hidden = true; });
+      // (review F2: an unfeatured stream is nobody's default - Watch › is this viewer's pick of it; pad-tabs.js opens Live)
+      var noteGo = document.getElementById('padLiveNoteGo');
+      if (noteGo) noteGo.addEventListener('click', function () { var st = window.PATVPadStage; if (st && typeof st.watchLive === 'function') st.watchLive(); });
       document.addEventListener('patv:padtab', function (e) { if (e && e.detail && e.detail.tab === 'live') liveNote.hidden = true; });
     }
     // newstream 1.99ala: the 📼 player (pad-plexq.js) and the Go live card (room-schedule.js) poll every 30 s on their own - when the stage's

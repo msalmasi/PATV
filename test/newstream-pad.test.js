@@ -36,19 +36,21 @@ async function stageScript(extra) {
   const nodes = {}, docL = {};
   for (const id of ["rmStage", "rmStPill", "rmStPillTxt", "rmCap", "rmTabs", "rmVideo", "rmStReconnect", "rmStUnmute", "rmEmbed"]) nodes[id] = el(id);
   if (html.includes('id="padLiveNote" hidden')) { nodes.padLiveNote = el("padLiveNote", { hidden: true }); nodes.padLiveNoteX = el("padLiveNoteX"); }
+  if (html.includes('id="padLiveNoteGo"')) nodes.padLiveNoteGo = el("padLiveNoteGo");
   nodes["padTab-live"] = el("padTab-live"); nodes["padTab-live"].attrs["aria-selected"] = String((extra && extra.padTabs ? extra.padTabs.initial : "feed") === "live");
   const dotHidden = /id="padTab-live"[^>]*>\s*<span class="pdot" aria-hidden="true" hidden>/.test(html);
   const dot = el("dot", { hidden: dotHidden });
   const polls = { plexq: 0, sched: 0 };
   let o = null;
+  const watched = [];
   const ctx = { console, JSON, CustomEvent: function (t, d) { this.type = t; this.detail = d && d.detail; },
     document: { getElementById: (id) => nodes[id] || null, querySelector: (s) => (s === '#padTabs .ptab[data-tab="live"] .pdot' ? dot : null),
       addEventListener: (k, f) => { (docL[k] = docL[k] || []).push(f); } },
-    PATVStage: { capture: () => ({ update() {} }), switcher: (opts) => { o = opts; return { poll() {}, setMic() {} }; } },
+    PATVStage: { capture: () => ({ update() {} }), switcher: (opts) => { o = opts; return { poll() {}, setMic() {}, watchLive() { watched.push(1); return true; } }; } },
     PATVPlexQ: { poll: () => { polls.plexq++; } }, PATVRoomSchedule: { poll: () => { polls.sched++; } } };
   ctx.window = ctx;
   vm.runInNewContext(js, ctx);
-  return { o, dot, note: nodes.padLiveNote || null, x: nodes.padLiveNoteX || null, liveTab: nodes["padTab-live"], polls, html,
+  return { o, dot, note: nodes.padLiveNote || null, x: nodes.padLiveNoteX || null, go: nodes.padLiveNoteGo || null, watched, liveTab: nodes["padTab-live"], polls, html,
            docFire: (k, e) => (docL[k] || []).forEach((f) => f(e || {})) };
 }
 
@@ -63,7 +65,7 @@ test("1a: a stream that starts while the viewer is on Feed lights the Live tab's
   p.o.onPoll(ONE); p.o.onAir(true);     // the stage's poll: a stream is live
   assert.equal(p.dot.hidden, false, "the Live tab's dot");
   assert.equal(p.note.hidden, false, "Live on the stage now · Watch ›");
-  assert.match(p.html, /<p class="plive" id="padLiveNote" hidden><a href="\?tab=live" data-pad-tab="live"><span class="pdot" aria-hidden="true"><\/span><span>Live on the stage now · <b>Watch ›<\/b><\/span><\/a><button type="button" id="padLiveNoteX" aria-label="Hide" title="Hide">✕<\/button><\/p>/,
+  assert.match(p.html, /<p class="plive" id="padLiveNote" hidden><a href="\?tab=live" data-pad-tab="live" id="padLiveNoteGo"><span class="pdot" aria-hidden="true"><\/span><span>Live on the stage now · <b>Watch ›<\/b><\/span><\/a><button type="button" id="padLiveNoteX" aria-label="Hide" title="Hide">✕<\/button><\/p>/,
     "a link pad-tabs.js already switches tabs for (data-pad-tab), and a ✕");
   p.o.onPoll({ slots: [], active: false, pepe_here: true, featured: { id: "s1", live: false, by: "auto", went: true } });
   assert.equal(p.note.hidden, false, "a held featured stream (a 📼 pause, an OBS reconnect) is still on - the line never flaps");
@@ -135,4 +137,14 @@ test("2: the 📼 player and the Go live card ask at once when the stage's poll 
   assert.match(read("public", "js", "room-schedule.js"), /window\.PATVRoomSchedule = \{ poll: function \(\) \{ if \(Date\.now\(\) - askedAt >= 1500\) poll\(\); \} \};/);
   assert.match(read("views", "room.ejs"), /pad-plexq\.js\?v=5/);
   assert.match(read("views", "partials", "room-schedule.ejs"), /room-schedule\.js\?v=6/);
+});
+
+test("1d: \"Watch ›\" opens Live AND the stream for this viewer - the stage's own pick (PATVPadStage.watchLive: an unfeatured stream is nobody's default, review F2)", async () => {
+  const p = await stageScript();
+  assert.ok(p.go, "the line's link");
+  assert.match(p.html, /<a href="\?tab=live" data-pad-tab="live" id="padLiveNoteGo">/, "pad-tabs.js opens Live (data-pad-tab), as before");
+  p.o.onPoll(NONE); p.o.onPoll(ONE);
+  assert.equal(p.note.hidden, false);
+  p.go.fire("click");
+  assert.equal(p.watched.length, 1, "the stage was asked to open the stream");
 });

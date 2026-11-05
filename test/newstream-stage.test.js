@@ -229,3 +229,20 @@ test("2d: destroy() drops the tab listeners (the homepage's front-pad swap); a p
 test("2e: room.ejs and home.ejs load the new stage-room.js (v=24)", () => {
   for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=24/, v);
 });
+
+test("1e: \"Watch ›\" (the Feed / About line) is the viewer's OWN pick - the first live stream when the stage shows nothing; never over Pepe's stream, a stream on screen or the mic stage; never a cam", async () => {
+  const x = switcher({ pepeOn: false });
+  x.answer(live([H("c1", { hls: null, cam: true }), H("s1"), H("s2")])); await x.poll();
+  assert.equal(x.sw.view(), "pepe", "nobody's default (F2)");
+  assert.equal(x.sw.watchLive(), true);
+  assert.equal(x.sw.view(), "slot:s1", "the first live stream - not the cam");
+  x.answer(live([H("c1", { hls: null, cam: true }), H("s1"), H("s2")], { featured: null })); await x.poll();
+  assert.equal(x.sw.view(), "slot:s1", "a pick: kept like a tab click");
+  assert.equal(x.sw.watchLive(), false, "a stream is on screen: nothing changes");
+  const p = switcher({ pepeOn: true, slots: [H("s1")] });
+  assert.equal(p.sw.watchLive(), false); assert.equal(p.sw.view(), "pepe", "Pepe's stream shows: his");
+  const m = switcher({ pepeOn: false, slots: [H("s1")] });
+  m.sw.setMic(MIC()); assert.equal(m.sw.watchLive(), false); assert.equal(m.sw.view(), "mic");
+  const c = switcher({ pepeOn: false, slots: [H("c1", { hls: null, cam: true })] });
+  assert.equal(c.sw.watchLive(), false); assert.equal(c.sw.view(), "pepe", "only a cam: its tab");
+});
