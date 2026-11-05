@@ -20,6 +20,7 @@ delete process.env.STAGING;
 const { runQuery } = require(path.join(repo, "dbUtils"));
 const E = require(path.join(repo, "casino", "bjengine"));
 const svc = require(path.join(repo, "casino", "service"));
+require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99?? casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
 const funding = require(path.join(repo, "funding"));
 
 let server, base;

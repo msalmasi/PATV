@@ -2,8 +2,9 @@
 // 1.99?? casino2 (owner 2026-11-04: "Poker table / casino tables need clickable names with the usual tipping etc." + a chat from the
 // tables): GET /api/casino/t/:id/people and /pads (casino/people.js).
 //   * people: signed in only (401), private no-store, 30 a minute per account; never part of the 1 s poll
-//   * a veiled seat (hidden on the bridge now: the seat's login, a web seat's linked login or its account key; incognito on) is {veil: true}
-//     and nothing else - no account, no login, no tip; a failing / loading hidden check fails closed
+//   * a veiled seat (hidden on the bridge now: the seat's login, a web seat's linked login or its account key; incognito on) is MASKED
+//     (1.99?? casino2 rework, casino/veil.js): {veil: true, display: <its label>} under the masked seat's own id, nothing else - no
+//     account, no login, no tip; a failing / loading hidden check fails closed (everyone masked for that answer)
 //   * a web seat: its PATV name + tip only, never a Camfrog login (1.99ajf); your own seat {me}; Pepe's account {bot}
 //   * a room seat: its login only while it is a NAMED member of a live pad the table plays in or advertises in AND THE VIEWER MAY OPEN
 //     (padaccess.full + the 18+ gate - review F1: an Approved / 18+ pad never says who is in its room now), with that pad's mod caps
@@ -108,7 +109,8 @@ test.before(async () => {
   base = "http://127.0.0.1:" + server.address().port;
 });
 test.after(() => { Object.assign(Q, { isHidden: real.isHidden }); CV.isHiddenLogin = real.isHiddenLogin; PM.viewMod = real.viewMod; svc.stop(); if (server) server.close(); });
-test.beforeEach(() => { people._reset(); require(path.join(repo, "padweb"))._reset(); S.hidden.clear(); S.fail = false; });   // (padweb caches incognito 30 s)
+const V = require(path.join(repo, "casino", "veil"));
+test.beforeEach(() => { people._reset(); require(path.join(repo, "padweb"))._reset(); V._reset(); S.hidden.clear(); S.fail = false; });   // (padweb caches incognito 30 s; veil re-reads at most every 2 s)
 
 const seatOf = (d, u) => d.seats[svc.uidHash(u.userId)];
 
@@ -185,25 +187,36 @@ test("people: a room seat in a pad the viewer may NOT open (Approved advert pad)
   }
 });
 
-test("people: veiled seats are {veil: true} and nothing else - the seat's login, a web seat's linked login, the account key, incognito; fail closed", async () => {
+test("people: a veiled seat is MASKED - {veil: true, display: its label} under the masked seat's own id and nothing else (the seat's login, a web seat's linked login, the account key, incognito); fail closed", async () => {
+  const T = svc.S.tables.get(TID);
   S.hidden.add("hidcf");                                              // quotes.isHidden (the site's one rule)
   S.hidden.add("cv:fernlinkedcf");                                    // chatlogview.isHiddenLogin: a web seat's LINKED login
   await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated, reported) VALUES ('u:${U.fern.userId}', 1, 1, 1)`);   // incognito by account
+  const masked = (d, u) => d.seats[V.seatOf(T, u.userId)];
   try {
     const d = (await get("/api/casino/t/" + TID + "/people", U.viewer)).d;
-    for (const u of [U.hid, U.fernlinked, U.fern]) assert.deepEqual(seatOf(d, u), { veil: true }, u.username);
+    for (const u of [U.hid, U.fernlinked, U.fern]) {
+      assert.equal(seatOf(d, u), undefined, "never under the account's seat hash (the same at every table): " + u.username);
+      assert.match(V.seatOf(T, u.userId), /^v[0-9a-f]{11}$/);
+      // ("someone": each was shown under their name at this table before - frognames C.2, never a frog name right after the name)
+      assert.deepEqual(masked(d, u), { veil: true, display: "someone" }, u.username);
+    }
     // review F3: incognito by a mixed-case linked login ('MixedCF' -> incognito_state 'mixedcf'), before the sticky set has them
     assert.equal(seatOf(d, U.mixed).veil, undefined, "(not incognito yet)");
     await runQuery(`INSERT OR REPLACE INTO incognito_state (login, "on", updated, reported) VALUES ('mixedcf', 1, 1, 1)`);
-    require(path.join(repo, "padweb"))._reset();
-    assert.deepEqual(seatOf((await get("/api/casino/t/" + TID + "/people", U.viewer)).d, U.mixed), { veil: true }, "a mixed-case login's incognito veils the seat");
+    require(path.join(repo, "padweb"))._reset(); V._reset();
+    assert.deepEqual(masked((await get("/api/casino/t/" + TID + "/people", U.viewer)).d, U.mixed), { veil: true, display: "someone" }, "a mixed-case login's incognito masks the seat");
     assert.doesNotMatch(JSON.stringify(d), /hidcf|"hid"|fernlinked|"fern"/, "nothing about them on the wire");
+    for (const u of [U.hid, U.fernlinked, U.fern]) assert.ok(!JSON.stringify(d).includes(svc.uidHash(u.userId)), "nor their account's seat hash");
     assert.equal(seatOf(d, U.willow).login, "willowcf", "others as before");
-    S.fail = true;
+    S.fail = true; V._reset();
     const f = (await get("/api/casino/t/" + TID + "/people", U.viewer)).d;
-    for (const u of [U.willow, U.gone]) assert.deepEqual(seatOf(f, u), { veil: true }, "the hidden set failing: everyone veiled - " + u.username);
-    assert.deepEqual(seatOf(f, U.viewer), { me: true, display: "viewer" });
-  } finally { await runQuery("DELETE FROM incognito_state"); }
+    for (const u of [U.willow, U.gone]) assert.deepEqual(masked(f, u), { veil: true, display: "someone" }, "the hidden set failing: everyone masked - " + u.username);
+    assert.deepEqual(masked(f, U.viewer), { me: true, display: "someone" }, "(your own seat too, for that answer - it opens no menu)");
+    S.fail = false; V._reset();
+    const back = (await get("/api/casino/t/" + TID + "/people", U.viewer)).d;
+    assert.equal(seatOf(back, U.willow).login, "willowcf", "a failed read keeps nothing: named again once it reads");
+  } finally { await runQuery("DELETE FROM incognito_state"); delete T.veil; V._reset(); require(path.join(repo, "padweb"))._reset(); }
 });
 
 test("pads: the rooms it plays in (home first), then its adverts - live bridged pads only; chat = the chat window's gate; anyone may ask", async () => {
@@ -231,14 +244,23 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   const ejs = require(path.join(repo, "node_modules", "ejs"));
   for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=7"], ["casino-bj.ejs", "casinobj.js?v=8"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
-    for (const s of ["casino-ui.js?v=6", js, "room-mod.js?v=14", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=8", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
+    // (1.99?? casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
+    for (const s of ["casino-ui.js?v=6", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=8", "person-sheet.css?v=3",
+                     "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
   const chat = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");
   assert.match(chat, /casino-chat\.js\?v=1/);
   assert.match(fs.readFileSync(path.join(repo, "views", "partials", "casino-top.ejs"), "utf8"), /id="cz-chatbtn" hidden/);
   assert.match(fs.readFileSync(path.join(repo, "views", "casino-bj.ejs"), "utf8"), /class="cz-who" data-pepe="1"/, "the dealer opens Pepe's menu");
   const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
-  assert.match(ui, /if \(!signed \|\| !p \|\| p\.me \|\| p\.veil/, "no button for a veiled seat, your own seat or signed-out viewers");
+  // 1.99?? casino2 rework: every seat is the same button (a masked one too - a plain seat would mark who is incognito); never your own
+  // seat, never for signed-out viewers; a masked seat opens veilMenu (its label, "incognito player", one line - no profile, no tip)
+  assert.match(ui, /if \(!signed \|\| !s \|\| !s\.seat \|\| mine\) return inner;/);
+  assert.match(ui, /if \(p\.veil\) \{ veilMenu\(anchor, p\); return; \}/);
+  const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("function veilMenu(") + 700);
+  assert.match(vm, /items: \[\]/, "the masked seat's menu has no items");
+  assert.doesNotMatch(vm, /\/u\/|tip|patv|login/i, "nothing in it that says who");
+  assert.match(ui, /if \(s\.veil\) return `<span class="av veil" aria-hidden="true">🐸/, "a masked seat has no picture");
   assert.match(ui, /wrap\.hidden = true; wrap\.className = "cz-pm-host"/, "the menu's Manage panel can never show on a table page");
   for (const f of ["casinohm.js", "casinobj.js"]) assert.match(fs.readFileSync(path.join(repo, "public", "js", f), "utf8"), /CZ\.seatWho\(s, CZ\.avatarHTML\(s\)/, f);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));

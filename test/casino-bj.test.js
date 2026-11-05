@@ -22,6 +22,7 @@ const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const E = require(path.join(repo, "casino", "bjengine"));
 const fair = require(path.join(repo, "casino", "fair"));
 const svc = require(path.join(repo, "casino", "service"));
+require(path.join(repo, "casino", "veil"))._hooks.kind = async () => null;   // (1.99?? casino2 rework: nobody is veiled here - test/casino-veil.test.js is about veils)
 const funding = require(path.join(repo, "funding"));
 
 let NOW = Date.UTC(2026, 9, 11, 12, 0, 0);
