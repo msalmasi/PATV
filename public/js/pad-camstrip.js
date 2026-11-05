@@ -3,7 +3,7 @@
 // slots (1, or 4 with a Season Pass - the same slots the popover uses; the server counts them) side by side. Each tile: the
 // cam live over WebRTC (muted - a cam has no sound; the room's audio is the 🔊 button), its name, ⚡ LIVE, ⤢ bigger, ✕ (frees
 // the slot at once). Stills / previews never count. A cam that ends says why and offers ↻ Retry.
-// The strip is remembered per pad in this browser (localStorage, wrapped: blocked storage = not remembered) and comes back
+// The strip is remembered per pad and account in this browser (localStorage, wrapped: blocked storage = not remembered) and comes back
 // after a reload: fresh tickets are asked for each remembered cam, up to the viewer's slots.
 //
 //   var strip = PATVCamStrip.init(host, slug, {audioHost})     host = views/partials/cam-strip.ejs's #rmStrip
@@ -16,10 +16,22 @@
 // The page beats every 15 s per tile (the server drops a slot without beats after 45 s). All text via textContent.
 // mfix review: a tile whose connection drops after it played is watched again while the site still says the cam is connecting /
 // live ("reconnecting…") - a few times, then "the live cam stopped" with ↻ Retry.
+// pubswitch (owner 2026-11-05: Players Lounge "lost the room dock layout" for him signed in, through reloads, a sign-out and the pad's
+//   level switch, until he cleared the site's data): every broken load carried a remembered pin whose cam couldn't start, and the
+//   page's own start-up (its deferred scripts, the Room Dock's DOMContentLoaded start) waited 16-61 s behind that connect. So:
+//   - remembered cams come back only after the page has finished loading (window load, or DOMContentLoaded + SETTLE_MS) - never
+//     while it is still being read - and without scrolling the page to the strip;
+//   - a remembered cam that ends (left cam, Pepe couldn't open it, the relay never came up...) is forgotten: it stays on the page
+//     as an "off" tile with ↻ Retry but the next load doesn't start it again (a full strip, live cams off here and a network blip
+//     keep it remembered);
+//   - the memory is per ACCOUNT (opts.viewer, the partial's signed-in viewer): another account signed in on this browser never
+//     gets the first one's cams; the old per-browser key (patv.camstrip.<slug>) is dropped the first time a viewer's page loads.
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-  var BEAT_MS = 15000, KEEP = 8;
+  var BEAT_MS = 15000, KEEP = 8, SETTLE_MS = 4000;
+  // (pubswitch) why a tile ended that keeps it remembered - anything else forgets it
+  var REMEMBER_ON = { viewer_cap: 1, off: 1, net: 1 };
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (rewatch)
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function post(url, body, keep) {
@@ -40,7 +52,25 @@
     catch (e) { return []; }
   }
   function save(key, tiles) {
+    tiles = tiles.filter(function (t) { return !t.forget; });          // (pubswitch: a cam that ended isn't brought back)
     try { localStorage.setItem(key, JSON.stringify(tiles.map(function (t) { return t.id ? { id: t.id, display: String(t.display || '').slice(0, 60) } : { login: t.login, display: String(t.display || t.login).slice(0, 60) }; }))); } catch (e) { /* not remembered */ }
+  }
+  /** pubswitch: a short tag of the signed-in viewer for the storage key (keeps the memory per account; no name in the key) */
+  function viewerTag(v) {
+    var s = String(v).toLowerCase(), h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
+    return ('0000000' + h.toString(16)).slice(-8);
+  }
+  /** pubswitch: fn once the page has finished loading (its own start-up first) - at once where there is no loading page */
+  function settled(fn) {
+    var D = window.document;
+    if (!D || typeof D.readyState !== 'string' || D.readyState === 'complete') return fn();
+    var done = false;
+    function go() { if (done) return; done = true; setTimeout(fn, 0); }
+    window.addEventListener('load', go);
+    // (the load event can wait on a slow picture or the stage's stream: the page's DOMContentLoaded start-up and a few seconds do)
+    function arm() { setTimeout(go, SETTLE_MS); }
+    if (D.readyState === 'loading' && D.addEventListener) D.addEventListener('DOMContentLoaded', arm); else arm();
   }
 
   function init(host, slug, opts) {
@@ -49,6 +79,10 @@
                 full: function () { return true; }, focus: function () {}, count: function () { return 0; } };
     if (!host) return api;
     var KEY = 'patv.camstrip.' + slug;
+    if (opts.viewer) {          // (pubswitch: per account; the old per-browser memory may be anyone's who used this browser - dropped)
+      try { localStorage.removeItem(KEY); } catch (e) { /* blocked storage */ }
+      KEY += '.' + viewerTag(opts.viewer);
+    }
     var base = '/api/rooms/' + encodeURIComponent(slug) + '/livecam';
     var info = null, restored = false, tiles = [], saved = load(KEY);
     var head = el('div', 'cs-head'), title = el('h2', 'cs-title'), count = el('span', 'cs-count'), acts = el('span', 'cs-acts');
@@ -103,7 +137,10 @@
         if (t.sess) { try { t.sess.close(); } catch (e) { /* gone */ } t.sess = null; }
         try { v.srcObject = null; } catch (e) { /* gone */ }
         t.state = 'ended'; badge.textContent = _t('js.pad.strip.off', 'off'); badge.classList.remove('on');
-        tap.hidden = true; say(why(code, m), true); paint();
+        tap.hidden = true; say(why(code, m), true);
+        // pubswitch: a cam that ended isn't started again by the next page load (↻ Retry here still can)
+        if (!REMEMBER_ON[code] && !t.forget) { t.forget = true; remember(); }
+        paint();
       };
       t.stop = function (tell, keep) {
         t.gen++; clearInterval(t.beat); t.beat = null;
@@ -157,6 +194,7 @@
       t.start = function () {
         var my = ++t.gen;
         t.rew = [];
+        if (t.forget) { t.forget = false; remember(); }          // (pubswitch: ↻ Retry - remembered again)
         t.state = 'asking'; badge.textContent = _t('js.pad.live.connecting', 'connecting…'); badge.classList.remove('on'); tap.hidden = true; say('', false);
         if (!window.RTCPeerConnection || !window.PATVRtc || !PATVRtc.watch) return t.ended('browser', _t('js.pad.live.err_browser', 'This browser can\'t play live cams.'));
         post(base, t.ref).then(function (d) {
@@ -205,11 +243,12 @@
       remember(); paint();
       if (opts.onChange) { try { opts.onChange(); } catch (e) { /* page's own */ } }
     }
-    function put(who) {
+    function put(who, restoring) {
       var t = tile(who);
       tiles.push(t); row.appendChild(t.el);
       remember(); paint();
-      if (host.scrollIntoView && !opts.quiet) { try { host.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* old engine */ } }
+      // (pubswitch: a strip coming back after a reload never scrolls the page - only a pin the viewer just made does)
+      if (host.scrollIntoView && !opts.quiet && !restoring) { try { host.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* old engine */ } }
       if (opts.onChange) { try { opts.onChange(); } catch (e) { /* page's own */ } }
       return t;
     }
@@ -235,20 +274,23 @@
       t.take(h);
       return true;
     };
+    function restore() {
+      if (!info || info.signin) { restored = false; return; }      // (live cams went off meanwhile: the next live view tries again)
+      var room = Math.max(0, slots() - liveTiles());                // (a pin made while the page loaded holds a slot already)
+      saved.forEach(function (w) {
+        if (find(keyOf(w))) return;
+        var t = put(w, true);
+        if (room > 0) { room--; t.start(); } else t.ended('viewer_cap');
+      });
+      saved = [];
+      paint();
+    }
     api.update = function (inf) {
       info = inf ? { on: !!inf.on, signin: !!inf.signin, slots: inf.slots ? { used: inf.slots.used, max: inf.slots.max } : null, sp_max: inf.sp_max || null } : null;
       if (!info) { tiles.forEach(function (t) { if (t.state !== 'ended') t.ended('off'); }); paint(); return; }
-      // restore the remembered strip once, up to the viewer's slots (the rest wait as "off" tiles with ↻ Retry)
-      if (!restored && !info.signin) {
-        restored = true;
-        var room = slots();
-        saved.forEach(function (w) {
-          if (find(keyOf(w))) return;
-          var t = put(w);
-          if (room > 0) { room--; t.start(); } else t.ended('viewer_cap');
-        });
-        saved = [];
-      }
+      // restore the remembered strip once, up to the viewer's slots (the rest wait as "off" tiles with ↻ Retry) - pubswitch: once the
+      // page has loaded (a cam that can't start must never hold up the page's own start-up)
+      if (!restored && !info.signin) { restored = true; settled(restore); }
       var m = slots();
       if (m && info.sp_max && m < info.sp_max && tiles.length && api.full()) note.textContent = _t('js.pad.strip.more', 'A Season Pass lets you watch up to {n} cams at once.', { n: info.sp_max });
       paint();

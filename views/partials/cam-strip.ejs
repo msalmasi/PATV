@@ -56,8 +56,9 @@
   }
   @media (prefers-reduced-motion: reduce) { .cam-strip .cs-row { scroll-behavior: auto; } }
 </style>
-<script src="/public/js/pad-camstrip.js?v=4"></script><%# v3 (1.99aid privacy controls, round 3 - F2): frog-name cams pinned by their opaque id; v4 (1.99ajf dockclean): the tile keeps its reference for the Dock %>
+<script src="/public/js/pad-camstrip.js?v=5"></script><%# v3 (1.99aid privacy controls, round 3 - F2): frog-name cams pinned by their opaque id; v4 (1.99ajf dockclean): the tile keeps its reference for the Dock; v5 (pubswitch): remembered per account, back only after the page loaded, an ended cam forgotten %>
 <script>
   window.PATVPadStrip = window.PATVCamStrip ? PATVCamStrip.init(document.getElementById('rmStrip'), <%- JSON.stringify(String(slug)).replace(/</g, '\\u003c') %>,
-    { audioHost: function () { return document.getElementById('rmAudioBox'); } }) : null;
+    { audioHost: function () { return document.getElementById('rmAudioBox'); },
+      viewer: <%- JSON.stringify(locals.user ? String(locals.user) : null).replace(/</g, '\\u003c') %> }) : null;<%# pubswitch: the signed-in viewer (room.ejs's `user`) - the strip's memory is theirs alone %>
 </script>
