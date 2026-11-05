@@ -15,7 +15,9 @@
 //     onShow(sel)                                              (1.99cr) what's selected, for the Snap / Clip
 //                                                              bar (stage-capture.js): null | {stream, label, embed, capture, nsfw}
 //   })
-// Default view: the room's FEATURED slot when it's live, else Pepe's stream. Viewers switch freely.
+// Default view: the room's FEATURED slot when it's live, else Pepe's stream (newstream 1.99akv: while it shows - off air or away, the first
+// live stream; see pickDefault). Viewers switch freely. The 10 s poll skips its turn in a hidden tab (unless this viewer may be listening)
+// and asks at once when the tab comes back (newstream: tickPoll / wake).
 // 1.99lm: a slot can be featured automatically (feature_by 'auto': it went live while nothing was featured -
 // mainstage.js autoFeature) - the same default; its star says "live now". Pepe's tab gets the star while an
 // admin features his stream (pepeSrc.featured; no auto-feature happens then).
@@ -235,10 +237,20 @@
     }
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
+    // newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it"): Pepe's
+    // stream is the default only while it SHOWS (on air and in this pad) - off air or away, a live stream that nobody featured (takeover off, an
+    // admin's site-wide Pepe event, a second slot) is the default instead of "Pepe's stream is off air - pick a stream above". Never a 🎬 cam
+    // (a cam is the default only when featured - D-21) and never a 📼 card (those are featured).
+    function pepeShows() { return !!(pepeOn && pepeHere); }
+    function firstLive() {
+      for (var i = 0; i < slots.length; i++) { var s = slots[i]; if (s && !s.cam && !s.pending && !s.held && (s.hls || s.embed)) return s; }
+      return null;
+    }
     function pickDefault() {
-      var f = featured();
-      // dock3 1.99akf: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage
-      view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
+      var f = featured(), w = !f && featWins(), m = !f && !w && micDefault(), l = !f && !w && !m && !pepeShows() ? firstLive() : null;
+      // dock3 1.99akf: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage,
+      // else (newstream) Pepe's stream while it shows, else the first live stream, else Pepe's off-air slate
+      view = f ? 'slot:' + f.id : w ? 'pepe' : m ? 'mic' : l ? 'slot:' + l.id : 'pepe';
     }
     // ── upnext: 📼 "Coming up next" ──
     var UPNEXT_STANDBY_MS = 30000, UPNEXT_HANDOFF_MS = 20000, UPNEXT_POLL_MS = 3000;
@@ -657,10 +669,11 @@
     var dead = false;
     // dock3 review 1.99akf: answers are applied in the order the polls were SENT - an older one that lands after a newer one is dropped (the
     // 10 s poll in flight when ★ Feature is pressed used to land after the action's own poll and move the view back for up to 10 s)
-    var pollSeq = 0, pollApplied = 0, winsSeen = featWins();
+    var pollSeq = 0, pollApplied = 0, winsSeen = featWins(), polledAt = 0;
     function poll() {
       if (dead) return Promise.resolve();
       var seq = ++pollSeq;
+      polledAt = Date.now();
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
         // dock3 1.99akf: a failed / stale answer (the server's catch: `stale`; a refusal: ok false) moves nothing - it used to read as
@@ -691,14 +704,31 @@
         var f = featured();
         if (was && !cur()) { chosen = false; pickDefault(); }                      // that slot ended / was cut (dock3: the viewer's pick ends with it)
         else if (!chosen && ((f ? f.id : null) !== (wasF ? wasF.id : null) || featWins() !== wasW)) pickDefault();   // featured changed and the viewer never chose
+        // newstream 1.99akv: a viewer who never chose, sitting on Pepe's off-air slate (or on a pad he isn't in) - a stream that started (or one
+        // that was live when his went off air) is the default now. Someone watching a stream is never moved by this (Pepe coming back included).
+        else if (!chosen && view === 'pepe' && !pepeShows()) pickDefault();
         winsSeen = featWins();
         if (o.onPoll) o.onPoll(g);
         show();
       }).catch(function () {});
     }
-    var POLL_MS = 10000, pollEvery = POLL_MS, pollTimer = setInterval(poll, POLL_MS);
+    // newstream 1.99akv: the poll follows the tab. Hidden, it skips its turn (a background tab asked every 10 s - or once a minute once the
+    // browser throttles it - and came back showing whatever the last of those said, up to a minute old) unless this viewer may be LISTENING:
+    // the player is running unmuted, or an embed is up (its player is not ours - it may be heard). Back in view (visibilitychange, a page
+    // restored from the back/forward cache, the network back) it asks at once - one call, not a second timer.
+    function hiddenNow() { try { return !!(typeof document !== 'undefined' && document.hidden === true); } catch (e) { return false; } }
+    function listening() {
+      if (embedFor) return true;
+      try { if (!player.running()) return false; var st = player.state ? player.state() : null; return !!(st && !st.muted); } catch (e) { return false; }
+    }
+    function tickPoll() { if (hiddenNow() && !listening()) return; poll(); }
+    function wake() { if (dead || hiddenNow() || Date.now() - polledAt < 1500) return; poll(); }
+    function onPageShow(e) { if (e && e.persisted) wake(); }
+    try { if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('visibilitychange', wake); } catch (e) { /* old engine */ }
+    try { window.addEventListener('pageshow', onPageShow); window.addEventListener('online', wake); } catch (e) { /* old engine */ }
+    var POLL_MS = 10000, pollEvery = POLL_MS, pollTimer = setInterval(tickPoll, POLL_MS);
     // (upnext review F5: one poll timer - faster only while a 📼 card is starting, see upSync)
-    function pollAt(ms) { if (dead || ms === pollEvery) return; pollEvery = ms; clearInterval(pollTimer); pollTimer = setInterval(poll, ms); }
+    function pollAt(ms) { if (dead || ms === pollEvery) return; pollEvery = ms; clearInterval(pollTimer); pollTimer = setInterval(tickPoll, ms); }
     // economy E-0: verified watch-minutes. Every 30 s a signed-in viewer's page says what it is showing
     // (HLS streams only - embeds can't be verified), whether the tab is visible and the video is playing,
     // and where the playhead is. The server credits only consecutive beats from one session per account
@@ -792,6 +822,8 @@
     // 1.99ajq dockpol (owner H6): the homepage swaps to a new front pad - this switcher stops for good (its polls, beats, player, mic stage, cam)
     function destroy() {
       dead = true; clearInterval(pollTimer); if (beats) { clearInterval(beats); beats = null; }
+      try { if (typeof document.removeEventListener === 'function') document.removeEventListener('visibilitychange', wake); } catch (e) { /* gone */ }   // (newstream)
+      try { if (typeof window.removeEventListener === 'function') { window.removeEventListener('pageshow', onPageShow); window.removeEventListener('online', wake); } } catch (e) { /* gone */ }
       if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }
       upSync(); try { upHide(true); } catch (e) { /* gone */ }      // (upnext: its timers and card)
       try { micStop(); } catch (e) { /* gone */ } try { camStop(); } catch (e) { /* gone */ }
