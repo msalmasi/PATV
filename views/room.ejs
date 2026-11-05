@@ -655,7 +655,7 @@
   <script src="/public/js/webrtc-client.js?v=6"></script>
   <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=16"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile %>
+  <script src="/public/js/stage-mic.js?v=17"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile; (dock3 1.99??) v17: no such tag %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=21"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
   <script src="/public/js/stage-capture.js?v=3"></script>
@@ -869,12 +869,12 @@
       <section class="card pm" id="rmMod" hidden></section>
     </aside>
   </div>
-  <script src="/public/js/chatlog-core.js?v=13"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog); v13 (1.99ajw padppl rework): a linked login's clash tag, folded frog lines (vb) %>
+  <script src="/public/js/chatlog-core.js?v=14"></script><%# CL5: the one renderer for the chat's lines (PATVChatlog); v13 (1.99ajw padppl rework): a linked login's clash tag, folded frog lines (vb); v14 (dock3 1.99??): no clash tag %>
   <script src="/public/js/pad-history.js?v=4"></script><%# CL8: scrollback, 📅 jump to a date, ?line= deep links (PATVPadHistory) %>
   <script src="/public/js/pad-search.js?v=2"></script><%# CL9: 🔍 search the pad's chat (PATVPadSearch) %>
   <script src="/public/js/pad-download.js?v=4"></script><%# CL10: ⋯ › ⬇ Download chat log (PATVPadDownload) %>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
-  <script src="/public/js/room-bridge.js?v=28"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list; v27 (1.99ajq dockpol): opts.onCmd (command toasts); v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login %>
+  <script src="/public/js/room-bridge.js?v=29"></script><%# 1.99ajh dockpop v24: audio pause / resume / isPlaying; v25 (1.99ajn padppl): @mentions insert the PATV name + carry who; v26 (review): the "not the Camfrog user" tag in the @ list; v27 (1.99ajq dockpol): opts.onCmd (command toasts); v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99??): no clash tag, the mic bars without a real level %>
   <link rel="stylesheet" href="/public/css/roompm.css?v=1"><script src="/public/js/pad-roompm.js?v=1"></script><%# 1.99ajd roompm: Pepe's private answers in the chat (PATVRoomPm) %>
   <link rel="stylesheet" href="/public/css/flair.css?v=4"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=5">
@@ -882,12 +882,12 @@
   <script src="/public/js/chat-clip.js?v=7"></script><%# 1.99aht v5: a !transcripts off bar's 🔊 Clip says it goes up without a caption; 1.99ajq dockpol v6: quoteOne / micOne %>
   <% if (signedIn || dockOn_) { %><script src="/public/js/chat-lines.js?v=5"></script><% } %><% if (signedIn) { %><script src="/public/js/pad-evidence.js?v=3" defer></script><% } %><%# CL6: the ⋯ on each chat line (⚑ Report, Remove my line, Hide, Delete); 1.99ajq dockpol v4: in the Dock for everyone - 📋 Copy text, ✂️ / 🔊 clip one message, a tap opens it on touch %>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
-  <link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><%# 1.99ajn padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
+  <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><%# 1.99ajn padppl: the 🚫 Block / ⛔ Ban sheets, folded lines, mention chips, idle 🌐 rows %>
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=2" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream); 1.99ajh dockpop v2: stop() (the chat window's wipe) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
   <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
-  <script src="/public/js/room-mod.js?v=16"></script><%# v15 (1.99ajn padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu; v16 (review): one Website ban item, group headings, never taller than the window %>
+  <script src="/public/js/room-mod.js?v=17"></script><%# v15 (1.99ajn padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu; v16 (review): one Website ban item, group headings, never taller than the window; v17 (dock3 1.99??): no clash part in the block sheet's who line %>
   <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><script src="/public/js/pad-ban-sheet.js?v=3"></script><script src="/public/js/gift-sheet.js?v=2"></script><% } %>
   <script src="/public/js/pad-tip.js?v=1"></script>
   <script src="/public/js/pad-soundboard.js?v=5" defer></script>
@@ -1628,8 +1628,7 @@
           : /^u:/i.test(lg) ? { k: 'acct', v: lg } : lg && !u.acct ? { k: 'login', v: lg } : u.patv && u.patv.username ? { k: 'user', v: String(u.patv.username) } : null;
         var un = !veil && u.patv && u.patv.username ? String(u.patv.username) : '';
         var sub = un && un.toLowerCase() !== String(shown).toLowerCase() ? '@' + un : (!veil && !u.web && lg && !/^u:/i.test(lg) && lg.toLowerCase() !== String(shown).toLowerCase() ? lg : '');
-        out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent, cmd: cmd,
-                   clash: !veil && u.clash ? String(u.clash) : null });   // (1.99ajn padppl review fix: the "not the Camfrog user" tag in the list too)
+        out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : u.web ? '🌐' : '', u: u, recent: !!recent, cmd: cmd });
       }
       (liveData && liveData.mic || []).forEach(function (u) { add(u); });
       (liveData && liveData.members || []).forEach(function (u) { add(u); });

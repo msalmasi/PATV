@@ -472,7 +472,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=13"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=14"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
   const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");

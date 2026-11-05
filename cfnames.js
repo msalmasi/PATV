@@ -13,9 +13,10 @@
 //                        own linked login): "Is <name> your Camfrog name? Link it in Settings so people know it's you." - the same words
 //                        whether or not someone else has that login linked (it says nothing about who has it). hintAfter() flashes it.
 //   clashOf(acc, login)  the Camfrog login an account's SHOWN name (username or display name) equals but isn't linked to, or null - the
-//                        page's "not the Camfrog user" tag (u.clash) and the /admin/users#nameclash list
-// Display names stay free text; bridge.withPatv SHOWS a clashing name with the tag (1.99ajw rework: a linked login's display name too - it
-// used to be replaced by the login).
+//                        /admin/users#nameclash list, and mentions.js (a typed "@" never alerts a look-alike)
+// Display names stay free text; bridge.withPatv SHOWS a clashing name (1.99ajw rework: a linked login's display name too - it used to be
+// replaced by the login). dock3 1.99?? (owner 2026-11-05: "it's just confusing"): the pad's "not the Camfrog user" tag is gone - no
+// viewer-facing surface carries u.clash any more.
 // Review fix (LOOK-ALIKES): a name also clashes when it only LOOKS like a seen login - skeleton(): Unicode compatibility forms folded,
 // Cyrillic / Greek letters that look Latin mapped to them, 0 -> o, 1 / I / i / | -> l, rn -> m, vv -> w, and the separators at either end
 // dropped ("Тricon", "tric0n", "tricon_", "trlcon" all read as "tricon"). An exact match is checked first; a look-alike never counts against
@@ -241,7 +242,7 @@ async function adminRename(me, userId, newName) {
 }
 
 function register(app, { addUser }) {
-  // (review fix: the seen set is built at start, so the first polls after a restart already carry the "not the Camfrog user" tags)
+  // (review fix: the seen set is built at start, so the first polls after a restart already answer the admins' list and the mention guard)
   init().then(() => rebuild()).catch((e) => console.error("[cfnames] init:", e.message));
   const SP = require("./siteperms"), guard = require("./middleware/authGuard");
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0] : null);

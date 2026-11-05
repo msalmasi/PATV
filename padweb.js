@@ -165,9 +165,8 @@ async function forRoom(R, me = null, tipOf = null) {
       if (await incognitoOn(key)) continue;
       if (v.login && await incognitoOn("u:" + v.userId)) continue;
       if (await privateOn(v)) continue;
+      // (dock3 1.99??: no "not the Camfrog user" tag on a web name any more (owner: "just confusing") - the row's 🌐 says it is a web account)
       const e = { web: true, display: v.username, patv: { username: v.username }, act: v.act };
-      // 1.99ajn padppl: a web name that is a Camfrog login this account isn't linked to - the "not the Camfrog user" tag (cfnames.js)
-      try { const cl = require("./cfnames").clashOf(v.userId, v.username, v.username, v.login); if (cl) e.clash = cl; } catch (err) { /* no tag */ }
       if (!v.act) e.ago = v.ago;
       if (self) e.me = true;
       else if (tipOf) { const t = tipOf(v.username); if (t) e.tip = t; }

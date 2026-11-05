@@ -629,14 +629,8 @@
         var nm = el('span', 'rb-ac-n', p.name || p.value); li.appendChild(nm);
         if (p.login) li.appendChild(el('span', 'rb-ac-l', p.login));
         if (p.tag) { var tg = el('span', 'rb-ac-t', p.tag); tg.title = p.tag; li.appendChild(tg); }   // (1.99ajh dockpop: its full word when it shortens)
-        // 1.99ajn padppl review fix: a 🌐 name that is (or looks like) a Camfrog login it isn't linked to says so here - where the wrong person
-        // would get mentioned
-        // (1.99ajw padppl rework: a LINKED Camfrog user's clashing PATV display name is shown with the tag too - its own explanation)
-        if (p.clash) { var ct = el('span', 'clash-tag', window.__t ? __t('js.pad.chat.clash', 'not the Camfrog user') : 'not the Camfrog user');
-          var webAcc = !p.u || p.u.web || /^u:/i.test(String(p.u.login || ''));
-          ct.title = !window.__t ? 'Not the Camfrog user ' + p.clash : webAcc ? __t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(p.clash) })
-            : __t('js.pad.chat.clash_title_cf', 'This is their PATV display name. They are not the Camfrog user called {login}.', { login: String(p.clash) });
-          li.appendChild(ct); }
+        // (dock3 1.99??: no "not the Camfrog user" tag here any more - owner: "just confusing"; the row's second line (@username / the
+        // Camfrog login) and its 🌐 tell two same-named people apart)
         li._pick = function () { takeName(p, c); };
         li.addEventListener('mousedown', function (e) { e.preventDefault(); takeName(p, c); });
         list.appendChild(li); acItems.push(li);

@@ -86,7 +86,7 @@
     o = o || {};
     var T = text(o);
     var S = sheet({ title: T.title, cls: 'psh-block', anchor: o.anchor });
-    // (review fix: which person this is - "PATV account @x · Camfrog login y", and "not the Camfrog user" when a web name clashes)
+    // (review fix: which person this is - "PATV account @x · Camfrog login y")
     if (o.who) S.body.appendChild(el('p', 'psh-sub', String(o.who)));
     S.body.appendChild(el('p', 'psh-p', T.body));
     if (T.note) S.body.appendChild(el('p', 'psh-hint', T.note));          // (1.99ajw padppl rework: the accepted residual, said up front)

@@ -109,7 +109,7 @@
         var ref = veil ? (u.id ? { k: 'veil', id: String(u.id) } : null) : lg && !u.acct ? { k: 'login', v: lg } : un ? { k: 'user', v: un } : null;
         var sub = un && un.toLowerCase() !== String(shown).toLowerCase() ? '@' + un : (!veil && lg && lg.toLowerCase() !== String(shown).toLowerCase() ? lg : '');
         out.push({ value: value, atValue: veil ? String(u.alias) : String(shown || value), ref: ref, name: shown, login: sub, tag: veil ? _t('js.pad.veil.incognito', 'incognito') : '',
-                   u: u, recent: !!rec, cmd: cmd, clash: !veil && u.clash ? String(u.clash) : null });
+                   u: u, recent: !!rec, cmd: cmd });
       }
       (latest && latest.mic || []).forEach(function (u) { add(u); });
       (latest && latest.members || []).forEach(function (u) { add(u); });

@@ -72,36 +72,15 @@
 .line .blk-fold button { margin-left: 6px; font: inherit; font-style: normal; font-size: 12px; background: none; border: 0; color: var(--ds-ac-2, #81c784);
                          text-decoration: underline; cursor: pointer; padding: 0; }
 /* 1.99ajn padppl: the people list's INACTIVE 🌐 rows (posted in the last hour, chat not open now) - dimmed, with a visible "23m" (a title
-   never reaches a touch screen); the "not the Camfrog user" tag stays at full strength */
-.rmd-web.is-idle > :not(.nm), .rmd-web.is-idle .nm > :not(.who-web):not(.web-ago), .rmd-web.is-idle .who-web > :not(.clash-tag) { opacity: .55; }
+   never reaches a touch screen) */
+.rmd-web.is-idle > :not(.nm), .rmd-web.is-idle .nm > :not(.who-web):not(.web-ago), .rmd-web.is-idle .who-web > * { opacity: .55; }
 .rmd-web .web-ago { margin-left: 4px; font-size: 11px; color: var(--ds-text-muted, #9a9a9a); white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* the "not the Camfrog user" tag beside a 🌐 name that equals a Camfrog login */
-.clash-tag { display: inline-block; margin-left: 4px; font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--ds-warn-line, #6b531e);
-             color: var(--ds-warn, #f2c46d); background: var(--ds-warn-bg, rgba(224, 160, 48, .10)); white-space: nowrap; vertical-align: middle; }
 /* a chat line that @mentions you, and a mention chip (kept on one line; its flair as the emoji only) */
 .line.is-mention { box-shadow: inset 3px 0 0 var(--ds-gold, #ffcf40); background: var(--ds-gold-bg, rgba(255, 215, 64, .08)); }
 .mention { font-weight: 600; border-radius: 4px; padding: 0 2px; background: rgba(140, 170, 255, .12); white-space: nowrap; display: inline-block; max-width: 100%;
            overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; text-decoration: none; }
 .mention.mention-me { background: rgba(255, 207, 64, .22); }
 .mention .mn-fl { margin-left: 2px; font-weight: normal; }
-/* the people list: a 🌐 row named like a Camfrog user keeps its "not the Camfrog user" tag in view - it wraps under the name */
-main.rm.rm-dock #rmPeople .nm:has(.clash-tag) { flex-wrap: wrap; white-space: normal; overflow: visible; }
-main.rm.rm-dock #rmPeople .nm > .who-web:has(> .clash-tag) { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; white-space: normal; overflow: visible; min-inline-size: 0; }
-main.rm.rm-dock #rmPeople .nm > .who-web > .clash-tag { margin-left: 0; }
-/* 1.99ajw padppl rework: a LINKED Camfrog user's clashing PATV display name is shown with the tag too (chatlog-core .who-clash = the name +
-   the tag) - laid out like .who-web: in a line's head, the people list and the person menu's header */
-.chatlog .line-head > .who-clash { flex: 0 40 auto; min-width: 8ch; display: flex; align-items: center; gap: 3px; }
-.chatlog .line-head .who-clash > .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chatlog .line-head .who-clash > .clash-tag { margin-left: 0; flex: none; }
-main.rm.rm-dock #rmPeople .nm > .who-clash { display: flex; flex-wrap: wrap; align-items: center; column-gap: 2px; row-gap: 1px; flex: 0 1 auto; min-inline-size: 4ch; white-space: normal; overflow: visible; }
-main.rm.rm-dock #rmPeople .nm > .who-clash > .who { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-main.rm.rm-dock #rmPeople .nm > .who-clash > .clash-tag { margin-left: 0; }
-.pm-pop .pm-pop-n .rmd-person-name .who-clash { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; min-inline-size: 0; }
-/* ... and on a mic-stage tile's label (stage-mic.js .mf-clash) - sized for the label, gone while hidden */
-.player .mf-tile .mf-clash { flex: none; margin: 0; font-size: 10px; line-height: 1.5; padding: 0 5px; }
-.player .mf-tile .mf-clash[hidden] { display: none; }
-/* the composer's @ list: the tag after a clashing 🌐 name */
-.rb-ac .clash-tag, .rmd-ac .clash-tag { margin-left: 6px; }
 /* Windows high contrast: the picked choice, the line that names you and its chip stay visible */
 @media (forced-colors: active) {
   .psh { border: 1px solid CanvasText; }
@@ -109,5 +88,4 @@ main.rm.rm-dock #rmPeople .nm > .who-clash > .clash-tag { margin-left: 0; }
   .line.is-mention { border-inline-start: 3px solid Highlight; box-shadow: none; }
   .mention { outline: 1px solid CanvasText; }
   .mention.mention-me { outline: 2px solid Highlight; }
-  .clash-tag { border-color: CanvasText; }
 }

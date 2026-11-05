@@ -1400,20 +1400,15 @@ function withPatv(u, C, F = null) {
   const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
   if (fl) out.patv.flair = require("./padflair").plain(fl);
   if (!u.self) {
-    // 1.99ajn padppl (cfnames.js): a PATV name that is ANOTHER Camfrog login Pepe has seen carries `clash` = that login (the page's "not the
-    // Camfrog user" tag). 1.99ajw padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's clashing PATV display
-    // name is SHOWN with the tag, the same as a web account's - it used to be replaced by the login (PATV brocklee258, linked to login
-    // ritchiecuh, showed as "ritchiecuh" because "brocklee258" is also a login Pepe has seen). Every surface that names people through
-    // here gets it alike: chat and 🎙 transcript lines, the people and mic lists, the person-menu header, the @ list, the mic stage
-    // (micfollow viewFor), history / search / downloads. The ROOM side is bridge-relay.webName's older rule (never another ACCOUNT's
-    // linked login or username - Camfrog can't show a tag), unchanged.
-    const d = str(acc.display, 40) || out.display;
-    let cl = null;
-    // (review fix: the account's id / username go along, so an admin's "Mark OK" applies here too; a linked login is judged by its display name)
-    const web_ = ACCT_RE.test(login);
-    try { cl = require("./cfnames").clashOf(web_ ? login.slice(2) : null, acc.username, d, web_ ? null : login, { onlyShown: !web_ }); } catch (e) { cl = null; }
-    out.display = d;
-    if (cl) out.clash = cl;
+    // 1.99ajw padppl rework (owner: "I don't like this part" - the hard guard): a LINKED login's PATV display name is SHOWN, the same as a
+    // web account's, even when it is also a Camfrog login Pepe has seen - it used to be replaced by the login (PATV brocklee258, linked to
+    // login ritchiecuh, showed as "ritchiecuh"). dock3 (owner 2026-11-05 item 1: "we don't need to flair users with 'not the Camfrog user',
+    // it's just confusing") - 1.99??: no `clash` tag any more on any viewer-facing surface. Two same-named people stay apart by the
+    // neutral markers every surface already has: 🌐 on a web account / a line typed on the website, the Camfrog login as the name's
+    // tooltip and as the @ list's second line, "PATV account @x · Camfrog login y" in the block sheet. cfnames.clashOf still feeds the
+    // admins' /admin/users#nameclash list and keeps a typed "@" from alerting a look-alike (mentions.js). The ROOM side is
+    // bridge-relay.webName's older rule (never another ACCOUNT's linked login or username), unchanged.
+    out.display = str(acc.display, 40) || out.display;
   }
   return out;
 }

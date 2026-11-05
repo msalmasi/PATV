@@ -47,5 +47,5 @@ test("stage-mic.js: a touch tap on a tile shows its buttons for 4 s; a mouse cli
 
 test("the pages load the new stylesheet and script", () => {
   for (const v of ["home.ejs", "room.ejs", "stageBook.ejs"]) assert.ok(read("views", v).includes("/public/css/webrtc.css?v=9"), v + ": webrtc.css v9");
-  assert.ok(read("views", "room.ejs").includes("/public/js/stage-mic.js?v=16"), "room.ejs: stage-mic.js v16");
+  assert.ok(read("views", "room.ejs").includes("/public/js/stage-mic.js?v=17"), "room.ejs: stage-mic.js v16");
 });

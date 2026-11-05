@@ -9,7 +9,9 @@
 //     their own username? ... I don't like this part."): NOBODY is refused a name Pepe has seen on Camfrog - sign-up, rename, Pepe's
 //     rename, the OAuth / SSO username pickers all take it; a gentle hint follows ("Is <name> your Camfrog name? Link it in Settings so
 //     people know it's you." - the same words whether or not someone else has that login linked). Existing clashes are listed for admins;
-//     the pad SHOWS a clashing name with "not the Camfrog user" - a web account's and (rework) a linked login's display name alike
+//     the pad SHOWS a clashing name as it is - a web account's and (rework) a linked login's display name alike. dock3 (owner 2026-11-05:
+//     "we don't need to flair users with 'not the Camfrog user', it's just confusing") 1.99??: no tag on any viewer-facing surface - the
+//     neutral markers (🌐, the login tooltip, the @ list's second line, the block sheet's who line) tell two same-named people apart
 //   node --test test/targets-disambig.test.js
 "use strict";
 const test = require("node:test");
@@ -155,7 +157,7 @@ test("4. rework: nobody is refused a name Pepe has seen on Camfrog - a gentle hi
   assert.equal(en["auth.hint.camfrog_name"], "Is {name} your Camfrog name? Link it in Settings so people know it's you.");
 });
 
-test("5. existing clashes: listed for admins; the pad SHOWS a clashing name with the tag - a web account's and (rework) a linked login's display name", async () => {
+test("5. existing clashes: listed for admins; the pad SHOWS a clashing name WITHOUT a tag (dock3) - a web account's and a linked login's display name", async () => {
   await CF.rebuild();
   const list = await CF.clashes();
   const ids = list.map((x) => x.userId).sort();
@@ -164,51 +166,55 @@ test("5. existing clashes: listed for admins; the pad SHOWS a clashing name with
   assert.equal(h1.login, "tricon"); assert.equal(h1.loginOwner, "TriconOG"); assert.equal(h1.by, "username");
   const B = require(path.join(repo, "bridge"));
   const C = await B.resolveNames([{ login: "trlcon" }, { login: "tricon" }, { login: "u:har-0002" }]);
-  // 1.99ajw rework: the harasser's lines from his alt login 'trlcon' show his PATV display name 'tricon' WITH the tag (it used to be the login)
+  // 1.99ajw rework: the harasser's lines from his alt login 'trlcon' show his PATV display name 'tricon' (it used to be the login); dock3: no tag
   const hl = B.withPatv({ login: "trlcon", display: "trlcon" }, C);
-  assert.equal(hl.display, "tricon"); assert.equal(hl.clash, "tricon", "shown, tagged 'not the Camfrog user'");
-  assert.equal(hl.login, "trlcon", "the login stays (the name's tooltip)");
+  assert.equal(hl.display, "tricon"); assert.equal(hl.clash, undefined, "shown, never tagged 'not the Camfrog user' (dock3)");
+  assert.equal(hl.login, "trlcon", "the login stays (the name's tooltip - the neutral marker)");
   const rl = B.withPatv({ login: "tricon", display: "tricon" }, C);
   assert.equal(rl.display, "Tricon", "the real one keeps his PATV display name"); assert.equal(rl.clash, undefined, "and is never tagged");
   const w = B.withPatv({ login: "u:har-0002", display: "tricon2", acct: true, web: true }, C);
-  assert.equal(w.clash, "tricon", "a web account named like a Camfrog user carries the tag");
+  assert.equal(w.clash, undefined, "a web account named like a Camfrog user carries no tag either (dock3)"); assert.equal(w.web, true, "its 🌐 marks it");
   // the owner's real case: PATV brocklee258, linked to login ritchiecuh, display name "brocklee258" - also a login Pepe has seen (maybe his
-  // own alt, through a CF auto account) - shows as "brocklee258" + the tag, never as "ritchiecuh"
+  // own alt, through a CF auto account) - shows as "brocklee258" (dock3: no tag), never as "ritchiecuh"
   await runQuery("INSERT INTO camfrog_userstats (login, data, updated) VALUES ('brocklee258', '{}', 1)");
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('brk-0001', 'brocklee258', 'brocklee258', 'x', 'ritchiecuh')");
   await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('cfa-0001', 'CFsa1p1bz8', 'brocklee258', 'x', 'brocklee258')");
   await CF.rebuild();
   const C2 = await B.resolveNames([{ login: "ritchiecuh" }, { login: "brocklee258" }]);
   const bk = B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2);
-  assert.equal(bk.display, "brocklee258"); assert.equal(bk.clash, "brocklee258"); assert.equal(bk.patv.username, "brocklee258");
+  assert.equal(bk.display, "brocklee258"); assert.equal(bk.clash, undefined); assert.equal(bk.patv.username, "brocklee258"); assert.equal(bk.login, "ritchiecuh");
   assert.equal(B.withPatv({ login: "brocklee258", display: "brocklee258" }, C2).clash, undefined, "the Camfrog login itself is never tagged");
   // every list that names people through withPatv says the same: the people list / mic list entries, the person menu, the @ list
   assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh", on_mic: true }, C2).display, "brocklee258");
-  // an admin's Mark OK (it is his own alt): no tag on pad lines either - the name stays
+  // an admin's Mark OK (it is his own alt): off the admins' list - the name stays
+  assert.ok((await CF.clashes()).some((x) => x.userId === "brk-0001"), "listed for admins");
   await CF.markOk({ userId: "adm", username: "boss" }, "brk-0001", "brocklee258");
-  assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2).clash, undefined, "marked OK");
+  assert.ok(!(await CF.clashes()).some((x) => x.userId === "brk-0001"), "marked OK");
   assert.equal(B.withPatv({ login: "ritchiecuh", display: "ritchiecuh" }, C2).display, "brocklee258");
   // an admin marks one OK (same person who hasn't linked yet): no tag, no list entry
   await CF.markOk({ userId: "adm", username: "boss" }, "har-0002", "tricon");
   assert.ok(!(await CF.clashes()).some((x) => x.userId === "har-0002"));
-  // the mic stage gets the tag from the same place (micfollow viewFor: the tile's name + clash), and draws it (stage-mic.js)
-  const mf = fs.readFileSync(path.join(repo, "micfollow.js"), "utf8");
-  assert.match(mf, /\.\.\.\(patv && u && u\.clash \? \{ clash: String\(u\.clash\)\.slice\(0, 40\) \} : \{\}\)/);
-  const sm = fs.readFileSync(path.join(repo, "public", "js", "stage-mic.js"), "utf8");
-  assert.match(sm, /clashTag\.hidden = !\(s\.clash && !vc\);/); assert.match(sm, /tag\.textContent = ''; clashTag\.hidden = true;/, "never on a veiled cover");
+  // dock3: no surface carries or draws the tag - the mic stage (micfollow viewFor, stage-mic.js), the web people (padweb), the @ lists, the
+  // block sheet's who line, the stylesheet
+  const src = (...p) => fs.readFileSync(path.join(repo, ...p), "utf8");
+  for (const f of [["micfollow.js"], ["padweb.js"], ["bridge.js"], ["public", "js", "stage-mic.js"], ["public", "js", "room-bridge.js"], ["public", "js", "home-dock.js"],
+    ["public", "js", "room-mod.js"], ["public", "js", "chatlog-core.js"], ["public", "css", "person-sheet.css"], ["views", "room.ejs"]]) {
+    assert.doesNotMatch(src(...f), /\.clash\b|clash:|clash-tag|clashTag|who-clash|js\.pad\.chat\.clash|kind_clash/, f.join("/") + ": no clash tag");
+  }
 });
 
-test("6. the chat line renderer draws the tag with its explanation (textContent-safe) - a web line and (rework) a linked login's line", () => {
+test("6. dock3: the chat line renderer draws no tag - a web line keeps its 🌐, a linked login's line its login tooltip; the keys are gone", () => {
   const CR = require(path.join(repo, "public", "js", "chatlog-core"));
+  // (an old payload that still carries `clash` draws nothing extra either)
   const html = String(CR.renderItem({ k: "msg", c: 1, ts: Date.now(), text: "hi", u: { login: "u:har-0001", display: "tricon", web: true, acct: true, clash: "tricon", patv: { username: "tricon" } } }, {}, CR.htmlH));
-  assert.match(html, /<span class="clash-tag" title="This is a PATV web account\. It is not the Camfrog user called tricon\.">not the Camfrog user<\/span>/);
+  assert.doesNotMatch(html, /clash|not the Camfrog user/);
+  assert.match(html, /<span class="who-web"><a class="who"[^>]*>tricon<\/a><span class="web-mark" title="Sent from the website">/);
   const cf = String(CR.renderItem({ k: "msg", c: 2, ts: Date.now(), text: "yo", u: { login: "ritchiecuh", display: "brocklee258", clash: "brocklee258", patv: { username: "brocklee258" } } }, {}, CR.htmlH));
-  assert.match(cf, /<span class="who-clash"><a class="who"[^>]*>brocklee258<\/a><span class="clash-tag" title="This is their PATV display name\. They are not the Camfrog user called brocklee258\.">not the Camfrog user<\/span><\/span>/);
+  assert.doesNotMatch(cf, /clash|not the Camfrog user/);
   assert.match(cf, /<a class="who"[^>]*title="ritchiecuh"/, "the login is still the name's tooltip");
-  const plain = String(CR.renderItem({ k: "msg", c: 3, ts: Date.now(), text: "yo", u: { login: "alicecf", display: "Alice", patv: { username: "alicep" } } }, {}, CR.htmlH));
-  assert.doesNotMatch(plain, /who-clash|clash-tag/, "no clash: the name as before");
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
-  assert.equal(en["js.pad.chat.clash_title_cf"], "This is their PATV display name. They are not the Camfrog user called {login}.");
+  for (const k of ["js.pad.chat.clash", "js.pad.chat.clash_title", "js.pad.chat.clash_title_cf", "js.block.kind_clash"]) assert.equal(en[k], undefined, k + " is gone");
+  assert.ok(en["siteperm.k.accounts.name_clash"], "the admins' list stays");
 });
 
 test("7. review: look-alikes of a seen login are tagged ('Тricon', 'tric0n', 'tricon_'); never against the account's own login; Mark OK by username reaches pad lines", async () => {

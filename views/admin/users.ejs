@@ -88,7 +88,7 @@
   <% if (_can('accounts.name_clash')) { %>
   <section class="adm-card sfty" id="nameclash" aria-labelledby="nameclashT">
     <h2 id="nameclashT"><span class="ds-ic sfty-ic" aria-hidden="true">👥</span> Named like a Camfrog user <span class="adm-pill admin">admins</span> <span class="adm-pill" id="ncCount" aria-label="accounts listed">?</span></h2>
-    <p class="adm-help">PATV accounts whose username or display name is - or only looks like - a Camfrog login Pepe has seen, but which aren't linked to that login (someone may be posing as them - the "tricon" case). Nobody is refused such a name (it may be their own Camfrog name - they get a hint to link it). On the pads the name shows with "not the Camfrog user" beside it. <b>Rename</b> tells them why; <b>Mark OK</b> when it's the same person who hasn't linked yet. Every change is in the admin audit (<code>name_clash</code>).</p>
+    <p class="adm-help">PATV accounts whose username or display name is - or only looks like - a Camfrog login Pepe has seen, but which aren't linked to that login (someone may be posing as them - the "tricon" case). Nobody is refused such a name (it may be their own Camfrog name - they get a hint to link it). On the pads the name shows as it is - no tag (owner, 2026-11-05: it only confused people); the 🌐 web mark and the Camfrog login tooltip tell people apart. <b>Rename</b> tells them why; <b>Mark OK</b> when it's the same person who hasn't linked yet. Every change is in the admin audit (<code>name_clash</code>).</p>
     <div class="adm-actions"><button type="button" id="ncLoad" class="adm-btn ghost">Load the list</button></div>
     <ul id="ncList" class="sfty-list"></ul>
   </section>

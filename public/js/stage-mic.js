@@ -281,10 +281,8 @@
       // mfix: 📌 on a pinned cam's label (its place is fixed: hand-overs and new speakers never move it)
       var pinTag = el('span', 'mf-pin', '📌'); pinTag.hidden = true; pinTag.setAttribute('title', _t('js.stage.mf.pinned_tag', 'pinned'));
       var pinSr = el('span', 'mf-sr-only');
-      // 1.99ajw padppl rework: "not the Camfrog user" beside a PATV name that is another Camfrog login Pepe has seen (micfollow s.clash -
-      // the chat and people lists' tag), never on a veiled tile
-      var clashTag = el('span', 'mf-clash clash-tag', _t('js.pad.chat.clash', 'not the Camfrog user')); clashTag.hidden = true;
-      label.appendChild(mic); label.appendChild(pinTag); label.appendChild(name); label.appendChild(clashTag); label.appendChild(tag); label.appendChild(pinSr); label.appendChild(sr);
+      // (dock3 1.99??: no "not the Camfrog user" tag on a tile's name any more - owner: "just confusing")
+      label.appendChild(mic); label.appendChild(pinTag); label.appendChild(name); label.appendChild(tag); label.appendChild(pinSr); label.appendChild(sr);
       var x = btn('mf-x', '✕');
       var rp = btn('mf-x mf-rp', _t('js.stage.mf.report', '⚑'));            // ⚑ viewers (owners have ✕)
       var pn = btn('mf-x mf-pn', '📌'); pn.hidden = true;                      // mfix: owners - pin this person here
@@ -484,7 +482,7 @@
         hoodImg.hidden = false; v.hidden = true; img.hidden = true; card.hidden = true;
         name.textContent = (tightNames() ? short(nm) : nm) + ' · ' + veilText(s);
         name.className = 'mf-name'; name.style.cssText = '';
-        tag.textContent = ''; clashTag.hidden = true;
+        tag.textContent = '';
         e.setAttribute('aria-label', _t('js.stage.mf.cover_aria', '{name}, {veil}, on the mic', { name: nm, veil: veilText(s) }));
         e.classList.toggle('newest', !!s.newest);
         e.classList.toggle('pinned', false);
@@ -517,9 +515,7 @@
         name.textContent = vc ? (tightNames() ? short(labelOf(s)) : labelOf(s)) + ' · ' + veilText(s) : tightNames() ? short(s.name) : s.name;
         name.className = 'mf-name' + (s.nameCss && !vc ? ' cx-name' : '');
         name.style.cssText = vc ? '' : s.nameCss || '';
-        clashTag.hidden = !(s.clash && !vc);
-        if (s.clash && !vc) clashTag.title = _t('js.pad.chat.clash_title_cf', 'This is their PATV display name. They are not the Camfrog user called {login}.', { login: String(s.clash) });
-        e.setAttribute('aria-label', vc ? _t('js.stage.mf.cover_aria', '{name}, {veil}, on the mic', { name: labelOf(s), veil: veilText(s) }) : s.name + (s.clash ? ', ' + _t('js.pad.chat.clash', 'not the Camfrog user') : ''));
+        e.setAttribute('aria-label', vc ? _t('js.stage.mf.cover_aria', '{name}, {veil}, on the mic', { name: labelOf(s), veil: veilText(s) }) : s.name);
         e.classList.toggle('mf-vcam', vc);
         e.classList.toggle('newest', !!s.newest);
         // mfix: pinned / recent (let go of the mic a moment ago - no ring) / the viewer's own cam

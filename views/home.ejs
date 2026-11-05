@@ -80,7 +80,7 @@
      micStage: !!locals.homeMic,     // 1.99ajq dockpol (owner H5): the front pad's mic stage for this viewer (home.js homeMic)
      // (1.99ajq dockpol fix (review): a block swapped in for a front pad whose mic stage this viewer may see loads its script then - the page
      // only included it when the FIRST render had it)
-     micJs: locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg() ? '/public/js/stage-mic.js?v=16' : null };
+     micJs: locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg() ? '/public/js/stage-mic.js?v=17' : null };
 %><% if (locals.dockFragment) { %><%- homeDock_ ? include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) : '' %><% if (homeDock_) { %><script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script><% } %><% } else { %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
@@ -108,7 +108,7 @@
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=9"><%# 1.99ajq dockpol: v7; 1.99ajw casino2: v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: v9 (the stage media bar, the embed row) %>
 <link rel="stylesheet" href="/public/css/home-dock.css?v=5"><%# 1.99ajy dockmedia: v4 (fullscreen fills the screen); homegap: v5 (the call-to-action card fills the stage column) %>
 <%_ if (locals.homeMic && typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { _%>
-<script src="/public/js/stage-mic.js?v=16"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile %>
+<script src="/public/js/stage-mic.js?v=17"></script><%# 1.99ajq dockpol (owner H5): the front pad's 🎙 mic-follows stage, for a signed-in viewer with access; v16 (1.99ajw padppl rework): the "not the Camfrog user" tag on a tile; v17 (dock3 1.99??): no such tag %>
 <%_ } _%>
 <%_ } _%>
 <style>
@@ -922,7 +922,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=14">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=28"></script><%# v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login %>
+<script src="/public/js/room-bridge.js?v=29"></script><%# v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99??): no clash tag, the mic bars without a real level %>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1175,12 +1175,12 @@
 </script>
 <% } %>
 <%_ if (homeDock_) { _%>
-<script src="/public/js/chatlog-core.js?v=13"></script>
+<script src="/public/js/chatlog-core.js?v=14"></script>
 <script src="/public/js/dock-link.js?v=2"></script>
 <script src="/public/js/pad-dock.js?v=9"></script><%# 1.99ajy dockmedia: v9 %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
-<link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=3"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage %>
+<link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
+<script src="/public/js/home-dock.js?v=4"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99??): no clash tag in the @ list %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>

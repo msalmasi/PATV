@@ -307,18 +307,11 @@
     if (ctx && ctx.lineHead && !a.title) a.title = shownName(u, ctx);
     if (u.patv) { a.href = linkOf(ctx, '/u/' + encodeURIComponent(u.patv.username)); a.rel = relOf(ctx); }
     var n = h(u.patv ? 'a' : 'span', a, [shownName(u, ctx)]);
-    // 1.99-padppl: a PATV name that equals a Camfrog login it isn't linked to (cfnames.js, u.clash) says so. 1.99-padppl rework: a LINKED
-    // login's clashing display name too (bridge.withPatv shows it now - it used to put the login in its place), in the chat, the people and
-    // mic lists and the person menu alike
-    var ct = u.clash ? h('span', { 'class': 'clash-tag', title: u.web || ACCT_KEY.test(String(u.login || ''))
-      ? _t('js.pad.chat.clash_title', 'This is a PATV web account. It is not the Camfrog user called {login}.', { login: String(u.clash) })
-      : _t('js.pad.chat.clash_title_cf', 'This is their PATV display name. They are not the Camfrog user called {login}.', { login: String(u.clash) }) },
-      [_t('js.pad.chat.clash', 'not the Camfrog user')]) : null;
-    if (!u.web) return ct ? h('span', { 'class': 'who-clash' }, [n, ct]) : n;
+    // (dock3 1.99??: no "not the Camfrog user" tag beside a name any more - owner: "just confusing"; the web mark below and the login tooltip
+    // above tell two same-named people apart)
+    if (!u.web) return n;
     // 1.99xa: a line they sent from the website (Pepe relayed it) - their own chat, marked so the room can tell
-    var wk = [n, h('span', { 'class': 'web-mark', title: _t('js.pad.chat.web', 'Sent from the website') }, ['\u00a0\ud83c\udf10'])];
-    if (ct) wk.push(ct);
-    return h('span', { 'class': 'who-web' }, wk);
+    return h('span', { 'class': 'who-web' }, [n, h('span', { 'class': 'web-mark', title: _t('js.pad.chat.web', 'Sent from the website') }, ['\u00a0\ud83c\udf10'])]);
   }
   /** 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex. */
   function flairNode(u, ctx, h) {
