@@ -7,6 +7,8 @@
 //   viewer POST /api/rooms/<slug>/audio/rtc -> a 2-minute read ticket on the WHEP URL (?pt=) -> WHEP -> MediaMTX
 //          asks the auth hook (webrtc.js -> auth() here), which checks the ticket AND that the viewer may still hear
 //          the room (padaccess.full: the same rule as /p/<slug>/audio). Anything that fails -> the page plays MP3.
+//          audiogate: and it keeps answering to that rule while it plays - recheck() kicks a session whose listener no longer
+//          passes (a pad tightened, a member removed, signed out, the bridge perk lost), like the MP3 relay's listeners.
 //
 // Who gets it: the stage setting `room_rtc` (/stage/admin): "off" (default) | "prime" (Prime Time pads - pad.primeTime -
 // plus comped admin pads, the house pad included) | "all". It also needs webrtc_enabled (the MediaMTX / TURN servers)
@@ -103,7 +105,24 @@ const ST = new Map();                  // room id -> {wantUntil, readers, ready,
 const pending = [];                    // times tickets were handed out (the cap counts them for PENDING_MS)
 // adultgate site: who each WebRTC reader session is (the auth hook's session id -> the account its ticket was for, null =
 // signed out), so recheck() can end the sessions the 18+ gate stops once it applies to their room
-const READERS = new Map();             // session id -> {uid, roomId, at}
+const READERS = new Map();             // session id -> {uid, roomId, at, ls}
+// audiogate: the sign-in (sessions.js id) each signed-in ticket was handed out under, by the ticket's signature - memory only,
+// for TICKET_MS (a ticket only opens a session): the hook gives it to the session it opens (READERS.ls), so signing out ends
+// that WebRTC session too, and a ticket from before a sign-out opens nothing. A restart forgets them: those sessions answer by
+// account only (as before).
+const TICKET_LS = new Map();           // ticket signature -> {uid, ls, until}
+const TICKET_LS_MAX = 20000;
+const ticketSig = (tok) => { const m = /\.([A-Za-z0-9_-]{32})$/.exec(String(tok || "")); return m ? m[1] : null; };
+function noteTicketSession(tok, uid, ls, t = now()) {
+  const sig = ticketSig(tok);
+  if (!sig || !uid || !ls) return;
+  for (const [k, v] of TICKET_LS) { if (v.until > t && TICKET_LS.size < TICKET_LS_MAX) break; TICKET_LS.delete(k); }
+  TICKET_LS.set(sig, { uid: String(uid), ls: String(ls), until: t + TICKET_MS });
+}
+function ticketSession(tok, uid, t = now()) {
+  const v = TICKET_LS.get(ticketSig(tok) || "");
+  return v && v.until > t && v.uid === String(uid || "") ? v.ls : null;
+}
 function st(id) {
   let s = ST.get(id);
   if (!s) { s = { wantUntil: 0, readers: 0, ready: false, seenAt: 0, readerIds: [] }; ST.set(id, s); }
@@ -130,7 +149,7 @@ function active(t = now()) {
  * A viewer asks to listen over WebRTC. The caller has already checked they may hear the room (padaccess.full).
  * -> {ok: true, whep, ready} | {ok: false, fallback: why}   ("off" / "busy" / ...: the page plays MP3)
  */
-function ticket(user, R, t = now()) {
+function ticket(user, R, t = now(), { session = null } = {}) {
   if (!on()) return { ok: false, fallback: "off" };
   if (!eligible(R, t)) return { ok: false, fallback: R && R.audio ? "not-eligible" : "no-audio" };
   const { cap } = cfg();
@@ -139,7 +158,10 @@ function ticket(user, R, t = now()) {
   pending.push(t);
   want(R.id, t);
   const s = st(R.id);
-  const url = W().whepUrl(p) + "?pt=" + encodeURIComponent(readTicket(user && user.userId ? user.userId : null, p, t));
+  const uid = user && user.userId ? String(user.userId) : null;
+  const tk = readTicket(uid, p, t);
+  if (uid && session) noteTicketSession(tk, uid, session, t);      // audiogate
+  const url = W().whepUrl(p) + "?pt=" + encodeURIComponent(tk);
   // 1.99yd: the player's jitter buffer target comes from the room-audio settings (/admin/pepe/audio)
   let jitter = 200;
   try { jitter = require("./roomaudiocfg").jitterMs(); } catch (e) { jitter = 200; }
@@ -186,29 +208,42 @@ function noteSync(items, t = now()) {
 }
 
 /**
- * adultgate site: the 18+ gate now applies to a room (the switch on, the pad marked 18+, or every TICK while on): end the
- * WebRTC reader sessions of a viewer it stops (their player falls back to the MP3 relay, which refuses them too). A
- * session the auth hook never saw (a site restart since) is ended on a change, not on the periodic tick - its listener
- * can ask for a new ticket. -> how many were ended
+ * audiogate (was adultgate site's 18+-only re-check): the MP3 relay's audience rule for the WebRTC room listeners already
+ * connected - on a change (padaccess.onChange: a level / members; adultgate.onChange: the 18+ switch, a pad marked 18+) and on
+ * bridge.js's periodic tick (sign-outs, accounts gone or demoted, the 💎 bridge perk lost). Each session the hook let in is asked
+ * again - padaccess.hearNow for its account and the sign-in its ticket came with, the pad's bridge perk - and one that fails is
+ * kicked (the player falls back to the MP3 relay, which refuses them too). Every session the hook saw counts, also one MediaMTX
+ * hasn't listed yet. A session the hook never saw (a site restart since) is ended on a change, not on the periodic tick - its
+ * listener can ask for a new ticket. Never cut: a pad open to everyone (no lookups), a lookup that fails (kept, asked again).
+ * only = a room id, a (roomId) -> boolean filter, or null (every room). -> how many were ended
  */
-async function recheck(why = "change") {
-  const AG = require("./adultgate");
+async function recheck(why = "change", only = null) {
   const PA = require("./padaccess");
-  let n = 0;
-  for (const [roomId, s] of ST) {
-    if (!(s.readerIds || []).length || !AG.applies(roomId)) continue;
-    for (const sid of s.readerIds) {
+  const inScope = typeof only === "function" ? only : only == null ? () => true : (id) => id === String(only);
+  const perkOk = (id) => { try { return require("./bridge").bridgeOk(id); } catch (e) { return true; } };
+  const byRoom = new Map();
+  const add = (roomId, sid) => { if (!byRoom.has(roomId)) byRoom.set(roomId, new Set()); byRoom.get(roomId).add(sid); };
+  for (const [sid, r] of READERS) if (r && r.roomId) add(r.roomId, sid);
+  for (const [roomId, s] of ST) for (const sid of s.readerIds || []) add(roomId, sid);
+  let n = 0, failed = 0;
+  for (const [roomId, sids] of byRoom) {
+    if (!inScope(roomId)) continue;
+    const perk = perkOk(roomId);
+    if (perk && PA.full(null, roomId)) continue;     // open to everyone right now: nothing to ask
+    for (const sid of sids) {
       const r = READERS.get(sid);
       let stop;
-      if (!r) stop = why !== "tick";
-      else stop = (await PA.adultGateFor(r.uid, roomId)) !== "ok";
+      if (!perk) stop = true;
+      else if (!r || r.roomId !== roomId) stop = why !== "tick";
+      else { try { stop = !(await PA.hearNow(r.uid, roomId, { session: r.ls || null })); } catch (e) { stop = false; failed++; } }
       if (!stop) continue;
       try { require("./livecam").kickReader(sid); } catch (e) { /* best effort */ }
       READERS.delete(sid);
       n++;
     }
   }
-  if (n) console.log(`[roomrtc] 18+ gate: ended ${n} WebRTC room listener(s)`);
+  if (n) console.log(`[roomrtc] audiogate (${why}): ended ${n} WebRTC room listener(s)`);
+  if (failed) console.error(`[roomrtc] audiogate (${why}): ${failed} listener check(s) failed - kept, asked again next pass`);
   return n;
 }
 
@@ -238,11 +273,16 @@ async function auth(b, action, proto) {
     if (!tok && /^ra1\./.test(String(b.token || ""))) tok = String(b.token);
     const c = checkTicket(tok, p);
     if (!c) return loopbackIp(b.ip) ? 403 : 401;
-    if (!(await require("./padaccess").fullFor(c.uid, R.id))) return 403;
+    // audiogate: + the sign-in the ticket was asked under is still live (hearNow); a lookup that fails answers as before (fullFor:
+    // as if signed out - a Public pad still plays)
+    const ls = c.uid ? ticketSession(tok, c.uid) : null;
+    let may;
+    try { may = await require("./padaccess").hearNow(c.uid, R.id, { session: ls }); } catch (e) { may = require("./padaccess").full(null, R.id); }
+    if (!may) return 403;
     want(R.id);
-    // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read)
+    // adultgate site: who this session is, for recheck() (MediaMTX passes the session id with the read); audiogate: + its sign-in
     if (b.id && /^[0-9a-f-]{36}$/i.test(String(b.id))) {
-      READERS.set(String(b.id), { uid: c.uid || null, roomId: R.id, at: now() });
+      READERS.set(String(b.id), { uid: c.uid || null, roomId: R.id, at: now(), ls });
       if (READERS.size > 20000) READERS.delete(READERS.keys().next().value);
     }
     return 200;
@@ -258,7 +298,7 @@ function hint(R) { return eligible(R); }
 module.exports = {
   PREFIX, PATH_RE, MODES, GRACE_MS, TICKET_MS, PENDING_MS,
   pathFor, roomForPath, pubKey, readTicket, checkTicket, isPrime, eligible, active, ticket, forBot, noteSync, noteCap, auth, hint, want, recheck,
-  _state: ST, _readers: READERS,
+  _state: ST, _readers: READERS, _ticketSessions: TICKET_LS, ticketSession,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
-  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); },
+  _reset: () => { ST.clear(); pending.length = 0; READERS.clear(); TICKET_LS.clear(); },
 };

@@ -41,6 +41,10 @@
 // 1.99gk: RTMP slots' HLS (nginx-rtmp, /hls/...) is checked the same way through nginx auth_request (hlsauth.js), which
 // also accepts the viewer's login cookie; the player now keeps ?pt= on every request. Any level / member change
 // forgets the remembered IPs (bump).
+// audiogate: bump(roomId) also re-checks the pad's room audio that is ALREADY playing (bridge.js audioRecheck - the MP3 relay
+// and its levels; roomrtc.recheck - the ⚡ WebRTC sessions): a pad made Members / Approved or a member removed ends the streams
+// of whoever no longer passes full() at once; a reload (load() after a re-key or a merge) re-checks every pad. hearNow() is the
+// per-listener question the periodic pass asks too (a sign-out, an account gone or demoted).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -126,7 +130,11 @@ async function load() {
     if (!M.has(r.room_id)) M.set(r.room_id, new Set());
     M.get(r.room_id).add(String(r.user_id));
   }
+  const again = loaded;
   LEVEL = L; MEMBERS = M; loaded = true;
+  // audiogate: a reload (a re-key moved a pad's level onto a room, a merge) can tighten any pad - what caches or plays under the
+  // old levels is re-checked (the first load has nothing open yet)
+  if (again) bump(null);
 }
 
 // ── reads (synchronous, off the cache) ──
@@ -308,8 +316,8 @@ async function setLevel(actor, R, level) {
                   ON CONFLICT(room_id) DO UPDATE SET level = excluded.level, updated = excluded.updated, updated_by = excluded.updated_by`,
                  [R.id, lv, NOW(), actor.username || actor.userId]);
   if (lv === DEFAULT) LEVEL.delete(R.id); else LEVEL.set(R.id, lv);
+  bump(R.id);                              // audiogate: before the audit write - the room audio playing now follows the new level at once
   await rooms.event(R.id, "access", actor.username || "?", `level=${lv}`);
-  bump();
   // CL3: the pad chat's watermarks move now - an Approved pad opening up never shows its Approved-era lines to non-members (aud_m)
   try { await require("./chatlogview").reconcileNow(R.id); require("./bridge").refreshRoom(R.id); } catch (e) { console.error("[padaccess] chat watermarks:", e.message); }
   return listFor(R.id);
@@ -335,7 +343,7 @@ async function decide(actor, R, userId, approve) {
                         link: "/p/" + encodeURIComponent(slug), ref: `pad-access-ok:${R.id}:${uid}` }).catch(() => {});
   }
   await rooms.event(R.id, "access", actor.username || "?", `${st} ${(await userName(uid)) || uid}`);
-  bump();
+  bump(R.id);
   return listFor(R.id);
 }
 
@@ -350,15 +358,23 @@ async function remove(actor, R, userId) {
                  [NOW(), actor.username || actor.userId, R.id, uid]);
   const s = MEMBERS.get(R.id);
   if (s) s.delete(uid);
+  bump(R.id);                              // audiogate: (as setLevel) their open room audio ends now, not after the audit write
   await rooms.event(R.id, "access", actor.username || "?", `removed ${(await userName(uid)) || uid}`);
-  bump();
   return listFor(R.id);
 }
 
 // Anything that caches per-pad results (the stage read cache) listens here.
+// audiogate: fn(roomId) - the pad whose level / members changed, or null when every pad may have (a reload: a re-key, a merge);
+// the room audio already playing (bridge.js MP3 listeners, roomrtc WebRTC readers) is re-checked under the new rule at once.
 const listeners = new Set();
 function onChange(fn) { listeners.add(fn); }
-function bump() { ipOk.clear(); for (const fn of listeners) { try { fn(); } catch (e) { /* a listener's problem */ } } }
+function bump(roomId = null) {
+  ipOk.clear();
+  for (const fn of listeners) {
+    try { const p = fn(roomId == null ? null : String(roomId)); if (p && typeof p.catch === "function") p.catch((e) => console.error("[padaccess] change:", e.message)); }
+    catch (e) { /* a listener's problem */ }
+  }
+}
 
 // ── stage read tokens (webrtc.js) ──
 const b64 = (s) => Buffer.from(String(s)).toString("base64url");
@@ -397,10 +413,14 @@ function tokenizeSlots(slots, viewer, roomId) {
 }
 const ipOk = new Map();         // "<ip>|<stream>" -> until (ms)
 const classCache = new Map();   // user id -> {at, u: {userId, class} | null}
-async function accountLite(userId) {
+// audiogate: a failed read is never cached (it used to be remembered as "no such account" for a minute); strict -> it throws
+async function accountLite(userId, { strict = false } = {}) {
   const c = classCache.get(userId);
   if (c && NOW() - c.at < 60e3) return c.u;
-  const r = (await getQuery("SELECT userId, class FROM users WHERE userId = ?", [userId]).catch(() => []))[0] || null;
+  let rows;
+  try { rows = await getQuery("SELECT userId, class FROM users WHERE userId = ?", [userId]); }
+  catch (e) { if (strict) throw e; return null; }
+  const r = (rows && rows[0]) || null;
   classCache.set(userId, { at: NOW(), u: r });
   if (classCache.size > 5000) classCache.clear();
   return r;
@@ -441,6 +461,21 @@ async function fullFor(userId, roomId) {
   await init();
   if (!userId) return full(null, roomId);
   const u = await accountLite(String(userId));
+  return full(u || null, roomId);
+}
+/**
+ * audiogate: may a listener who is ALREADY hearing the pad's live room (the MP3 relay, its levels, a WebRTC session) still hear
+ * it? padaccess.full for who they are NOW - the account (null = signed out) and the sign-in it connected with (sessions.js id):
+ * a signed-out / revoked / expired sign-in or an account that's gone counts as signed out (a Public pad still lets them hear
+ * it), the class from the 60 s cache. Throws when that can't be read (a database error): no answer is not a "no" - the
+ * callers keep the listener and ask again on their next pass. Reads only what exists; keeps nothing.
+ */
+async function hearNow(userId, roomId, { session = null } = {}) {
+  await init();
+  if (full(null, roomId)) return true;            // open to everyone right now: no lookups
+  if (!userId) return false;
+  if (session && !(await require("./sessions").isLive(String(session), String(userId)))) return false;   // full(null) said no
+  const u = await accountLite(String(userId), { strict: true });
   return full(u || null, roomId);
 }
 /** adultgate site: the 18+ gate alone for an account id (null = signed out) - class from the same 60 s cache. */
@@ -594,6 +629,7 @@ module.exports = {
   init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, adultGate, adultSlots, adultGateFor, blockedFor, visibleRows,
   camVisible, camSlotsFor,                  // stagefix site
   state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, fullFor, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
+  hearNow,                                  // audiogate
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };
 // gatefix site: what Pepe's DM / Telegram answers leave out (liveRoomsOutside, gateLiveRooms)

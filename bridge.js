@@ -870,22 +870,78 @@ function audioClose(id) {
 setInterval(() => {
   for (const [id, a] of audio) if (a.listeners.size && Date.now() - a.at > AUDIO_IDLE_MS && a.at) audioClose(id);
 }, 10 * 1000).unref();
-/** adultgate site: end the MP3 listeners the 18+ gate stops now (the switch turned on / the pad marked 18+ after they
- *  started listening). Each listener's response carries the account that opened it (res.agViewer). -> how many ended */
-function audioRecheck() {
+/**
+ * audiogate (was adultgate site's 18+-only re-check): /p/:slug/audio's audience rule holds for the listeners ALREADY connected,
+ * not only at connect time. Every listener carries who opened it - res.agViewer (the account, null = signed out) and
+ * res.agSession (the sign-in it came with, sessions.js; null when none was seen) - and on every change that can stop someone
+ * (padaccess.onChange: a pad made Members / Approved, a member removed, a level reload; adultgate.onChange: the 18+ switch, a
+ * pad marked 18+) and every AUDIO_RECHECK_MS (sign-outs, an account deleted or demoted, the 💎 bridge perk lost - nothing
+ * announces those) the same rule is asked again: padaccess.full for who they are now + the pad's bridge perk (isLiveShown's
+ * bridgeOk). A listener that fails is ended - its MP3 response closes, so the framed ?lv=1 levels stop with it; a mic-stage
+ * capture's tap ends once (stagemiccap re-checks those every 500 ms as well). Nobody who still passes is cut: a pad open to
+ * everyone is skipped without a lookup, and a lookup that fails (a database error) keeps the listener until the next pass.
+ * Nothing is stored.
+ *   1. at once, with what the listener carried (no awaits - a change ends the open streams before anything else is sent):
+ *      the perk gone -> everyone; else padaccess.full(res.agViewer, room) - a signed-out listener on a pad that isn't open to
+ *      everyone, a member removed from an Approved pad, an 18+ pad's unconfirmed viewer (the 18+ re-check as it always was)
+ *   2. `deep` (changes and the timer; not adultgate's own 15 s tick): each signed-in listener left, by padaccess.hearNow - is
+ *      that sign-in still live, the account still there, its class now?
+ * only = a room id, a (roomId) -> boolean filter, or null (every room). -> {ended (step 1), pending (a promise of the total)}
+ */
+const AUDIO_RECHECK_MS = 15 * 1000;
+function audioRecheck(why = "change", only = null, { deep = true } = {}) {
+  const PA = require("./padaccess");
+  const inScope = typeof only === "function" ? only : only == null ? () => true : (id) => id === String(only);
   let n = 0;
-  const AG = require("./adultgate");
+  const cut = (a, l) => {
+    if (!a.listeners.has(l)) return false;
+    a.listeners.delete(l);
+    try { l.end(); } catch (e) { /* gone */ }
+    n++;
+    return true;
+  };
+  const later = [];
   for (const [id, a] of audio) {
-    if (!a.listeners.size || !AG.applies(id)) continue;
-    for (const res of [...a.listeners]) {
-      if (AG.gate(res.agViewer || null, id) === "ok") continue;
-      a.listeners.delete(res);
-      try { res.end(); } catch (e) { /* gone */ }
-      n++;
+    if (!a.listeners.size || !inScope(id)) continue;
+    const perk = bridgeOk(id);
+    if (perk && PA.full(null, id)) continue;      // open to everyone (a Public pad the 18+ gate doesn't stop): nothing to ask
+    for (const l of [...a.listeners]) {
+      const v = l.agViewer && l.agViewer.userId ? l.agViewer : null;
+      if (!perk || !PA.full(v, id)) { cut(a, l); continue; }
+      if (deep && v) later.push({ id, a, l, uid: String(v.userId), session: l.agSession || null });
     }
   }
-  if (n) console.log(`[bridge] 18+ gate: ended ${n} room audio listener(s)`);
-  return n;
+  const sync = n;
+  if (sync) console.log(`[bridge] audiogate (${why}): ended ${sync} room audio listener(s)`);
+  if (!later.length) return { ended: sync, pending: Promise.resolve(sync) };
+  const pending = (async () => {
+    let m = 0, failed = 0;
+    for (const w of later) {
+      if (!w.a.listeners.has(w.l)) continue;
+      let ok = true;
+      try { ok = await PA.hearNow(w.uid, w.id, { session: w.session }); } catch (e) { ok = true; failed++; }
+      if (!ok && cut(w.a, w.l)) m++;
+    }
+    if (m) console.log(`[bridge] audiogate (${why}): ended ${m} room audio listener(s) (signed out / account / role)`);
+    if (failed) console.error(`[bridge] audiogate (${why}): ${failed} listener check(s) failed - kept, asked again next pass`);
+    return sync + m;
+  })();
+  return { ended: sync, pending };
+}
+let audioRecheckT = null, audioTickBusy = false;
+/** audiogate: the periodic pass (MP3 listeners + roomrtc's WebRTC readers) - one at a time; never keeps the process alive. */
+function startAudioRecheck() {
+  if (audioRecheckT) return;
+  audioRecheckT = setInterval(async () => {
+    if (audioTickBusy) return;
+    audioTickBusy = true;
+    try {
+      await audioRecheck("tick").pending;
+      await require("./roomrtc").recheck("tick");
+    } catch (e) { console.error("[bridge] audiogate tick:", e.message); }
+    finally { audioTickBusy = false; }
+  }, AUDIO_RECHECK_MS);
+  if (audioRecheckT.unref) audioRecheckT.unref();
 }
 
 /**
@@ -1938,11 +1994,23 @@ function register(app, { isBotToken, addUser }) {
   require("./hubhidden").boot();
   // adultgate site: when the 18+ gate starts applying to a room (the switch on, a pad marked 18+), its open MP3 listeners and
   // the pages waiting on a long-poll answer again under the gate (the waiting ones re-check after waitForChange)
-  require("./adultgate").onChange((why) => {
-    audioRecheck();
-    if (why !== "tick") wakeAll();
-    return require("./roomrtc").recheck(why);         // ...and the WebRTC room listeners (livecam re-checks its own viewers)
+  // audiogate: only the pads the gate applies to; on its own 15 s tick only step 1 (no lookups) - the deep pass and the WebRTC
+  // readers' tick are startAudioRecheck's
+  const AGm = require("./adultgate");
+  AGm.onChange((why) => {
+    const agRooms = (id) => AGm.applies(id);
+    audioRecheck(why, agRooms, { deep: why !== "tick" });
+    if (why === "tick") return null;
+    wakeAll();
+    return require("./roomrtc").recheck(why, agRooms);   // ...and the WebRTC room listeners (livecam re-checks its own viewers)
   });
+  // audiogate: a pad's level / members changed (one pad; null = every pad, after a reload): the room audio playing there answers
+  // to the new rule now - a Public pad made Members ends its signed-out listeners, a removed member's stream ends, ...
+  require("./padaccess").onChange((roomId) => {
+    audioRecheck("access", roomId);
+    return require("./roomrtc").recheck("access", roomId);
+  });
+  startAudioRecheck();
   const PW = require("./privwire");
   PW.init().catch((e) => console.error("[bridge] privacy wire:", e.message));
   /** One sync's work and answer (v1 and v2 alike). wave 2: the answer says privwire: 2 only while the switch is on (the advert). */
@@ -2093,7 +2161,9 @@ function register(app, { isBotToken, addUser }) {
     try { ip = require("./middleware/authGuard").clientIp(req); } catch (e) { ip = (req.socket && req.socket.remoteAddress) || "?"; }
     const wait = rtcHit(signed ? "u:" + req.user.userId : "ip:" + ip);
     if (wait) { res.set("Retry-After", String(wait)); return res.status(429).json({ ok: false, fallback: "rate" }); }
-    try { res.json(require("./roomrtc").ticket(req.user, R)); } catch (e) {
+    // audiogate: + the sign-in it was asked with (memory only, for the ticket's life): the hook and the re-check ask it's still live
+    const ls = req.loginSession && req.user && req.user.userId && req.loginSession.userId === String(req.user.userId) ? req.loginSession.id : null;
+    try { res.json(require("./roomrtc").ticket(req.user, R, undefined, { session: ls })); } catch (e) {
       console.error("[bridge] room rtc ticket:", e.message);
       res.json({ ok: false, fallback: "error" });
     }
@@ -2125,6 +2195,8 @@ function register(app, { isBotToken, addUser }) {
     if (framed) require("./audiolv").open(res, a, Date.now());     // (micvad review fix: a framed prime only from fresh posts)
     else for (const r of a.recent) res.write(r.buf);
     res.agViewer = req.user && req.user.userId ? req.user : null;     // adultgate site: audioRecheck asks the gate again for this account
+    // audiogate: ...and the sign-in it came with (sessions.js id, memory only): signing out / out everywhere ends the stream too
+    res.agSession = res.agViewer && req.loginSession && req.loginSession.userId === String(res.agViewer.userId) ? req.loginSession.id : null;
     a.listeners.add(res);
     req.on("close", () => { a.listeners.delete(res); });
   });
@@ -2650,7 +2722,7 @@ async function forgetVeiled(logins) {
 }
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
-  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)
