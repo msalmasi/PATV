@@ -94,7 +94,7 @@
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 %>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=24"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab, a live stream beats Pepe's off-air slate %>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=24"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once) %>
 <link rel="stylesheet" href="/public/css/stage-upnext.css?v=1">
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
@@ -824,7 +824,7 @@
     var frontSlug = <%- JSON.stringify(frontInfo ? frontInfo.slug : '').replace(/</g, '\\u003c') %>;
     if (window.PATVAvSync) window.PATVAvSync.pad(function () { return frontSlug; });
     var stCap = PATVStage.capture({ host: document.getElementById('stCap'), room: function () { return frontSlug; } });
-    // newstream 1.99akv: the header's pad, the slate's pad name and its Go live links were drawn once - after a front-page change the new pad's
+    // newstream 1.99ala: the header's pad, the slate's pad name and its Go live links were drawn once - after a front-page change the new pad's
     // stream played under the OLD pad's name; and "Next up" (the slate) never moved: both follow the stage's own poll now (g.front, g.next)
     function frontNamed(f) {
       var href = '/p/' + encodeURIComponent(f.slug), go = '/stage?room=' + encodeURIComponent(f.slug);
@@ -837,10 +837,16 @@
       var pad = document.getElementById('slPad'); if (pad) pad.textContent = f.title || f.slug;
       document.querySelectorAll('#stSlate .golive-btn, #stageShow .golive-btn').forEach(function (b) { b.setAttribute('href', go); });
     }
+    // (review F4: written only when the booking changed - #stSlate is role=status, so a rewrite every 10 s was read out again; the key starts
+    // as the booking this page was rendered with)
+    var slateKey = <%- JSON.stringify(JSON.stringify(nextUp_ ? [String(nextUp_.display), nextUp_.title || null, Number(nextUp_.start_at)] : null)).replace(/</g, '\\u003c') %>;
     function slateNext(n) {
       var acts = document.querySelector('#stSlate .sl-acts'); if (!acts) return;
-      var box = document.getElementById('slNext'), br = document.getElementById('slBrowse');
       var ok = n && typeof n === 'object' && Number(n.start_at) > 0 && n.display;
+      var key = JSON.stringify(ok ? [String(n.display), n.title || null, Number(n.start_at)] : null);
+      if (key === slateKey) return;
+      slateKey = key;
+      var box = document.getElementById('slNext'), br = document.getElementById('slBrowse');
       // (as the server renders it: "Next up" when there is one, else "Browse Top Pads" - one or the other, swapped in place)
       if (!ok) {
         if (box) box.parentNode.removeChild(box);
@@ -863,7 +869,7 @@
       onPoll: function (g) {
         if (!g) return;
         if (g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); frontNamed(g.front); }
-        if (Object.prototype.hasOwnProperty.call(g, 'next')) slateNext(g.next);      // newstream 1.99akv
+        if (Object.prototype.hasOwnProperty.call(g, 'next')) slateNext(g.next);      // newstream 1.99ala
       },
       api: '/api/stage', front: frontSlug, slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf

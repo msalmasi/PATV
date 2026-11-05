@@ -237,7 +237,7 @@ async function nextSlot(roomId, t = Date.now()) {
   return s ? { display: s.displayname || s.username || "someone", title: s.title || null, start_at: Number(s.start_at) } : null;
 }
 /**
- * newstream 1.99akv: nextSlot for the homepage stage's 10 s poll (/api/stage with no pad, or ?room=<pad>&home=1 - bridge.js): the off-air
+ * newstream 1.99ala: nextSlot for the homepage stage's 10 s poll (/api/stage with no pad, or ?room=<pad>&home=1 - bridge.js): the off-air
  * slate's "Next up" and the Dock's off-air bar were drawn once at load - a booking made since never showed, one that had started (and
  * ended) stayed. One read per pad per NEXT_TTL for every viewer; never throws (null).
  */
@@ -383,11 +383,16 @@ function register(app, { addUser, xpForNextLevel }) {
       const PA = require("./padaccess");
       await PA.init();
       const viewer = req.user && req.user.userId ? req.user : null;
-      // newstream 1.99akv: + the pads without a Camfrog room (rooms.withSitePads - the rows the page's Top Pads came from): a SITE pad's line
-      // ("🎥 who — what", "📼 title") was never refreshed - its id wasn't in the bridge's summary, so a stream that started there never showed
-      const sum = await bridge.summary(!!viewer, viewer);
-      const all = await require("./rooms").withSitePads(sum).catch(() => sum);
-      const rows = PA.visibleRows(viewer, all).filter((r) => want.has(r.id));
+      // newstream 1.99ala: + the listed pads without a Camfrog room: a SITE pad's line ("🎥 who — what", "📼 title") was never refreshed - its
+      // id wasn't in the bridge's summary, so a stream that started there never showed. Their ids come from the registry's cache
+      // (padsignals.sitePads, no query - review L3: not rooms.withSitePads, whose site-activity rows this line never reads); an unlisted pad is
+      // never answered (as Top Pads)
+      const R = require("./rooms");
+      const sum = (await bridge.summary(!!viewer, viewer)).filter((r) => r && r.id && R.isListed(r.id));
+      const have = new Set(sum.map((r) => r.id));
+      let site = [];
+      try { site = require("./padsignals").sitePads().filter((p) => p && want.has(p.id) && !have.has(p.id)).map((p) => ({ id: p.id, slug: p.slug, name: p.title || p.slug, site: true })); } catch (e) { site = []; }
+      const rows = PA.visibleRows(viewer, sum.concat(site)).filter((r) => want.has(r.id));
       const NP = await nowPlaying(rows, viewer);
       const np = {};
       for (const r of rows) np[r.id] = PA.adultGate(viewer, r.id) === "ok" ? NP.get(r.id) || null : null;     // adultgate site

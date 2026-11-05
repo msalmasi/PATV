@@ -1,5 +1,5 @@
 "use strict";
-// newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
+// newstream 1.99ala (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
 // annoying."): the homepage's pieces that only learned about a stream at load:
 //   1. Top Pads' "now playing" line of a SITE pad (no Camfrog room) - /api/home/nowplaying read the bridge's summary only, so a site pad's id
 //      was never answered and its line never moved after load (rooms.withSitePads: the rows the page's Top Pads come from)
@@ -38,12 +38,13 @@ test.before(async () => {
 });
 test.after(() => new Promise((r) => server.close(r)));
 
+const PS = require(path.join(repo, "padsignals"));
 test("1: a site pad's Top Pads line follows a stream that started after load (/api/home/nowplaying answers site pads)", async () => {
-  const keep = { summary: bridge.summary, withSitePads: rooms.withSitePads, publicSlots: MS.publicSlots };
+  const keep = { summary: bridge.summary, sitePads: PS.sitePads, publicSlots: MS.publicSlots };
   let slots = [];
   bridge.summary = async () => [{ id: "Cf.Room", slug: "cf-room", name: "Cf Room", live: true, count: 3, micCount: 0, mic: [] }];
-  // (padsignals' row for a pad without a Camfrog room - live on its site activity)
-  rooms.withSitePads = async (sum) => (sum || []).concat([{ id: "Site.Pad", slug: "site-pad", name: "Site Pad", live: true, count: 0, micCount: 0, site: true }]);
+  // (the listed pads without a Camfrog room, from the registry's cache)
+  PS.sitePads = () => [{ id: "Site.Pad", slug: "site-pad", title: "Site Pad" }];
   MS.publicSlots = async () => slots;
   try {
     const ask = async () => (await fetch(base + "/api/home/nowplaying?ids=Site.Pad,Cf.Room")).json();
@@ -55,7 +56,31 @@ test("1: a site pad's Top Pads line follows a stream that started after load (/a
     d = await ask();
     assert.deepEqual(d.np["Site.Pad"], { k: "stage", name: "Juniper", title: "Fresh set" }, "🎥 Juniper — Fresh set, no refresh");
     assert.ok("Cf.Room" in d.np, "Camfrog pads as before");
-  } finally { Object.assign(bridge, { summary: keep.summary }); rooms.withSitePads = keep.withSitePads; MS.publicSlots = keep.publicSlots; }
+  } finally { Object.assign(bridge, { summary: keep.summary }); PS.sitePads = keep.sitePads; MS.publicSlots = keep.publicSlots; }
+});
+
+test("1b: the line reads no site activity - never padsignals' feed / watch scans (rooms.withSitePads: four queries + engagement on a cold cache) (review L3)", async () => {
+  const keep = { summary: bridge.summary, sitePads: PS.sitePads, rows: PS.rows, withSitePads: rooms.withSitePads, publicSlots: MS.publicSlots, isListed: rooms.isListed };
+  let scans = 0;
+  bridge.summary = async () => [{ id: "Cf.Room", slug: "cf-room", name: "Cf Room", live: true, count: 3, micCount: 0, mic: [] },
+                                { id: "Cf.Hidden", slug: "cf-hidden", name: "Unlisted", live: true, count: 2, micCount: 0, mic: [] }];
+  PS.sitePads = () => [{ id: "Site.Pad", slug: "site-pad", title: "Site Pad" }, { id: "Site.Other", slug: "site-other", title: "Other" }];
+  PS.rows = async () => { scans++; return [{ id: "Site.Pad", slug: "site-pad", name: "Site Pad", live: true, site: true }]; };
+  rooms.withSitePads = async (sum) => { scans++; return (sum || []).concat([{ id: "Site.Pad", slug: "site-pad", name: "Site Pad", live: true, site: true }]); };
+  rooms.isListed = (id) => id !== "Cf.Hidden";
+  MS.publicSlots = async () => [{ id: "s1", room_id: "Site.Pad", display: "Juniper", title: "Fresh set", hls: "/x.m3u8", featured: true },
+                                { id: "s2", room_id: "Cf.Hidden", display: "Aster", title: "Unlisted set", hls: "/y.m3u8", featured: true }];
+  try {
+    const d = await (await fetch(base + "/api/home/nowplaying?ids=Site.Pad,Cf.Room,Cf.Hidden")).json();
+    assert.equal(d.ok, true);
+    assert.deepEqual(d.np["Site.Pad"], { k: "stage", name: "Juniper", title: "Fresh set" });
+    assert.equal(scans, 0, "no site-activity read");
+    assert.ok(!("Site.Other" in d.np), "only the pads asked about");
+    assert.ok(!("Cf.Hidden" in d.np), "an unlisted pad is never answered");
+  } finally {
+    Object.assign(bridge, { summary: keep.summary }); Object.assign(PS, { sitePads: keep.sitePads, rows: keep.rows });
+    Object.assign(rooms, { withSitePads: keep.withSitePads, isListed: keep.isListed }); MS.publicSlots = keep.publicSlots;
+  }
 });
 
 // ── 2. the homepage stage's "Next up" + the old homepage's pad name: drawn once at load, now from the stage's own 10 s poll ──
@@ -124,6 +149,42 @@ test("2b: the slate's \"Next up\" follows the poll - a booking made since appear
   s.o.onPoll({ front: { slug: "night-orchard", title: "Night Orchard" } });
   assert.ok(s.acts.children.some((c) => c.id === "slBrowse"), "an answer without `next` (a pad page's) moves nothing");
   assert.match(read("locales", "en.json"), /"js\.home\.slate\.next_up": "Next up:"/);
+});
+
+test("2b2: the slate's \"Next up\" is written only when the booking changed - #stSlate is role=status, a rewrite every 10 s is read out again (review F4)", async () => {
+  const n = { display: "Willow", title: "Late set", start_at: 2e12 };
+  const s = await oldSlate({ nextUp: n });
+  assert.ok(s.ids.slNext && !s.ids.slBrowse, "booked at load: Next up");
+  let writes = 0;
+  const count = (node) => {
+    const a = node.appendChild, r = node.removeChild;
+    node.appendChild = function (c) { writes++; return a.call(this, c); };
+    node.removeChild = function (c) { writes++; return r.call(this, c); };
+    let t = node.textContent;
+    Object.defineProperty(node, "textContent", { get: () => t, set: (v) => { writes++; t = v; } });
+  };
+  count(s.ids.slNext); count(s.acts);
+  const front = { slug: "night-orchard", title: "Night Orchard" };
+  for (let i = 0; i < 3; i++) s.o.onPoll({ front, next: Object.assign({}, n) });
+  assert.equal(writes, 0, "the booking the page was rendered with: nothing written, poll after poll");
+  s.o.onPoll({ front, next: { display: "Willow", title: "Later set", start_at: 2e12 } });
+  assert.ok(writes > 0, "a changed booking is written");
+  assert.match(s.ids.slNext.textContent, /Later set/);
+  const w = writes;
+  s.o.onPoll({ front, next: { display: "Willow", title: "Later set", start_at: 2e12 } });
+  assert.equal(writes, w, "the same again: nothing");
+  // none at load (Browse Top Pads) and none in the poll: nothing either
+  const e = await oldSlate({ nextUp: null });
+  let ew = 0; const ea = e.acts.appendChild; e.acts.appendChild = function (c) { ew++; return ea.call(this, c); };
+  e.o.onPoll({ front, next: null }); e.o.onPoll({ front, next: null });
+  assert.equal(ew, 0);
+  // the key the page starts from is a script string: a title with markup stays text (escaped), and still matches the poll's
+  const m = { display: "Wil<low", title: "a</script><b>", start_at: 2e12 };
+  const x = await oldSlate({ nextUp: m });
+  assert.ok(!x.html.includes("a</script><b>"), "never raw in the page");
+  let xw = 0; const xa = x.ids.slNext.appendChild; x.ids.slNext.appendChild = function (c) { xw++; return xa.call(this, c); };
+  x.o.onPoll({ front, next: Object.assign({}, m) });
+  assert.equal(xw, 0);
 });
 
 test("2c: /api/stage carries the shown pad's next booking on the homepage's answers only, cached per pad (home.nextUpCached)", async () => {
