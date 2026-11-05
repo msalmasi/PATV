@@ -7305,7 +7305,7 @@
   "pad.settings.mf.layout.pip": "Picture in picture",
   "pad.settings.mf.layout.dynamic": "Dynamic (fits the speakers)",
   "pad.settings.mf.default": "When it shows",
-  "pad.settings.mf.default.first": "First, unless you feature a stream",
+  "pad.settings.mf.default.first": "First, unless a stream is featured",
   "pad.settings.mf.default.after_streams": "After featured streams",
   "pad.settings.mf.default.tab": "Only as a tab",
   "pad.settings.mf.max_people": "People on the mic stage at most (1–{max})",

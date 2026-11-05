@@ -50,7 +50,7 @@
         onShow: function (sel) { if (dead) return; if (cap) cap.update(frontSlug ? sel : null); try { box.dispatchEvent(new CustomEvent('patv:stagechange', { detail: sel })); } catch (e) { /* old engine */ } },
         // the front pad changed mid-session: the block follows it (frontChanged below)
         onPoll: function (g) { if (dead || !g || !g.front || !g.front.slug || g.front.slug === frontSlug) return; frontChanged(g.front); },
-        api: '/api/stage', slots: S.slots || [], pepeOn: !!S.pepeOn, pepeHere: S.pepeHere !== false, pepeWhep: S.pepeWhep || null, pepeSrc: S.pepeSrc || null, manage: !!S.manage,
+        api: '/api/stage', slots: S.slots || [], pepeOn: !!S.pepeOn, pepeHere: S.pepeHere !== false, pepeWhep: S.pepeWhep || null, pepeSrc: S.pepeSrc || null, manage: !!S.manage, featured: S.featured || null,   // (dock3 1.99??: the front pad's featured slot)
         onAir: function (on) { box.classList.toggle('is-on', !!on); box.classList.toggle('is-off', !on); }
       });
     }

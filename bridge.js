@@ -2241,7 +2241,7 @@ function register(app, { isBotToken, addUser }) {
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
   app.get("/api/stage", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    let slots = [], front = null, roomId = null;
+    let slots = [], front = null, roomId = null, featured = null, stale = false;
     try {
       const reg = require("./rooms");
       const web = require("./roomsweb");
@@ -2272,14 +2272,17 @@ function register(app, { isBotToken, addUser }) {
         if (front) list = list.filter((s) => !(s && s.cam));
         if (list.some((s) => s && s.cam) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
         slots = await MS.slotsFor(R.id, req.user || null, list);
+        // dock3 1.99??: the pad's featured slot, live or not (a cam slot only where this page may show it) - the page holds a featured
+        // stage through a short drop instead of handing the view to the mic stage
+        featured = await MS.featuredOf(R.id, req.user || null, { front: !!front });
       }
-    } catch (e) { slots = []; }
+    } catch (e) { slots = []; stale = true; }   // (dock3 1.99??: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
     // 1.99ajr golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
     let t = Date.now();
     try { t = require("./mainstage").clockNow(); } catch (e) { t = Date.now(); }
-    res.json({ ...stage(), slots, front, pepe_here: here !== false, now: t });
+    res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(stale ? { stale: true } : {}) });
   });
 
   // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pads at /p

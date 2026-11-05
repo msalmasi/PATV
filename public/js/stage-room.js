@@ -31,10 +31,16 @@
 // with PATVRtc.watch (muted: a cam has no sound) and beats every 15 s like a live cam (livecam.js stageWatch).
 // micfollow: 🎙 "On the mic" - the pad's mic-follows program (micfollow.js; the pad page's /live long-poll hands it over
 // with setMic(stage_program)) is a third view kind, 'mic', drawn by stage-mic.js (only on the page with WebRTC on;
-// without it setMic does nothing). Default view: a featured slot someone chose (owner / staff / booked) > the mic stage
-// (when someone on it has a picture, the pad shows it first, Pepe's stream isn't featured for an event) > an
-// auto-featured stream > Pepe's stream; the pad's default_view can put streams first or keep the mic stage a tab. A
-// viewer who picked a tab keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
+// without it setMic does nothing). Default view: a featured slot > Pepe's stream featured > the mic stage (when someone on
+// it has a picture) > Pepe's stream; the pad's default_view 'tab' keeps the mic stage a tab. A viewer who picked a tab
+// keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
+// dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99??: FEATURED MEANS
+// FEATURED - automatically (1.99lm), by hand or booked, or Pepe's stream (featWins): the mic stage is never the default over
+// it (an auto-feature used to yield to it - every featured stage on prod 11-03..05 was 'auto'; default_view 'after_streams'
+// now reads like 'first'). A featured slot that drops out of /api/stage for a moment (📼 pause / seek, an OBS reconnect, a
+// missed heartbeat) is HELD while the server still names it (g.featured) - the view, the tab and the player's reconnecting
+// overlay stay; a failed / stale answer moves nothing; the 🎙 tab never grabs a viewer back off a featured stage; a viewer
+// whose picked stage ended is back on the defaults (chosen reset).
 // mfix (owner 2026-10-25: "the mic stage drops between mic-ups"): a mic view that goes idle (nobody on the mic stage) stays up
 // MIC_GRACE_MS with "Nobody is on the mic right now" before the page goes back to its default - a short gap between two mic-ups
 // no longer flips viewers to Pepe's stream and back. A viewer who picked the 🎙 tab gets it back by itself when the mic stage
@@ -72,12 +78,19 @@
     if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw, featured: feat };
     return { mode: 'stream', twitch: tw, featured: feat };
   }
+  // dock3 1.99??: the server's "this pad's featured slot", live or not (mainstage.featuredOf via /api/stage `featured` and the page's
+  // first render) - {id, live, by, went}; null for none, or one this page may not show (a cam slot on the homepage / past its rule)
+  function cleanFeat(x) {
+    if (!x || typeof x !== 'object' || x.id == null || !/^[\w-]{1,80}$/.test(String(x.id))) return null;
+    return { id: String(x.id), live: x.live === true, by: typeof x.by === 'string' ? x.by : null, went: x.went === true };
+  }
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
   function switcher(o) {
     var slots = Array.isArray(o.slots) ? o.slots : [];
     var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, chosen = false;
     var pepeSrc = cleanSrc(o.pepeSrc), ownPepe = false;   // 1.99fv: ownPepe = this viewer chose his own stream over the embed
+    var featHint = cleanFeat(o.featured);                 // dock3 1.99??: the server's featured slot (see cleanFeat)
     var pepeWhep = typeof o.pepeWhep === 'string' && o.pepeWhep ? o.pepeWhep : null;   // 1.99fd
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
@@ -111,8 +124,11 @@
     // default view (micDefault still needs a picture); paused (why_off) or off: no tab.
     function micManage() { return !!(window.PATVStageMic && mic && mic.manage && mic.on === true && !mic.why_off && !mic.signin && !mic.blocked); }
     function micDefault() {
-      return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !(pepeSrc && pepeSrc.featured);
+      return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !featWins();
     }
+    // dock3 1.99??: something featured beats the mic stage - a featured slot in the list (auto, by hand, booked; a held one too), the
+    // server naming one that went live but isn't listed this second, or Pepe's stream featured (an event / this pad)
+    function featWins() { return !!(featured() || (featHint && (featHint.live || featHint.went)) || (pepeSrc && pepeSrc.featured)); }
     // ── 1.99zc: 🎬 cam slots ──
     var camCtl = null;
     function camStop() { if (camCtl) { camCtl.stop(); camCtl = null; } }
@@ -188,9 +204,8 @@
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
     function pickDefault() {
       var f = featured();
-      if (f && (f.feature_by !== 'auto' || (mic && mic.default === 'after_streams'))) view = 'slot:' + f.id;   // a feature someone chose wins
-      else if (micDefault()) view = 'mic';                                                                   // micfollow
-      else view = f ? 'slot:' + f.id : 'pepe';
+      // dock3 1.99??: a featured slot (auto too), else Pepe's stream while something featured can't be shown here, else the mic stage
+      view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
     }
     pickDefault();
     // 1.99ajr golive: `since` (a slot's start, server ms) -> the player starts where the broadcast is (embedUrl's `at`). The iframe
@@ -360,7 +375,10 @@
       if (dead) return Promise.resolve();
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
-        var was = cur(), wasF = featured();
+        // dock3 1.99??: a failed / stale answer (the server's catch: `stale`; a refusal: ok false) moves nothing - it used to read as
+        // "nothing is live" and hand the view to the mic stage
+        if (!g || typeof g !== 'object' || g.ok === false || g.stale === true) return;
+        var was = cur(), wasF = featured(), wasW = featWins();
         if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99ajr golive: where a video slot is (setEmbed)
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
@@ -368,10 +386,18 @@
         var ns = cleanSrc(g.pepe_src);                                              // 1.99fv: an admin switched the source
         if (!ns || !pepeSrc || ns.mode !== pepeSrc.mode || JSON.stringify(ns.embed || null) !== JSON.stringify(pepeSrc.embed || null)) ownPepe = false;
         pepeSrc = ns;
-        slots = Array.isArray(g.slots) ? g.slots : [];
+        var fresh = Array.isArray(g.slots) ? g.slots : [], nh = cleanFeat(g.featured);
+        // dock3 1.99??: the featured slot of the last poll, not listed this second while the server still names it featured (it dropped for a
+        // moment - /api/stage lists only what is live NOW) - HELD: its tab, the view, the player's reconnecting overlay (the same source is a
+        // no-op for the player; a cam slot keeps its session). Dropped as soon as the server stops naming it.
+        if (wasF && nh && nh.id === String(wasF.id) && !fresh.some(function (s) { return s && String(s.id) === String(wasF.id); })) {
+          var hold = {}; for (var k in wasF) if (Object.prototype.hasOwnProperty.call(wasF, k)) hold[k] = wasF[k];
+          hold.featured = true; hold.held = true; fresh = [hold].concat(fresh);
+        }
+        featHint = nh; slots = fresh;
         var f = featured();
-        if (was && !cur()) pickDefault();                                           // that slot ended / was cut
-        else if (!chosen && (f ? f.id : null) !== (wasF ? wasF.id : null)) pickDefault();   // featured changed and the viewer never chose
+        if (was && !cur()) { chosen = false; pickDefault(); }                      // that slot ended / was cut (dock3: the viewer's pick ends with it)
+        else if (!chosen && ((f ? f.id : null) !== (wasF ? wasF.id : null) || featWins() !== wasW)) pickDefault();   // featured changed and the viewer never chose
         if (o.onPoll) o.onPoll(g);
         show();
       }).catch(function () {});
@@ -445,17 +471,17 @@
           micIdleAt = Date.now();
           micGraceTimer = setTimeout(function () {
             micGraceTimer = null;
-            if (view === 'mic' && !micOn() && !micManage()) { micIdleAt = 0; pickDefault(); show(); }
+            if (view === 'mic' && !micOn() && !micManage()) { micIdleAt = 0; chosen = false; pickDefault(); show(); }   // (dock3: the page moved them)
           }, MIC_GRACE_MS + 50);
         }
-        if (!micGrace()) { micIdleAt = 0; pickDefault(); show(); return; }
+        if (!micGrace()) { micIdleAt = 0; chosen = false; pickDefault(); show(); return; }
         if (micCtl) micCtl.update(idleProgram());
         o.onAir && o.onAir(true, '🎙');
         if (micTabKey() !== micTabSig) { renderTabs(); if (o.onShow) o.onShow(selection()); }
         return;
       }
-      // mfix: the viewer picked the 🎙 tab and it came back after the grace: theirs again
-      if (micWanted && micOn() && view !== 'mic') { view = 'mic'; show(); return; }
+      // mfix: the viewer picked the 🎙 tab and it came back after the grace: theirs again - dock3 1.99??: never over a featured stage
+      if (micWanted && micOn() && view !== 'mic' && !featWins()) { view = 'mic'; show(); return; }
       if (!chosen && micDefault() !== wasDef) {
         var before = view;
         pickDefault();

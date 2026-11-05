@@ -1789,7 +1789,7 @@ function whepOf(s) {
   try { const w = require("./webrtc"); return w.enabled() ? w.whepUrl(s.stream) : null; } catch (e) { return null; }
 }
 // What a stage shows: the slots live right now in a room (cached briefly; pages poll it).
-const pubCache = new Map();   // room id ("" = every room) -> {at, list, camLogins}
+const pubCache = new Map();   // room id ("" = every room) -> {at, list, camLogins, featured}
 async function publicSlots(roomId) {
   const k = String(roomId || "");
   const c = pubCache.get(k);
@@ -1797,7 +1797,12 @@ async function publicSlots(roomId) {
   const t = now();
   let nameStyle = () => "";
   try { nameStyle = require("./cosmetics").nameStyle; } catch (e) { /* no cosmetics */ }
-  const rows = (await openSlots(roomId || undefined)).filter((s) => isLive(s, t));
+  const open = await openSlots(roomId || undefined);
+  const rows = open.filter((s) => isLive(s, t));
+  // dock3 1.99??: the room's featured open slot, LIVE OR NOT (a 📼 pause / seek, an OBS reconnect, a missed heartbeat drop it from `list`
+  // for a moment while it stays featured) - featuredOf() hands it to the page, which holds the view instead of giving it to the mic stage
+  const fo = roomId ? open.find((s) => s.featured) : null;
+  const featured = fo ? { id: fo.id, live: isLive(fo, t), by: fo.feature_by || null, went: !!fo.went_live, cam: fo.source === "cam" } : null;
   // stagefix fix: each live cam slot's Camfrog login, cached WITH the list but never on it (slotsFor's mine: true reads it here
   // instead of querying every open slot on every poll)
   const camLogins = new Map();
@@ -1817,8 +1822,22 @@ async function publicSlots(roomId) {
       ...(whep ? { whep } : {}),                                              // 1.99et: only while webrtc_enabled is on
     };
   }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.since || 0) - (b.since || 0));
-  pubCache.set(k, { at: Date.now(), list, camLogins });
+  pubCache.set(k, { at: Date.now(), list, camLogins, featured });
   return list;
+}
+/**
+ * dock3 1.99??: a pad's featured open slot for `viewer`'s page, live or not -> {id, live, by, went} | null (publicSlots' cache, no extra
+ * query). A featured 🎬 cam slot is named only where the page may show it: never on the homepage's front stage (`front`, D-21), never to a
+ * viewer past its rule (padaccess.camVisible) - the same rule as roomStage / slotsFor. The page (stage-room.js) keeps the mic stage off the
+ * default while this names something that went live, and holds a featured slot that dropped out of the live list for a moment.
+ */
+async function featuredOf(roomId, viewer, { front = false } = {}) {
+  if (!roomId) return null;
+  await publicSlots(roomId);
+  const c = pubCache.get(String(roomId)), f = c && c.featured;
+  if (!f) return null;
+  if (f.cam && (front || !camVisible(roomId, viewer))) return null;
+  return { id: f.id, live: f.live, by: f.by, went: f.went };
 }
 /** stagefix fix: slot id -> Camfrog login of a room's live cam slots, from publicSlots' cache (server side only). */
 async function camLoginsOf(roomId) {
@@ -1882,7 +1901,7 @@ async function roomStage(roomId, viewer) {
     // adultgate site: + a cam slot's name blanked for a viewer the 18+ gate stops (padaccess.adultSlots; off: as is)
     // stagefix: + cam slots only for viewers who may see the live room, and mine: true on the viewer's own cam (slotsFor)
     slots: await slotsFor(roomId, viewer, live), open: shown, free: Math.max(0, RS.slot_count - shown),
-    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by } : null,
+    featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by, went: !!featured.went_live } : null,   // (dock3 1.99??: + went - the page's first featured marker)
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
@@ -2332,7 +2351,7 @@ module.exports = {
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf, playUrlOf, whipRelayed, RTMP_PLAY, OUT_LOCAL, pubKey, clearCache: () => pubCache.clear(),
   camOpen, camBeat, camCandidates, slotsFor, camNotify,      // mfix: camNotify - a 📌 pin on the mic stage tells the person the same way
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
-  autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
+  autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES, featuredOf,
   clockNow: () => now(),       // 1.99ajr golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },

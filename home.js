@@ -293,6 +293,9 @@ function register(app, { addUser, xpForNextLevel }) {
       // stagefix site: + cam slots only for viewers who may see the pad's live room, mine: true on their own (mainstage.slotsFor)
       // stagefix fix: ...and never a cam slot here at all: a cam on a Stage plays only on its own pad page (D-21)
       const slots = (await require("./mainstage").slotsFor(front.id, viewer).catch(() => [])).filter((s) => !(s && s.cam));
+      // dock3 1.99??: the front pad's featured slot, live or not - the stage keeps the mic stage off the default while one is featured and
+      // holds it through a short drop (stage-room.js featWins); never a cam slot here (front: true)
+      const stageFeatured = await require("./mainstage").featuredOf(front.id, viewer, { front: true }).catch(() => null);
       // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
@@ -344,7 +347,7 @@ function register(app, { addUser, xpForNextLevel }) {
         vt: vt_,
         homeMic: homeMic_, dockFragment: frag,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
-        slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
+        slots, nextUp, stageFeatured, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,

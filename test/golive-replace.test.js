@@ -300,10 +300,16 @@ test("stage-room.js: a video slot starts where the broadcast is; polls never reb
 
 test("stage-room.js: the mic stage destroys the player; coming back rebuilds it at the broadcast position (the owner's replay)", () => {
   const since = Date.now() - 40 * 1000;
-  const x = switcher({ slots: [{ id: "s1", display: "holder", featured: true, feature_by: "auto", embed: { p: "youtube", t: "video", id: "AAAAAAAAAAA" }, since }] });
+  // (dock3 1.99??: an auto-featured video no longer yields to the mic stage by itself - the viewer picks the 🎙 tab here)
+  let onTab = null;
+  const tabs = { innerHTML: "", addEventListener: (k, fn) => { if (k === "click") onTab = fn; } };
+  const x = switcher({ tabs, slots: [{ id: "s1", display: "holder", featured: true, feature_by: "auto", embed: { p: "youtube", t: "video", id: "AAAAAAAAAAA" }, since }] });
   assert.equal(x.sw.view(), "slot:s1");
   x.sw.setMic({ v: 1, active: true, count: 1, default: "first", layout: "split", src: [{ id: "a" }] });
-  assert.equal(x.sw.view(), "mic", "an auto-featured video yields to the mic stage");
+  assert.equal(x.sw.view(), "slot:s1", "dock3: an auto-featured video keeps the stage - featured means featured");
+  const b = { hasAttribute: (k) => k === "data-v", getAttribute: () => "mic" };
+  onTab({ target: { closest: () => b } });
+  assert.equal(x.sw.view(), "mic", "the viewer picked the 🎙 tab");
   assert.equal(x.frames(), 0, "its player is gone meanwhile");
   x.sw.setMic(null);                                       // mic follows off -> back at once
   assert.equal(x.sw.view(), "slot:s1");
@@ -324,7 +330,7 @@ test("stage-room.js: the poll's server clock corrects this one (skew)", async ()
 
 test("/api/stage answers the server's clock (now)", () => {
   const src = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
-  assert.match(src, /res\.json\(\{ \.\.\.stage\(\), slots, front, pepe_here: here !== false, now: t \}\)/);
+  assert.match(src, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);   // (dock3 1.99??: + featured / stale; stage(roomId))
   assert.equal(typeof S.clockNow, "function");
   assert.equal(S.clockNow(), T);
 });

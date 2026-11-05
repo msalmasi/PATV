@@ -204,7 +204,7 @@ function switcher(opts, withMic = true) {
 }
 const MIC = (extra) => Object.assign({ v: 1, active: true, count: 2, default: "first", layout: "split", src: [{ id: "a" }, { id: "b" }] }, extra || {});
 
-test("stage-room.js: the default view - a chosen feature > the mic stage > an auto-featured stream > Pepe; capture off", () => {
+test("stage-room.js: the default view - a featured stream (dock3: auto too) > Pepe featured > the mic stage > Pepe; capture off", () => {
   let x = switcher({});
   x.sw.setMic(MIC());
   assert.equal(x.sw.view(), "mic", "the mic stage over Pepe's stream");
@@ -213,7 +213,7 @@ test("stage-room.js: the default view - a chosen feature > the mic stage > an au
   assert.ok(x.tabs().indexOf('data-v="mic"') < x.tabs().indexOf('data-v="pepe"'), "before Pepe's tab");
   x = switcher({ slots: [{ id: "s1", display: "Stream", featured: true, feature_by: "auto", hls: "x" }] });
   x.sw.setMic(MIC());
-  assert.equal(x.sw.view(), "mic", "over an AUTO-featured stream (default first)");
+  assert.equal(x.sw.view(), "slot:s1", "dock3 1.99??: an AUTO-featured stream beats the mic stage too (owner item 6 - it used to yield)");
   x = switcher({ slots: [{ id: "s1", display: "Stream", featured: true, feature_by: "auto", hls: "x" }] });
   x.sw.setMic(MIC({ default: "after_streams" }));
   assert.equal(x.sw.view(), "slot:s1", "after_streams: any featured stream first");
@@ -1013,7 +1013,7 @@ test("wave2 WP-4 stage-room.js (?v=18): the mic stage repaints when only the dyn
     assert.equal(x.rendered.length, before + 1, "repainted after " + f.toString());
     last = p;
   }
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=21/, v);   // (1.99ahq stage cover: v=19; 1.99ajq dockpol: v=20 - destroy() for the homepage's front-pad swap)
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=22/, v);   // (1.99ahq stage cover: v=19; 1.99ajq dockpol: v=20 - destroy() for the homepage's front-pad swap)
 });
 
 // ── wave2 WP-4 (the incognito / mic-stage spec F.4): cover tiles on the page ──

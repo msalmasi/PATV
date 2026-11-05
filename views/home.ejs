@@ -73,7 +73,8 @@
   const hmdInit_ = !homeDock_ ? null : { front: frontInfo ? { id: frontInfo.id, slug: frontInfo.slug, title: frontInfo.title } : null,
      chat: room ? { id: room.id, slug: room.slug, name: room.name, onStage: !!roomOnStage } : null, initial: room && (me || roomLive) ? roomLive : null,
      vt: typeof vt !== 'undefined' ? vt || null : null, signed: !!me, linked: !!(me && me.camfrogUsername), user: me ? me.username : null,
-     stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff },
+     stage: { slots: paid, pepeOn: !!st.active, pepeHere: pepeHere_, pepeWhep: st.whep || null, pepeSrc: st.pepe_src || null, manage: !!staff,
+              featured: locals.stageFeatured || null },   // dock3 1.99??: the front pad's featured slot, live or not (never a cam - home.js)
      goLive: '/stage' + (frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : ''),
      staff: stageAdmin ? { front: '/pads/admin#front', pepe: stageAdmin.admin ? '/admin/pepe#control' : null } : null,
      nextUp: nextUp_ ? { name: nextUp_.display, title: nextUp_.title || null, at: Number(nextUp_.start_at) } : null,
@@ -91,7 +92,7 @@
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
 <script src="/public/js/webrtc-client.js?v=6"></script>
 <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 %>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=21"></script>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=22"></script>
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
@@ -825,6 +826,7 @@
       onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
       onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
       api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
+      featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99??
       onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
 <%_ } _%>

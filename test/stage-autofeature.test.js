@@ -127,6 +127,25 @@ test("hand-over picks the stream that went live first; a dropped stream keeps it
   assert.equal(await feat(c.id), null);
 });
 
+test("dock3 1.99??: featuredOf - the pad's featured slot LIVE OR NOT (a drop keeps it named, live: false), went, never on another pad; null once it ends", async () => {
+  const a = await live();
+  await S.tick();
+  let f = await S.featuredOf(rooms.HOUSE_ROOM, null);
+  assert.deepEqual(f, { id: a.id, live: true, by: "auto", went: true });
+  assert.ok((await S.publicSlots(rooms.HOUSE_ROOM)).some((s) => s.id === a.id), "listed while live");
+  await done(a.key, a.cid);                                  // a 📼 seek / an OBS reconnect: publish_done
+  adv(3000);
+  assert.ok(!(await S.publicSlots(rooms.HOUSE_ROOM)).some((s) => s.id === a.id), "out of the live list for the moment");
+  f = await S.featuredOf(rooms.HOUSE_ROOM, null);
+  assert.deepEqual(f, { id: a.id, live: false, by: "auto", went: true }, "still named featured - the page holds it");
+  assert.equal(await S.featuredOf("Some.Other.Room", null), null, "another pad's");
+  assert.equal(await S.featuredOf(null, null), null);
+  await S.end(a.id, "test", "test"); adv(3000);
+  assert.equal(await S.featuredOf(rooms.HOUSE_ROOM, null), null, "ended: nothing featured");
+  const src = fs.readFileSync(path.join(repo, "mainstage.js"), "utf8");
+  assert.match(src, /if \(f\.cam && \(front \|\| !camVisible\(roomId, viewer\)\)\) return null;/, "a featured cam slot: never on the homepage, never past its rule");
+});
+
 test("Pepe featured: no take-over; an auto-feature that's up is dropped; it comes back when his feature ends", async () => {
   const a = await live();
   assert.equal(await feat(a.id), "auto");
