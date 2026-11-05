@@ -67,8 +67,12 @@ test.after(() => { server.close(); });
 test("defaults = what shipped; strict validation names each bad field; lenient clamps", () => {
   assert.deepEqual(AC.DEFAULTS, { pacing: "helper", helper_mode: "adaptive", helper_fixed_ms: 1000, helper_min_ms: 200, helper_max_ms: 1000,
     helper_headroom_ms: 120, helper_window_s: 60, inproc_prebuffer_ms: 140, inproc_splice_ms: 600, mixer_latency_s: 0.7, jitter_ms: 200,
-    opus_kbps: 64, mp3_kbps: 64 });
+    opus_kbps: 64, mp3_kbps: 64, levels: "on" });
   assert.deepEqual(AC.normalize({}).errors, {});
+  // micvad 1.99??: the mic-bar levels switch - on | off, default on; strict names a bad value, lenient falls back to on
+  assert.equal(AC.normalize({ levels: "OFF " }).cfg.levels, "off");
+  assert.deepEqual(Object.keys(AC.normalize({ levels: "loud" }).errors), ["levels"]);
+  assert.equal(AC.normalize({ levels: 0 }, { lenient: true }).cfg.levels, "on");
   const bad = AC.normalize({ pacing: "warp", helper_min_ms: 50, mixer_latency_s: 3.5, jitter_ms: "lots", mp3_kbps: 70, opus_kbps: "64.0x" });
   assert.deepEqual(Object.keys(bad.errors).sort(), ["helper_min_ms", "jitter_ms", "mixer_latency_s", "mp3_kbps", "opus_kbps", "pacing"]);
   assert.match(bad.errors.mixer_latency_s, /0\.2.3/);
@@ -150,6 +154,17 @@ test("Pepe: settings ride on the audio answer when his version is older; the sta
   const row = view.bot.rooms[ALPHA];
   assert.equal(row.stats, line); assert.equal(row.stats_at, 1700000000000);
   assert.equal(row.rtc.buffer_ms, 640); assert.equal(row.rtc.evil, undefined, "only known fields kept");
+  const t3 = await post("/api/rooms/alpha/audio/rtc", {}, "u3");
+  // micvad 1.99??: ...and whether the page may read its own level for the mic bars (the levels setting)
+  assert.equal(t3.d.levels, true);
+  assert.equal(AC.levelsOn(), true);
+  await adminPost({ cfg: { levels: "off" } });
+  assert.equal(AC.levelsOn(), false);
+  const t4 = await post("/api/rooms/alpha/audio/rtc", {}, "u4");
+  assert.equal(t4.d.ok, true); assert.equal(t4.d.levels, false, "off: the page never polls getStats");
+  r = await bot("/api/bridge/audio", { room: ALPHA, seq: 4, data: "", rtc_cap: true, acfg_v: AC.current().v - 1 });
+  assert.equal(r.audio_cfg.cfg.levels, "off", "Pepe hears it with the next answer (audio_cfg.levels)");
+  await adminPost({ cfg: { levels: "on" } });
 });
 
 test("!audiostats latency writes through: bot token, validated, audited as Pepe; the next answer carries it", async () => {

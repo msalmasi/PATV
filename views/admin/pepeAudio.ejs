@@ -7,7 +7,7 @@
 
 <section class="adm-card" id="room-audio" aria-labelledby="raT">
   <h2 id="raT"><span class="ds-ic" aria-hidden="true">🔊</span> Room audio settings <span class="adm-pill admin">admins</span> <span class="adm-pill" id="raVer"></span></h2>
-  <p class="adm-help">Changing the pacing, the buffer of the pacing in use or the Opus bitrate restarts each live ⚡ publish: the old WebRTC session ends, the new one connects about a second later. Listeners hear the MP3 relay for those seconds and their player switches back to ⚡ by itself. The mixer latency applies at once, the MP3 bitrate from the next chunk, the jitter target from a listener's next ⚡ connection.</p>
+  <p class="adm-help">Changing the pacing, the buffer of the pacing in use or the Opus bitrate restarts each live ⚡ publish: the old WebRTC session ends, the new one connects about a second later. Listeners hear the MP3 relay for those seconds and their player switches back to ⚡ by itself. The mixer latency applies at once, the MP3 bitrate from the next chunk, the jitter target from a listener's next ⚡ connection, the mic-bar levels from a listener's next ▶.</p>
   <form class="adm-form" id="raForm" autocomplete="off" novalidate>
     <fieldset>
       <legend>WebRTC pacing</legend>
@@ -32,6 +32,8 @@
       <legend>Mixer and listener</legend>
       <label>Room mixer latency (s) - net audio's jitter cushion (website audio and per-room recording) <input type="number" name="mixer_latency_s" step="0.05" inputmode="decimal"></label>
       <label>⚡ listener jitter buffer target (ms) - the browser holds this much <input type="number" name="jitter_ms" inputmode="numeric"></label>
+      <%# micvad 1.99??: roomaudiocfg.js FIELDS.levels (default on) %>
+      <label>Real mic bars where the page can't measure the sound (iPhone) - with the MP3 relay Pepe's loudness level (one value per 100 ms, nothing per speaker); ⚡ uses the browser's own level <select name="levels"><option value="on">on</option><option value="off">off - the bars only animate while someone holds the mic</option></select></label>
     </fieldset>
     <fieldset>
       <legend>Bitrates</legend>
@@ -137,7 +139,8 @@
     var pace = c.pacing === 'helper' ? 'helper (' + (c.helper_mode === 'fixed' ? 'fixed ' + c.helper_fixed_ms + ' ms' :
       'adaptive ' + c.helper_min_ms + '–' + c.helper_max_ms + ' ms +' + c.helper_headroom_ms + ' ms / ' + c.helper_window_s + ' s') + ')' :
       'in-process (prebuffer ' + c.inproc_prebuffer_ms + ' ms, splice > ' + c.inproc_splice_ms + ' ms)';
-    return pace + ' · mixer ' + c.mixer_latency_s + ' s · jitter ' + c.jitter_ms + ' ms · Opus ' + c.opus_kbps + ' / MP3 ' + c.mp3_kbps + ' kbps';
+    return pace + ' · mixer ' + c.mixer_latency_s + ' s · jitter ' + c.jitter_ms + ' ms · Opus ' + c.opus_kbps + ' / MP3 ' + c.mp3_kbps + ' kbps' +
+      (c.levels ? ' · levels ' + c.levels : '');
   }
   function live() {
     var b = V.bot;

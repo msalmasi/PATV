@@ -32,6 +32,12 @@ test("iPhone (any iOS browser - CriOS too): the meter is marked rb-nolvl, never 
   }
 });
 
+test("micvad 1.99??: room-bridge.css hides an iOS meter only while it has no real level (rb-lvl: Pepe's levels / ⚡'s getStats)", () => {
+  const css = fs.readFileSync(path.join(repo, "public/css/room-bridge.css"), "utf8");
+  assert.match(css, /\n\.rb-meter\.rb-nolvl:not\(\.rb-lvl\) \{ display: none; \}/);
+  assert.doesNotMatch(css, /\n\.rb-meter\.rb-nolvl \{/, "the 1.99akf rule is gone");
+});
+
 test("Android / desktop: a plain meter (the analyser gives it a real level while playing - rb-lvl)", () => {
   for (const [ua, pf] of [["Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", "Linux armv8l"],
     ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "Win32"]]) {

@@ -206,9 +206,11 @@ test("dock3 item 2 + pausebars: the bars' CSS - shown with holders only while PL
   assert.match(css, /\.rmd-now\.rmd-talk > \.rb-meter:not\(\.rb-lvl\) > i:nth-child\(3\) \{ height: 14px; \}/, "the still eq shape (reduced motion)");
   assert.match(css, /@keyframes rmdEq \{ from \{ transform: scaleY\(\.18\); \} to \{ transform: scaleY\(1\); \} \}/);
   assert.match(css, /@media \(forced-colors: active\) \{ main\.rm\.rm-dock \.rb-meter > i \{ forced-color-adjust: none; background: CanvasText; \} \}/);
-  assert.match(rb, /\.rb-meter\.rb-nolvl \{ display: none; \}/, "iOS outside the Dock: hidden as before");
+  // (micvad 1.99??: ...while it has no real level - Pepe's levels on the MP3 relay / ⚡'s getStats mark an iOS meter rb-lvl too)
+  assert.match(rb, /\.rb-meter\.rb-nolvl:not\(\.rb-lvl\) \{ display: none; \}/, "iOS outside the Dock: hidden as before without a real level");
   assert.match(js, /if \(IOS\) \{ meter\.classList\.add\('rb-nolvl'\); vol\.style\.display = 'none'; \}/, "no inline hide on iOS (an inline style beats every rule)");
-  assert.match(js, /var an = mode === 'rtc' \? rtcAnalyser : analyser;\n\s+lvl\(an && playing\);\n\s+if \(!an \|\| !playing\)/, "rb-lvl follows the analyser, before the early return");
+  assert.match(js, /var an = mode === 'rtc' \? rtcAnalyser : analyser;\n\s+if \(!an \|\| !playing\) \{\n\s+var want = lvWanted\(\), r = [^\n]+\n\s+lvSrc\(r \? want : ''\); lvl\(!!r\);/, "rb-lvl: the analyser, else a real level from elsewhere (micvad 1.99??), before the early return");
+  assert.match(js, /lvSrc\('an'\); lvl\(true\);/, "the analyser's frames: rb-lvl");
   assert.match(js, /playing = false; cancelAnimationFrame\(raf\);[^\n]*\n[^\n]*\n\s+bars\.forEach\(function \(b\) \{ b\.style\.height = ''; \}\); lvl\(false\);/, "stop() clears the last frame's heights and rb-lvl");
 });
 

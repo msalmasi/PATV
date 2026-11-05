@@ -36,6 +36,10 @@ const FIELDS = Object.freeze({
   jitter_ms:           { def: 200, min: 0, max: 2000 },
   opus_kbps:           { def: 64, min: 16, max: 256 },
   mp3_kbps:            { def: 64, choices: [32, 48, 64, 96, 128, 160, 192] },
+  // micvad 1.99??: the room's loudness for the pad page's mic bars where it can't measure the sound (iPhone): Pepe's levels on the
+  // MP3 relay (pepe_audiolv -> audiolv.js), the browser's own receiver level on ⚡ (the WHEP ticket's `levels`). Off = no levels
+  // anywhere: Pepe sends none, /p/:slug/audio is plain MP3 even to ?lv=1, the page never polls - exactly as before.
+  levels:              { def: "on", choices: ["on", "off"] },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 const ONLINE_MS = 90 * 1000;               // Pepe pushes every 20 s
@@ -113,6 +117,8 @@ function normalize(input, { base = DEFAULTS, lenient = false } = {}) {
 /** The settings now (sync; defaults until init() ran). */
 const current = () => ({ v: CFG.v, cfg: { ...CFG.cfg } });
 const jitterMs = () => CFG.cfg.jitter_ms;
+/** micvad 1.99??: the mic-bar levels switch (default on). */
+const levelsOn = () => CFG.cfg.levels !== "off";
 
 /** For Pepe's room-audio post answer (bridge.js): the settings when his version (acfg_v) isn't ours. */
 function forBot(body) {
@@ -266,5 +272,5 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, init, normalize, current, jitterMs, forBot, save, botSet, setBotState, cleanState, view, FIELDS, DEFAULTS,
+module.exports = { register, init, normalize, current, jitterMs, levelsOn, forBot, save, botSet, setBotState, cleanState, view, FIELDS, DEFAULTS,
   _setClock, _reset: () => { CFG = { v: 0, cfg: { ...DEFAULTS }, at: null, by: null }; BOT = null; ready = null; loaded = false; } };

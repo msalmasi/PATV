@@ -854,10 +854,11 @@ function audioTap(roomId, fn, viewer) {
   a.listeners.add(listener);
   return untap;
 }
-/** Keep `buf` (arrived at `now`) as recent audio; drop what is older than AUDIO_PRIME_MS, always keeping the newest. */
-function audioRemember(a, buf, now) {
+/** Keep `buf` (arrived at `now`) as recent audio; drop what is older than AUDIO_PRIME_MS, always keeping the newest.
+ *  micvad 1.99??: lv = its levels (audiolv.clean) for a framed listener's prime - in memory with the bytes, nowhere else. */
+function audioRemember(a, buf, now, lv) {
   a.at = now;
-  a.recent.push({ buf, at: now });
+  a.recent.push({ buf, at: now, lv: lv || null });
   while (a.recent.length > 1 && now - a.recent[0].at > AUDIO_PRIME_MS) a.recent.shift();
 }
 function audioClose(id) {
@@ -2064,8 +2065,13 @@ function register(app, { isBotToken, addUser }) {
     const a = audioHub(R.id);
     const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
     if (buf && buf.length) {
-      audioRemember(a, buf, Date.now());
-      for (const l of a.listeners) { try { l.write(buf); } catch (e) { a.listeners.delete(l); } }
+      // micvad 1.99??: the post's levels (Pepe's pepe_audiolv: one digit per 100 ms, pinned to its MP3 frames) - only while the
+      // room-audio setting `levels` is on, only in their checked shape, only to framed listeners (audiolv.js). A raw listener and a
+      // mic-stage capture (audioTap) get exactly the bytes they always did.
+      let lv = null;
+      try { lv = require("./roomaudiocfg").levelsOn() ? require("./audiolv").clean(body.lv, buf.length) : null; } catch (e) { lv = null; }
+      audioRemember(a, buf, Date.now(), lv);
+      for (const l of a.listeners) { try { if (l.framed) l.framed(buf, lv); else l.write(buf); } catch (e) { a.listeners.delete(l); } }
     }
     let rtc = { rtc: null };
     try { rtc = require("./roomrtc").forBot(R); } catch (e) { console.error("[bridge] room rtc:", e.message); }
@@ -2108,10 +2114,16 @@ function register(app, { isBotToken, addUser }) {
     if (!R || !R.audio || !isLiveShown(R)) return res.status(404).send("This room's audio isn't on.");
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
-    res.status(200).set({ "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no", Connection: "keep-alive" });
+    // micvad 1.99??: ?lv=1 (the page's MSE player where it has no analyser - iPhone) + the `levels` setting on = the same stream as
+    // framed records with Pepe's levels beside the MP3 (audiolv.js); anything else = exactly the MP3 as before
+    let framed = false;
+    try { framed = req.query.lv === "1" && require("./roomaudiocfg").levelsOn(); } catch (e) { framed = false; }
+    res.status(200).set({ "Content-Type": framed ? "application/octet-stream" : "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no",
+                          Connection: "keep-alive", ...(framed ? { "X-Audio-Frames": "1" } : {}) });
     res.flushHeaders();
     try { req.socket.setNoDelay(true); } catch (e) { /* not a TCP socket */ }
-    for (const r of a.recent) res.write(r.buf);
+    if (framed) require("./audiolv").open(res, a);
+    else for (const r of a.recent) res.write(r.buf);
     res.agViewer = req.user && req.user.userId ? req.user : null;     // adultgate site: audioRecheck asks the gate again for this account
     a.listeners.add(res);
     req.on("close", () => { a.listeners.delete(res); });
