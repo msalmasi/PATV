@@ -499,9 +499,11 @@
       :has() chains in home-dock.css: hmd-fill (3+ Top Pads rows, or 2 + the featured table: the call-to-action card fills the stage
       column under the strip; homegap fix: two rows alone are only ~42px past the strip - the strip fills that row, as it does beside one
       row and its 🎧 listen bar, instead of the card moving up and Top Pads' two rows spreading to its height), hmd-pairs (one row + the
-      featured table: two level pairs), hmd-tall (5 rows, or 4 + the table: the card says it big), hmd-notops, hmd-feat %>
+      featured table: two level pairs), hmd-tall (5 rows, or 4 + the table: the card says it big), hmd-notops, hmd-feat
+      homegap2 (owner 2026-11-05 "fix all 3", blank 2): hmd-long (3+ Top Pads rows) - 761-1023px the featured table goes under Top Pads,
+      full width, instead of a one-liner beside them over a 141-229px blank %>
   <%_ const hT_ = tops_.length, hF_ = !!feat;
-      const hmdLow_ = [(hT_ >= 3 || (hT_ === 2 && hF_)) ? 'hmd-fill' : (hT_ === 1 && hF_ ? 'hmd-pairs' : ''), (hT_ >= 5 || (hT_ >= 4 && hF_)) ? 'hmd-tall' : '', hT_ ? '' : 'hmd-notops', hF_ ? 'hmd-feat' : ''].filter(Boolean).join(' '); _%>
+      const hmdLow_ = [(hT_ >= 3 || (hT_ === 2 && hF_)) ? 'hmd-fill' : (hT_ === 1 && hF_ ? 'hmd-pairs' : ''), (hT_ >= 5 || (hT_ >= 4 && hF_)) ? 'hmd-tall' : '', hT_ >= 3 ? 'hmd-long' : '', hT_ ? '' : 'hmd-notops', hF_ ? 'hmd-feat' : ''].filter(Boolean).join(' '); _%>
   <div class="hmd-grid<%= hmdLow_ ? ' ' + hmdLow_ : '' %>" id="hmdGrid">
   <%- include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) %>
 <%_ } _%>

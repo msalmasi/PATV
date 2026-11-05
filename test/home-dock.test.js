@@ -226,7 +226,7 @@ test("homegap: Your show / the join pitch are the Dock grid's last cell - one pi
   const tops = HG_TOPS.slice(0, 3);
   const on = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, tops });
   const g = hgGrid(on), show = on.indexOf('id="stageShow"'), meCard = on.indexOf('class="card me"');
-  assert.equal(g.cls, "hmd-fill");
+  assert.equal(g.cls, "hmd-fill hmd-long");
   assert.ok(g.a > 0 && g.side > g.a && show > g.side && meCard > show, "the grid, the side widgets, Your show, then the me card");
   assert.match(on, /<section class="card golive golive-wide hmd-cta" id="stageShow"/);
   assert.match(on.slice(show, meCard), /^[^]*?<\/section>\s*<\/div>\s*<!-- ───── you ───── -->/, "the grid closes right after the card");
@@ -255,9 +255,9 @@ test("homegap: the grid's classes - Top Pads rows 0-5 x the featured table, sign
     "0/0": "hmd-notops", "0/1": "hmd-notops hmd-feat",
     "1/0": "", "1/1": "hmd-pairs hmd-feat",
     "2/0": "", "2/1": "hmd-fill hmd-feat",
-    "3/0": "hmd-fill", "3/1": "hmd-fill hmd-feat",
-    "4/0": "hmd-fill", "4/1": "hmd-fill hmd-tall hmd-feat",
-    "5/0": "hmd-fill hmd-tall", "5/1": "hmd-fill hmd-tall hmd-feat",
+    "3/0": "hmd-fill hmd-long", "3/1": "hmd-fill hmd-long hmd-feat",   // (homegap2: hmd-long = 3+ rows - 761-1023px the table goes under them)
+    "4/0": "hmd-fill hmd-long", "4/1": "hmd-fill hmd-tall hmd-long hmd-feat",
+    "5/0": "hmd-fill hmd-tall hmd-long", "5/1": "hmd-fill hmd-tall hmd-long hmd-feat",
   };
   for (let T = 0; T <= 5; T++) for (const F of [0, 1]) for (const me of [null, ME(true)]) {
     const k = T + "/" + F, h = await renderHome({ me, username: me && me.username, padDockOn: true, tops: HG_TOPS.slice(0, T), S: F ? HG_FEAT : {} });
@@ -397,4 +397,28 @@ test("homegap2 blank 1: home-dock.css - 1024px and wider, on air, the tease fill
     "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss { display: grid; }"]) assert.ok(mq.includes(r), "from 1024px, on air: " + r);
   assert.ok(mq.indexOf("#rmChat:has(> .rmd-tease) { align-self: stretch; }") > mq.indexOf(":has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }"), "beside the off-air rule (off air the chat is its own row: as tall as its words)");
   assert.equal((css.match(/is-on/g) || []).length, (mq.match(/is-on/g) || []).length, "on air only from 1024px - below it the chat is its own full-width row");
+});
+test("homegap2 blank 2: 761-1023px the row under the chat follows the grid's classes - side by side only for 1-2 Top Pads rows, both stretched; no hole", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const i = css.indexOf("@media (min-width: 761px) and (max-width: 1023px) {"), mq = css.slice(i, css.indexOf("\n}\n", i));
+  assert.ok(i > 0);
+  const areas = {};
+  for (const m of mq.matchAll(/^  main\.hm\.rmd-home \.hmd-grid((?:\.[a-z-]+)*) \{[^}]*?grid-template-areas: ([^;]+);/gm)) areas[m[1] || "base"] = m[2];
+  assert.deepEqual(areas, {
+    base: '"stage stage" "coin coin" "chat chat" "tops tops" "cta cta"',                        // Top Pads alone: the width
+    ".hmd-feat": '"stage stage" "coin coin" "chat chat" "tops feat" "cta cta"',                 // 1-2 rows + the table: side by side
+    ".hmd-feat.hmd-long": '"stage stage" "coin coin" "chat chat" "tops tops" "feat feat" "cta cta"',   // 3+ rows: the table under them
+    ".hmd-notops": '"stage stage" "coin coin" "chat chat" "cta cta"',                           // neither: no row (no extra gap)
+    ".hmd-notops.hmd-feat": '"stage stage" "coin coin" "chat chat" "feat feat" "cta cta"',      // the table alone: the width (no 41px hole)
+  });
+  assert.doesNotMatch(mq, /:has\(/, "the side column is server-rendered: classes, never :has() (the old :has(#stageSide > a.box) / off-air / popped copies are gone - only the top half ever changed, and here it is one column)");
+  assert.doesNotMatch(mq, /\.rmd-popped|is-off/, "the same on and off air, and with the chat popped");
+  const side = "main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > ";
+  assert.ok(mq.includes(side + "a.box { align-self: stretch; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: center;"), "side by side the table stretches to Top Pads: a 3-line card, centred");
+  assert.ok(mq.includes(side + "a.box > :is(h3, div) { grid-column: 1 / -1;"));
+  assert.ok(mq.includes(side + ".tp { display: flex; flex-direction: column; }") && mq.includes(side + ".tp > .rooms-mini { flex: 1 1 auto; align-content: space-evenly; }"), "and Top Pads' rows spread when the table is the taller");
+  // (the one-line table elsewhere: the base rule, full width)
+  assert.match(css, /^main\.hm\.rmd-home #stageSide > a\.box \{ display: block; padding: var\(--ds-sp-2\) var\(--ds-sp-3\); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/m);
+  // and the server's classes for it: hmd-long = 3+ rows, signed in or out
+  assert.match(rd("views", "home.ejs"), /hT_ >= 3 \? 'hmd-long' : ''/);
 });

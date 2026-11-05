@@ -248,10 +248,22 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
 
 @media (min-width: 761px) and (max-width: 1023px) {
   /* (1.99ajq dockpol fix (review, H4): the coin-op right under the stage here too - watch and spin at once - then the chat, then Top Pads) */
-  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto auto auto auto; grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat" "cta cta"; }
-  main.hm.rmd-home .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "cta cta"; }
-  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off), main.hm.rmd-home.rmd-popped .hmd-grid { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat" "cta cta"; }
-  main.hm.rmd-home .hmd-grid:has(#rmStage.is-off):not(:has(#stageSide > a.box)), main.hm.rmd-home.rmd-popped .hmd-grid:not(:has(#stageSide > a.box)) { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "cta cta"; }
+  /* (homegap2 (owner 2026-11-05 "fix all 3", blank 2): the row under the chat follows what the side column holds - home.ejs's classes,
+     the same on and off air and with the chat popped (only the top half ever changed, and here it is one column) - never a blank beside
+     Top Pads: one or two rows and the featured table side by side, both stretched to the taller (the table a 3-line card, centred; Top
+     Pads' rows spread); three rows or more (hmd-long) Top Pads takes the width and the table is a full-width line under it (beside them
+     the one-line table left 141-229px empty under it); no Top Pads: the table takes the width; neither: no row for them) */
+  main.hm.rmd-home .hmd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-feat { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops feat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-feat.hmd-long { grid-template-areas: "stage stage" "coin coin" "chat chat" "tops tops" "feat feat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-notops { grid-template-areas: "stage stage" "coin coin" "chat chat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-notops.hmd-feat { grid-template-areas: "stage stage" "coin coin" "chat chat" "feat feat" "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > a.box { align-self: stretch; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: center; gap: 2px .3em; white-space: nowrap; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > a.box > :is(h3, div) { grid-column: 1 / -1; display: block; min-inline-size: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > a.box > b { font-size: var(--ds-fs-lead, 16px); }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > a.box > .muted { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; align-self: baseline; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > .tp { display: flex; flex-direction: column; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(.hmd-long, .hmd-notops) #stageSide > .tp > .rooms-mini { flex: 1 1 auto; align-content: space-evenly; }
   main.hm.rmd-home #hmDock > #rmStage { align-self: start; }
   main.hm.rmd-home #hmDock > #rmChat { contain: none; block-size: 440px; min-block-size: 0; }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: 60vh; max-block-size: 60svh; }
