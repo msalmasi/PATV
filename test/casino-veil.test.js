@@ -490,3 +490,58 @@ test("verify: a seat masked WITHOUT a session (a check that keeps failing) never
   assert.notEqual(s2.seat, s1.seat, "a new one each time they sit");
   assert.equal(d.table.last_round.players.find((p) => p.name === "someone").seat, res.seat, "the old result keeps its id");
 });
+
+// ── 1.99?? casmask (the 1.99ajw verifier's gap c): a closed table that is no longer in memory is masked by its SAVED state ──
+test("casmask (gap c): a closed table no longer in memory keeps its masks - rounds up to a masked seat session stay 'someone' (its saved omr / old-content ids), the current veil applies, a row that can't be read masks everyone", async () => {
+  await fresh();
+  const tid = (await A(ann, "start", [], { room: null })).table;
+  assert.ok((await A(ann, "bet", ["500"], { table: tid })).ok);
+  assert.ok((await A(cat, "bet", ["700"], { table: tid })).ok);
+  await dealRound(tid, [ann, cat]);                                  // round 1: Cat named
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  VK.set("u:u3", "incognito");
+  for (let i = 0; i < 10; i++) { tick(120); await get(`/api/casino/t/${tid}`, "u5"); }   // (C.2: a frog name 20 minutes on)
+  assert.ok((await A(cat, "bet", ["500"], { table: tid })).ok);
+  const frog = (await get(`/api/casino/t/${tid}`, "u5")).d.table.seats.find((s) => s.veil);
+  assert.ok(isFrog(frog.name), frog.name);
+  await dealRound(tid, [ann, cat]);                                  // round 2: Cat as the frog
+  VK.delete("u:u3"); tick(3);
+  assert.ok((await A(cat, "leave", [], { table: tid })).ok);
+  await get(`/api/casino/t/${tid}`, "u5");
+  tick(V.LEAVE_GRACE_MS / 1000 + 5);
+  await get(`/api/casino/t/${tid}`, "u5");                          // (his seat session is over: named again)
+  const live = (await get(`/api/casino/t/${tid}/history`)).d.rounds;
+  const r1 = (h) => h.find((r) => r.round === 1), r2 = (h) => h.find((r) => r.round === 2);
+  assert.ok(r1(live).results.players.some((p) => p.name === "someone") && !/\bCat\b/.test(JSON.stringify(live)), "in memory: round 1 'someone' (omr)");
+  assert.ok(r2(live).results.players.some((p) => p.name === frog.name && p.seat === frog.seat), "in memory: round 2 the frog");
+  const fair1 = (await get(`/api/casino/fair/${tid}/1`)).d;
+  // the table closes and leaves memory (its linger is over / a restart): the history and the fairness record still mask round 1
+  assert.ok((await A(ann, "end", [], { table: tid })).ok);
+  svc.S.tables.delete(tid); V._reset();
+  assert.equal(svc.getTable(tid), null, "no longer in memory");
+  const gone = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(!/\bCat\b/.test(gone.text), "never the name: " + gone.text.slice(0, 300));
+  assert.ok(r1(gone.d.rounds).results.players.some((p) => p.name === "someone"), "round 1 stays 'someone' for good (the saved omr)");
+  assert.deepEqual(r1(gone.d.rounds).results, r1(live).results, "round 1 exactly as it read in memory (the saved old-content id)");
+  assert.deepEqual(r2(gone.d.rounds).results, r2(live).results, "round 2: the frog, as written");
+  assert.ok(r1(gone.d.rounds).results.players.some((p) => p.name === "Ann" && p.seat === svc.uidHash("u1")), "a named player stays named");
+  const fairGone = await get(`/api/casino/fair/${tid}/1`);
+  assert.deepEqual(fairGone.d.results, fair1.results, "the fairness record: the same mask");
+  assert.ok(!/\bCat\b/.test(fairGone.text));
+  // the current veil still applies to a table out of memory: Ann incognito now -> her entries read "someone"
+  VK.set("u:u1", "incognito"); V._reset();
+  const now = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(!/\bAnn\b/.test(now.text) && !now.text.includes(svc.uidHash("u1")), "veiled now: masked (no seat hash either)");
+  VK.clear(); V._reset();
+  assert.ok(/\bAnn\b/.test((await get(`/api/casino/t/${tid}/history`)).text), "named again");
+  // fail closed: the saved state can't be read -> every entry of those rounds is 'someone' (never the current veil alone)
+  await runQuery("UPDATE casino_tables SET state = ? WHERE id = ?", ["{not json", tid]); V._reset();
+  const bad = await get(`/api/casino/t/${tid}/history`);
+  assert.ok(bad.d.ok && bad.d.rounds.length >= 2);
+  assert.ok(!/\bAnn\b|\bCat\b/.test(bad.text) && !bad.text.includes(svc.uidHash("u1")), "nobody named, no seat ids");
+  assert.ok(bad.d.rounds.every((r) => r.results.players.every((p) => p.name === "someone" && p.seat === null)));
+  await runQuery("DELETE FROM casino_tables WHERE id = ?", [tid]); V._reset();
+  const none = await get(`/api/casino/fair/${tid}/1`);
+  assert.ok(!/\bAnn\b|\bCat\b/.test(none.text) && none.d.results.players.every((p) => p.name === "someone"), "no saved row: masked too");
+});

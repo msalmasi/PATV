@@ -362,10 +362,57 @@ function maskRound(T, lr) {
   }
   return out;
 }
+// 1.99?? casmask (the 1.99ajw verifier's gap c): a table that is no longer in memory (closed and past its linger, or closed before a
+// restart - boot loads only the open ones) is masked by its SAVED state (casino_tables.state - its veil: the names each person was
+// shown under, the rounds up to their last masked seat session's start (omr) and the old-content ids (ns)) with each person's kind
+// read NOW - never by the current veil alone, so a round first shown under the name stays "someone" for good there too. The table's
+// row can't be read (a failed query, a state that doesn't parse, no row for rounds that exist): every entry of those rounds is
+// "someone" (fail closed). Memory only, a minute per table (the old-content ids stay steady meanwhile).
+const savedCache = new Map();        // table id -> {at, T}
+async function savedTable(tableId) {
+  const id = String(tableId), c = savedCache.get(id), t = clock();
+  if (c && t - c.at < ROW_MS) return c.T;
+  const row = (await getQuery("SELECT state FROM casino_tables WHERE id = ?", [id]))[0];
+  if (!row) throw new Error("no saved table");
+  const st = JSON.parse(row.state);
+  if (!st || typeof st !== "object") throw new Error("a saved table that doesn't parse");
+  const veil = {};
+  for (const [uid, r] of Object.entries(st.veil && typeof st.veil === "object" ? st.veil : {})) {
+    if (!r || typeof r !== "object") continue;
+    // the session's mask is over (the table is closed: what it showed masked was written masked); the kind is read per answer
+    veil[uid] = { n: Array.isArray(r.n) ? r.n.map(String) : [], k: null, m: 0, lab: null, ep: Number(r.ep) || 0, w: r.w ? 1 : 0, at: Number(r.at) || 0 };
+    if (r.omr != null && Number.isFinite(Number(r.omr))) veil[uid].omr = Number(r.omr);
+    if (typeof r.ns === "string" && /^[0-9a-f]{11}$/.test(r.ns)) veil[uid].ns = r.ns;
+  }
+  const e = st.eng && typeof st.eng === "object" ? st.eng : {};
+  const T = { id, game: st.game, saved: true, veil, eng: { seats: [], names: Object.assign({}, e.names || {}) }, players: st.players || {},
+              host: st.host || null };
+  savedCache.set(id, { at: t, T });
+  if (savedCache.size > 500) savedCache.delete(savedCache.keys().next().value);
+  return T;
+}
+/** a stored round's summary with every entry "someone" (no seat id) - a table whose saved state can't be read */
+function scrubRound(res) {
+  const out = Object.assign({}, res);
+  for (const f of ["winners", "shown", "players"]) {
+    if (Array.isArray(res[f])) out[f] = res[f].map((x) => (x && typeof x === "object" ? Object.assign({}, x, { name: SOMEONE, seat: null }) : x));
+  }
+  return out;
+}
+
 /** stored rounds (the history, the fairness record): rows [{results, players}] - players = casino_rounds.players (server only:
- *  [{uid, name}]). The table's own state first (when it is still in memory), then anyone else a round names who is veiled now. */
+ *  [{uid, name}]). The table's own state first (in memory, else its saved state - casmask gap c), then anyone else a round names who
+ *  is veiled now. */
 async function maskRounds(tableId, rows) {
-  const T = (() => { try { return svc().getTable(tableId); } catch (e) { return null; } })();
+  let T = (() => { try { return svc().getTable(tableId); } catch (e) { return null; } })();
+  if (!T && rows.some((row) => row && row.results && typeof row.results === "object")) {
+    try {
+      T = await savedTable(tableId);
+      for (const uid of Object.keys(T.veil)) T.veil[uid].k = await kindForUid(uid);
+    } catch (e) {
+      return rows.map((row) => Object.assign({}, row, { results: row.results && typeof row.results === "object" ? scrubRound(row.results) : row.results }));
+    }
+  }
   const H = svc().uidHash;
   const kinds = new Map();
   for (const row of rows) {
@@ -399,4 +446,4 @@ async function maskRounds(tableId, rows) {
 module.exports = { SOMEONE, NAMED_GAP_MS, LEAVE_GRACE_MS, REFRESH_MS, MAX_PEOPLE, kindOf, kindForActor, keysOf, enter, apply, refresh, state, masked, label, seatOf,
   nameOf, hostName, camName, maskText, maskLog, maskRound, maskRounds, _hooks: hooks,
   _setClock: (f) => { clock = f || (() => { try { return require("./service").S.hooks.now(); } catch (e) { return Date.now(); } }); },
-  _reset: () => { fresh.clear(); rowCache.clear(); kindCache.clear(); } };
+  _reset: () => { fresh.clear(); rowCache.clear(); kindCache.clear(); savedCache.clear(); } };
