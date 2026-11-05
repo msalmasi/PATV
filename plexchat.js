@@ -317,7 +317,7 @@ async function opNp(user, b) {
     out.on_air = T ? T.label : null;
     // 1.99akr onairtitle: + the video's title when it's an embed (the label alone said only "🔗 YouTube video")
     const ti = T && OA().titleOf ? OA().titleOf(T) : null;
-    out.on_air_title = ti ? ti.title : null;
+    out.on_air_title = ti && ti.title ? ti.title : null;     // a held title (onairtitle.vet) is never sent
     return out;
   }
   const R = await padOf(b.room);

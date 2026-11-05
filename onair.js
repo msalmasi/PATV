@@ -89,6 +89,12 @@
 //     Pepe applies his own incognito / hidden rules on top), `owner` (a slot's streamer: name + chat login, for Pepe's
 //     privacy check) and `next` (the main lane's next ⏰ row: label + a cached title + its time - never its url or who
 //     queued it). Nothing here waits on the network: the lookups run in the background, a miss is the label as before.
+//     Review fixes: a video / player / stage title goes through the caption rule (onairtitle.vet: onairmedia.textBad + no
+//     link-shaped words - tripped = `title_held`, never the text); the private-activity check is by account (a web-only
+//     picker too) and fails closed; the !onair status says "someone private" for a hidden picker; `next` is the row that
+//     plays when this pick ends (the oldest next-up one, else the soonest booking + its New York `when`); a 📼 / Go Live
+//     pick's `since` is when it went live (on_at); who picked it / the streamer's login / the player's report live in META
+//     (by pick id) - never on TARGET, so never in the staff view or onair_state.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -1008,7 +1014,7 @@ async function checkTarget(t) {
       const why = await slotWhyNot(s, { needLive: false, padOk: true }, t);
       if (why) return clear(why, "system");
       if (!pending && (T.pad_ok === "session" || T.pad_ok === "always") && !(await padConsent(T.pad))) return clear("consent_revoked", "system");
-      if (S().isLive(s, t)) { T.live_at = t; T.went_live = true; }
+      if (S().isLive(s, t)) { if (T.start_until && !T.went_live && !T.on_at) T.on_at = t; T.live_at = t; T.went_live = true; }
       else if (t - (T.live_at || T.at) > LIVE_GRACE_MS && !(T.start_until && !T.went_live && t < T.start_until)) return clear("not_live", "system");
       if (T.kind === "embed" && !pending) {
         if (BOT && BOT.state && BOT.state.irl && botOk(t)) T.embed_play_at = t;     // hidden under the IRL feed: no stall clock
@@ -1040,7 +1046,11 @@ async function botTarget() {
     if (!s) return null;
     // 1.99aaq: a pick still waiting for its stream to start (go live / 📼) stays off OBS until it's live - no blank scene
     if (T.start_until && !T.went_live && !S().isLive(s)) return null;
-    return { id: T.id, kind: "slot", label: T.label, url: (S().playUrlOf || S().hlsOf)(s), live: S().isLive(s), since: T.at, ...(await pickMeta(T, s)) };
+    // onairtitle review (function 5): a 📼 / Go Live pick waits up to LIBRARY_WAIT_MS / its start window for the stream - "on
+    // air since" is when it went live (on_at), not when it was picked
+    if (T.start_until && !T.on_at && S().isLive(s)) T.on_at = now();
+    return { id: T.id, kind: "slot", label: T.label, url: (S().playUrlOf || S().hlsOf)(s), live: S().isLive(s),
+             since: (T.start_until && T.on_at) || T.at, ...(await pickMeta(T, s)) };
   }
   if (T.kind === "embed") {
     const s = T.slot_id ? await S().getSlot(T.slot_id).catch(() => null) : null;
@@ -1054,22 +1064,58 @@ async function botTarget() {
            ...(await pickMeta(T)) };
 }
 // ── 1.99akr onairtitle: what Pepe is told about the pick beyond its label (he answers "what's playing on your cam" with it) ──
+// onairtitle review (function 2): what's worked out about a pick for Pepe (who picked it + their chat login, the streamer's chat
+// login, what the OBS player says it's playing) lives HERE, by pick id - never on TARGET, so it's never in the staff view
+// (view / adminView: 1.99aid keeps an account <-> Camfrog login pairing out of it) nor saved in onair_state. In memory only:
+// after a restart it's worked out again (the picker on the next poll, the player's report within 5 s).
+const META = new Map();          // pick key -> {picker, picker_at, owner_login, player_meta}
+const META_MAX = 50;
+// the pick's id + who + when: a slot picked again (same id) by someone else is a new pick, never the last picker's cache
+const metaKey = (T) => (T ? `${T.id || ""}|${T.by || ""}|${T.at || ""}` : "");
+function metaOf(T) {
+  const k = metaKey(T);
+  let m = META.get(k);
+  if (!m) {
+    m = {};
+    META.set(k, m);
+    while (META.size > META_MAX) META.delete(META.keys().next().value);
+  }
+  return m;
+}
 /** The video title + channel of an embed pick (onairtitle.js: the oEmbed cache - a lookup starts in the background when there's
- *  none - else what the OBS player page says it's playing). Never waits. -> {title, author} | null */
+ *  none - else what the OBS player page says it's playing). Never waits. -> {title, author} | {held: true} (the abuse filter
+ *  held it: Pepe is told there's a title he won't say) | null */
 function titleOf(T) {
   if (!T || !T.embed) return null;
   const hit = OT().peek(T.embed);
   if (hit && hit.title) return hit;
-  if (T.player_meta && T.player_meta.title) return { title: T.player_meta.title, author: T.player_meta.author || null };
-  return null;
+  const pm = META.has(metaKey(T)) ? metaOf(T).player_meta : null;
+  if (pm && pm.title) return { title: pm.title, author: pm.author || null };
+  return (hit && hit.held) || (pm && pm.held) ? { held: true } : null;
 }
 /** The pick's label + its video title when known (the !onair status / "On Pepe's main stream" replies). */
-const labelWithTitle = (T) => { const ti = titleOf(T); return T.label + (ti ? ` "${ti.title}"` : ""); };
+const labelWithTitle = (T) => { const ti = titleOf(T); return T.label + (ti && ti.title ? ` "${ti.title}"` : ""); };
+/** Who put a pick on as the public !onair status says it: "someone private" for a hidden picker (pickerFor - private activity,
+ *  fail closed), else the raw `by` as before. Pepe swaps in "someone private" for HIS veils too (pepe_onair). */
+const byShown = (T) => {
+  const m = T && META.get(metaKey(T));
+  return m && m.picker && m.picker.hidden ? "someone private" : String((T && T.by) || "?");
+};
 const PICKER_TTL_MS = 60 * 1000;
+/** Private activity for one account - the rule stories.privateLogins uses (the profile's analytics / an_rooms hidden), by
+ *  account id, so a web-only account (no Camfrog name) is covered too. Can't tell = private (fail closed). */
+async function privateAccount(userId) {
+  try {
+    const pl = require("./profilelayout");
+    const L = await pl.get(userId);
+    return pl.stateOf(L, "analytics") === "hidden" || pl.stateOf(L, "an_rooms") === "hidden";
+  } catch (e) { return true; }
+}
 /** Who put a pick on, from its `by` ("pepe:<login>" chat, "web:<username>" the /stage/admin bar, "queue:<by>" a ⏰ row) ->
  *  {via, login, name} | {via, hidden: true} (private activity: no name, no login) | null (the system, a test, unknown).
  *  login = the chat login (a web picker's linked one, or the account key incognito.loginOf gives) - Pepe checks HIS
- *  incognito / hidden rules against it before he names anyone. */
+ *  incognito / hidden rules against it before he names anyone. onairtitle review (safety 3): the private-activity check is
+ *  by ACCOUNT (a web-only picker has no Camfrog name - it used to be skipped), and every lookup that fails = hidden. */
 async function pickerOf(by, depth = 0) {
   const b = String(by || "");
   const q = /^queue:(.{1,80})$/.exec(b);
@@ -1077,32 +1123,43 @@ async function pickerOf(by, depth = 0) {
     const p = await pickerOf(q[1], depth + 1);
     return p ? { ...p, via: "queue" } : null;
   }
-  let via = null, login = null, name = null, m;
-  if ((m = /^pepe:([\w.\-$]{1,40})$/.exec(b))) { via = "chat"; login = m[1].toLowerCase(); name = m[1]; }
-  else if ((m = /^web:(.{1,60})$/.exec(b)) && m[1] !== "?") {
-    via = "web"; name = m[1];
+  let m;
+  if ((m = /^pepe:([\w.\-$]{1,40})$/.exec(b))) {
+    const via = "chat", login = m[1].toLowerCase();
+    try {
+      const u = (await getQuery("SELECT userId FROM users WHERE lower(camfrogUsername) = ?", [login]))[0];
+      if (u && (await privateAccount(u.userId))) return { via, hidden: true };
+    } catch (e) { return { via, hidden: true }; }
+    return { via, login, name: m[1] };
+  }
+  if ((m = /^web:(.{1,60})$/.exec(b)) && m[1] !== "?") {
+    const via = "web";
+    let login = null;
     try {
       const u = (await getQuery("SELECT userId FROM users WHERE lower(username) = ?", [m[1].toLowerCase()]))[0];
-      login = u ? await IN().loginOf(u.userId) : null;
-    } catch (e) { login = null; }
-  } else return null;
-  // private activity (stories.privateLogins - the same neutral "unavailable" a cam gets) hides who did it
-  try { if (login && !login.startsWith("u:") && (await require("./stories").privateLogins([login])).has(login)) return { via, hidden: true }; }
-  catch (e) { return { via, hidden: true }; }
-  return { via, login: login || null, name: String(name).slice(0, 60) };
+      if (!u || (await privateAccount(u.userId))) return { via, hidden: true };     // an account we can't find: not named
+      login = await IN().loginOf(u.userId);
+    } catch (e) { return { via, hidden: true }; }
+    return { via, login: login || null, name: String(m[1]).slice(0, 60) };
+  }
+  return null;
 }
 async function pickerFor(T, t = now()) {
-  if (!("picker" in T) || !T.picker_at || t - T.picker_at > PICKER_TTL_MS || t < T.picker_at) {
-    T.picker = await pickerOf(T.by).catch(() => null);
-    T.picker_at = t;
+  const m = metaOf(T);
+  if (!("picker" in m) || !m.picker_at || t - m.picker_at > PICKER_TTL_MS || t < m.picker_at) {
+    m.picker = await pickerOf(T.by).catch(() => ({ via: null, hidden: true }));
+    m.picker_at = t;
   }
-  return T.picker;
+  return m.picker;
 }
-/** The main lane's next ⏰ row (the queue's first waiting main-lane row: a due booking, else the oldest next-up): its label,
- *  a title when one is cached (a link's lookup starts in the background) and its booked time - never its url or who queued it. */
+/** The main lane's next ⏰ row: what plays when this pick ends - the oldest next-up row (onairqueue.list() puts the booked rows
+ *  first, and a booking up to two weeks away isn't "next": onairtitle review, function 1), else the soonest booking with its
+ *  time as the ⏰ queue says it (New York: `when`) and `at`. Its label, a title when one is cached (a link's lookup starts in the
+ *  background) - never its url or who queued it. */
 async function nextUp() {
-  let r = null;
-  try { r = (await Q().list()).find((x) => x.lane !== "corner") || null; } catch (e) { r = null; }
+  let rows = [];
+  try { rows = (await Q().list()).filter((x) => x.lane !== "corner"); } catch (e) { rows = []; }
+  const r = rows.find((x) => x.at == null) || rows.find((x) => x.at != null) || null;
   if (!r) return null;
   let title = null;
   if (r.kind === "library") title = (r.spec && r.spec.title) || null;
@@ -1110,24 +1167,34 @@ async function nextUp() {
     let e = null;
     try { e = EMB().clean(EMB().parse(r.url)); } catch (err) { e = null; }
     const hit = e ? OT().peek(e) : null;
-    title = hit ? hit.title : null;
+    title = hit && hit.title ? hit.title : null;
   }
-  return { label: OT().clean(r.label, 120), ...(title ? { title: OT().clean(title, OT().TITLE_MAX) } : {}), ...(r.at ? { at: r.at } : {}) };
+  let when = null;
+  if (r.at) { try { when = Q().fmt(r.at); } catch (e) { when = null; } }
+  return { label: OT().clean(r.label, 120), ...(title ? { title: OT().clean(title, OT().TITLE_MAX) } : {}),
+           ...(r.at ? { at: r.at, ...(when ? { when } : {}) } : {}) };
 }
 /** The extra fields of a pick for Pepe (see the top of the file). s = its slot (a slot / an embed slot). */
 async function pickMeta(T, s = null) {
   const out = {};
   const ti = titleOf(T);
-  if (ti) Object.assign(out, { title: ti.title, ...(ti.author ? { author: ti.author } : {}) });
-  else if (T.kind === "slot" && s && s.title) out.title = OT().clean(s.title, OT().TITLE_MAX);
+  if (ti && ti.title) Object.assign(out, { title: ti.title, ...(ti.author ? { author: ti.author } : {}) });
+  else if (ti && ti.held) out.title_held = true;
+  else if (T.kind === "slot" && s && s.title && s.source === "library") out.title = OT().clean(s.title, OT().TITLE_MAX);   // the library's
+  else if (T.kind === "slot" && s && s.title) {          // a streamer's own title: the same filter as a video's (onairtitle.vet)
+    const v = OT().vet(s.title);
+    if (v && v.title) out.title = v.title;
+    else if (v && v.held) out.title_held = true;
+  }
   else if (T.kind === "media" && T.media && T.media.card && T.media.card.title) out.title = OT().clean(T.media.card.title, OT().TITLE_MAX);
   else if (T.kind === "media" && T.media && T.media.caption) out.title = OT().clean(T.media.caption, OT().TITLE_MAX);
   if (T.embed) out.embed = { p: T.embed.p, t: T.embed.t };
   out.source = T.kind === "cam" ? "cam" : T.kind === "media" ? "media" : T.direct ? "link"
     : s && s.source === "library" ? "plex" : T.start_until && T.pad === rooms().HOUSE_ROOM ? "golive" : "stage";
   if (s && (T.kind === "slot" || T.kind === "embed")) {
-    if (T.owner_login === undefined) T.owner_login = T.user_id ? await IN().loginOf(T.user_id).catch(() => null) : null;
-    out.owner = { name: OT().clean(s.displayname || s.username, 60), login: T.owner_login || null };
+    const m = metaOf(T);
+    if (m.owner_login === undefined) m.owner_login = T.user_id ? await IN().loginOf(T.user_id).catch(() => null) : null;
+    out.owner = { name: OT().clean(s.displayname || s.username, 60), login: m.owner_login || null };
   }
   const p = await pickerFor(T);
   if (p) out.picker = p;
@@ -1222,9 +1289,10 @@ function embedState(tok, state, detail, meta) {
   if (st === "playing") T.embed_play_at = now();
   if (detail) T.embed_detail = String(detail).replace(/[\u0000-\u001f]/g, " ").slice(0, 120);
   // 1.99akr onairtitle: what the player says it's playing (YouTube's getVideoData) - untrusted, cleaned; used when oEmbed has
-  // nothing (a channel's live stream, oEmbed unreachable). In memory only.
+  // nothing (a channel's live stream, oEmbed unreachable). In memory only (META - never saved, never in the staff view), and
+  // vetted like an oEmbed title (onairtitle.vet: the abuse filter, no link-shaped words; tripped = held).
   const pm = OT().fromPlayer(meta);
-  if (pm) T.player_meta = pm;
+  if (pm) metaOf(T).player_meta = pm;
   return { on: true };
 }
 /** Pepe's poll: {state, optin_events, cmd} in -> {cfg, target, optin, result} out. */
@@ -1264,6 +1332,8 @@ async function botCommand(c) {
   try {
     if (action === "status") {
       const n = (await Q().list().catch(() => [])).length;
+      // onairtitle review (safety 2): the status is public - a hidden picker (pickerFor) is "someone private" in it
+      for (const T of [TARGET, OVERLAY]) if (T) await pickerFor(T).catch(() => null);
       return { ok: true, msg: statusLine() + (n ? ` ⏰ ${n} queued (!onair queue).` : "") };
     }
     if (action === "consent") {                  // the cam owner answers in Camfrog: !onair yes | always | no
@@ -1415,10 +1485,10 @@ function statusLine() {
   if (!CFG.enabled) return "On-air is switched OFF (/stage/admin).";
   const st = BOT && BOT.state;
   const pepe = !botOk() ? " Pepe hasn't checked in." : st ? ` OBS ${st.obs || "?"}${st.irl ? ", the IRL feed is live (it wins)" : ""}${st.err ? ", " + st.err : ""}.` : "";
-  if (TARGET && (TARGET.pending || []).length) return `Waiting for the owner's OK: ${TARGET.label} (asked by ${TARGET.by}).` + pepe;
+  if (TARGET && (TARGET.pending || []).length) return `Waiting for the owner's OK: ${TARGET.label} (asked by ${byShown(TARGET)}).` + pepe;
   const left = (T) => (T && T.kind === "media" && T.media && T.media.until ? `, ${M().fmtDur(Math.max(0, Math.ceil((T.media.until - now()) / 1000)))} left` : "");
-  const corner = OVERLAY ? ` ↗ Corner: ${OVERLAY.label} (by ${OVERLAY.by}${left(OVERLAY)}).` : "";
-  return (TARGET ? `On Pepe's main stream: ${labelWithTitle(TARGET)} (since ${new Date(TARGET.at).toISOString().slice(11, 16)} UTC, by ${TARGET.by}${left(TARGET)}).` : "Nothing is on Pepe's main stream.") + corner + pepe;
+  const corner = OVERLAY ? ` ↗ Corner: ${OVERLAY.label} (by ${byShown(OVERLAY)}${left(OVERLAY)}).` : "";
+  return (TARGET ? `On Pepe's main stream: ${labelWithTitle(TARGET)} (since ${new Date(TARGET.at).toISOString().slice(11, 16)} UTC, by ${byShown(TARGET)}${left(TARGET)}).` : "Nothing is on Pepe's main stream.") + corner + pepe;
 }
 
 // ── views ──
