@@ -310,10 +310,11 @@ test("closing a stash: a stake that slips in after the first check is caught in 
   // the balance withdrawal records its move ("<key>:empty") - a stake landing right then
   await runQuery(`CREATE TRIGGER stashhold_slip AFTER INSERT ON stash_moves WHEN NEW.key = 'web:tx:close:bbbb0001:empty'
                   BEGIN UPDATE capital_docs SET data = '${landed}' WHERE key = 'vaults'; END`);
+  // 1.99akz review fix: the withdrawal is inside the closing transaction now - the refusal rolls it back (nothing moved)
   await assert.rejects(SS.close({ stashId: "47", ownerUserId: "tx", key: "web:tx:close:bbbb0001" }),
-                       (e) => e.code === "E_STASH_IN_VAULTS" && /500 PAT balance went to your wallet; the stash stays open/.test(e.message));
-  assert.deepEqual(await row(47), { balance: 0, closed: null }, "open: its shares can still be unstaked into it");
-  assert.equal(await bal("tx"), 500);
+                       (e) => e.code === "E_STASH_IN_VAULTS" && !/went to your wallet/.test(e.message));
+  assert.deepEqual(await row(47), { balance: 500, closed: null }, "open, its balance still in it: its shares can still be unstaked into it");
+  assert.equal(await bal("tx"), 0, "nothing paid to the wallet");
   await runQuery("DROP TRIGGER stashhold_slip");
   await putBook(NORMAL());
 });
