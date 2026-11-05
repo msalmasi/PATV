@@ -521,7 +521,7 @@ function start() {
 }
 
 module.exports = { init, noteItem, enrich, enrichPending, metrics, compute, playsOf, backfill, profileStats, start, METRICS, GENRES, FRANCHISES, inFranchise,
-                   TV, SCIFI_TV, PRESTIGE, PRESTIGE_ALL,
+                   TV, SCIFI_TV, PRESTIGE, PRESTIGE_ALL, DEEP_MAX,
                    airedOf, qualifies, norm, CUTOFF_KEY, MIN_AIR,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); },
                    _set: (o) => { if (o.fetchItem) fetchItem = o.fetchItem; } };

@@ -46,6 +46,7 @@ function register(app, { addUser, noTimers } = {}) {
   lib.register(app, { addUser, noTimers });
   reqs.register(app, { addUser, noTimers });
   inv.register(app, { noTimers });
+  require("./plexcatalog").register(app, { addUser, noTimers });
   Promise.all([lib.init(), reqs.init(), inv.init()]).catch((e) => console.error("[media] setup:", conf.errLine(e)));
 
   const fail = (res, e) => {

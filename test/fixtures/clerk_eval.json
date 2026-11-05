@@ -1,0 +1,2432 @@
+{
+  "schema_version": 1,
+  "description": "Original offline clerk cases; fixture titles and metadata only.",
+  "cases": [
+    {
+      "id": "owner-01",
+      "phase": "1",
+      "owner": true,
+      "line": "Play a random episode of The Simpsons",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "select": "random",
+        "kind": "episode"
+      },
+      "expect": {
+        "show": "The Simpsons",
+        "kind": "episode",
+        "not_season": 0,
+        "reroll": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-01-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe Play a random episode of The Simpsons",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "select": "random",
+        "kind": "episode"
+      },
+      "expect": {
+        "show": "The Simpsons",
+        "kind": "episode",
+        "not_season": 0,
+        "reroll": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-02",
+      "phase": "1",
+      "owner": true,
+      "line": "play the first season of The Office",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Office",
+        "select": "season",
+        "season": 1
+      },
+      "expect": {
+        "show": "The Office",
+        "kind": "season",
+        "season": 1,
+        "count": 2
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-02-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe play the first season of The Office",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Office",
+        "select": "season",
+        "season": 1
+      },
+      "expect": {
+        "show": "The Office",
+        "kind": "season",
+        "season": 1,
+        "count": 2
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-03",
+      "phase": "1",
+      "owner": true,
+      "line": "play the latest Universal Basic Guys",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Universal Basic Guys",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "1009063"
+        ],
+        "newest": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-03-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe play the latest Universal Basic Guys",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Universal Basic Guys",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "1009063"
+        ],
+        "newest": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-04",
+      "phase": "1",
+      "owner": true,
+      "line": "play the last 3 episodes of South Park",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "South Park",
+        "select": "last_n",
+        "n": 3
+      },
+      "expect": {
+        "kind": "list",
+        "items": 3,
+        "order": "aired",
+        "show": "South Park"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-04-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe play the last 3 episodes of South Park",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "South Park",
+        "select": "last_n",
+        "n": 3
+      },
+      "expect": {
+        "kind": "list",
+        "items": 3,
+        "order": "aired",
+        "show": "South Park"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-05",
+      "phase": "1",
+      "owner": true,
+      "line": "Play the last Spider-man movie that came out",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Spider-man",
+        "select": "latest",
+        "kind": "movie"
+      },
+      "expect": {
+        "keys": [
+          "2010"
+        ],
+        "newest": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-05-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe Play the last Spider-man movie that came out",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Spider-man",
+        "select": "latest",
+        "kind": "movie"
+      },
+      "expect": {
+        "keys": [
+          "2010"
+        ],
+        "newest": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "owner-06",
+      "phase": "1",
+      "owner": true,
+      "line": "Play a horror movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "genres": [
+          "Horror"
+        ],
+        "select": "random",
+        "kind": "movie"
+      },
+      "expect": {
+        "kind": "movie",
+        "genre": "Horror"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "owner-06-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe Play a horror movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "genres": [
+          "Horror"
+        ],
+        "select": "random",
+        "kind": "movie"
+      },
+      "expect": {
+        "kind": "movie",
+        "genre": "Horror"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "owner-07",
+      "phase": "2a",
+      "owner": true,
+      "line": "Play the episode of Seinfeld with the 100 Grand Bar",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Seinfeld",
+            "season": 9,
+            "episode": 11,
+            "episode_title": "The Dealership",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1005281"
+        ],
+        "recall": "in"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-07-addressed",
+      "phase": "2a",
+      "owner": true,
+      "line": "pepe Play the episode of Seinfeld with the 100 Grand Bar",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Seinfeld",
+            "season": 9,
+            "episode": 11,
+            "episode_title": "The Dealership",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1005281"
+        ],
+        "recall": "in"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-08",
+      "phase": "1",
+      "owner": true,
+      "line": "Play a good deep-cut cult horror movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "shelves": [
+          "Cult Horror"
+        ],
+        "deep_cut": true,
+        "quality": "good"
+      },
+      "expect": {
+        "kind": "movie",
+        "shelf": "Cult Horror",
+        "deep_cut": true,
+        "min_rating": 6.5
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-08-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe Play a good deep-cut cult horror movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "shelves": [
+          "Cult Horror"
+        ],
+        "deep_cut": true,
+        "quality": "good"
+      },
+      "expect": {
+        "kind": "movie",
+        "shelf": "Cult Horror",
+        "deep_cut": true,
+        "min_rating": 6.5
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-09",
+      "phase": "2a",
+      "owner": true,
+      "line": "Play the episode of Star Trek where Picard meets aliens that communicate by telling a story repeatedly",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: The Next Generation",
+            "season": 5,
+            "episode": 2,
+            "episode_title": "Darmok",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1006152"
+        ],
+        "recall": "in"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-09-addressed",
+      "phase": "2a",
+      "owner": true,
+      "line": "pepe Play the episode of Star Trek where Picard meets aliens that communicate by telling a story repeatedly",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: The Next Generation",
+            "season": 5,
+            "episode": 2,
+            "episode_title": "Darmok",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1006152"
+        ],
+        "recall": "in"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-10",
+      "phase": "1",
+      "owner": true,
+      "line": "play a hot adult movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "genre": "Thriller",
+        "warning": "adult_themes"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-10-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe play a hot adult movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "genre": "Thriller",
+        "warning": "adult_themes"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "owner-11",
+      "phase": "1",
+      "owner": true,
+      "line": "Play something from the Criterion Collection",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "shelves": [
+          "Criterion Collection"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "Criterion Collection"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "owner-11-addressed",
+      "phase": "1",
+      "owner": true,
+      "line": "pepe Play something from the Criterion Collection",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "shelves": [
+          "Criterion Collection"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "Criterion Collection"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "owner-12",
+      "phase": "3",
+      "owner": true,
+      "line": "Play something from the IMDB top 100",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "shelves": [
+          "IMDb Top 250"
+        ],
+        "rank_max": 100,
+        "select": "random"
+      },
+      "expect": {
+        "list": "IMDb Top 250",
+        "max_rank": 100
+      },
+      "path": "fast"
+    },
+    {
+      "id": "owner-12-addressed",
+      "phase": "3",
+      "owner": true,
+      "line": "pepe Play something from the IMDB top 100",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "shelves": [
+          "IMDb Top 250"
+        ],
+        "rank_max": 100,
+        "select": "random"
+      },
+      "expect": {
+        "list": "IMDb Top 250",
+        "max_rank": 100
+      },
+      "path": "fast"
+    },
+    {
+      "id": "surprise",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe surprise me",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "select": "random"
+      },
+      "expect": {
+        "nonempty": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "scary",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe put on something scary",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "genres": [
+          "Horror"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "genre": "Horror"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "funny",
+      "phase": "1",
+      "owner": false,
+      "line": "play something funny",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "genres": [
+          "Comedy"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "genre": "Comedy"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "pilot",
+      "phase": "1",
+      "owner": false,
+      "line": "the pilot of lost",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Lost",
+        "select": "pilot"
+      },
+      "expect": {
+        "keys": [
+          "1011031"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "finale",
+      "phase": "1",
+      "owner": false,
+      "line": "the season 3 finale of the office",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Office",
+        "select": "finale",
+        "season": 3
+      },
+      "expect": {
+        "keys": [
+          "1002098"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "first-three",
+      "phase": "1",
+      "owner": false,
+      "line": "the first three episodes of twin peaks",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Twin Peaks",
+        "select": "first_n",
+        "n": 3
+      },
+      "expect": {
+        "kind": "list",
+        "items": 3,
+        "order": "aired"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "series",
+      "phase": "1",
+      "owner": false,
+      "line": "all of the office from the start",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Office",
+        "select": "series"
+      },
+      "expect": {
+        "kind": "show",
+        "count": 2
+      },
+      "path": "rules"
+    },
+    {
+      "id": "shuffle",
+      "phase": "1",
+      "owner": false,
+      "line": "the simpsons on shuffle",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "select": "random"
+      },
+      "expect": {
+        "show": "The Simpsons",
+        "kind": "episode",
+        "not_season": 0
+      },
+      "path": "rules"
+    },
+    {
+      "id": "franchise",
+      "phase": "1",
+      "owner": false,
+      "line": "star wars in order",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Star Wars",
+        "select": "in_order",
+        "kind": "movie"
+      },
+      "expect": {
+        "kind": "list",
+        "keys": [
+          "2033",
+          "2034",
+          "2035"
+        ],
+        "order": "aired"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "director",
+      "phase": "1",
+      "owner": false,
+      "line": "a kubrick movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "people": [
+          "Kubrick"
+        ]
+      },
+      "expect": {
+        "people": "Kubrick"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "decade",
+      "phase": "1",
+      "owner": false,
+      "line": "an 80s action movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Action"
+        ],
+        "years": [
+          1980,
+          1989
+        ]
+      },
+      "expect": {
+        "genre": "Action",
+        "years": [
+          1980,
+          1989
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "cast",
+      "phase": "1",
+      "owner": false,
+      "line": "a movie with tom hanks",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "people": [
+          "Tom Hanks"
+        ]
+      },
+      "expect": {
+        "keys": [
+          "2032"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "short",
+      "phase": "1",
+      "owner": false,
+      "line": "a movie under 90 minutes",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "max_minutes": 90
+      },
+      "expect": {
+        "max_minutes": 90
+      },
+      "path": "interp"
+    },
+    {
+      "id": "christmas",
+      "phase": "1",
+      "owner": false,
+      "line": "a christmas movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "shelves": [
+          "Christmas Films"
+        ]
+      },
+      "expect": {
+        "shelf": "Christmas Films"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "documentary",
+      "phase": "1",
+      "owner": false,
+      "line": "a documentary about space",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "genres": [
+          "Documentary"
+        ],
+        "about": "space atmosphere"
+      },
+      "expect": {
+        "genre": "Documentary"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "unseen",
+      "phase": "1",
+      "owner": false,
+      "line": "something I haven't seen",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "select": "random",
+        "unseen": true
+      },
+      "expect": {
+        "unseen": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "year-tail",
+      "phase": "1",
+      "owner": false,
+      "line": "the spider-man movie from 2002",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "spider-man",
+        "year": 2002
+      },
+      "expect": {
+        "keys": [
+          "2001"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "year-front",
+      "phase": "1",
+      "owner": false,
+      "line": "the 2002 spider-man",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "spider-man",
+        "year": 2002
+      },
+      "expect": {
+        "keys": [
+          "2001"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "command-latest",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex latest south park",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "south park",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "1004816"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "command-random",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex random simpsons",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "simpsons",
+        "select": "random"
+      },
+      "expect": {
+        "show": "The Simpsons",
+        "kind": "episode"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "command-surprise",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex surprise",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "select": "random"
+      },
+      "expect": {
+        "nonempty": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "warn-nc17",
+      "phase": "1",
+      "owner": false,
+      "line": "play Velvet Tide",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Velvet Tide"
+      },
+      "expect": {
+        "keys": [
+          "2100"
+        ],
+        "warn": "nc17"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "warn-nr",
+      "phase": "1",
+      "owner": false,
+      "line": "play The Unrated Lantern",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "The Unrated Lantern"
+      },
+      "expect": {
+        "keys": [
+          "2101"
+        ],
+        "warn": "unrated"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "warn-missing",
+      "phase": "1",
+      "owner": false,
+      "line": "play Untitled Rating Picnic",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Untitled Rating Picnic"
+      },
+      "expect": {
+        "keys": [
+          "2102"
+        ],
+        "warn": "unrated"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-1013-named",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play the last of us",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "us",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "1013031"
+        ],
+        "exact": true,
+        "show": "The Last of Us"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-1013-command",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex the last of us",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "us",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "1013031"
+        ],
+        "exact": true,
+        "show": "The Last of Us"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2016-named",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play last action hero",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "action hero",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "2016"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2016-command",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex last action hero",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "action hero",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "2016"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2017-named",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play the first wives club",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "wives club",
+        "select": "oldest"
+      },
+      "expect": {
+        "keys": [
+          "2017"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2017-command",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex the first wives club",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "wives club",
+        "select": "oldest"
+      },
+      "expect": {
+        "keys": [
+          "2017"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2018-named",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play random hearts",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "hearts",
+        "select": "random"
+      },
+      "expect": {
+        "keys": [
+          "2018"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2018-command",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex random hearts",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "hearts",
+        "select": "random"
+      },
+      "expect": {
+        "keys": [
+          "2018"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2019-named",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play the last picture show",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "picture",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "2019"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "exact-2019-command",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex the last picture show",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "picture",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "2019"
+        ],
+        "exact": true
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2011",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Adult Beginners",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Adult Beginners"
+      },
+      "expect": {
+        "keys": [
+          "2011"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-1014",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Sex Education",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Sex Education"
+      },
+      "expect": {
+        "keys": [
+          "1014031"
+        ],
+        "show": "Sex Education"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2012",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Sexy Beast",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Sexy Beast"
+      },
+      "expect": {
+        "keys": [
+          "2012"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2013",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Porno",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Porno"
+      },
+      "expect": {
+        "keys": [
+          "2013"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2014",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Zack and Miri Make a Porno",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Zack and Miri Make a Porno"
+      },
+      "expect": {
+        "keys": [
+          "2014"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2015",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play xxx",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "xxx"
+      },
+      "expect": {
+        "keys": [
+          "2015"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2023",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play 1917",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "1917"
+      },
+      "expect": {
+        "keys": [
+          "2023"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2024",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play 2001: a space odyssey",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "2001: a space odyssey"
+      },
+      "expect": {
+        "keys": [
+          "2024"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "literal-2025",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play blade runner 2049",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "blade runner 2049"
+      },
+      "expect": {
+        "keys": [
+          "2025"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "adult-swim",
+      "phase": "1",
+      "owner": false,
+      "line": "something from the Adult Swim shelf",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "shelves": [
+          "Adult Swim"
+        ],
+        "select": "random"
+      },
+      "expect": {
+        "shelf": "Adult Swim"
+      },
+      "path": "fast"
+    },
+    {
+      "id": "ordinary-search-0-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play some xxx",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-0-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play some xxx",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-1-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play porn",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-1-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play porn",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-2-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play an adult video",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-2-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play an adult video",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-3-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play nsfw stuff",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-3-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play nsfw stuff",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-4-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play hentai",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-4-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play hentai",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-5-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play something sexy",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-5-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play something sexy",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-6-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play a steamy movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-6-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play a steamy movie",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-7-0",
+      "phase": "1",
+      "owner": false,
+      "line": "play an erotic thriller",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "ordinary-search-7-1",
+      "phase": "1",
+      "owner": false,
+      "line": "play an erotic thriller",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "steamy": true,
+        "genres": [
+          "Thriller"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "not_refused": true
+      },
+      "path": "interp"
+    },
+    {
+      "id": "denied-section",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play Cedar Evening",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Cedar Evening"
+      },
+      "expect": {
+        "code": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "blocked-rating",
+      "phase": "1",
+      "owner": false,
+      "line": "!plex Paper Orchard",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "title": "Paper Orchard"
+      },
+      "expect": {
+        "code": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "repeat-allowed",
+      "phase": "1",
+      "owner": false,
+      "line": "play a random episode of the simpsons",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [
+          "1001165"
+        ]
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "select": "random"
+      },
+      "expect": {
+        "show": "The Simpsons",
+        "kind": "episode"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "not-ours-0",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe play drake",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    },
+    {
+      "id": "not-ours-1",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe roll the dice",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    },
+    {
+      "id": "not-ours-2",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe we watched alien yesterday",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    },
+    {
+      "id": "not-ours-3",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe don't play alien",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    },
+    {
+      "id": "not-ours-4",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe watch my cam",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    },
+    {
+      "id": "not-ours-5",
+      "phase": "1",
+      "owner": false,
+      "line": "pepe have you seen alien?",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": []
+      },
+      "expect_interp": {
+        "intent": "other"
+      },
+      "expect": {
+        "not_ours": true
+      },
+      "path": "not_ours"
+    }
+  ]
+}

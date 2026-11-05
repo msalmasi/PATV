@@ -17,7 +17,11 @@
 //
 //   POST /api/medialib/bot   {password, op, as: {login} | {user_id}, room, via: room | web, ...}
 //     search    {q, year?, season?, episode?, target: stage | cam}  -> {rows (<= 5), free, how, per_hour, state, target, pad}
+//     shelves   {} -> allowed genres and shelves; find {ask,raw,exclude?,limit?} -> verified rows (<=20), catalog and pricing
+//               A known show's unmatched detail may return alternatives:[season rows] (<=5), never an automatic first episode.
+//               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace}
+//               Clerk lists also send keys:[key], scope:list|series. Every key is checked before the existing queue builder runs.
 //               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
 //                goes on with its feature and card - medialib.playFor / mediaqueue.startFor {replace: true}; -> + replaced {title, queue})
 //     control   {action: pause | resume | stop | seek | seek_rel | next | prev, value}
@@ -35,13 +39,15 @@ const OA = () => require("./onair");
 const rooms = () => require("./rooms");
 const conf = () => require("./mediaconf");
 const PA = () => require("./padaccess");
+const CF = () => require("./plexfind");
+const CAT = () => require("./plexcatalog");
 
 const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_library", "busy_queue", "slot_taken", "site_full", "encoder_busy",
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
-  "not_found", "error", "replace_gone", "replace_changed", "play_changed"];
-const OPS = new Set(["search", "play", "control", "np", "continue", "rpm"]);
-const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from"]);
+  "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable"];
+const OPS = new Set(["search", "find", "shelves", "play", "control", "np", "continue", "rpm"]);
+const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
 const CONTINUE_MS = 14 * 24 * 3600 * 1000;
 
@@ -188,6 +194,53 @@ function score(it, q, want) {
 }
 
 // ── ops ──
+function clerkOrFail(user) {
+  const enabled = conf().get().clerk_enabled;
+  if (enabled !== "everyone" && !(enabled === "staff" && require("./siteperms").atLeast(user, "staff"))) throw new Fail("clerk_off", "The clerk is switched off here.", 403);
+}
+async function clerkAccess(user, b) {
+  const target = b.target === "cam" ? "cam" : "stage";
+  const R = target === "cam" ? await padOf(rooms().HOUSE_ROOM) : await padOf(b.room);
+  await seeOrFail(user, R);
+  if (target === "cam") await camOrFail(user);
+  await ML().init();
+  const A = await ML()._q.mustAccess(user);
+  clerkOrFail(user);
+  return { target, R, A };
+}
+async function opShelves(user, b) {
+  await clerkAccess(user, b);
+  return CAT().shelves();
+}
+async function opFind(user, b) {
+  const { target, R, A } = await clerkAccess(user, b);
+  let seenKeys = [];
+  // This is the only personal-history read. No supplied user id or another account's history is accepted.
+  if (b.ask && b.ask.unseen === true) seenKeys = (await getQuery("SELECT DISTINCT rating_key FROM media_plays WHERE user_id = ? AND rating_key IS NOT NULL", [user.userId])).map((r) => String(r.rating_key));
+  let maxSec = Infinity;
+  if (target === "stage") {
+    const limits = await require("./mainstage").limitsFor(R.id);
+    maxSec = Math.max(60, (limits.library_max - ML()._q.SLACK_MIN) * 60);
+  }
+  let out;
+  try { out = await CF().find({ ask: b.ask, raw: clean(b.raw, 100), exclude: b.exclude, limit: b.limit, target }, { seenKeys, maxSec }); }
+  catch (e) {
+    if (e && e.refuse) throw e;
+    throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+  }
+  const S = conf().get(), per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
+  const state = await ML().padState(user, R.id).catch(() => null);
+  for (const row of [...out.rows, ...(out.alternatives || [])]) {
+    const sec = Array.isArray(row.keys) ? row.total_sec : row.duration;
+    if (Array.isArray(row.keys)) row.estimate = per ? MQ().estimate(per, sec) : 0;
+    else {
+      row.price = per ? ML().priceFor(sec, 0, S).price : 0;
+      if (row.kind === "episode") row.estimate = per ? MQ().estimate(per, sec) : 0;
+    }
+    if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) row.next_cost = await MQ().addCostFor(R.id, sec || 0).catch(() => 0);
+  }
+  return { ok: true, ...out, clerk: S.clerk_enabled, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
+}
 async function opSearch(user, b) {
   const target = b.target === "cam" ? "cam" : "stage";
   const R = target === "cam" ? await padOf(rooms().HOUSE_ROOM) : await padOf(b.room);
@@ -254,13 +307,23 @@ async function opSearch(user, b) {
 
 async function opPlay(user, b, ctx) {
   const target = b.target === "cam" ? "cam" : "stage";
-  const key = String(b.key == null ? "" : b.key);
+  const listed = Array.isArray(b.keys) || b.scope === "list" || b.scope === "series";
+  const keys = Array.isArray(b.keys) ? b.keys.map(String) : [];
+  const key = String(b.key == null ? keys[0] || "" : b.key);
   if (!/^\d{1,12}$/.test(key)) throw new Fail("bad", "Bad item.", 400);
   const scope = SCOPES.has(b.scope) ? b.scope : "title";
   const price = b.price == null || b.price === "" ? undefined : Math.floor(Number(b.price));
   if (target === "cam") {
     const R = await padOf(rooms().HOUSE_ROOM);
     await seeOrFail(user, R);
+    if (listed || b.clerk === true) {
+      await camOrFail(user);
+      await ML().init();
+      await ML()._q.mustAccess(user);
+      clerkOrFail(user);
+      if (listed) throw new Fail("bad", "Pepe's stream takes one title at a time.", 400);
+      await CF().validateKeys([key]);
+    }
     const by = ctx.via === "web" ? "web:" + user.username : "pepe:" + (clean(ctx.login, 40) || user.username);
     const r = await OA().libraryFor(user, key, by, { price, mode: ["now", "next", "replace"].includes(b.mode) ? b.mode : "now" });
     const T = (OA().view() || {}).target || null;
@@ -269,10 +332,17 @@ async function opPlay(user, b, ctx) {
   }
   const R = await padOf(b.room);
   await seeOrFail(user, R);
+  if (listed || b.clerk === true) {
+    await ML().init();
+    await ML()._q.mustAccess(user);
+    clerkOrFail(user);
+    await CF().validateKeys(listed ? keys : [key]);
+    if (listed && keys.length > (conf().get().library_queue_max_items || 60)) throw new Fail("queue_full", "That list is longer than the queue limit.", 409);
+  }
   if (b.mode === "next") {
     // on a paid queue: what it adds to the starter's bill, as the starter said yes to it (400 / 409 estimate otherwise)
     const est = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
-    const r = await MQ().addNext(user, R.id, [key], { estimate: est, scope: scope === "title" || scope === "episode" ? null : scope });
+    const r = await MQ().addNext(user, R.id, listed ? keys : [key], { estimate: est, scope: listed || scope === "title" || scope === "episode" ? null : scope });
     return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
   const S = conf().get();
@@ -281,6 +351,12 @@ async function opPlay(user, b, ctx) {
   const slotArg = typeof b.replace_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(b.replace_slot) ? b.replace_slot : null;
   const rep = b.mode === "replace" ? { replace: slotArg || true } : {};
   const replaced = (r) => (r && r.replaced ? { replaced: { title: r.replaced.title || null, queue: !!r.replaced.queue } } : {});
+  if (listed) {
+    const estimate = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
+    const r = await MQ().startFor(user, { room: R.id, keys, scope: scope === "series" ? "series" : "list", ...(estimate !== undefined ? { estimate } : {}), ...rep });
+    return { ok: true, target: "stage", title: r.title, price: r.price || 0, queue: true, items: r.items, total_sec: r.total_sec, estimate: r.estimate || 0,
+      per_hour: r.per_hour || 0, pad: { id: R.id, title: R.title || R.id }, ...replaced(r) };
+  }
   if (scope === "title" || (scope === "episode" && S.library_queue === false)) {
     const r = await ML().playFor(user, { room: R.id, key, ...(price !== undefined ? { price } : {}), ...rep });
     return { ok: true, target: "stage", title: r.title, price: r.price || 0, queue: false, pad: { id: R.id, title: R.title || R.id }, ...replaced(r) };
@@ -416,6 +492,8 @@ async function handle(b = {}) {
     const ctx = { via, login: b.as && b.as.login ? String(b.as.login) : null };
     let r;
     if (op === "search") r = await opSearch(user, b);
+    else if (op === "find") r = await opFind(user, b);
+    else if (op === "shelves") r = await opShelves(user, b);
     else if (op === "play") r = await opPlay(user, b, ctx);
     else if (op === "control") r = await opControl(user, b);
     else if (op === "np") r = await opNp(user, b);

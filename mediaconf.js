@@ -24,6 +24,11 @@ const DEFAULT_CREDIT_ITEMS = {
 };
 
 const DEFAULTS = {
+  // Library clerk: the index is a rebuildable cache; selection remains off until an admin enables it.
+  clerk_enabled: "off",          // off | staff | everyone
+  clerk_block_ratings: "X,XXX,AO,R18,R18+",
+  clerk_warn_ratings: "NR,Not Rated,Unrated",
+  catalog_sync_min: 60,
   // 📼 library playback
   library_enabled: false,
   library_allow: "admins",        // admins (class Admin) | staff (Admin + Staff). Later: approved pads.
@@ -117,6 +122,10 @@ function itemMap(v, shape) {
   return out;
 }
 const CLEAN = {
+  clerk_enabled: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
+  clerk_block_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
+  clerk_warn_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim()).filter((x) => /^[A-Za-z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
+  catalog_sync_min: (v) => num(v, 10, 1440, 60),
   library_enabled: bool, requests_enabled: bool, invites_enabled: bool,
   library_allow: (v) => (["admins", "staff"].includes(v) ? v : "admins"),
   library_quality: (v) => ([1080, 720, 480].includes(Number(v)) ? Number(v) : 720),

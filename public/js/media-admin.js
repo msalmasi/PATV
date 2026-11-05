@@ -13,6 +13,77 @@
   }
   function msg(id, t, good) { var e = document.getElementById(id); if (e) { e.textContent = t || ""; e.style.color = good ? "#9ccc65" : ""; } }
 
+  // 1.99??: the clerk's rebuildable catalog. Metadata is text, never HTML.
+  var ct = function (key, fallback, values) {
+    return window.__t ? window.__t("js.media.catalog." + key, fallback, values) : String(fallback).replace(/\{(\w+)\}/g, function (m, n) {
+      return values && values[n] != null ? String(values[n]) : m;
+    });
+  };
+  var pcTimer = null;
+  function pcDate(value) {
+    if (!value || !Number.isFinite(Number(value))) return ct("never", "Never");
+    var date = new Date(Number(value));
+    return isNaN(date.getTime()) ? ct("never", "Never") : date.toLocaleString();
+  }
+  function pcText(parent, tag, text) {
+    var node = document.createElement(tag); node.textContent = text; parent.appendChild(node); return node;
+  }
+  function pcDraw(j, dry) {
+    var out = document.getElementById("pcOut");
+    if (!out) return;
+    while (out.firstChild) out.removeChild(out.firstChild);
+    if (dry) pcText(out, "p", ct("dry_result", "Read-only count: {n} items in allowed sections. The catalog was not changed.", { n: j.allowed_count || 0 }));
+    else {
+      pcText(out, "p", j.requires_1_7 ? ct("needs_version", "Needs media-control 1.7.0.") :
+        !j.allow_list_set ? ct("needs_policy", "Set MEDIACTL_SECTIONS on the media-control host after reviewing the sections.") :
+        j.ready ? ct("ready", "Catalog ready: {n} titles.", { n: j.count || 0 }) : ct("not_ready", "Catalog unavailable or more than three days out of date. Ordinary title search stays available."));
+      pcText(out, "p", ct("details", "Media-control {version} · Last sync: {at} · Last full sync: {full}", {
+        version: j.version || "—", at: pcDate(j.at), full: pcDate(j.full_at)
+      }));
+      if (j.syncing) pcText(out, "p", ct("syncing", "Catalog sync is running. You can leave this page."));
+      if (j.error) pcText(out, "p", ct("last_error", "Last sync error: {error}", { error: j.error }));
+    }
+    var wrap = pcText(out, "div", ""); wrap.className = "tblwrap";
+    var table = pcText(wrap, "table", ""), head = pcText(pcText(table, "thead", ""), "tr", "");
+    [ct("id", "Section ID"), ct("name", "Section"), ct("type", "Type"), ct("policy", "Policy"), ct("count", "Items")].forEach(function (label) { pcText(head, "th", label); });
+    var body = pcText(table, "tbody", "");
+    (j.sections || []).forEach(function (section) {
+      var tr = pcText(body, "tr", "");
+      var policy = section.policy === "allowed" ? ct("allowed", "Allowed") : section.policy === "adult" ? ct("adult", "Adult: excluded") : ct("off", "Excluded");
+      [section.id, section.policy === "allowed" ? section.title : ct("hidden", "(hidden)"),
+        section.type === "show" ? ct("shows", "Shows") : ct("movies", "Movies"), policy, Number(section.count) || 0].forEach(function (value) { pcText(tr, "td", value); });
+    });
+    if (!(j.sections || []).length) { var cell = pcText(pcText(body, "tr", ""), "td", ct("no_sections", "No sections read yet.")); cell.colSpan = 5; }
+  }
+  function pcLoad() {
+    if (!document.getElementById("pcOut")) return Promise.resolve();
+    clearTimeout(pcTimer);
+    return api("GET", "/api/media/admin/catalog").then(function (j) {
+      pcDraw(j, false);
+      if (j.syncing) pcTimer = setTimeout(function poll() {
+        if (document.hidden) pcTimer = setTimeout(poll, 4000); else pcLoad();
+      }, 4000);
+    }).catch(function () { msg("pcMsg", ct("failed", "Could not read the catalog status. Try Refresh.")); });
+  }
+  function pcAction(id, route, body) {
+    var button = document.getElementById(id);
+    if (!button) return;
+    button.addEventListener("click", function () {
+      button.disabled = true; msg("pcMsg", ct("loading", "Loading…"));
+      api("POST", route, body).then(function (j) {
+        if (id === "pcDry") { pcDraw(j, true); msg("pcMsg", ct("dry_done", "Read-only count complete."), true); }
+        else { msg("pcMsg", ct("sync_started", "Sync started. Status updates automatically."), true); pcLoad(); }
+      }).catch(function () { msg("pcMsg", ct("action_failed", "The catalog action could not finish. Refresh to check its status.")); })
+        .then(function () { button.disabled = false; });
+    });
+  }
+  pcAction("pcSync", "/api/media/admin/catalog/sync", { full: true });
+  pcAction("pcDry", "/api/media/admin/catalog/dry", {});
+  var pcRefresh = document.getElementById("pcRefresh");
+  if (pcRefresh) pcRefresh.addEventListener("click", pcLoad);
+  window.addEventListener("pagehide", function () { clearTimeout(pcTimer); });
+  pcLoad();
+
   // connection checks
   api("GET", "/api/media/admin/checks").then(function (j) {
     ["mediactl", "overseerr", "wizarr", "tautulli"].forEach(function (k) {

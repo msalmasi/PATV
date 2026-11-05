@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('partials/admin-open', { title: 'Plex & media', user: user, section: 'media', admIsAdmin: true }) %>
 <!-- views/mediaAdmin.ejs — 1.99ji: Plex / media integrations (mediaweb.js): 📼 library playback, 🎬 Overseerr requests, 🎟️ Wizarr invites. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=9">
@@ -17,6 +18,18 @@
         <tr><td>🎟️ Wizarr</td><td><%= yes(K.wizarr) %> <small class="muted">WIZARR_URL, WIZARR_API_KEY</small></td><td><%= yes(S.invites_enabled) %></td><td data-ck="wizarr">…</td></tr>
         <tr><td>📊 Tautulli (profile watch stats)</td><td><%= yes(K.tautulli) %> <small class="muted">TAUTULLI_URL, TAUTULLI_API_KEY</small></td><td><%= yes(K.tautulli) %> <small class="muted">on with its keys</small></td><td data-ck="tautulli">…</td></tr>
       </tbody></table></div>
+  </section>
+
+  <section class="sb-card" id="plexCatalog" aria-labelledby="pcT">
+    <h2 id="pcT"><%= t('adm.media.catalog.title') %></h2>
+    <p class="muted"><%= t('adm.media.catalog.help') %></p>
+    <div class="row">
+      <button type="button" class="btn primary" id="pcSync"><%= t('adm.media.catalog.sync') %></button>
+      <button type="button" class="btn" id="pcDry"><%= t('adm.media.catalog.dry') %></button>
+      <button type="button" class="btn" id="pcRefresh"><%= t('adm.media.catalog.refresh') %></button>
+      <span class="msg" id="pcMsg" role="status"></span>
+    </div>
+    <div id="pcOut" aria-live="polite"><p class="muted"><%= t('adm.media.catalog.loading') %></p></div>
   </section>
 
   <% if (libraryOk) { %>
@@ -70,6 +83,15 @@
       <label class="chk"><input type="checkbox" name="library_break" <%= S.library_break !== false ? 'checked' : '' %>> 📼 Station break: "Coming up next" on the stage for a moment before each title starts (a fresh play, Play this instead, the next title of a queue, ⏭ / ⏮, a booked start) - off = titles start at once everywhere</label>
       <label>Station break length where a pad doesn't set its own <select name="library_break_sec"><% [0, 5, 8, 15].forEach((n) => { %><option value="<%= n %>" <%= Number(S.library_break_sec) === n ? 'selected' : '' %>><%= n ? n + ' seconds' : 'Off' %></option><% }) %></select></label>
       <p class="muted" style="grid-column: 1 / -1; margin: 0">A Plex member = a PATV account linked to a Plex account that's on our server with active access (📼 Plex members below), or the list above. Paid plays: the price is held when they press Play, routed once it's on the stage (flow library_play: 50% Fort Knox / 50% the pad's room vault; 100% Fort Knox on their own pad), refunded if it never gets there. Admins (above) play free. Queues: one play towards the daily caps however many titles; non-members are charged as it plays, per started hour of what's actually been played (each title's hours are taken when it starts, held until it's on, refunded if it never starts); out of PAT = the queue ends after the current title.</p>
+
+      <h3><%= t('adm.media.catalog.title') %></h3>
+      <label><%= t('adm.media.catalog.enabled') %>
+        <select name="clerk_enabled"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>" <%= (S.clerk_enabled || 'off') === v ? 'selected' : '' %>><%= t('adm.media.catalog.mode_' + v) %></option><% }) %></select>
+      </label>
+      <label><%= t('adm.media.catalog.sync_minutes') %> <input type="number" name="catalog_sync_min" min="10" max="1440" value="<%= S.catalog_sync_min || 60 %>"></label>
+      <label><%= t('adm.media.catalog.blocked') %> <input type="text" name="clerk_block_ratings" maxlength="400" value="<%= S.clerk_block_ratings == null ? 'X,XXX,AO,R18,R18+' : S.clerk_block_ratings %>"></label>
+      <label><%= t('adm.media.catalog.warned') %> <input type="text" name="clerk_warn_ratings" maxlength="400" value="<%= S.clerk_warn_ratings == null ? 'NR,Not Rated,Unrated' : S.clerk_warn_ratings %>"></label>
+      <p class="muted" style="grid-column:1/-1"><%= t('adm.media.catalog.warning_help') %></p>
 
       <h3>📼 Plex members</h3>
       <label>Re-read the server's shares every (minutes) <input type="number" name="plex_sync_min" min="10" max="1440" value="<%= S.plex_sync_min %>"></label>
@@ -135,5 +157,5 @@
     <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
   </section>
 </main>
-<script src="/public/js/media-admin.js?v=3" defer></script>
+<script src="/public/js/media-admin.js?v=4" defer></script>
 <%- include('partials/admin-close') %>
