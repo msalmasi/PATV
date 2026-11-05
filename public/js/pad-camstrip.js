@@ -22,16 +22,18 @@
 //   - remembered cams come back only after the page has finished loading (window load, or DOMContentLoaded + SETTLE_MS) - never
 //     while it is still being read - and without scrolling the page to the strip;
 //   - a remembered cam that ends (left cam, Pepe couldn't open it, the relay never came up...) is forgotten: it stays on the page
-//     as an "off" tile with ↻ Retry but the next load doesn't start it again (a full strip, live cams off here and a network blip
-//     keep it remembered);
+//     as an "off" tile with ↻ Retry but the next load doesn't start it again (REMEMBER_ON: a full strip, live cams off here, a
+//     refusal for capacity / Pepe away / signed out, a network blip keep it remembered - those are refused at once, nothing connects);
 //   - the memory is per ACCOUNT (opts.viewer, the partial's signed-in viewer): another account signed in on this browser never
 //     gets the first one's cams; the old per-browser key (patv.camstrip.<slug>) is dropped the first time a viewer's page loads.
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, KEEP = 8, SETTLE_MS = 4000;
-  // (pubswitch) why a tile ended that keeps it remembered - anything else forgets it
-  var REMEMBER_ON = { viewer_cap: 1, off: 1, net: 1 };
+  // (pubswitch) why a tile ended that keeps it remembered: not about this cam - no slot of yours, live cams off here, the site's or
+  // Pepe's capacity for a moment, a network blip, signed out (those are refused at once, nothing connects). Anything else - they left
+  // cam / opted out / ended it, the relay never came up or died, this browser can't play it - forgets it.
+  var REMEMBER_ON = { viewer_cap: 1, off: 1, room_off: 1, switched_off: 1, slots_busy: 1, budget: 1, nopepe: 1, list_unread: 1, rate: 1, signin: 1, net: 1 };
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (rewatch)
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function post(url, body, keep) {

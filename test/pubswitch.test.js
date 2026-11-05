@@ -200,7 +200,7 @@ function sandbox({ store = {}, readyState, live = "never" } = {}) {
                 fetch: (u, o) => {
                   posts.push([u, o && o.body != null ? JSON.parse(o.body) : null]);
                   // a ticket, then Pepe never gets the cam up (prod 22:40Z: [livecam] end ... why=start_timeout): the beat says ended
-                  const d = /\/livecam$/.test(u) ? (live === "refused" ? { ok: false, code: "start_timeout" } : { ok: true, whep: "/whep/x" })
+                  const d = /\/livecam$/.test(u) ? (live === "refused" ? { ok: false, code: "start_timeout" } : /^code:/.test(live) ? { ok: false, code: live.slice(5) } : { ok: true, whep: "/whep/x" })
                           : /\/beat$/.test(u) ? { ok: true, state: "ended", why: "start_timeout" } : { ok: true };
                   return Promise.resolve({ json: () => Promise.resolve(d) });
                 },
@@ -295,6 +295,21 @@ test("strip: a remembered cam that ends is forgotten - the next load doesn't sta
   assert.deepEqual(asks(F.posts), [{ login: "alice" }]);
   assert.equal(f.count(), 2);
   assert.deepEqual(JSON.parse(F.store[key]).map((x) => x.login), ["alice", "bob"], "a full strip keeps its remembered cams");
+  // refused at once for a reason that isn't the cam (capacity for a moment, Pepe away, signed out): nothing connected - kept
+  for (const code of ["slots_busy", "budget", "nopepe", "signin", "room_off"]) {
+    const T = sandbox({ live: "code:" + code, store: { [key]: PIN("alice") } });
+    T.ctx.PATVCamStrip.init(T.mk("section"), "pad", { viewer: "pb" }).update(INFO);
+    for (let i = 0; i < 3; i++) await flush();
+    assert.deepEqual(asks(T.posts), [{ login: "alice" }], code);
+    assert.deepEqual(JSON.parse(T.store[key]).map((x) => x.login), ["alice"], code + ": still remembered");
+  }
+  // the cam itself can't be watched: forgotten
+  for (const code of ["not_on_cam", "opted_out", "unavailable", "ended_by", "relay_lost", "pad_access"]) {
+    const T = sandbox({ live: "code:" + code, store: { [key]: PIN("alice") } });
+    T.ctx.PATVCamStrip.init(T.mk("section"), "pad", { viewer: "pb" }).update(INFO);
+    for (let i = 0; i < 3; i++) await flush();
+    assert.deepEqual(JSON.parse(T.store[key]), [], code + ": forgotten");
+  }
 });
 
 test("strip: the memory is per account - another account on this browser gets nothing; the old per-browser key is dropped", async () => {
