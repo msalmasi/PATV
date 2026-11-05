@@ -17,7 +17,8 @@ const path = require("path");
 const vm = require("vm");
 
 const repo = path.resolve(__dirname, "..");
-const read = (...p) => fs.readFileSync(path.join(repo, ...p), "utf8");
+// (dock3 1.99??: CRLF -> LF like the other dock tests - a Windows checkout (core.autocrlf) has CRLF files, the multi-line matches below are LF)
+const read = (...p) => fs.readFileSync(path.join(repo, ...p), "utf8").replace(/\r\n/g, "\n");
 
 function mk() {
   const e = { children: [], attrs: {}, style: {}, listeners: {}, className: "", classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
@@ -184,5 +185,5 @@ test("M1 (the homepage): a phone on its side - home-dock.css clamps the stage to
   const none = css.indexOf("main.rm.rm-dock.rmd-home #rmStage { max-block-size: none; }");
   const clamp = css.indexOf("@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {\n  main.rm.rm-dock.rmd-home #rmStage { max-block-size: calc(100svh - var(--ds-sp-2) - var(--ds-sp-2)); }");
   assert.ok(none > 0 && clamp > none, "the clamp comes after (same specificity: the later one wins)");
-  assert.match(read("views", "home.ejs"), /home-dock\.css\?v=5"/);
+  assert.match(read("views", "home.ejs"), /home-dock\.css\?v=6"/);   // (dock3 1.99??: v6 - homegap 1.99ake took v5 first)
 });
