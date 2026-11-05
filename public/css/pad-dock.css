@@ -1308,3 +1308,45 @@ main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter:not(.rb-lvl) > i:nth-child(3) { he
 main.rm.rm-dock .rmd-px-row { margin: var(--ds-sp-2) 0; }
 main.rm.rm-dock .rmd-px-row > .rmd-px-play { inline-size: 100%; justify-content: center; }
 @media (pointer: coarse) { main.rm.rm-dock .rmd-px-row > .rmd-px-play { min-block-size: 44px; } }
+
+/* ── dock3 (owner 2026-11-05 item 4: fullscreen on phones; "our controls block the native player controls") 1.99??: the stage goes fullscreen
+   IN PLACE (pad-dock.js fullStage - nothing moves, so an embed's iframe never reloads): element fullscreen on #rmStage itself, or on an
+   iPhone the full-window mode (rmd-fakefull: the same card fixed over the page). 💬 Show chat is the stage bar's own button then, and the
+   chat floats inside the stage between its top chip and its bottom bar - never over a native control. ── */
+main.rm.rm-dock #rmStage.rmd-full:fullscreen { inline-size: 100%; block-size: 100%; max-block-size: none; min-block-size: 0; aspect-ratio: auto; margin: 0; border: 0; border-radius: 0; }
+main.rm.rm-dock #rmStage.rmd-full::backdrop { background: var(--ds-media-bg); }
+main.rm.rm-dock #rmStage.rmd-full.rmd-fakefull { position: fixed; inset: 0; z-index: var(--ds-z-modal); inline-size: auto; block-size: 100dvh; max-block-size: none; min-block-size: 0;
+  aspect-ratio: auto; margin: 0; border: 0; border-radius: 0; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  overscroll-behavior: contain; }
+/* (a fullscreen host - a pinned cam, the cam on my stage - in the full-window mode too) */
+main.rm.rm-dock .rmd-fullscreen.rmd-fakefull { position: fixed; inset: 0; z-index: var(--ds-z-modal); inline-size: auto; block-size: 100dvh; overscroll-behavior: contain;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+/* the ancestors that would trap a fixed box (containment, transforms, filters) step aside while the full-window mode lasts; the page behind is locked */
+main.rm.rm-dock[data-rmd-unc], main.rm.rm-dock [data-rmd-unc] { container-type: normal !important; contain: none !important; transform: none !important; filter: none !important;
+  backdrop-filter: none !important; perspective: none !important; will-change: auto !important; }
+body.rmd-fakefull-on { overflow: hidden; overscroll-behavior: none; }
+main.rm.rm-dock #rmStage.rmd-full > .rmd-overlay { inset-block-end: calc(var(--ds-sp-2) + 52px); }
+@media (min-width: 761px) { main.rm.rm-dock #rmStage.rmd-full > .rmd-overlay { inset-block-start: calc(var(--ds-sp-2) + 44px); } }
+/* an embed keeps every control of its own: with the chat shown the chat never floats over the iframe - it takes its own part of the stage
+   (under the picture and its bar on a portrait screen, beside them on a wide one) */
+main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on { grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr) var(--rmd-pin-row); }
+main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on > .rmd-overlay { position: static; grid-area: 3 / 1; inline-size: auto; min-block-size: 0; }
+main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on > #rmStrip { grid-area: 4 / 1; }
+@media (orientation: landscape) {
+  main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on { grid-template-columns: minmax(0, 1fr) min(400px, 40%); grid-template-rows: minmax(0, 1fr) auto var(--rmd-pin-row); }
+  main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on > .rmd-overlay { grid-area: 1 / 2 / -1 / 3; }
+  main.rm.rm-dock #rmStage.rmd-full.rmd-embed.rmd-chat-on > #rmStrip { grid-area: 3 / 1; }
+}
+main.rm.rm-dock #rmStage:not(.rmd-full) .rmd-ov-bot > .rmd-full-chat { display: none; }
+main.rm.rm-dock .rmd-ov-bot > .rmd-full-chat[data-rmd-on="true"] { background: var(--ds-media-chip); }
+/* (item 4) a phone on its side, not fullscreen: the stage was squeezed to ~107px (only the width was checked - the chat's floor won) and an
+   embed's iframe to 38-55px under its bar row, too small for its own controls. The Live panel now flows: the stage is the screen's height
+   (the picture + its bar row), the chat a screen high under it - the page scrolls between them. */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  body.pad-dock-live { block-size: auto; min-block-size: 0; }
+  body.pad-dock-live > main.rm.rm-dock { flex: none; }
+  body.pad-dock-live main.rm.rm-dock #padPanel-live { flex: none; container-type: inline-size; }
+  body.pad-dock-live main.rm.rm-dock #rmStage { block-size: calc(100dvh - var(--ds-sp-2) - var(--ds-sp-2)); max-block-size: none; min-block-size: 0; }
+  body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body { flex: none; block-size: calc(100dvh - var(--ds-sp-2) - var(--ds-sp-2)); }
+  main.rm.rm-dock.rmd-home #rmStage { max-block-size: calc(100svh - var(--ds-sp-2) - var(--ds-sp-2)); }
+}

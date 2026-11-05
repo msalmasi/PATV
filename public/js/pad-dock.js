@@ -230,6 +230,7 @@
     }
     function stageFull() { return !!(current && current.kind === 'full' && stage && current.host.contains(stage)); }
     function paintFull() {
+      paintChatToggle();
       if (!fullBtn) return;
       var label = stageFull() ? t('exit_fullscreen', 'Exit fullscreen') : t('fullscreen', 'Fullscreen');
       fullBtn.querySelector('.rmd-label').textContent = label; fullBtn.title = label; fullBtn.setAttribute('aria-label', label);
@@ -344,9 +345,10 @@
     function external(fn) {
       if (inPip()) { W.focus(); toast(t('in_pad', 'Use this control in the pad tab.')); return; }
       closeLayer(false);
-      if (D.fullscreenElement && D.exitFullscreen) {
-        Promise.resolve(D.exitFullscreen()).then(function () { redock(); fn(); }).catch(function () { toast(t('exit_first', 'Leave fullscreen to use this control.')); });
-      } else fn();
+      if (fsEl()) {
+        Promise.resolve(exitFs()).then(function () { redock(); fn(); }).catch(function () { toast(t('exit_first', 'Leave fullscreen to use this control.')); });
+      } else if (fakeOn()) { redock(); setTimeout(fn, 0); }    // (dock3: async like the real one - a nested click() on the element being clicked is ignored)
+      else fn();
     }
     // Existing menus/prompts belong to the opener. Route the original gesture there before they open.
     var externalSelector = '.la-btn,.pm-mg,.pm-btn,.ic button.cam,.mc-btn,.cc-btn,.pc-btn,.sc-btn,.stx,.mf-rv,.mf-off,[data-rv],[data-rvm],.rv,.rvm,[data-reveal],.veil-reveal,.reveal-btn,#rmMoreBtn,#rmSearchBtn,#rmHistJump,#rmCap button,#rmClip button,.sbd-rep,[data-pad-gift],[data-share-path]';
@@ -357,7 +359,7 @@
       if (pip && e.currentTarget === pip.document) {
         e.preventDefault(); e.stopImmediatePropagation(); W.focus(); toast(t('in_pad', 'Use this control in the pad tab.')); return;
       }
-      if (!D.fullscreenElement) return;
+      if (!fsEl() && !fakeOn()) return;
       e.preventDefault(); e.stopImmediatePropagation();
       external(function () { b.__rmdReplay = true; b.click(); b.__rmdReplay = false; });
     }
@@ -382,6 +384,8 @@
           var items = focusable(layer.box), at = items.indexOf(doc.activeElement); e.preventDefault();
           if (items.length) items[e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (at + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length].focus();
         }
+      } else if (e.key === 'Escape' && fakeOn()) {
+        e.preventDefault(); redock();                     // (dock3: the full-window mode - Escape leaves it, as it leaves real fullscreen)
       } else if (e.key === 'Escape' && current && current.kind === 'float' && current.host.contains(doc.activeElement)) {
         // (1.99ajh dockpop: only from inside the float - an Escape anywhere else on Feed / About never pulls the chat back)
         e.preventDefault(); floatBack();
@@ -418,9 +422,16 @@
       if (!current) return;
       var old = current; current = null;
       if (old.cleanup) old.cleanup();
-      if (old.kind === 'full' && D.fullscreenElement && D.exitFullscreen) { try { Promise.resolve(D.exitFullscreen()).catch(function () {}); } catch (e) {} }
+      if (old.kind === 'full') {
+        if (fsEl()) exitFs();
+        if (old.fake) unfake(old);
+        if (old.locked) { try { W.screen.orientation.unlock(); } catch (e) { /* not locked */ } }
+      }
       (old.moves || []).slice().reverse().forEach(restore);
-      if (old.host) old.host.remove();
+      // (dock3: the stage fullscreen IN PLACE keeps its card - only its chat layer goes)
+      // (its notices too: a toast stack made while it was fullscreen went with the host before)
+      if (old.inPlace) { stage.classList.remove('rmd-full', 'rmd-chat-on'); if (old.overlay) old.overlay.remove(); each(Array.prototype.slice.call(stage.children), function (c) { if (c.classList && c.classList.contains('ds-toasts')) c.remove(); }); }
+      else if (old.host) old.host.remove();
       if (pip) {
         var win = pip; pip = null;
         listeners = listeners.filter(function (x) { if (x[0] !== win.document) return true; x[0].removeEventListener(x[1], x[2], x[3]); return false; });
@@ -512,48 +523,136 @@
       current.setMin = setMin;
       if (floatMin) setMin(true); else changed();
     }
+    // ── dock3 (owner 2026-11-05 item 4: "I can't full screen a stage chrome mobile from our overlay button. And our controls block the native
+    // player controls where the native full screen button is so I can't use that.") 1.99??: 🖥️ works on every phone, for every stage kind ──
+    // * the STAGE goes fullscreen IN PLACE - nothing moves (moving it into a fullscreen host reloaded an embed's iframe: the YouTube video
+    //   restarted on the way in and again on the way out): element fullscreen on #rmStage itself where the browser has it (Android, iPad,
+    //   desktop; the webkit-prefixed calls of older iPads too); a refusal falls back to the full-window mode below, never a dead button
+    // * an iPhone (no element fullscreen in any iOS browser): a playing video stage hands its <video> to iOS's own player inside the tap
+    //   (webkitEnterFullscreen - native controls, its own ⛶); every other kind - an embed, the mic stage and covers, a cam slot - or a video
+    //   iOS refuses (not loaded yet) gets the FULL-WINDOW mode: the same stage fixed over the page (rmd-fakefull), the ancestors that would
+    //   trap a fixed box stepped aside (data-rmd-unc), the page locked; 🖥️ Exit fullscreen, Escape and the browser's back (iOS's edge swipe:
+    //   a history entry of ours) leave it
+    // * 💬 Show chat is a button of the stage's own bar while it is fullscreen (the old 64px top bar never faded - it covered YouTube's own
+    //   top bar and a phone's landscape picture); the chat floats inside the stage
+    // * Android: a wide picture turns the screen to landscape while fullscreen (screen.orientation.lock; refused quietly where it can't)
+    // * a pinned cam / the cam on my stage: its tile in the fullscreen host, as before (a WebRTC <video> survives the move); full-window on
+    //   an iPhone
+    var fakePop = 0, chatBtn = null;
+    function fsEl() { return D.fullscreenElement || D.webkitFullscreenElement || null; }
+    function fsApi() {
+      var h = D.documentElement;
+      return !!(h && (typeof h.requestFullscreen === 'function' || typeof h.webkitRequestFullscreen === 'function') && D.fullscreenEnabled !== false && D.webkitFullscreenEnabled !== false);
+    }
+    function reqFs(n) {
+      var f = typeof n.requestFullscreen === 'function' ? n.requestFullscreen : n.webkitRequestFullscreen;
+      var r = f.call(n, { navigationUI: 'hide' });
+      return r && typeof r.then === 'function' ? r : Promise.resolve();
+    }
+    function exitFs() {
+      try { var f = D.exitFullscreen || D.webkitExitFullscreen; if (f && fsEl()) { var r = f.call(D); if (r && r.catch) r.catch(function () {}); return r; } } catch (e) { /* gone */ }
+      return null;
+    }
+    function fakeOn() { return !!(current && current.kind === 'full' && current.fake); }
     function full(n) {
-      // (1.99ajy dockmedia verify: iPhone Safari has no element fullscreen - the stage's player goes fullscreen itself, as video.js's own ⛶ did
-      // (video.js -> the <video>'s webkitEnterFullscreen; the ⚡ <video> directly); anything else says it can't, as before)
-      if (n && n === stage && !(D.documentElement && D.documentElement.requestFullscreen) && nativeFull()) return;
-      redock(); if (!n) return;
+      if (!n) { redock(); return; }
+      if (n === stage) { fullStage(); return; }
+      redock();
       var host = el('section', 'rmd-fullscreen'); root.appendChild(host);
       var head = viewbar(host), media = el('div', 'rmd-full-media' + (n.classList.contains('cs-tile') ? ' cam-strip' : ''));
-      if (n === stage) { var bk = head.querySelector('[data-rmd-back]'); if (bk) bk.hidden = true; }    // (the overlay's 🖥️ Exit fullscreen is the way out)
       var overlay = el('div', 'rmd-overlay'); overlay.hidden = true;
       host.appendChild(media); host.appendChild(overlay);
-      current = { kind: 'full', host: host, moves: [], focus: D.activeElement };
+      current = { kind: 'full', host: host, overlay: overlay, moves: [], focus: D.activeElement };
       current.moves.push(movable(n, media, t('media_away', 'The player is in another view.')));
-      // (1.99ajy dockmedia verify: the toggle's NAME follows its words - "Hide chat" read as "Show chat, pressed" was a label-in-name miss; the
-      // state rides on data-rmd-on, the words say it)
-      var toggle = button('💬', 'show_chat', 'Show chat', function () {
-        if (overlay.hidden) {
-          overlay.hidden = false;
-          current.chatMove = movable(chat, overlay, t('chat_overlay', 'Chat is over the player.'));
-          current.moves.push(current.chatMove); toggle.setAttribute('data-rmd-on', 'true');
-        } else {
-          restore(current.chatMove); current.moves.splice(current.moves.indexOf(current.chatMove), 1); current.chatMove = null;
-          overlay.hidden = true; toggle.setAttribute('data-rmd-on', 'false');
-        }
-        var tl = overlay.hidden ? t('show_chat', 'Show chat') : t('hide_chat', 'Hide chat');
-        toggle.querySelector('.rmd-label').textContent = tl; toggle.setAttribute('aria-label', tl); toggle.title = tl; changed();
-      });
-      toggle.setAttribute('data-rmd-on', 'false'); toggle.setAttribute('data-rmd-showchat', '');
+      var toggle = button('💬', 'show_chat', 'Show chat', function () { toggleChat(); }); toggle.setAttribute('data-rmd-showchat', '');
       if (popped || !chat) toggle.hidden = true;     // (1.99ajh dockpop: the chat is in its own window - nothing to show here)
-      head.appendChild(toggle); changed();
-      if (!host.requestFullscreen) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); return; }
-      try { Promise.resolve(host.requestFullscreen()).catch(function () { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }); }
-      catch (e) { redock(); toast(t('fullscreen_unavailable', 'Fullscreen is unavailable in this browser.')); }
+      current.chatToggle = toggle; head.appendChild(toggle); changed();
+      enterFs(host);
+    }
+    function fullStage() {
+      var api = fsApi(), s = mediaSrc();
+      if (!api && s && (s.kind === 'vjs' || s.kind === 'rtc') && nativeFull(s)) return;
+      redock();
+      var overlay = el('div', 'rmd-overlay'); overlay.hidden = true; stage.appendChild(overlay);
+      current = { kind: 'full', host: stage, inPlace: true, overlay: overlay, moves: [], focus: D.activeElement };
+      stage.classList.add('rmd-full'); changed();
+      enterFs(stage);
+    }
+    function enterFs(n) {
+      var my = current;
+      if (!fsApi()) { fake(); return; }
+      try { reqFs(n).then(function () { if (current === my) turn(); }, function () { if (current === my && !fsEl()) fake(); }); }
+      catch (e) { if (current === my) fake(); }
+    }
+    /** 💬 Show chat / Hide chat while fullscreen: the chat floats over the picture (inside the fullscreen element) */
+    function toggleChat() {
+      var c = current; if (!c || c.kind !== 'full' || !c.overlay || !chat) return;
+      if (c.overlay.hidden) { c.overlay.hidden = false; c.chatMove = movable(chat, c.overlay, t('chat_overlay', 'Chat is over the player.')); c.moves.push(c.chatMove); }
+      else { restore(c.chatMove); c.moves.splice(c.moves.indexOf(c.chatMove), 1); c.chatMove = null; c.overlay.hidden = true; }
+      if (c.inPlace) stage.classList.toggle('rmd-chat-on', !c.overlay.hidden);   // (an embed gives the chat its own part of the stage - pad-dock.css)
+      changed();
+    }
+    // (1.99ajy dockmedia verify: the toggle's NAME follows its words - "Hide chat" read as "Show chat, pressed" was a label-in-name miss; the
+    // state rides on data-rmd-on, the words say it)
+    function paintChatToggle() {
+      var c = current && current.kind === 'full' ? current : null, on = !!(c && c.overlay && !c.overlay.hidden);
+      [chatBtn, c && c.chatToggle].forEach(function (b) {
+        if (!b) return;
+        var tl = on ? t('hide_chat', 'Hide chat') : t('show_chat', 'Show chat'), l = b.querySelector('.rmd-label');
+        if (l.textContent !== tl) l.textContent = tl;
+        b.setAttribute('aria-label', tl); b.title = tl; b.setAttribute('data-rmd-on', on ? 'true' : 'false');
+      });
+      if (chatBtn) chatBtn.hidden = !stageFull() || popped || !chat;
+    }
+    // the full-window mode (no element fullscreen, or the browser refused it)
+    function traps(a) {
+      var cs = null; try { cs = W.getComputedStyle(a); } catch (e) { cs = null; }
+      if (!cs) return false;
+      var no = function (v) { return !v || v === 'none' || v === 'normal' || v === 'auto'; };
+      return !no(cs.containerType) || /layout|paint|strict|content|size/.test(cs.contain || '') || !no(cs.transform) || !no(cs.filter) ||
+        !no(cs.backdropFilter || cs.webkitBackdropFilter) || !no(cs.perspective) || /transform|filter|perspective/.test(cs.willChange || '');
+    }
+    function fake() {
+      var my = current; if (!my || my.kind !== 'full' || my.fake) return;
+      my.fake = true; my.host.classList.add('rmd-fakefull'); D.body.classList.add('rmd-fakefull-on');
+      my.unc = [];
+      for (var a = my.host.parentNode; a && a.nodeType === 1 && a !== D.body && a !== D.documentElement; a = a.parentNode) if (traps(a)) { a.setAttribute('data-rmd-unc', ''); my.unc.push(a); }
+      try {
+        if (W.history && W.history.pushState) {
+          var st = {}, s0 = W.history.state; if (s0 && typeof s0 === 'object') for (var k in s0) if (Object.prototype.hasOwnProperty.call(s0, k)) st[k] = s0[k];
+          st.rmdFull = 1; W.history.pushState(st, ''); my.pushed = true;
+        }
+      } catch (e) { /* sandboxed: Escape / 🖥️ Exit fullscreen still leave it */ }
+      changed();
+    }
+    function unfake(old) {
+      old.host.classList.remove('rmd-fakefull'); D.body.classList.remove('rmd-fakefull-on');
+      (old.unc || []).forEach(function (a) { a.removeAttribute('data-rmd-unc'); });
+      if (old.pushed && !old.popped) { try { if (W.history.state && W.history.state.rmdFull) { fakePop++; W.history.back(); } } catch (e) { fakePop = 0; } }
+    }
+    // (Android: a wide picture fills a portrait-locked phone the right way round while fullscreen)
+    function turn() {
+      var so = W.screen && W.screen.orientation, coarse = false;
+      try { coarse = !!(W.matchMedia && W.matchMedia('(pointer: coarse)').matches); } catch (e) { coarse = false; }
+      if (!so || typeof so.lock !== 'function' || !coarse || !current) return;
+      var s = mediaSrc(), v = s && (s.kind === 'rtc' ? s.v : s.kind === 'vjs' && s.p.el && s.p.el() ? s.p.el().querySelector('video') : null);
+      if (!(s && s.kind === 'embed') && !(v && v.videoWidth > v.videoHeight)) return;
+      try { var r = so.lock('landscape'); current.locked = true; if (r && r.catch) r.catch(function () {}); } catch (e) { /* not here */ }
     }
     function stageMedia() { return localCam ? localCam.host : stage; }
-    function nativeFull() {
-      var s = mediaSrc(); if (!s || (s.kind !== 'vjs' && s.kind !== 'rtc')) return false;
-      try {
-        if (s.kind === 'vjs' && typeof s.p.requestFullscreen === 'function') { var r = s.p.requestFullscreen(); if (r && r.catch) r.catch(function () {}); return true; }
-        var v = s.kind === 'rtc' ? s.v : s.p.el && s.p.el() && s.p.el().querySelector('video');
-        if (v && typeof v.webkitEnterFullscreen === 'function') { v.webkitEnterFullscreen(); return true; }
-      } catch (e) { /* the player's */ }
-      return false;
+    /** iPhone: iOS's own fullscreen player for the stage's <video> - inside the tap; false = it can't (not loaded yet, no API) */
+    function nativeFull(s) {
+      var v = s.kind === 'rtc' ? s.v : (s.p.el && s.p.el() && s.p.el().querySelector('video'));
+      if (!v || typeof v.webkitEnterFullscreen !== 'function' || v.webkitSupportsFullscreen === false || !(v.readyState >= 1)) return false;
+      try { v.webkitEnterFullscreen(); } catch (e) { return false; }
+      // (a refusal that doesn't throw: nothing began within a moment - the full-window mode instead; it needs no tap)
+      var began = false, onBegin = function () { began = true; };
+      v.addEventListener('webkitbeginfullscreen', onBegin);
+      setTimeout(function () {
+        v.removeEventListener('webkitbeginfullscreen', onBegin);
+        if (!began && !v.webkitDisplayingFullscreen && !dead && !current) { var o2 = el('div', 'rmd-overlay'); o2.hidden = true; stage.appendChild(o2); current = { kind: 'full', host: stage, inPlace: true, overlay: o2, moves: [], focus: D.activeElement }; stage.classList.add('rmd-full'); fake(); }
+      }, 1200);
+      return true;
     }
     // 1.99ajh dockpop: 🖼️ Picture-in-picture is the STAGE's only (Document PiP where the browser has it, else the video's own PiP for the
     // pad's stream or Pepe's - never the 🎙 mic stage). The chat's Document PiP is gone: it closed with its opener, so it couldn't follow
@@ -1969,16 +2068,22 @@
     // The overlay shows (rmd-controls-on: opacity) and takes taps (rmd-ov-armed: only its own buttons, never the whole bar - the mic
     // stage's tile controls under the bars stay usable). 1.99ajf dockclean review: a touch that wakes a hidden overlay arms it a moment
     // LATER, so the tap that revealed the pad chip / ⋯ / 🖥️ under the finger doesn't also press it.
-    var armTimer = null;
-    function offTools() { clearTimeout(armTimer); stage.classList.remove('rmd-controls-on', 'rmd-ov-armed'); }
+    // dock3 1.99?? (item 4): on touch the bar stays TOUCH_HIDE_MS (a 2.5 s bar was gone before a phone viewer found 🖥️), and it keeps taking
+    // taps until its fade has run (FADE_MS - pad-dock.css --ds-dur-2): a tap on a still-visible 🖥️ never just wakes the bar again
+    var armTimer = null, disarmTimer = null, TOUCH_HIDE_MS = 4500, FADE_MS = 250;
+    function hideMs() { return lastPtr === 'touch' ? TOUCH_HIDE_MS : HIDE_MS; }
+    function offTools() {
+      clearTimeout(armTimer); stage.classList.remove('rmd-controls-on');
+      clearTimeout(disarmTimer); disarmTimer = setTimeout(function () { if (!stage.classList.contains('rmd-controls-on')) stage.classList.remove('rmd-ov-armed'); }, FADE_MS);
+    }
     function showTools(armLater) {
       if (!stage) return;
       var was = stage.classList.contains('rmd-controls-on');
-      stage.classList.add('rmd-controls-on'); clearTimeout(autoTimer);
+      stage.classList.add('rmd-controls-on'); clearTimeout(autoTimer); clearTimeout(disarmTimer);
       if (armLater === true && !was) { clearTimeout(armTimer); armTimer = setTimeout(function () { if (stage.classList.contains('rmd-controls-on')) stage.classList.add('rmd-ov-armed'); }, 450); }
       else if (armLater !== true) { clearTimeout(armTimer); stage.classList.add('rmd-ov-armed'); }
       paintCapture();
-      autoTimer = setTimeout(function hide() { if (overlayHot()) { autoTimer = setTimeout(hide, HIDE_MS); return; } offTools(); }, HIDE_MS);
+      autoTimer = setTimeout(function hide() { if (overlayHot()) { autoTimer = setTimeout(hide, hideMs()); return; } offTools(); }, hideMs());
     }
     function hideTools() { clearTimeout(autoTimer); if (!overlayHot()) offTools(); }
 
@@ -2125,9 +2230,11 @@
       clipBtn.setAttribute('aria-haspopup', 'menu'); clipBtn.setAttribute('aria-expanded', 'false');
       // (1.99ajf dockclean review: 🖥️ is a toggle - inside fullscreen it is "Exit fullscreen", the one way out; the viewbar's ↩ is hidden there)
       fullBtn = iconBtn(IC.full, 'fullscreen', 'Fullscreen', function () { if (stageFull()) redock(); else full(stageMedia()); });
+      // (dock3 item 4: 💬 Show chat lives in the stage's own bar while the stage is fullscreen - it fades with the bar; hidden otherwise)
+      chatBtn = iconBtn('💬', 'show_chat', 'Show chat', function () { toggleChat(); }, 'ds-btn quiet sm rmd-full-chat'); chatBtn.setAttribute('data-rmd-showchat', ''); chatBtn.hidden = true;
       var more = iconBtn(IC.more, 'stage_menu', 'Stage options', function (b) { if (layer && layer.opener === b) { closeLayer(); return; } stageMenu(b); });
       more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.classList.add('rmd-stage-more'); stageMoreBtn = more;
-      [snapBtn, clipBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
+      [snapBtn, clipBtn, chatBtn, fullBtn, more].forEach(function (b) { ovBot.appendChild(b); });
       // the homepage's slim off-air bar: [pad chip ›] Nothing on stage right now · Next up … (+ ⋯ for staff). (1.99ajh dockpop review: no
       // 🎥 Go live of its own - the Your show card and the navbar already have the same link; on air it is the stage ⋯'s Go live here)
       if (mode === 'preview' && pv.staff) root.classList.add('rmd-staff');
@@ -2145,8 +2252,10 @@
         mini.appendChild(showStageBtn);
         stage.parentNode.insertBefore(mini, stage);
       }
-      on(stage, 'pointermove', function (e) { if (e.pointerType !== 'touch') showTools(); });
+      var inChat = function (e) { return !!(e.target && e.target.closest && e.target.closest('.rmd-overlay')); };   // (dock3: the chat over a fullscreen stage)
+      on(stage, 'pointermove', function (e) { if (e.pointerType !== 'touch' && !inChat(e)) showTools(); });
       on(stage, 'pointerdown', function (e) {
+        if (inChat(e)) return;
         if (e.pointerType === 'touch') {
           var ctl = e.target.closest && e.target.closest('.rmd-ov-top,.rmd-ov-bot,.rmd-strip,button,a,input,select');
           if (!ctl && stage.classList.contains('rmd-controls-on')) { hideTools(); return; }
@@ -2155,8 +2264,8 @@
         }
         showTools();
       });
-      on(stage, 'pointerleave', function () { clearTimeout(autoTimer); autoTimer = setTimeout(function () { if (!overlayHot()) offTools(); }, HIDE_MS); });
-      on(stage, 'focusin', function () { showTools(); });
+      on(stage, 'pointerleave', function () { clearTimeout(autoTimer); autoTimer = setTimeout(function () { if (!overlayHot()) offTools(); }, hideMs()); });
+      on(stage, 'focusin', function (e) { if (!inChat(e)) showTools(); });
       on(stage, 'patv:stagechange', function (e) { stageChanged(e.detail); paintSource(); paintCapture(); paintMedia(); });
       // (1.99ajy dockmedia (owner item 2): a player the stage starts later gets its native controls turned off too; the bar follows the source,
       // the embed and the tap-to-unmute layer)
@@ -2166,7 +2275,7 @@
       // (what video.js offered, kept: a mouse double-click on the picture is the Dock's 🖥️; k / m while focus is on the stage - never in a field)
       on(stage, 'pointerdown', function (e) { lastPtr = e.pointerType || ''; }, true);
       on(stage, 'dblclick', function (e) {
-        if (lastPtr !== 'mouse' || (e.target.closest && e.target.closest('button,a,input,select,textarea,.rmd-strip,.rmd-ov-top,.rmd-ov-bot'))) return;
+        if (lastPtr !== 'mouse' || (e.target.closest && e.target.closest('button,a,input,select,textarea,.rmd-strip,.rmd-ov-top,.rmd-ov-bot,.rmd-overlay'))) return;
         var s = mediaSrc(); if (!s || (s.kind !== 'vjs' && s.kind !== 'rtc')) return;
         if (e.preventDefault) e.preventDefault();
         if (stageFull()) redock(); else full(stageMedia());
@@ -2741,7 +2850,12 @@
       // (1.99ajq dockpol fix: the flairs' fit - when the people list, the audio bar or the log change width, and for each new line)
       fitOnResize(node('rmPeople')); fitOnResize(node('rmAudioBox')); fitOnResize(node('rmScroll'));
       [node('rmFeed'), node('rmOlder')].forEach(function (box) { observe(box, function (ms) { ms.forEach(function (m) { each(m.addedNodes, function (x) { if (x.nodeType === 1) fitSoon(x); }); }); }, { childList: true }); });
-      on(D, 'fullscreenchange', function () { if (current && current.kind === 'full' && !D.fullscreenElement) redock(); });
+      // (dock3: + the webkit-prefixed events of older iPads; a refused request falls back to the full-window mode; the browser's back leaves it)
+      var fsGone = function () { if (current && current.kind === 'full' && !fsEl() && !current.fake) redock(); };
+      on(D, 'fullscreenchange', fsGone); on(D, 'webkitfullscreenchange', fsGone);
+      var fsErr = function () { if (current && current.kind === 'full' && !fsEl() && !current.fake) fake(); };
+      on(D, 'fullscreenerror', fsErr); on(D, 'webkitfullscreenerror', fsErr);
+      on(W, 'popstate', function () { if (fakePop) { fakePop--; return; } if (fakeOn()) { current.popped = true; redock(); } });
       if (mode === 'pad') on(D, 'patv:padtab', function (e) { tabChanged(e.detail && e.detail.tab); });
       if (mode === 'pad') {
         // 1.99ajw casino2 (owner point 18): a floating chat follows this tab to the pad's casino table (casino-chat.js) - written when the

@@ -213,7 +213,7 @@ test("item 2: the Dock turns the native controls off (the flag, every new video.
   // the mouse's double-click on the picture is the Dock's 🖥️
   h.stage.dispatchEvent(new Event("pointerdown", { bubbles: true, pointerType: "mouse" }));
   h.doc.getElementById("rmVideo").dispatchEvent(new Event("dblclick", { bubbles: true }));
-  assert.ok(h.doc.querySelector(".rmd-fullscreen"), "fullscreen");
+  assert.ok(h.stage.classList.contains("rmd-full"), "fullscreen (dock3: in place)");
 });
 test("item 2: no media controls for an embed (a solid row instead), the mic stage, a cam slot, off air; the ⚡ <video> gets them; no slider without a fine pointer", () => {
   const { h, log, ref, vj, emb, box } = stageRig();
@@ -420,16 +420,36 @@ test("verify: a paused stage keeps its bar and its ⏯ (rmd-paused); playing aga
   assert.equal(vj.player.st.paused, false);
   assert.match(read("public", "css", "pad-dock.css"), /main\.rm\.rm-dock #rmStage\.rmd-paused \.rmd-ov-bot \.rmd-media-play \{ position: absolute;/, "the round ⏯ in the picture at any width");
 });
-test("verify: iPhone (no element fullscreen) - 🖥️ asks the player for its own fullscreen; elsewhere the Dock's", () => {
-  const { h, log, vj } = stageRig();
-  vj.player.requestFullscreen = () => { log.push("vjs.requestFullscreen"); return Promise.resolve(); };
-  const rf = h.doc.documentElement.requestFullscreen; h.doc.documentElement.requestFullscreen = undefined;
+test("dock3 item 4: iPhone (no element fullscreen) - a loaded video goes to iOS's own player in the tap; one that isn't, and every other kind, the full-window mode in place", async () => {
+  const { h, log, vj, emb } = stageRig();
+  const v = h.make("video", null, null, vj); v.readyState = 4; v.webkitEnterFullscreen = () => log.push("webkitEnterFullscreen");
+  vj.player.el = () => vj;
+  // (no element fullscreen at all, as on an iPhone; the documentElement's comes from the same prototype)
+  const proto = Object.getPrototypeOf(h.stage), rf = proto.requestFullscreen; proto.requestFullscreen = undefined;
   try {
     h.button("Fullscreen", h.stage).click();
-    assert.ok(log.includes("vjs.requestFullscreen"), "video.js's own (the <video>'s webkitEnterFullscreen on iOS)");
-    assert.equal(h.doc.querySelector(".rmd-fullscreen"), null, "no Dock fullscreen host");
-  } finally { h.doc.documentElement.requestFullscreen = rf; }
-  h.button("Fullscreen", h.stage).click(); assert.ok(h.doc.querySelector(".rmd-fullscreen"), "with element fullscreen: the Dock's, as before");
+    assert.ok(log.includes("webkitEnterFullscreen"), "iOS's own player (native controls, its own ⛶)");
+    assert.equal(h.stage.classList.contains("rmd-full"), false, "nothing of ours");
+    // not loaded yet (iOS would refuse): the full-window mode
+    v.readyState = 0; log.length = 0;
+    h.button("Fullscreen", h.stage).click();
+    assert.equal(log.includes("webkitEnterFullscreen"), false);
+    assert.ok(h.stage.classList.contains("rmd-full") && h.stage.classList.contains("rmd-fakefull"), "the stage fixed over the page, in place");
+    assert.ok(h.doc.body.classList.contains("rmd-fakefull-on"), "the page behind is locked");
+    assert.ok(h.stage.closest("#padPanel-live") === h.panel, "nothing moved");
+    assert.equal(h.button("Exit fullscreen", h.stage).getAttribute("aria-label"), "Exit fullscreen");
+    h.doc.dispatchEvent(new Event("keydown", { key: "Escape" }));
+    assert.equal(h.stage.classList.contains("rmd-fakefull"), false, "Escape leaves it"); assert.equal(h.doc.body.classList.contains("rmd-fakefull-on"), false);
+    // an embed: the full-window mode, the iframe never moves (it would reload)
+    emb.classList.remove("hide"); const f = h.make("iframe", null, null, emb); h.mutate(emb);
+    h.button("Fullscreen", h.stage).click();
+    assert.ok(h.stage.classList.contains("rmd-fakefull")); assert.ok(f.parentNode === emb, "the iframe stays where it is");
+    h.button("Exit fullscreen", h.stage).click(); assert.equal(h.stage.classList.contains("rmd-full"), false);
+  } finally { proto.requestFullscreen = rf; }
+  // with element fullscreen: the stage ITSELF, in place (Android, iPad, desktop)
+  h.button("Fullscreen", h.stage).click(); await new Promise((r) => setTimeout(r, 0));
+  assert.ok(h.doc.fullscreenElement === h.stage, "the stage itself"); assert.ok(h.doc.querySelector(".rmd-fullscreen") === null, "no host");
+  assert.equal(h.stage.classList.contains("rmd-fakefull"), false);
 });
 test("verify: the source chip reads 'name · source' (never 'Willow FableYouTube'); a narrow stage's ⋯ carries 📸 / 🎬 when the bar folds them", () => {
   const h = harness({ mo: true, setup: (x) => {
