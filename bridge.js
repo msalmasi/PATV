@@ -2409,7 +2409,7 @@ function register(app, { isBotToken, addUser }) {
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
   app.get("/api/stage", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    let slots = [], front = null, roomId = null, featured = null, stale = false;
+    let slots = [], front = null, roomId = null, featured = null, stale = false, next;
     try {
       const reg = require("./rooms");
       const web = require("./roomsweb");
@@ -2460,6 +2460,9 @@ function register(app, { isBotToken, addUser }) {
           await new Promise((r) => addUser(req, res, r));
           featured = await MS.featuredOf(R.id, req.user || null, { front: home });
         }
+        // newstream 1.99akv: the homepage's "Next up" (the off-air slate, the Dock's off-air bar) - the shown pad's next booking, public facts
+        // only (home.nextSlot), cached per pad; it was drawn once at load
+        if (home) next = await require("./home").nextUpCached(R.id).catch(() => null);
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
@@ -2467,7 +2470,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ajr golive: + the server's clock - the page starts a video slot where the broadcast is (stage-room.js setEmbed)
     let t = Date.now();
     try { t = require("./mainstage").clockNow(); } catch (e) { t = Date.now(); }
-    res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(stale ? { stale: true } : {}) });
+    res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(next !== undefined ? { next } : {}), ...(stale ? { stale: true } : {}) });
   });
 
   // newstream 1.99akv: the pads list's live check (padsonair.js) - /p asks it every 30 s and swaps its sections when it moves

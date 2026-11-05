@@ -49,7 +49,11 @@
         tabs: $('rmTabs'), wrap: $('rmVideo'), reconnect: $('rmStReconnect'), unmute: $('rmStUnmute'), embedHost: $('rmEmbed'), slug: frontSlug,
         onShow: function (sel) { if (dead) return; if (cap) cap.update(frontSlug ? sel : null); try { box.dispatchEvent(new CustomEvent('patv:stagechange', { detail: sel })); } catch (e) { /* old engine */ } },
         // the front pad changed mid-session: the block follows it (frontChanged below)
-        onPoll: function (g) { if (dead || !g || !g.front || !g.front.slug || g.front.slug === frontSlug) return; frontChanged(g.front); },
+        onPoll: function (g) {
+          if (dead || !g) return;
+          if (g.front && g.front.slug && g.front.slug !== frontSlug) { frontChanged(g.front); return; }
+          if (Object.prototype.hasOwnProperty.call(g, 'next')) nextChanged(g.next);   // newstream 1.99akv: the off-air bar's "Next up"
+        },
         // (dock3 review 1.99akf MF2: THIS block's pad by the homepage's rules - home=1 - and `front` = what the front page shows now; polling
         // with no pad applied a new front pad's stage to this block until the swap - its 🎙 mic stage over the featured stream)
         api: frontSlug ? '/api/stage?room=' + encodeURIComponent(frontSlug) + '&home=1' : '/api/stage',
@@ -64,6 +68,20 @@
       var time = '';
       try { time = W.PATVTime && W.PATVTime.format ? W.PATVTime.format(n.at, 'time') : new Date(n.at).toLocaleTimeString(D.documentElement.lang || undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { time = ''; }
       return _t('js.home.dock.next_up', 'Next up: {name} · {time}', { name: n.name + (n.title ? ' — ' + n.title : ''), time: time });
+    }
+    // newstream 1.99akv: the off-air bar's "Next up" was built once (pad-dock.js preview.nextUp) - a booking made since never showed, one that
+    // started and ended stayed. The stage's own 10 s poll carries the pad's next booking (/api/stage ...&home=1 `next`); the bar's second
+    // piece (.rmd-slim-b, after its " · ") follows it - added, rewritten or taken away. Text only.
+    function nextChanged(n) {
+      var nn = n && typeof n === 'object' && Number(n.start_at) > 0 && n.display ? { name: String(n.display).slice(0, 80), title: n.title ? String(n.title).slice(0, 120) : null, at: Number(n.start_at) } : null;
+      var was = I.nextUp || null;
+      if (was === nn || (was && nn && was.name === nn.name && was.title === nn.title && Number(was.at) === nn.at)) return;
+      I.nextUp = nn;
+      var slim = box ? box.querySelector('.rmd-slim-t') : null; if (!slim) return;
+      var b = slim.querySelector('.rmd-slim-b'), sep = slim.querySelector('.rmd-slim-sep'), txt = nextUpText();
+      if (!txt) { if (b) b.parentNode.removeChild(b); if (sep) sep.parentNode.removeChild(sep); return; }
+      if (!b) { sep = el('span', 'rmd-slim-sep', ' · '); sep.setAttribute('aria-hidden', 'true'); slim.appendChild(sep); b = el('span', 'rmd-slim-b'); slim.appendChild(b); }
+      b.textContent = txt;
     }
 
     // ── the chat card ──

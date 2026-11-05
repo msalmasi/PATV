@@ -236,6 +236,22 @@ async function nextSlot(roomId, t = Date.now()) {
   const s = (fut || []).find((x) => x && x.status === "scheduled" && (Number(x.start_at) || 0) >= t - 60 * 1000);
   return s ? { display: s.displayname || s.username || "someone", title: s.title || null, start_at: Number(s.start_at) } : null;
 }
+/**
+ * newstream 1.99akv: nextSlot for the homepage stage's 10 s poll (/api/stage with no pad, or ?room=<pad>&home=1 - bridge.js): the off-air
+ * slate's "Next up" and the Dock's off-air bar were drawn once at load - a booking made since never showed, one that had started (and
+ * ended) stayed. One read per pad per NEXT_TTL for every viewer; never throws (null).
+ */
+const NEXT_TTL = 15000, nextCache = new Map();
+async function nextUpCached(roomId, t = Date.now()) {
+  const k = String(roomId || "");
+  if (!k) return null;
+  const c = nextCache.get(k);
+  if (c && t - c.at < NEXT_TTL) return c.v;
+  const v = await nextSlot(k, t).catch(() => null);
+  nextCache.set(k, { at: t, v });
+  if (nextCache.size > 500) nextCache.delete(nextCache.keys().next().value);
+  return v;
+}
 
 function register(app, { addUser, xpForNextLevel }) {
   app.get("/", addUser, async (req, res) => {
@@ -393,4 +409,4 @@ function register(app, { addUser, xpForNextLevel }) {
   });
 }
 
-module.exports = { register, stats, topPads, nextSlot, nowPlaying, personal };
+module.exports = { register, stats, topPads, nextSlot, nextUpCached, nowPlaying, personal, _nextReset: () => nextCache.clear() };

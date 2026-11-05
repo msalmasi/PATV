@@ -1908,6 +1908,8 @@
   "js.home.on_air": "ON AIR",
   "js.home.off_air": "OFF AIR",
   "js.home.live_now": "live now",
+  "js.home.slate.next_up": "Next up:",
+  "js.home.slate.browse": "Browse Top Pads",
   "js.home.nothing": "nothing streaming right now",
   "js.home.spin.now": "NOW SPINNING",
   "js.home.spin.last": "LAST SPIN",

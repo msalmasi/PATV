@@ -824,12 +824,47 @@
     var frontSlug = <%- JSON.stringify(frontInfo ? frontInfo.slug : '').replace(/</g, '\\u003c') %>;
     if (window.PATVAvSync) window.PATVAvSync.pad(function () { return frontSlug; });
     var stCap = PATVStage.capture({ host: document.getElementById('stCap'), room: function () { return frontSlug; } });
+    // newstream 1.99akv: the header's pad, the slate's pad name and its Go live links were drawn once - after a front-page change the new pad's
+    // stream played under the OLD pad's name; and "Next up" (the slate) never moved: both follow the stage's own poll now (g.front, g.next)
+    function frontNamed(f) {
+      var href = '/p/' + encodeURIComponent(f.slug), go = '/stage?room=' + encodeURIComponent(f.slug);
+      var a = document.querySelector('#stRoom .room-on');
+      if (a) {
+        a.textContent = f.title || f.slug; a.setAttribute('href', href);
+        var bm = document.getElementById('stRoom').nextElementSibling;       // (the old pad's 🚀 badge)
+        if (bm && /\bboost-mark\b/.test(bm.className || '')) bm.parentNode.removeChild(bm);
+      }
+      var pad = document.getElementById('slPad'); if (pad) pad.textContent = f.title || f.slug;
+      document.querySelectorAll('#stSlate .golive-btn, #stageShow .golive-btn').forEach(function (b) { b.setAttribute('href', go); });
+    }
+    function slateNext(n) {
+      var acts = document.querySelector('#stSlate .sl-acts'); if (!acts) return;
+      var box = document.getElementById('slNext'), br = document.getElementById('slBrowse');
+      var ok = n && typeof n === 'object' && Number(n.start_at) > 0 && n.display;
+      // (as the server renders it: "Next up" when there is one, else "Browse Top Pads" - one or the other, swapped in place)
+      if (!ok) {
+        if (box) box.parentNode.removeChild(box);
+        if (!br) { br = document.createElement('a'); br.className = 'btn'; br.id = 'slBrowse'; br.href = '/p'; br.textContent = _t('js.home.slate.browse', 'Browse Top Pads'); acts.appendChild(br); }
+        return;
+      }
+      if (br) br.parentNode.removeChild(br);
+      if (!box) { box = document.createElement('span'); box.className = 'sl-next'; box.id = 'slNext'; acts.appendChild(box); }
+      var when = '';
+      try { when = window.PATVTime && PATVTime.format ? PATVTime.format(Number(n.start_at), 'full') : new Date(Number(n.start_at)).toLocaleString(); } catch (e) { when = ''; }
+      box.textContent = _t('js.home.slate.next_up', 'Next up:') + ' ';
+      var b = document.createElement('b'); b.textContent = String(n.display); box.appendChild(b);
+      box.appendChild(document.createTextNode((n.title ? ' · ' + n.title : '') + (when ? ' · ' + when : '')));
+    }
     PATVStage.switcher({
       tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),
       reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute'),
       embedHost: document.getElementById('stEmbed'),
       onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
-      onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
+      onPoll: function (g) {
+        if (!g) return;
+        if (g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); frontNamed(g.front); }
+        if (Object.prototype.hasOwnProperty.call(g, 'next')) slateNext(g.next);      // newstream 1.99akv
+      },
       api: '/api/stage', front: frontSlug, slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf
       posters: <%= typeof me !== 'undefined' && me ? 'true' : 'false' %>,   // upnext: the card's poster (the /api/medialib/poster proxy is for signed-in viewers)
@@ -1188,7 +1223,7 @@
 <script src="/public/js/pad-dock.js?v=12"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11 (the holder fit again on play / pause); plexreplace: v12 (the stage asks at once after a 📼 start) %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
-<script src="/public/js/home-dock.js?v=5"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag %>
+<script src="/public/js/home-dock.js?v=6"></script><%# v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag; v6 (newstream): the off-air bar's Next up follows the stage's poll %>
 <%_ } _%>
 <% if (tpListen_) { %>
 <script>
