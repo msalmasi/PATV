@@ -762,14 +762,26 @@ async function refreshNotice({ now = Date.now(), bot = null, opts = {} } = {}) {
   const pend = await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending'");
   if (!pend.length) return { checked: 0, cleared: 0 };
   const p = await plan(Object.assign({ now, bot, supply: { total: 1, wallets: 1 } }, opts));
-  const tierOf = new Map(p.rows.map((r) => [r.f.userId, r.tier]));
-  let cleared = 0;
+  const rowOf = new Map(p.rows.map((r) => [r.f.userId, r]));
+  let cleared = 0, undecided = 0;
   for (const { userId } of pend) {
-    const t = tierOf.get(userId);
+    const r = rowOf.get(userId);
+    const t = r && r.tier;
     if (t === "archived") continue;
+    if (r && unsureHold(r)) { undecided++; continue; }
     if (!t || !tiers.includes(t)) if (await clearNotice(userId, t ? `activity (now ${t})` : "account gone")) cleared++;
   }
-  return { checked: pend.length, cleared };
+  return { checked: pend.length, cleared, undecided };
+}
+/**
+ * 1.99akz stashhold review: a plan row held only because something couldn't be READ ("stash vaults unreadable" - the vault book,
+ * a transient error) says nothing about the account's activity - the notice refresh leaves such a row pending (it is never
+ * archived while held: the apply re-classifies) instead of clearing its warning for good. -> bool
+ */
+const UNSURE_HOLDS = new Set(["stash vaults unreadable"]);
+function unsureHold(r) {
+  const hs = r && r.f && r.f.holds;                 // gather's facts: a Set (a list from elsewhere works too)
+  return !!hs && typeof hs[Symbol.iterator] === "function" && typeof hs !== "string" && [...hs].some((h) => UNSURE_HOLDS.has(h));
 }
 
 /** Admin card: the dates, and counts by state and tier. */
@@ -810,4 +822,5 @@ const LIVE = (alias) => (columnReady ? `${alias ? alias + "." : ""}archived_at I
 
 module.exports = { DEFAULTS, DEFAULT_TIERS, CF_RANDOM, emailCategory, ms, ensure, gather, holdsFor, tx, classify, plan, supply, botFacts,
   archiveOne, restore, touch, purge, mergeDuplicate, dupSplit, LIVE, PURGE_TABLES,
-  ensureNotice, reloadNotice, startNoticeTimers, noticeMeta, startNotice, clearNotice, pendingLogins, seenLogin, refreshNotice, noticeSummary, noticeMiddleware };
+  ensureNotice, reloadNotice, startNoticeTimers, noticeMeta, startNotice, clearNotice, pendingLogins, seenLogin, refreshNotice, noticeSummary, noticeMiddleware,
+  unsureHold };

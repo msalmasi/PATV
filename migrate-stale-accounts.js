@@ -118,8 +118,11 @@ async function backup(dir) {
       const meta = ((await getQuery("SELECT 1 FROM sqlite_master WHERE name = 'stale_meta'")).length && (await stale.noticeMeta())) || {};
       const sel = meta.tiers || stale.DEFAULT_TIERS;
       const tierOf = new Map(p.rows.map((r) => [r.f.userId, r.tier]));
-      const back = pend.filter((x) => !sel.includes(tierOf.get(x.userId)) && tierOf.get(x.userId) !== "archived");
-      console.log(`DRY RUN notice refresh: ${pend.length} pending, ${back.length} active again (would be cleared)`);
+      // 1.99akz: a row held only because the vault book couldn't be read stays pending (stale.unsureHold - as refreshNotice)
+      const unsure = new Set(p.rows.filter((r) => stale.unsureHold(r)).map((r) => r.f.userId));
+      const back = pend.filter((x) => !sel.includes(tierOf.get(x.userId)) && tierOf.get(x.userId) !== "archived" && !unsure.has(x.userId));
+      const und = pend.filter((x) => unsure.has(x.userId)).length;
+      console.log(`DRY RUN notice refresh: ${pend.length} pending, ${back.length} active again (would be cleared)` + (und ? `, ${und} undecided (vault book unreadable - left pending)` : ""));
       process.exit(0);
     }
     const r = await stale.refreshNotice({ now, bot, opts });

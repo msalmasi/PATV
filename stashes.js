@@ -307,11 +307,14 @@ async function total() {
 //           "none"      neither exists (no vaults on this database)
 //   pending  the stash's stake / unstake requests still in the vault queue (any state but done / failed): PAT "going in" (held
 //            in vaultfloat) or "coming out" (paid to the stash at the cut-off)
-//   error    the book (or, with no book, the snapshot) couldn't be read / parsed -> the callers HOLD (fail closed; core.doc()
-//            would have answered "nothing staked" for a corrupt row, so the row is parsed here, strictly)
+//   error    the book (or, with no inited book, the snapshot) couldn't be read / parsed -> the callers HOLD (fail closed;
+//            core.doc() would have answered "nothing staked" for a corrupt row, so the row is parsed here, strictly)
 // Shares below VAULT_EPS are float dust (none on prod 2026-11-05).
+// 1.99akz review fixes: the book's SHAPE is checked too (its vault map, each vault, each holders map and the queue must be plain
+// objects - a pair list or a string there read as "nothing staked"), every vault the book lists counts (not a fixed list), and
+// with a book that isn't inited the snapshot IS the view of Pepe's positions - an unreadable one is an error there too.
 const VAULT_EPS = 1e-9;
-const VAULT_KEYS = ["bank", "house", "mm", "auto"];
+const plainObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
 const openReq = (q) => !!q && !["done", "failed"].includes(String(q.state || ""));
 async function tableThere(t) {
   return (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
@@ -340,11 +343,33 @@ async function vaultViews() {
       }
     }
   } catch (e) { snapErr = `the staking snapshot can't be read (${e.message})`; }
-  // the book decides when it is readable; the snapshot only stands in for it (an error there counts only without a book)
-  out.error = bookErr || (!out.book && snapErr) || null;
+  // the inited book decides when it is readable; the snapshot stands in for it only while there is no inited book - then it is
+  // the one view of Pepe's positions, and an error there counts (1.99akz review fix: a not-inited book row no longer hides it)
+  out.error = bookErr || ((!out.book || !out.book.inited) && snapErr) || null;
+  if (!out.error && out.book) {
+    try { bookShape(out.book); } catch (e) { out.error = `the vault book can't be read (${e.message})`; }
+  }
   return out;
 }
-/** One stash's shares per vault in a book doc (holder "s<id>"). Throws on a non-number share count. */
+/** 1.99akz: throws unless the book has the shape capital/vaults.js keeps - an inited book's vault map, every vault in it and
+ *  its holders, Auto and its holders (when there), the queue (when there) and each request in it: plain objects. */
+function bookShape(d) {
+  if (d.v !== undefined && d.v !== null ? !plainObj(d.v) : !!d.inited) throw new Error("its vault map isn't an object");
+  for (const [v, st] of Object.entries(d.v || {})) {
+    if (!plainObj(st)) throw new Error(`vault ${v} isn't an object`);
+    if (!plainObj(st.holders)) throw new Error(`vault ${v}'s holders aren't an object`);
+  }
+  if (d.auto !== undefined && d.auto !== null) {
+    if (!plainObj(d.auto)) throw new Error("its auto fund isn't an object");
+    if (!plainObj(d.auto.holders)) throw new Error("the auto fund's holders aren't an object");
+  }
+  if (d.queue !== undefined && d.queue !== null) {
+    if (!plainObj(d.queue)) throw new Error("its queue isn't an object");
+    for (const [k, q] of Object.entries(d.queue)) if (!plainObj(q)) throw new Error(`queue item ${k} isn't an object`);
+  }
+}
+/** One stash's shares per vault in a book doc (holder "s<id>"; every vault the book lists, and Auto). Throws on a non-number
+ *  share count. (The shape is checked once, in vaultViews.) */
 function bookShares(d, id) {
   const key = `s${id}`, out = {};
   const put = (v, x) => {
@@ -353,21 +378,35 @@ function bookShares(d, id) {
     if (!Number.isFinite(n)) throw new Error(`${v} shares of ${key} aren't a number`);
     if (n > VAULT_EPS) out[v] = n;
   };
-  for (const v of ["bank", "house", "mm"]) put(v, ((((d && d.v) || {})[v] || {}).holders || {})[key]);
-  put("auto", (((d && d.auto) || {}).holders || {})[key]);
+  for (const [v, st] of Object.entries(d.v || {})) put(v, st.holders[key]);
+  if (d.auto) put("auto", d.auto.holders[key]);
   return out;
 }
+/** One stash's shares per vault in the staking snapshot (positions[id].hold[vault].shares, every vault listed). Throws on a
+ *  shape that isn't the snapshot's or a non-number share count. */
 function snapShares(s, id) {
-  const p = ((s && s.positions) || {})[String(id)];
   const out = {};
-  for (const v of VAULT_KEYS) {
-    const h = p && p.hold && p.hold[v];
-    if (!h) continue;
-    const n = Number(h.shares);
+  if (!s || s.positions === undefined || s.positions === null) return out;
+  if (!plainObj(s.positions)) throw new Error("the snapshot's positions aren't an object");
+  const p = s.positions[String(id)];
+  if (p === undefined || p === null) return out;
+  if (!plainObj(p)) throw new Error(`the snapshot's position of stash ${id} isn't an object`);
+  if (p.hold === undefined || p.hold === null) return out;
+  if (!plainObj(p.hold)) throw new Error(`the snapshot's holdings of stash ${id} aren't an object`);
+  for (const [v, h] of Object.entries(p.hold)) {
+    if (h === undefined || h === null) continue;
+    const n = plainObj(h) ? Number(h.shares) : NaN;
     if (!Number.isFinite(n)) throw new Error(`the snapshot's ${v} shares of stash ${id} aren't a number`);
     if (n > VAULT_EPS) out[v] = n;
   }
   return out;
+}
+/** The snapshot's queue (an array of requests when there). Throws on any other shape. */
+function snapQueue(s) {
+  if (!s || s.queue === undefined || s.queue === null) return [];
+  if (!Array.isArray(s.queue)) throw new Error("the snapshot's queue isn't a list");
+  for (const q of s.queue) if (!plainObj(q)) throw new Error("a request in the snapshot's queue isn't an object");
+  return s.queue;
 }
 const reqShape = (q) => ({ id: q.id == null ? null : String(q.id), vault: q.vault || null, kind: q.kind || null,
                            amount: q.amount == null ? null : Number(q.amount), shares: q.shares == null ? null : Number(q.shares), state: q.state || null });
@@ -416,9 +455,11 @@ async function vaultHoldings(ids = null) {
             h.pending.push(reqShape(q));
           }
         };
-        if (views.book) addQ(Object.values((views.book && views.book.queue) || {}));
-        if (!inited && views.snap) addQ(Array.isArray(views.snap.queue) ? views.snap.queue : []);
-        // the value (informational): at the snapshot's prices, else the snapshot's own values
+        if (views.book) addQ(Object.values(views.book.queue || {}));
+        if (!inited && views.snap) addQ(snapQueue(views.snap));
+      } catch (e) { h.error = `the vault book can't be read (${e.message})`; }
+      // the value (informational only - it never decides a hold): at the snapshot's prices, else the snapshot's own values
+      try {
         const vs = Object.keys(h.shares);
         if (!vs.length) h.value = 0;
         else if (prices && vs.every((v) => Number.isFinite(Number(prices[v])))) h.value = Math.trunc(vs.reduce((t, v) => t + h.shares[v] * Number(prices[v]), 0));
@@ -427,7 +468,7 @@ async function vaultHoldings(ids = null) {
           h.value = p && p.hold && vs.every((v) => p.hold[v] && Number.isFinite(Number(p.hold[v].value)))
             ? Math.trunc(vs.reduce((t, v) => t + Number(p.hold[v].value), 0)) : null;
         }
-      } catch (e) { h.error = `the vault book can't be read (${e.message})`; }
+      } catch (e) { h.value = null; }
     }
     h.inVaults = !h.error && (Object.keys(h.shares).length > 0 || h.pending.length > 0);
     h.held = !!h.error || h.inVaults || (h.balance || 0) > 0 || (h.staked || 0) > 0;
@@ -705,6 +746,9 @@ async function rename({ stashId, name }) {
  * or has a stake / unstake waiting in the vault queue (vaultHoldings; a vault-book read error refuses too): checked before
  * anything moves, and again in the closing transaction (a stake requested in between can't strand its shares under a
  * closed stash).
+ * 1.99akz review fix: the balance withdrawal runs INSIDE the closing transaction, with the vault check right before the close -
+ * a vault stake / unstake request runs on the same transaction chain (capital/service.js), so nothing lands between them, and a
+ * refusal there rolls the withdrawal back: "refused" always means nothing moved (Pepe tells the member so).
  */
 async function close({ stashId, ownerUserId, key, via = "web", unstake = false }) {
   await requireLive();
@@ -715,17 +759,19 @@ async function close({ stashId, ownerUserId, key, via = "web", unstake = false }
   if (s0.staked && unstake) await botMove({ stashId: s0.id, stakedDelta: -s0.staked, key: key + ":unstake", kind: "unstake", why: "close" });
   const s = await get(stashId);
   if (s.staked) throw new Refuse(409, `'${s.name}' still has ${s.staked.toLocaleString("en-US")} PAT staked - unstake it first.`);
-  let paid = 0;
-  if (s.balance > 0) {
-    const w = await withdraw({ stashId: s.id, login: s.owner, userId: ownerUserId, amount: "all", key: key + ":empty", via });
-    paid = w.amount || 0;
-  }
   return tx(async () => {
     const dup = await seen(key);
     if (dup) return dup;
-    // stashhold: again, on the chain - a stake that slipped in after the first check (its PAT left the balance) keeps it open
+    let paid = 0;
+    const cur = (await getQuery("SELECT balance FROM stashes WHERE id = ? AND closed IS NULL", [String(s.id)]))[0];
+    if (cur && Number(cur.balance) > 0) {
+      const w = await withdraw({ stashId: s.id, login: s.owner, userId: ownerUserId, amount: "all", key: key + ":empty", via });
+      paid = w.amount || 0;
+    }
+    // stashhold: again, on the chain, right before the close - a stake that slipped in after the first check keeps it open, and
+    // the withdrawal above rolls back with the refusal
     const no = vaultRefusal(await stashHoldings(s.id), s.name);
-    if (no) { if (paid) no.message += ` (its ${fmtN(paid)} PAT balance went to your wallet; the stash stays open.)`; throw no; }
+    if (no) throw no;
     const r = await runQuery("UPDATE stashes SET closed = ?, updated = ? WHERE id = ? AND closed IS NULL AND balance = 0", [now() / 1000, now(), s.id]);
     if (!r || r.changes !== 1) throw new Refuse(409, "Couldn't empty the stash, so it's still open.");
     const out = { ok: true, stash: s.id, name: s.name, paid };

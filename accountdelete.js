@@ -534,6 +534,11 @@ async function settle(uid, login, report) {
   const t = now();
   report.settled = report.settled || {};
   const bump = (k, n) => { if (n) report.settled[k] = (report.settled[k] || 0) + n; };
+  // 1.99akz review fix: the stash plan FIRST - a stash of theirs with PAT in the vaults (a stake since blockers(), or a vault book
+  // that can't be read) stops the job before anything below is settled (renewals, the welcome bonus, pending actions and creator
+  // plans stay as they were); the next tick's blockers() holds the deletion with the reason
+  const sp = await stashPlan(login, uid);
+  if (sp.vaults.length) throw new Error(`stash ${sp.vaults.map((v) => v.id).join(", ")} has PAT in the vaults (or the vault book can't be read) - not closed`);
   bump("creator_subs_stopped", await run("creator_subs", ["fan_id", "cancel_at_end"], "UPDATE creator_subs SET cancel_at_end = 1, renew = 0, updated = ? WHERE fan_id = ? AND status = 'active'", [t, uid]).catch(() => 0));
   bump("creator_subs_ended", await run("creator_subs", ["fan_id"], "UPDATE creator_subs SET status = 'ended', cancel_at_end = 1, ended_at = ?, updated = ? WHERE fan_id = ? AND status = 'grace'", [t, t, uid]).catch(() => 0));
   bump("shop_subs_stopped", await run("shop_subs", ["user_id", "cancel_at_end"], "UPDATE shop_subs SET cancel_at_end = 1, updated = ? WHERE user_id = ? AND status = 'active'", [t, uid]));
@@ -543,20 +548,35 @@ async function settle(uid, login, report) {
   bump("pending_actions_cancelled", await run("pepe_actions", ["user_id", "status"], `UPDATE pepe_actions SET status = 'failed', message = 'account deleted', updated = ? WHERE user_id = ? AND status = 'pending' AND kind != ?`, [t, uid, FORGET_KIND]));
   bump("creator_plans_closed", await run("creator_plans", ["creator_id", "active"], "UPDATE creator_plans SET active = 0 WHERE creator_id = ?", [uid]));
   // sole-owned stashes (site-owned, unstaked, nobody else in them): into the wallet first, so the routing takes it
-  const sp = await stashPlan(login, uid);
-  if (sp.vaults.length) throw new Error(`stash ${sp.vaults.map((v) => v.id).join(", ")} has PAT in the vaults (or the vault book can't be read) - not closed`);
+  const S = require("./stashes");
+  const keys = [...new Set([`u:${uid}`, login ? low(login) : null].filter(Boolean))].map(low);
+  const IN = `(${keys.map(() => "?").join(",")})`;
   for (const s of sp.auto) {
     // 1.99akv stashhold: once more right before it moves / closes - a stake since blockers() keeps the stash (and the account): the
-    // job stops here, and the next tick's blockers() holds the deletion with the reason
-    const h = await require("./stashes").stashHoldings(s.id).catch(() => null);
-    if (!h || h.error || h.inVaults) throw new Error(`stash ${s.id} has PAT in the vaults (or the vault book can't be read) - not closed`);
-    if (Number(s.balance) > 0) {
-      const S = require("./stashes");
-      const r = await S.withdraw({ key: `acctdel-${uid}-stash-${s.id}`, login: login || `u:${uid}`, stashId: s.id, amount: "all", userId: uid, via: "account-deleted" });
-      if (!r || r.ok === false) throw new Error(`stash ${s.id} withdrawal refused: ${(r && (r.code || r.error)) || "?"}`);
-      bump("stash_pat", Number(s.balance));
-    }
-    await runQuery("UPDATE stashes SET closed = ?, updated = ? WHERE id = ? AND closed IS NULL AND balance = 0", [t / 1000, t, s.id]).catch(() => {});
+    // job stops here, and the next tick's blockers() holds the deletion with the reason.
+    // 1.99akz review fix: the check, the withdrawal and the close are ONE transaction (a vault stake / unstake request runs on the
+    // same chain - capital/service.js - so none lands between them; a throw rolls the withdrawal back), the stash must still be
+    // theirs alone (a member added since blockers() stops it too), and the close must close exactly that one row.
+    await tx(async () => {
+      const h = await S.stashHoldings(s.id).catch(() => null);
+      if (!h || h.error || h.inVaults) throw new Error(`stash ${s.id} has PAT in the vaults (or the vault book can't be read) - not closed`);
+      const cur = (await getQuery(`SELECT id, balance, staked FROM stashes WHERE id = ? AND closed IS NULL AND lower(owner) IN ${IN}`, [String(s.id), ...keys]))[0];
+      if (!cur) throw new Error(`stash ${s.id} changed (closed or not theirs any more) - not closed`);
+      if (Number(cur.staked) > 0) throw new Error(`stash ${s.id} has PAT staked - not closed`);
+      if ((await tableExists("stash_members"))
+          && (await getQuery(`SELECT COUNT(*) AS n FROM stash_members WHERE stash_id = ? AND lower(login) NOT IN ${IN}`, [String(s.id), ...keys]))[0].n > 0) {
+        throw new Error(`stash ${s.id} has other members now - not closed`);
+      }
+      if (Number(cur.balance) > 0) {
+        const r = await S.withdraw({ key: `acctdel-${uid}-stash-${s.id}`, login: login || `u:${uid}`, stashId: s.id, amount: "all", userId: uid, via: "account-deleted" });
+        if (!r || r.ok === false) throw new Error(`stash ${s.id} withdrawal refused: ${(r && (r.code || r.error)) || "?"}`);
+        bump("stash_pat", Number(r.amount) || 0);
+      }
+      const h2 = await S.stashHoldings(s.id).catch(() => null);
+      if (!h2 || h2.error || h2.inVaults) throw new Error(`stash ${s.id} has PAT in the vaults (or the vault book can't be read) - not closed`);
+      const c = await runQuery("UPDATE stashes SET closed = ?, updated = ? WHERE id = ? AND closed IS NULL AND balance = 0", [t / 1000, t, String(s.id)]);
+      if (!c || c.changes !== 1) throw new Error(`stash ${s.id} couldn't be emptied - not closed`);
+    });
   }
 }
 

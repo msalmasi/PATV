@@ -51,7 +51,7 @@ what has a safe existing rule is settled automatically.
 | Settled automatically | How |
 |---|---|
 | Your balance | Routed by the PAT Routing row `account_deleted` (below) |
-| Stashes only you use (site-owned, nothing in the vaults or the vault queue) | Withdrawn into the wallet (keyed stash move), closed, then routed with the balance |
+| Stashes only you use (site-owned, nothing in the vaults or the vault queue) | Withdrawn into the wallet (keyed stash move) and closed in one transaction with a last vault / members check (anything new there stops the run and nothing moves - 1.99akz), then routed with the balance |
 | Creator subscriptions you pay for, store subscriptions | Stop renewing (`cancel_at_end`); one in grace ends |
 | Prime Time / Season Pass renewals you pay with PAT | Stop (`renewer_id` cleared) |
 | A pending welcome bonus | Expired (never paid) |
