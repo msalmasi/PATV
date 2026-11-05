@@ -178,6 +178,31 @@ async function details(type, tmdb) {
 }
 
 // ── request ──
+/** Read-only clerk preview. request() below remains the authority and repeats every check when confirmed. */
+async function canRequest(user, type) {
+  const refuse = (reason, extra = {}) => ({ ok: false, reason, cost: { with: "free", price: 0 }, ...extra });
+  if (!user || !user.userId) return refuse("signin");
+  if (!conf.on.requests()) return refuse("off");
+  if (!["movie", "tv"].includes(type)) return refuse("off");
+  const S = conf.get(), me = (await getQuery("SELECT userId, username, level FROM users WHERE userId = ?", [user.userId]))[0];
+  if (!me) return refuse("signin");
+  if ((me.level || 0) < S.request_min_level) return refuse("level", { level: S.request_min_level });
+  // The first preview may precede /requests initialisation. Missing request tables mean no prior requests/credits;
+  // do not create them or consume a credit from a read-only preview.
+  const read = async (sql, args, table) => {
+    try { return await getQuery(sql, args); }
+    catch (e) { if (String(e && e.message).includes(`no such table: ${table}`)) return []; throw e; }
+  };
+  // The same predicate as requestroles.isActive(), without that reader's lazy schema-writing init().
+  const scout = !!(await read("SELECT 1 FROM request_roles WHERE user_id = ? AND role = 'scout' AND status = 'active'", [String(me.userId)], "request_roles"))[0];
+  const count = (await read("SELECT COUNT(*) AS n FROM media_requests WHERE user_id = ? AND created > ? AND status NOT IN ('error')", [me.userId, clock() - DAY], "media_requests"))[0];
+  if (!scout && S.requests_per_day > 0 && Number(count && count.n) >= S.requests_per_day) return refuse("limit");
+  if (scout) return { ok: true, reason: null, cost: { with: "scout", price: 0 } };
+  const credit = (await read("SELECT n FROM media_credits WHERE user_id = ? AND kind = ?", [me.userId, type], "media_credits"))[0];
+  if (Number(credit && credit.n) > 0) return { ok: true, reason: null, cost: { with: "credit", price: 0 } };
+  const price = Math.max(0, Math.floor(Number(type === "tv" ? S.request_price_tv : S.request_price_movie) || 0));
+  return { ok: true, reason: null, cost: { with: price ? "pat" : "free", price } };
+}
 async function request(user, b = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
@@ -479,5 +504,5 @@ function register(app, { addUser, noTimers } = {}) {
   });
 }
 
-module.exports = { init, register, search, details, request, refund, sync, poll, webhook, onSale, credits, addCredits, requesterFor, mine, adminState, setLink,
+module.exports = { init, register, search, details, request, canRequest, refund, sync, poll, webhook, onSale, credits, addCredits, requesterFor, mine, adminState, setLink,
                    statusOf, LABEL, Refuse, api, overseerrUsers, posterUrl, TMDB_IMG, MEDIA, _setClock: (fn) => { clock = fn || (() => Date.now()); }, _resetUsers: () => { usersCache = { at: 0, list: null }; } };

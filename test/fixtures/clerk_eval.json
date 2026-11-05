@@ -2427,6 +2427,976 @@
         "not_ours": true
       },
       "path": "not_ours"
+    },
+    {
+      "id": "recall-homer",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the simpsons where homer goes to space",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "The Simpsons",
+            "confidence": 0.95,
+            "season": 5,
+            "episode": 15,
+            "episode_title": "Deep Space Homer"
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ],
+        "recall": "in",
+        "match": "exact"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-title-only",
+      "phase": "2a",
+      "owner": false,
+      "line": "play that star trek episode about the captain and the story language",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: The Next Generation",
+            "confidence": 0.95,
+            "episode_title": "Darmok"
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1006152"
+        ],
+        "recall": "in",
+        "match": "partial"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-corrected-number",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the star trek with the language made of stories",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: The Next Generation",
+            "confidence": 0.95,
+            "season": 5,
+            "episode": 3,
+            "episode_title": "Darmok"
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1006152"
+        ],
+        "recall": "in",
+        "match": "partial"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-mismatch",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the star trek episode about the crystal teapot",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: The Next Generation",
+            "confidence": 0.95,
+            "season": 5,
+            "episode": 2,
+            "episode_title": "The Crystal Teapot"
+          }
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "recall": "mismatch"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-nonexistent",
+      "phase": "2a",
+      "owner": false,
+      "line": "play that seinfeld episode with the invisible sandwich",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Seinfeld",
+            "confidence": 0.95,
+            "season": 12,
+            "episode": 3,
+            "episode_title": "Invisible Sandwich"
+          }
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "recall": "unknown"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-missing-season",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the deep space nine episode where jake grows old waiting for his father",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "episode",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Star Trek: Deep Space Nine",
+            "confidence": 0.95,
+            "season": 4,
+            "episode": 2,
+            "episode_title": "The Visitor",
+            "year": 1993
+          }
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "recall": "missing",
+        "request": "offer",
+        "season": 4
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-missing-movie",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the film about a radio message arriving at a snowbound observatory",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "guesses": [
+          {
+            "kind": "movie",
+            "title": "Northern Signal",
+            "year": 2022,
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "recall": "missing",
+        "request": "offer"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-movie-in",
+      "phase": "2a",
+      "owner": false,
+      "line": "play that film where a space crew finds a creature aboard",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "guesses": [
+          {
+            "kind": "movie",
+            "title": "Alien",
+            "year": 1979,
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "2020"
+        ],
+        "recall": "in",
+        "match": "exact"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-movie-partial",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the film about the space freighter with a creature",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "guesses": [
+          {
+            "kind": "movie",
+            "title": "Alien",
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "2020"
+        ],
+        "recall": "in",
+        "match": "partial"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-year-unknown",
+      "phase": "2a",
+      "owner": false,
+      "line": "play that movie with the station on the salt flats",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "guesses": [
+          {
+            "kind": "movie",
+            "title": "Unconfirmed Year",
+            "year": 2022,
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "code": "none",
+        "recall": "unknown",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "recall-gated",
+      "phase": "2a",
+      "owner": false,
+      "line": "play that movie with the cedar grove at night",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "guesses": [
+          {
+            "kind": "movie",
+            "title": "Cedar Evening",
+            "year": 2000,
+            "confidence": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "code": "unavailable",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "fts-homer",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the simpsons episode about a nasa orbital assignment",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "kind": "episode",
+        "about": "NASA orbital assignment",
+        "guesses": []
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "fts-dealership",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the seinfeld episode with the vehicle purchase and showroom dispute",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Seinfeld",
+        "kind": "episode",
+        "about": "vehicle purchase showroom dispute",
+        "guesses": []
+      },
+      "expect": {
+        "keys": [
+          "1005281"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "fts-missing-candy",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the episode of seinfeld with the 100 grand bar",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Seinfeld",
+        "kind": "episode",
+        "about": "100 Grand Bar",
+        "guesses": []
+      },
+      "expect": {
+        "code": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "fts-low-confidence",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the simpsons episode about nasa recruiting a worker",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "The Simpsons",
+        "kind": "episode",
+        "about": "NASA worker",
+        "guesses": [
+          {
+            "kind": "episode",
+            "show": "Seinfeld",
+            "confidence": 0.2,
+            "season": 1,
+            "episode": 1,
+            "episode_title": "Pilot"
+          }
+        ]
+      },
+      "expect": {
+        "keys": [
+          "1001165"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "seasonal-office",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the christmas episode of the office",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "The Office",
+        "kind": "episode",
+        "about": "Christmas December gift"
+      },
+      "expect": {
+        "keys": [
+          "1002063"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "best-sopranos",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the best episode of the sopranos",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "The Sopranos",
+        "kind": "episode",
+        "quality": "best"
+      },
+      "expect": {
+        "keys": [
+          "1012034"
+        ],
+        "show": "The Sopranos",
+        "kind": "episode",
+        "min_rating": 7.5
+      },
+      "path": "interp"
+    },
+    {
+      "id": "like-alien",
+      "phase": "2a",
+      "owner": false,
+      "line": "play something like alien but funnier",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "kind": "movie",
+        "like": "Alien",
+        "genres": [
+          "Comedy"
+        ]
+      },
+      "expect": {
+        "kind": "movie",
+        "genre": "Comedy",
+        "exclude": [
+          "2020"
+        ]
+      },
+      "path": "interp"
+    },
+    {
+      "id": "browse-dune",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe do you have dune?",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "action": "browse",
+        "title": "Dune"
+      },
+      "expect": {
+        "keys": [
+          "2022"
+        ]
+      },
+      "path": "rules"
+    },
+    {
+      "id": "browse-new",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe what's new on plex",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "action": "browse",
+        "select": "latest"
+      },
+      "expect": {
+        "nonempty": true,
+        "max_rows": 3
+      },
+      "path": "rules"
+    },
+    {
+      "id": "browse-missing",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe is Northern Signal on plex",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "action": "browse",
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "offer"
+      },
+      "path": "rules"
+    },
+    {
+      "id": "browse-recommend",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe recommend a movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "action": "browse",
+        "kind": "movie"
+      },
+      "expect": {
+        "kind": "movie",
+        "max_rows": 3
+      },
+      "path": "rules"
+    },
+    {
+      "id": "missing-clerk-off",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "off"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "link"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-level",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "request_reason": "level"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "link"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-limit",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "request_reason": "limit"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "link"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-requests-off",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": false,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-adult-pad",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": true,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-private",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "via": "pm"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "missing-telegram",
+      "phase": "2a",
+      "owner": false,
+      "line": "play Northern Signal",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone",
+        "via": "tg"
+      },
+      "expect_interp": {
+        "title": "Northern Signal"
+      },
+      "expect": {
+        "code": "none",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "gated-typed",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe play Cedar Evening",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Cedar Evening"
+      },
+      "expect": {
+        "code": "unavailable",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "blocked-typed",
+      "phase": "2a",
+      "owner": false,
+      "line": "pepe play Paper Orchard",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Paper Orchard"
+      },
+      "expect": {
+        "code": "unavailable",
+        "request": "none"
+      },
+      "path": "interp"
+    },
+    {
+      "id": "newer-spider",
+      "phase": "2a",
+      "owner": false,
+      "line": "play the latest spider-man movie",
+      "context": {
+        "lang": "en",
+        "adult": false,
+        "dj": false,
+        "spotify": false,
+        "plex": false,
+        "member": true,
+        "recent": [],
+        "requests": true,
+        "clerk_requests": "everyone"
+      },
+      "expect_interp": {
+        "title": "Spider-man",
+        "kind": "movie",
+        "select": "latest"
+      },
+      "expect": {
+        "keys": [
+          "2010"
+        ],
+        "request": "offer",
+        "newer": true
+      },
+      "path": "rules"
     }
   ]
 }

@@ -88,6 +88,10 @@
       <label><%= t('adm.media.catalog.enabled') %>
         <select name="clerk_enabled"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>" <%= (S.clerk_enabled || 'off') === v ? 'selected' : '' %>><%= t('adm.media.catalog.mode_' + v) %></option><% }) %></select>
       </label>
+      <label><%= t('adm.media.catalog.requests') %>
+        <select name="clerk_requests"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>" <%= (S.clerk_requests || 'off') === v ? 'selected' : '' %>><%= t('adm.media.catalog.mode_' + v) %></option><% }) %></select>
+      </label>
+      <p class="muted" style="grid-column:1/-1"><%= t('adm.media.catalog.request_help') %></p>
       <label><%= t('adm.media.catalog.sync_minutes') %> <input type="number" name="catalog_sync_min" min="10" max="1440" value="<%= S.catalog_sync_min || 60 %>"></label>
       <label><%= t('adm.media.catalog.blocked') %> <input type="text" name="clerk_block_ratings" maxlength="400" value="<%= S.clerk_block_ratings == null ? 'X,XXX,AO,R18,R18+' : S.clerk_block_ratings %>"></label>
       <label><%= t('adm.media.catalog.warned') %> <input type="text" name="clerk_warn_ratings" maxlength="400" value="<%= S.clerk_warn_ratings == null ? 'NR,Not Rated,Unrated' : S.clerk_warn_ratings %>"></label>

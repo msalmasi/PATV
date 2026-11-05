@@ -6,10 +6,20 @@ const path = require("node:path");
 const { fixtureRunner, rawLine } = require("../tools/clerk-find");
 const fixture = require("./fixtures/clerk_catalog.json");
 const evaluation = require("./fixtures/clerk_eval.json");
-const PHASES = new Set(["1"]);
+const PHASES = new Set(["1", "2a"]);
 
 function check(caseRow, result) {
   const expected = caseRow.expect, rows = result.rows || [];
+  if (expected.recall) assert.ok((result.recall || []).some(r => r.status === expected.recall), "recall status");
+  if (expected.match) assert.ok((result.recall || []).some(r => r.match === expected.match), "recall match");
+  if (expected.request) {
+    const mode = result.seerr ? result.request && result.request.may ? "offer" : "link" : "none";
+    assert.equal(mode, expected.request, "verified request offer/link only");
+  }
+  if (expected.season != null && result.seerr) assert.equal(result.seerr.season, expected.season);
+  if (expected.newer) assert.ok(result.seerr && result.seerr.year > Math.max(...rows.map(r => r.year || 0)), "newer release note");
+  if (caseRow.context.adult || ["pm", "tg"].includes(caseRow.context.via) || caseRow.context.requests === false) assert.equal(result.lookup_count, 0, "no external lookup in restricted context");
+  if (expected.max_rows) assert.ok(rows.length <= expected.max_rows);
   if (expected.code === "none") { assert.equal(rows.length, 0, "no library match"); return; }
   if (expected.code) { assert.equal(result.code, expected.code); return; }
   assert.ok(rows.length > 0, "expected a verified catalog pick");
@@ -18,6 +28,7 @@ function check(caseRow, result) {
   assert.ok(source.every(Boolean), "all output keys are in the fixture catalog");
   assert.ok(source.every(r => ["71", "72"].includes(r.section) && r.content_rating !== "X"), "no denied row escapes");
   if (expected.keys) assert.deepEqual(keys, expected.keys, "verified key/order");
+  if (expected.exclude) assert.ok(keys.every(key => !expected.exclude.includes(key)), "reference excluded");
   if (expected.exact) assert.equal(result.exact, true);
   if (expected.count != null) assert.equal(rows.length, expected.count);
   if (expected.items != null) assert.equal(keys.length, expected.items);
@@ -47,7 +58,7 @@ test("shared clerk fixtures are byte-identical when the bot checkout is supplied
   }
 });
 
-test("phase 1 golden selections use the real catalog and finder", async t => {
+test("phase 1 and 2a golden selections use the real catalog and finder", async t => {
   const runner = await fixtureRunner(fixture);
   try {
     for (const caseRow of evaluation.cases.filter(c => PHASES.has(c.phase) && !c.expect.not_ours)) {

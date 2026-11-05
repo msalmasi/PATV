@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { createCatalog } = require("../plexcatalog");
-const { createFinder } = require("../plexfind");
+const { createFinder, norm } = require("../plexfind");
 
 const NOW = Date.UTC(2026, 10, 5, 12);
 const SETTINGS = Object.freeze({ clerk_enabled: "everyone", clerk_block_ratings: "X,XXX,AO,R18,R18+",
@@ -28,14 +28,29 @@ async function fixtureRunner(fixture) {
   try {
     await catalog.init();
     await catalog.importSnapshot(fixture);
-    const finder = createFinder({ catalog, settings: () => ({ ...SETTINGS }), now: () => NOW, deepMax: { movie: 2, show: 10 } });
+    const lookups = [];
+    const requests = {
+      async search(user, query) { lookups.push({ op: "search", query: norm(query) }); return (fixture.seerr && fixture.seerr.search[norm(query)]) || []; },
+      async details(kind, tmdb) { lookups.push({ op: "details", kind, tmdb }); return (fixture.seerr && fixture.seerr.details[kind + ":" + tmdb]) || null; },
+    };
+    const finder = createFinder({ catalog, requests, settings: () => ({ ...SETTINGS }), now: () => NOW, deepMax: { movie: 2, show: 10 } });
     return {
       catalog,
       async find(request) {
         const ctx = request.context || {};
-        return finder.find({ ask: request.ask || {}, raw: request.raw || "", exclude: request.exclude || [],
-          limit: request.limit || 20, target: request.target || "stage" },
-        { seenKeys: ctx.seen || [], maxSec: ctx.maxSec || 12 * 3600 });
+        const before = lookups.length;
+        const result = await finder.find({ ask: request.ask || {}, raw: request.raw || "", exclude: request.exclude || [],
+          limit: request.limit || 20, target: request.target || "stage", browse: request.ask && request.ask.action === "browse" },
+        { seenKeys: ctx.seen || [], maxSec: ctx.maxSec || 12 * 3600,
+          user: { userId: "fixture-cedar", username: "fixture-cedar" },
+          allowSeerr: ctx.requests === true && !ctx.adult && !["pm", "tg"].includes(ctx.via) });
+        // This fixture projection mirrors the route's preview. Real auth/once-only requests are tested through plexchat.
+        if (result.seerr) {
+          const reason = ctx.clerk_requests === "off" ? "clerk_off" : ctx.request_reason || null;
+          result.request = reason ? { may: false, reason } : { may: true, cost: ctx.request_cost || { with: "free", price: 0 } };
+        }
+        result.lookup_count = lookups.length - before;
+        return result;
       },
       async close() { await catalog.close(); removeFixtureDir(dir); },
     };

@@ -20,6 +20,8 @@
 //     shelves   {} -> allowed genres and shelves; find {ask,raw,exclude?,limit?} -> verified rows (<=20), catalog and pricing
 //               A known show's unmatched detail may return alternatives:[season rows] (<=5), never an automatic first episode.
 //               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
+//               probe:true checks catalog titles before interpretation without an external Seerr lookup.
+//     browse    find with limit 3; request {kind,tmdb,season?,target} consumes this speaker/pad's verified 10-minute offer.
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace}
 //               Clerk lists also send keys:[key], scope:list|series. Every key is checked before the existing queue builder runs.
 //               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
@@ -41,12 +43,14 @@ const conf = () => require("./mediaconf");
 const PA = () => require("./padaccess");
 const CF = () => require("./plexfind");
 const CAT = () => require("./plexcatalog");
+const MR = () => require("./mediarequests");
 
 const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_library", "busy_queue", "slot_taken", "site_full", "encoder_busy",
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
-  "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable"];
-const OPS = new Set(["search", "find", "shelves", "play", "control", "np", "continue", "rpm"]);
+  "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable",
+  "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream"];
+const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
 const CONTINUE_MS = 14 * 24 * 3600 * 1000;
@@ -212,6 +216,39 @@ async function opShelves(user, b) {
   await clerkAccess(user, b);
   return CAT().shelves();
 }
+const offers = new Map(), OFFER_MS = 10 * 60000;
+function requestsOn() { return !!(conf().on && typeof conf().on.requests === "function" && conf().on.requests()); }
+function requestRollout(user) {
+  const mode = conf().get().clerk_requests;
+  return mode === "everyone" || mode === "staff" && require("./siteperms").atLeast(user, "staff");
+}
+async function requestRoom(user, b, R) {
+  if (!clean(b.room, 100) || b.via != null && !["room", "web"].includes(b.via)) return null;
+  const origin = b.target === "cam" ? await padOf(b.room) : R;
+  if (origin !== R) await seeOrFail(user, origin);
+  return !R.adult && !origin.adult ? origin : null;
+}
+const offerKey = (user, R, origin, target, item) => JSON.stringify([user.userId, R.id, origin.id, target, item.kind, Number(item.tmdb), item.season == null ? null : Number(item.season)]);
+function costOf(cost) {
+  if (!cost || !["scout", "credit", "pat", "free"].includes(cost.with)) return null;
+  const price = Number(cost.price);
+  if (!Number.isSafeInteger(price) || price < 0 || cost.with !== "pat" && price !== 0) return null;
+  return { with: cost.with, price };
+}
+async function requestPreview(user, b, R, origin, item) {
+  if (!origin || !requestsOn()) return { may: false, reason: "off" };
+  if (!requestRollout(user)) return { may: false, reason: "clerk_off" };
+  let rights;
+  try { rights = await MR().canRequest(user, item.kind); } catch (e) { return { may: false, reason: "off" }; }
+  const reason = ["signin", "unlinked", "level", "limit", "off"].includes(rights && rights.reason) ? rights.reason : "off";
+  const cost = costOf(rights && rights.cost);
+  if (!rights || !rights.ok || !cost) return { may: false, reason, ...(reason === "level" && Number.isInteger(rights.level) ? { level: rights.level } : {}) };
+  const target = b.target === "cam" ? "cam" : "stage";
+  for (const [key, offer] of offers) if (now() - offer.at >= OFFER_MS) offers.delete(key);
+  while (offers.size >= 5000) offers.delete(offers.keys().next().value);
+  offers.set(offerKey(user, R, origin, target, item), { at: now(), item: { ...item }, cost });
+  return { may: true, cost };
+}
 async function opFind(user, b) {
   const { target, R, A } = await clerkAccess(user, b);
   let seenKeys = [];
@@ -223,11 +260,15 @@ async function opFind(user, b) {
     maxSec = Math.max(60, (limits.library_max - ML()._q.SLACK_MIN) * 60);
   }
   let out;
-  try { out = await CF().find({ ask: b.ask, raw: clean(b.raw, 100), exclude: b.exclude, limit: b.limit, target }, { seenKeys, maxSec }); }
+  const origin = requestsOn() ? await requestRoom(user, b, R) : null;
+  try { out = await CF().find({ ask: b.ask, raw: clean(b.raw, 100), exclude: b.exclude, limit: b.limit, target, browse: b.op === "browse", probe: b.probe === true },
+    { seenKeys, maxSec, user, allowSeerr: !!origin && requestsOn() }); }
   catch (e) {
     if (e && e.refuse) throw e;
     throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
   }
+  if (out.code === "unavailable") throw new Fail("unavailable", "That one isn't available here.", 404);
+  if (out.seerr) out.request = await requestPreview(user, b, R, origin, out.seerr);
   const S = conf().get(), per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
   const state = await ML().padState(user, R.id).catch(() => null);
   for (const row of [...out.rows, ...(out.alternatives || [])]) {
@@ -240,6 +281,42 @@ async function opFind(user, b) {
     if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) row.next_cost = await MQ().addCostFor(R.id, sec || 0).catch(() => 0);
   }
   return { ok: true, ...out, clerk: S.clerk_enabled, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
+}
+async function opRequest(user, b) {
+  const { target, R } = await clerkAccess(user, b);
+  const origin = await requestRoom(user, b, R);
+  if (!origin || !requestsOn() || !requestRollout(user)) throw new Fail("request_off", "Requests aren't available here.", 403);
+  const kind = ["movie", "tv"].includes(b.kind) ? b.kind : null;
+  const tmdb = /^\d{1,9}$/.test(String(b.tmdb)) ? Number(b.tmdb) : null;
+  const season = b.season == null ? null : intOr(b.season, 1, 200);
+  if (!kind || !tmdb || b.season != null && (kind !== "tv" || season == null || Number(b.season) !== season)) throw new Fail("request_stale", "Ask for a fresh request offer.", 409);
+  const key = offerKey(user, R, origin, target, { kind, tmdb, season }), offer = offers.get(key);
+  if (!offer || now() - offer.at >= OFFER_MS) { offers.delete(key); throw new Fail("request_stale", "Ask for a fresh request offer.", 409); }
+  offers.delete(key); // Claim before the first await: a repeated or simultaneous yes cannot send another request.
+  let rights;
+  try { rights = await MR().canRequest(user, kind); }
+  catch (e) { throw new Fail("upstream", "The request service isn't available right now.", 502); }
+  if (!rights || !rights.ok) {
+    const reason = rights && rights.reason, code = reason === "off" ? "request_off" : ["signin", "level", "limit"].includes(reason) ? reason : "request_off";
+    throw new Fail(code, "The request could not be sent.", code === "limit" ? 429 : 403);
+  }
+  if (JSON.stringify(costOf(rights.cost)) !== JSON.stringify(offer.cost)) throw new Fail("request_stale", "The request cost changed. Ask for a fresh offer.", 409);
+  try {
+    const result = await MR().request(user, { type: kind, tmdb, ...(season != null ? { seasons: [season] } : {}) });
+    const status = ["submitting", "pending", "approved", "partial", "available", "declined", "failed"].includes(result.status) ? result.status : "pending";
+    const cost = costOf({ with: result.paid_with, price: result.price }) || offer.cost;
+    return { ok: true, status, label: status, paid_with: cost.with, price: cost.price };
+  } catch (e) {
+    let code = "upstream";
+    if (e && e.refuse) {
+      if (e.status === 401) code = "signin";
+      else if (e.status === 403) code = requestsOn() ? "level" : "request_off";
+      else if (e.status === 429) code = "limit";
+      else if (e.status === 409) code = /already on Plex|already available/i.test(String(e.message || "")) ? "available" : "requested";
+      else if (e.status === 402) code = "pat";
+    }
+    throw new Fail(code, "The request could not be sent.", e && e.status || 502);
+  }
 }
 async function opSearch(user, b) {
   const target = b.target === "cam" ? "cam" : "stage";
@@ -492,7 +569,8 @@ async function handle(b = {}) {
     const ctx = { via, login: b.as && b.as.login ? String(b.as.login) : null };
     let r;
     if (op === "search") r = await opSearch(user, b);
-    else if (op === "find") r = await opFind(user, b);
+    else if (op === "find" || op === "browse") r = await opFind(user, b);
+    else if (op === "request") r = await opRequest(user, b);
     else if (op === "shelves") r = await opShelves(user, b);
     else if (op === "play") r = await opPlay(user, b, ctx);
     else if (op === "control") r = await opControl(user, b);

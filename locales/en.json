@@ -10691,6 +10691,8 @@
   "adm.media.catalog.mode_off": "Off",
   "adm.media.catalog.mode_staff": "Staff",
   "adm.media.catalog.mode_everyone": "Everyone",
+  "adm.media.catalog.requests": "Who may request missing titles from chat",
+  "adm.media.catalog.request_help": "Missing titles must be confirmed by the request service. Each request needs its own yes; paid or credit requests need an explicit yes. Requests from chat are unavailable on 18+ pads and in private messages.",
   "adm.media.catalog.sync_minutes": "Catalog sync interval (minutes)",
   "adm.media.catalog.blocked": "Blocked content ratings (comma-separated)",
   "adm.media.catalog.warned": "Ratings to label as unrated (comma-separated)",

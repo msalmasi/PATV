@@ -13347,7 +13347,7 @@
         "Drama"
       ],
       "content_rating": "TV-14",
-      "rating": 7.0,
+      "rating": 8.4,
       "audience_rating": null,
       "studio": "Lantern Studio",
       "directors": [],
@@ -18592,8 +18592,205 @@
     }
   ],
   "seerr": {
-    "search": {},
-    "details": {}
+    "search": {
+      "northern signal": [
+        {
+          "type": "movie",
+          "title": "Northern Signal",
+          "year": 2022,
+          "tmdb": 740001,
+          "availability": "unknown",
+          "media_status": 1
+        }
+      ],
+      "star trek deep space nine": [
+        {
+          "type": "tv",
+          "title": "Star Trek: Deep Space Nine",
+          "year": 1993,
+          "tmdb": 740002,
+          "availability": "unknown",
+          "media_status": 1
+        }
+      ],
+      "seinfeld": [
+        {
+          "type": "tv",
+          "title": "Seinfeld",
+          "year": 1989,
+          "tmdb": 740003,
+          "availability": "unknown",
+          "media_status": 1
+        }
+      ],
+      "spider man": [
+        {
+          "type": "movie",
+          "title": "Spider-Man: Lanterns Across Queens",
+          "year": 2025,
+          "tmdb": 740004,
+          "availability": "unknown",
+          "media_status": 1
+        },
+        {
+          "type": "movie",
+          "title": "Spider-Man: Beyond Tomorrow",
+          "year": 2028,
+          "tmdb": 740005,
+          "availability": "unknown",
+          "media_status": 1
+        }
+      ],
+      "cedar evening": [
+        {
+          "type": "movie",
+          "title": "Cedar Evening",
+          "year": 2000,
+          "tmdb": 740006,
+          "availability": "available",
+          "media_status": 5
+        }
+      ],
+      "paper orchard": [
+        {
+          "type": "movie",
+          "title": "Paper Orchard",
+          "year": 2000,
+          "tmdb": 740007,
+          "availability": "available",
+          "media_status": 5
+        }
+      ],
+      "unconfirmed year": [
+        {
+          "type": "movie",
+          "title": "Unconfirmed Year",
+          "year": 2010,
+          "tmdb": 740008,
+          "availability": "unknown",
+          "media_status": 1
+        }
+      ],
+      "invented missing movie": []
+    },
+    "details": {
+      "tv:740002": {
+        "type": "tv",
+        "title": "Star Trek: Deep Space Nine",
+        "year": 1993,
+        "tmdb": 740002,
+        "availability": "unknown",
+        "media_status": 1,
+        "seasons": [
+          {
+            "n": 1,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 2,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 3,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 4,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 5,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 6,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 7,
+            "episodes": 26,
+            "status": 1,
+            "availability": "unknown"
+          }
+        ]
+      },
+      "tv:740003": {
+        "type": "tv",
+        "title": "Seinfeld",
+        "year": 1989,
+        "tmdb": 740003,
+        "availability": "unknown",
+        "media_status": 1,
+        "seasons": [
+          {
+            "n": 1,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 2,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 3,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 4,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 5,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 6,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 7,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 8,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          },
+          {
+            "n": 9,
+            "episodes": 24,
+            "status": 1,
+            "availability": "unknown"
+          }
+        ]
+      }
+    }
   },
   "lists": {}
 }
