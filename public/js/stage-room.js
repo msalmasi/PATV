@@ -25,7 +25,9 @@
 // Pepe is in - the API's pepe_here - whichever room his Camfrog window shows. Not in the room: no tab.
 // HLS slots play in the shared video.js player (stage-player.js); embed slots (YouTube / Twitch) are
 // rendered only with the official players, from {p,t,id} re-checked here (never a raw URL).
-// manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot.
+// manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot - dock3 1.99?? (owner item 5: "We just need to
+// add it to Pepe's stage"): and the same ★ Feature / ☆ Unfeature on Pepe's stream, featuring it on THIS pad (POST /api/stage/pepe/feature,
+// the slot buttons' permission; pepeSrc.pad = this pad featured it). Not while he is off air; the site-wide event stays /stage/admin's.
 // 1.99zc: 🎬 a CAM slot (s.cam: someone's live Camfrog cam the pad's owner put on the stage - mainstage camOpen) has no
 // HLS: the page asks for its own WHEP ticket (POST /api/stage/slots/<id>/cam, signed in + the pad's rule), plays it
 // with PATVRtc.watch (muted: a cam has no sound) and beats every 15 s like a live cam (livecam.js stageWatch).
@@ -75,8 +77,9 @@
     var tw = x.twitch && typeof x.twitch === 'object' && TW_LOGIN.test(String(x.twitch.login || ''))
       ? { login: String(x.twitch.login), live: x.twitch.live === true } : null;
     var feat = x.featured === true;                       // 1.99lm: an admin featured Pepe's stream (an event)
-    if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw, featured: feat };
-    return { mode: 'stream', twitch: tw, featured: feat };
+    var pad = x.pad_featured === true;                    // dock3 1.99??: ...or this pad's owner / staff did, on this pad
+    if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw, featured: feat, pad: pad };
+    return { mode: 'stream', twitch: tw, featured: feat, pad: pad };
   }
   // dock3 1.99??: the server's "this pad's featured slot", live or not (mainstage.featuredOf via /api/stage `featured` and the page's
   // first render) - {id, live, by, went}; null for none, or one this page may not show (a cam slot on the homepage / past its rule)
@@ -296,11 +299,30 @@
       }
       return h;
     }
+    // dock3 1.99?? (owner item 5): ★ Feature / ☆ Unfeature on Pepe's stream - the SAME .adm buttons a slot gets (o.manage: the pad's owner,
+    // staff; the Room Dock lists them in the source chip's ▾ as it does a slot's), featuring his stream on this pad. ☆ while this pad features
+    // it; nothing while only the site-wide event does (that one is /stage/admin's) or he is off air.
+    var lastFront = null;                                  // (the old homepage switcher polls without a room: the front pad's slug from the poll)
+    function featRoom() { return padSlug || lastFront || ''; }
+    function pepeAdm() {
+      if (!o.manage || !pepeHere || view !== 'pepe' || cur() || !featRoom()) return '';
+      if (pepeSrc && pepeSrc.pad) return '<span class="adm"><button type="button" data-act="pepe-unfeature">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button></span>';
+      if ((pepeSrc && pepeSrc.featured) || !pepeOn) return '';
+      return '<span class="adm"><button type="button" data-act="pepe-feature">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button></span>';
+    }
+    function pepeFeature(b, on) {
+      if (!confirm(on ? _t('js.stage.room.q_pepe_feature', 'Feature Pepe\'s stream? It becomes the pad\'s main stream.') : _t('js.stage.room.q_pepe_unfeature', 'Stop featuring Pepe\'s stream on this pad?'))) return;
+      b.disabled = true;
+      fetch('/api/stage/pepe/feature', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+        body: JSON.stringify({ room: featRoom(), on: on }) })
+        .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || _t('js.stage.room.e_do', 'Could not do that.')); poll(); })
+        .catch(function () { alert(_t('js.stage.room.e_net', 'Could not reach the server.')); b.disabled = false; });
+    }
     function renderTabs() {
       var box = o.tabs;
       micTabSig = micTabKey();
       if (!box) return;
-      if (!slots.length && !micShown()) { box.innerHTML = pepeExtras(); return; }
+      if (!slots.length && !micShown() && !pepeAdm()) { box.innerHTML = pepeExtras(); return; }
       var h = '';
       slots.forEach(function (s) {
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
@@ -331,7 +353,7 @@
                                                 : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button>') +
              '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut', '✂ Cut')) + '</button>' +
              (s.cam ? '' : '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut_ban', 'Cut + ban')) + '</button>') + '</span>';
-      }
+      } else h += pepeAdm();
       box.innerHTML = h;
     }
     if (o.tabs) {
@@ -343,6 +365,7 @@
         var act = b.getAttribute('data-act');
         if (!act) return;
         if (act === 'leave') { leave(b); return; }        // stagefix site: 🙈 Take me off this Stage
+        if (act === 'pepe-feature' || act === 'pepe-unfeature') { pepeFeature(b, act === 'pepe-feature'); return; }   // dock3 1.99??
         var ban = b.hasAttribute('data-ban');
         var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
@@ -379,6 +402,7 @@
         // "nothing is live" and hand the view to the mic stage
         if (!g || typeof g !== 'object' || g.ok === false || g.stale === true) return;
         var was = cur(), wasF = featured(), wasW = featWins();
+        if (g.front && typeof g.front.slug === 'string' && g.front.slug) lastFront = g.front.slug;   // (dock3: Pepe's ★ on the old homepage)
         if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99ajr golive: where a video slot is (setEmbed)
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream

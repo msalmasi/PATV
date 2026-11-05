@@ -808,10 +808,11 @@ function pepeWhep() {
   try { return require("./webrtc").pepeWhep(); } catch (e) { return null; }
 }
 /** 1.99fv: what Pepe's stage plays (mainstage.pepeSource: his stream, or an admin-chosen YouTube / Twitch embed). */
-function pepeSrc() {
-  try { return require("./mainstage").pepeSource(); } catch (e) { return { mode: "stream" }; }
+// (dock3 1.99??: for one pad - roomId - it also says whether that pad's owner / staff featured his stream there: pad_featured)
+function pepeSrc(roomId) {
+  try { return require("./mainstage").pepeSource(undefined, roomId || null); } catch (e) { return { mode: "stream" }; }
 }
-function stage() {
+function stage(roomId) {
   const fresh = Date.now() - STAGE.at < 120 * 1000;
   const room = stageRoom();
   // active / since come from Pepe's OWN stream only (HLS, else OBS) - never from Twitch; pepe_src is display only
@@ -819,10 +820,10 @@ function stage() {
     // 1.99fd: whep = the ⚡ Low latency toggle on Pepe's stage (only while his HLS is on air too)
     const whep = HLS.live ? pepeWhep() : null;
     return { active: HLS.live, since: HLS.live ? HLS.since : null, ended: HLS.ended || STAGE.ended || null, known: true, source: "hls", room,
-             ...(whep ? { whep } : {}), pepe_src: pepeSrc() };
+             ...(whep ? { whep } : {}), pepe_src: pepeSrc(roomId) };
   }
   return { active: fresh && !!STAGE.active, since: STAGE.since || null, ended: STAGE.ended || null, known: fresh && !STAGE.unknown, source: "obs", room,
-           pepe_src: pepeSrc() };
+           pepe_src: pepeSrc(roomId) };
 }
 
 // ── room audio relay: Pepe POSTs ~0.25 s MP3 chunks (1.99hp; was ~1 s), we pass them to signed-in listeners. Nothing kept. ──
@@ -2448,7 +2449,7 @@ function register(app, { isBotToken, addUser }) {
       } catch (e) { plexPlay = null; }
     }
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
-    const here = pepeIn(R.id), st = stage();
+    const here = pepeIn(R.id), st = stage(R.id);
     const latest = feed ? await padLatest(R.id, req.user, feed) : [];
     // 1.99ex: the Feed tab's seen state is per account for members (feedseen.js); signed out it stays in localStorage
     let feedSeen;

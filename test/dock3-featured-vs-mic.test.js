@@ -29,11 +29,13 @@ function mk() {
 // a switcher whose polls answer from a queue (an answer of `null` = the request failed)
 function switcher(opts) {
   const js = read("public", "js", "stage-room.js");
-  const answers = [], timers = [], src = [];
+  const answers = [], timers = [], src = [], calls = [];
   const ctx = { document: { readyState: "complete", createElement: mk }, console, setInterval: () => 0, clearInterval() {},
     setTimeout: (fn, ms) => { if (ms >= 40000) { timers.push(fn); return 1000 + timers.length; } return setTimeout(fn, ms); },
     clearTimeout: (h) => { if (h > 1000) timers[h - 1001] = null; else clearTimeout(h); }, location: { hostname: "x" },
-    fetch: () => { const a = answers.length ? answers.shift() : {}; return a === null ? Promise.reject(new Error("offline")) : Promise.resolve({ json: () => Promise.resolve(a) }); },
+    fetch: (url, init) => { calls.push({ url, init });
+      if (/\/api\/stage\/pepe\/feature$/.test(url)) return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+      const a = answers.length ? answers.shift() : {}; return a === null ? Promise.reject(new Error("offline")) : Promise.resolve({ json: () => Promise.resolve(a) }); },
     confirm: () => true, alert() {} };
   ctx.window = ctx; ctx.window.addEventListener = () => {};
   ctx.PATVStage = { player: () => ({ stop() {}, setSrc(s) { src.push(s); }, start() {}, running: () => false }) };
@@ -43,7 +45,8 @@ function switcher(opts) {
   Object.defineProperty(tabs, "innerHTML", { set(v) { html = v; }, get() { return html; } });
   const sw = ctx.PATVStage.switcher(Object.assign({ tabs, wrap: mk(), api: "/api/stage?room=pad", slots: [], pepeOn: true, pepeHere: true, slug: "pad", watch: false }, opts));
   const click = (v) => { const b = { hasAttribute: (k) => k === "data-v", getAttribute: () => v }; tabs.listeners.click[0]({ target: { closest: () => b } }); };
-  return { sw, tabs: () => html, src, click, answer: (a) => answers.push(a), poll: () => sw.poll(), grace: () => { const f = timers.splice(0); for (const x of f) if (x) x(); } };
+  const act = (a) => { const b = { hasAttribute: (k) => k === "data-act", getAttribute: (k) => (k === "data-act" ? a : null), disabled: false }; tabs.listeners.click[0]({ target: { closest: () => b } }); };
+  return { sw, tabs: () => html, src, click, act, calls, answer: (a) => answers.push(a), poll: () => sw.poll(), grace: () => { const f = timers.splice(0); for (const x of f) if (x) x(); } };
 }
 const MIC = (extra) => Object.assign({ v: 1, active: true, count: 2, default: "first", layout: "split", src: [{ id: "a" }, { id: "b" }] }, extra || {});
 const S1 = (by, extra) => Object.assign({ id: "s1", display: "Willow", featured: true, feature_by: by, hls: "/hls/s1.m3u8", since: 1 }, extra || {});
@@ -147,4 +150,53 @@ test("server: /api/stage carries `featured` (live or not, the homepage / cam rul
   assert.match(room, /featured: <%- JSON\.stringify\(RS\.featured \|\| null\)/);
   assert.match(hj, /stageFeatured = await require\("\.\/mainstage"\)\.featuredOf\(front\.id, viewer, \{ front: true \}\)/);
   assert.equal((home.match(/featured: locals\.stageFeatured \|\| null|featured: <%- JSON\.stringify\(locals\.stageFeatured \|\| null\)/g) || []).length, 2, "the Dock's init and the old switcher");
+});
+
+// ── dock3 item 5 (owner: "I actually see where the feature button is now. We just need to add it to Pepe's stage"): the SAME ★ Feature ──
+test("item 5: ★ Feature on Pepe's stage - the slot buttons' markup for the pad's managers; ☆ Unfeature while THIS pad features him; none for the site-wide event, off air, or viewers", () => {
+  const adm = (x) => (/<span class="adm">(.*?)<\/span>/.exec(x.tabs()) || [])[1] || "";
+  let x = switcher({ manage: true });
+  assert.match(adm(x), /^<button type="button" data-act="pepe-feature">★ Feature<\/button>$/, "Pepe alone: his tab and the button (the Dock's source chip lists it)");
+  assert.match(x.tabs(), /data-v="pepe"/, "his tab is drawn so the Dock shows the chip");
+  x = switcher({ manage: true, pepeSrc: { mode: "stream", featured: true, pad_featured: true } });
+  assert.match(adm(x), /data-act="pepe-unfeature">☆ Unfeature</);
+  assert.match(x.tabs(), /data-v="pepe"[^>]*><span class="dot" aria-hidden="true"><\/span><span class="star"/, "his tab carries the ★");
+  x = switcher({ manage: true, pepeSrc: { mode: "stream", featured: true, pad_featured: false } });
+  assert.equal(adm(x), "", "only the site-wide event: /stage/admin's, no button here");
+  x = switcher({ manage: true, pepeOn: false });
+  assert.equal(adm(x), "", "off air: nothing to feature");
+  x = switcher({ manage: true, pepeOn: false, pepeSrc: { mode: "stream", featured: true, pad_featured: true } });
+  assert.match(adm(x), /pepe-unfeature/, "off air but featured here: ☆ Unfeature stays");
+  x = switcher({ manage: false });
+  assert.equal(adm(x), "", "a viewer: no button");
+  x = switcher({ manage: true, pepeHere: false });
+  assert.equal(adm(x), "", "Pepe isn't in this pad: no button");
+  // a slot selected: the slot's own buttons, never Pepe's
+  x = switcher({ manage: true, slots: [S1("owner")] });
+  assert.match(adm(x), /data-act="unfeature" data-id="s1"/); assert.doesNotMatch(x.tabs(), /pepe-feature/);
+  x.click("pepe"); assert.match(adm(x), /data-act="pepe-feature"/, "his tab picked: his button");
+});
+
+test("item 5: ★ Feature posts {room, on} to /api/stage/pepe/feature, then polls; a viewer who never picked a tab goes to his stream (and back to the mic stage on ☆)", async () => {
+  const x = switcher({ manage: true });
+  x.sw.setMic(MIC());
+  assert.equal(x.sw.view(), "mic");
+  x.click("pepe");                                        // the manager picks his tab (the button is on it)
+  x.act("pepe-feature");
+  await new Promise((r) => setTimeout(r, 5));
+  const post = x.calls.find((c) => c.url === "/api/stage/pepe/feature");
+  assert.ok(post, "posted"); assert.equal(post.init.method, "POST"); assert.deepEqual(JSON.parse(post.init.body), { room: "pad", on: true });
+  // a viewer (never chose) on the same pad: the poll brings the pad feature - mic -> pepe
+  const v = switcher({});
+  v.sw.setMic(MIC()); assert.equal(v.sw.view(), "mic");
+  v.answer(live([], null, { pepe_src: { mode: "stream", featured: true, pad_featured: true } })); await v.poll();
+  assert.equal(v.sw.view(), "pepe", "Pepe featured on this pad: his stream is the default");
+  v.sw.setMic(MIC({ count: 3, src: [{ id: "a" }, { id: "b" }, { id: "c" }] })); assert.equal(v.sw.view(), "pepe", "the next mic-up doesn't take it");
+  v.answer(live([], null, { pepe_src: { mode: "stream", featured: false, pad_featured: false } })); await v.poll();
+  assert.equal(v.sw.view(), "mic", "☆ Unfeature: mic follows again");
+  // the old homepage switcher (no room in its api): the front pad's slug from the poll
+  const h = switcher({ manage: true, slug: "", api: "/api/stage" });
+  h.answer(live([], null, { front: { id: "R", slug: "front-pad", title: "Front" } })); await h.poll();
+  h.act("pepe-feature"); await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(JSON.parse(h.calls.find((c) => c.url === "/api/stage/pepe/feature").init.body), { room: "front-pad", on: true });
 });

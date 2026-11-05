@@ -4577,6 +4577,8 @@
   "js.stage.room.q_cut": "Cut this slot? Unused PAT is refunded.",
   "js.stage.room.q_unfeature": "Stop featuring this slot? It stays on as an ordinary one.",
   "js.stage.room.q_feature": "Feature this slot? It becomes the pad's main stream.",
+  "js.stage.room.q_pepe_feature": "Feature Pepe's stream? It becomes the pad's main stream.",
+  "js.stage.room.q_pepe_unfeature": "Stop featuring Pepe's stream on this pad?",
   "js.stage.room.e_do": "Could not do that.",
   "js.stage.room.e_net": "Could not reach the server.",
   "js.stage.room.leave": "🙈 Take me off this Stage",

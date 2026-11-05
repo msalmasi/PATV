@@ -286,7 +286,7 @@ function register(app, { addUser, isBotToken }) {
       if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       const st = await stage.roomStage(R.id, req.user);
       const manage = await rooms.canManage(req.user, R.id);
-      res.json({ ok: true, ...st, pepe: bridge().stage(), pepe_here: bridge().pepeIn(R.id) !== false, manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
+      res.json({ ok: true, ...st, pepe: bridge().stage(R.id), pepe_here: bridge().pepeIn(R.id) !== false, manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
     } catch (e) { fail(res, e); }
   });
 

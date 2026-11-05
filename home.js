@@ -269,8 +269,8 @@ function register(app, { addUser, xpForNextLevel }) {
       // featured room's stage whenever Pepe is IN that room (bridge.pepeIn), whatever his window shows.
       const reg = require("./rooms");
       const web = require("./roomsweb");
-      const stage = bridge.stage();
       const front = await reg.frontRoom(allRooms, { viewer }).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
+      const stage = bridge.stage(front.id);       // (dock3 1.99??: + whether the front pad featured Pepe's stream - the first paint's ★)
       const pepeHere = bridge.pepeIn(front.id) !== false;
       const frontReg = await reg.get(front.id).catch(() => null);
       // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges

@@ -44,7 +44,7 @@ const feat = async (id) => { const s = await S.getSlot(id); return s.featured ? 
 const featuredIn = async (room) => (await getQuery("SELECT id, feature_by FROM stage_slots WHERE room_id = ? AND featured = 1 AND status IN ('waiting','active')", [room]));
 async function clear() {
   for (const s of await getQuery("SELECT id FROM stage_slots WHERE status != 'ended'")) await S.end(s.id, "test_cleanup", "test");
-  await S.setConfig({ takeover_mode: "when_idle", pepe_feature: null }, "test");
+  await S.setConfig({ takeover_mode: "when_idle", pepe_feature: null, pepe_feature_pads: {} }, "test");
   await rooms.setStage(rooms.HOUSE_ROOM, { takeover: "" }, "test", { maxSlots: 4, maxPrice: 0 });
 }
 
@@ -268,6 +268,62 @@ test("an embed slot (live the moment it opens) is auto-featured when booked", as
   assert.equal(b.slot.status, "active");
   assert.equal(b.slot.featured, true);
   assert.equal(b.slot.feature_by, "auto");
+});
+
+test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad's auto-feature drops and stays off, other pads untouched; the page's ★ (pad_featured)", async () => {
+  await S.setConfig({ pepe_feature_pads: {} }, "test");
+  const a = await live();                                    // the house pad: auto-featured
+  assert.equal(await feat(a.id), "auto");
+  const r = await S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1");
+  assert.deepEqual(r, { featured: true });
+  assert.equal(await feat(a.id), null, "one featured stream per pad: the auto-feature yields");
+  assert.ok(S.padPepeFeatured(rooms.HOUSE_ROOM), "featured here");
+  assert.equal(S.padPepeFeatured("Some.Other.Room"), null, "not on another pad");
+  assert.equal(S.pepeFeatured(), null, "not the site-wide event");
+  let src = S.pepeSource(undefined, rooms.HOUSE_ROOM);
+  assert.equal(src.featured, true); assert.equal(src.pad_featured, true);
+  src = S.pepeSource(undefined, "Some.Other.Room");
+  assert.equal(src.featured, false, "another pad's stage has no ★ on him"); assert.equal(src.pad_featured, false);
+  assert.equal(S.pepeSource().pad_featured, false, "no pad asked: no pad feature");
+  // while it stands, no auto-feature on THIS pad
+  adv(5000); const b = await live(); await S.tick();
+  assert.equal(await feat(b.id), null, "Pepe featured here: nothing auto-featured");
+  assert.equal((await featuredIn(rooms.HOUSE_ROOM)).length, 0);
+  assert.deepEqual(await S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1"), { featured: true, already: true });
+  // off: auto-feature resumes at once
+  assert.deepEqual(await S.setPadPepeFeature(rooms.HOUSE_ROOM, false, "owner1"), { featured: false });
+  assert.equal(S.padPepeFeatured(rooms.HOUSE_ROOM), null);
+  assert.equal((await featuredIn(rooms.HOUSE_ROOM)).length, 1, "a live stream is auto-featured again");
+  const ev = await getQuery("SELECT what, actor, detail, room_id FROM stage_events WHERE what IN ('pepe_featured', 'pepe_unfeatured') ORDER BY ts");
+  assert.ok(ev.some((e) => e.what === "pepe_featured" && e.actor === "owner1" && e.room_id === rooms.HOUSE_ROOM), "logged with the pad");
+});
+
+test("dock3 1.99??: precedence - a slot featured by hand clears the pad's Pepe feature; refused while Pepe is away (409); the route is the slot buttons' rule", async () => {
+  await S.setConfig({ pepe_feature_pads: {} }, "test");
+  const a = await live();
+  await S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1");
+  await S.featureByOwner(a.id, "owner1");
+  assert.equal(await feat(a.id), "owner");
+  assert.equal(S.padPepeFeatured(rooms.HOUSE_ROOM), null, "a slot featured by hand ends Pepe's feature here");
+  assert.equal(S.config().pepe_feature_pads[rooms.HOUSE_ROOM], undefined);
+  // Pepe in another room (bridge.pepeIn false): refused; a stored one is ignored until he is back
+  const B = require(path.join(repo, "bridge"));
+  B._rooms.set("Elsewhere.Room", { id: "Elsewhere.Room", name: "Elsewhere", updated: Date.now() + 3600 * 1000, members: [], mic: [] });
+  try {
+    await assert.rejects(S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1"), (e) => e.status === 409 && /isn't in this pad/.test(e.message));
+    await S.setConfig({ pepe_feature_pads: { [rooms.HOUSE_ROOM]: { by: "owner1", at: T } } }, "test");
+    assert.equal(S.padPepeFeatured(rooms.HOUSE_ROOM), null, "stored, but ignored while he is away");
+    assert.equal(S.pepeSource(undefined, rooms.HOUSE_ROOM).featured, false);
+  } finally { B._rooms.delete("Elsewhere.Room"); }
+  assert.ok(S.padPepeFeatured(rooms.HOUSE_ROOM), "back (nobody knows where he is - shown as before): it counts again");
+  await S.setConfig({ pepe_feature_pads: {} }, "test");
+  const src = fs.readFileSync(path.join(repo, "mainstage.js"), "utf8");
+  assert.match(src, /app\.post\("\/api\/stage\/pepe\/feature", addUser, needUser, async/);
+  assert.match(src, /if \(!\(await rooms\.canManage\(req\.user, R\.id\)\)\) throw new Refuse\(403, "Only this pad's owner can feature streams\."\);/);
+  // a bad stored value is cleaned
+  await S.setConfig({ pepe_feature_pads: { "": { by: "x" }, ok: "nope", [rooms.HOUSE_ROOM]: { by: 7, at: "x" } } }, "test");
+  assert.deepEqual(S.config().pepe_feature_pads, { [rooms.HOUSE_ROOM]: { by: "7", at: null } });
+  await S.setConfig({ pepe_feature_pads: {} }, "test");
 });
 
 test("admin routes + UI: pepe-feature / autofeature cancel are staff-only; the admin card, pad setting and ★ strings exist", async () => {
