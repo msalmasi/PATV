@@ -315,6 +315,9 @@ async function opNp(user, b) {
   if (target === "cam") {
     const T = (OA().view() || {}).target || null;
     out.on_air = T ? T.label : null;
+    // 1.99akr onairtitle: + the video's title when it's an embed (the label alone said only "🔗 YouTube video")
+    const ti = T && OA().titleOf ? OA().titleOf(T) : null;
+    out.on_air_title = ti ? ti.title : null;
     return out;
   }
   const R = await padOf(b.room);

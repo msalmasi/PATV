@@ -2,18 +2,20 @@
 // only: YouTube IFrame API (videos, lives, a channel's live stream) and the Twitch embed player (channels, VODs), sound on.
 // Every 5 s the player's state goes to POST /api/onair/player/state {t, state, detail}; the server answers {on:false} once
 // this pick is no longer on air (or the token is stale) -> the player is removed and the page stays empty.
+// 1.99akr onairtitle: + {title, author} - what the YouTube player says it's playing (getVideoData), so Pepe can say WHICH
+// video is on his cam (the only source for a channel's live stream; the server cleans it and treats it as untrusted text).
 (function () {
   'use strict';
   var box = document.getElementById('oaPlayer');
   if (!box) return;
   var P = box.getAttribute('data-p'), T = box.getAttribute('data-t'), ID = box.getAttribute('data-id');
   var TOKEN = box.getAttribute('data-token'), PARENT = box.getAttribute('data-parent') || location.hostname;
-  var state = 'loading', detail = '', stopped = false, player = null;
+  var state = 'loading', detail = '', stopped = false, player = null, meta = null;
   function set(s, d) { state = s; if (d != null) detail = String(d).slice(0, 120); }
   function report() {
     if (stopped) return;
     fetch('/api/onair/player/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
-      body: JSON.stringify({ t: TOKEN, state: state, detail: detail }) })
+      body: JSON.stringify({ t: TOKEN, state: state, detail: detail, title: meta ? meta.title : undefined, author: meta ? meta.author : undefined }) })
       .then(function (r) { return r.json(); })
       .then(function (j) { if (j && j.on === false) stop(); })
       .catch(function () { /* the next report */ });
@@ -53,6 +55,10 @@
     setInterval(function () {
       try {
         if (!player || !player.getCurrentTime) return;
+        try {
+          var vd = player.getVideoData && player.getVideoData();
+          if (vd && vd.title) meta = { title: String(vd.title).slice(0, 200), author: String(vd.author || '').slice(0, 100) };
+        } catch (y) { /* no video data yet */ }
         var ct = player.getCurrentTime(), st = player.getPlayerState();
         if (st === 1) set(lastT >= 0 && ct === lastT ? 'buffering' : 'playing', lastT >= 0 && ct === lastT ? 'clock stuck' : '');
         lastT = ct;
