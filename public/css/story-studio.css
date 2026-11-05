@@ -87,22 +87,65 @@
 .sst .sst-trim-report { font-size: 12px; font-variant-numeric: tabular-nums; margin: 0; }
 @media (max-width: 760px) {
   .sst.ds-scrim.sheet { padding: 0; place-items: stretch; }
-  .sst.ds-scrim.sheet .sst-card { inline-size: 100%; block-size: var(--sst-vh, 100dvh); max-block-size: none; border: 0; border-radius: var(--ds-r-xs); padding: 0; }
-  .sst .sst-head { padding-block-start: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)); }
-  .sst .sst-body { display: flex; }
-  .sst .sst-work { inline-size: 100%; padding-block: var(--ds-sp-2); }
+  /* The workspace fills the phone; the exported canvas stays exactly 9:16.
+     Sheets float over it, so opening a tool never changes the composition. */
+  .sst.ds-scrim.sheet .sst-card { position: relative; isolation: isolate; inline-size: 100%; block-size: var(--sst-vh, 100dvh); max-block-size: none; border: 0; border-radius: var(--ds-r-xs); padding: 0; background: var(--ds-media-bg); }
+  .sst .sst-head { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-sticky); border: 0; box-shadow: var(--ds-e-0) !important; padding: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)) var(--ds-sp-3) var(--ds-sp-4); background: linear-gradient(var(--ds-media-panel), transparent); }
+  .sst .sst-head .ds-pixel-h { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .sst .sst-head .ds-btn { background: var(--ds-media-chip); border-color: transparent; border-radius: var(--ds-r-pill); }
+  .sst .sst-lifetime { padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 11px; }
+  .sst .sst-body { display: flex; min-block-size: 0; }
+  .sst .sst-work { position: relative; inline-size: 100%; padding: 0; gap: 0; }
+  .sst .sst-preview-wrap { min-block-size: 0; }
+  .sst .sst-preview { block-size: min(100%, calc(100vw * 16 / 9)); max-block-size: none; border-radius: var(--ds-r-xs); }
   .sst .sst-summary { display: none; }
-  .sst .sst-identity { display: block; }
-  .sst .sst-tools { gap: var(--ds-sp-1); justify-content: space-between; padding-inline: var(--ds-sp-4); }
-  .sst .sst-tools .ds-btn { flex: 1; min-inline-size: 0; padding-inline: var(--ds-sp-1); overflow-wrap: anywhere; }
-  .sst .sst-foot { padding-block-end: calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)); }
-  .sst .sst-post { min-inline-size: 110px; max-inline-size: 45%; white-space: normal; }
+  .sst .sst-empty { background: radial-gradient(ellipse at 50% 35%, var(--ds-ac-bg), transparent 65%); padding-inline: var(--ds-sp-8); }
+  .sst .sst-empty p { font-size: 20px; color: var(--ds-text-strong); line-height: 1.4; max-inline-size: 220px; margin: 0 auto; }
+  .sst .sst-empty > .ds-ic { font-size: 48px; }
+  .sst .sst-picks { position: absolute; inset-inline: var(--ds-sp-4); inset-block-end: var(--ds-sp-6); justify-content: center; gap: var(--ds-sp-6); z-index: var(--ds-z-raised); }
+  .sst .sst-picks .ds-btn { flex-direction: column; gap: var(--ds-sp-1); inline-size: 80px; min-block-size: 80px; padding: var(--ds-sp-2); border-radius: var(--ds-r-xl); background: var(--ds-media-chip); font-size: 11px; }
+  .sst .sst-picks .ds-ic { font-size: 24px; }
+  .sst:not(.sst-has-media) .sst-picks [data-picker="camera"] { order: 1; min-block-size: 88px; inline-size: 88px; border-radius: var(--ds-r-pill); border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
+  .sst .sst-filename { display: none; }
+  .sst.sst-has-media .sst-picks { inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-block-end: auto; inset-inline-end: auto; inset-inline-start: var(--ds-sp-3); gap: var(--ds-sp-2); }
+  .sst.sst-has-media .sst-picks .ds-btn { inline-size: 44px; min-block-size: 44px; padding: var(--ds-sp-1); border-radius: var(--ds-r-pill); }
+  .sst.sst-has-media .sst-picks .sst-button-label { display: none; }
+  .sst.sst-has-media .sst-picks .ds-ic { font-size: 20px; }
+  .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: var(--ds-sp-2); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-2); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
+  .sst .sst-tools .ds-btn { flex: none; inline-size: 60px; min-inline-size: 44px; min-block-size: 56px; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); background: var(--ds-media-chip); color: var(--ds-text-strong); overflow-wrap: anywhere; line-height: 1.2; }
+  .sst .sst-tools .ds-ic { font-size: 22px; }
+  .sst:not(.sst-has-media) .sst-tools, .sst:not(.sst-video) [data-tool="trim"] { display: none; }
+  .sst .sst-foot { padding: var(--ds-sp-2) var(--ds-sp-3) calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)); border: 0; background: var(--ds-media-bg); }
+  .sst .sst-decision { gap: var(--ds-sp-2); }
+  .sst .sst-identity { display: block; text-align: start; margin-inline-start: var(--ds-sp-2); }
+  .sst .sst-post { min-inline-size: 110px; max-inline-size: 45%; white-space: normal; border-radius: var(--ds-r-pill); }
   .sst .sst-destination { max-inline-size: 55%; }
-  .sst .sst-sheet { max-block-size: 29dvh; }
+  .sst .sst-destination strong { font-size: 13px; }
+  .sst:not(.sst-has-media) .sst-post { display: none; }
+  .sst:not(.sst-has-media) .sst-destination { max-inline-size: 100%; }
+  .sst .sst-rules { display: none; }
+  .sst .sst-sheet-slot { position: absolute; inset-inline: 0; inset-block: calc(64px + env(safe-area-inset-top, 0px)) 0; display: flex; flex-direction: column; justify-content: flex-end; pointer-events: none; z-index: var(--ds-z-nav); }
+  .sst .sst-sheet { display: flex; flex-direction: column; pointer-events: auto; padding: var(--ds-sp-2) var(--ds-sp-4) calc(var(--ds-sp-3) + env(safe-area-inset-bottom, 0px)); max-block-size: min(62%, 480px); border-start-start-radius: var(--ds-r-2xl); border-start-end-radius: var(--ds-r-2xl); overflow: hidden; box-shadow: var(--ds-e-3); animation: sst-sheet-in 160ms ease-out; }
+  .sst .sst-sheet::before { content: ''; flex: none; align-self: center; inline-size: 32px; block-size: 4px; border-radius: var(--ds-r-pill); background: var(--ds-line-strong); margin-block: var(--ds-sp-1) var(--ds-sp-2); }
+  .sst .sst-sheet-head { flex: none; }
+  .sst .sst-sheet-head .ds-btn { flex: none; }
+  .sst .sst-sheet-head .ds-eyebrow { min-inline-size: 0; overflow-wrap: anywhere; }
+  .sst .sst-sheet-body { overflow: auto; overscroll-behavior: contain; min-block-size: 0; padding: var(--ds-sp-1); }
+  .sst[data-sheet="options"] .sst-sheet-body > .sst-field, .sst[data-sheet="options"] .sst-sheet-body > .sst-help { flex-basis: 100%; }
+  /* Keep the footer's space to prevent canvas jumps, while removing covered controls from focus. */
+  .sst.sst-has-sheet .sst-foot { visibility: hidden; }
+  .sst.sst-has-sheet .sst-tools, .sst.sst-has-sheet .sst-picks { display: none; }
+  .sst.sst-has-sheet .sst-status:not(:empty) { position: absolute; inset-block-start: calc(68px + env(safe-area-inset-top, 0px)); inset-inline: var(--ds-sp-3); z-index: var(--ds-z-pop); border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
+  .sst .sst-progress, .sst .sst-recovery { flex-wrap: wrap; }
+  .sst .sst-recovery .ds-btn { white-space: normal; }
+  .sst .sst-status, .sst .sst-progress, .sst .sst-recovery { background: var(--ds-media-bg); }
+  .sst.sst-busy .sst-tools, .sst.sst-busy .sst-picks { display: none; }
+  .sst .sst-colors { flex-wrap: nowrap; inline-size: 100%; overflow-x: auto; padding: var(--ds-sp-1); }
+  .sst .sst-colors button { flex: none; border-radius: var(--ds-r-pill); }
   .sst .ds-in { font-size: 16px; }
-  .sst .sst-filename { max-inline-size: 28%; }
   .sst .sst-button-label { white-space: normal; }
 }
+@keyframes sst-sheet-in { from { transform: translateY(var(--ds-sp-6)); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (pointer: coarse) {
   .sst .ds-btn, .sst .sst-picks .ds-btn, .sst .sst-layer, .sst .sst-colors button { min-block-size: 44px; }
   .sst .sst-icon-only, .sst .sst-colors button { min-inline-size: 44px; }

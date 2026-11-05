@@ -119,6 +119,8 @@ The Room Dock maps an equipped pad accent once, on `.rm-dock.pad-acc` and the ma
 
 Story Studio is the second consumer of this mapping, on `.sst.pad-acc`; its focus ring follows the selected pad's guarded accent too.
 
+On phones (up to 760px), Story Studio uses a media-first full-screen workspace with floating tools and bottom editing sheets. The picture remains exactly 9:16; opening a sheet overlays it without resizing the composition. Camera and Gallery open the native file/capture pickers. Destination and posting identity stay beside the publish action; secondary rules live in Story options. Desktop retains the preview and details rail.
+
 ```css
 --ds-ac: var(--pad-accent);
 --ds-ac-2: var(--pad-accent);

@@ -291,6 +291,44 @@ test('Studio: one listener, pad preselection, nested Escape, draft confirmation 
   P.win.confirm = () => true; key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null); assert.equal(P.doc.activeElement, P.opener); assert.equal(P.revoked.length, 1);
 });
 
+test('Studio: overlay sheets focus a visible control and return to their tool after Done or Escape', async () => {
+  const P = studioPage(), root = await studioOpen(P); await studioPick(P);
+  assert.doesNotMatch(P.doc.querySelector('.sst-preview').getAttribute('aria-label'), /\bbelow\b/i);
+  const sticker = P.doc.querySelector('[data-tool="sticker"]'); sticker.focus(); sticker.click(); await flush();
+  assert.equal(root.getAttribute('data-sheet'), 'sticker'); assert.ok(root.classList.contains('sst-has-sheet'));
+  const done = P.doc.querySelector('.sst-sheet-head button'); assert.equal(P.doc.activeElement, done);
+  done.click(); assert.equal(root.getAttribute('data-sheet'), null); assert.ok(!root.classList.contains('sst-has-sheet'));
+  assert.equal(P.doc.querySelector('.sst-sheet'), null); assert.equal(P.doc.activeElement, sticker);
+
+  sticker.click(); await flush(); assert.equal(P.doc.activeElement, P.doc.querySelector('.sst-sheet-head button'));
+  keyActive(P, 'Escape'); assert.equal(P.doc.activeElement, sticker); assert.equal(root.getAttribute('data-sheet'), null);
+  const text = P.doc.querySelector('[data-tool="text"]'); text.focus(); text.click();
+  const words = P.doc.querySelector('.sst-text-input'); assert.equal(P.doc.activeElement, words); assert.equal(root.getAttribute('data-sheet'), 'text');
+  words.value = 'Keep the story canvas in view'; words.dispatchEvent(new Ev('input')); await flush();
+  keyActive(P, 'Escape'); assert.equal(P.doc.activeElement, text); assert.equal(root.getAttribute('data-sheet'), null);
+  text.click(); assert.equal(P.doc.querySelector('.sst-text-input').value, '');
+  assert.ok(P.doc.querySelector('.sst-sheet-body').textContent.includes('Keep the story canvas in view'));
+});
+
+test('Studio: mobile editing state follows replacement media and restores the draft after upload cancellation', async () => {
+  let release;
+  const P = studioPage({ fetch: (url, opt) => opt.method === 'PUT' ? new Promise(resolve => {
+    release = () => resolve(P.response(200, { ok: true, received: Number(url.split('offset=')[1]) + opt.body.size }));
+  }) : null });
+  const root = await studioOpen(P);
+  assert.ok(!root.classList.contains('sst-has-media')); assert.ok(!root.classList.contains('sst-video')); assert.ok(!root.classList.contains('sst-busy'));
+  await studioPick(P); assert.ok(root.classList.contains('sst-has-media')); assert.ok(!root.classList.contains('sst-video'));
+  await studioPick(P, 'video/mp4'); assert.ok(root.classList.contains('sst-video')); assert.equal(root.getAttribute('data-sheet'), 'trim');
+  await studioPick(P); assert.ok(root.classList.contains('sst-has-media')); assert.ok(!root.classList.contains('sst-video')); assert.equal(root.getAttribute('data-sheet'), null);
+  P.doc.querySelector('.sst-post').click(); await flush(15); assert.equal(typeof release, 'function');
+  assert.ok(root.classList.contains('sst-busy')); assert.ok(!P.doc.querySelector('.sst-progress').hidden);
+  assert.ok(P.doc.querySelector('[data-tool="text"]').disabled);
+  clickText(P, 'Cancel'); await flush(); release(); await flush();
+  assert.ok(!root.classList.contains('sst-busy')); assert.ok(root.classList.contains('sst-has-media'));
+  assert.ok(P.doc.querySelector('.sst-progress').hidden); assert.ok(!P.doc.querySelector('[data-tool="text"]').disabled);
+  assert.equal(P.calls.filter(c => c.url === '/api/stories/mine').length, 0); assert.ok(P.doc.querySelector('.sst-source'));
+});
+
 test('Studio: caps are checked before uploads; long video gets clamped trim and native capture remains local', async () => {
   const P = studioPage(); await studioOpen(P);
   const f = { type: 'video/mp4', name: 'large.mp4', size: 101 * 1024 * 1024 };
@@ -658,8 +696,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=1/);
-  assert.match(html, /story-studio\.css\?v=1/);
+  assert.match(html, /story-studio\.js\?v=2/);
+  assert.match(html, /story-studio\.css\?v=2/);
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });

@@ -55,12 +55,12 @@
     s.root.remove(); document.body.style.overflow = s.oldOverflow; current = null;
     if (s.opener && s.opener.isConnected) s.opener.focus();
   }
-  function focusables(root) { return Array.prototype.filter.call(root.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), function (n) { return !n.disabled && n.tabIndex !== -1 && !n.hidden && n.offsetParent !== null; }); }
+  function focusables(root) { return Array.prototype.filter.call(root.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), function (n) { return !n.disabled && n.tabIndex !== -1 && !n.hidden && n.offsetParent !== null && getComputedStyle(n).visibility !== 'hidden'; }); }
   function key(s, e) {
     if (!live(s)) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else close(s); return; }
     if (e.key === 'Tab') {
-      var list = focusables(s.root), i = list.indexOf(document.activeElement);
+      var list = focusables(s.sheet || s.root); if (s.sheetName === 'crop') list.unshift(s.preview); var i = list.indexOf(document.activeElement);
       if (!list.length) { e.preventDefault(); s.root.focus(); }
       else if (e.shiftKey && i <= 0) { e.preventDefault(); list[list.length - 1].focus(); }
       else if (!e.shiftKey && (i < 0 || i === list.length - 1)) { e.preventDefault(); list[0].focus(); }
@@ -80,14 +80,14 @@
     s.more = add(head, iconButton(_t('js.feed.ss.options', '⚙️ Story options'), function () { optionsSheet(s); }, 'icon sm quiet sst-icon-only'));
     s.body = add(s.card, el('div', 'sst-body')); var work = add(s.body, el('div', 'sst-work'));
     s.previewWrap = add(work, el('div', 'sst-preview-wrap')); s.preview = add(s.previewWrap, el('div', 'sst-preview')); s.preview.tabIndex = 0;
-    s.preview.setAttribute('aria-label', _t('js.feed.ss.preview', 'Story preview. Use the tools below to edit.'));
+    s.preview.setAttribute('aria-label', _t('js.feed.ss.preview', 'Story preview. Use the editing tools to make it yours.'));
     s.empty = add(s.preview, el('div', 'sst-empty')); var emptyIcon = add(s.empty, el('span', 'ds-ic', _t('js.feed.ss.camera_icon', '📷'))); emptyIcon.setAttribute('aria-hidden', 'true'); add(s.empty, el('p', null, _t('js.feed.ss.choose', 'Choose a picture or video')));
     s.canvas = add(s.preview, el('canvas', 'sst-overlay')); s.canvas.width = W; s.canvas.height = H; s.canvas.setAttribute('aria-hidden', 'true');
     s.handles = add(s.preview, el('div', 'sst-handles')); s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
       var f = add(s.picks, input('file')); f.accept = 'image/*,video/*'; f.hidden = true; f.setAttribute('data-pick', pair[0]); if (pair[0] === 'camera') f.setAttribute('capture', 'environment');
       f.addEventListener('change', function () { if (f.files && f.files[0]) pick(s, f.files[0]); f.value = ''; });
-      add(s.picks, iconButton(pair[1], function () { f.click(); }));
+      var pickButton = add(s.picks, iconButton(pair[1], function () { f.click(); })); pickButton.setAttribute('data-picker', pair[0]);
     });
     s.filename = add(s.picks, el('span', 'sst-filename'));
     s.summary = add(s.body, el('aside', 'sst-summary')); add(s.summary, el('h3', 'ds-eyebrow', _t('js.feed.ss.summary', 'Story details')));
@@ -110,7 +110,7 @@
     s.key = function (e) { key(s, e); }; document.addEventListener('keydown', s.key, true);
     s.focus = function (e) { if (live(s) && !s.root.contains(e.target)) { var fs = focusables(s.root); (fs[0] || s.root).focus(); } }; document.addEventListener('focusin', s.focus);
     s.resize = function () { layoutHandles(s); }; window.addEventListener('resize', s.resize);
-    if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
+    if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
     cropGestures(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
     var include = pad && !/^(?:user:|u\/|profile$)/i.test(String(pad)) ? '?pad=' + encodeURIComponent(pad) : '';
     req('/api/stories/targets' + include).then(function (data) {
@@ -137,6 +137,7 @@
   }
   function paintControls(s) {
     var d = s.d; s.post.disabled = s.busy || !!s.pendingStickers || !s.target || !d.file || !d.valid || (!d.decoded && !d.legacy);
+    s.root.classList.toggle('sst-has-media', !!d.file); s.root.classList.toggle('sst-video', d.kind === 'video'); s.root.classList.toggle('sst-busy', !!s.busy);
     s.closeButton.disabled = !!(s.attempt && s.attempt.stage === 'mine'); s.cancelButton.disabled = s.closeButton.disabled;
     s.destination.disabled = s.busy || !s.targets.length; s.more.disabled = s.busy;
     Array.prototype.forEach.call(s.picks.querySelectorAll('button'), function (b) { b.disabled = s.busy; });
@@ -144,11 +145,11 @@
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
-  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); paintControls(s); if (opener && opener.isConnected) opener.focus(); }
+  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); if (opener && opener.isConnected) opener.focus(); }
   function sheet(s, name, title) {
-    var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet');
+    var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet'); s.root.setAttribute('data-sheet', name);
     s.sheet = add(s.sheetSlot, el('section', 'sst-sheet')); s.sheet.setAttribute('aria-label', title);
-    var h = add(s.sheet, el('div', 'sst-sheet-head')); add(h, el('h3', 'ds-eyebrow', title)); add(h, button(_t('js.feed.ss.done', 'Done'), function () { closeSheet(s); }));
+    var h = add(s.sheet, el('div', 'sst-sheet-head')); add(h, el('h3', 'ds-eyebrow', title)); var done = add(h, button(_t('js.feed.ss.done', 'Done'), function () { closeSheet(s); })); done.focus();
     var body = add(s.sheet, el('div', 'sst-sheet-body')); paintControls(s); return body;
   }
   function destinationSheet(s) {
@@ -156,7 +157,12 @@
     s.targets.forEach(function (p) { var b = add(box, button(p.profile ? _t('js.feed.ss.profile', 'Your profile') : p.title, function () { s.target = p; paintTarget(s); closeSheet(s); }, 'quiet sst-target')); b.setAttribute('aria-pressed', String(p === s.target)); });
     var first = box.querySelector('button'); if (first) first.focus();
   }
-  function optionsSheet(s) { var box = sheet(s, 'options', _t('js.feed.ss.options', '⚙️ Story options')); var check = input('checkbox'); check.checked = s.d.nsfw; check.addEventListener('change', function () { s.d.nsfw = check.checked; }); add(box, field(_t('js.feed.sc.nsfw', 'NSFW (blurred until someone taps it)'), check)).classList.add('ds-check'); check.focus(); }
+  function optionsSheet(s) {
+    var box = sheet(s, 'options', _t('js.feed.ss.options', '⚙️ Story options')); var check = input('checkbox'); check.checked = s.d.nsfw; check.addEventListener('change', function () { s.d.nsfw = check.checked; }); add(box, field(_t('js.feed.sc.nsfw', 'NSFW (blurred until someone taps it)'), check)).classList.add('ds-check');
+    add(box, el('p', 'sst-help', _t('js.feed.ss.visible', 'Visible for 24 hours')));
+    if (s.target && !s.target.profile && s.target.href) { var rules = add(box, el('a', 'ds-btn quiet sm', _t('js.feed.ss.rules', 'Pad rules'))); rules.href = s.target.href + '#rules'; rules.target = '_blank'; rules.rel = 'noopener'; }
+    check.focus();
+  }
   function framing(d) {
     var ratio = W / H, own = d.w / d.h;
     var w = own > ratio ? ratio / own : 1, h = own > ratio ? 1 : own / ratio;
