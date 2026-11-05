@@ -40,13 +40,13 @@
 // person - never who.
 // Every answer to a veil block is the same whoever is behind it (an account, an unlinked login, nobody), apart from "That's you".
 // Menus never say "they blocked you"; only "you blocked them" (blk), and never on a veiled entry (Unblock is in Settings → Blocked people)
-// - except (1.99?? casmask, the 1.99ajw verifier's gap b) a FROG-NAMED masked casino seat whose person the viewer frog-blocked (people.js
+// - except (1.99akb casmask, the 1.99ajw verifier's gap b) a FROG-NAMED masked casino seat whose person the viewer frog-blocked (people.js
 // vb, {k:'cseat'} below): the same residual a folded frog line already carries (two frog names are the same person - never who). A
 // "someone" seat is neither blocked nor unblocked from the table (casmask review: it can be the seat a watcher just saw named - a
 // block on it would tie the name to every frog name; personref refuses it, the same answer whoever sits there).
 //
 // Routes: POST /api/blocks {ref, on, slug?} (ref = personref.js, or {k:'vb', id} / {k:'lb', v} from the settings list)
-//         (1.99?? casmask: or {k:'cseat', t, s} - a masked casino seat by its own id: Block, and Unblock lifting every frog-name block on that person)
+//         (1.99akb casmask: or {k:'cseat', t, s} - a masked casino seat by its own id: Block, and Unblock lifting every frog-name block on that person)
 //         GET  /api/blocks            the viewer's blocks (veils by label only)
 //         GET  /settings/blocked      the page
 "use strict";
@@ -218,12 +218,12 @@ async function set(user, ref, on, { R = null } = {}) {
     if (on === false) { await runQuery("DELETE FROM login_blocks WHERE blocker_id = ? AND login = ?", [me, l]); changed(me); return { ok: true, blocked: false, login: l }; }
     ref = { k: "login", v: l };
   }
-  const p = await PR.resolve(ref, { R, cseat: true });       // (1.99?? casmask: the masked casino seat's Block - personref opt-in)
+  const p = await PR.resolve(ref, { R, cseat: true });       // (1.99akb casmask: the masked casino seat's Block - personref opt-in)
   if (p.error) throw new Refuse(404, p.error);
   const myLogin = user.camfrogUsername ? low(user.camfrogUsername) : await loginOf(me);
   if (p.veil) {
     if ((p.userId && p.userId === me) || (p.login && myLogin && p.login === myLogin)) throw new Refuse(400, "That's you.", "self");
-    // 1.99?? casmask (the 1.99ajw verifier's gap b): a MASKED casino seat ({k:'cseat'}, personref.js) - its menu offers 🚫 Block (a
+    // 1.99akb casmask (the 1.99ajw verifier's gap b): a MASKED casino seat ({k:'cseat'}, personref.js) - its menu offers 🚫 Block (a
     // frog-name block like the chat's) and ✅ Unblock on a frog name the viewer already blocked that way. Unblock lifts every frog-name
     // block on that person (the block follows them under any frog name); Block adds none when one is already there. The answer is the
     // same either way, whoever is behind the seat.

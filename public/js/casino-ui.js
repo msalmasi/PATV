@@ -676,7 +676,7 @@
     smallMenu(anchor, { cls: "cz-pepe", aria: T("pepe_menu", "Pepe"), avatar: { name: "Pepe", avatar: "/public/img/pepe.png" }, name: "Pepe",
                         role: T("pepe_role", "the dealer · provably fair"), items });
   }
-  /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who. 1.99?? casmask (the
+  /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who. 1.99akb casmask (the
    *  1.99ajw verifier's gap b): 🚫 Block… - a FROG-NAME block, the chat's masked-entry item and sheet (block-sheet.js veil: whatever frog
    *  name they use their veiled activity is hidden from you; the server finds who it is from the masked seat's own id and never says) -
    *  or ✅ Unblock on a frog name you already blocked that way (the people answer's vb). Signed-out viewers never get this menu.

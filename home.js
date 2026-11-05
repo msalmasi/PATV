@@ -25,7 +25,7 @@ const many = async (sql, params = []) => {
 };
 const parse = (s) => { try { return JSON.parse(s); } catch (e) { return null; } };
 
-// 1.99?? casmask (the 1.99ajw verifier's gap a): Pepe's own tables as /tables shows them - masked by the site's veils too (tables.view)
+// 1.99akb casmask (the 1.99ajw verifier's gap a): Pepe's own tables as /tables shows them - masked by the site's veils too (tables.view)
 async function tablesState() {
   try {
     const T = await require("./tables").view();
@@ -139,7 +139,7 @@ async function personal(me, S) {
     out.tickets = p ? Number(p.count) || 0 : 0;
     out.bets = (S.betters && S.betters[cf]) || 0;
   }
-  // 1.99?? casmask: the viewer's own seat - by their own seat list (Pepe's tables: tables.js PRIV, keyed by their PATV name) or their
+  // 1.99akb casmask: the viewer's own seat - by their own seat list (Pepe's tables: tables.js PRIV, keyed by their PATV name) or their
   // account at a site table - so a MASKED seat of theirs is still theirs here; a name on the (masked) public list only as the old fallback
   const mine = new Set();
   try { for (const x of require("./tables")._state().PRIV.get(String(me.username || "").toLowerCase()) || []) mine.add(String(x.table)); } catch (e) { /* none */ }

@@ -125,7 +125,7 @@ async function kindForActor(actor) {
   try { return await kindOf(keysOf(String(actor.uid), actor, await linkedLogin(String(actor.uid)))); } catch (e) { return "unknown"; }
 }
 const kindCache = new Map();         // userId (+ room login) -> {k, at}: people a stored round names whom no table in memory knows (maskRounds)
-/** p: their player record at the table (1.99?? casmask review: a room seat's login counts - a saved table read it too) */
+/** p: their player record at the table (1.99akb casmask review: a room seat's login counts - a saved table read it too) */
 async function kindForUid(uid, p = null) {
   const ck = uid + (p && p.via === "room" && p.camfrog ? "|" + lc(p.camfrog) : "");
   const c = kindCache.get(ck), t = clock();
@@ -315,7 +315,7 @@ function maskText(T, text, o) {
   if (typeof text !== "string" || !text) return text;
   return maskWith(text, pairsOf(T, !!(o && o.webOnly), !!(o && o.fresh)));
 }
-/** 1.99?? casmask: a text with each [name, label] pair's name masked as maskText does (longest first; a one-character name as written,
+/** 1.99akb casmask: a text with each [name, label] pair's name masked as maskText does (longest first; a one-character name as written,
  *  never next to a card's suit) - also what tables.js masks Pepe's own tables' log with */
 function maskWith(text, pairs) {
   if (typeof text !== "string" || !text || !Array.isArray(pairs) || !pairs.length) return text;
@@ -371,7 +371,7 @@ function maskRound(T, lr) {
   }
   return out;
 }
-// 1.99?? casmask (the 1.99ajw verifier's gap c): a table that is no longer in memory (closed and past its linger, or closed before a
+// 1.99akb casmask (the 1.99ajw verifier's gap c): a table that is no longer in memory (closed and past its linger, or closed before a
 // restart - boot loads only the open ones) is masked by its SAVED state (casino_tables.state - its veil: the names each person was
 // shown under, the rounds up to their last masked seat session's start (omr) and the old-content ids (ns)) with each person's kind
 // read NOW - never by the current veil alone, so a round first shown under the name stays "someone" for good there too. The table's

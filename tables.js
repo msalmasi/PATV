@@ -21,7 +21,7 @@
 // account that paid for the seat. That map is kept in memory only, apart from the public state, and
 // /api/tables/state hands a signed-in user ONLY their own entry. It is never written to the
 // database, never rendered into page HTML, and never included in anything another user can fetch.
-// 1.99?? casmask: the sync's `who` (which login / account key sits in which seat, who hosts) is server only too - WHO, read
+// 1.99akb casmask: the sync's `who` (which login / account key sits in which seat, who hosts) is server only too - WHO, read
 // by the site's own veils (view) and never part of the public state.
 const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
@@ -42,7 +42,7 @@ let STATE = null;                      // the latest public state
 let PRIV = new Map();                  // PATV username (lowercase) -> [that player's own seats, one per table]
 let RECEIVED = 0;
 
-// ── 1.99?? casmask (the 1.99ajw verifier's gap a): Pepe's own tables masked by the SITE's veils too ──
+// ── 1.99akb casmask (the 1.99ajw verifier's gap a): Pepe's own tables masked by the SITE's veils too ──
 // Pepe masks his tables before he syncs them (pepe_tables.py, privacy fix 2: "someone" / "someone N" for everyone private by HIS
 // checks). The site applies its own veils on top, at every read, with the rule casino/veil.js uses (veil.kindOf: padweb.hiddenKey or
 // Pepe's incognito report, for the seat's login, its account's key "u:<id>" and the account's linked login): a seat the site finds
@@ -50,7 +50,7 @@ let RECEIVED = 0;
 // the host, the result, the felt's last round and the public log. Who sits where comes from the sync's SERVER-ONLY `who`
 // ({<table id>: {seats: [<login> | "u:<id>"], host}} - kept in WHO, never in STATE, never on a page); a table without it (an older
 // Pepe) has every seat and its host masked (fail closed). /api/tables/state and the homepage read the tables through view().
-// 1.99?? casmask review fixes:
+// 1.99akb casmask review fixes:
 //   * STICKY for the table's life (Pepe's own rule, _game_veil_map): a person the site masked at a table (a confirmed veil -
 //     incognito / !bridge hide) stays masked there under the same label - after they stand up, after their veil is switched off, in
 //     its final round, its linger and every log line it wrote (kept while a line of that table can still be in Pepe's log). Masks
@@ -281,7 +281,7 @@ async function view() {
   try { await refreshKinds(); } catch (e) { /* the masks fail closed on what isn't read */ }
   return maskState(publicState());
 }
-/** 1.99?? casmask review: the sync answer's {<table id>: [seat keys]} - the seats (and host) the site finds veiled, CONFIRMED veils
+/** 1.99akb casmask review: the sync answer's {<table id>: [seat keys]} - the seats (and host) the site finds veiled, CONFIRMED veils
  *  only (incognito / !bridge hide - never a check that couldn't say: Pepe's veil is sticky for the table's life), and the ones it
  *  keeps masked there (STICKY). Pepe adds them to that table's veil (pepe_tables._tables_site_veils). */
 function veilReport() {
@@ -296,7 +296,7 @@ function veilReport() {
   }
   return out;
 }
-/** 1.99?? casmask review: a website table action's player as the site's veils see them (their login, their account, its linked
+/** 1.99akb casmask review: a website table action's player as the site's veils see them (their login, their account, its linked
  *  login) - true for a CONFIRMED veil only (a check that can't say, or fails: false - Pepe's own checks still apply, and the web
  *  view masks them anyway). Pepe puts them in the table's veil before the action's first room line. */
 async function actorVeiled(a) {
@@ -467,7 +467,7 @@ function cleanSync(b) {
       tables, closed, max_tables: int(b.max_tables || 1, 1, 50),
       rooms: arr(b.rooms, 30).map((r) => ({ id: str(r.id, 64), name: str(r.name, 64), holdem: bool(r.holdem), bj: bool(r.bj) })),
       busy: b.busy ? str(b.busy, 40) : null,
-      // (1.99?? casmask review: + the line's table - server side only, maskState masks a line by its own table)
+      // (1.99akb casmask review: + the line's table - server side only, maskState masks a line by its own table)
       log: arr(b.log, 40).map((l) => Object.assign({ ts: int(l.ts), game: l.game === "bj" ? "bj" : "holdem", text: str(l.text, 200) },
                                                      /^[0-9a-f]{6,16}$/.test(String(l.tid || "")) ? { tid: String(l.tid) } : {})),
       config: {
@@ -480,7 +480,7 @@ function cleanSync(b) {
       },
     },
     priv: cleanPrivate(b.private, new Set(tables.map((t) => t.id))),
-    who: cleanWho(b.who, [...tables, ...closed].map((t) => t.id)),        // 1.99?? casmask: server only (see WHO)
+    who: cleanWho(b.who, [...tables, ...closed].map((t) => t.id)),        // 1.99akb casmask: server only (see WHO)
   };
 }
 
@@ -546,7 +546,7 @@ function register(app, { isBotToken, addUser }) {
       const { state, priv, who } = cleanSync(b);
       STATE = state;
       PRIV = priv;           // replaced wholesale: a player who left loses their entry at once
-      WHO = who;             // 1.99?? casmask: who sits where - server only, for the site's own veils (view)
+      WHO = who;             // 1.99akb casmask: who sits where - server only, for the site's own veils (view)
       RECEIVED = Date.now();
       SKEW = Number(b.bot_now) > 0 ? RECEIVED - Number(b.bot_now) * 1000 : 0;
       ok = true;
@@ -554,7 +554,7 @@ function register(app, { isBotToken, addUser }) {
       console.error("[tables] sync:", e.message);
       return res.status(400).json({ ok: false });
     }
-    // 1.99?? casmask review: the site's veils for these tables go back to Pepe (veilReport) - read first (at most 1.5 s)
+    // 1.99akb casmask review: the site's veils for these tables go back to Pepe (veilReport) - read first (at most 1.5 s)
     let tm = null;
     try { await Promise.race([refreshKinds(), new Promise((r) => { tm = setTimeout(r, 1500); if (tm.unref) tm.unref(); })]); } catch (e) { /* as read */ }
     if (tm) clearTimeout(tm);
@@ -581,7 +581,7 @@ function register(app, { isBotToken, addUser }) {
         try { args = JSON.parse(a.args); } catch (e) { args = []; }
         const x = { id: a.id, kind: "table", args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin,
                     user_id: a.user_id, actor: { userId: a.user_id, username: a.username, login: a.camfrog || null, display: null } };   // 1.99wv
-        if (await actorVeiled(a)) x.veil = 1;      // 1.99?? casmask review: the site's veil - Pepe masks them from the first line
+        if (await actorVeiled(a)) x.veil = 1;      // 1.99akb casmask review: the site's veil - Pepe masks them from the first line
         out.push(x);
       }
       res.json({ actions: out });
@@ -594,7 +594,7 @@ function register(app, { isBotToken, addUser }) {
   // The live table + (for a signed-in player) their own seat and recent requests. Per-user: never cache.
   app.get("/api/tables/state", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
-    const out = await view();           // 1.99?? casmask: masked by the site's veils too (see WHO)
+    const out = await view();           // 1.99akb casmask: masked by the site's veils too (see WHO)
     out.me = null;
     if (req.user && req.user.userId) {
       try {

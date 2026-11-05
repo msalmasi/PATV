@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? casmask (the 1.99ajw verifier's gap a): Pepe's OWN tables (his engines - a room with `!casino backend off`) on the website -
+// 1.99akb casmask (the 1.99ajw verifier's gap a): Pepe's OWN tables (his engines - a room with `!casino backend off`) on the website -
 // /tables, /casino/t/<id> (GET /api/tables/state) and the homepage's first table block (home.js) - are masked by the SITE's veils too,
 // on top of what Pepe masked himself before the sync (pepe_tables.py, privacy fix 2):
 //   * who sits where comes from the sync's server-only `who` ({<id>: {seats: [login | "u:<id>"], host}}) - never on the wire
@@ -169,7 +169,7 @@ test("Pepe's own tables: a seat whose key is the login an alias folds into is ch
   assert.equal((await get(null)).d.tables[0].seats[1].name, "Frankie", "named when neither is veiled");
 });
 
-// ── 1.99?? casmask review fixes ──
+// ── 1.99akb casmask review fixes ──
 const syncJ = async (body) => { const r = await fetch(base + "/api/tables/sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.assign({ password: "tok" }, body)) }); return { status: r.status, d: await r.json() }; };
 const LR = { hand_no: 3, uncontested: false, board: ["As", "Kd", "2c", "3h", "4s"], pot: 600, rake: 0,
              shown: [{ name: "Frankie", cards: ["Ah", "Ad"], hand: "a pair of aces" }, { name: "Alice", cards: ["7c", "8d"], hand: "high card" }],

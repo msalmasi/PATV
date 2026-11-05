@@ -492,7 +492,7 @@ test("verify: a seat masked WITHOUT a session (a check that keeps failing) never
   assert.equal(d.table.last_round.players.find((p) => p.name === "someone").seat, res.seat, "the old result keeps its id");
 });
 
-// ── 1.99?? casmask (the 1.99ajw verifier's gap c): a closed table that is no longer in memory is masked by its SAVED state ──
+// ── 1.99akb casmask (the 1.99ajw verifier's gap c): a closed table that is no longer in memory is masked by its SAVED state ──
 test("casmask (gap c): a closed table no longer in memory keeps its masks - rounds up to a masked seat session stay 'someone' (its saved omr / old-content ids), the current veil applies, a row that can't be read masks everyone", async () => {
   await fresh();
   const tid = (await A(ann, "start", [], { room: null })).table;
@@ -547,7 +547,7 @@ test("casmask (gap c): a closed table no longer in memory keeps its masks - roun
   assert.ok(!/\bAnn\b|\bCat\b/.test(none.text) && none.d.results.players.every((p) => p.name === "someone"), "no saved row: masked too");
 });
 
-// ── 1.99?? casmask (the 1.99ajw verifier's gap b): a masked seat's menu offers a FROG-NAME Block (Unblock once blocked) ──
+// ── 1.99akb casmask (the 1.99ajw verifier's gap b): a masked seat's menu offers a FROG-NAME Block (Unblock once blocked) ──
 test("casmask (gap b): a masked seat's Block is a frog-name block by the masked seat's own id - the server finds who and never says; Unblock once blocked (frog names only); signed out: none", async () => {
   await fresh();
   const B = require(path.join(repo, "blocks"));
@@ -625,7 +625,7 @@ test("casmask: asking for Pepe's stream while another table holds it names THAT 
   assert.ok(r.reply.includes(V.label(svc.getTable(t1), "u2") + "'s table"), "the other table's label: " + r.reply);
 });
 
-// ── 1.99?? casmask review fixes (gap b): a "someone" seat is never blocked or unblocked from the table; {k:'cseat'} is opt-in ──
+// ── 1.99akb casmask review fixes (gap b): a "someone" seat is never blocked or unblocked from the table; {k:'cseat'} is opt-in ──
 test("casmask review: a 'someone' seat the viewer just saw NAMED - Block and Unblock both refused (the same answer whoever sits there): no frog-name block tied to the name, no Settings row lifted, no oracle", async () => {
   await fresh();
   const B = require(path.join(repo, "blocks"));

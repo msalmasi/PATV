@@ -10,7 +10,7 @@
 //                          non-enumerable _vz (this room's snapshot only).
 //   {k: "line", c}         a veiled chat line by its feed row -> bridge.revealLookup (the live item's _vz first, then
 //                          chat_log_veil; this room only).
-//   {k: "cseat", t, s}     1.99?? casmask (the 1.99ajw verifier's gap b): a MASKED seat at a site casino table by the masked seat's
+//   {k: "cseat", t, s}     1.99akb casmask (the 1.99ajw verifier's gap b): a MASKED seat at a site casino table by the masked seat's
 //                          own id (casino/veil.js seatOf - never the account's seat hash) -> the account / login behind it, read from
 //                          the table in memory (a seat that is no longer masked or no longer there: "They aren't at the table any
 //                          more."). No pad: anyone signed in may watch a table. casmask review: OPT-IN - only a caller that asks
@@ -85,7 +85,7 @@ function clean(ref) {
   return null;
 }
 const CSEAT_T_RE = /^[0-9a-f]{10}$/, CSEAT_S_RE = /^v[0-9a-f]{11}$/;
-/** 1.99?? casmask: a masked casino seat -> {kind: "veil", userId, username, login, label, room} | {error} (see the top) */
+/** 1.99akb casmask: a masked casino seat -> {kind: "veil", userId, username, login, label, room} | {error} (see the top) */
 async function ofCasinoSeat(ref) {
   const gone = { error: "They aren't at the table any more." };
   let T = null, V = null;
@@ -148,7 +148,7 @@ function pageSafe(p) {
  *  frog names stay out of reach of people who can't see it)? Named refs need no pad. Fails closed. */
 async function padOk(raw, viewer, R, { cseat = false } = {}) {
   const ref = clean(raw);
-  // (1.99?? casmask: a casino table - no pad, signed in only; casmask review: and only for a caller that opts in - blocks.js)
+  // (1.99akb casmask: a casino table - no pad, signed in only; casmask review: and only for a caller that opts in - blocks.js)
   if (ref && ref.k === "cseat") return !!(cseat && viewer && viewer.userId);
   if (!ref || (ref.k !== "veil" && ref.k !== "line")) return true;
   if (!R || !R.id || !viewer || !viewer.userId) return false;

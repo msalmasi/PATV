@@ -258,7 +258,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   assert.match(ui, /if \(!signed \|\| !s \|\| !s\.seat \|\| mine\) return inner;/);
   assert.match(ui, /if \(p\.veil\) \{ veilMenu\(anchor, p, seat\); return; \}/);
   const vm = ui.slice(ui.indexOf("function veilMenu("), ui.indexOf("function veilMenu(") + 1300);
-  // (1.99?? casmask gap b: its one item is the frog-name 🚫 Block / ✅ Unblock - casino-veil.test.js drives it)
+  // (1.99akb casmask gap b: its one item is the frog-name 🚫 Block / ✅ Unblock - casino-veil.test.js drives it)
   assert.match(vm, /const items = \[\];/);
   assert.match(vm, /ref: \{ k: "cseat", t: tableId, s: String\(seat\) \}/, "the masked seat's Block: by its own id");
   assert.doesNotMatch(vm.replace(/PATVBlockSheet/g, ""), /\/u\/|tip|patv|login/i, "nothing in it that says who");

@@ -16,7 +16,7 @@
 //                                             Camfrog login, the linked login or the account key hidden / incognito; a masked seat session;
 //                                             fails closed while the hidden sets load), keyed by the masked seat's own id - its label
 //                                             (a frog name or "someone") and nothing else: no account, no login, no tip, no avatar
-//                                             (1.99?? casmask gap b: + bk: 1 on a FROG-NAMED seat for a signed-in viewer - the menu's
+//                                             (1.99akb casmask gap b: + bk: 1 on a FROG-NAMED seat for a signed-in viewer - the menu's
 //                                             🚫 Block, {k:'cseat'}, personref.js; + vb: 1 when the viewer frog-blocked that person -
 //                                             its ✅ Unblock instead. A "someone" seat: neither - review fix)
 //   * {display, web: true, patv, tip?}       a web seat - its PATV name only (1.99ajf: a PATV name never maps to a Camfrog login)
@@ -106,7 +106,7 @@ async function seatsFor(T, user, pads) {
     try { return fl ? require("../padflair").plain(fl) : null; } catch (e) { return null; }
   };
   const V = require("./veil");
-  // 1.99?? casmask (gap b): the keys behind the frog names this viewer blocked (blocks.veilKeysOf - server only; null when it can't be read:
+  // 1.99akb casmask (gap b): the keys behind the frog names this viewer blocked (blocks.veilKeysOf - server only; null when it can't be read:
   // the masked seat's menu then offers 🚫 Block, never ✅ Unblock)
   let vkeys = null;
   if (me) { try { vkeys = await require("../blocks").veilKeysOf(me.userId); } catch (e2) { vkeys = null; } }
@@ -115,7 +115,7 @@ async function seatsFor(T, user, pads) {
     const display = String((e.names && e.names[k]) || p.name || row.displayname || row.username || "?").slice(0, 60);
     if (String(k) === PEPE_ID || (pepe && lc(row.username) === pepe)) { out[hash] = { bot: true, display, patv: row.username ? { username: row.username } : null }; continue; }
     // 1.99ajw casino2 rework: a masked seat (the table view's own mask - routes.js re-read it first) is its label and nothing else
-    // 1.99?? casmask (gap b): + vb: 1 on a FROG-NAMED masked seat whose person this viewer blocked under a frog name (its menu then offers
+    // 1.99akb casmask (gap b): + vb: 1 on a FROG-NAMED masked seat whose person this viewer blocked under a frog name (its menu then offers
     // ✅ Unblock - the same residual the chat's folded frog lines carry: two frog names are the same person, never who). Never on a
     // "someone" seat (one can follow their named seat by moments - C.2 - so it would tie the two).
     if (V.masked(T, k)) {
