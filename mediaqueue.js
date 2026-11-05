@@ -589,6 +589,27 @@ async function watchIdle() {
       if (q && q.state === "starting") await endQueue(q, "didn't finish starting", { stageReason: "library_failed" });
     }).catch((e) => console.error("[mediaqueue] stale start:", conf.errLine(e)));
   }
+  // upnext2 (E): an after-queue whose title went without the hand-over (the site restarted in between): nothing on now -> it starts as a
+  // fresh queue; something else on -> it ends (what it waited behind is over)
+  for (const r of await getQuery("SELECT id, room_id FROM media_queues WHERE state = 'after'")) {
+    await withLock(r.room_id, async () => {
+      const w = await load(r.id);
+      if (!w || w.state !== "after") return;
+      const s = await I().session(w.room_id);
+      if (s && String(s.slot_id) === String(w.behind)) return;           // still behind it
+      if (s || (await activeFor(w.room_id))) { await cancelAfter(w.room_id, "something else started on the stage", w.behind); return; }
+      const R = await I().roomOf(w.room_id);
+      const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [w.user_id]))[0];
+      const A = u ? await L().access(u) : null;
+      if (!R || !u || !A || !A.ok) { await cancelAfter(w.room_id, "Playing from Plex isn't open to you right now", w.behind); return; }
+      const req = (w.prefs && w.prefs.req) || {};
+      try {
+        const x = await launch(u, A, R, { room: R.id, keys: w.items.map((it) => it.key), quality: req.quality, audio: req.audio, sub: req.sub, offset: req.offset,
+                                          estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null);
+        await runQuery("UPDATE media_queues SET state = 'started', end_reason = ?, updated = ? WHERE id = ? AND state = 'after'", [`started as queue #${x.queue_id}`, NOW(), w.id]);
+      } catch (e) { await cancelAfter(w.room_id, (e && e.message) || "it couldn't start", w.behind); }
+    }).catch((e) => console.error("[mediaqueue] after:", conf.errLine(e)));
+  }
   const qs = await getQuery(`SELECT id, room_id FROM media_queues q WHERE state = 'active'
                              AND NOT EXISTS (SELECT 1 FROM media_sessions s WHERE s.room_id = q.room_id)`);
   let n = 0;
@@ -636,12 +657,14 @@ async function bookFor(user, b = {}) {
  * (inside the pad's lock) Build, check, open the slot - or, for a booking, open ITS slot (mainstage.libraryActivate) -
  * and start the first title. booked = {slot_id} for a booked slot's start: its estimate was confirmed when it was booked.
  */
-async function launch(user, A, R, b, booked) {
+// upnext2 (E): sys = {rep, reason} - an after-queue taking the stage over from the title it waited behind, which ended by itself (startAfter):
+// no permission over that title is needed (nobody's title comes off), its slot ends `reason` (library_done / library_error)
+async function launch(user, A, R, b, booked, sys = {}) {
   const S = conf.get();
   {
     // plexreplace: {replace: true} - this queue takes over from what's on (medialib.replaceTarget: you may control it, else control_denied);
     // every refusal below comes first, the old title stops only once the new slot exists (medialib.retire)
-    const rep = !booked && I().wantsReplace(b) ? await I().replaceTarget(user, R, I().replaceWant(b)) : null;
+    const rep = sys.rep || (!booked && I().wantsReplace(b) ? await I().replaceTarget(user, R, I().replaceWant(b)) : null);
     await I().preflight(user, A, R, { replacing: rep });
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
@@ -666,7 +689,7 @@ async function launch(user, A, R, b, booked) {
     } else {
       opened = await stage.libraryOpen(user, { room: R.id, title: "📼 " + fmtTitle(first),
                                                minutes: Math.min(24 * 60, Math.ceil(built.total_sec / 60) + I().SLACK_MIN),
-                                               ...(rep ? { replace: rep.slot_id, upnext: L().upNextInfo(first) } : {}) });
+                                               ...(rep ? { replace: rep.slot_id, upnext: L().upNextInfo(first), ...(sys.reason ? { reason: sys.reason } : {}) } : {}) });
       if (rep) await I().retire(user, R, rep);                      // (the old encoder off, its play / queue closed - before this key is kept)
     }
     L()._keys.set(R.id, opened.key);
@@ -691,7 +714,7 @@ async function launch(user, A, R, b, booked) {
       L()._keys.delete(R.id);
       throw e;
     }
-    if (rep) await I().logControl(user, R.id, "replace", `${rep.title || "?"} → ${r.title}`, { play_id: r.play_id, queue_id: q.id });
+    if (rep && !sys.rep) await I().logControl(user, R.id, "replace", `${rep.title || "?"} → ${r.title}`, { play_id: r.play_id, queue_id: q.id });
     console.log(`[mediaqueue] ${user.username} (${A.how}) queued ${built.items.length} titles (${built.scope}, ${Math.round(built.total_sec / 60)} min) on ${R.id} - queue #${q.id}` +
                 (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free") + (rep ? ` - replaced "${rep.title}"${rep.q ? ` (queue #${rep.q.id})` : ""} on slot ${rep.slot_id}` : ""));
     return { ok: true, queue_id: q.id, slot: { id: opened.slot.id, stream: opened.slot.stream, hls: opened.slot.hls }, title: r.title, price: r.price,
@@ -975,18 +998,28 @@ async function edit(user, room, b = {}) {
       const [it] = q.items.splice(idx, 1);
       q.items.splice(to, 0, it);
     } else if (b.op === "add") {
+      // upnext2 (review of the investigation's gap): adding titles is growing someone's bill - only whoever the queue bills (its starter) or a
+      // library admin on a free queue (mayGrow, as Pepe's "queue it next"), and on a PAID queue what it adds must be the figure they said yes to
+      if (!(await mayGrow(user, q))) throw refuse(403, `${q.username || "Someone"}'s queue is playing - only they can add to it.`, { code: "not_starter", by: q.username || null });
       const add = await build({ keys: b.keys }, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
       const room_ = S.library_queue_max_items - q.items.length;
       if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
       const s = await I().session(R.id);
       const curLeft = s ? Math.max(0, (s.duration || 0) - (s.position || 0)) : 0;
       let left = curLeft + totalSec(q.items.slice(q.pos + 1));
-      let added = 0;
+      const put = [];
       for (const it of add.items.slice(0, room_)) {
         if (left + it.duration > S.library_queue_max_hours * 3600) break;
-        q.items.push(it); left += it.duration; added++;
+        put.push(it); left += it.duration;
       }
+      const added = put.length;
       if (!added) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+      const cost = addCost(q, s, totalSec(put));
+      if (cost > 0) {
+        if (b.estimate == null || b.estimate === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT to the queue as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
+        if (Math.floor(Number(b.estimate)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
+      }
+      q.items.push(...put);
       const slot = await stage.getSlot(q.slot_id);
       if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
       await saveItems(q);
@@ -997,6 +1030,123 @@ async function edit(user, room, b = {}) {
     await logIt();
     return { ok: true, items: q.items.length };
   });
+}
+
+// ── upnext2 (E): "+ Add to the queue" while a SINGLE 📼 title is on (owner 2026-11-05: "unless there is an existing queue, Plex doesn't show
+// the 'add to the queue' button. Just a play this instead button.") ──
+// Titles added behind a single play start a queue of the ADDER's own that waits behind it (media_queues state 'after', behind = that play's
+// slot): their titles, their estimate confirmed now, charged as it plays like any queue they start (never cheaper than ▶ Play), one play
+// towards their daily cap when it starts. It starts when the title on now ends by itself (medialib.watchOne -> startAfter): it takes the pad's
+// stage over like ▶ Play this instead (the feature and the "Coming up next" card carry; the station break first). Who: whoever may ▶ Play on
+// the pad - medialib.preflight without its busy checks (access, the pad, not banned there, no stage slot of their own, the daily cap); the
+// library admins / the pad's owner with access as anyone. A second "+ Add" by its owner (or a library admin on a free one - mayGrow) grows it;
+// anyone else: not_starter. ⏹ / ▶ Play this instead / a Cut of the title on now = what it waited for is gone: it ends, with a notice.
+// Not behind a RUNNING queue: its starter's "+ Add to the queue that's playing" grows it (edit op add); anyone else's titles inside someone's
+// queue would need per-title billing - an owner question.
+async function afterFor(roomId) {
+  const r = (await getQuery("SELECT id FROM media_queues WHERE room_id = ? AND state = 'after' ORDER BY id DESC LIMIT 1", [String(roomId || "")]))[0];
+  return r ? load(r.id) : null;
+}
+async function after(user, b = {}) {
+  await L().init();
+  if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
+  const A = await I().mustAccess(user);
+  const S = conf.get();
+  if (S.library_queue === false) throw refuse(403, "Queues are switched off right now.", { code: "queue_off" });
+  const R = await I().roomOf(b.room);
+  if (!R || !(await stage.seesPad(user, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
+  return withLock(R.id, async () => {
+    const s = await I().session(R.id);
+    if (await activeFor(R.id)) throw refuse(409, "A queue is playing on this pad - its starter adds to it.", { code: "queue_on" });
+    if (!s || s.queue_id) throw refuse(409, "Nothing is playing on this pad - ▶ Play starts it now.", { code: "nothing_on" });
+    const w = await afterFor(R.id);
+    if (w && String(w.behind) !== String(s.slot_id)) { await cancelAfter(R.id, "what it waited behind is over", w.behind); }
+    const wait = w && String(w.behind) === String(s.slot_id) ? w : null;
+    if (wait) {
+      if (!(await mayGrow(user, wait))) {
+        throw refuse(403, `${wait.username || "Someone"}'s titles are up next already - ask again when they start (or they can add yours).`, { code: "not_starter", by: wait.username || null });
+      }
+      const add = await build(b, { ...S, library_queue_max_items: 200, library_queue_max_hours: 24 });
+      const room_ = S.library_queue_max_items - wait.items.length;
+      if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
+      let tot = totalSec(wait.items, Number((wait.prefs.req || {}).offset) || 0);
+      const put = [];
+      for (const it of add.items.slice(0, room_)) {
+        if (tot + it.duration > S.library_queue_max_hours * 3600) break;
+        put.push(it); tot += it.duration;
+      }
+      if (!put.length) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+      const before = estimate(wait.per_hour, totalSec(wait.items, Number((wait.prefs.req || {}).offset) || 0));
+      const cost = Math.max(0, estimate(wait.per_hour, tot) - before);
+      if (cost > 0) {
+        if (b.estimate == null || b.estimate === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT, charged as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
+        if (Math.floor(Number(b.estimate)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
+      }
+      wait.items.push(...put);
+      await saveItems(wait);
+      await runQuery("UPDATE media_queues SET prefs = ? WHERE id = ?", [JSON.stringify({ ...wait.prefs, est: (wait.prefs.est || 0) + cost }), wait.id]);
+      await I().logControl(user, R.id, "queue_after", `+${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: wait.id });
+      return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: s.title || null };
+    }
+    await I().preflight(user, A, R, { behind: s.slot_id });
+    const built = await build(b, S, await padCapSec(R.id, false));
+    const pv = priceView(A, S, built.total_sec);
+    if (pv.estimate > 0) {
+      if (b.estimate == null || b.estimate === "") throw refuse(400, `This costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to add it.`, { estimate: pv.estimate, code: "estimate" });
+      if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
+    }
+    const t = NOW();
+    const req = { quality: b.quality, audio: b.audio, sub: b.sub, offset: built.offset };
+    const ins = await runQuery(`INSERT INTO media_queues (room_id, user_id, username, access, state, items, pos, prefs, scope, per_hour, paid_hours, played_sec,
+                                  slot_id, created, updated, behind) VALUES (?, ?, ?, ?, 'after', ?, 0, ?, ?, ?, 0, 0, NULL, ?, ?, ?)`,
+                               [R.id, user.userId, user.username, A.how, JSON.stringify(built.items), JSON.stringify({ req, est: pv.estimate }), built.scope, pv.per_hour,
+                                t, t, s.slot_id]);
+    await I().logControl(user, R.id, "queue_after", `${built.items.length} title(s) after "${s.title || "?"}": ${fmtTitle(built.items[0])}`, { queue_id: ins.id });
+    console.log(`[mediaqueue] ${user.username} (${A.how}) queued ${built.items.length} title(s) behind "${s.title}" on ${R.id} - after-queue #${ins.id}` +
+                (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free"));
+    try { stage.stageBump(R.id); } catch (e) { /* the 2 s cache: pages see it then */ }
+    return { ok: true, after: true, queue_id: ins.id, added: built.items.length, items: built.items.length, total_sec: built.total_sec, estimate: pv.estimate,
+             per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: s.title || null };
+  });
+}
+/** (inside the pad's lock) What an after-queue waited for is gone (⏹, a replace, a Cut): it ends, its owner gets a notice. slotId = only the
+ *  one behind that slot (null: any). Never throws. -> ended one? */
+async function cancelAfter(roomId, why, slotId = null) {
+  try {
+    const w = await afterFor(roomId);
+    if (!w || (slotId && String(w.behind) !== String(slotId))) return false;
+    await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = 'after_cancelled', updated = ? WHERE id = ? AND state = 'after'",
+                   [NOW(), ("didn't start: " + String(why || "")).slice(0, 120), NOW(), w.id]);
+    const pad = await padTitle(roomId);
+    await require("./inbox").addSafe(w.user_id, { kind: "media", title: `📼 Your titles up next on ${pad} didn't start`,
+      body: `${String(why || "What they waited for ended").slice(0, 160)} - nothing was charged. Add them again any time.`, link: "/stage", ref: "mlibafter:" + w.id });
+    console.log(`[mediaqueue] after-queue #${w.id} on ${roomId} ended: ${why}`);
+    return true;
+  } catch (e) { console.error("[mediaqueue] after:", conf.errLine(e)); return false; }
+}
+/** (inside the pad's lock - medialib.watchOne) The single title `s` ended by itself (how: finished / error): titles waiting behind it start -
+ *  their owner's queue takes the stage over from that slot (launch with a system replace: the feature + the card carry, the station break).
+ *  Their own rules apply again now (access, the pad, the cap, the price = the estimate they confirmed). -> started? */
+async function startAfter(s, how, pos) {
+  const w = await afterFor(s.room_id).catch(() => null);
+  if (!w || String(w.behind) !== String(s.slot_id)) return false;
+  const R = await I().roomOf(s.room_id);
+  const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [w.user_id]))[0];
+  const A = u ? await L().access(u) : null;
+  if (!R || !u || !A || !A.ok) { await cancelAfter(s.room_id, (A && A.message) || "Playing from Plex isn't open to you right now", s.slot_id); return false; }
+  const req = (w.prefs && w.prefs.req) || {};
+  const rep = { slot_id: s.slot_id, s, q: null, starter: null, by: s.by_user || null, title: s.title || null, left: 0, why: how === "error" ? "error" : "finished" };
+  try {
+    const r = await launch(u, A, R, { room: R.id, keys: w.items.map((x) => x.key), quality: req.quality, audio: req.audio, sub: req.sub, offset: req.offset,
+                                      estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null,
+                           { rep, reason: how === "error" ? "library_error" : "library_done" });
+    await runQuery("UPDATE media_queues SET state = 'started', end_reason = ?, updated = ? WHERE id = ? AND state = 'after'", [`started as queue #${r.queue_id}`, NOW(), w.id]);
+    console.log(`[mediaqueue] after-queue #${w.id} on ${s.room_id} started as queue #${r.queue_id} ("${s.title}" ${how})`);
+    return true;
+  } catch (e) {
+    await cancelAfter(s.room_id, (e && e.message) || "it couldn't start", s.slot_id);
+    return false;
+  }
 }
 
 // ── views ──
@@ -1029,7 +1179,7 @@ async function views({ all = false, userId = null, recent = false } = {}) {
   await L().init();
   let rows;
   if (all) rows = await getQuery("SELECT id FROM media_queues WHERE state = 'active' ORDER BY id");
-  else if (userId) rows = await getQuery("SELECT id FROM media_queues WHERE user_id = ? AND (state = 'active' OR (? AND ended_at > ?)) ORDER BY id DESC LIMIT 5",
+  else if (userId) rows = await getQuery("SELECT id FROM media_queues WHERE user_id = ? AND (state IN ('active','after') OR (? AND ended_at > ?)) ORDER BY id DESC LIMIT 5",
                                          [userId, recent ? 1 : 0, NOW() - RECENT_MS]);
   else rows = [];
   const out = [];
@@ -1048,10 +1198,13 @@ function routes(app, { J, me, timers = true }) {
   app.post("/api/medialib/queue/next", ...J(async (req) => next(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/prev", ...J(async (req) => prev(me(req), (req.body || {}).room)));
   app.post("/api/medialib/queue/edit", ...J(async (req) => edit(me(req), (req.body || {}).room, req.body || {})));
+  // upnext2 (E): "+ Add to the queue" behind a single title (a queue of the adder's own that starts when it ends)
+  app.post("/api/medialib/queue/after", ...J(async (req) => after(me(req), req.body || {})));
 }
 
 module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostFor, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
                    buildQueue, capQueue, totalSec, estimate, hoursNeeded, pickTracks, prefsFrom, sortEps, slim, SCOPES, _setClock,
                    _fast: (on) => { fastOn = !!on; },
                    breakDue, _now: () => NOW(),                                     // upnext2: the station break (medialib's clock is this one)
+                   after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)

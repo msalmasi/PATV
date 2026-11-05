@@ -40,7 +40,7 @@ test("a Plex user: the third choice with the price, the search panel + rights no
   assert.match(html, /up to 3 paid plays a day/);
   assert.match(html, /Plex members play free: <a href="\/subscriptions">/, "1.99jp: how to play free (1.99jr: /subscriptions)");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
-  assert.match(html, /plex-play\.js\?v=2" defer><\/script><script src="\/public\/js\/stage-plex\.js\?v=4/, "1.99ajw casino2: the shared flow first");
+  assert.match(html, /plex-play\.js\?v=3" defer><\/script><script src="\/public\/js\/stage-plex\.js\?v=4/, "1.99ajw casino2: the shared flow first");
   for (const k of ["info", "search", "results", "pick", "msg"]) assert.match(html, new RegExp('data-px="' + k + '"'), "the shared flow finds its " + k);
   assert.match(html, /stage\.css\?v=9/);
   // the ordinary booking fields step aside in 📼 mode

@@ -102,7 +102,7 @@ const bal = async (u) => (await getQuery("SELECT points_balance AS b FROM users 
 const play = async (id) => (await getQuery("SELECT * FROM media_plays WHERE id = ?", [id]))[0];
 let admin, owner;
 async function clear() {
-  for (const q of await getQuery("SELECT id FROM media_queues WHERE state IN ('active','starting')")) await runQuery("UPDATE media_queues SET state = 'ended' WHERE id = ?", [q.id]);
+  for (const q of await getQuery("SELECT id FROM media_queues WHERE state IN ('active','starting','after')")) await runQuery("UPDATE media_queues SET state = 'ended' WHERE id = ?", [q.id]);
   await runQuery("DELETE FROM media_sessions");
   mstreams.stopAll();
   for (const s of await getQuery("SELECT id FROM stage_slots WHERE status != 'ended'")) await S.end(s.id, "test_cleanup", "test");
@@ -540,4 +540,120 @@ test("D (coming): what's coming on the pad's 📼 stage - a playing title's end,
   // the pad page's first render and /api/stage carry it
   assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /coming = await MS\.comingOf\(R\.id, req\.user \|\| null\);/);
   assert.ok("coming" in (await S.roomStage(ROOM, VIEWER)));
+});
+
+// ── upnext2 (E): "+ Add to the queue" while a single 📼 title is on ──
+const inbox = async (u) => getQuery("SELECT title, body FROM inbox WHERE user_id = ? ORDER BY rowid", [u.userId]).catch(() => []);
+const afterRow = async () => (await getQuery("SELECT * FROM media_queues WHERE room_id = ? AND state = 'after' ORDER BY id DESC LIMIT 1", [ROOM]))[0] || null;
+
+test("E: behind a single title (no queue) a member adds a title - their own queue that waits behind it: the price confirmed now (never cheaper than ▶ Play), nothing taken, the title on now untouched; the sheet / the 📼 player / the lower-third see it", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 5 }, "test", { maxSlots: 4, maxPrice: 0 });
+  const a = await L.playFor(admin, { room: ROOM, key: "500" });
+  T += 5000; await L.watch();
+  await pub(keyOf(last()));
+  const encoder = onEncoder();
+  await conf.set({ library_price: 1000 }, "test");
+  const payer = await mkUser("pleb", 100000);
+  const m = await L.mine(payer, ROOM);
+  assert.deepEqual([m.on_pad.queue, m.on_pad.can_after, m.on_pad.can_replace], [false, true, false], "\"+ Add to the queue\" (not \"Play this instead\")");
+  await assert.rejects(Q.after(payer, { room: ROOM, key: "501" }), (e) => e.status === 400 && e.extra.code === "estimate" && e.extra.estimate === 2000, "the price first - a ▶ Play of it costs 2000 too");
+  const r = await Q.after(payer, { room: ROOM, key: "501", estimate: 2000 });
+  assert.deepEqual([r.ok, r.after, r.items, r.estimate, r.behind], [true, true, 1, 2000, "Charade (1963)"]);
+  assert.equal(await bal(payer), 100000, "nothing taken until it plays");
+  assert.equal((await session()).play_id, a.play_id, "the title on now is untouched");
+  assert.equal(onEncoder().ratingKey, encoder.ratingKey);
+  const w = await afterRow();
+  assert.deepEqual([w.user_id, w.behind, w.slot_id, w.per_hour], [payer.userId, a.slot.id, null, 1000]);
+  assert.deepEqual((await L.mine(payer, ROOM)).on_pad.after, { count: 1, mine: true });
+  const pl = await L.player(VIEWER, ROOM);
+  assert.deepEqual([pl.after.count, pl.after.next[0].title], [1, "Night of the Living Dead"]);
+  await S.stageBump(ROOM);
+  assert.equal((await S.comingOf(ROOM, VIEWER)).next.title, "Night of the Living Dead", "the lower-third's UP NEXT");
+  // the starter of the title on now may add behind their own title too (their slot isn't "another slot") - it grows nobody else's
+  const other = await mkUser("pleb", 100000);
+  await assert.rejects(Q.after(other, { room: ROOM, key: "502", estimate: 2000 }), (e) => e.status === 403 && e.extra.code === "not_starter" && e.extra.by === payer.username);
+  // its owner grows it: what it ADDS is confirmed
+  await assert.rejects(Q.after(payer, { room: ROOM, key: "502" }), (e) => e.extra.code === "estimate" && e.extra.estimate === 1000, "2 h + 1.3 h = 4 started hours: +1000");
+  const g = await Q.after(payer, { room: ROOM, key: "502", estimate: 1000 });
+  assert.deepEqual([g.added, g.items, g.cost], [1, 2, 1000]);
+});
+
+test("E: the title on now ends by itself -> the waiting queue takes the stage over (the feature + the card carry, the station break), charged as it plays; the title before ends 'finished'", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 5 }, "test", { maxSlots: 4, maxPrice: 0 });
+  const a = await L.playFor(admin, { room: ROOM, key: "500" });
+  T += 5000; await L.watch();
+  const k = keyOf(last()), p0 = await pub(k);
+  await conf.set({ library_price: 1000 }, "test");
+  const payer = await mkUser("pleb", 100000);
+  await Q.after(payer, { room: ROOM, key: "501", estimate: 2000 });
+  last().finish();
+  await settle();
+  await unpub(k, p0.cid);
+  const t1 = T;
+  await L.watch();
+  const sa = await S.getSlot(a.slot.id);
+  assert.deepEqual([sa.status, sa.end_reason], ["ended", "library_done"]);
+  assert.equal((await play(a.play_id)).end_reason, "finished");
+  const q = (await Q.views({ userId: payer.userId })).find((x) => x.state === "active");
+  assert.ok(q, "the payer's own queue is on the stage");
+  assert.equal(q.starts_at, t1 + 5000, "after the station break");
+  const qs = (await getQuery("SELECT slot_id FROM media_queues WHERE id = ?", [q.id]))[0].slot_id;
+  const f = await featured();
+  assert.deepEqual([f.id, f.live, f.next.title], [qs, false, "Night of the Living Dead"], "the new slot carries the feature: the card");
+  assert.equal(await afterRow(), null, "the waiting row is used up");
+  assert.equal(await bal(payer), 100000, "nothing yet");
+  T = t1 + 5000; await L.watch();
+  assert.equal(onEncoder().ratingKey, "501");
+  assert.equal(await bal(payer), 98000, "the first started hours as it starts");
+});
+
+test("E: ⏹ / ▶ Play this instead of the title on now = what the titles waited for is gone: they end (a notice; nothing charged)", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  const payer = await mkUser("pleb", 100000);
+  await Q.after(payer, { room: ROOM, key: "501" });
+  assert.ok(await afterRow());
+  await L.stop(admin, ROOM);
+  assert.equal(await afterRow(), null);
+  const ended = (await getQuery("SELECT end_reason, notice FROM media_queues WHERE user_id = ? ORDER BY id DESC LIMIT 1", [payer.userId]))[0];
+  assert.deepEqual([ended.notice, /was stopped/.test(ended.end_reason)], ["after_cancelled", true]);
+  assert.match(JSON.stringify(await inbox(payer)), /didn't start/);
+  assert.equal(await bal(payer), 100000);
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await Q.after(payer, { room: ROOM, key: "501" });
+  await L.playFor(admin, { room: ROOM, key: "502", replace: true });
+  assert.equal(await afterRow(), null, "replaced: it ends too");
+});
+
+test("E: not behind a running queue (its starter grows it), nothing on = ▶ Play; the pad's rules are ▶ Play's (banned, another slot of your own)", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  const u = await mkUser();
+  await assert.rejects(Q.after(u, { room: ROOM, key: "501" }), (e) => e.status === 409 && e.extra.code === "nothing_on");
+  await Q.startFor(admin, { room: ROOM, key: "911", scope: "season" });
+  await assert.rejects(Q.after(u, { room: ROOM, key: "501" }), (e) => e.status === 409 && e.extra.code === "queue_on");
+  await clear();
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await S.roomBan(ROOM, "@" + u.username, "test", owner.username);
+  assert.equal(await S.isBanned(u.userId, ROOM), true);
+  await assert.rejects(Q.after(u, { room: ROOM, key: "501" }), (e) => e.status === 403 && e.extra.code === "banned", "banned from the pad's stage: as ▶ Play");
+  const v = await mkUser();
+  const own = await S.book(v, { minutes: 30, room: OTHER });
+  assert.ok(own.slot);
+  await assert.rejects(Q.after(v, { room: ROOM, key: "501" }), (e) => e.extra && e.extra.code === "has_slot", "a stage slot of their own elsewhere: as ▶ Play");
+});
+
+test("E (the investigation's API gap): adding to a running queue is its starter's (or a library admin's on a free one) - the pad's owner can't add to someone's PAID queue, and its starter confirms what an add costs", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  await conf.set({ library_price: 1000 }, "test");
+  const payer = await mkUser("pleb", 100000);
+  const pv = await Q.preview(payer, { room: ROOM, key: "911", scope: "season" });
+  await Q.startFor(payer, { room: ROOM, key: "911", scope: "season", estimate: pv.estimate });
+  await assert.rejects(Q.edit(owner, ROOM, { op: "add", keys: ["501"] }), (e) => e.status === 403 && e.extra.code === "not_starter", "the pad's owner may control it, not bill it");
+  await assert.rejects(Q.edit(payer, ROOM, { op: "add", keys: ["501"] }), (e) => e.status === 400 && e.extra.code === "estimate" && e.extra.estimate === 2000, "2 h of episodes + 1.6 h = 4 started hours: +2000");
+  await assert.rejects(Q.edit(payer, ROOM, { op: "add", keys: ["501"], estimate: 5 }), (e) => e.status === 409 && e.extra.code === "estimate");
+  const r = await Q.edit(payer, ROOM, { op: "add", keys: ["501"], estimate: 2000 });
+  assert.deepEqual([r.ok, r.added, r.items], [true, 1, 4]);
+  // the pad's owner still controls it (⏭ / remove) - only adding is the starter's
+  assert.equal((await Q.edit(owner, ROOM, { op: "remove", index: 3 })).ok, true);
 });

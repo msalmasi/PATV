@@ -135,7 +135,7 @@ test("2: the 📼 player and the Go live card ask at once when the stage's poll 
   // the scripts hand their poll out; their cache-busters moved
   assert.match(read("public", "js", "pad-plexq.js"), /window\.PATVPlexQ = \{ poll: function \(\) \{ if \(Date\.now\(\) - askedAt >= 1500\) poll\(\); \} \};/, "(never twice in a moment)");
   assert.match(read("public", "js", "room-schedule.js"), /window\.PATVRoomSchedule = \{ poll: function \(\) \{ if \(Date\.now\(\) - askedAt >= 1500\) poll\(\); \} \};/);
-  assert.match(read("views", "room.ejs"), /pad-plexq\.js\?v=5/);
+  assert.match(read("views", "room.ejs"), /pad-plexq\.js\?v=6/);   // (upnext2: v6)
   assert.match(read("views", "partials", "room-schedule.ejs"), /room-schedule\.js\?v=6/);
 });
 

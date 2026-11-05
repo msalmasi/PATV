@@ -35,7 +35,8 @@
                   next: _t('js.plexq.l_next', 'skipped to'), prev: _t('js.plexq.l_prev', 'went back to'), stop: _t('js.plexq.l_stop', 'stopped'),
                   queue_add: _t('js.plexq.l_add', 'added'), queue_remove: _t('js.plexq.l_remove', 'removed'), queue_move: _t('js.plexq.l_move', 'moved'),
                   // 1.99ajk plexchat: added right after what's on / asked Pepe in chat (plexchat.js's audit row)
-                  queue_next: _t('js.plexq.l_qnext', 'added next'), pepe: _t('js.plexq.l_pepe', 'asked Pepe -') };
+                  queue_next: _t('js.plexq.l_qnext', 'added next'), pepe: _t('js.plexq.l_pepe', 'asked Pepe -'),
+                  queue_after: _t('js.plexq.l_after', 'added after this') };                   // (upnext2 E)
   var last = null, base = null, poller = null, ticker = null, dragging = false, busy = false, lastH = '';
   // the position now: the server's, moved on locally while it plays
   function pos() {
@@ -107,6 +108,12 @@
               '<button type="button" class="sact" data-mv="' + x.index + '" data-to="' + (x.index + 1) + '"' + (k < q.next.length - 1 ? '' : ' disabled') + ' aria-label="' + esc(_t('js.plex.q_down', 'Move down')) + '">↓</button>' +
               '<button type="button" class="sact" data-rm="' + x.index + '" aria-label="' + esc(_t('js.plex.q_remove', 'Remove')) + '">✕</button></span>' : '') + '</li>';
         }).join('') + '</ol>' + (can ? '<a class="muted" href="/stage">' + esc(_t('js.plexq.manage', 'Edit the queue ›')) + '</a>' : '') + '</details>';
+    }
+    // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue
+    if (!q && j.after && j.after.next && j.after.next.length) {
+      h += '<details class="pq-q"><summary>' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +
+        j.after.next.map(function (x) { return '<li><span>' + esc(label(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + '</span>' : '') + '</span></li>'; }).join('') + '</ol>' +
+        (j.after.by ? '<p class="muted">' + esc(_t('js.plexq.after_by', 'added by {name}', { name: j.after.by })) + '</p>' : '') + '</details>';
     }
     if (can && j.log && j.log.length) {
       h += '<details class="pq-log"><summary>' + esc(_t('js.plexq.log', 'Who did what')) + '</summary><ul>' + j.log.map(function (l) {

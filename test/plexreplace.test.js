@@ -309,7 +309,8 @@ test("who: the starter, the pad's owner and the library admins may replace; anyo
     assert.deepEqual([st.library.title, st.library.can_replace], ["Charade (1963)", false]);
     assert.equal((await L.padState(owner, ROOM)).library.can_replace, true);
     assert.equal((await L.mine(bob, ROOM)).on_pad.can_replace, false);
-    assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: true, can_replace: true, slot_id: r3.slot.id });
+    assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: true, can_replace: true, slot_id: r3.slot.id,
+                                                            can_after: true });   // (upnext2 E: "+ Add to the queue" behind a single title)
     // nothing on: a replace is an ordinary play
     await L.stop(admin, ROOM);
     const r4 = await L.playFor(bob, { room: ROOM, key: "501", replace: true });
@@ -350,7 +351,8 @@ test("a 📼 QUEUE is replaced as a whole (it ends 'replaced by'), a queue can r
   await pub(keyOf(last()));
   assert.equal(await feat(q.slot.id), "auto");
   assert.equal((await L.padState(admin, ROOM)).library.left, 2);
-  assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "The Show — S1E1 Pilot", queue: true, left: 2, by: admin.username, mine: true, can_replace: true, slot_id: q.slot.id });
+  assert.deepEqual((await L.mine(admin, ROOM)).on_pad, { title: "The Show — S1E1 Pilot", queue: true, left: 2, by: admin.username, mine: true, can_replace: true, slot_id: q.slot.id,
+                                                          can_add: true });   // (upnext2 E: its starter grows it)
   const w = watchFeature();
   const r = await L.playFor(admin, { room: ROOM, key: "501", replace: true });
   const seen = await w.stop();
@@ -439,7 +441,8 @@ test("the routes the sheet calls: POST /api/medialib/play answers a busy pad wit
     const a = await L.play(admin, { room: ROOM, key: "500" });
     await pub(keyOf(last()));
     const m = await get(owner, "/api/medialib/mine?room=" + encodeURIComponent(ROOM));
-    assert.deepEqual(m.on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: false, can_replace: true, slot_id: a.slot.id }, "the pad's owner may change it");
+    assert.deepEqual(m.on_pad, { title: "Charade (1963)", queue: false, left: 0, by: admin.username, mine: false, can_replace: true, slot_id: a.slot.id, can_after: true },
+                     "the pad's owner may change it (upnext2 E: and add behind it)");
     let r = await post(owner, "/api/medialib/play", { room: ROOM, key: "501" });
     assert.equal(r.status, 409);
     assert.deepEqual([r.j.ok, r.j.code, r.j.can_replace, r.j.playing, r.j.playing_queue], [false, "busy_library", true, "Charade (1963)", false]);

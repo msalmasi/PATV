@@ -164,6 +164,8 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_room ON media_queues (room_id, state)");
       // upnext2: a queue's title in its station break - {until, pos, offset, tracks} (mediaqueue.beginBreak / breakDue)
       await addCol("media_queues", "brk TEXT");
+      // upnext2 (E): an after-queue (state 'after') waits behind the single play on this slot (mediaqueue.after / startAfter)
+      await addCol("media_queues", "behind TEXT");
       await runQuery("CREATE INDEX IF NOT EXISTS media_queues_user ON media_queues (user_id, created)");
       // 1.99lw: who pressed what on the 📼 controls (pause / seek / next / stop ...), shown in the panel to whoever may control it
       await runQuery(`CREATE TABLE IF NOT EXISTS media_controls (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, room_id TEXT NOT NULL,
@@ -254,6 +256,7 @@ async function comingFor(roomId) {
     out.ends_at = Math.round(Number(s.updated) + Math.max(0, Number(s.duration) - (Number(s.position) || 0)) * 1000);
   }
   if (s && q && Number(s.queue_id) === Number(q.id) && q.items[q.pos + 1]) out.next = comingInfo(q.items[q.pos + 1]);
+  if (s && !q) { const w = await require("./mediaqueue").afterFor(id); if (w && w.items[0]) out.next = comingInfo(w.items[0]); }   // (upnext2 E)
   if (!s && !q) {
     const now = Date.now();
     const bk = (await safeQuery(`SELECT b.start_at, b.req, b.first, sl.title FROM media_bookings b JOIN stage_slots sl ON sl.id = b.slot_id
@@ -602,11 +605,13 @@ async function retire(user, R, rep) {
   try {
     if (rep.q) { await require("./mediaqueue")._retire(rep.q, user); return; }
     let pos = null;
-    if (!(rep.s && rep.s.state === "break")) {                          // (upnext2: one in its station break has no encoder yet)
+    if (!(rep.s && rep.s.state === "break") && !rep.why) {              // (upnext2: one in its station break has no encoder yet; one that ended has none)
       try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
       catch (e) { console.warn("[medialib] replace: media-control stop:", conf.errLine(e)); }
     }
-    await dropSession(rep.s, "replaced by " + user.username, pos != null ? pos : rep.s.position);
+    await dropSession(rep.s, rep.why || "replaced by " + user.username, pos != null ? pos : rep.s.position);
+    // upnext2 (E): titles someone added behind it waited for THIS title - replaced, they don't start (a notice says so)
+    if (!rep.why) await require("./mediaqueue").cancelAfter(R.id, `“${rep.s.title || "what was on"}” was replaced by something else`, rep.slot_id);
   } catch (e) { console.error("[medialib] replace: closing what was on:", conf.errLine(e)); }
 }
 
@@ -711,7 +716,7 @@ async function play(user, b = {}, how = {}) {
  * The pad rules for a new play / queue (shared with mediaqueue.js): one library stream per pad (a 📼 queue holds its pad
  * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
  */
-async function preflight(user, A, R, { carry = false, replacing = null } = {}) {
+async function preflight(user, A, R, { carry = false, replacing = null, behind = null } = {}) {
   // 1.99ajk plexchat: each refusal carries a stable code (plexchat.js words it in the room's language); the texts are unchanged.
   // A pad whose 📼 queue is on reads busy_queue (a queue's title has a session too): Pepe can offer "queue it next" for that one
   // plexreplace: `replacing` (replaceTarget) is what this play takes off - only THAT may be on; the busy refusal says what's on and whether
@@ -726,15 +731,16 @@ async function preflight(user, A, R, { carry = false, replacing = null } = {}) {
     const can = !!(cur && !cur.busy && user && user.userId && (await mayControl(user, R.id, cur.starter)));
     return new Refuse(409, msg, { code, can_replace: can, ...(cur && !cur.busy && cur.title ? playingOf(cur, can, user) : {}) });
   };
-  if (s && !(rep && s.slot_id === rep.slot_id)) throw await busy("This pad is already playing from the library - stop it first.", queued ? "busy_queue" : "busy_library");
-  if (otherQ.length) {
+  // upnext2 (E): `behind` (an after-queue waiting behind the single play on that slot) - the play on now is what it waits for, not a refusal
+  if (!behind && s && !(rep && s.slot_id === rep.slot_id)) throw await busy("This pad is already playing from the library - stop it first.", queued ? "busy_queue" : "busy_library");
+  if (!behind && otherQ.length) {
     throw await busy("This pad is already playing a queue from the library - stop it first.", "busy_queue");
   }
   if (isLibAdmin(user) || carry) return;
   if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.", { code: "pad" });
   if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.", { code: "banned" });
   const mine = (await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]))
-    .filter((x) => !(rep && x.id === rep.slot_id));                   // (plexreplace: your own 📼 slot that this one takes over from)
+    .filter((x) => !(rep && x.id === rep.slot_id) && !(behind && x.id === behind));   // (plexreplace / upnext2 E: your own 📼 slot this one takes over from)
   if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.", { code: "has_slot" });
   const S0 = conf.get();
   const member = isMemberHow(A.how);
@@ -831,6 +837,8 @@ async function stop(user, room, reason = "stopped") {
     }
     await stage.end(s.slot_id, "library_" + reason, user.username).catch(() => {});
     await dropSession(s, reason + " by " + user.username, pos);
+    // upnext2 (E): ⏹ ends what's on - titles added behind it don't start either (their owner gets a notice)
+    await require("./mediaqueue").cancelAfter(R.id, `“${s.title || "what was on"}” was stopped`, s.slot_id);
     await logControl(user, R.id, "stop", s.title, { play_id: s.play_id });
     return { ok: true };
   });
@@ -1022,6 +1030,15 @@ async function mine(user, roomId) {
       if (cur && !cur.busy) {
         out.on_pad = { title: cur.title || null, queue: !!cur.q, left: cur.left, by: cur.by || null, mine: !!(cur.starter && cur.starter === user.userId),
                        can_replace: !!(A.ok && (await mayControl(user, R.id, cur.starter))) };
+        // upnext2 (E): "+ Add to the queue" - a running queue you may grow (its starter, a library admin on a free one), or titles behind a single
+        // title (a queue of yours that starts when it ends - mediaqueue.after: whoever may ▶ Play here; one already waiting: its owner grows it)
+        const Qm = require("./mediaqueue"), qOn = conf.get().library_queue !== false && A.ok;
+        if (cur.q) out.on_pad.can_add = !!(qOn && (await Qm.mayGrow(user, cur.q)));
+        else {
+          const w = await Qm.afterFor(R.id);
+          out.on_pad.can_after = !!(qOn && (!w || (await Qm.mayGrow(user, w))));
+          if (w) out.on_pad.after = { count: w.items.length, mine: w.user_id === user.userId };
+        }
         if (out.on_pad.can_replace) out.on_pad.slot_id = cur.slot_id;   // (plexreplace review fix: the sheet's replace names it)
       } else if (cur && cur.busy) out.on_pad = { title: null, queue: true, left: 0, by: null, mine: false, can_replace: false };
     } catch (e) { /* the sheet still works: the server refuses a busy pad with can_replace */ }
@@ -1054,6 +1071,10 @@ async function player(user, room) {
     if (v.starts_at) out.starts_at = v.starts_at;                      // upnext2: in its station break
   }
   if (s && s.state === "break" && s.brk_until) out.starts_at = Number(s.brk_until);
+  if (s && !q) {                                                         // upnext2 (E): titles waiting behind this one
+    const w = await Q.afterFor(R.id);
+    if (w) out.after = { by: w.username, count: w.items.length, next: w.items.slice(0, can ? 60 : 10) };
+  }
   if (can) out.log = await getQuery("SELECT ts, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 8", [R.id]);
   return out;
 }
@@ -1154,6 +1175,7 @@ async function watchOne(s0, live) {
     // the stage ended it (Cut, time up, paused too long): stop the encoder (upnext2: none yet in a station break)
     if (s.state !== "break") { try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* unreachable: it'll fail to publish anyway */ } }
     await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), m ? m.position : s.position);
+    await require("./mediaqueue").cancelAfter(s.room_id, `“${s.title || "what was on"}” was taken off the stage`, s.slot_id);   // (upnext2 E)
     return true;
   }
   // upnext2: in its station break - nothing to look at on media-control yet; one that is due starts now (its timer was lost: a restart)
@@ -1166,6 +1188,8 @@ async function watchOne(s0, live) {
     return true;
   }
   if (m.state === "error" && (await retryRestart(s, m, live.look))) return true;   // 1.99acx: right after a seek - once more
+  // upnext2 (E): it ended (or failed) by itself and someone's titles wait behind it - they take the stage over now (the station break first)
+  if ((m.state === "ended" || m.state === "error") && (await require("./mediaqueue").startAfter(s, m.state === "ended" ? "finished" : "error", m.position))) return true;
   if (m.state === "ended" || m.state === "error") {
     await stage.end(s.slot_id, m.state === "ended" ? "library_done" : "library_error", "system").catch(() => {});
     try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* best effort */ }

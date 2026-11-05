@@ -19,6 +19,11 @@
 // confirm, never a dead end. Someone who may not change it sees what's on and why the pick waits.
 // Review fix: the replace names the slot the confirm named (on_pad.slot_id / a refusal's playing_slot) - something else on by the yes ->
 // replace_changed and the sheet asks again with what's on NOW; any other failed replace asks /mine again (never a stale "Now on").
+// upnext2 (owner 2026-11-05: "unless there is an existing queue, Plex doesn't show the 'add to the queue' button. Just a play this instead
+// button."): the "+" next to ▶ follows what's on THIS pad (medialib.mine on_pad): a queue you may grow (on_pad.can_add) -> "+ Add to the
+// queue that's playing" (it used to add to your queue on whatever pad it ran - another pad's sheet included), a single title -> "+ Add to the
+// queue" (on_pad.can_after: a queue of yours that plays after it - POST /api/medialib/queue/after, the price confirmed like a queue's),
+// anything else -> "+ My list". A paid add says what it adds before it's added (the server's `estimate`).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -57,6 +62,7 @@
   }
   function noticeText(q) {
     if (!q || !q.notice) return '';
+    if (q.notice === 'after_cancelled') return _t('js.plex.qn_after', '📼 Your titles up next didn’t start: what they waited behind ended first. Nothing was charged.');
     if (q.notice === 'out_of_pat') return _t('js.plex.qn_out_of_pat', '📼 Your queue ended: you’re out of PAT - top up to keep watching.');
     if (q.notice === 'failed') return _t('js.plex.qn_failed', '📼 Your queue ended: several titles in a row didn’t play.');
     if (q.notice === 'no_encoder') return _t('js.plex.qn_no_encoder', '📼 Your queue ended: no library stream came free in time.');
@@ -173,9 +179,11 @@
     // plexreplace: the pick says what's on (and whether ▶ swaps it), the button says "instead"
     var noteOnPad = function (x) {
       onPad = x && x.title ? { title: String(x.title), queue: !!x.queue, left: Math.max(0, Number(x.left) || 0), by: x.by || null, mine: !!x.mine, can_replace: !!x.can_replace,
-                               slot_id: x.slot_id ? String(x.slot_id) : null } : null;
+                               slot_id: x.slot_id ? String(x.slot_id) : null, can_add: x.can_add === true, can_after: x.can_after === true,
+                               after: x.after && typeof x.after === 'object' ? { count: Math.max(0, Number(x.after.count) || 0), mine: x.after.mine === true } : null } : null;
       drawNow();
       drawPrice();
+      drawAdd();
     };
     var drawNow = function () {
       var el = P.pick.querySelector('[data-now]');
@@ -320,9 +328,20 @@
         : '<b>' + esc(_t('js.plex.free', 'Free')) + '</b> <span class="muted">' + esc(MEMBER ? _t('js.plex.free_member', '(Plex member)') : _t('js.plex.free_admin', '(site admin)')) + '</span>';
       btn.textContent = playLabel(quote, 1);
     };
-    var addBtn = function (key) {
-      return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '">' + esc(myQueue ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : _t('js.plex.q_add', '+ My list')) + '</button>' : '';
+    // upnext2: where "+" adds on THIS pad - 'running' (a queue here you may grow), 'after' (behind the single title on), 'list' (this tab's list)
+    var addMode = function () {
+      if (onPad && onPad.queue && onPad.can_add) return 'running';
+      if (onPad && !onPad.queue && onPad.can_after) return 'after';
+      return 'list';
     };
+    var addLabel = function () {
+      var m = addMode();
+      return m === 'running' ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : m === 'after' ? _t('js.plex.q_add_after', '+ Add to the queue') : _t('js.plex.q_add', '+ My list');
+    };
+    var addBtn = function (key) {
+      return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '"' + (addMode() === 'after' ? ' title="' + esc(_t('js.plex.q_add_after_title', 'Plays after what’s on now')) + '"' : '') + '>' + esc(addLabel()) + '</button>' : '';
+    };
+    var drawAdd = function () { host.querySelectorAll('[data-add]').forEach(function (b) { if (!b.disabled) b.textContent = addLabel(); }); };
     var openItem = function (key, wantScope) {
       say(_t('js.plex.loading', 'Loading…'), true);
       closeAsk(false);
@@ -536,17 +555,59 @@
       var it = picked && String(picked.key) === key ? picked : null;
       var entry = { key: key, label: it ? (it.type === 'show' ? it.title + ' · ' + _t('js.plex.q_whole_series', 'whole series') : label(it)) : key,
                     duration: it && it.type !== 'show' ? it.duration : null };
-      if (myQueue) {
-        btn.disabled = true;
-        api('POST', '/api/medialib/queue/edit', { room: myQueue.room, op: 'add', keys: [key] }).then(function (j) {
-          say(_t('js.plex.q_added_running', 'Added to the queue that’s playing ({n} titles now).', { n: j.items }), true);
-          if (opts.pollNow) opts.pollNow();
-        }).catch(function (e) { say(e.message); }).then(function () { btn.disabled = false; });
-        return;
-      }
+      var mode = addMode();
+      if (mode === 'running') { addRunning(btn, key); return; }
+      if (mode === 'after') { addAfter(btn, key); return; }
       list.push(entry);
       saveList(); drawList();
       say(_t('js.plex.q_added', 'Added to my list.'), true);
+    };
+    // upnext2: "+ Add to the queue that's playing" - on THIS pad (review: it used to add to your queue on any pad); a paid queue says what it adds
+    var addRunning = function (btn, key, est) {
+      var body = { room: opts.roomId(), op: 'add', keys: [key] };
+      if (est != null) body.estimate = est;
+      btn.disabled = true;
+      api('POST', '/api/medialib/queue/edit', body).then(function (j) {
+        say(_t('js.plex.q_added_running', 'Added to the queue that’s playing ({n} titles now).', { n: j.items }), true);
+        if (opts.pollNow) opts.pollNow();
+      }).catch(function (e) {
+        var d = e.data || {};
+        if (d.code === 'estimate' && d.estimate && d.estimate !== est) {
+          btn.disabled = false;
+          ask(_t('js.plex.q_add_cost', 'That adds about {price} PAT to the queue, charged as it plays (only what actually plays). Add it?', { price: fmt(d.estimate) }),
+              _t('js.plex.ask_add', 'Yes, add it'), btn, function () { addRunning(btn, key, d.estimate); });
+          return;
+        }
+        say(e.message); info();
+      }).then(function () { btn.disabled = false; });
+    };
+    // upnext2 (E): "+ Add to the queue" behind the single title on this pad - a queue of yours that plays after it (the pick's choices when
+    // it's the picked title: scope, start point, quality, audio, subtitles)
+    var addAfter = function (btn, key, est) {
+      var pk = P.pick, body = { room: opts.roomId(), keys: [key], quality: QUALITY };
+      if (picked && String(picked.key) === String(key) && pk.querySelector('[data-q]')) {
+        var a = pk.querySelector('[data-a]'), s = pk.querySelector('[data-s]'), off = parseTime(pk.querySelector('[data-o]').value) || 0;
+        body = { room: opts.roomId(), key: key, scope: scope(), offset: off, quality: Number(pk.querySelector('[data-q]').value),
+                 audio: a ? a.value : null, sub: s && s.value !== '' ? s.value : null };
+      }
+      if (est != null) body.estimate = est;
+      var now = onPad ? onPad.title : '';
+      btn.disabled = true;
+      api('POST', '/api/medialib/queue/after', body).then(function (j) {
+        say(_t('js.plex.q_added_after', 'Added - it plays after “{now}” ({n} up next).', { now: j.behind || now, n: j.items }), true);
+        info();
+        if (opts.onStarted) { try { opts.onStarted({ after: true }); } catch (e) { /* the page's own */ } }
+      }).catch(function (e) {
+        var d = e.data || {};
+        if (d.code === 'estimate' && d.estimate && d.estimate !== est) {
+          btn.disabled = false;
+          ask(_t('js.plex.q_after_cost', 'Add it to play after “{now}”? About {price} PAT, charged as it plays (only what actually plays) - nothing is taken until it starts.', { now: now, price: fmt(d.estimate) }) + '\n\n' +
+              _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.'),
+              _t('js.plex.ask_add', 'Yes, add it'), btn, function () { addAfter(btn, key, d.estimate); });
+          return;
+        }
+        say(e.message); info();
+      }).then(function () { btn.disabled = false; });
     };
     listBox.addEventListener('click', function (ev) {
       var b = ev.target.closest('button');
@@ -563,12 +624,7 @@
     var noteQueues = function (j) {
       var was = myQueue;
       myQueue = (j.queues || []).filter(function (q) { return q.state === 'active'; })[0] || null;
-      if (!!was !== !!myQueue) {
-        // the "+" buttons say where they add to
-        host.querySelectorAll('[data-add]').forEach(function (b) {
-          b.textContent = myQueue ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : _t('js.plex.q_add', '+ My list');
-        });
-      }
+      if (!!was !== !!myQueue) drawAdd();                      // (upnext2: the "+" buttons say where they add to on THIS pad - on_pad)
     };
     function toPepe(id, n) {
       fetch('/api/stage/admin/onair', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
