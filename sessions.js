@@ -477,6 +477,11 @@ function register(app, { addUser }) {
     if (!SP.can(row, "accounts.sessions_revoke")) return res.status(403).json({ ok: false, error: "Admins only." });
     const target = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(req.params.id)]))[0];
     if (!target) return res.status(404).json({ ok: false, error: "No such account." });
+    // rankrule (staffrank.js): never yourself (Settings signs you out everywhere), never PATV staff of your rank or above (the owner
+    // above every Admin)
+    const SR = require("./staffrank");
+    const why = await SR.check(req.user, target.userId);
+    if (why) return SR.send(req, res, why);
     // 1.99wl: a reason and the member's username typed as the confirmation (/admin/accounts); audited before it runs
     const b = req.body || {};
     const reason = String(b.reason || "").trim().slice(0, 200);

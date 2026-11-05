@@ -21,7 +21,7 @@ function register(app, { addUser, isBotToken }) {
   const guard = require("./middleware/authGuard");
   const T = (req, k, d) => (req.t ? req.t(k) : d);
   const fail = (res, e) => {
-    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, code: e.code || null });
+    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: require("./staffrank").msg(res, e), code: e.code || null });
     console.error("[creators]", e);
     res.status(500).json({ ok: false, error: "Something went wrong - nothing was charged." });
   };

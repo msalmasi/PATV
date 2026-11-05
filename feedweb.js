@@ -302,8 +302,9 @@ function register(app, { addUser, isBotToken }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[feed]", e);
-    res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : e.message },
-      st === 409 && Array.isArray(e.choices) ? { code: "ambiguous", choices: e.choices } : {}));   // 1.99ajn padppl: targets.js
+    res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : require("./staffrank").msg(res, e) },
+      st === 409 && Array.isArray(e.choices) ? { code: "ambiguous", choices: e.choices } : {},   // 1.99ajn padppl: targets.js
+      e instanceof require("./staffrank").StaffRankError ? { code: e.code } : {}));            // rankrule: said in the viewer's language
   };
   const viewOpts = (req) => ({ host: req.hostname || "publicaccess.tv" });
 

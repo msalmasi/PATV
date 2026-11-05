@@ -248,7 +248,9 @@ function register(app, { addUser }) {
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0] : null);
   const fail = (res, e) => {
     if (!(e && e.status)) console.error("[cfnames]", e);                // (review fix: a 500 leaves a log line)
-    res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+    const SR = require("./staffrank");
+    res.status(e && e.status ? e.status : 500).json(Object.assign({ ok: false, error: e && e.status ? SR.msg(res, e) : "Something went wrong." },
+      e instanceof SR.StaffRankError ? { code: e.code } : {}));
   };
   app.get("/api/admin/nameclash", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -261,6 +263,8 @@ function register(app, { addUser }) {
     try {
       const me = await meOf(req); if (!SP.can(me, "accounts.name_clash")) return res.status(403).json({ ok: false, error: "Admins only." });
       const b = req.body || {};
+      // rankrule (staffrank.js): never yourself / your own alt; a rename never on PATV staff of your rank or above ("it's OK": a lift)
+      if (b.op === "ok" || b.op === "rename") await require("./staffrank").assert(me, String(b.userId || ""), { lift: b.op === "ok" });
       if (b.op === "ok") { await markOk(me, String(b.userId || ""), String(b.name || "")); return res.json({ ok: true }); }
       if (b.op === "rename") return res.json(await adminRename(me, String(b.userId || ""), b.username));
       res.status(400).json({ ok: false, error: "ok or rename" });

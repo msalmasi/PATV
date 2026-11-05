@@ -1110,6 +1110,12 @@ async function whoAction(user, input, { action = "look", why = "" } = {}) {
   const note = clean(why, WHY_MAX);
   if (note.length < 3) throw new Refuse(400, "Give the reason (the request, the order, the case) - it's audited.", "why");
   const { keys, account: acct, label } = await resolveKeys(input);
+  // rankrule (staffrank.js): hiding / deleting every line of an ACCOUNT's (or its linked login's) - never yours, never PATV staff of your
+  // rank or above (the owner above every Admin); un-hiding is a lift (never your own). Looks, exports and legal holds are not sanctions.
+  // A Camfrog login with no account has no rank (nothing to check). Before the audit row and anything else.
+  if (acct && (action === "hide_all" || action === "purge_all" || action === "unhide_all")) {
+    await require("./staffrank").assert(me, acct.userId, { lift: action === "unhide_all" });
+  }
   // Train 3 review fix-up: "Delete every line" forgets the Camfrog login (its lines keep only a hash, its !msg copy records get a
   // pseudonym) - so its own audit row names each Camfrog login by that PSEUDONYM, never the login (tools/cflogin.js: the audit
   // "must not keep the very name a forget removes"; a row naming the login a few ms before the pseudonym's would link the two).
@@ -1361,7 +1367,7 @@ function register(app, { addUser }) {
   const fail = (res, e) => {
     // (code: the page shows its own words for it - js.pad.chat.err.<code>; error: the English fallback; retry: seconds, for rate)
     if (e && e.refuse) {
-      return res.status(e.status || 400).json({ ok: false, error: e.message, code: e.code || undefined, ...(e.why ? { why: e.why } : {}),
+      return res.status(e.status || 400).json({ ok: false, error: require("./staffrank").msg(res, e), code: e.code || undefined, ...(e.why ? { why: e.why } : {}),
                                                 ...(e.retry ? { retry: e.retry } : {}) });
     }
     console.error("[chatlogmod]", e && e.message);

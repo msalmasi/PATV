@@ -265,6 +265,7 @@ async function hitting(me, userId, reason) {
 async function exempt(me, userId, ids = [], reason = "") {
   needAdmin(me);
   await init();
+  await require("./staffrank").assert(me, userId, { lift: true });     // rankrule: never let yourself through (a lift: no rank check)
   let list = (Array.isArray(ids) ? ids : []).map((x) => Math.floor(Number(x))).filter((x) => x > 0).slice(0, 200);
   if (!list.length) list = (await hitting(me, userId, reason || "exempt")).map((b) => b.id);
   await tx(async () => { for (const id of list) await runQuery("INSERT OR IGNORE INTO net_ban_exempt (ban_id, user_id) VALUES (?, ?)", [id, String(userId)]); });
@@ -293,6 +294,8 @@ async function banAccountNets(me, userId, { scope = "site", roomId = null, reaso
   needAdmin(me);
   await init();
   if (!ON) { const e = new Error("Network bans are switched off."); e.status = 409; throw e; }
+  // rankrule: never your own networks (your account / alt), never PATV staff of your rank or above (the owner above every Admin)
+  await require("./staffrank").assert(me, userId);
   const nets = await getQuery("SELECT net_hash FROM net_seen WHERE user_id = ? AND last_at > ?", [String(userId), now() - RECENT_DAYS * 86400e3]);
   const until = Number(days) > 0 ? now() + Math.min(365, Number(days)) * 86400e3 : null;
   const ids = [];
@@ -332,6 +335,11 @@ async function lift(me, id) {
   await init();
   // (review fix: an account's networks are ONE ban in the list - `id` may be several ids)
   const ids = (Array.isArray(id) ? id : [id]).map((x) => Math.floor(Number(x))).filter((x) => x > 0).slice(0, 200);
+  // rankrule: never a ban on your own account's networks (a lift: no rank check) - before anything changes
+  if (ids.length) {
+    const from = await getQuery(`SELECT DISTINCT from_user FROM net_bans WHERE id IN (${ids.map(() => "?").join(",")}) AND from_user IS NOT NULL`, ids);
+    for (const f of from) await require("./staffrank").assert(me, String(f.from_user), { lift: true });
+  }
   await tx(async () => { for (const x of ids) await runQuery("UPDATE net_bans SET lifted_at = ?, lifted_by = ? WHERE id = ? AND lifted_at IS NULL", [now(), me.username, x]); });
   await require("./adminaudit").record({ userId: me.userId, username: me.username }, "net_ban", null, { op: "lift", ids }, null);
   await reload();
@@ -413,7 +421,9 @@ function register(app, { addUser }) {
   const guard = require("./middleware/authGuard");
   const fail = (res, e) => {
     if (!(e && e.status)) console.error("[netban]", e);                 // (review fix: a 500 leaves a log line)
-    res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+    const SR = require("./staffrank");
+    res.status(e && e.status ? e.status : 500).json(Object.assign({ ok: false, error: e && e.status ? SR.msg(res, e) : "Something went wrong." },
+      e instanceof SR.StaffRankError ? { code: e.code } : {}));
   };
   const meOf = async (req) => (req.user && req.user.userId ? (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0] : null);
   const writeOk = (req) => req.is("application/json") && req.get("X-Requested-With") === "fetch" && guard.sameSite(req);

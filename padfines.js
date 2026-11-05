@@ -78,6 +78,9 @@ async function request(admin, { op, from, to, amount, reason, key } = {}) {
     if (!T || T.id !== String(to)) throw fail(404, "No such pad to move it into.");
     if (T.id === R.id) throw fail(400, "That's the same pad.");
   }
+  // rankrule (staffrank.js): a fine / a transfer out of a pad is a sanction on its owner - never your own pad, never one owned by PATV staff
+  // of your rank or above (the owner above every Admin); a pad without an owner has no rank
+  if (R.owner && R.owner.userId) await require("./staffrank").assert(admin, String(R.owner.userId));
   const a = typeof amount === "number" ? amount : /^\s*\d+\s*$/.test(String(amount || "")) ? parseInt(amount, 10) : NaN;
   if (!Number.isFinite(a) || Math.floor(a) !== a || a < 1 || a > MAX_AMOUNT) throw fail(400, "Enter a whole amount of PAT.");
   const why = clean(reason, 200);
@@ -235,7 +238,8 @@ function register(app, { addUser, isBotToken }) {
       res.json(Object.assign({ ok: true }, await request(req.user, { op: b.op, from: b.from, to: b.to, amount: b.amount, reason: b.reason, key: b.key })));
     } catch (e) {
       if (e && e.message === "busy") return res.status(429).json({ ok: false, error: "You already have a few things waiting for Pepe - give him a moment." });
-      res.status(e.status || 500).json({ ok: false, error: e.status ? e.message : "Something went wrong." });
+      const SR = require("./staffrank");
+      res.status(e.status || 500).json(Object.assign({ ok: false, error: e.status ? SR.msg(res, e) : "Something went wrong." }, e instanceof SR.StaffRankError ? { code: e.code } : {}));
       if (!e.status) console.error("[padfines] move:", e);
     }
   });

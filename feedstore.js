@@ -2087,6 +2087,7 @@ async function reportAction(user, { post, comment = null, action, tell = true, d
   }
   const open = await getQuery(`SELECT * FROM feed_reports WHERE post_id = ? AND ${c ? "comment_id = ?" : "comment_id IS NULL"} AND resolved_at IS NULL`, c ? [p.id, c.id] : [p.id]);
   const why = cleanLine(reason, 200);
+  if (action === "ban") await require("./staffrank").assert(user, c ? c.author_id : p.author_id);   // rankrule: before anything changes
   if (action === "dismiss" || action === "false") {
     if (c && c.hidden_at) await runQuery("UPDATE feed_comments SET hidden_at = NULL WHERE id = ?", [c.id]);
     if (!c && p.hidden_at) await runQuery("UPDATE feed_posts SET hidden_at = NULL WHERE id = ?", [p.id]);
@@ -2134,7 +2135,8 @@ async function userReportAction(user, { userId, action, tell = true, days = 0, r
   const T = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(userId || "")]))[0];
   if (!T) throw new Refuse(404, "No such user.");
   const open = await getQuery("SELECT * FROM user_reports WHERE target_id = ? AND resolved_at IS NULL", [T.userId]);
-  if (action === "ban") await ban(user, T.username, { room: "", reason: cleanLine(reason, 200) || "reported account", days });
+  // rankrule: checked here, before anything changes (ban() checks the account its name resolves to as well)
+  if (action === "ban") { await require("./staffrank").assert(user, T.userId); await ban(user, T.username, { room: "", reason: cleanLine(reason, 200) || "reported account", days }); }
   const act = action === "dismiss" ? "dismissed" : action === "false" ? "false" : "banned";
   if (open.length) await runQuery(`UPDATE user_reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE id IN (${open.map(() => "?").join(",")})`, [NOW(), user.username, act, ...open.map((r) => r.id)]);
   if (tell && open.length) {
@@ -2164,6 +2166,10 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
   if (r.error || !r.userId) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
   const u = { userId: r.userId, username: r.username };
   if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
+  // rankrule (owner 2026-11-05: "Rank rule - refuse actions on equal or higher-ranked staff."): never yourself / your own alt, never PATV
+  // staff of your rank or above (the owner above every Admin) - every scope, every caller (/api/feed/ban, the report actions, the person
+  // menu's pad / site ban); nothing is written
+  await require("./staffrank").assert(user, u.userId);
   const until = untilMs !== undefined ? (untilMs == null ? null : Math.floor(Number(untilMs))) : Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
   // 1.99ajn padppl: an upsert (was INSERT OR REPLACE) - the row's other columns a later build adds are kept on a re-ban
   await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -2186,6 +2192,7 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
 async function unban(user, userId, room = "", { via = "form" } = {}) {
   const roomId = String(room || "");
   if (roomId ? !(await rooms.canManage(user, roomId)) : !SP.can(user, "feed.moderate")) throw new Refuse(403, "Not allowed.");
+  await require("./staffrank").assert(user, String(userId), { lift: true });      // rankrule: never your own ban (a lift: no rank check)
   const cur = (await getQuery("SELECT username FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]))[0];
   await runQuery("DELETE FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]);
   // 1.99ajn padppl: an unban is audited too (it never was) - the pad's event log and admin_audit

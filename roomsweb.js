@@ -109,7 +109,8 @@ function register(app, { addUser, isBotToken }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[rooms]", e);
-    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+    const SR = require("./staffrank");
+    res.status(st).json(Object.assign({ ok: false, error: st === 500 ? "Something went wrong." : SR.msg(res, e) }, e instanceof SR.StaffRankError ? { code: e.code } : {}));
   };
   const jsonOnly = (req, res, next) => (req.is("application/json") ? next() : res.status(415).json({ ok: false, error: "JSON only." }));
   const needUser = (req, res, next) => (req.user && req.user.userId ? next() : res.status(401).json({ ok: false, error: "Sign in first." }));
@@ -319,14 +320,14 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/rooms/:slug/ban", sheetBody, addUser, needUser, jsonOnly, async (req, res) => {
     try {
       const R = await manageable(req, res); if (!R) return;
-      const u = await stage.roomBan(R.id, (req.body || {}).username, (req.body || {}).reason, actor(req));
+      const u = await stage.roomBan(R.id, (req.body || {}).username, (req.body || {}).reason, actor(req), { me: req.user });   // rankrule
       res.json({ ok: true, username: u.username });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/:slug/unban", sheetBody, addUser, needUser, jsonOnly, async (req, res) => {
     try {
       const R = await manageable(req, res); if (!R) return;
-      res.json({ ok: await stage.roomUnban(R.id, (req.body || {}).userId, actor(req)) });
+      res.json({ ok: await stage.roomUnban(R.id, (req.body || {}).userId, actor(req), { me: req.user }) });   // rankrule: never your own
     } catch (e) { fail(res, e); }
   });
   // bridge switches for this room: queued for Pepe, who re-checks the owner and applies them

@@ -464,6 +464,9 @@ async function staffSet(actor, userId, { status, note, rating } = {}) {
   const c = await creatorRow(userId);
   const u = await userRow(userId);
   if (!u) throw new Refuse(404, "No such account.");
+  // rankrule (staffrank.js): never your own creator account (approving yourself included); a pause / ban / back to pending never on PATV
+  // staff of your rank or above (the owner above every Admin); approve / reinstate / a note is a lift - no rank check
+  await require("./staffrank").assert(actor, String(userId), { lift: !status || status === "active" });
   const t = now();
   if (!c) {
     if (status !== "active") throw new Refuse(404, "Not a creator.");

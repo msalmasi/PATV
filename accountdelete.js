@@ -1054,6 +1054,7 @@ function register(app, { addUser }) {
   const sameOrigin = (req) => { const s = req.get("origin") || req.get("referer"); try { return !!s && new URL(s).host === req.get("host"); } catch (e) { return false; } };
   const fail = (res, e) => {
     if (e instanceof Refuse) return res.status(e.status).json({ ok: false, error: e.message, code: e.code, block: e.block || undefined, retry_at: e.retry_at || undefined });
+    if (e instanceof require("./staffrank").StaffRankError) return res.status(e.status).json({ ok: false, error: require("./staffrank").msg(res, e), code: e.code });
     console.error("[acctdel]", e.message);
     return res.status(500).json({ ok: false, error: "Something went wrong." });
   };
@@ -1117,6 +1118,8 @@ function register(app, { addUser }) {
       const target = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [String(req.params.id)]))[0];
       if (!target) throw new Refuse(404, "No such account.");
       if (target.userId === me.userId) throw new Refuse(403, "Another admin has to do this for your own account.", "E_SELF");
+      // rankrule (staffrank.js): your own alt is you; never PATV staff of your rank or above (an Admin's account: the owner's to delete)
+      await require("./staffrank").assert(me, target.userId);
       if (String((req.body || {}).confirm || "").trim() !== target.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
       if (String((req.body || {}).reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");   // 1.99wl
       if (await pendingOf(target.userId)) throw new Refuse(409, "Already scheduled.", "E_PENDING");
@@ -1135,6 +1138,7 @@ function register(app, { addUser }) {
       const d = (await getQuery(`SELECT d.id, d.user_id, u.username FROM account_deletions d LEFT JOIN users u ON u.userId = d.user_id
                                  WHERE d.id = ? AND d.state IN ('scheduled','held')`, [Number(req.params.id) || 0]))[0];
       if (!d) throw new Refuse(404, "No pending deletion with that id.");
+      await require("./staffrank").assert(me, d.user_id, { lift: true });    // rankrule: never your own (a lift: no rank check)
       const b = req.body || {};
       if (String(b.confirm || "").trim() !== d.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
       if (String(b.reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");

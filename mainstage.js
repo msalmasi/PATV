@@ -2219,7 +2219,7 @@ async function mine(userId) {
 function mfRecheck(userId) {
   try { require("./micfollow").recheckUser(userId).catch((e) => console.error("[stage] micfollow:", e.message)); } catch (e) { /* no mic follows */ }
 }
-async function ban(username, reason, actor) {
+async function ban(username, reason, actor, { me = null } = {}) {
   await init();
   // profmod review fix: {userId} = that account (the profile's 🎬 - a rename can't retarget it); a typed name is matched case-blind
   // but its EXACT spelling wins - a legacy pair of usernames that differ only in case (personref.accountByUsername) never swaps
@@ -2228,6 +2228,8 @@ async function ban(username, reason, actor) {
   const u = byId ? (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(username.userId)]))[0]
     : (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 1", [name, name]))[0];
   if (!u) throw new Refuse(404, "No such user.");
+  // rankrule: a web staff ban (me = the acting account): never yourself / your own alt, never PATV staff of your rank or above
+  if (me) await require("./staffrank").assert(me, u.userId);
   await runQuery("INSERT OR REPLACE INTO stage_bans (userId, username, reason, by, at) VALUES (?, ?, ?, ?, ?)",
                  [u.userId, u.username, String(reason || "").slice(0, 200), actor || null, now()]);
   await event(null, "ban", actor, u.username + (reason ? ": " + reason : ""));
@@ -2237,13 +2239,14 @@ async function ban(username, reason, actor) {
   mfRecheck(u.userId);                            // micfollow: a stage ban keeps them off the 🎙 mic stage too
   return u;
 }
-async function unban(userId, actor) {
+async function unban(userId, actor, { me = null } = {}) {
   await init();
+  if (me) await require("./staffrank").assert(me, String(userId || ""), { lift: true });      // rankrule: never your own (a lift: no rank)
   const r = await runQuery("DELETE FROM stage_bans WHERE userId = ?", [String(userId || "")]);
   if (r.changes) { await event(null, "unban", actor, userId); mfRecheck(userId); }
   return r.changes > 0;
 }
-async function roomBan(roomId, who, reason, actor) {
+async function roomBan(roomId, who, reason, actor, { me = null } = {}) {
   await init();
   const w = String(who || "").trim();
   // 1.99ajn padppl: targets.js - "u:<id>", "@name", "cf:<login>" exact; a bare name that means two people (a PATV username = another
@@ -2254,6 +2257,7 @@ async function roomBan(roomId, who, reason, actor) {
   if (!u) throw new Refuse(404, "No such user.");
   const RS = await rooms.stageSettings(roomId);
   if (RS.owner && RS.owner.userId === u.userId) throw new Refuse(400, "That's the pad's owner.");
+  if (me) await require("./staffrank").assert(me, u.userId);      // rankrule: padbans' rule - never yourself, never staff of your rank or above
   await runQuery("INSERT OR REPLACE INTO stage_room_bans (room_id, userId, username, reason, by, at) VALUES (?, ?, ?, ?, ?, ?)",
                  [roomId, u.userId, u.username, String(reason || "").slice(0, 200), actor || null, now()]);
   await event(null, "room_ban", actor, u.username + (reason ? ": " + reason : ""), roomId);
@@ -2263,7 +2267,8 @@ async function roomBan(roomId, who, reason, actor) {
   mfRecheck(u.userId);
   return u;
 }
-async function roomUnban(roomId, userId, actor) {
+async function roomUnban(roomId, userId, actor, { me = null } = {}) {
+  if (me) await require("./staffrank").assert(me, String(userId || ""), { lift: true });      // rankrule: never your own (a lift: no rank)
   const r = await runQuery("DELETE FROM stage_room_bans WHERE room_id = ? AND userId = ?", [roomId, String(userId || "")]);
   if (r.changes) { await event(null, "room_unban", actor, userId, roomId); mfRecheck(userId); }
   return r.changes > 0;
@@ -2317,7 +2322,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
   const stageStaff = (u) => SP.can(u, "stage.admin");   // 1.99ack (siteperms.js): /stage/admin and its APIs
   const fail = (res, e) => {
     // stagefix: + the refusal's code when it has one (livecam's: "unavailable", "not_on_cam"... - the page words it)
-    if (e && (e.refuse || (e.status && e.status < 500 && e.message))) return res.status(e.status).json({ ok: false, error: e.message, ...(e.code ? { code: e.code } : {}), ...(e.have ? { have: e.have } : {}) });
+    if (e && (e.refuse || (e.status && e.status < 500 && e.message))) return res.status(e.status).json({ ok: false, error: require("./staffrank").msg(res, e), ...(e.code ? { code: e.code } : {}), ...(e.have ? { have: e.have } : {}) });
     console.error("[stage]", e);
     res.status(500).json({ ok: false, error: "Something went wrong - nothing was charged." });
   };
@@ -2459,9 +2464,11 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const s = await getSlot(req.params.id);
       if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can cut slots.");
-      const r = await end(s.id, "cut", actor(req));
       const b = req.body || {};
-      if (b.ban && s.source !== "cam") await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req));   // 1.99zc: a cam slot's username is who put it up
+      // rankrule: "cut + ban" is checked before the cut (a refused ban cuts nothing); a cut alone is the pad's own programming
+      if (b.ban && s.source !== "cam") await require("./staffrank").assert(req.user, s.userId);
+      const r = await end(s.id, "cut", actor(req));
+      if (b.ban && s.source !== "cam") await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req), { me: req.user });   // 1.99zc: a cam slot's username is who put it up
       if (r && s.source !== "cam") rooms.notify(s.userId, { kind: "stage", title: "Your stage slot was cut", body: r.refund ? `${r.refund.toLocaleString("en-US")} PAT unused was refunded.` : "",
                                       link: "/stage", ref: "stage-cut:" + s.id, pm: false }).catch(() => {});
       res.json({ ok: true, settled: r });
@@ -2558,12 +2565,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const b = req.body || {};
       const ids = b.id ? [String(b.id)] : (await openSlots(b.room || undefined)).map((s) => s.id);
+      // rankrule: "cut + ban" is checked before the cut (a refused ban cuts nothing); a cut alone is programming, not a sanction
+      const banSlot = b.ban && ids.length === 1 ? await getSlot(ids[0]) : null;
+      if (banSlot) await require("./staffrank").assert(req.user, banSlot.userId);
       const out = [];
       for (const id of ids) { const r = await end(id, "cut", actor(req)); if (r) out.push(r); }
-      if (b.ban && ids.length === 1) {
-        const s = await getSlot(ids[0]);
-        if (s) await ban(s.username, b.reason || "cut from the stage", actor(req));
-      }
+      if (banSlot) await ban(banSlot.username, b.reason || "cut from the stage", actor(req), { me: req.user });
       res.json({ ok: true, cut: out.length });
     } catch (e) { fail(res, e); }
   });
@@ -2575,12 +2582,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/admin/ban", addUser, needStaff, staffJson, async (req, res) => {
     try {
       const b = req.body || {};
-      const u = await ban(b.userId != null && String(b.userId) !== "" ? { userId: b.userId } : b.username, b.reason, actor(req));
+      const u = await ban(b.userId != null && String(b.userId) !== "" ? { userId: b.userId } : b.username, b.reason, actor(req), { me: req.user });
       res.json({ ok: true, username: u.username });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/admin/unban", addUser, needStaff, staffJson, async (req, res) => {
-    try { res.json({ ok: await unban((req.body || {}).userId, actor(req)) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: await unban((req.body || {}).userId, actor(req), { me: req.user }) }); } catch (e) { fail(res, e); }
   });
   // Pepe ("!stage cut"): cut open slots back to Pepe's stream - every room, or {room} only (1.99bi)
   app.post("/api/stage/cut", async (req, res) => {

@@ -301,6 +301,7 @@ function parseHours(v) {
 
 function register(app, { isBotToken, addUser, bySlug }) {
   init().catch((e) => console.error("[bridgeblocks] init:", e.message));
+  const SR = require("./staffrank");     // rankrule: the web routes (Pepe's /api/bridge/blocks keeps his own ladder)
   const guard = require("./middleware/authGuard");
   const bad = (res, st, error) => res.status(st).json({ ok: false, error });
   const fail = (res, e) => { console.error("[bridgeblocks]", e); bad(res, 500, "Something went wrong - nothing changed."); };
@@ -370,6 +371,11 @@ function register(app, { isBotToken, addUser, bySlug }) {
       const by = { userId: String(c.me.userId), name: c.me.username, via: "web" };
       const feat = b.feature == null || b.feature === "" ? null : featureOf(b.feature);       // 1.99zf: one feature, or all
       if (b.feature != null && b.feature !== "" && !feat) return bad(res, 400, "That isn't a bridge feature.");
+      // rankrule (staffrank.js): never yourself / your own alt; a block never on PATV staff of your rank or above (a lift: no rank check)
+      if (b.op === "block" || b.op === "unblock") {
+        const why = await SR.decide(c.me, await SR.rowOf(target.userId), { lift: b.op === "unblock" });
+        if (why) return SR.send(req, res, why);
+      }
       if (b.op === "unblock") return res.json({ ok: true, target, ...(await unblock({ roomId: c.R.id, target, feature: feat, by })) });
       if (b.op !== "block") return bad(res, 400, "block or unblock");
       if (target.userId === String(c.me.userId)) return bad(res, 400, "That's you.");
@@ -384,7 +390,7 @@ function register(app, { isBotToken, addUser, bySlug }) {
   async function admin(req, res, write) {
     if (write && (!req.is("application/json") || req.get("X-Requested-With") !== "fetch" || !guard.sameSite(req))) { bad(res, 400, "Bad request."); return null; }
     if (!req.user || !req.user.userId) { bad(res, 401, "Sign in first."); return null; }
-    const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    const me = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
     if (!SP.can(me, "bridge.blocks_global")) { bad(res, 403, "Admins only."); return null; }
     return me;
   }
@@ -408,6 +414,12 @@ function register(app, { isBotToken, addUser, bySlug }) {
       const room = String(b.room || "").trim().slice(0, 128);
       const target = await resolveTarget(b.target);
       if (target.error) return targetFail(res, target);
+      // rankrule (staffrank.js): never yourself / your own alt; a block never on PATV staff of your rank or above (the owner above every
+      // Admin; a lift: no rank check) - before anything is written
+      if (b.op === "block" || b.op === "unblock") {
+        const why = await SR.decide(me, await SR.rowOf(target.userId), { lift: b.op === "unblock" });
+        if (why) return SR.send(req, res, why);
+      }
       const by = { userId: String(me.userId), name: me.username, via: "admin" };
       // 1.99zf: `features` = several at once (the per-account toggles); `feature` one; neither = "all" (unblock: every one)
       let feats = Array.isArray(b.features) ? b.features : b.feature != null && b.feature !== "" ? [b.feature] : null;

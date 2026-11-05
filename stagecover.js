@@ -975,7 +975,7 @@ function register(app, { addUser, noTimers = false }) {
   const SP = require("./siteperms");
   const rawChunk = express.raw({ type: "application/octet-stream", limit: CHUNK_MAX });
   const fail = (res, e) => {
-    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, code: e.code || null, ...(e.received != null ? { received: e.received } : {}) });
+    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: require("./staffrank").msg(res, e), code: e.code || null, ...(e.received != null ? { received: e.received } : {}) });
     console.error("[stagecover]", e);
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
@@ -1034,6 +1034,9 @@ function register(app, { addUser, noTimers = false }) {
       const a = await safetyAdmin(req);
       if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
       const who = String((req.body || {}).user_id || "");
+      // rankrule: never your own, never PATV staff of your rank or above (the owner above every Admin) - before anything changes; the
+      // automatic image checks (imagesafety's hook) still take any cover down
+      if (who) await require("./staffrank").assert(a, who);
       if (!who || !(await removeUpload(who, "admin " + a.username))) throw new Refuse(404, "That cover is already gone.", "gone");
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
@@ -1043,6 +1046,7 @@ function register(app, { addUser, noTimers = false }) {
       const a = await safetyAdmin(req);
       if (!a) return res.status(403).json({ ok: false, error: "Admins only." });
       const who = String((req.body || {}).user_id || "");
+      if (who) await require("./staffrank").assert(a, who, { lift: true });      // rankrule: never your own held cover (a lift: no rank)
       if (!who || !(await releaseUpload(who))) throw new Refuse(404, "That cover isn't waiting for a check.", "gone");
       console.log(`[stagecover] ${who}: held cover put up by admin ${a.username}`);
       res.json({ ok: true });

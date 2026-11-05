@@ -1259,6 +1259,8 @@ async function reportAction(viewer, { message, action, tell = true, days = 0, re
   const open = await getQuery("SELECT * FROM dm_reports WHERE message_id = ? AND resolved_at IS NULL", [id]);
   if (!open.length) throw new Refuse(404, "No open reports on that message.");
   const m = (await getQuery("SELECT * FROM messages WHERE id = ?", [id]))[0];
+  // rankrule: a ban is checked before the message goes (a refused ban changes nothing) - by the account id, as it is banned
+  if (action === "ban") await require("./staffrank").assert(viewer, open[0].sender_id);
   if ((action === "remove" || action === "ban") && m && !m.deleted_at) {
     await runQuery("UPDATE messages SET body = NULL, deleted_at = ?, deleted_by = ? WHERE id = ?", [NOW(), "admin:" + viewer.username, id]);
     await forgetRelay(id);        // CL11: deleted with the message (fix-up: only a hash of the key stays, 48 h)
@@ -1945,7 +1947,7 @@ function register(app, { isBotToken, addUser }) {
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : e && e.status === 507 ? 507 : 500;
     if (st === 500) console.error("[dm]", e && e.message);
-    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message, code: (e && e.code) || undefined, refused: (e && e.refused) || undefined });
+    res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : require("./staffrank").msg(res, e), code: (e && e.code) || undefined, refused: (e && e.refused) || undefined });
   };
   const viewer = async (req) => (req.user && req.user.userId ? account(req.user.userId) : null);
 
