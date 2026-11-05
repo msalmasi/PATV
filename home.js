@@ -367,7 +367,11 @@ function register(app, { addUser, xpForNextLevel }) {
       const PA = require("./padaccess");
       await PA.init();
       const viewer = req.user && req.user.userId ? req.user : null;
-      const rows = PA.visibleRows(viewer, await bridge.summary(!!viewer, viewer)).filter((r) => want.has(r.id));
+      // newstream 1.99akv: + the pads without a Camfrog room (rooms.withSitePads - the rows the page's Top Pads came from): a SITE pad's line
+      // ("🎥 who — what", "📼 title") was never refreshed - its id wasn't in the bridge's summary, so a stream that started there never showed
+      const sum = await bridge.summary(!!viewer, viewer);
+      const all = await require("./rooms").withSitePads(sum).catch(() => sum);
+      const rows = PA.visibleRows(viewer, all).filter((r) => want.has(r.id));
       const NP = await nowPlaying(rows, viewer);
       const np = {};
       for (const r of rows) np[r.id] = PA.adultGate(viewer, r.id) === "ok" ? NP.get(r.id) || null : null;     // adultgate site
