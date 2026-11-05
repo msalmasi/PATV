@@ -1341,12 +1341,36 @@ main.rm.rm-dock #rmStage:not(.rmd-full) .rmd-ov-bot > .rmd-full-chat { display: 
 main.rm.rm-dock .rmd-ov-bot > .rmd-full-chat[data-rmd-on="true"] { background: var(--ds-media-chip); }
 /* (item 4) a phone on its side, not fullscreen: the stage was squeezed to ~107px (only the width was checked - the chat's floor won) and an
    embed's iframe to 38-55px under its bar row, too small for its own controls. The Live panel now flows: the stage is the screen's height
-   (the picture + its bar row), the chat a screen high under it - the page scrolls between them. */
+   (the picture + its bar row), the chat a screen high under it - the page scrolls between them. dock3 review 1.99?? (M1): the screen's height
+   UNDER the navbar - a full 100dvh stage started under the 61-65px navbar, so its bar row (⏯, 🔉, the source, 🖥️, ⋯) sat below the fold and a
+   sideways phone showed a stream with no control at all until the viewer scrolled (4px: a navbar a little taller than --ds-nav-h). */
 @media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
   body.pad-dock-live { block-size: auto; min-block-size: 0; }
   body.pad-dock-live > main.rm.rm-dock { flex: none; }
   body.pad-dock-live main.rm.rm-dock #padPanel-live { flex: none; container-type: inline-size; }
-  body.pad-dock-live main.rm.rm-dock #rmStage { block-size: calc(100dvh - var(--ds-sp-2) - var(--ds-sp-2)); max-block-size: none; min-block-size: 0; }
+  body.pad-dock-live main.rm.rm-dock #rmStage { block-size: calc(100dvh - var(--ds-nav-h) - var(--ds-sp-2) - var(--ds-sp-2) - 4px); max-block-size: none; min-block-size: 0; }
   body.pad-dock-live main.rm.rm-dock #padPanel-live .rmd-body { flex: none; block-size: calc(100dvh - var(--ds-sp-2) - var(--ds-sp-2)); }
   main.rm.rm-dock.rmd-home #rmStage { max-block-size: calc(100svh - var(--ds-sp-2) - var(--ds-sp-2)); }
+}
+
+/* ── dock3 review 1.99?? (item 4 on phones) ── */
+/* (M2) the chat floated inside a fullscreen stage fits its box: the Live panel's log floor (--rmd-log-min, 112-120px - #padPanel-live .rmd-log)
+   followed the chat in, so it needed ~306px whatever box it got and spilled over the stage's bar (⏯, 🔉, the source) or off the screen, the
+   composer out of reach; on a phone on its side the chat is the column beside the picture (the 45% top of a phone's overlay left a 127px box) */
+main.rm.rm-dock :is(#rmStage.rmd-full, .rmd-fullscreen) > .rmd-overlay .rmd-log { min-block-size: 0; }
+@media (orientation: landscape) and (max-width: 760px) {
+  main.rm.rm-dock #rmStage.rmd-full:not(.rmd-embed) > .rmd-overlay { inset-block-start: calc(var(--ds-sp-2) + 44px); inset-inline: auto var(--ds-sp-2); inline-size: min(360px, 50%); }
+}
+/* (M3) 💬 Show chat on in fullscreen: a narrow stage's 56px ⏯ in the middle of the picture sat on the chat's header (a tap there paused the
+   stream) - it goes back into the stage's bar row, a 44px button like its neighbours */
+main.rm.rm-dock #rmStage.rmd-full.rmd-chat-on .rmd-ov-bot .rmd-media-play { position: static; inset: auto; margin-inline: 0; inline-size: 44px; min-inline-size: 44px;
+  block-size: 44px; min-block-size: 44px; }
+main.rm.rm-dock #rmStage.rmd-full.rmd-chat-on .rmd-ov-bot .rmd-media-play > .ds-ic { font-size: var(--ds-fs-sm); }
+/* (C5) reduced motion switched on after the page loaded (room-bridge.js only skips the analyser when it is on at load): the "on the mic" bars
+   keep the still eq shape over a real level too - meterLoop's per-frame heights never move them */
+@media (prefers-reduced-motion: reduce) {
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter > i { transition: none; animation: none; transform: none; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter > i:is(:nth-child(1), :nth-child(5)) { height: 5px !important; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter > i:is(:nth-child(2), :nth-child(4)) { height: 9px !important; }
+  main.rm.rm-dock .rmd-now.rmd-talk > .rb-meter > i:nth-child(3) { height: 14px !important; }
 }

@@ -270,7 +270,8 @@ test("an embed slot (live the moment it opens) is auto-featured when booked", as
   assert.equal(b.slot.feature_by, "auto");
 });
 
-test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad's auto-feature drops and stays off, other pads untouched; the page's ★ (pad_featured)", async () => {
+test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad's auto-feature drops and stays off, other pads untouched; the page's ★ (pad_featured)", async (t) => {
+  S._setPepeAir(() => true); t.after(() => S._setPepeAir(null));   // (dock3 review: it counts while his stream is on air - test/dock3-review-server.test.js)
   await S.setConfig({ pepe_feature_pads: {} }, "test");
   const a = await live();                                    // the house pad: auto-featured
   assert.equal(await feat(a.id), "auto");
@@ -298,7 +299,8 @@ test("dock3 1.99?? (owner item 5): Pepe's stream featured on ONE pad - that pad'
   assert.ok(ev.some((e) => e.what === "pepe_featured" && e.actor === "owner1" && e.room_id === rooms.HOUSE_ROOM), "logged with the pad");
 });
 
-test("dock3 1.99??: precedence - a slot featured by hand clears the pad's Pepe feature; refused while Pepe is away (409); the route is the slot buttons' rule", async () => {
+test("dock3 1.99??: precedence - a slot featured by hand clears the pad's Pepe feature; refused while Pepe is away (409); the route is the slot buttons' rule", async (t) => {
+  S._setPepeAir(() => true); t.after(() => S._setPepeAir(null));
   await S.setConfig({ pepe_feature_pads: {} }, "test");
   const a = await live();
   await S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1");
@@ -312,7 +314,9 @@ test("dock3 1.99??: precedence - a slot featured by hand clears the pad's Pepe f
   try {
     await assert.rejects(S.setPadPepeFeature(rooms.HOUSE_ROOM, true, "owner1"), (e) => e.status === 409 && /isn't in this pad/.test(e.message));
     await S.setConfig({ pepe_feature_pads: { [rooms.HOUSE_ROOM]: { by: "owner1", at: T } } }, "test");
-    assert.equal(S.padPepeFeatured(rooms.HOUSE_ROOM), null, "stored, but ignored while he is away");
+    assert.ok(S.padPepeFeatured(rooms.HOUSE_ROOM), "(dock3 review: a short absence - a bot restart, rejoining rooms - is held)");
+    adv(61 * 1000);
+    assert.equal(S.padPepeFeatured(rooms.HOUSE_ROOM), null, "stored, but ignored while he is away (past the hold)");
     assert.equal(S.pepeSource(undefined, rooms.HOUSE_ROOM).featured, false);
   } finally { B._rooms.delete("Elsewhere.Room"); }
   assert.ok(S.padPepeFeatured(rooms.HOUSE_ROOM), "back (nobody knows where he is - shown as before): it counts again");

@@ -33,7 +33,7 @@
 // with PATVRtc.watch (muted: a cam has no sound) and beats every 15 s like a live cam (livecam.js stageWatch).
 // micfollow: 🎙 "On the mic" - the pad's mic-follows program (micfollow.js; the pad page's /live long-poll hands it over
 // with setMic(stage_program)) is a third view kind, 'mic', drawn by stage-mic.js (only on the page with WebRTC on;
-// without it setMic does nothing). Default view: a featured slot > Pepe's stream featured > the mic stage (when someone on
+// without it setMic does nothing). Default view: a featured slot > Pepe's stream featured (dock3 review: while he is here and on air) > the mic stage (when someone on
 // it has a picture) > Pepe's stream; the pad's default_view 'tab' keeps the mic stage a tab. A viewer who picked a tab
 // keeps it until it ends. No snaps / clips / watch-minutes of it (selection: capture false).
 // dock3 (owner 2026-11-05 item 6: "mic follows seems to sometimes interrupt another featured stage") 1.99??: FEATURED MEANS
@@ -129,9 +129,14 @@
     function micDefault() {
       return micOn() && mic.active === true && mic.default !== 'tab' && !mic.signin && !mic.blocked && !featWins();
     }
-    // dock3 1.99??: something featured beats the mic stage - a featured slot in the list (auto, by hand, booked; a held one too), the
-    // server naming one that went live but isn't listed this second, or Pepe's stream featured (an event / this pad)
-    function featWins() { return !!(featured() || (featHint && (featHint.live || featHint.went)) || (pepeSrc && pepeSrc.featured)); }
+    // dock3 1.99??: something featured beats the mic stage - a featured slot in the list (auto, by hand, booked; a held one too) or Pepe's
+    // stream featured (an event / this pad). dock3 review 1.99??: only what this page can SHOW - Pepe's feature while he is in this pad and
+    // on air (through a drop of up to PEPE_HOLD_MS: an OBS reconnect never hands the view to the mic stage and back), never while he is off
+    // air or away (the viewer sat on "nothing streaming right now" with people on the mic); the server's marker alone (a featured slot this
+    // page doesn't list - a page loaded during its drop) no longer counts: it showed Pepe's off-air slate for up to a 📼 pause
+    var PEPE_HOLD_MS = 60000, pepeOffAt = 0;              // (when his stream went off air while this page watched; 0 = on air / never seen on)
+    function pepeLive() { return pepeOn || (pepeOffAt > 0 && Date.now() - pepeOffAt < PEPE_HOLD_MS); }
+    function featWins() { return !!(featured() || (pepeSrc && pepeSrc.featured && pepeHere && pepeLive())); }
     // ── 1.99zc: 🎬 cam slots ──
     var camCtl = null;
     function camStop() { if (camCtl) { camCtl.stop(); camCtl = null; } }
@@ -207,7 +212,7 @@
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
     function pickDefault() {
       var f = featured();
-      // dock3 1.99??: a featured slot (auto too), else Pepe's stream while something featured can't be shown here, else the mic stage
+      // dock3 1.99??: a featured slot (auto too), else Pepe's stream while it is featured (dock3 review: here and on air), else the mic stage
       view = f ? 'slot:' + f.id : featWins() ? 'pepe' : micDefault() ? 'mic' : 'pepe';
     }
     pickDefault();
@@ -302,10 +307,15 @@
     // dock3 1.99?? (owner item 5): ★ Feature / ☆ Unfeature on Pepe's stream - the SAME .adm buttons a slot gets (o.manage: the pad's owner,
     // staff; the Room Dock lists them in the source chip's ▾ as it does a slot's), featuring his stream on this pad. ☆ while this pad features
     // it; nothing while only the site-wide event does (that one is /stage/admin's) or he is off air.
-    var lastFront = null;                                  // (the old homepage switcher polls without a room: the front pad's slug from the poll)
+    // (the old homepage switcher polls without a room: the front pad's slug from the poll - dock3 review 1.99??: from the first render on, o.front)
+    var lastFront = typeof o.front === 'string' && o.front ? o.front : null;
     function featRoom() { return padSlug || lastFront || ''; }
+    // dock3 review 1.99??: o.manage was worked out for ONE pad - the pad page's, the Dock's block, the old homepage's first front pad; once the
+    // old homepage shows another pad (the front page changed) its ★ / ✂ buttons go until a reload (they answered 403 there)
+    var manageFor = padSlug || lastFront || '';
+    function canAdm() { return !!o.manage && (!manageFor || featRoom() === manageFor); }
     function pepeAdm() {
-      if (!o.manage || !pepeHere || view !== 'pepe' || cur() || !featRoom()) return '';
+      if (!canAdm() || !pepeHere || view !== 'pepe' || cur() || !featRoom()) return '';
       if (pepeSrc && pepeSrc.pad) return '<span class="adm"><button type="button" data-act="pepe-unfeature">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button></span>';
       if ((pepeSrc && pepeSrc.featured) || !pepeOn) return '';
       return '<span class="adm"><button type="button" data-act="pepe-feature">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button></span>';
@@ -348,7 +358,7 @@
         if (x.cam && x.mine === true) h += '<button type="button" class="stx" data-act="leave" data-id="' + esc(x.id) + '" title="' + esc(_t('js.stage.room.leave_title', 'Your cam is on this pad\'s Stage - take it off (this pad can\'t put it back for an hour)')) + '">' + esc(_t('js.stage.room.leave', '🙈 Take me off this Stage')) + '</button>';
       });
       var s = cur();
-      if (o.manage && s) {
+      if (canAdm() && s) {
         h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button>'
                                                 : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button>') +
              '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut', '✂ Cut')) + '</button>' +
@@ -394,16 +404,23 @@
         .catch(function () { b.disabled = false; alert(_t('js.stage.room.e_net', 'Could not reach the server.')); });
     }
     var dead = false;
+    // dock3 review 1.99??: answers are applied in the order the polls were SENT - an older one that lands after a newer one is dropped (the
+    // 10 s poll in flight when ★ Feature is pressed used to land after the action's own poll and move the view back for up to 10 s)
+    var pollSeq = 0, pollApplied = 0, winsSeen = featWins();
     function poll() {
       if (dead) return Promise.resolve();
+      var seq = ++pollSeq;
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         if (dead) return;
         // dock3 1.99??: a failed / stale answer (the server's catch: `stale`; a refusal: ok false) moves nothing - it used to read as
         // "nothing is live" and hand the view to the mic stage
         if (!g || typeof g !== 'object' || g.ok === false || g.stale === true) return;
-        var was = cur(), wasF = featured(), wasW = featWins();
+        if (seq < pollApplied) return;                                              // (dock3 review: out of date)
+        pollApplied = seq;
+        var was = cur(), wasF = featured(), wasW = winsSeen;                        // (dock3 review: as of the last poll - a hold that ran out since counts)
         if (g.front && typeof g.front.slug === 'string' && g.front.slug) lastFront = g.front.slug;   // (dock3: Pepe's ★ on the old homepage)
         if (Number(g.now) > 0) skew = Number(g.now) - Date.now();                   // 1.99ajr golive: where a video slot is (setEmbed)
+        if (pepeOn && !g.active) pepeOffAt = Date.now(); else if (g.active) pepeOffAt = 0;   // (dock3 review: the hold on his feature)
         pepeOn = !!g.active;
         pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
         if (typeof g.pepe_here === 'boolean') pepeHere = g.pepe_here;
@@ -422,6 +439,7 @@
         var f = featured();
         if (was && !cur()) { chosen = false; pickDefault(); }                      // that slot ended / was cut (dock3: the viewer's pick ends with it)
         else if (!chosen && ((f ? f.id : null) !== (wasF ? wasF.id : null) || featWins() !== wasW)) pickDefault();   // featured changed and the viewer never chose
+        winsSeen = featWins();
         if (o.onPoll) o.onPoll(g);
         show();
       }).catch(function () {});

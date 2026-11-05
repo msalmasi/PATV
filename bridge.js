@@ -812,6 +812,12 @@ function pepeWhep() {
 function pepeSrc(roomId) {
   try { return require("./mainstage").pepeSource(undefined, roomId || null); } catch (e) { return { mode: "stream" }; }
 }
+/** dock3 review 1.99??: Pepe's own stream is on air - stage().active without the rest (mainstage's per-pad Pepe feature counts only then;
+ *  stage() itself asks mainstage for pepe_src, so mainstage can't call it). */
+function pepeOnAir() {
+  if (HLS.live !== null) return !!HLS.live;
+  return Date.now() - STAGE.at < 120 * 1000 && !!STAGE.active;
+}
 function stage(roomId) {
   const fresh = Date.now() - STAGE.at < 120 * 1000;
   const room = stageRoom();
@@ -2251,14 +2257,23 @@ function register(app, { isBotToken, addUser }) {
       // 1.99fu: who's asking only matters while some pad is Approved (this is polled - no sign-in read otherwise)
       if (PA.anyApproved() && req.user === undefined) await new Promise((r) => addUser(req, res, r));
       let R = req.query.room ? await web.resolveRoom(String(req.query.room)) : null;
+      // dock3 review 1.99?? (MF2): ?room=<pad>&home=1 = the homepage Dock's block - THAT pad's stage by the homepage's rules (no cam slot), plus
+      // `front` (what the front page shows now: the Dock swaps its block when it changes). Polling with no pad applied a new front pad's stage
+      // to the old block - its 🎙 mic stage over its featured stream - until the swap (never, once skipSlug was set).
+      const homeQ = !!R && String(req.query.home || "") === "1";
       // 1.99fu: an Approved pad's stage is for the people inside it
-      if (R && !PA.canSee(req.user, R.id)) return res.status(req.user && req.user.userId ? 403 : 401).json({ ok: false, locked: true, error: "This pad is for approved members." });
-      if (!R) {
-        const f = await reg.frontRoom(await summary(false), { viewer: req.user || null });
-        R = f && f.id ? await reg.get(f.id) : null;
-        if (R && !PA.canSee(req.user, R.id)) R = null;
-        if (R) front = { id: R.id, slug: web.linkSlug(R), title: R.title, pinned: f.pinned };
+      if (R && !PA.canSee(req.user, R.id)) {
+        if (!homeQ) return res.status(req.user && req.user.userId ? 403 : 401).json({ ok: false, locked: true, error: "This pad is for approved members." });
+        R = null;                                    // (the Dock's pad was closed to this viewer since: the front page's, and `front` swaps the block)
       }
+      if (!R || homeQ) {
+        const f = await reg.frontRoom(await summary(false), { viewer: req.user || null });
+        let F = f && f.id ? await reg.get(f.id) : null;
+        if (F && !PA.canSee(req.user, F.id)) F = null;
+        if (F) front = { id: F.id, slug: web.linkSlug(F), title: F.title, pinned: f.pinned };
+        if (!R) R = F;
+      }
+      const home = !!front || homeQ;                 // (the homepage's front stage - its rules below)
       // 1.99fu: on an Approved pad the HLS / WHEP URLs carry this viewer's read token (webrtc.js checks it)
       // adultgate site: a cam slot from an 18+ pad's room carries no name past the gate (adultSlots; reads the sign-in when it applies)
       // stagefix site: a 🎬 cam slot is listed only to signed-in viewers who may see the pad's live room (padaccess.camSlotsFor),
@@ -2270,12 +2285,14 @@ function register(app, { isBotToken, addUser }) {
         let list = await MS.publicSlots(R.id);
         // stagefix fix: the homepage's front stage (no ?room=) never carries a cam slot - a cam on a Stage plays only on its own
         // pad page (D-21), and a featured one would otherwise be every signed-in visitor's default view on the homepage
-        if (front) list = list.filter((s) => !(s && s.cam));
+        if (home) list = list.filter((s) => !(s && s.cam));
         if (list.some((s) => s && s.cam) && req.user === undefined) await new Promise((r) => addUser(req, res, r));
         slots = await MS.slotsFor(R.id, req.user || null, list);
         // dock3 1.99??: the pad's featured slot, live or not (a cam slot only where this page may show it) - the page holds a featured
-        // stage through a short drop instead of handing the view to the mic stage
-        featured = await MS.featuredOf(R.id, req.user || null, { front: !!front });
+        // stage through a short drop instead of handing the view to the mic stage. dock3 review 1.99?? (MF6): a featured 🎬 cam that dropped
+        // out of the list still needs the sign-in read (its rule is per viewer) - it was named to nobody, so the hold never engaged
+        if (!home && req.user === undefined && (await MS.featuredCam(R.id))) await new Promise((r) => addUser(req, res, r));
+        featured = await MS.featuredOf(R.id, req.user || null, { front: home });
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99??: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
@@ -2621,7 +2638,7 @@ async function forgetVeiled(logins) {
 }
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
-  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+  revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)

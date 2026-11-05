@@ -154,7 +154,8 @@ test("home-dock.js: the lines as the pad Dock draws them but never with Reveal; 
   assert.equal(ha.isPlaying(), false); ha.pause(); assert.equal(P.calls.paused, 1, "it IS the Dock's player underneath");
   assert.equal(P.calls.dock.mode, "preview"); assert.equal(P.calls.dock.vt, "tag-1"); assert.equal(P.calls.dock.room, "Alpha");
   assert.equal(P.calls.dock.chatUrl, "/p/alpha/chat"); assert.equal(P.calls.dock.padHref, "/p/alpha");
-  assert.equal(P.calls.switcher.api, "/api/stage"); assert.ok(P.calls.switcher.wrap === P.doc.getElementById("rmVideo"), "the pad Dock's stage ids");
+  // (dock3 review 1.99?? MF2: THIS block's pad by the homepage's rules - a front-page change no longer applies the new pad's stage to it)
+  assert.equal(P.calls.switcher.api, "/api/stage?room=alpha&home=1"); assert.ok(P.calls.switcher.wrap === P.doc.getElementById("rmVideo"), "the pad Dock's stage ids");
   P.calls.timers.shift()();                                   // the first long-poll
   assert.equal(P.calls.urls.length, 1);
   const u = P.calls.urls[0];
@@ -211,7 +212,7 @@ test("item 3: the homepage stage in fullscreen has no card cap - (1,4,1) beats t
   assert.match(css, fix);
   assert.ok(css.search(fix) > css.indexOf("main.rm.rm-dock.rmd-home #rmStage.is-off { aspect-ratio: auto; }"), "after the off-air rule");
   assert.match(css, /main\.rm\.rm-dock\.rmd-home #rmStage \{ block-size: auto; aspect-ratio: 16 \/ 9; max-block-size: min\(560px, calc\(100vh - 140px\)\);/, "the card rule as it was - never rescoped to #hmDock > #rmStage (2,3,1), which would beat the off-air bar");
-  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=5/);
+  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=6/);   // (homegap: v5; dock3 review 1.99??: v6)
 });
 
 // homegap (owner 2026-11-05, "the empty space here looks weird" - a blank under the coin-op strip beside Top Pads + the featured table): the
@@ -310,7 +311,7 @@ test("homegap: home-dock.css - the lower rows from custom properties, set by the
   for (const s of ['"stage stage" "coin coin" "chat chat" "tops feat" "cta cta"', '"stage stage" "coin coin" "chat chat" "tops tops" "cta cta"', '"stage" "coin" "chat" "tops" "feat" "cta"'])
     assert.ok(css.includes(s), "761-1023px / phones: the card is the last row - " + s);
   assert.doesNotMatch(css, /grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"/, "off air / popped set only the top half");
-  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=5/);
+  assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=6/);   // (dock3 review 1.99??: v6 - after homegap's v5)
 });
 // homegap review fixes: the strip fills the row it shares (Top Pads' two rows, one row and its 🎧 listen bar), never under 96px from 1024px;
 // two rows alone no longer fill; the tall card's red light follows Go live under 1280px; the join pitch's buttons stack there; the featured

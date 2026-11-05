@@ -276,3 +276,9 @@ main.hm.rmd-home #stageSide > a.box > :is(h3, div) { display: inline; margin: 0 
   main.hm.rmd-home #wheelBox .aw-tool { min-block-size: 24px; padding-inline: 6px; font-size: 7px; }
 }
 @media (prefers-reduced-motion: reduce) { main.hm.rmd-home #hmDock * { scroll-behavior: auto; } }
+/* dock3 review 1.99?? (item 4 - review-mobile M1, on the homepage): a phone on its side - the stage fits the screen's height, so its bar row
+   (⏯, 🔉, the source, 🖥️, ⋯) is on screen with the picture. pad-dock.css's rule for it lost to the phone width's `max-block-size: none`
+   above (760px or narrower, this file loads later): a 404px stage in a 340px-high screen. (Fullscreen keeps its own size - pad-dock.css.) */
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  main.rm.rm-dock.rmd-home #rmStage { max-block-size: calc(100svh - var(--ds-sp-2) - var(--ds-sp-2)); }
+}

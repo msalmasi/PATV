@@ -116,10 +116,12 @@ test("race 2c: a failed poll, a stale server answer (`stale`) or ok:false never 
   x.answer({ ok: false, error: "x" }); await x.poll(); assert.equal(x.sw.view(), "slot:s1", "ok: false");
 });
 
-test("the server's featured marker with nothing to show (not listed for this page) still keeps the mic stage off the default: Pepe's stream instead", () => {
+// (dock3 review 1.99?? C2: the marker alone - a page loaded during the featured slot's drop - no longer keeps the mic stage off: it showed
+// Pepe's stream, or his off-air slate, for up to a 📼 pause; test/dock3-review-stage.test.js)
+test("the server's featured marker with nothing to show (not listed for this page) leaves the mic stage the default", () => {
   const x = switcher({ featured: { id: "s9", live: false, by: "owner", went: true } });
   x.sw.setMic(MIC());
-  assert.equal(x.sw.view(), "pepe");
+  assert.equal(x.sw.view(), "mic");
   // a featured slot that never went live yet (booked, opened, not publishing) doesn't hold the mic stage off
   const y = switcher({ featured: { id: "s9", live: false, by: "booked", went: false } });
   y.sw.setMic(MIC());
@@ -144,7 +146,8 @@ test("race 3: the 🎙 tab never grabs a viewer back off a featured stage; with 
 test("server: /api/stage carries `featured` (live or not, the homepage / cam rule) and answers `stale` on an error; the pages pass the first value in", () => {
   const br = read("bridge.js"), ms = read("mainstage.js"), room = read("views", "room.ejs"), home = read("views", "home.ejs"), hj = read("home.js");
   assert.match(ms, /async function featuredOf\(roomId, viewer, \{ front = false \} = \{\}\)/);
-  assert.match(br, /featured = await MS\.featuredOf\(R\.id, req\.user \|\| null, \{ front: !!front \}\)/);
+  // (dock3 review 1.99??: `home` - the front stage, or a Dock's own pad asked with home=1 - test/dock3-review-server.test.js)
+  assert.match(br, /featured = await MS\.featuredOf\(R\.id, req\.user \|\| null, \{ front: home \}\)/);
   assert.match(br, /\} catch \(e\) \{ slots = \[\]; stale = true; \}/);
   assert.match(br, /res\.json\(\{ \.\.\.stage\(roomId\), slots, front, featured, pepe_here: here !== false, now: t, \.\.\.\(stale \? \{ stale: true \} : \{\}\) \}\)/);
   assert.match(room, /featured: <%- JSON\.stringify\(RS\.featured \|\| null\)/);

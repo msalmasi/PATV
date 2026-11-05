@@ -39,5 +39,6 @@ test("pad-dock.css: :fullscreen and the full-window rules, the trap-lifting attr
   assert.match(css, /main\.rm\.rm-dock #rmStage\.rmd-full\.rmd-embed\.rmd-chat-on > \.rmd-overlay \{ position: static; grid-area: 3 \/ 1;/, "portrait: the chat under the picture and its bar");
   assert.match(css, /@media \(orientation: landscape\) \{\n  main\.rm\.rm-dock #rmStage\.rmd-full\.rmd-embed\.rmd-chat-on \{ grid-template-columns: minmax\(0, 1fr\) min\(400px, 40%\);/, "wide: beside it");
   assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) and \(pointer: coarse\) \{\n  body\.pad-dock-live \{ block-size: auto; min-block-size: 0; \}/);
-  assert.match(css, /body\.pad-dock-live main\.rm\.rm-dock #rmStage \{ block-size: calc\(100dvh - var\(--ds-sp-2\) - var\(--ds-sp-2\)\); max-block-size: none; min-block-size: 0; \}/);
+  // (dock3 review 1.99?? M1: the screen's height UNDER the navbar - its bar row was below the fold; test/dock3-review-stage.test.js)
+  assert.match(css, /body\.pad-dock-live main\.rm\.rm-dock #rmStage \{ block-size: calc\(100dvh - var\(--ds-nav-h\) - var\(--ds-sp-2\) - var\(--ds-sp-2\) - 4px\); max-block-size: none; min-block-size: 0; \}/);
 });
