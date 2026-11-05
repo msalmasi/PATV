@@ -173,7 +173,7 @@
   ticker = setInterval(function () { if (!document.hidden) drawTimes(); }, 1000);
   poll();
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
-  // newstream 1.99akv: the pad's stage (room.ejs - its 10 s poll saw the set of live slots change: a 📼 play started or ended) asks now
+  // newstream 1.99ala: the pad's stage (room.ejs - its 10 s poll saw the set of live slots change: a 📼 play started or ended) asks now
   // instead of waiting out the 30 s idle turn
   // (not twice in a moment: a tab coming back asks here and through the stage at once)
   window.PATVPlexQ = { poll: function () { if (Date.now() - askedAt >= 1500) poll(); } };

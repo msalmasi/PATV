@@ -1,5 +1,5 @@
 "use strict";
-// newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
+// newstream 1.99ala (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it. Thats
 // annoying."): the pad page's pieces that were drawn once, at load, follow the stage's own 10 s poll now:
 //   1. the Live / Stage tab's red dot (it was PT_.active at render - a viewer on Feed / About, where a site pad always opens, never saw a
 //      stream start) + a "Live on the stage now · Watch ›" line under the tabs for a stage that went on air while the page watched

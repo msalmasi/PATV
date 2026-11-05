@@ -2460,7 +2460,7 @@ function register(app, { isBotToken, addUser }) {
           await new Promise((r) => addUser(req, res, r));
           featured = await MS.featuredOf(R.id, req.user || null, { front: home });
         }
-        // newstream 1.99akv: the homepage's "Next up" (the off-air slate, the Dock's off-air bar) - the shown pad's next booking, public facts
+        // newstream 1.99ala: the homepage's "Next up" (the off-air slate, the Dock's off-air bar) - the shown pad's next booking, public facts
         // only (home.nextSlot), cached per pad; it was drawn once at load
         if (home) next = await require("./home").nextUpCached(R.id).catch(() => null);
       }
@@ -2473,14 +2473,14 @@ function register(app, { isBotToken, addUser }) {
     res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(next !== undefined ? { next } : {}), ...(stale ? { stale: true } : {}) });
   });
 
-  // newstream 1.99akv: the pads list's live check (padsonair.js) - /p asks it every 30 s and swaps its sections when it moves
+  // newstream 1.99ala: the pads list's live check (padsonair.js) - /p asks it every 30 s and swaps its sections when it moves
   require("./padsonair").register(app, { addUser });
   // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pads at /p
   app.get("/p", addUser, async (req, res) => {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn, req.user);
-    // (newstream 1.99akv: the page's first signature, from the same snapshot /api/pads/onair answers from - an unchanged list never refetches)
+    // (newstream 1.99ala: the page's first signature, from the same snapshot /api/pads/onair answers from - an unchanged list never refetches)
     const onairSig = await require("./padsonair").sigFor(signedIn ? req.user : null).catch(() => null);
     res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its chat room live on the web.",
                       image: res.locals.ogBase + require("./og").pageUrl("Pad Guide"), url: res.locals.ogBase + "/p" };
@@ -2741,7 +2741,7 @@ function padTabsFor(o) {
   const active = roomActive || stageOn;
   const qs = String(o.query || "").includes("?") ? String(o.query).slice(String(o.query).indexOf("?")) : "";
   const requested = T.requestedTab(qs, "") || (o.lineLive && T.lineRequested(qs) ? "live" : null);
-  // (newstream 1.99akv: roomActive apart - the Live tab's dot is "the room is active OR the stage is on air NOW"; room.ejs follows the stage)
+  // (newstream 1.99ala: roomActive apart - the Live tab's dot is "the room is active OR the stage is on air NOW"; room.ejs follows the stage)
   return { tabs, camfrog, active, roomActive, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null, lineLive: !!o.lineLive }),
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })), lineLive: !!o.lineLive };
 }

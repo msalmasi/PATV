@@ -52,7 +52,7 @@
         onPoll: function (g) {
           if (dead || !g) return;
           if (g.front && g.front.slug && g.front.slug !== frontSlug) { frontChanged(g.front); return; }
-          if (Object.prototype.hasOwnProperty.call(g, 'next')) nextChanged(g.next);   // newstream 1.99akv: the off-air bar's "Next up"
+          if (Object.prototype.hasOwnProperty.call(g, 'next')) nextChanged(g.next);   // newstream 1.99ala: the off-air bar's "Next up"
         },
         // (dock3 review 1.99akf MF2: THIS block's pad by the homepage's rules - home=1 - and `front` = what the front page shows now; polling
         // with no pad applied a new front pad's stage to this block until the swap - its 🎙 mic stage over the featured stream)
@@ -69,7 +69,7 @@
       try { time = W.PATVTime && W.PATVTime.format ? W.PATVTime.format(n.at, 'time') : new Date(n.at).toLocaleTimeString(D.documentElement.lang || undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { time = ''; }
       return _t('js.home.dock.next_up', 'Next up: {name} · {time}', { name: n.name + (n.title ? ' — ' + n.title : ''), time: time });
     }
-    // newstream 1.99akv: the off-air bar's "Next up" was built once (pad-dock.js preview.nextUp) - a booking made since never showed, one that
+    // newstream 1.99ala: the off-air bar's "Next up" was built once (pad-dock.js preview.nextUp) - a booking made since never showed, one that
     // started and ended stayed. The stage's own 10 s poll carries the pad's next booking (/api/stage ...&home=1 `next`); the bar's second
     // piece (.rmd-slim-b, after its " · ") follows it - added, rewritten or taken away. Text only.
     function nextChanged(n) {
