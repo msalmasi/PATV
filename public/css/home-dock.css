@@ -93,6 +93,24 @@ main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease > b { color: var(--ds-text-strong); font-size: var(--ds-fs-lead, 16px); }
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-blurb { display: none; }
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss { display: grid; }
+  /* (homegap2 review: the card reads as a panel at any height - the call-to-action card's two soft stage lights, a gold one from the
+     top and a green one at the Sign in button's corner, mirrored right to left) */
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #hmDock > #rmChat:has(> .rmd-tease) { --hmd-tz-bx: 6%;
+    background: radial-gradient(75% 38% at 50% -6%, rgba(255, 207, 64, .075), transparent 72%), radial-gradient(60% 34% at var(--hmd-tz-bx) 96%, rgba(76, 175, 80, .1), transparent 72%), var(--ds-surface); }
+  [dir="rtl"] main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #hmDock > #rmChat:has(> .rmd-tease) { --hmd-tz-bx: 94%; }
+}
+@media (min-width: 1280px) and (min-height: 760px) {
+  /* (homegap2 review: beside a 480-560px stage the tease says it big - the title at heading size, 40px discs, the list at body size, a
+     44px Sign in - instead of a small block centred in ~120px of empty card each side. Only in a window 760px tall or more: the stage card
+     stretches with a taller tease up to its 560px cap, but in a shorter window it stops at the window less 140px (460px at 600) and a
+     long translation of the big words would leave a blank under it) */
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease { gap: var(--ds-sp-4); padding: var(--ds-sp-4) var(--ds-sp-5); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease > b { font-size: var(--ds-fs-h2); line-height: var(--ds-lh-h2); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-mh { font-size: var(--ds-fs-pixel-h); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss, main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss > ul { gap: var(--ds-sp-3); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss li { grid-template-columns: 40px minmax(0, 1fr); gap: var(--ds-sp-3); font-size: var(--ds-fs-body); }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-ic { inline-size: 40px; block-size: 40px; font-size: 19px; }
+  main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease > .btn { min-block-size: 44px; padding-inline: var(--ds-sp-5); font-size: 15px; }
 }
 @media (min-width: 1024px) and (max-width: 1279px) {
   /* (homegap fix: the tall card's buttons are under the words at the start here - the red light follows Go live down to them, not the

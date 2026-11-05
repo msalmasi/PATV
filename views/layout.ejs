@@ -228,8 +228,8 @@
                                                         box-sizing: border-box; padding: 0 10px; border-radius: var(--ds-r-sm); user-select: none; font-size: 15px; }
             .nav-more > summary::-webkit-details-marker, .nav-burger > summary::-webkit-details-marker { display: none; }
             .nav-more > summary:hover, .nav-burger > summary:hover, .nav-more[open] > summary, .nav-burger[open] > summary { background: var(--ds-hover); color: #fff; }   /* scoped: an unscoped details[open] > summary greyed every open <details> on the site */
-            .nav-more > summary [aria-hidden] { font-size: 11px; transition: transform var(--ds-dur-2); }
-            .nav-more[open] > summary [aria-hidden] { transform: rotate(180deg); }
+            .nav-more > summary [aria-hidden]:not(.nav-more-ic) { font-size: 11px; transition: transform var(--ds-dur-2); }
+            .nav-more[open] > summary [aria-hidden]:not(.nav-more-ic) { transform: rotate(180deg); }<%# (homegap2 review: the ▾ turns, never the ⋯ that stands in for More's label) %>
             .nav-pop { position: absolute; top: calc(100% + 8px); min-width: 220px; background: var(--ds-surface-3); border: 1px solid var(--ds-line-menu);
                        border-radius: var(--ds-r-lg); padding: 6px; display: grid; gap: 2px; box-shadow: var(--ds-e-3); }
             .nav-more .nav-pop { inset-inline-start: 0; }
@@ -312,11 +312,15 @@
                 .navbar .avatar img { width: 36px; height: 36px; }
                 .navbar a.nav-signin { padding: 0 10px; }
             }
-            /* homegap2 (owner 2026-11-05 "fix all 3", blank 3: "make the navbar wrap or shrink its labels before it overflows"): the bar's
-               give-way steps, set by #navFit (after these styles) only while its pieces don't fit the window - nav-f1 Post icon-only, nav-f2
-               More's label -> ⋯, nav-f3 Go live icon-only, nav-f4 the short PATV logo, nav-f5 no search box / 🔍 button (search stays at the
-               top of More and ☰), nav-f6 the phone bar (☰ lists every link). A collapsed label stays the link's accessible name: visually
-               hidden, never display: none. (500px and narrower Post / Go live are icon-only already - their 34 / 32px squares above.) */
+            <%# homegap2 (owner 2026-11-05 "fix all 3", blank 3: "make the navbar wrap or shrink its labels before it overflows"): the bar's
+                give-way steps, set by #navFit (after these styles) only while its pieces don't fit the window - nav-f1 Post icon-only, nav-f2
+                More's label -> ⋯, nav-f3 Go live icon-only, nav-f4 the short PATV logo, nav-f5 no search box / 🔍 button (search stays at the
+                top of More and ☰), nav-f6 the phone bar (☰ lists every link). A collapsed label stays the link's accessible name: visually
+                hidden, never display: none. (500px and narrower Post / Go live are icon-only already - their 34 / 32px squares above.)
+                homegap2 review: header.nav-fit (set by #navFit) - the header never widens the page to the bar's pieces (a grid item's
+                min-width: auto grew <body>'s one column to them, so every measurement laid the whole page out wider - WebKit could keep the
+                stage's row at that size for seconds); the pieces overflow the bar instead, which #navFit measures. Without script: as before. %>
+            header.nav-fit { min-width: 0; }
             .nav-more-ic { display: none; }
             .navbar.nav-f1 .nav-post .nav-lbl, .navbar.nav-f2 .nav-more-lbl, .navbar.nav-f3 .nav-golive .nav-lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
             @media (min-width: 501px) { .navbar.nav-f1 a.nav-post, .navbar.nav-f3 a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
@@ -367,32 +371,44 @@
             .site-lang select { height: 36px; box-sizing: border-box; background: #18181c; color: #ddd; border: 1px solid #3a3a42; border-radius: var(--ds-r-sm); padding: 0 8px; font: 13px var(--ds-font); max-width: 220px; cursor: pointer; }
             .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
         </style>
+        <%# homegap2 (owner 2026-11-05 "fix all 3", blank 3): the navbar never scrolls the page sideways - at 1024px de / id / tr (and signed
+            in at 501-520 / 761-1040px in every language) its pieces were wider than the window, so the header (and the page) grew to them and
+            the whole page scrolled. Measured here - after the bar's styles, before the first paint - and again on a resize, when the window's
+            width changes without one (a vertical scrollbar coming or going as the page grows or shrinks - the ResizeObserver, on the header:
+            only its width ever changes, so another observer's work on the page never leaves it a "loop completed with undelivered
+            notifications" - <html>, whose height follows the page, did in WebKit; homegap2 review),
+            when the web fonts arrive, when one of its menus closes and when the search box grows: while the pieces don't fit, the next give-way
+            step (nav-f1 .. nav-f6, the styles above) - from nothing each time, so a wider window gets the labels back. Never while a menu is
+            open (its pop is meant to overflow the bar). window.PATV_navFit() for anything that changes the bar's pieces.
+            The measure (homegap2 review): header.nav-fit keeps the bar the window's width, so its pieces overflow it rather than widen the page
+            - the bar wider than the window, a piece (margins included) past the bar's padding, or past .navbar-left (min-width: 0: it shrinks
+            under its pieces first), either side; strict - 0.4px over is a 1px sideways scroll (WebKit, nl, signed in at 1024px). %>
         <script id="navFit">
-            // homegap2 (owner 2026-11-05 "fix all 3", blank 3): the navbar never scrolls the page sideways - at 1024px de / id / tr (and
-            // signed in at 501-520 / 761-1040px in every language) its pieces were wider than the window, so the header (and the page) grew
-            // to them and the whole page scrolled. Measured here - after the bar's styles, before the first paint - and again on a resize, when
-            // the web fonts arrive, when one of its menus closes and when the search box grows: while the pieces don't fit, the next give-way
-            // step (nav-f1 .. nav-f6, the styles above) - from nothing each time, so a wider window gets the labels back. Never while a menu
-            // is open (its pop is meant to overflow the bar). window.PATV_navFit() for anything that changes the bar's pieces.
             (function () {
                 var nav = document.querySelector('header .navbar'); if (!nav) return;
-                var left = nav.querySelector('.navbar-left'), N = 6, queued = 0;
-                // (the window's width: the header and <body> grow to the bar's pieces when they don't fit - they are not the measure)
-                // (strict: a bar 1024.4px wide in a 1024px window is a 1px sideways scroll - WebKit, nl, signed in)
-                function over() { var w = Math.min(document.documentElement.clientWidth, nav.parentNode.clientWidth); return nav.getBoundingClientRect().width > w + 0.01 || nav.scrollWidth > nav.clientWidth || (!!left && left.scrollWidth > left.clientWidth); }
+                var de = document.documentElement, left = nav.querySelector('.navbar-left'), N = 6, queued = 0, lw = -1;
+                nav.parentNode.classList.add('nav-fit');
+                function px(e, p) { return parseFloat(getComputedStyle(e)[p]) || 0; }
+                function out(kids, a, b) { for (var i = 0; i < kids.length; i++) { var e = kids[i], r = e.getBoundingClientRect(); if ((r.width || r.height) && (r.left - px(e, 'marginLeft') < a - 0.01 || r.right + px(e, 'marginRight') > b + 0.01)) return true; } return false; }
+                function over() {
+                    var r = nav.getBoundingClientRect();
+                    if (r.width > de.clientWidth + 0.01 || nav.scrollWidth > nav.clientWidth || out(nav.querySelectorAll(':scope > *'), r.left + px(nav, 'paddingLeft'), r.right - px(nav, 'paddingRight'))) return true;
+                    if (!left) return false;
+                    var l = left.getBoundingClientRect(); return left.scrollWidth > left.clientWidth || out(left.children, l.left, l.right);
+                }
                 function set(n) { for (var i = 1; i <= N; i++) nav.classList.toggle('nav-f' + i, i <= n); }
-                function fit() { queued = 0; if (nav.querySelector('details[open]')) return; var n = 0; set(0); while (n < N && over()) set(++n); }
+                function fit() { queued = 0; lw = de.clientWidth; if (nav.querySelector('details[open]')) return; var n = 0; set(0); while (n < N && over()) set(++n); }
                 function later() { if (!queued) queued = window.requestAnimationFrame ? window.requestAnimationFrame(fit) : setTimeout(fit, 16); }
                 fit();
                 window.addEventListener('resize', later); window.addEventListener('load', later);
+                if (window.ResizeObserver) new ResizeObserver(function () { if (de.clientWidth !== lw) later(); }).observe(nav.parentNode);
                 if (document.fonts) { if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', later); if (document.fonts.ready) document.fonts.ready.then(later); }
-                nav.addEventListener('toggle', function (e) { if (!e.target.open) later(); }, true);   // (toggle doesn't bubble: capture)
-                // (the search box grows 150 -> 210px while focused - its width transition, or at once with reduced motion)
+                nav.addEventListener('toggle', function (e) { if (!e.target.open) later(); }, true);
                 var box = function (e) { if (e.target.matches && e.target.matches('.nav-search input') && (e.type !== 'transitionend' || e.propertyName === 'width')) later(); };
                 nav.addEventListener('transitionend', box); nav.addEventListener('focusin', box); nav.addEventListener('focusout', box);
                 window.PATV_navFit = later;
             })();
-        </script>
+        </script><%# (toggle doesn't bubble: the capture listener; the search box grows 150 -> 210px while focused - its width transition, or at once with reduced motion) %>
         <template id="siteFootTpl">
             <footer class="site-foot" role="contentinfo">
                 <nav aria-label="<%- t('foot.policies_aria') %>">

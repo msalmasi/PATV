@@ -208,39 +208,58 @@ const I18N = require(path.join(repo, "i18n-core.js"));
 const catalog = (c) => JSON.parse(fs.readFileSync(path.join(repo, "locales", c + ".json"), "utf8"));
 const vm = require("vm");
 const fitSrc = (html) => { const m = /<script id="navFit">([\s\S]*?)<\/script>/.exec(html); assert.ok(m, "the fit script"); return m[1]; };
-// a model bar: `need` px of pieces at step 0, each step saving save[i]; the header grows to the pieces (as it does), the window doesn't
-function modelBar(src, { vw, need, save, open = false }) {
-  const cls = new Set(), L = { listeners: {} }, frames = [];
+// a model bar (homegap2 review): the window's width (header.nav-fit - the header never grows to the pieces), `need` px of pieces at step 0
+// (its 20px paddings included), each step saving save[i] from .navbar-left; .navbar-right is R px, G px after the left box. Short of room, the
+// left box (min-width: 0) shrinks under its pieces, which run past it - and past the bar's padding once there is no left box left; right to
+// left, mirrored. The integer scrollWidth / clientWidth never tell (sub-pixel): only the measured rects do. m = the last piece's end margin.
+function modelBar(src, { vw, need, save, open = false, rtl = false, ro = true, R = 300, G = 12, m = 0 }) {
+  const PAD = 20, cls = new Set(), hcls = new Set(), L = { listeners: {} }, frames = [], S = { vw, open };
   const level = () => [1, 2, 3, 4, 5, 6].filter((i) => cls.has("nav-f" + i)).length;
   const width = () => need - save.slice(0, level()).reduce((a, b) => a + b, 0);
-  const box = () => Math.max(S.vw, width());
-  const S = { vw };
-  const left = { get scrollWidth() { return 400; }, get clientWidth() { return 400; } };
+  const rect = (l, w) => (rtl ? { left: S.vw - l - w, right: S.vw - l, width: w, height: 40 } : { left: l, right: l + w, width: w, height: 40 });
+  const geo = () => { const C = width() - 2 * PAD - R - G, A = S.vw - 2 * PAD - R - G, lb = Math.max(0, Math.min(C, A));
+    return { box: rect(PAD, lb), kid: rect(PAD, C - m), right: rect(PAD + lb + G, R) }; };
+  const kid = { getBoundingClientRect: () => geo().kid }, right = { getBoundingClientRect: () => geo().right };
+  const left = { children: [kid], getBoundingClientRect: () => geo().box, scrollWidth: 300, clientWidth: 300 };
+  const header = { classList: { add: (c) => hcls.add(c) } };
   const navEl = {
     classList: { toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)), contains: (c) => cls.has(c) },
-    getBoundingClientRect: () => ({ width: box() }), get scrollWidth() { return Math.ceil(box()); }, get clientWidth() { return Math.round(box()); },
-    parentNode: { get clientWidth() { return box(); } },
+    getBoundingClientRect: () => ({ left: 0, right: S.vw, width: S.vw, height: 64 }), get scrollWidth() { return Math.round(S.vw); }, get clientWidth() { return Math.round(S.vw); },
+    parentNode: header,
     querySelector: (q) => (q === ".navbar-left" ? left : q === "details[open]" ? (S.open ? {} : null) : null),
+    querySelectorAll: (q) => (q === ":scope > *" ? [left, right] : []),
     addEventListener: (t, f) => { (L.listeners["nav:" + t] = L.listeners["nav:" + t] || []).push(f); },
   };
-  S.open = open;
+  const getComputedStyle = (e) => (e === navEl ? { paddingLeft: PAD + "px", paddingRight: PAD + "px" }
+    : e === kid ? { marginLeft: (rtl ? m : 0) + "px", marginRight: (rtl ? 0 : m) + "px" } : { marginLeft: "0px", marginRight: "0px" });
+  const RO = { cb: null, el: null };
   const win = { requestAnimationFrame: (f) => { frames.push(f); return frames.length; }, addEventListener: (t, f) => { (L.listeners[t] = L.listeners[t] || []).push(f); } };
-  const doc = { querySelector: (q) => (q === "header .navbar" ? navEl : null), documentElement: { get clientWidth() { return S.vw; } }, fonts: null };
-  vm.runInNewContext(src, Object.assign(win, { window: win, document: doc, setTimeout }));
+  if (ro) win.ResizeObserver = function (cb) { RO.cb = cb; this.observe = (el) => { RO.el = el; }; };
+  const de = { get clientWidth() { return Math.round(S.vw); } };
+  const doc = { querySelector: (q) => (q === "header .navbar" ? navEl : null), documentElement: de, fonts: null };
+  vm.runInNewContext(src, Object.assign(win, { window: win, document: doc, setTimeout, getComputedStyle }));
   const flush = () => { while (frames.length) frames.shift()(); };
-  return { level, width, S, win, flush, fire: (t, e) => { (L.listeners[t] || []).forEach((f) => f(e || {})); flush(); }, cls };
+  return { level, width, S, win, flush, fire: (t, e) => { (L.listeners[t] || []).forEach((f) => f(e || {})); flush(); }, cls, hcls, RO, de, header,
+    observe:() => { if (RO.cb) RO.cb([]); flush(); } };
 }
 
-test("homegap2: the navbar's fit takes the give-way steps in order only while the bar doesn't fit - from nothing each time, never with a menu open", async () => {
+test("homegap2: the navbar's fit takes the give-way steps in order only while the bar doesn't fit - from nothing each time, never with a menu open, left to right and right to left", async () => {
   const src = fitSrc(await render({ user: "someuser" }));
   const save = [73, 66, 90, 95, 48, 300];
-  assert.equal(modelBar(src, { vw: 1100, need: 1070, save }).level(), 0, "it fits: every label");
-  assert.equal(modelBar(src, { vw: 1024, need: 1070, save }).level(), 1, "tr at 1024px: Post icon-only (46px short)");
-  assert.equal(modelBar(src, { vw: 1024, need: 1024, save }).level(), 0, "exactly the window: no step");
-  assert.equal(modelBar(src, { vw: 1024, need: 1024.4, save }).level(), 1, "0.4px over is a 1px sideways scroll (WebKit, nl): a step");
-  assert.equal(modelBar(src, { vw: 900, need: 1070, save }).level(), 3, "short by 170: Post, More's label, Go live");
-  assert.equal(modelBar(src, { vw: 320, need: 9999, save }).level(), 6, "never more than the phone bar (nav-f6)");
+  for (const rtl of [false, true]) {
+    const k = rtl ? " (right to left)" : "";
+    assert.equal(modelBar(src, { vw: 1100, need: 1070, save, rtl }).level(), 0, "it fits: every label" + k);
+    assert.equal(modelBar(src, { vw: 1024, need: 1070, save, rtl }).level(), 1, "tr at 1024px: Post icon-only (46px short)" + k);
+    assert.equal(modelBar(src, { vw: 1024, need: 1024, save, rtl }).level(), 0, "exactly the window: no step" + k);
+    assert.equal(modelBar(src, { vw: 1024, need: 1024.4, save, rtl }).level(), 1, "0.4px over is a 1px sideways scroll (WebKit, nl): a step - the rects tell, the integer widths don't" + k);
+    assert.equal(modelBar(src, { vw: 1024, need: 1024, save, rtl, m: 14 }).level(), 0, "a last piece with an end margin (the logo's 14px), exactly the window: no step" + k);
+    assert.equal(modelBar(src, { vw: 1024, need: 1029, save, rtl, m: 14 }).level(), 1, "5px over, inside that margin (its border box still fits): a step - the margin counts" + k);
+    assert.equal(modelBar(src, { vw: 900, need: 1070, save, rtl }).level(), 3, "short by 170: Post, More's label, Go live" + k);
+    assert.equal(modelBar(src, { vw: 320, need: 9999, save, rtl }).level(), 6, "never more than the phone bar (nav-f6)" + k);
+    assert.equal(modelBar(src, { vw: 340, need: 400, save, rtl, R: 330 }).level(), 6, "the right side alone past the bar's padding (no left box left): a step each time, up to the phone bar" + k);
+  }
   const b = modelBar(src, { vw: 900, need: 1070, save });
+  assert.deepEqual([...b.hcls], ["nav-fit"], "header.nav-fit: the header never grows to the bar's pieces (they are measured overflowing it)");
   assert.equal(b.level(), 3);
   b.S.vw = 1200; b.fire("resize");
   assert.equal(b.level(), 0, "a wider window gets the labels back");
@@ -251,6 +270,20 @@ test("homegap2: the navbar's fit takes the give-way steps in order only while th
   b.S.open = false; b.fire("nav:toggle", { target: { open: false } });
   assert.equal(b.level(), 0, "fitted again when it closes");
   assert.equal(typeof b.win.PATV_navFit, "function", "window.PATV_navFit() for anything that changes the bar");
+  // homegap2 review (both reviews, finding 1): a vertical scrollbar appearing after load takes ~10-17px with no resize event - the root's
+  // ResizeObserver refits when (only when) the window's width changed since the last fit
+  const g = modelBar(src, { vw: 1024, need: 1016, save });
+  assert.equal(g.level(), 0);
+  assert.equal(g.RO.el, g.header, "it watches the header (only its width ever changes - never <html>, whose height follows the page: WebKit's loop warnings)");
+  g.observe(); assert.equal(g.level(), 0, "its first call: the same width, nothing to do");
+  g.S.vw = 1009; g.observe();
+  assert.equal(g.level(), 1, "the scrollbar came (1024 -> 1009, no resize event): Post icon-only");
+  g.S.vw = 1024; g.observe();
+  assert.equal(g.level(), 0, "and went: the label is back");
+  let calls = 0; const fr = g.win.requestAnimationFrame; g.win.requestAnimationFrame = (f) => { calls++; return fr(f); };
+  g.observe(); g.observe(); assert.equal(calls, 0, "a height change alone (the page growing at the same width) costs no refit");
+  const n = modelBar(src, { vw: 900, need: 1070, save, ro: false });
+  assert.equal(n.level(), 3, "no ResizeObserver (an old browser): the rest as before");
   for (const t of ["resize", "load", "nav:toggle", "nav:transitionend", "nav:focusin", "nav:focusout"]) assert.ok(src.includes("addEventListener('" + t.replace("nav:", "") + "'"), "fits again on " + t);
   assert.match(src, /document\.fonts\.addEventListener\('loadingdone', later\)/, "when the web fonts arrive");
 });
@@ -273,13 +306,24 @@ test("homegap2: the navbar's give-way steps - the fit after the bar's styles, la
   ]) assert.ok(src.includes(r), r);
   assert.doesNotMatch(src, /\.nav-f\d[^{]*\.nav(-more)?-lbl[^{]*\{[^}]*display: none/, "a collapsed label is visually hidden, never display: none (it is the link's name)");
   assert.ok(src.indexOf(".navbar.nav-f1 .nav-post .nav-lbl") > src.indexOf("@media (max-width: 420px) {"), "after the phone rules (they keep their 34 / 32px squares)");
+  // homegap2 review: the header never widens the page while the bar is measured (only once the fit runs - without script, as before)
+  assert.ok(html.includes("header.nav-fit { min-width: 0; }") && fitSrc(html).includes("nav.parentNode.classList.add('nav-fit');"), "header.nav-fit, set by the fit");
+  assert.ok(fitSrc(html).includes("if (window.ResizeObserver) new ResizeObserver(function () { if (de.clientWidth !== lw) later(); }).observe(nav.parentNode);"), "a width change with no resize event (a scrollbar) refits");
+  // homegap2 review: the ▾ turns when More opens, never the ⋯ that stands in for its label
+  assert.ok(src.includes(".nav-more > summary [aria-hidden]:not(.nav-more-ic) { font-size: 11px; transition: transform var(--ds-dur-2); }"));
+  assert.ok(src.includes(".nav-more[open] > summary [aria-hidden]:not(.nav-more-ic) { transform: rotate(180deg); }"));
+  assert.doesNotMatch(src, /\.nav-more(\[open\])? > summary \[aria-hidden\] \{ (font-size|transform)/, "no unscoped arrow rule left (the reduced-motion one only turns transitions off)");
+  // homegap2 review (finding 4): the fit's notes stay server-side (EJS comments) - every page carries only the code
+  assert.ok(!html.includes("homegap2") && !html.includes("give-way steps"), "no homegap2 notes in the page");
+  assert.ok(!/\/\/ /.test(fitSrc(html)) && fitSrc(html).length < 2600, "the fit script without its notes: " + fitSrc(html).length + " bytes");
   // More: the ⋯ is decorative, the label its name; Post / Go live keep their titles
   for (const user of [undefined, "someuser"]) {
     const n = nav(await render({ user }));
     assert.match(n, /<summary><span class="nav-more-ic" aria-hidden="true">⋯<\/span><span class="nav-more-lbl">More<\/span> <span aria-hidden="true">▾<\/span><\/summary>/);
     assert.match(n, /class="nav-post" title="[^"]+"/); assert.match(n, /class="nav-golive" title="[^"]+"/);
   }
-  // every language: the same bar - its labels capped (i18n.test.js pins the 7.5em), the fit and More's ⋯ there, right to left too
+  // every language's markup (right-to-left ones included): the same bar - its labels capped (i18n.test.js pins the 7.5em), the fit and More's
+  // ⋯ there. (How the fit measures a right-to-left bar: the model test above; the real bars: the browser sweeps in the hand-off)
   const langs = fs.readdirSync(path.join(repo, "locales")).filter((f) => /^[a-z]{2}(-[A-Z]{2})?\.json$/.test(f)).map((f) => f.slice(0, -5));
   assert.ok(langs.length >= 23);
   for (const l of langs) {

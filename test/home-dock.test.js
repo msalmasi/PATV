@@ -307,7 +307,8 @@ test("homegap: home-dock.css - the lower rows from custom properties, set by the
   for (const m of css.matchAll(/:has\(([^()]*)\)/g))
     assert.ok(/^(#rmStage\.is-off|#rmStage\.is-on|#rmChat|> \.rmd-tease|#stageSide > a\.box|#wheelBox)$/.test(m[1]), "a :has() for a live state (or the 761-1023px rules as they were, or no strip): " + m[1]);
   assert.deepEqual(mq.match(/:has\([^)]*\)/g), [":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#rmStage.is-off)", ":has(> .rmd-tease)",
-    ":has(#rmStage.is-on)", ":has(> .rmd-tease)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)"], "from 1024px: only no strip and the sign-in tease off / on air (homegap2)");
+    ":has(#rmStage.is-on)", ":has(> .rmd-tease)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)", ":has(#rmStage.is-on)",
+    ":has(#rmStage.is-on)", ":has(> .rmd-tease)", ":has(#rmStage.is-on)", ":has(> .rmd-tease)"], "from 1024px: only no strip and the sign-in tease off / on air (homegap2; its stage lights, mirrored - homegap2 review)");
   assert.doesNotMatch(css, /grid-row-end: span 2/, "the old Top Pads span is the areas' now");
   for (const s of ['"stage stage" "coin coin" "chat chat" "tops feat" "cta cta"', '"stage stage" "coin coin" "chat chat" "tops tops" "cta cta"', '"stage" "coin" "chat" "tops" "feat" "cta"'])
     assert.ok(css.includes(s), "761-1023px / phones: the card is the last row - " + s);
@@ -396,7 +397,27 @@ test("homegap2 blank 1: home-dock.css - 1024px and wider, on air, the tease fill
     "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-blurb { display: none; }",
     "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat .rmd-tease-miss { display: grid; }"]) assert.ok(mq.includes(r), "from 1024px, on air: " + r);
   assert.ok(mq.indexOf("#rmChat:has(> .rmd-tease) { align-self: stretch; }") > mq.indexOf(":has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }"), "beside the off-air rule (off air the chat is its own row: as tall as its words)");
-  assert.equal((css.match(/is-on/g) || []).length, (mq.match(/is-on/g) || []).length, "on air only from 1024px - below it the chat is its own full-width row");
+  const mq2 = mqBlocks(css, "@media (min-width: 1280px) and (min-height: 760px) {").filter((b) => b.includes("is-on"));
+  assert.equal(mq2.length, 1, "the big tease (homegap2 review): one block from 1280px");
+  assert.equal((css.match(/is-on/g) || []).length, (mq.match(/is-on/g) || []).length + (mq2[0].match(/is-on/g) || []).length, "on air only from 1024px - below it the chat is its own full-width row");
+});
+function mqBlocks(css, head) { const out = []; for (let k = css.indexOf(head); k >= 0; k = css.indexOf(head, k + 1)) out.push(css.slice(k, css.indexOf("\n}\n", k))); return out; }
+// homegap2 review (visual, finding 4): beside a 480-560px stage the tease was a small block centred in ~95-120px of empty card each side - the
+// call-to-action card's stage lights on the card from 1024px, and from 1280px it says it big. It still never sizes the row past the stage: the
+// browser sweep measures every locale (and 1.5x longer words) at 1280-1920px
+test("homegap2 review: the on-air sign-in tease - the call-to-action card's stage lights (mirrored right to left) and, from 1280px in a window 760px tall or more, bigger words and discs", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const i = css.indexOf("@media (min-width: 1024px) {"), mq = css.slice(i, css.indexOf("\n}\n", i));
+  const card = "main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #hmDock > #rmChat:has(> .rmd-tease)";
+  assert.ok(mq.includes(card + " { --hmd-tz-bx: 6%;\n    background: radial-gradient(75% 38% at 50% -6%, rgba(255, 207, 64, .075), transparent 72%), radial-gradient(60% 34% at var(--hmd-tz-bx) 96%, rgba(76, 175, 80, .1), transparent 72%), var(--ds-surface); }"), "a gold light from the top, a green one at Sign in's corner, on the card's own surface");
+  assert.ok(mq.includes('[dir="rtl"] ' + card + " { --hmd-tz-bx: 94%; }"), "right to left the green one mirrors (Sign in is at the right)");
+  const all = mqBlocks(css, "@media (min-width: 1280px) and (min-height: 760px) {"), mq2 = all.filter((b) => b.includes("is-on"))[0] || "";
+  assert.ok(mq2 && css.indexOf(mq2) > i, "after the 1024px block");
+  const on ="main.hm.rmd-home .hmd-grid:has(#rmStage.is-on) #rmChat ";
+  for (const r of [on + ".rmd-tease { gap: var(--ds-sp-4); padding: var(--ds-sp-4) var(--ds-sp-5); }", on + ".rmd-tease > b { font-size: var(--ds-fs-h2); line-height: var(--ds-lh-h2); }",
+    on + ".rmd-tease-miss li { grid-template-columns: 40px minmax(0, 1fr); gap: var(--ds-sp-3); font-size: var(--ds-fs-body); }", on + ".rmd-tease-ic { inline-size: 40px; block-size: 40px; font-size: 19px; }",
+    on + ".rmd-tease > .btn { min-block-size: 44px; padding-inline: var(--ds-sp-5); font-size: 15px; }"]) assert.ok(mq2.includes(r), "from 1280px: " + r);
+  assert.doesNotMatch(mq + mq2, /is-on\) #hmDock > #rmChat:has\(> \.rmd-tease\) \{[^}]*(block-size|contain)/,"the card's height stays 1.99ajh's (as tall as its words, stretched to the stage's row on air)");
 });
 test("homegap2 blank 2: 761-1023px the row under the chat follows the grid's classes - side by side only for 1-2 Top Pads rows, both stretched; no hole", () => {
   const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
