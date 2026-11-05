@@ -160,7 +160,7 @@
   .cg .tr-list .bst { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; font-size: 12.5px; font-weight: 700; color: #ffd9a8; border: 1px solid #7a4a1f; border-radius: 999px; padding: 0 12px; white-space: nowrap; }
   .cg .tr-list .bst:hover { border-color: #ff9a3c; color: #fff; }
 </style>
-<main class="ds-page wide cg">
+<main class="ds-page wide cg"<% if (typeof onairSig !== 'undefined' && onairSig) { %> data-onair="<%= onairSig %>"<% } %>>
   <div class="ds-head">
     <h1 class="ds-h1"><%- IC_(t('rooms.h1')) %></h1>
     <p class="lead"><%- t('rooms.lead') %><% if (!signedIn) { %> <%- t('rooms.lead_signin', { link: '<a href="/login">' + t('rooms.signin') + '</a>' }) %><% } %></p>
@@ -189,7 +189,7 @@
     <div class="btns"><a class="golive-btn" href="/stage"><%- IC_(t('rooms.go_live')) %></a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>"><%- IC_(t('rooms.create')) %></a></div>
   </section>
 
-  <div class="pepe" role="status">
+  <div class="pepe" id="padsPepe" role="status">
     <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%- pepeOn ? t('rooms.on_air') : t('rooms.off_air') %></span>
     <span><%- rows.some((r) => r.pepe_here) ? t('rooms.pepe_bar_card') : t('rooms.pepe_bar') %></span>
     <a href="/" style="margin-left:auto"><%- t('rooms.front_page') %></a>
@@ -220,7 +220,7 @@
     <% } %>
   </section>
 
-  <section class="card" aria-labelledby="chH">
+  <section class="card" id="padsAll" aria-labelledby="chH">
     <h2 id="chH"><%- fol_.length ? t('rooms.other_pads_h') : t('rooms.pads_h') %> <small><%- t('rooms.n_live', { n: rest_.filter((r) => r.live).length }) %> · <%- t('rooms.n_pads', { count: rest_.length }) %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
     <%# 1.99x: filter by platform - All / Camfrog / Site (Twitch / Discord appear once a pad has them) %>
     <nav class="pad-filter" aria-label="<%- t('rooms.filter_aria') %>">
@@ -238,7 +238,7 @@
     <% } %>
   </section>
 
-  <section class="card" aria-labelledby="scH">
+  <section class="card" id="padsSched" aria-labelledby="scH">
     <h2 id="scH"><%- t('rooms.schedule') %> <small><%- t('rooms.schedule_sub') %></small></h2>
     <% if (!sched.length) { %>
       <div class="empty"><%- t('rooms.none_booked') %> <a href="/stage"><%- t('rooms.book_first') %></a></div>
@@ -252,6 +252,55 @@
     <% } %>
   </section>
 </main>
+<% if (typeof onairSig !== 'undefined' && onairSig) { %>
+<script>
+  // newstream 1.99akv (owner 2026-11-05: "When a new stream is created, the website isnt aware of it so you need to refresh to see it"): this
+  // list follows the stages. Every 30 s while the tab is visible (and at once when it comes back) it asks /api/pads/onair for the list's
+  // signature (padsonair.js: live slots, next bookings, rooms live, Pepe on air); only when that moved does it fetch this page again and swap
+  // its sections - Following, the Pepe bar, Trending, the pads, the schedule - keeping the focused link. Nothing else polls.
+  (function () {
+    'use strict';
+    var main = document.querySelector('main.cg'), sig = main && main.getAttribute('data-onair'), busy = false;
+    var IDS = ['following', 'padsPepe', 'trending', 'padsAll', 'padsSched'];
+    if (!sig || !window.fetch || !window.DOMParser) return;
+    function linkTo(href) {
+      var all = document.querySelectorAll('main.cg a[href]');
+      for (var i = 0; i < all.length; i++) if (all[i].getAttribute('href') === href) return all[i];
+      return null;
+    }
+    function swap(doc) {
+      var act = document.activeElement, keep = null;
+      IDS.forEach(function (id) {
+        var old = document.getElementById(id), neu = doc.getElementById(id);
+        if (!old || !neu) return;
+        if (act && act !== document.body && old.contains(act) && act.getAttribute) keep = act.getAttribute('href');
+        old.parentNode.replaceChild(document.importNode(neu, true), old);
+      });
+      var back = keep ? linkTo(keep) : null;
+      if (back) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
+      if (window.PATVChipFit && typeof window.PATVChipFit.run === 'function') window.PATVChipFit.run();
+    }
+    function check() {
+      if (document.hidden || busy) return;
+      busy = true;
+      fetch('/api/pads/onair', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || !d.ok || !d.sig || d.sig === sig) return null;
+        return fetch(location.pathname + location.search, { credentials: 'same-origin', cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.text() : null; })
+          .then(function (html) {
+            if (!html) return;
+            var doc = new DOMParser().parseFromString(html, 'text/html'), m = doc.querySelector('main.cg'), ns = m && m.getAttribute('data-onair');
+            if (!ns) return;
+            swap(doc);
+            sig = ns;
+          });
+      }).catch(function () { /* offline: the next turn */ }).then(function () { busy = false; });
+    }
+    setInterval(check, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+  })();
+</script>
+<% } %>
 <%# 1.99jx: the schedule's times are tz.js <time data-tz> tags (public/js/localtime.js puts them in the viewer's zone) %>
 </body>
 </html>

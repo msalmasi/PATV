@@ -2470,11 +2470,15 @@ function register(app, { isBotToken, addUser }) {
     res.json({ ...stage(roomId), slots, front, featured, pepe_here: here !== false, now: t, ...(stale ? { stale: true } : {}) });
   });
 
+  // newstream 1.99akv: the pads list's live check (padsonair.js) - /p asks it every 30 s and swaps its sections when it moves
+  require("./padsonair").register(app, { addUser });
   // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pads at /p
   app.get("/p", addUser, async (req, res) => {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn, req.user);
+    // (newstream 1.99akv: the page's first signature, from the same snapshot /api/pads/onair answers from - an unchanged list never refetches)
+    const onairSig = await require("./padsonair").sigFor(signedIn ? req.user : null).catch(() => null);
     res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its chat room live on the web.",
                       image: res.locals.ogBase + require("./og").pageUrl("Pad Guide"), url: res.locals.ogBase + "/p" };
     let owned = [];
@@ -2491,7 +2495,7 @@ function register(app, { isBotToken, addUser }) {
     if (signedIn) {
       try { const ids = new Set(await require("./follows").followedPadIds(req.user.userId, 2000)); followRows = g.rows.filter((r) => ids.has(r.id)); } catch (e) { followRows = []; }
     }
-    res.render("rooms", { followRows, padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: SP.can(req.user, "pads.manage_any"), owned });
+    res.render("rooms", { followRows, onairSig, padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: SP.can(req.user, "pads.manage_any"), owned });
   });
 
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
