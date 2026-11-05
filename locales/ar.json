@@ -7201,6 +7201,8 @@
   "js.settings.timezone.now": "الآن: {time} ({zone})",
   "js.settings.timezone.failed": "تعذّر حفظ منطقتك الزمنية - حاول مرة أخرى.",
   "err.bad_timezone": "لا نعرف هذه المنطقة الزمنية.",
+  "staffrank.refused": "لا يمكنك فعل ذلك مع طاقم PATV بمرتبتك أو أعلى منها.",
+  "staffrank.self": "هذا أنت.",
   "economy.group.activity": "مكافآت النشاط",
   "economy.page_title": "دليل اقتصاد PAT",
   "economy.eyebrow": "اقتصاد PAT",

@@ -6916,6 +6916,8 @@
   "js.settings.timezone.now": "עכשיו: {time} ({zone})",
   "js.settings.timezone.failed": "לא הצלחנו לשמור את אזור הזמן - נסה שוב.",
   "err.bad_timezone": "אזור הזמן הזה לא מוכר לנו.",
+  "staffrank.refused": "אי אפשר לעשות את זה לצוות PATV בדרגה שלך או מעליה.",
+  "staffrank.self": "זה אתה.",
   "economy.group.activity": "תגמולי פעילות",
   "economy.page_title": "מדריך כלכלת PAT",
   "economy.eyebrow": "כלכלת PAT",

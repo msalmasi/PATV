@@ -6871,6 +6871,8 @@
   "js.settings.timezone.now": "Ahora: {time} ({zone})",
   "js.settings.timezone.failed": "No se pudo guardar tu zona horaria; inténtalo de nuevo.",
   "err.bad_timezone": "No conocemos esa zona horaria.",
+  "staffrank.refused": "No puedes hacerle eso al staff de PATV de tu rango o superior.",
+  "staffrank.self": "Eres tú.",
   "economy.group.activity": "Recompensas por actividad",
   "economy.page_title": "Guía de la economía de PAT",
   "economy.eyebrow": "LA ECONOMÍA DE PAT",

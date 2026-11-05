@@ -6821,6 +6821,8 @@
   "js.settings.timezone.now": "Jetzt: {time} ({zone})",
   "js.settings.timezone.failed": "Deine Zeitzone konnte nicht gespeichert werden – versuch es noch mal.",
   "err.bad_timezone": "Diese Zeitzone kennen wir nicht.",
+  "staffrank.refused": "Das darfst du bei PATV-Teammitgliedern deines Rangs oder höher nicht tun.",
+  "staffrank.self": "Das bist du.",
   "economy.group.activity": "Aktivitätsbelohnungen",
   "economy.page_title": "PAT-Wirtschaftsleitfaden",
   "economy.eyebrow": "DIE PAT-WIRTSCHAFT",

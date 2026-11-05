@@ -6821,6 +6821,8 @@
   "js.settings.timezone.now": "ابھی: {time} ({zone})",
   "js.settings.timezone.failed": "آپ کا ٹائم زون محفوظ نہیں ہو سکا - دوبارہ کوشش کریں۔",
   "err.bad_timezone": "ہم اس ٹائم زون کو نہیں جانتے۔",
+  "staffrank.refused": "آپ PATV کے اپنے درجے یا اس سے اوپر کے عملے کے ساتھ ایسا نہیں کر سکتے۔",
+  "staffrank.self": "یہ آپ ہی ہیں۔",
   "economy.group.activity": "سرگرمی کے انعامات",
   "economy.page_title": "PAT اکانومی گائیڈ",
   "economy.eyebrow": "PAT کی اکانومی",

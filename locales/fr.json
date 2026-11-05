@@ -6871,6 +6871,8 @@
   "js.settings.timezone.now": "Maintenant : {time} ({zone})",
   "js.settings.timezone.failed": "Impossible d’enregistrer ton fuseau horaire – réessaie.",
   "err.bad_timezone": "Nous ne connaissons pas ce fuseau horaire.",
+  "staffrank.refused": "Tu ne peux pas faire ça au staff de PATV de ton rang ou d'un rang supérieur.",
+  "staffrank.self": "C'est toi.",
   "economy.group.activity": "Récompenses d'activité",
   "economy.page_title": "Guide de l'économie PAT",
   "economy.eyebrow": "L'ÉCONOMIE PAT",

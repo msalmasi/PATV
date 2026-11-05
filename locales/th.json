@@ -6727,6 +6727,8 @@
   "js.settings.timezone.now": "ตอนนี้: {time} ({zone})",
   "js.settings.timezone.failed": "บันทึกเขตเวลาไม่สำเร็จ - ลองอีกครั้ง",
   "err.bad_timezone": "เราไม่รู้จักเขตเวลานั้น",
+  "staffrank.refused": "คุณทำแบบนี้กับทีมงาน PATV ที่มีระดับเท่ากันหรือสูงกว่าคุณไม่ได้",
+  "staffrank.self": "นั่นคุณเอง",
   "economy.group.activity": "รางวัลกิจกรรม",
   "economy.page_title": "คู่มือเศรษฐกิจ PAT",
   "economy.eyebrow": "เศรษฐกิจของ PAT",

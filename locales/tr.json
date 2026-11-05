@@ -6823,6 +6823,8 @@
   "js.settings.timezone.now": "Şu an: {time} ({zone})",
   "js.settings.timezone.failed": "Saat dilimin kaydedilemedi - tekrar dene.",
   "err.bad_timezone": "Bu saat dilimini tanımıyoruz.",
+  "staffrank.refused": "Kendi rütbenle veya daha yüksek rütbedeki PATV ekibi üyelerine bunu yapamazsın.",
+  "staffrank.self": "Bu sensin.",
   "economy.group.activity": "Etkinlik ödülleri",
   "economy.page_title": "PAT Ekonomi Rehberi",
   "economy.eyebrow": "PAT EKONOMİSİ",

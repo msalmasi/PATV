@@ -6726,6 +6726,8 @@
   "js.settings.timezone.now": "Bây giờ: {time} ({zone})",
   "js.settings.timezone.failed": "Không lưu được múi giờ - hãy thử lại.",
   "err.bad_timezone": "Chúng tôi không biết múi giờ đó.",
+  "staffrank.refused": "Bạn không thể làm điều đó với nhân viên PATV có cấp bằng hoặc cao hơn bạn.",
+  "staffrank.self": "Đó là bạn.",
   "economy.group.activity": "Phần thưởng hoạt động",
   "economy.page_title": "Hướng dẫn kinh tế PAT",
   "economy.eyebrow": "KINH TẾ PAT",

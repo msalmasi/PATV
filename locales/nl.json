@@ -6821,6 +6821,8 @@
   "js.settings.timezone.now": "Nu: {time} ({zone})",
   "js.settings.timezone.failed": "Je tijdzone kon niet worden opgeslagen - probeer het opnieuw.",
   "err.bad_timezone": "Die tijdzone kennen we niet.",
+  "staffrank.refused": "Dat kun je niet doen met PATV-staf van jouw rang of hoger.",
+  "staffrank.self": "Dat ben jij.",
   "economy.group.activity": "Activiteitsbeloningen",
   "economy.page_title": "PAT-economiegids",
   "economy.eyebrow": "DE PAT-ECONOMIE",

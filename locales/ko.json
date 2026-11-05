@@ -6726,6 +6726,8 @@
   "js.settings.timezone.now": "지금: {time} ({zone})",
   "js.settings.timezone.failed": "시간대를 저장하지 못했습니다. 다시 시도하세요.",
   "err.bad_timezone": "알 수 없는 시간대입니다.",
+  "staffrank.refused": "본인과 같거나 높은 등급의 PATV 직원에게는 그렇게 할 수 없어요.",
+  "staffrank.self": "본인이에요.",
   "economy.group.activity": "활동 보상",
   "economy.page_title": "PAT 경제 가이드",
   "economy.eyebrow": "PAT 경제",

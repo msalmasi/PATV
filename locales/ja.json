@@ -6726,6 +6726,8 @@
   "js.settings.timezone.now": "現在: {time}（{zone}）",
   "js.settings.timezone.failed": "タイムゾーンを保存できませんでした。もう一度お試しください。",
   "err.bad_timezone": "そのタイムゾーンは不明です。",
+  "staffrank.refused": "あなたと同等以上の役職のPATVスタッフに対して、その操作はできません。",
+  "staffrank.self": "それはあなたです。",
   "economy.group.activity": "アクティビティ報酬",
   "economy.page_title": "PAT経済ガイド",
   "economy.eyebrow": "PAT経済",

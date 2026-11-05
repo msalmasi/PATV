@@ -6871,6 +6871,8 @@
   "js.settings.timezone.now": "Ora: {time} ({zone})",
   "js.settings.timezone.failed": "Impossibile salvare il fuso orario: riprova.",
   "err.bad_timezone": "Non conosciamo questo fuso orario.",
+  "staffrank.refused": "Non puoi farlo allo staff di PATV del tuo grado o superiore.",
+  "staffrank.self": "Sei tu.",
   "economy.group.activity": "Ricompense attività",
   "economy.page_title": "Guida all'economia PAT",
   "economy.eyebrow": "L'ECONOMIA PAT",

@@ -6819,6 +6819,8 @@
   "js.settings.timezone.now": "اکنون: {time} ({zone})",
   "js.settings.timezone.failed": "منطقهٔ زمانی ذخیره نشد - دوباره امتحان کنید.",
   "err.bad_timezone": "این منطقهٔ زمانی را نمی‌شناسیم.",
+  "staffrank.refused": "نمی‌تونی این کارو با کارمندهای PATV که هم‌رده یا بالاتر از تو هستن انجام بدی.",
+  "staffrank.self": "این خودتی.",
   "economy.group.activity": "پاداش‌های فعالیت",
   "economy.page_title": "راهنمای اقتصاد PAT",
   "economy.eyebrow": "اقتصاد PAT",

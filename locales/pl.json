@@ -7011,6 +7011,8 @@
   "js.settings.timezone.now": "Teraz: {time} ({zone})",
   "js.settings.timezone.failed": "Nie udało się zapisać strefy czasowej – spróbuj ponownie.",
   "err.bad_timezone": "Nie znamy takiej strefy czasowej.",
+  "staffrank.refused": "Nie możesz tego zrobić wobec członków personelu PATV o twojej randze lub wyższej.",
+  "staffrank.self": "To ty.",
   "economy.group.activity": "Nagrody za aktywność",
   "economy.page_title": "Przewodnik po ekonomii PAT",
   "economy.eyebrow": "EKONOMIA PAT",

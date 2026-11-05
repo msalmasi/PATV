@@ -6726,6 +6726,8 @@
   "js.settings.timezone.now": "Sekarang: {time} ({zone})",
   "js.settings.timezone.failed": "Zona waktumu gagal disimpan - coba lagi.",
   "err.bad_timezone": "Kami tidak mengenal zona waktu itu.",
+  "staffrank.refused": "Kamu tidak bisa melakukan itu ke staf PATV dengan peringkat sama atau lebih tinggi darimu.",
+  "staffrank.self": "Itu kamu.",
   "economy.group.activity": "Hadiah aktivitas",
   "economy.page_title": "Panduan Ekonomi PAT",
   "economy.eyebrow": "EKONOMI PAT",

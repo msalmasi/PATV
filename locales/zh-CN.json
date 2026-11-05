@@ -6726,6 +6726,8 @@
   "js.settings.timezone.now": "现在：{time}（{zone}）",
   "js.settings.timezone.failed": "无法保存你的时区，请重试。",
   "err.bad_timezone": "我们不认识这个时区。",
+  "staffrank.refused": "你不能对等级相同或更高的 PATV 工作人员这样做。",
+  "staffrank.self": "那就是你。",
   "economy.group.activity": "活跃奖励",
   "economy.page_title": "PAT 经济指南",
   "economy.eyebrow": "PAT 经济",

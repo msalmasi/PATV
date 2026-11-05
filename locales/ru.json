@@ -7011,6 +7011,8 @@
   "js.settings.timezone.now": "Сейчас: {time} ({zone})",
   "js.settings.timezone.failed": "Не удалось сохранить часовой пояс — попробуйте ещё раз.",
   "err.bad_timezone": "Такой часовой пояс нам неизвестен.",
+  "staffrank.refused": "Так нельзя делать с персоналом PATV твоего ранга или выше.",
+  "staffrank.self": "Это ты.",
   "economy.group.activity": "Награды за активность",
   "economy.page_title": "Руководство по экономике PAT",
   "economy.eyebrow": "ЭКОНОМИКА PAT",
