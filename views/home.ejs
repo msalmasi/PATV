@@ -492,11 +492,12 @@
   <%_ if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { _%><div class="card hm-stories rmd-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.dock.stories'), next: '/' }) %></div><%_ } _%>
   <%# homegap (owner 2026-11-05 "the empty space here looks weird"): the grid's lower rows follow what the side column holds - Top Pads
       and the featured table are server-rendered only (home-dock.js swaps #hmDock, never #stageSide), so the state is classes here, not
-      :has() chains in home-dock.css: hmd-fill (2+ Top Pads rows: the call-to-action card fills the stage column under the strip),
-      hmd-pairs (one row + the featured table: two level pairs), hmd-tall (5 rows, or 4 + the table: the card says it big), hmd-notops,
-      hmd-feat %>
+      :has() chains in home-dock.css: hmd-fill (3+ Top Pads rows, or 2 + the featured table: the call-to-action card fills the stage
+      column under the strip; homegap fix: two rows alone are only ~42px past the strip - the strip fills that row, as it does beside one
+      row and its 🎧 listen bar, instead of the card moving up and Top Pads' two rows spreading to its height), hmd-pairs (one row + the
+      featured table: two level pairs), hmd-tall (5 rows, or 4 + the table: the card says it big), hmd-notops, hmd-feat %>
   <%_ const hT_ = tops_.length, hF_ = !!feat;
-      const hmdLow_ = [hT_ >= 2 ? 'hmd-fill' : (hT_ === 1 && hF_ ? 'hmd-pairs' : ''), (hT_ >= 5 || (hT_ >= 4 && hF_)) ? 'hmd-tall' : '', hT_ ? '' : 'hmd-notops', hF_ ? 'hmd-feat' : ''].filter(Boolean).join(' '); _%>
+      const hmdLow_ = [(hT_ >= 3 || (hT_ === 2 && hF_)) ? 'hmd-fill' : (hT_ === 1 && hF_ ? 'hmd-pairs' : ''), (hT_ >= 5 || (hT_ >= 4 && hF_)) ? 'hmd-tall' : '', hT_ ? '' : 'hmd-notops', hF_ ? 'hmd-feat' : ''].filter(Boolean).join(' '); _%>
   <div class="hmd-grid<%= hmdLow_ ? ' ' + hmdLow_ : '' %>" id="hmdGrid">
   <%- include('partials/home-dock', { t, frontInfo, hLK_, hFX_, hAV_, hBN_, live, room, roomOnStage, me, roomLive }) %>
 <%_ } _%>
@@ -586,13 +587,16 @@
         </div>
         <% } %>
       </div>
-      <% if (feat) { %>
+      <% /* homegap fix (review, focus order): with the Dock on the featured table is rendered after Top Pads (featBox_() there) - Tab goes
+            the strip, Top Pads, the table, then the call-to-action card, as the side column reads (it went to the table at the column's foot
+            first, then back up to Top Pads); Dock off it is where it always was */
+         const featBox_ = () => { %>
         <a class="box" href="<%= feat.href || '/casino/t/' + encodeURIComponent(feat.id) %>">
           <h3><%- t('home.feat.title') %></h3>
           <b><%= feat.game %></b><span class="muted"> · <%- t('home.feat.seated', { n: feat.seats.length }) %><%= feat.room ? ' · ' + feat.room : '' %></span>
           <div class="muted" style="margin-top:4px"><%- t('home.feat.watch') %></div>
         </a>
-      <% } %>
+      <% }; if (feat && !homeDock_) featBox_(); %>
       <%# 1.99ek: "Top Pads" (was "On now"): the top 5 LIVE pads, ranked by the front pick's score (activity + 🚀 boost points); hidden when none is live %>
       <% if (tops_.length) { %>
         <section class="box tp" aria-labelledby="tpH">
@@ -608,6 +612,7 @@
         </section>
       <% } %>
 <%_ if (homeDock_) { _%>
+      <%_ if (feat) featBox_(); _%>
   </div>
   <%# 1.99ajq dockpol (owner H3): "Your show on PATV" only for a signed-in viewer, after the Dock (signed out: the navbar's Go live)
       homegap (owner 2026-11-05 "the empty space here looks weird"): the call-to-action card - Your show signed in, the join pitch signed

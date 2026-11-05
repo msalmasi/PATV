@@ -216,13 +216,13 @@ test("item 3: the homepage stage in fullscreen has no card cap - (1,4,1) beats t
 
 // homegap (owner 2026-11-05, "the empty space here looks weird" - a blank under the coin-op strip beside Top Pads + the featured table): the
 // call-to-action card (Your show signed in, the join pitch signed out) is the Dock grid's last cell (.hmd-cta); 1024px and wider it fills the
-// stage column under the strip while the side column is the taller (Top Pads with 2+ rows, or with the featured table), on a 1fr row. What
+// stage column under the strip while the side column is much the taller (Top Pads with 3+ rows, or 2 + the featured table), on a 1fr row. What
 // the side column holds is server-rendered (home-dock.js swaps #hmDock only), so the state is the grid's classes, not :has() chains
 const HG_TOPS = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"].map((n, i) => ({ id: n, slug: n.toLowerCase(), name: n + " Pad", count: 5 - i, micCount: i % 2 }));
 const HG_FEAT = { featured: { id: "tbl-1", game: "Hold'em", seats: [1, 2, 3], room: null, href: "/casino/t/tbl-1" } };
 const hgGrid = (h) => { const m = h.match(/<div class="hmd-grid( [^"]*)?" id="hmdGrid">/); assert.ok(m, "the Dock grid"); return { a: m.index, cls: (m[1] || "").trim(), side: h.indexOf('id="stageSide"', m.index) }; };
 test("homegap: Your show / the join pitch are the Dock grid's last cell - one pitch signed out, today's order with the Dock off", async () => {
-  const tops = HG_TOPS.slice(0, 2);
+  const tops = HG_TOPS.slice(0, 3);
   const on = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, tops });
   const g = hgGrid(on), show = on.indexOf('id="stageShow"'), meCard = on.indexOf('class="card me"');
   assert.equal(g.cls, "hmd-fill");
@@ -253,7 +253,7 @@ test("homegap: the grid's classes - Top Pads rows 0-5 x the featured table, sign
   const want = {
     "0/0": "hmd-notops", "0/1": "hmd-notops hmd-feat",
     "1/0": "", "1/1": "hmd-pairs hmd-feat",
-    "2/0": "hmd-fill", "2/1": "hmd-fill hmd-feat",
+    "2/0": "", "2/1": "hmd-fill hmd-feat",
     "3/0": "hmd-fill", "3/1": "hmd-fill hmd-feat",
     "4/0": "hmd-fill", "4/1": "hmd-fill hmd-tall hmd-feat",
     "5/0": "hmd-fill hmd-tall", "5/1": "hmd-fill hmd-tall hmd-feat",
@@ -293,7 +293,8 @@ test("homegap: home-dock.css - the lower rows from custom properties, set by the
   assert.match(mq, /main\.hm\.rmd-home \.hmd-grid\.hmd-pairs \{ --hmd-low: "coin tops" "cta feat"; --hmd-low-rows: auto auto; --hmd-cta-mt: 0px; \}/);
   assert.match(mq, /main\.hm\.rmd-home \.hmd-grid:is\(\.hmd-fill, \.hmd-pairs\) > \.hmd-cta \{/, "the panel look: fill and pairs");
   assert.match(mq, /\[dir="rtl"\] main\.hm\.rmd-home \.hmd-grid:is\(\.hmd-fill, \.hmd-pairs\) > \.hmd-cta \{ --hmd-cta-bx: 14%; --hmd-cta-gx: 90%; \}/, "right to left: the lights mirror");
-  assert.match(mq, /radial-gradient\(34% 95% at var\(--hmd-cta-bx\) 55%/);
+  assert.match(mq, /--hmd-cta-bx: 86%; --hmd-cta-by: 55%;/);
+  assert.match(mq, /radial-gradient\(34% 95% at var\(--hmd-cta-bx\) var\(--hmd-cta-by\)/);
   assert.match(mq, /main\.hm\.rmd-home \.hmd-grid\.hmd-tall > #stageShow p > b \{ display: block;/, "the tall card: the <b> sentence on its own line");
   assert.match(mq, /main\.hm\.rmd-home \.hmd-grid:is\(\.hmd-pairs, \.hmd-notops\) #stageSide > a\.box \{ display: grid; grid-template-columns: auto minmax\(0, 1fr\); align-content: center;/, "the featured table stretched to a taller neighbour: 3 lines");
   // (the chat's own pad keeps its name, the note gives way - 1024px and wider, AFTER the note's base rule: the same specificity)
@@ -303,11 +304,59 @@ test("homegap: home-dock.css - the lower rows from custom properties, set by the
   assert.doesNotMatch(css, /:has\(> \.hmd-cta\)|:has\(> \.tp|:has\(#stageSide > \.tp|\.rooms-mini > li:nth-child|\.rooms-mini > li \+ li/, "no :has() chains on Top Pads or the card");
   assert.equal((css.match(/:has\(/g) || []).length, (css.match(/:has\(([^()]*)\)/g) || []).length, "every :has() is a plain one");
   for (const m of css.matchAll(/:has\(([^()]*)\)/g))
-    assert.ok(/^(#rmStage\.is-off|#rmChat|> \.rmd-tease|#stageSide > a\.box)$/.test(m[1]), "a :has() for a live state (or the 761-1023px rules as they were): " + m[1]);
-  assert.deepEqual(mq.match(/:has\([^)]*\)/g), [":has(#rmStage.is-off)", ":has(> .rmd-tease)"], "from 1024px: only the off-air sign-in tease");
+    assert.ok(/^(#rmStage\.is-off|#rmChat|> \.rmd-tease|#stageSide > a\.box|#wheelBox)$/.test(m[1]), "a :has() for a live state (or the 761-1023px rules as they were, or no strip): " + m[1]);
+  assert.deepEqual(mq.match(/:has\([^)]*\)/g), [":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#wheelBox)", ":has(#rmStage.is-off)", ":has(> .rmd-tease)"], "from 1024px: only no strip and the off-air sign-in tease");
   assert.doesNotMatch(css, /grid-row-end: span 2/, "the old Top Pads span is the areas' now");
   for (const s of ['"stage stage" "coin coin" "chat chat" "tops feat" "cta cta"', '"stage stage" "coin coin" "chat chat" "tops tops" "cta cta"', '"stage" "coin" "chat" "tops" "feat" "cta"'])
     assert.ok(css.includes(s), "761-1023px / phones: the card is the last row - " + s);
   assert.doesNotMatch(css, /grid-template-areas: "stage stage" "chat chat" "coin tops" "coin feat"/, "off air / popped set only the top half");
   assert.match(rd("views", "home.ejs"), /home-dock\.css\?v=5/);
+});
+// homegap review fixes: the strip fills the row it shares (Top Pads' two rows, one row and its 🎧 listen bar), never under 96px from 1024px;
+// two rows alone no longer fill; the tall card's red light follows Go live under 1280px; the join pitch's buttons stack there; the featured
+// table after Top Pads with the Dock on (focus order); no strip -> the card takes its place
+test("homegap fix: the coin-op strip from 1024px - 96px at least, no cap (it fills the row it shares), after the strip's own 96px cap", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const cap = css.indexOf("main.hm.rmd-home #wheelBox .aw-coinop { display: grid;");
+  const fill = css.indexOf("@media (min-width: 1024px) { main.hm.rmd-home #wheelBox .aw-coinop { min-block-size: 96px; max-block-size: none; } }");
+  assert.ok(cap > 0 && /max-block-size: 96px/.test(css.slice(cap, css.indexOf("}", cap))), "the strip's base rule keeps its 96px cap (761-1023px / phones override it as before)");
+  assert.ok(fill > cap, "the 1024px floor / no cap comes after the base rule - the same specificity");
+  // below 1024px the strip's rules are untouched
+  const mid = css.slice(css.indexOf("@media (min-width: 761px) and (max-width: 1023px) {"));
+  assert.match(mid, /main\.hm\.rmd-home #wheelBox \.aw-coinop \{ grid-template-columns: auto minmax\(0, 1fr\) auto; grid-template-areas: "credit door btn" "status status tools"; max-block-size: none; row-gap: var\(--ds-sp-1\); \}/);
+});
+test("homegap fix: under 1280px the tall card's red light is on Go live (under the words, at the start); the join pitch's buttons stack", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const i = css.indexOf("@media (min-width: 1024px) and (max-width: 1279px) {"), mq = css.slice(i, css.indexOf("\n}\n", i));
+  assert.ok(i > css.indexOf('[dir="rtl"] main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta {'), "after the lights' base + RTL rules");
+  assert.match(mq, /main\.hm\.rmd-home \.hmd-grid\.hmd-tall > #stageShow \{ --hmd-cta-bx: 12%; --hmd-cta-by: 82%; \}/);
+  assert.match(mq, /\[dir="rtl"\] main\.hm\.rmd-home \.hmd-grid\.hmd-tall > #stageShow \{ --hmd-cta-bx: 88%; \}/, "right to left the start is the right");
+  assert.match(mq, /main\.hm\.rmd-home \.hmd-grid:is\(\.hmd-fill, \.hmd-pairs\) > #hmdPitch \.ds-actions \{ flex-direction: column; align-items: stretch; \}/);
+  // (1280px and wider the tall card's buttons are at its end - the base light position, no override)
+  const wide = css.slice(css.indexOf("@media (min-width: 1280px) {"));
+  assert.doesNotMatch(wide.slice(0, wide.indexOf("\n}\n")), /--hmd-cta-bx/);
+});
+test("homegap fix: no coin-op strip from 1024px - the card takes its place (it is always rendered today)", () => {
+  const css = rd("public", "css", "home-dock.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /main\.hm\.rmd-home \.hmd-grid:not\(:has\(#wheelBox\)\) \{ --hmd-low: "cta tops"; --hmd-low-rows: auto; --hmd-cta-mt: 0px; \}/);
+  assert.match(css, /main\.hm\.rmd-home \.hmd-grid\.hmd-feat:not\(:has\(#wheelBox\)\) \{ --hmd-low: "cta tops" "cta feat"; --hmd-low-rows: 1fr auto; \}/);
+  assert.match(css, /main\.hm\.rmd-home \.hmd-grid\.hmd-notops:not\(:has\(#wheelBox\)\) \{ --hmd-low: "cta cta"; \}/);
+  assert.match(css, /main\.hm\.rmd-home \.hmd-grid\.hmd-notops\.hmd-feat:not\(:has\(#wheelBox\)\) \{ --hmd-low: "cta feat"; \}/);
+  assert.match(rd("views", "home.ejs"), /<div class="aw aw-hm" id="wheelBox">/);
+});
+test("homegap fix: the featured table after Top Pads with the Dock on (Tab: strip, Top Pads, table, card); Dock off where it always was", async () => {
+  for (const me of [null, ME(true)]) for (const T of [0, 1, 3, 5]) {
+    const on = await renderHome({ me, username: me && me.username, padDockOn: true, tops: HG_TOPS.slice(0, T), S: HG_FEAT });
+    const g = hgGrid(on), wheel = on.indexOf('id="wheelBox"', g.side), feat = on.indexOf('<a class="box" href="/casino/t/tbl-1">', g.side), cta = on.indexOf("hmd-cta", g.side);
+    assert.equal((on.match(/<a class="box" href="\/casino\/t\/tbl-1">/g) || []).length, 1, "one featured table (tops " + T + ")");
+    assert.ok(wheel > g.side && feat > wheel && cta > feat, "the strip, then the table, then the card (tops " + T + ")");
+    if (T) assert.ok(feat > on.indexOf('<section class="box tp"', g.side) && feat > on.indexOf('id="tpAudioBox"', g.side), "after Top Pads (tops " + T + ")");
+    assert.match(on.slice(feat, cta + 8), /^<a class="box"[^]*?<\/a>\s*<\/div>\s*<section class="card [^"]*hmd-cta"$/, "the side column's last cell, then the card (tops " + T + ")");
+    const off = await renderHome({ me, username: me && me.username, padDockOn: false, tops: HG_TOPS.slice(0, T), S: HG_FEAT });
+    const ofeat = off.indexOf('<a class="box" href="/casino/t/tbl-1">');
+    assert.equal((off.match(/<a class="box" href="\/casino\/t\/tbl-1">/g) || []).length, 1, "Dock off: one featured table");
+    if (T) assert.ok(ofeat < off.indexOf('<section class="box tp"'), "Dock off: before Top Pads, as it was");
+  }
+  const none = await renderHome({ me: ME(true), username: "viewer", padDockOn: true, tops: HG_TOPS.slice(0, 3) });
+  assert.doesNotMatch(none, /<a class="box" href="\/casino/, "no table: none");
 });

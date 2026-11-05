@@ -27,14 +27,15 @@ main.hm.rmd-home #stageSide > a.box { grid-area: feat; margin: 0; min-inline-siz
 main.hm.rmd-home .hmd-grid:not(:has(#rmChat)) { --hmd-top: "stage stage"; --hmd-top-rows: auto; }
 /* ── homegap (owner 2026-11-05, "the empty space here looks weird"): the stage column never ends in a blank. The call-to-action card
    (views/home.ejs .hmd-cta: 🎥 Your show signed in, the join pitch signed out) is the grid's last cell. 1024px and wider, while the side
-   column under the chat is taller than the coin-op strip - Top Pads with two rows or more, or Top Pads and the featured table - it moves
-   up under the strip, beside Top Pads, on a 1fr row, so the two columns end level: the card grows when the side column is the taller (its
-   words centred on a stage-light backdrop, a panel like Top Pads beside it), Top Pads' rows spread when the card is (one Top Pads row and
-   the featured table: two level pairs instead). Otherwise (one Top Pads row alone, or none) it stays the full-width card after the Dock,
-   and the strip shares its row level (or takes the width). Below 1024px it is where it always was: the last row, full width, the page's
-   card gap above it. What the side column holds is server-rendered, so it is the grid's classes (home.ejs hmdLow_): hmd-fill (2+ Top Pads
-   rows), hmd-pairs (one row + the table), hmd-tall (5 rows, or 4 + the table), hmd-notops, hmd-feat - :has() only for what the page
-   changes live (off air, the popped chat, no chat, the sign-in tease). ── */
+   column under the chat is much taller than the coin-op strip - Top Pads with three rows or more, or two rows and the featured table - it
+   moves up under the strip, beside Top Pads, on a 1fr row, so the two columns end level: the card grows when the side column is the taller
+   (its words centred on a stage-light backdrop, a panel like Top Pads beside it), Top Pads' rows spread when the card is (one Top Pads row
+   and the featured table: two level pairs instead). Otherwise (two Top Pads rows alone, one, or none) it stays the full-width card after
+   the Dock, and the strip shares its row and fills it (homegap fix: up to Top Pads' two rows, or one row and its 🎧 listen bar - the only
+   live growth of the side column, so the strip absorbs it with no card moving). Below 1024px it is where it always was: the last row, full
+   width, the page's card gap above it. What the side column holds is server-rendered, so it is the grid's classes (home.ejs hmdLow_):
+   hmd-fill (3+ Top Pads rows, or 2 + the table), hmd-pairs (one row + the table), hmd-tall (5 rows, or 4 + the table), hmd-notops,
+   hmd-feat - :has() only for what the page changes live (off air, the popped chat, no chat, the sign-in tease) and for no strip. ── */
 main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min-inline-size: 0; margin: var(--hmd-cta-mt, calc(var(--cardgap, var(--ds-sp-4)) - var(--ds-sp-2))) 0 0; }
 @media (min-width: 1024px) {
   /* the lower rows: no Top Pads - the strip takes the width, or sits beside the featured table (centred to the strip's height) */
@@ -46,6 +47,12 @@ main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min
   main.hm.rmd-home .hmd-grid.hmd-fill.hmd-feat { --hmd-low: "coin tops" "cta tops" "cta feat"; --hmd-low-rows: auto 1fr auto; }
   /* (ONE Top Pads row and the featured table: two level pairs - [strip | Top Pads] then [the card | the featured table, centred]) */
   main.hm.rmd-home .hmd-grid.hmd-pairs { --hmd-low: "coin tops" "cta feat"; --hmd-low-rows: auto auto; --hmd-cta-mt: 0px; }
+  /* (homegap fix: no coin-op strip - the page always renders it today; if it ever doesn't, the card takes its place, so the stage column
+     still ends level instead of an empty strip-sized cell) */
+  main.hm.rmd-home .hmd-grid:not(:has(#wheelBox)) { --hmd-low: "cta tops"; --hmd-low-rows: auto; --hmd-cta-mt: 0px; }
+  main.hm.rmd-home .hmd-grid.hmd-feat:not(:has(#wheelBox)) { --hmd-low: "cta tops" "cta feat"; --hmd-low-rows: 1fr auto; }
+  main.hm.rmd-home .hmd-grid.hmd-notops:not(:has(#wheelBox)) { --hmd-low: "cta cta"; }
+  main.hm.rmd-home .hmd-grid.hmd-notops.hmd-feat:not(:has(#wheelBox)) { --hmd-low: "cta feat"; }
   /* (Top Pads taller than its rows - the card is the taller side: the rows spread down the card under the header) */
   main.hm.rmd-home #stageSide > .tp { display: flex; flex-direction: column; }
   main.hm.rmd-home #stageSide > .tp > .rooms-mini { flex: 1 1 auto; align-content: space-evenly; }
@@ -57,8 +64,8 @@ main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min
   /* the card in the stage column: Top Pads' pixel heading (Your show), the words and the buttons centred on two soft stage lights - a
      gold one from the top, and one on the card's own first button (Go live red, Join green) - so whatever height it takes reads as the
      panel's (right to left the lights mirror: the buttons are at the card's left there) */
-  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta { --hmd-cta-glow: rgba(230, 74, 25, .15); --hmd-cta-bx: 86%; --hmd-cta-gx: 10%; align-content: center; padding: var(--ds-sp-3) var(--ds-sp-4);
-    background: radial-gradient(34% 95% at var(--hmd-cta-bx) 55%, var(--hmd-cta-glow), transparent 72%), radial-gradient(45% 140% at var(--hmd-cta-gx) -25%, rgba(255, 207, 64, .085), transparent 72%), var(--ds-surface); }
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta { --hmd-cta-glow: rgba(230, 74, 25, .15); --hmd-cta-bx: 86%; --hmd-cta-by: 55%; --hmd-cta-gx: 10%; align-content: center; padding: var(--ds-sp-3) var(--ds-sp-4);
+    background: radial-gradient(34% 95% at var(--hmd-cta-bx) var(--hmd-cta-by), var(--hmd-cta-glow), transparent 72%), radial-gradient(45% 140% at var(--hmd-cta-gx) -25%, rgba(255, 207, 64, .085), transparent 72%), var(--ds-surface); }
   [dir="rtl"] main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > .hmd-cta { --hmd-cta-bx: 14%; --hmd-cta-gx: 90%; }
   main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #hmdPitch { --hmd-cta-glow: rgba(76, 175, 80, .13); }
   main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #stageShow h3 { font: var(--ds-fs-pixel-h)/1.6 var(--ds-font-pixel); letter-spacing: var(--ds-ls-pixel-h); text-transform: uppercase; color: var(--ds-gold); }
@@ -77,6 +84,15 @@ main.hm.rmd-home .hmd-grid > .hmd-cta { grid-area: cta; align-self: stretch; min
   main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow .row > * { min-block-size: 44px; padding-inline: var(--ds-sp-5); font-size: 15px; }
   /* (signed out, off air: the sign-in tease is as tall as its words here too - the off-air 440px card rule outranked 1.99ajh's) */
   main.hm.rmd-home .hmd-grid:has(#rmStage.is-off) #hmDock > #rmChat:has(> .rmd-tease) { block-size: auto; }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  /* (homegap fix: the tall card's buttons are under the words at the start here - the red light follows Go live down to them, not the
+     empty end of the card; right to left the start is the right) */
+  main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow { --hmd-cta-bx: 12%; --hmd-cta-by: 82%; }
+  [dir="rtl"] main.hm.rmd-home .hmd-grid.hmd-tall > #stageShow { --hmd-cta-bx: 88%; }
+  /* (the join pitch in the 656-850px stage column: Join / Sign in stacked at its end - side by side they left the words ~330px, five
+     lines in French, and Top Pads' rows spread to the card's height) */
+  main.hm.rmd-home .hmd-grid:is(.hmd-fill, .hmd-pairs) > #hmdPitch .ds-actions { flex-direction: column; align-items: stretch; }
 }
 @media (min-width: 1280px) {
   /* (the stage column is 850px or more: the tall card keeps its two zones - the words, then the buttons at the end) */
@@ -201,6 +217,11 @@ main.hm.rmd-home #wheelBox .aw-now .amt { display: inline; }
 main.hm.rmd-home #wheelBox .aw-status { grid-area: status; align-self: start; min-block-size: 0; inline-size: auto; text-align: start; font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 main.hm.rmd-home #wheelBox .aw-tools { grid-area: tools; inline-size: auto; flex-direction: column; gap: 4px; }
 main.hm.rmd-home #wheelBox .aw-tool { min-block-size: 28px; font-size: 8px; padding-inline: 8px; white-space: nowrap; }
+/* (homegap fix, 1024px and wider: the strip is never under its 96px - its own row in the fill sizes to it, and the card under it takes
+   the rest - and never short of the row it shares: beside Top Pads' two rows, or one row and its 🎧 listen bar (a signed-out visitor on
+   a members-only pad: Top Pads' own player), or beside a 3-line featured table, it fills the row - its pieces centred - so no blank opens
+   under it; the cap was for the old grid, where the strip spanned Top Pads' and the table's rows) */
+@media (min-width: 1024px) { main.hm.rmd-home #wheelBox .aw-coinop { min-block-size: 96px; max-block-size: none; } }
 /* Top Pads under the chat: a compact list - five 32px rows (the "now playing" lines are the pad pages') */
 main.hm.rmd-home #stageSide > .tp { padding: var(--ds-sp-2) var(--ds-sp-3); }
 main.hm.rmd-home #stageSide > .tp > h2 { min-block-size: 24px; margin: 0 0 var(--ds-sp-1); }
