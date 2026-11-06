@@ -6,6 +6,7 @@
 //     fastEnd, or a browser without RTCDtlsTransport, nothing changes (the 'disconnected' + 5 s path stays)
 //   * livecam.js: the fast_end field (default per STAGING, admin checkbox, never sent to Pepe), the watch tickets carry it
 //   * the three live-cam pages pass it (stage-mic, the cam strip, the ▶ Live popover); cache-busters bumped
+//   * the MediaMTX kick: one route (the second only when the first route doesn't exist), no second "session not found"
 //   node --test test/camstutter.test.js
 "use strict";
 const test = require("node:test");
@@ -228,4 +229,41 @@ test("the live-cam pages pass the ticket's fast_end to watch() (only a real true
   assert.ok(read("views", "partials", "cam-strip.ejs").includes("/public/js/pad-camstrip.js?v=7"));
   assert.ok(read("views", "home.ejs").includes("/public/js/webrtc-client.js?v=7") && read("views", "home.ejs").includes("/public/js/stage-mic.js?v=18"));
   assert.ok(read("views", "stageBook.ejs").includes("/public/js/webrtc-client.js?v=7"));
+});
+
+// ── the MediaMTX kick: one route ───────────────────────────────────────────────────────────────────────────────────────────
+async function kickWith(handler) {
+  const hits = [];
+  const server = http.createServer((req, res) => { hits.push(req.method + " " + req.url); handler(req, res); });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const old = process.env.MEDIAMTX_API;
+  process.env.MEDIAMTX_API = "http://127.0.0.1:" + server.address().port;
+  const LC = require(path.join(repo, "livecam"));
+  try {
+    await new Promise((r) => LC._kickHttp("12345678-1234-1234-1234-123456789abc", r));
+  } finally {
+    if (old == null) delete process.env.MEDIAMTX_API; else process.env.MEDIAMTX_API = old;
+    server.close();
+  }
+  return hits;
+}
+test("kick: MediaMTX v1.21 has the first route - one request (kicked, or its JSON 'session not found'), never the second", async () => {
+  let hits = await kickWith((req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); });
+  assert.deepEqual(hits, ["POST /v3/webrtcsessions/kick/12345678-1234-1234-1234-123456789abc"]);
+  hits = await kickWith((req, res) => { res.writeHead(404, { "content-type": "application/json" }); res.end('{"error":"session not found"}'); });
+  assert.equal(hits.length, 1, "a session that's gone already: one request, one log line on the VPS (was two)");
+});
+test("kick: a MediaMTX without that route (another version: a plain 404) gets the other route", async () => {
+  const hits = await kickWith((req, res) => {
+    if (req.url.startsWith("/v3/webrtcsessions/")) { res.writeHead(404, { "content-type": "text/plain" }); res.end("404 page not found"); }
+    else { res.writeHead(200); res.end("{}"); }
+  });
+  assert.deepEqual(hits, ["POST /v3/webrtcsessions/kick/12345678-1234-1234-1234-123456789abc", "POST /v3/webrtc/sessions/kick/12345678-1234-1234-1234-123456789abc"]);
+});
+test("kick: a bad id never reaches MediaMTX", async () => {
+  const LC = require(path.join(repo, "livecam"));
+  let called = false;
+  LC._kickHttp("../../v3/config", () => { called = true; });
+  await tick(20);
+  assert.equal(called, false);
 });

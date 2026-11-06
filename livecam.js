@@ -608,19 +608,32 @@ function sweep(t = now()) {
   }
   for (const [k, until] of COOL) if (until < t) COOL.delete(k);
 }
-let kickImpl = (id) => {
+// camstutter (2026-11-05): MediaMTX v1.21 answers on BOTH kick routes (prod: /v3/webrtcsessions/... and /v3/webrtc/sessions/... both
+// list), so every kick went out twice and the second always logged "[API] session not found" (~3k lines a day on the VPS). Now the
+// first route only - the second only when the first ROUTE is missing (a 404 that isn't MediaMTX's own JSON error: another version).
+const KICK_ROUTES = ["/v3/webrtcsessions/kick/", "/v3/webrtc/sessions/kick/"];
+function kickHttp(id, done) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return;
   const http = require("http");
   const api = String(process.env.MEDIAMTX_API || "http://127.0.0.1:9997").replace(/\/+$/, "");
-  for (const p of ["/v3/webrtcsessions/kick/", "/v3/webrtc/sessions/kick/"]) {
+  const go = (i) => {
+    if (i >= KICK_ROUTES.length) { if (done) done(); return; }
     try {
-      const u = new URL(api + p + id);
-      const req = http.request({ host: u.hostname, port: u.port || 80, path: u.pathname, method: "POST", timeout: 3000 }, (r) => r.resume());
-      req.on("error", () => {}); req.on("timeout", () => req.destroy());
+      const u = new URL(api + KICK_ROUTES[i] + id);
+      const req = http.request({ host: u.hostname, port: u.port || 80, path: u.pathname, method: "POST", timeout: 3000 }, (r) => {
+        let body = "";
+        r.setEncoding("utf8");
+        r.on("data", (c) => { if (body.length < 512) body += c; });
+        r.on("end", () => { if (r.statusCode === 404 && !/^\s*\{/.test(body)) go(i + 1); else if (done) done(); });
+        r.on("error", () => { if (done) done(); });
+      });
+      req.on("error", () => { if (done) done(); }); req.on("timeout", () => req.destroy());
       req.end();
-    } catch (e) { /* no MediaMTX */ }
-  }
-};
+    } catch (e) { if (done) done(); }   // no MediaMTX
+  };
+  go(0);
+}
+let kickImpl = (id) => kickHttp(id);
 function kickReader(id) { try { kickImpl(id); } catch (e) { /* best effort */ } }
 /**
  * adultgate site: the 18+ gate now applies to a room (the switch on, the pad marked 18+, or every TICK while on): drop the
@@ -2049,5 +2062,6 @@ module.exports = {
   _sessions: SESS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setKick: (fn) => { kickImpl = fn; },
+  _kickHttp: kickHttp,                // camstutter: the real kick (tests point MEDIAMTX_API at a fake)
   _reset: () => { SESS.clear(); BY_PATH.clear(); COOL.clear(); RV_STARTING.clear(); BOT = null; OPTOUT = new Set(); CFG = { v: 0, cfg: { ...DEFAULTS }, at: null, by: null }; ready = null; SYNC_AT = 0; FAILS = []; },
 };
