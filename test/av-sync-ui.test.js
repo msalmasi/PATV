@@ -31,14 +31,23 @@ function sandbox(options = {}) {
   }
   const docEvents = {};
   const document = { createElement: element, body: null, hidden: false, addEventListener(k, fn) { (docEvents[k] ||= []).push(fn); } }; document.body = element("body");
+  // iosdelay: the script tag's data-avsync-hold (the admin's Safari delay method for this viewer, rendered by the page)
+  document.currentScript = options.hold == null ? null : { getAttribute: (k) => (k === "data-avsync-hold" ? options.hold : null) };
+  const warnings = [], workers = [];
   const setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { at: now + delay, fn }); return id; };
   const clearTimeout = id => timers.delete(id);
-  const ctx = { document, console, Promise, Date: { now: () => now }, setTimeout, clearTimeout,
+  const ctx = { document, console: { log: console.log, info: console.info, error: console.error, warn: (...a) => warnings.push(a.join(" ")) }, Promise, Date: { now: () => now }, setTimeout, clearTimeout,
     navigator: { userAgent: options.ua || "Chrome/145.0", platform: options.platform || "Win32", maxTouchPoints: options.touch || 0 },
     location: { search: options.search || "" },
     localStorage: { getItem(k) { if (options.noStorage) throw new Error("denied"); return storage.get(k) || null; }, setItem(k, v) { if (options.noStorage) throw new Error("denied"); storage.set(k, v); } },
     addEventListener(k, fn) { (events[k] ||= []).push(fn); },
     fetch(url, init) { requests.push({ url, init, at: now }); return options.fetch ? options.fetch(url, init, config) : Promise.resolve({ ok: true, json: () => Promise.resolve(plain(config)) }); } };
+  // iosdelay: a WebKit-like page - RTCRtpScriptTransform + Worker (fakes: a worker records what it is sent; the test answers for it)
+  if (options.webkit) {
+    ctx.Worker = class { constructor(url) { if (options.workerThrows) throw new Error("blocked"); this.url = url; this.posted = []; workers.push(this); } postMessage(m) { this.posted.push(plain(m)); } };
+    ctx.RTCRtpScriptTransform = class { constructor(worker, opts) { this.worker = worker; this.options = plain(opts); } };
+  }
+  if (options.rxProto) ctx.RTCRtpReceiver = { prototype: options.rxProto };
   ctx.window = ctx; vm.runInNewContext(source, ctx);
   async function flush() { for (let i = 0; i < 24; i++) await Promise.resolve(); }
   async function advance(ms) {
@@ -53,9 +62,15 @@ function sandbox(options = {}) {
     }
     now = end; await flush();
   }
+  // kinds: standard (jitterBufferTarget), legacy (playoutDelayHint), none; iosdelay: webkit (WebKit before iOS 27: only `transform`),
+  // webkit27 (jitterBufferTarget + transform), chromium (jitterBufferTarget + playoutDelayHint + transform)
   function receiver(kind = "standard") {
-    const writes = [], rx = { writes };
-    if (kind !== "none") Object.defineProperty(rx, kind === "legacy" ? "playoutDelayHint" : "jitterBufferTarget", { configurable: true, get: () => writes.at(-1), set: v => { if (options.setterThrows) throw new Error("unsupported"); writes.push(v); } });
+    const writes = [], hints = [], transforms = [], rx = { writes, hints, transforms };
+    const prop = (name, list) => Object.defineProperty(rx, name, { configurable: true, get: () => list.at(-1), set: v => { if (options.setterThrows) throw new Error("unsupported"); list.push(v); } });
+    if (kind === "standard" || kind === "webkit27" || kind === "chromium") prop("jitterBufferTarget", writes);
+    if (kind === "legacy") prop("playoutDelayHint", writes);
+    if (kind === "chromium") prop("playoutDelayHint", hints);
+    if (kind === "webkit" || kind === "webkit27" || kind === "chromium") Object.defineProperty(rx, "transform", { configurable: true, get: () => (transforms.length ? transforms.at(-1) : null), set: v => { transforms.push(v); } });
     return rx;
   }
   function peer(kind = "video", delayMs = 200, rtt = .1) {
@@ -73,7 +88,7 @@ function sandbox(options = {}) {
   }
   function media(mode = "mp3", pad = "pad", extra = {}) { const input = { slug: pad, playing: true, mode, pc: mode === "rtc" ? peer("audio", 200, .3) : null, ahead: () => .5, ...extra }; ctx.PATVAvSync.audio(input); return input; }
   function tile(rx = receiver(), pc = peer(), pad) { ctx.PATVAvSync.video(rx, { pc, url: "https://relay.test/whep/cam1?pt=PRIVATE_TICKET", pad }); return { rx, pc }; }
-  return { api: ctx.PATVAvSync, ctx, config, requests, storage, document, element, receiver, peer, media, tile, advance, flush, now: () => now,
+  return { api: ctx.PATVAvSync, ctx, config, requests, storage, document, element, receiver, peer, media, tile, advance, flush, now: () => now, warnings, workers,
     event: (name, value) => (events[name] || []).forEach(fn => fn(value)), docEvent: (name) => (docEvents[name] || []).forEach(fn => fn()) };
 }
 
@@ -882,4 +897,150 @@ test("1.99ait avf review: the toggle's title names only what it holds here - no 
   // a mic switch on again: they are held for everyone, and both say so
   c.config.apply.mic_card = true; await c.advance(5000);
   assert.match(cb.title, /mic signs are held for everyone/); assert.equal(first(), "sync for you: ON (your toggle) · mic signs: held for everyone");
+});
+
+// ── iosdelay (1.99alg): Safari / iPhone / iPad before iOS 27 (every iPhone browser is WebKit inside, Chrome too) have neither
+// jitterBufferTarget nor playoutDelayHint - av-sync.js holds such a cam's encoded frames in a worker (public/js/av-sync-hold.js, an
+// RTCRtpScriptTransform on the receiver), following the same target. Only there: Chromium, Firefox and iOS 27's own delay unchanged. ──
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/141.0.7390.96 Mobile/15E148 Safari/604.1";
+const SAFARI_ON = { engines: { chromium: true, firefox: false, safari: true }, safari_method: "auto" };
+const holdPosts = (w, id) => w.posted.filter((m) => m.id === id && "hold" in m).map((m) => m.hold);
+const panel = (s) => s.document.body.children.find((e) => e.tagName === "ASIDE").children[2].textContent.split("\n");
+
+test("iosdelay: iPhone Chrome with no delay of its own - the cam's frames are held in a worker, attached in ontrack before any frame, following the target", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  assert.equal(s.workers.length, 1, "the worker starts with the page (ready before the first cam)");
+  const w = s.workers[0]; assert.equal(w.url, "/public/js/av-sync-hold.js?v=1"); assert.deepEqual(w.posted, [{ ping: true }]);
+  w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit"));
+  assert.equal(a.rx.transforms.length, 1, "attached synchronously in ontrack (watch() sets srcObject after)");
+  const tf = a.rx.transforms[0]; assert.equal(tf.worker, w); assert.deepEqual(tf.options, { id: "h1", ramp: false });
+  assert.deepEqual(holdPosts(w, "h1"), [0], "no room audio yet: a pass-through");
+  s.media(); await s.advance(0);
+  assert.equal(holdPosts(w, "h1").at(-1), 1400, "the same target as Chrome's jitterBufferTarget (MP3: 1000 - 200 + 100 + 500)");
+  assert.equal(s.api.debug().tiles[0].method, "hold"); assert.equal(s.api.debug().tiles[0].supported, true); assert.equal(s.api.debug().tiles[0].target_ms, 1400);
+  s.config.k.pt = 120; const n = holdPosts(w, "h1").length; await s.advance(5000); assert.equal(holdPosts(w, "h1").length, n, "the deadband");
+  s.config.k.pt = 200; await s.advance(5000); assert.equal(holdPosts(w, "h1").at(-1), 1500);
+  s.config.k.hold = 60; await s.advance(5000); assert.equal(holdPosts(w, "h1").at(-1), 1560, "its own calibration (k_hold_ms) is added");
+  s.config.k.hold = 0; await s.advance(5000);
+  s.api.audio({ slug: "pad", playing: false, mode: "mp3" }); assert.equal(holdPosts(w, "h1").at(-1), 0, "the audio stopping lets go at once (the worker ramps)");
+  s.media(); await s.advance(0); assert.equal(holdPosts(w, "h1").at(-1), 1500);
+  const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box); const button = box.children[0];
+  assert.equal(button.hidden, false); assert.match(button.title, /cams/, "the toggle holds this cam");
+  button.click(); assert.equal(holdPosts(w, "h1").at(-1), 0, "toggle off"); button.click(); assert.equal(holdPosts(w, "h1").at(-1), 1500, "toggle on");
+  assert.equal(a.rx.transforms.length, 1, "never re-attached or taken off while the cam plays");
+  // teardown: a closed cam's state is dropped in the worker; a reconnect is a new receiver with its own id
+  a.pc.close(); await s.advance(2000);
+  assert.deepEqual(w.posted.filter((m) => m.close), [{ id: "h1", close: true }]); assert.equal(s.api.debug().tiles.length, 0);
+  const b = s.tile(s.receiver("webkit")); assert.deepEqual(b.rx.transforms[0].options, { id: "h2", ramp: false }); assert.equal(holdPosts(w, "h2").at(-1), 1500, "the current target from its first frame");
+  s.event("pagehide"); assert.equal(holdPosts(w, "h2").at(-1), 0, "leaving: nothing held");
+});
+
+test("iosdelay: the worker's reports reach debug() and the ?avsync=1 panel's cam lines; a cam over a memory cap is said once in the console", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, search: "?avsync=1", config: { ...SAFARI_ON, dbg: true } });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); s.tile(s.receiver("webkit")); s.tile(s.receiver("standard")); s.media(); await s.advance(0);
+  let lines = panel(s);
+  assert.equal(lines[0], "sync for you: ON (your toggle)", "the first line as before");
+  assert.equal(lines[1], "cam 1: frame hold · target 1400 ms · waiting for frames");
+  assert.equal(lines[2], "cam 2: the browser's own delay · target 1400 ms");
+  w.onmessage({ data: { id: "h1", applied: 1380, target: 1400, frames: 42, kb: 120, over: "" } }); await s.advance(2000);
+  lines = panel(s);
+  assert.equal(lines[1], "cam 1: frame hold · target 1400 ms · applied 1380 ms · 42 frames held");
+  assert.deepEqual(plain(s.api.debug().tiles[0].frame_hold), { sent_ms: 1400, applied_ms: 1380, frames: 42, kb: 120, stopped: "" });
+  assert.equal(s.api.debug().tiles[1].frame_hold, null); assert.equal(s.api.debug().tiles[1].method, "jbt");
+  assert.equal(s.warnings.length, 0);
+  w.onmessage({ data: { id: "h1", applied: 0, target: 0, frames: 0, kb: 0, over: "tile" } }); w.onmessage({ data: { id: "h1", applied: 0, target: 0, frames: 0, kb: 0, over: "tile" } });
+  await s.advance(2000);
+  assert.equal(s.warnings.length, 1, "said once"); assert.match(s.warnings[0], /frame hold stopped.*memory cap.*undelayed/);
+  assert.match(panel(s)[1], /stopped: memory cap - plays undelayed$/);
+  w.onmessage({ data: { id: "nobody", applied: 5 } }); w.onmessage({ data: "junk" }); w.onmessage({});   // unknown / odd messages are ignored
+  // every string has its English text in locales/en.json (the other languages sync from it), and the JS fallback is that text
+  const EN = JSON.parse(fs.readFileSync(path.join(__dirname, "../locales/en.json"), "utf8"));
+  let n = 0;
+  for (const m of source.matchAll(/translate\('(js\.[a-z0-9_.]+)', '((?:[^'\\]|\\.)*)'(?:, \{[^}]*\})?\)/g)) { n++; assert.equal(EN[m[1]], m[2].replace(/\\'/g, "'"), m[1]); }
+  for (const m of source.matchAll(/translate\('(js\.[a-z0-9_.]+)', "((?:[^"\\]|\\.)*)"(?:, \{[^}]*\})?\)/g)) { n++; assert.equal(EN[m[1]], m[2], m[1]); }
+  assert.ok(n >= 17, "checked: " + n);
+});
+
+test("iosdelay: no page flag and no settings yet - nothing is attached and the toggle doesn't claim the cams; settings that allow it attach later cams (ramping: the worker was not ready)", async () => {
+  const s = sandbox({ ua: IPHONE, webkit: true, config: { ...SAFARI_ON, apply: { video: true, mic: false, mp3: true, mic_card: false, mic_chat: false, mic_list: false } } });
+  assert.equal(s.workers.length, 0, "no worker without the page's flag");
+  s.api.pad("pad"); const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  const a = s.tile(s.receiver("webkit"));
+  assert.equal(a.rx.transforms.length, 0); assert.equal(s.api.debug().tiles[0].method, "none"); assert.equal(s.api.debug().tiles[0].supported, false);
+  s.media(); await s.advance(0);
+  assert.equal(box.children[0].hidden, true, "nothing this browser can hold back here: the toggle isn't offered");
+  const b = s.tile(s.receiver("webkit"));
+  assert.equal(s.workers.length, 1, "the settings allow it: the worker starts now");
+  assert.deepEqual(b.rx.transforms[0].options, { id: "h1", ramp: true }, "not ready yet: frames pass straight through until it is, then the delay ramps in");
+  assert.equal(holdPosts(s.workers[0], "h1").at(-1), 1400);
+  assert.equal(a.rx.transforms.length, 0, "a cam already playing is never attached mid-stream");
+  await s.advance(2000); assert.equal(box.children[0].hidden, false, "offered once a cam can wait"); assert.match(box.children[0].title, /cams/);
+});
+
+test("iosdelay: settings that rule it out - Safari delay method off, engine_safari off, cams not delayed, mode off, an older site - new cams are never attached, whatever the page's flag said", async () => {
+  for (const [why, change] of [["method off", { safari_method: "off" }], ["engine off", { engines: { chromium: true, firefox: false, safari: false } }],
+    ["video off", { apply: { video: false, mic: true, mp3: true, mic_card: true, mic_chat: true, mic_list: true } }], ["mode off", { on: false }], ["older site", { safari_method: undefined }]]) {
+    const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: { ...SAFARI_ON, ...change } });
+    s.workers[0].onmessage({ data: { ready: true } });
+    s.api.pad("pad"); s.media(); await s.advance(0);
+    const a = s.tile(s.receiver("webkit"));
+    assert.equal(a.rx.transforms.length, 0, why); assert.equal(s.api.debug().tiles[0].method, "none", why);
+  }
+});
+
+test("iosdelay: iOS 27 (jitterBufferTarget): auto uses the browser's own delay - no worker, no transform; 'hold' holds the frames and leaves jitterBufferTarget alone", async () => {
+  const proto = { jitterBufferTarget: null, transform: null };
+  const auto = sandbox({ ua: IPHONE, hold: "auto", webkit: true, rxProto: proto, config: SAFARI_ON });
+  assert.equal(auto.workers.length, 0, "auto with a built-in delay: no worker");
+  auto.api.pad("pad"); const a = auto.tile(auto.receiver("webkit27")); auto.media(); await auto.advance(0);
+  assert.equal(a.rx.transforms.length, 0); assert.equal(a.rx.writes.at(-1), 1400); assert.equal(auto.api.debug().tiles[0].method, "jbt");
+  const forced = sandbox({ ua: IPHONE, hold: "hold", webkit: true, rxProto: proto, config: { ...SAFARI_ON, safari_method: "hold" } });
+  assert.equal(forced.workers.length, 1); forced.workers[0].onmessage({ data: { ready: true } });
+  forced.api.pad("pad"); const b = forced.tile(forced.receiver("webkit27")); forced.media(); await forced.advance(0);
+  assert.equal(b.rx.transforms.length, 1); assert.deepEqual(b.rx.writes, [], "jitterBufferTarget never written: one delay, not two");
+  assert.equal(holdPosts(forced.workers[0], "h1").at(-1), 1400); assert.equal(forced.api.debug().tiles[0].method, "hold");
+});
+
+test("iosdelay: Chromium's path is unchanged - a transform-capable Chrome never attaches, even with data-avsync-hold=hold; nor does any receiver with playoutDelayHint", async () => {
+  const c = sandbox({ hold: "hold", webkit: true, rxProto: { jitterBufferTarget: null, playoutDelayHint: null, transform: null }, config: { ...SAFARI_ON, safari_method: "hold" } });
+  assert.equal(c.workers.length, 0, "Chrome: no worker");
+  c.api.pad("pad"); const a = c.tile(c.receiver("chromium")); c.media(); await c.advance(0);
+  assert.deepEqual(a.rx.transforms, []); assert.equal(a.rx.writes.at(-1), 1400); assert.deepEqual(a.rx.hints, [], "jitterBufferTarget first, as before");
+  assert.equal(c.api.debug().tiles[0].method, "jbt");
+  // an unknown user agent counts as Safari - a receiver with Chrome's playoutDelayHint still never takes the frame hold
+  const u = sandbox({ ua: "SomeBrowser/1.0", hold: "hold", webkit: true, config: { ...SAFARI_ON, safari_method: "hold" } });
+  u.workers.forEach((w) => w.onmessage({ data: { ready: true } }));
+  u.api.pad("pad"); const b = u.tile(u.receiver("chromium")); u.media(); await u.advance(0);
+  assert.deepEqual(b.rx.transforms, []); assert.equal(b.rx.writes.at(-1), 1400);
+  // Firefox (its own jitterBufferTarget) with every switch on
+  const f = sandbox({ ua: "Firefox/145.0", hold: "hold", webkit: true, config: { engines: { chromium: true, firefox: true, safari: true }, safari_method: "hold" } });
+  assert.equal(f.workers.length, 0); f.api.pad("pad"); const x = f.tile(f.receiver("webkit27")); f.media(); await f.advance(0);
+  assert.deepEqual(x.rx.transforms, []); assert.equal(x.rx.writes.at(-1), 1400);
+});
+
+test("iosdelay: a worker that fails (won't load, or breaks) - the transforms come off so the cams pass straight through, nothing claims a delay, said once; a blocked Worker never attaches", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
+  let prevented = false; w.onerror({ preventDefault() { prevented = true; } });
+  assert.equal(a.rx.transforms.at(-1), null, "taken off: WebKit passes the frames straight through again");
+  assert.equal(s.api.debug().tiles[0].method, "none"); assert.equal(s.api.debug().tiles[0].supported, false); assert.equal(prevented, true);
+  assert.equal(s.warnings.length, 1); assert.match(s.warnings[0], /frame hold could not run/);
+  const b = s.tile(s.receiver("webkit")); assert.equal(b.rx.transforms.length, 0, "no new attach"); w.onerror({}); assert.equal(s.warnings.length, 1);
+  const blocked = sandbox({ ua: IPHONE, hold: "auto", webkit: true, workerThrows: true, config: SAFARI_ON });
+  blocked.api.pad("pad"); const c = blocked.tile(blocked.receiver("webkit"));
+  assert.equal(c.rx.transforms.length, 0); assert.equal(blocked.api.debug().tiles[0].method, "none");
+  // no RTCRtpScriptTransform at all (a very old iPhone): nothing to attach, no worker
+  const old = sandbox({ ua: IPHONE, hold: "auto", config: SAFARI_ON });
+  assert.equal(old.workers.length, 0); old.api.pad("pad"); const d = old.tile(old.receiver("webkit"));
+  assert.equal(d.rx.transforms.length, 0); assert.equal(old.api.debug().tiles[0].method, "none");
+});
+
+test("iosdelay: the page pins the hold worker's version, and the worker file is plain JS for a dedicated worker that never sends or stores anything", () => {
+  assert.match(source, /'\/public\/js\/av-sync-hold\.js\?v=1'/);
+  const worker = fs.readFileSync(path.join(__dirname, "../public/js/av-sync-hold.js"), "utf8");
+  assert.match(worker, /self\.onrtctransform = /); assert.match(worker, /self\.onmessage = /);
+  assert.doesNotMatch(worker, /\b(fetch|XMLHttpRequest|WebSocket|indexedDB|localStorage|importScripts|sendBeacon)\b/);
 });

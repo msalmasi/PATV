@@ -88,7 +88,7 @@ test("admin capability + same-site fetch, every save versioned and audited, inva
   assert.equal(audit[0].admin_id, "adm");
   const prior = AV.current(); AV._reset(); await AV.init(); assert.deepEqual(AV.current(), prior, "versioned database row survives process cache reset");
   const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
-  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=4/);   // 1.99ahm: 3 - Delay the people list's 🎙 icons; 1.99ait avf: 4 - the mic-sign fallbacks, mic_follow_toggle
+  const html = await page.text(); assert.equal(page.status, 200); assert.match(html, /id="av-sync"/); assert.match(html, /admin-avsync\.js\?v=5/);   // (iosdelay: 5 - Safari delay method, k_hold_ms) 1.99ahm: 3 - Delay the people list's 🎙 icons; 1.99ait avf: 4 - the mic-sign fallbacks, mic_follow_toggle
 });
 
 test("public route requires sign-in/full pad access; mode does not grant access; no identifiers or unheld cams", async () => {
@@ -431,4 +431,63 @@ test("1.99ait avf review: the admin card says which way each calibration moves (
   assert.ok(C.labelOf("fallback_rtc_ms").textContent.startsWith("Cam WebRTC fallback delay (ms)"), C.labelOf("fallback_rtc_ms").textContent);
   assert.ok(C.labelOf("fallback_mp3_ms").textContent.startsWith("Cam MP3 fallback delay (ms)"), C.labelOf("fallback_mp3_ms").textContent);
   assert.doesNotMatch(C.fields.textContent, /undefined|MISSING/);
+});
+
+// iosdelay (1.99alg): Safari / iPhone / iPad before iOS 27 (every iPhone browser, Chrome too) have no cam delay of their own - av-sync.js
+// holds their cams' frames in a worker. "Safari delay method" says how (auto: the browser's own where it has one, else the frame hold;
+// hold: always the frame hold on WebKit; off: only the browser's own), k_hold_ms calibrates it, and the pad page's script tag carries
+// the method (data-avsync-hold) because the transform must be on a cam before its first frame, before the page asks for these settings.
+test("iosdelay: Safari delay method (auto / hold / off, default auto) and k_hold_ms (0, -1000..1000) - audited, in the viewer's answer; data-avsync-hold only while the mode, cam delay and engine_safari apply; an older stored row reads the defaults", async () => {
+  assert.equal(AV.DEFAULTS.safari_method, "auto"); assert.deepEqual(AV.FIELDS.safari_method.choices, ["auto", "hold", "off"]);
+  assert.deepEqual([AV.DEFAULTS.k_hold_ms, AV.FIELDS.k_hold_ms.min, AV.FIELDS.k_hold_ms.max], [0, -1000, 1000]);
+  assert.ok(AV.normalize({ safari_method: "always" }).errors.safari_method); assert.equal(AV.normalize({ safari_method: " HOLD " }).cfg.safari_method, "hold");
+  const keys = Object.keys(AV.FIELDS);
+  assert.equal(keys.indexOf("safari_method"), keys.indexOf("engine_safari") + 1, "the card draws it under Enable Safari video delay");
+  assert.equal(keys.indexOf("k_hold_ms"), keys.indexOf("k_re_ms") + 1, "with the other cam calibrations");
+  const A = { userId: "adm-ios", username: "adm-ios", class: "Admin" }, adm = { userId: "adm", class: "Admin" }, v1 = { userId: "v1", class: "pleb" };
+  const before = await get(publicPath(), "v2");
+  assert.deepEqual([before.data.safari_method, before.data.k.hold], ["auto", 0], "the defaults reach viewers");
+  assert.equal(AV.holdHint(adm), "", "dark by default (mode off, engine_safari off)");
+  await AV.save(A, { cfg: { mode: "admins", engine_safari: false } }); assert.equal(AV.holdHint(adm), "", "engine_safari off");
+  await AV.save(A, { cfg: { engine_safari: true } });
+  assert.deepEqual([AV.holdHint(adm), AV.holdHint(v1), AV.holdHint(null), AV.holdHint({ username: "no-id" })], ["auto", "", "", ""], "only while the mode applies to the viewer");
+  const saved = await AV.save(A, { cfg: { safari_method: "hold", k_hold_ms: -80 } });
+  assert.deepEqual([saved.changed.safari_method, saved.changed.k_hold_ms], [["auto", "hold"], [0, -80]]);
+  const audit = await db.getQuery("SELECT detail FROM admin_audit WHERE action = 'avsync_cfg' ORDER BY id DESC LIMIT 1");
+  assert.deepEqual(JSON.parse(audit[0].detail).changed.safari_method, ["auto", "hold"], "audited like the others");
+  assert.equal(AV.holdHint(adm), "hold");
+  const on = await get(publicPath(), "adm"); assert.deepEqual([on.data.safari_method, on.data.k.hold, on.data.k.pt], ["hold", -80, 0]);
+  // the pad page: av-sync.js's tag carries the method only while it may be used
+  app.locals.webrtcCfg = () => ({ base: "https://relay.example.invalid", turn: "/api/turn" });
+  const page = async (user) => { const r = await fetch(base + "/p/alpha", { headers: { "x-test-user": user } }); const html = await r.text(); assert.equal(r.status, 200, html.slice(0, 300)); return html; };
+  try {
+    assert.match(await page("adm"), /<script src="\/public\/js\/av-sync\.js\?v=9" data-avsync-hold="hold"><\/script>/);
+    await AV.save(A, { cfg: { apply_video: false } }); assert.equal(AV.holdHint(adm), "", "cams not delayed");
+    assert.match(await page("adm"), /<script src="\/public\/js\/av-sync\.js\?v=9"><\/script>/, "no flag: no frame hold from the first cam");
+    await AV.save(A, { cfg: { apply_video: true, safari_method: "off" } }); assert.equal(AV.holdHint(adm), "", "method off");
+    assert.doesNotMatch(await page("adm"), /data-avsync-hold/);
+    await AV.save(A, { cfg: { mode: "everyone", safari_method: "auto" } });
+    assert.match(await page("v1"), /av-sync\.js\?v=9" data-avsync-hold="auto">/, "everyone: a viewer too");
+  } finally { delete app.locals.webrtcCfg; }
+  // a row saved before these fields existed: the defaults, everything else as it was
+  await db.runQuery("UPDATE avsync_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "everyone", engine_safari: true, k_re_ms: 20 })]);
+  AV._reset(); await AV.init();
+  const c = AV.current().cfg;
+  assert.deepEqual([c.safari_method, c.k_hold_ms, c.engine_safari, c.k_re_ms], ["auto", 0, true, 20]);
+  // the admin card draws them with their labels and help (locales/en.json); Enable Safari video delay says what it covers now
+  const data = (await get("/api/admin/pepe/avsync", "adm")).data;
+  const C = adminCard(data); for (let i = 0; i < 12; i++) await Promise.resolve();
+  const method = C.labelOf("safari_method"), k = C.labelOf("k_hold_ms"), engine = C.labelOf("engine_safari");
+  assert.ok(method && k && engine, "drawn");
+  assert.ok(method.textContent.startsWith(C.EN["js.admavsync.safari_method"] + " ") && method.textContent.includes(C.EN["js.admavsync.safari_method_help"]), method.textContent);
+  assert.match(C.EN["js.admavsync.safari_method_help"], /iPhone/); assert.match(C.EN["js.admavsync.safari_method_help"], /auto/); assert.match(C.EN["js.admavsync.safari_method_help"], /\?avsync=1/);
+  assert.ok(k.textContent.startsWith(C.EN["js.admavsync.k_hold_ms"]) && k.textContent.includes("default 0 · -1000–1000") && k.textContent.includes(C.EN["js.admavsync.k_hold_help"]), k.textContent);
+  assert.match(C.EN["js.admavsync.k_hold_help"], /ahead of the voice[^.]*raise/i);
+  assert.ok(engine.textContent.includes(C.EN["js.admavsync.engine_safari_help"]), engine.textContent); assert.match(C.EN["js.admavsync.engine_safari_help"], /Chrome/);
+  const options = method.children.find((x) => x.name === "safari_method").children.map((o) => o.value); assert.deepEqual(options, ["auto", "hold", "off"]);
+  assert.doesNotMatch(C.fields.textContent, /undefined|MISSING/);
+  const admin = await (await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } })).text();
+  assert.match(admin, /admin-avsync\.js\?v=5/); assert.match(admin, /iPhone/, "the card's intro says how iPhones get it");
+  await AV.save(A, { reset: true });
+  assert.deepEqual([AV.current().cfg.safari_method, AV.current().cfg.k_hold_ms], ["auto", 0], "reset: the defaults");
 });

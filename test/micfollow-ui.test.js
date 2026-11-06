@@ -168,8 +168,8 @@ test("room.ejs: stage-mic.js only with WebRTC; ONE setMic, inside safe(); the sw
   // (wave2 WP-4: av-sync.js?v=3 - it delays the dynamic layout's `ring` like newest / recent; 1.99ahm: v=4 - the On the mic card / chat lines;
   // v=5 - the people list's 🎙 icons; 1.99ahp v=6 - a stable program's places too; 1.99ait avf v=7 - the toggle shows on / off, the
   // mic signs' own fallback, the held room-audio latency, mic_follow_toggle; Room Dock v=8 - a PiP window's own visibility)
-  assert.ok(blk.indexOf('av-sync.js?v=8') >= 0 && blk.indexOf('av-sync.js?v=8') < blk.indexOf('webrtc-client.js?v=7'), 'controller loads before live-cam receivers');
-  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=8"><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer");
+  assert.ok(blk.indexOf('av-sync.js?v=9') >= 0 && blk.indexOf('av-sync.js?v=9') < blk.indexOf('webrtc-client.js?v=7'), 'controller loads before live-cam receivers');   // (iosdelay: v=9 - the Safari / iPhone frame hold)
+  assert.match(blk, /<% if \(locals\.avsyncOn\) \{ %><script src="\/public\/js\/av-sync\.js\?v=9"<% if \(locals\.avsyncHold\) \{ %> data-avsync-hold="<%= locals\.avsyncHold %>"<% \} %>><\/script><% \} %>/, "review fix: only while lip sync applies to the viewer (iosdelay: + data-avsync-hold)");
   assert.match(room, /window\.PATVPadStage = PATVStage\.switcher\(\{/);
   // (1.99ajq dockpol (owner H5): the homepage renders the front pad's mic stage ONLY for a signed-in viewer with access - home.js homeMic, its
   // script only then and only with WebRTC; home-dock.js hands each gated program to setMic only while I.micStage)
