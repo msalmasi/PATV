@@ -1056,6 +1056,10 @@ test("review fix F2: a worker that ran and then threw keeps its transforms (taki
   assert.equal(holdPosts(w, "h1").length, holdPosts(w, "h1").length); assert.ok(!w.posted.slice(n).some((m) => "hold" in m && m.hold > 0), "never asked to hold again");
   const b = s.tile(s.receiver("webkit")); assert.equal(b.rx.transforms.length, 0, "no new attach");
   a.pc.close(); await s.advance(2000); assert.ok(w.posted.some((m) => m.id === "h1" && m.close), "its state is still dropped when it closes");
+  // a kick while it ramps out still drops what it holds at once
+  const k = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const kw = k.workers[0]; kw.onmessage({ data: { ready: true } }); k.api.pad("pad"); const kt = k.tile(k.receiver("webkit", { transport: true })); k.media(); await k.advance(0);
+  kw.onerror({}); kt.rx.transport.set("closed"); assert.ok(kw.posted.some((m) => m.id === "h1" && m.close), "kicked while 'off': dropped");
 });
 
 test("review fix C1: the server ending a cam (its DTLS transport closes: a ban, a block, the 18+ gate, a cover, a veil, an opt-out) drops what the worker holds at once - never shown, whatever the page's fast_end or tick", async () => {

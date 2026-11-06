@@ -39,6 +39,7 @@
     try { var v = D.currentScript && D.currentScript.getAttribute ? D.currentScript.getAttribute('data-avsync-hold') : ''; return v === 'auto' || v === 'hold' ? v : ''; } catch (e) { return ''; }
   })();
   var hold = { worker: null, ready: false, failed: false, seq: 0 };
+  var wantsReports = /(?:^|[?&])avsync=1(?:&|$)/.test(W.location && W.location.search || '');   // (review fix F4: the panel's reports)
   function holdKit() { return typeof W.RTCRtpScriptTransform === 'function' && typeof W.Worker === 'function'; }
   function pathOf(url) {
     // The query can contain a reader ticket. It is never stored, sent or included in debug output.
@@ -126,10 +127,11 @@
     return c.on && c.apply && c.apply.video && c.engines && c.engines.safari && (m === 'auto' || m === 'hold') ? m : '';
   }
   // iosdelay: how this receiver's cam is delayed - 'jbt' (jitterBufferTarget), 'pdh' (Chrome's playoutDelayHint), 'hold' (the frame
-  // hold) or 'none'. auto holds frames only where the browser has no delay of its own; hold also where WebKit has one (iOS 27+).
-  function apiFor(rx, pad) {
+  // hold) or 'none'; 'off' = a frame hold whose worker broke after it ran (its transform stays, passing frames through). auto holds
+  // frames only where the browser has no delay of its own; hold also where WebKit has one (iOS 27+). noHold: this cam's hold stopped.
+  function apiFor(rx, pad, noHold) {
     var jbt = 'jitterBufferTarget' in rx, pdh = 'playoutDelayHint' in rx, m = '';
-    if (browserEngine === 'safari' && !pdh && 'transform' in rx && holdKit() && !hold.failed) m = holdMethod(pad);
+    if (!noHold && browserEngine === 'safari' && !pdh && 'transform' in rx && holdKit() && !hold.failed) m = holdMethod(pad);
     if (m === 'hold' || m === 'auto' && !jbt) return 'hold';
     return jbt ? 'jbt' : pdh ? 'pdh' : 'none';
   }
@@ -138,33 +140,62 @@
     try {
       var w = new W.Worker(HOLD_SRC);
       w.onmessage = holdMessage;
-      // it won't load, or it broke: the cams pass straight through (holdFailed)
+      // it won't load, or it broke (holdFailed)
       w.onerror = function (event) { try { if (event && event.preventDefault) event.preventDefault(); } catch (e) { /* fine */ } holdFailed(); };
-      hold.worker = w; w.postMessage({ ping: true });
+      hold.worker = w; w.postMessage({ ping: true, report: wantsReports });   // (review fix F4: reports only for the ?avsync=1 panel)
     } catch (e) { hold.worker = null; holdFailed(); }
     return hold.worker;
   }
-  function holdPost(message) { try { if (hold.worker && !hold.failed) hold.worker.postMessage(message); } catch (e) { /* the worker is gone */ } }
+  function holdPost(message) { try { if (hold.worker) hold.worker.postMessage(message); } catch (e) { /* the worker is gone */ } }
   function warn(text) { try { if (W.console && W.console.warn) W.console.warn('[av-sync] ' + text); } catch (e) { /* no console */ } }
   function holdMessage(event) {
     var d = event && event.data;
     if (!d || typeof d !== 'object') return;
     if (d.ready) { hold.ready = true; return; }
     var entry = typeof d.id === 'string' ? receivers.filter(function (r) { return r.holdId === d.id; })[0] : null;
-    if (!entry) return;
-    entry.held = { applied: number(d.applied), frames: number(d.frames), kb: number(d.kb), over: typeof d.over === 'string' ? d.over.slice(0, 12) : '' };
-    // the worker failed open (a memory cap): this cam plays undelayed until it reconnects - said once
-    if (entry.held.over && !entry.overTold) { entry.overTold = true; warn('a cam\'s frame hold stopped (' + entry.held.over + ' memory cap) - that cam plays undelayed until it reconnects'); }
+    if (!entry || entry.api !== 'hold') return;
+    if (d.in) { entry.inAt = Date.now(); return; }          // its frames reach the worker (the watchdog)
+    if (d.key) { entry.keyAt = Date.now(); return; }        // its first key frame went out of it (the watchdog)
+    var over = typeof d.over === 'string' ? d.over.slice(0, 12) : '';
+    // review fix (C2): its frames can no longer get through the worker - the transform comes off ('ended': the receiver stopped - quietly)
+    if (d.dead) { holdDead(entry, over === 'ended' ? '' : 'its stream broke'); return; }
+    entry.held = { applied: number(d.applied), frames: number(d.frames), over: over };
+    // the worker failed open (a memory cap, an error): this cam plays undelayed until it reconnects - said once
+    if (over && !entry.overTold) {
+      entry.overTold = true; entry.supported = false; entry.target = null;
+      warn('a cam\'s frame hold stopped (' + (over === 'error' ? 'an error' : over + ' memory cap') + ') - that cam plays undelayed until it reconnects');
+    }
+  }
+  // review fix (C2): this cam's frames can no longer get through the worker (a broken stream, a transform it couldn't read from, or
+  // the watchdog: nothing reaches the decoder) - the transform comes off, so WebKit passes its frames straight through again, and the
+  // cam plays undelayed until it reconnects (said once, unless why is '').
+  function holdDead(entry, why) {
+    if (entry.api !== 'hold') return;
+    try { entry.receiver.transform = null; } catch (e) { /* passes through anyway */ }
+    holdPost({ id: entry.holdId, close: true });
+    unwatch(entry);
+    entry.holdId = null; entry.held = null; entry.api = apiFor(entry.receiver, entry.pad, true); entry.target = undefined;
+    setTarget(entry, targetFor(entry), true);
+    if (why) warn('a cam\'s frame hold stopped (' + why + ') - that cam plays undelayed until it reconnects');
+    notify();
   }
   function holdFailed() {
     if (hold.failed) return;
+    var ran = hold.ready;
     hold.failed = true; hold.ready = false;
     warn('the cam frame hold could not run - Safari / iPhone cams play undelayed');
     receivers.forEach(function (entry) {
       if (entry.api !== 'hold') return;
-      // off the receiver: WebKit passes its frames straight through again (an unstarted transform never touched them)
-      try { entry.receiver.transform = null; } catch (e) { /* passes through anyway */ }
-      entry.holdId = null; entry.held = null; entry.api = apiFor(entry.receiver, entry.pad);
+      unwatch(entry, ran);                  // (ran: still watching its transport - a kick drops what it is still ramping out)
+      if (ran) {
+        // review fix (F2): a worker that ran and then threw keeps its transforms - taking one off now would lose the frames it holds
+        // (WebKit drops them: the cam would freeze until its next key frame, then jump) - and lets go of the delay instead (it ramps)
+        holdPost({ id: entry.holdId, hold: 0 }); entry.api = 'off'; entry.sent = 0; entry.held = null;
+      } else {
+        // it never started: WebKit never handed it a frame - off the receiver, its frames pass straight through as before
+        try { entry.receiver.transform = null; } catch (e) { /* passes through anyway */ }
+        entry.holdId = null; entry.held = null; entry.api = apiFor(entry.receiver, entry.pad);
+      }
       setTarget(entry, targetFor(entry), true);
     });
     notify();
@@ -178,12 +209,71 @@
       var id = 'h' + (++hold.seq);
       entry.receiver.transform = new W.RTCRtpScriptTransform(w, { id: id, ramp: !hold.ready });
       entry.holdId = id;
-    } catch (e) { entry.holdId = null; entry.api = 'jitterBufferTarget' in entry.receiver ? 'jbt' : 'none'; }
+    } catch (e) { entry.holdId = null; entry.api = 'jitterBufferTarget' in entry.receiver ? 'jbt' : 'none'; return; }
+    watchTransport(entry); watchdog(entry);
+  }
+  // review fix (C1): the cam's connection is gone - a ban, a block, the 18+ gate, a cover, a veil change or an opt-out ends it on the
+  // server and MediaMTX closes it (DTLS close_notify): what the worker holds is dropped at once, never shown - the picture stops where
+  // the kick found it, as it did before the frame hold, whether or not the page has noticed (fast_end) or closed the tile yet.
+  function endHold(entry) {
+    if (entry.holdEnded || !entry.holdId) return;
+    entry.holdEnded = true; unwatch(entry, true);
+    holdPost({ id: entry.holdId, close: true });
+  }
+  function watchTransport(entry) {
+    if (entry.trWatch || entry.holdEnded) return;
+    var tr = null; try { tr = entry.receiver.transport; } catch (e) { /* none */ }
+    if (!tr || typeof tr.addEventListener !== 'function') return;          // (not yet: the next tick looks again)
+    var check = function () { if (tr.state === 'closed' || tr.state === 'failed') endHold(entry); };
+    entry.trWatch = { tr: tr, fn: check }; tr.addEventListener('statechange', check); check();
+  }
+  function unwatch(entry, keepTransport) {
+    clearTimeout(entry.wd); entry.wd = null;
+    if (!keepTransport && entry.trWatch) { try { entry.trWatch.tr.removeEventListener('statechange', entry.trWatch.fn); } catch (e) { /* gone */ } entry.trWatch = null; }
+  }
+  // review fix (C2): the transform goes on every Safari / iPhone cam from its first frame, room audio or not - a WebKit whose transform
+  // never lets frames through would black those cams out. While its packets keep arriving with nothing decoded: WD_KEY_MS after the
+  // worker let its first key frame out, or WD_IN_MS without a frame ever reaching the worker -> the transform comes off (holdDead).
+  // Done once a frame is decoded after that key frame; a browser whose stats don't say (packetsReceived, framesDecoded) isn't judged.
+  var WD_FIRST_MS = 4000, WD_EVERY_MS = 3000, WD_CHECKS = 30, WD_IN_MS = 20000, WD_KEY_MS = 4000;
+  function watchdog(entry) {
+    clearTimeout(entry.wd);
+    entry.wd = setTimeout(function () { entry.wd = null; watchCheck(entry); }, entry.wdN ? WD_EVERY_MS : WD_FIRST_MS);
+  }
+  function watched(entry) { return !stopped && entry.api === 'hold' && !entry.holdEnded && receivers.indexOf(entry) >= 0; }   // (the first check only records)
+  function watchCheck(entry) {
+    if (!watched(entry) || (entry.wdN = (entry.wdN || 0) + 1) > WD_CHECKS) return;
+    flowOf(entry.pc).then(function (f) {
+      if (!f || !watched(entry)) return;
+      var now = Date.now(), prev = entry.wdLast; entry.wdLast = { at: now, packets: f.packets, decoded: f.decoded };
+      if (prev && f.decoded > prev.decoded) {
+        if (entry.keyAt != null && prev.at >= entry.keyAt) return;        // decoded after its key frame went out of the worker: it works
+        entry.wdFlat = null;
+      } else if (prev && f.packets > prev.packets && entry.wdFlat == null) entry.wdFlat = prev.at;   // arriving, nothing decoded since
+      var flat = entry.wdFlat == null ? 0 : now - entry.wdFlat;
+      if (entry.keyAt != null ? flat >= WD_KEY_MS && now - entry.keyAt >= WD_KEY_MS : entry.inAt == null && flat >= WD_IN_MS) { holdDead(entry, 'no frames got through'); return; }
+      watchdog(entry);
+    }, function () { if (watched(entry)) watchdog(entry); });
+  }
+  function flowOf(pc) {
+    if (!pc || !pc.getStats || pc.signalingState === 'closed') return Promise.reject(new Error('No stats'));
+    return within(Promise.resolve().then(function () { return pc.getStats(); }), 2500).then(function (report) {
+      var packets = null, decoded = null;
+      report.forEach(function (row) {
+        if (row.type !== 'inbound-rtp' || row.isRemote || (row.kind || row.mediaType) !== 'video') return;
+        if (number(row.packetsReceived) != null) packets = (packets || 0) + row.packetsReceived;
+        var d = number(row.framesDecoded) != null ? row.framesDecoded : number(row.framesReceived);
+        if (d != null) decoded = (decoded || 0) + d;
+      });
+      return packets == null || decoded == null ? null : { packets: packets, decoded: decoded };
+    });
   }
   function targetFor(entry, ignoreToggle) {
     if (!eligible(entry.pad, 'video', ignoreToggle)) return null;
     var c = cfgFor(entry.pad), cam = c.cams && c.cams[entry.path], input = inputs(entry.pad);
     input.hold = cam && number(cam.hold_ms); input.k = cam && c.k && c.k[cam.src === 'passthrough' || cam.src === 'pt' ? 'pt' : 're'];
+    // review fix (C3): the frame hold's own calibration (k_hold_ms) goes in before the cap, as k_pt / k_re do
+    if (entry.api === 'hold' && c.k && number(c.k.hold) != null) input.k = (number(input.k) || 0) + c.k.hold;
     input.statsOK = input.statsOK && entry.statsOK;
     input.net = sound.mode === 'rtc' && number(soundStats.rtt) != null && number(entry.rtt) != null ? (soundStats.rtt - entry.rtt) * 500 : 0;
     return videoTarget(input);
@@ -191,7 +281,8 @@
   function setTarget(entry, target, force) {
     target = number(target) == null || target <= 0 ? null : clamp(target, 0, 4000);
     var c = cfgFor(entry.pad), band = c ? bounded(c.deadband, 0, 500, 40) : 40;
-    if (entry.api === 'hold') { setHold(entry, target, band, force, c); return; }   // iosdelay
+    if (entry.api === 'hold') { setHold(entry, target, band, force); return; }   // iosdelay
+    if (entry.api === 'off') { entry.supported = false; entry.target = null; return; }   // (its worker broke: passes frames through)
     if (!force && entry.target !== undefined && (entry.target === target || target != null && entry.target != null && Math.abs(target - entry.target) <= band)) return;
     try {
       if ('jitterBufferTarget' in entry.receiver) entry.receiver.jitterBufferTarget = target;
@@ -200,21 +291,27 @@
       entry.supported = true; entry.target = target;
     } catch (e) { entry.supported = false; entry.target = null; }
   }
-  // iosdelay: the frame hold's target = the same target + its own calibration (k_hold_ms); null = 0, a pass-through (the worker ramps)
-  function setHold(entry, target, band, force, c) {
-    var k = c && c.k ? number(c.k.hold) || 0 : 0, ms = target == null ? 0 : Math.round(clamp(target + k, 0, 4000));
+  // iosdelay: the frame hold's target (k_hold_ms already in it - review fix C3); null = 0, a pass-through (the worker ramps). Review fix
+  // (F6): with the Safari delay method switched off since this cam attached it is 0 too, and so it is once its worker stopped holding
+  // it (a cap, an error) - neither claims to wait.
+  function setHold(entry, target, band, force) {
+    var stopped = !!(entry.held && entry.held.over), off = stopped || !!(configs[entry.pad] && configs[entry.pad].data && !holdMethod(entry.pad));
+    if (off) target = null;
+    var ms = target == null ? 0 : Math.round(clamp(target, 0, 4000));
+    entry.supported = !off;
     if (!force && entry.target !== undefined && (entry.sent === ms || ms > 0 && entry.sent > 0 && Math.abs(ms - entry.sent) <= band)) return;
-    holdPost({ id: entry.holdId, hold: ms });
-    entry.sent = ms; entry.target = target; entry.supported = true;
+    if (!stopped && !entry.holdEnded) holdPost({ id: entry.holdId, hold: ms });
+    entry.sent = ms; entry.target = target;
   }
   function pruneReceivers() {
     receivers = receivers.filter(function (entry) {
       if (!entry.pc || entry.pc.signalingState === 'closed' || entry.pc.connectionState === 'closed') {
-        if (entry.api === 'hold') holdPost({ id: entry.holdId, close: true });   // iosdelay: its held frames are dropped in the worker
+        if (entry.holdId) { endHold(entry); unwatch(entry); }   // iosdelay: its held frames are dropped in the worker (hold or off)
         else setTarget(entry, null, true);
         if (entry.pc && entry.pc.removeEventListener && entry.closeListener) entry.pc.removeEventListener('connectionstatechange', entry.closeListener);
         return false;
       }
+      if ((entry.api === 'hold' || entry.api === 'off') && !entry.trWatch) watchTransport(entry);   // (review fix C1: a transport that wasn't there in ontrack)
       return true;
     });
     Object.keys(configs).forEach(function (pad) {
@@ -326,11 +423,12 @@
     if (existing) return;
     var pad = slug(options.pad) || defaultPad(), path = pathOf(options.url);
     var entry = { receiver: receiver, pc: options.pc, pad: pad, path: path, target: undefined, rtt: null, diagnostics: {}, statsOK: true, supported: false,
-      api: 'none', holdId: null, held: null, sent: null };
+      api: 'none', holdId: null, held: null, sent: null, inAt: null, keyAt: null, holdEnded: false, trWatch: null, wd: null };
     receivers.push(entry);
     entry.api = apiFor(receiver, pad);
     if (entry.api === 'hold') attachHold(entry);      // iosdelay: before watch() assigns srcObject - before any frame
-    entry.closeListener = function () { pruneReceivers(); };
+    // (review fix C1: a failed connection drops what the worker holds at once too)
+    entry.closeListener = function () { if (entry.pc.connectionState === 'failed') endHold(entry); pruneReceivers(); };
     if (entry.pc.addEventListener) entry.pc.addEventListener('connectionstatechange', entry.closeListener);
     // This synchronous write precedes watch() assigning srcObject. A known path uses its last valid target.
     var sibling = receivers.filter(function (r) { return r !== entry && r.pad === pad && r.path === path && r.target != null; })[0];
@@ -622,9 +720,10 @@
       tiles: receivers.map(function (entry, index) { var cam = c && c.cams && c.cams[entry.path]; return { slot: index + 1, same_pad: entry.pad === sound.slug,
         hold_ms: cam ? number(cam.hold_ms) : null, src: cam && ['passthrough', 'pt', 'reencode'].indexOf(cam.src) >= 0 ? cam.src : null,
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),
-        method: entry.api,   // iosdelay: jbt / pdh / hold / none
-        frame_hold: entry.api === 'hold' ? { sent_ms: number(entry.sent), applied_ms: entry.held ? entry.held.applied : null,
-          frames: entry.held ? entry.held.frames : null, kb: entry.held ? entry.held.kb : null, stopped: entry.held ? entry.held.over : '' } : null,
+        method: entry.api,   // iosdelay: jbt / pdh / hold / off / none
+        frame_hold: entry.api === 'hold' || entry.api === 'off' ? { sent_ms: number(entry.sent), applied_ms: entry.held ? entry.held.applied : null,
+          frames: entry.held ? entry.held.frames : null, stopped: entry.api === 'off' ? 'error' : entry.held ? entry.held.over : '',
+          frames_in: entry.inAt != null, key_out: entry.keyAt != null, ended: !!entry.holdEnded } : null,
         playout_delay_extension: !!(entry.pc.remoteDescription && /a=extmap:[^\r\n]*playout-delay/.test(entry.pc.remoteDescription.sdp || '')) }; }) };
   }
   // 1.99ait avf (F2): the viewer's toggle shows its state - "Sync to the audio: on" / "... off", the `on` class (room-bridge.css
@@ -668,13 +767,15 @@
     if (!receivers.length) return [translate('js.pad.audio.avsync_cams_none', 'cams: none open')];
     return receivers.map(function (r, i) {
       var how = r.api === 'hold' ? translate('js.pad.audio.avsync_how_hold', 'frame hold') : r.api === 'jbt' || r.api === 'pdh' ? translate('js.pad.audio.avsync_how_own', "the browser's own delay")
+        : r.api === 'off' ? translate('js.pad.audio.avsync_how_off', 'frame hold stopped (an error) - plays undelayed')
         : translate('js.pad.audio.avsync_how_none', "none - this browser can't hold cams back here");
       var t = number(r.target), line = translate('js.pad.audio.avsync_cam', 'cam {n}: {how} · target {ms}', { n: i + 1, how: how, ms: t == null ? '-' : Math.round(t) + ' ms' });
       if (r.api !== 'hold') return line;
       var h = r.held;
       line += ' · ' + (h && h.applied != null ? translate('js.pad.audio.avsync_cam_held', 'applied {ms} ms · {frames} frames held', { ms: h.applied, frames: h.frames == null ? 0 : h.frames })
         : translate('js.pad.audio.avsync_cam_wait', 'waiting for frames'));
-      if (h && h.over) line += ' · ' + translate('js.pad.audio.avsync_cam_over', 'stopped: memory cap - plays undelayed');
+      if (h && h.over) line += ' · ' + (h.over === 'error' ? translate('js.pad.audio.avsync_cam_err', 'stopped: an error - plays undelayed')
+        : translate('js.pad.audio.avsync_cam_over', 'stopped: memory cap - plays undelayed'));
       return line;
     });
   }
