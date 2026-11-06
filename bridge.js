@@ -2550,6 +2550,7 @@ function register(app, { isBotToken, addUser }) {
       padDockOn: true,
       vt: signedIn ? require("./roompm").tag(req.user.userId) : null,
       avsyncOn: require("./avsync").viewerOn(req.user),
+      avsyncHold: require("./avsync").holdHint(req.user),   // iosdelay: the Safari / iPhone frame hold (av-sync.js data-avsync-hold)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),
       clipAcct: !!(signedIn && !linked && (() => { try { return require("./cliplink").accountOk(live.id); } catch (e) { return false; } })()),
       room: { id: live.id, name: title, slug, count: live.count, live: isLive(live), topic: live.topic ? await require("./chatlogview").redactLoaded(live.topic) : "",
@@ -2680,6 +2681,7 @@ function register(app, { isBotToken, addUser }) {
       plexPlay,      // 1.99ajw casino2: the Dock's 📼 Play from Plex (null = not offered)
       vt: vt_,   // 1.99ajh dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
+      avsyncHold: require("./avsync").holdHint(req.user),   // iosdelay: the Safari / iPhone frame hold (av-sync.js data-avsync-hold)
       acctActor: !!(signedIn && !linked && require("./actorcap").on()),   // 1.99wv: relay lines / DJ / Pepe menu as the PATV account
       // 1.99aiq cliplink: 🔊 Clip for an account with no linked Camfrog name - the pad's switch is off and Pepe can (cliplink.accountOk)
       clipAcct: !!(signedIn && !linked && (() => { try { return require("./cliplink").accountOk(R.id); } catch (e) { return false; } })()),

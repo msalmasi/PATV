@@ -655,7 +655,7 @@
 <% if (chatOnly_) { %>
   <%# 1.99ajh dockpop: the window's room audio (⚡ WebRTC) and the camera sheet's ▶ Live need the WebRTC client; av-sync holds mic grab /
       drop lines to the audio (both only while their switches say so, as on the pad page) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9"><% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %><script src="/public/js/webrtc-client.js?v=7"></script><% } %>
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9"><% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=9"<% if (locals.avsyncHold) { %> data-avsync-hold="<%= locals.avsyncHold %>"<% } %>></script><% } %><script src="/public/js/webrtc-client.js?v=7"></script><% } %>
 <% } else { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0 || !!(RS.featured && RS.featured.next);
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
@@ -664,7 +664,7 @@
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
-  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
+  <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=9"<% if (locals.avsyncHold) { %> data-avsync-hold="<%= locals.avsyncHold %>"<% } %>></script><% } %>
   <script src="/public/js/webrtc-client.js?v=7"></script>
   <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>

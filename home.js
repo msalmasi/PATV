@@ -359,6 +359,7 @@ function register(app, { addUser, xpForNextLevel }) {
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
         roomOnStage: roomOnStage_, stageAdmin, frontInfo, pepeHere,
         avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)
+        avsyncHold: require("./avsync").holdHint(req.user),   // iosdelay: the Safari / iPhone frame hold (av-sync.js data-avsync-hold)
         // 1.99ajh dockpop (owner P2): the homepage's Room Dock - the pad page's mode for this viewer ('staff' = staff only; 'off' = today's
         // homepage byte for byte), and the viewer tag its chat window protocol keys on (dock-link.js; never the account id)
         padDockOn: padDockOn_,

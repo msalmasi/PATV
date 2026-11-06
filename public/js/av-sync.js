@@ -4,7 +4,9 @@
 (function () {
   'use strict';
   var W = window, D = document, own = Object.prototype.hasOwnProperty;
-  var translate = typeof W.__t === 'function' ? W.__t : function (key, fallback) { return fallback; };
+  var translate = typeof W.__t === 'function' ? W.__t : function (key, fallback, vars) {
+    return String(fallback).replace(/\{(\w+)\}/g, function (m, n) { return vars && vars[n] != null ? String(vars[n]) : m; });
+  };
   var receivers = [], configs = Object.create(null), records = Object.create(null), lines = [], buttons = [], listeners = [], surfaceDocs = [];
   var padSource = '', sound = { slug: '', playing: false, mode: 'rtc', pc: null, ahead: null };
   var soundStats = { browser: null, rtt: null, ok: false }, audioPrevious = null, mp3Average = null, mp3At = 0;
@@ -26,6 +28,18 @@
     return 'safari';
   }
   var browserEngine = engine();
+  // iosdelay (1.99alg): Safari, iPhone and iPad before Safari / iOS 27 (every iPhone browser is WebKit inside, Chrome too) have neither
+  // jitterBufferTarget nor playoutDelayHint, so their cams are delayed by holding the cam's encoded frames in a worker
+  // (av-sync-hold.js, an RTCRtpScriptTransform on the cam's receiver). The page says at load whether that may be used - data-avsync-hold on
+  // this script's tag = the admin's "Safari delay method" for this viewer (auto / hold; absent = not for them): the transform has to
+  // be on a receiver before its first frame, before this page has asked for the settings. Once it has them they decide for later
+  // cams. Never on Chromium or Firefox (their own delay), never on a receiver with Chrome's playoutDelayHint.
+  var HOLD_SRC = '/public/js/av-sync-hold.js?v=1';
+  var bootHold = (function () {
+    try { var v = D.currentScript && D.currentScript.getAttribute ? D.currentScript.getAttribute('data-avsync-hold') : ''; return v === 'auto' || v === 'hold' ? v : ''; } catch (e) { return ''; }
+  })();
+  var hold = { worker: null, ready: false, failed: false, seq: 0 };
+  function holdKit() { return typeof W.RTCRtpScriptTransform === 'function' && typeof W.Worker === 'function'; }
   function pathOf(url) {
     // The query can contain a reader ticket. It is never stored, sent or included in debug output.
     var match = /\/whep\/([^/?#]+)/.exec(String(url || ''));
@@ -103,6 +117,69 @@
     if (c.fallback_ind && number(c.fallback_ind[sound.mode]) != null) input.fallback = c.fallback_ind[sound.mode];
     return indicatorTarget(input);
   }
+  // iosdelay: the admin's Safari delay method for cams on this pad: the settings once this page has them (any age), else the page's flag
+  function holdMethod(pad) {
+    var entry = configs[pad], c = entry && entry.data;
+    if (entry && entry.denied) return '';
+    if (!c) return bootHold;
+    var m = c.safari_method;
+    return c.on && c.apply && c.apply.video && c.engines && c.engines.safari && (m === 'auto' || m === 'hold') ? m : '';
+  }
+  // iosdelay: how this receiver's cam is delayed - 'jbt' (jitterBufferTarget), 'pdh' (Chrome's playoutDelayHint), 'hold' (the frame
+  // hold) or 'none'. auto holds frames only where the browser has no delay of its own; hold also where WebKit has one (iOS 27+).
+  function apiFor(rx, pad) {
+    var jbt = 'jitterBufferTarget' in rx, pdh = 'playoutDelayHint' in rx, m = '';
+    if (browserEngine === 'safari' && !pdh && 'transform' in rx && holdKit() && !hold.failed) m = holdMethod(pad);
+    if (m === 'hold' || m === 'auto' && !jbt) return 'hold';
+    return jbt ? 'jbt' : pdh ? 'pdh' : 'none';
+  }
+  function holdWorker() {
+    if (hold.worker || hold.failed) return hold.worker;
+    try {
+      var w = new W.Worker(HOLD_SRC);
+      w.onmessage = holdMessage;
+      // it won't load, or it broke: the cams pass straight through (holdFailed)
+      w.onerror = function (event) { try { if (event && event.preventDefault) event.preventDefault(); } catch (e) { /* fine */ } holdFailed(); };
+      hold.worker = w; w.postMessage({ ping: true });
+    } catch (e) { hold.worker = null; holdFailed(); }
+    return hold.worker;
+  }
+  function holdPost(message) { try { if (hold.worker && !hold.failed) hold.worker.postMessage(message); } catch (e) { /* the worker is gone */ } }
+  function warn(text) { try { if (W.console && W.console.warn) W.console.warn('[av-sync] ' + text); } catch (e) { /* no console */ } }
+  function holdMessage(event) {
+    var d = event && event.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.ready) { hold.ready = true; return; }
+    var entry = typeof d.id === 'string' ? receivers.filter(function (r) { return r.holdId === d.id; })[0] : null;
+    if (!entry) return;
+    entry.held = { applied: number(d.applied), frames: number(d.frames), kb: number(d.kb), over: typeof d.over === 'string' ? d.over.slice(0, 12) : '' };
+    // the worker failed open (a memory cap): this cam plays undelayed until it reconnects - said once
+    if (entry.held.over && !entry.overTold) { entry.overTold = true; warn('a cam\'s frame hold stopped (' + entry.held.over + ' memory cap) - that cam plays undelayed until it reconnects'); }
+  }
+  function holdFailed() {
+    if (hold.failed) return;
+    hold.failed = true; hold.ready = false;
+    warn('the cam frame hold could not run - Safari / iPhone cams play undelayed');
+    receivers.forEach(function (entry) {
+      if (entry.api !== 'hold') return;
+      // off the receiver: WebKit passes its frames straight through again (an unstarted transform never touched them)
+      try { entry.receiver.transform = null; } catch (e) { /* passes through anyway */ }
+      entry.holdId = null; entry.held = null; entry.api = apiFor(entry.receiver, entry.pad);
+      setTarget(entry, targetFor(entry), true);
+    });
+    notify();
+  }
+  // In ontrack, before any frame: the worker passes frames straight through until it is ready (WebKit starts the transform only then),
+  // so a cam attached before that ramps its delay in (options.ramp) instead of freezing for the whole target.
+  function attachHold(entry) {
+    var w = holdWorker();
+    try {
+      if (!w || hold.failed) throw new Error('no worker');
+      var id = 'h' + (++hold.seq);
+      entry.receiver.transform = new W.RTCRtpScriptTransform(w, { id: id, ramp: !hold.ready });
+      entry.holdId = id;
+    } catch (e) { entry.holdId = null; entry.api = 'jitterBufferTarget' in entry.receiver ? 'jbt' : 'none'; }
+  }
   function targetFor(entry, ignoreToggle) {
     if (!eligible(entry.pad, 'video', ignoreToggle)) return null;
     var c = cfgFor(entry.pad), cam = c.cams && c.cams[entry.path], input = inputs(entry.pad);
@@ -114,6 +191,7 @@
   function setTarget(entry, target, force) {
     target = number(target) == null || target <= 0 ? null : clamp(target, 0, 4000);
     var c = cfgFor(entry.pad), band = c ? bounded(c.deadband, 0, 500, 40) : 40;
+    if (entry.api === 'hold') { setHold(entry, target, band, force, c); return; }   // iosdelay
     if (!force && entry.target !== undefined && (entry.target === target || target != null && entry.target != null && Math.abs(target - entry.target) <= band)) return;
     try {
       if ('jitterBufferTarget' in entry.receiver) entry.receiver.jitterBufferTarget = target;
@@ -122,10 +200,18 @@
       entry.supported = true; entry.target = target;
     } catch (e) { entry.supported = false; entry.target = null; }
   }
+  // iosdelay: the frame hold's target = the same target + its own calibration (k_hold_ms); null = 0, a pass-through (the worker ramps)
+  function setHold(entry, target, band, force, c) {
+    var k = c && c.k ? number(c.k.hold) || 0 : 0, ms = target == null ? 0 : Math.round(clamp(target + k, 0, 4000));
+    if (!force && entry.target !== undefined && (entry.sent === ms || ms > 0 && entry.sent > 0 && Math.abs(ms - entry.sent) <= band)) return;
+    holdPost({ id: entry.holdId, hold: ms });
+    entry.sent = ms; entry.target = target; entry.supported = true;
+  }
   function pruneReceivers() {
     receivers = receivers.filter(function (entry) {
       if (!entry.pc || entry.pc.signalingState === 'closed' || entry.pc.connectionState === 'closed') {
-        setTarget(entry, null, true);
+        if (entry.api === 'hold') holdPost({ id: entry.holdId, close: true });   // iosdelay: its held frames are dropped in the worker
+        else setTarget(entry, null, true);
         if (entry.pc && entry.pc.removeEventListener && entry.closeListener) entry.pc.removeEventListener('connectionstatechange', entry.closeListener);
         return false;
       }
@@ -239,8 +325,11 @@
     pruneReceivers(); var existing = receivers.filter(function (r) { return r.receiver === receiver; })[0];
     if (existing) return;
     var pad = slug(options.pad) || defaultPad(), path = pathOf(options.url);
-    var entry = { receiver: receiver, pc: options.pc, pad: pad, path: path, target: undefined, rtt: null, diagnostics: {}, statsOK: true, supported: false };
+    var entry = { receiver: receiver, pc: options.pc, pad: pad, path: path, target: undefined, rtt: null, diagnostics: {}, statsOK: true, supported: false,
+      api: 'none', holdId: null, held: null, sent: null };
     receivers.push(entry);
+    entry.api = apiFor(receiver, pad);
+    if (entry.api === 'hold') attachHold(entry);      // iosdelay: before watch() assigns srcObject - before any frame
     entry.closeListener = function () { pruneReceivers(); };
     if (entry.pc.addEventListener) entry.pc.addEventListener('connectionstatechange', entry.closeListener);
     // This synchronous write precedes watch() assigning srcObject. A known path uses its last valid target.
@@ -533,6 +622,9 @@
       tiles: receivers.map(function (entry, index) { var cam = c && c.cams && c.cams[entry.path]; return { slot: index + 1, same_pad: entry.pad === sound.slug,
         hold_ms: cam ? number(cam.hold_ms) : null, src: cam && ['passthrough', 'pt', 'reencode'].indexOf(cam.src) >= 0 ? cam.src : null,
         target_ms: number(entry.target), supported: entry.supported, rtt_s: number(entry.rtt), stats: copy(entry.diagnostics),
+        method: entry.api,   // iosdelay: jbt / pdh / hold / none
+        frame_hold: entry.api === 'hold' ? { sent_ms: number(entry.sent), applied_ms: entry.held ? entry.held.applied : null,
+          frames: entry.held ? entry.held.frames : null, kb: entry.held ? entry.held.kb : null, stopped: entry.held ? entry.held.over : '' } : null,
         playout_delay_extension: !!(entry.pc.remoteDescription && /a=extmap:[^\r\n]*playout-delay/.test(entry.pc.remoteDescription.sdp || '')) }; }) };
   }
   // 1.99ait avf (F2): the viewer's toggle shows its state - "Sync to the audio: on" / "... off", the `on` class (room-bridge.css
@@ -542,9 +634,14 @@
   // 1.99ait avf review: what the toggle holds for this viewer - the cams only where their engine is enabled (a Firefox / Safari viewer
   // gets no cam delay while engine_firefox / engine_safari are off), and "the mic signs are held for everyone" only while a mic switch
   // holds them (mic_follow_toggle off)
+  // iosdelay: the cams the toggle would hold can actually wait here (a browser with no delay - the frame hold off - holds nothing)
+  function camsWait(pad) {
+    var mine = receivers.filter(function (r) { return r.pad === pad; });
+    return !mine.length || mine.some(function (r) { return r.supported; });
+  }
   function holds() {
     var pad = sound.slug, mics = anyMic(pad, true), all = micIgnoresToggle(pad);
-    return { cams: eligible(pad, 'video', true), mics: mics && !all, all: mics && all };
+    return { cams: eligible(pad, 'video', true) && camsWait(pad), mics: mics && !all, all: mics && all };
   }
   function paint(button) {
     var text = enabled ? translate('js.pad.audio.sync_on', 'Sync to the audio: on') : translate('js.pad.audio.sync_off', 'Sync to the audio: off');
@@ -565,11 +662,27 @@
     var line = enabled ? translate('js.pad.audio.avsync_you_on', 'sync for you: ON (your toggle)') : translate('js.pad.audio.avsync_you_off', 'sync for you: OFF (your toggle)');
     return holds().all ? line + ' · ' + translate('js.pad.audio.avsync_mic_all', 'mic signs: held for everyone') : line;   // (review: only while held)
   }
+  // iosdelay: the panel's per-cam lines - how this browser delays each cam (the frame hold, the browser's own, none), its target and,
+  // for the frame hold, what the worker applies and holds - so the owner can see it working on his iPhone
+  function camLines() {
+    if (!receivers.length) return [translate('js.pad.audio.avsync_cams_none', 'cams: none open')];
+    return receivers.map(function (r, i) {
+      var how = r.api === 'hold' ? translate('js.pad.audio.avsync_how_hold', 'frame hold') : r.api === 'jbt' || r.api === 'pdh' ? translate('js.pad.audio.avsync_how_own', "the browser's own delay")
+        : translate('js.pad.audio.avsync_how_none', "none - this browser can't hold cams back here");
+      var t = number(r.target), line = translate('js.pad.audio.avsync_cam', 'cam {n}: {how} · target {ms}', { n: i + 1, how: how, ms: t == null ? '-' : Math.round(t) + ' ms' });
+      if (r.api !== 'hold') return line;
+      var h = r.held;
+      line += ' · ' + (h && h.applied != null ? translate('js.pad.audio.avsync_cam_held', 'applied {ms} ms · {frames} frames held', { ms: h.applied, frames: h.frames == null ? 0 : h.frames })
+        : translate('js.pad.audio.avsync_cam_wait', 'waiting for frames'));
+      if (h && h.over) line += ' · ' + translate('js.pad.audio.avsync_cam_over', 'stopped: memory cap - plays undelayed');
+      return line;
+    });
+  }
   function notify() {
     // (1.99ahm: the viewer's toggle is offered while any of the mic switches holds something back too; 1.99ait avf F5: while they
     // follow it - mic_follow_toggle off, it is offered for the cams only)
     var available = !micIgnoresToggle(sound.slug) && MIC_KINDS.some(function (kind) { return delayFor(sound.slug, true, kind) > 0; }) ||
-      receivers.some(function (entry) { return targetFor(entry, true) != null; });
+      receivers.some(function (entry) { return entry.supported && targetFor(entry, true) != null; });   // (iosdelay: one that can wait)
     buttons = buttons.filter(function (item) { if (item.box.isConnected === false) return false; item.button.hidden = !available; paint(item.button); return true; });
     var c = cfgFor(sound.slug), wantsDebug = /(?:^|[?&])avsync=1(?:&|$)/.test(W.location && W.location.search || '');
     if (wantsDebug && c && c.dbg && D.body) {
@@ -580,7 +693,7 @@
         button.type = 'button'; button.style.minHeight = '44px'; button.addEventListener('click', function () { try { if (W.navigator.clipboard) W.navigator.clipboard.writeText(JSON.stringify(debug(), null, 2)).catch(function () {}); } catch (e) {} });
         panel.appendChild(title); panel.appendChild(button); panel.appendChild(content); D.body.appendChild(panel); debugBox = { panel: panel, content: content };
       }
-      debugBox.panel.hidden = false; debugBox.content.textContent = youLine() + '\n' + JSON.stringify(debug(), null, 2);   // (1.99ait avf F2)
+      debugBox.panel.hidden = false; debugBox.content.textContent = youLine() + '\n' + camLines().join('\n') + '\n' + JSON.stringify(debug(), null, 2);   // (1.99ait avf F2; iosdelay: the cam lines)
     } else if (debugBox) debugBox.panel.hidden = true;
     listeners.slice().forEach(function (listener) { try { listener(); } catch (e) {} });
   }
@@ -597,6 +710,12 @@
     box.appendChild(button); buttons.push({ box: box, button: button }); notify();
   }
   function onChange(callback) { if (typeof callback !== 'function') return function () {}; listeners.push(callback); return function () { listeners = listeners.filter(function (f) { return f !== callback; }); }; }
+  // iosdelay: with the page's flag the worker starts now, so it is ready before the first cam (not when the method is auto and the
+  // browser has its own delay - iOS 27 and later)
+  (function () {
+    var P = W.RTCRtpReceiver && W.RTCRtpReceiver.prototype;
+    if (bootHold && browserEngine === 'safari' && holdKit() && !(P && 'playoutDelayHint' in P) && (bootHold === 'hold' || !(P && 'jitterBufferTarget' in P))) holdWorker();
+  })();
   W.PATVAvSync = { pad: function (value) { padSource = value; wake(); }, video: video, audio: audio, decorate: decorate, debug: debug,
     latency: latency, modsInstant: modsInstant, onChange: onChange, gateProgram: gateProgram, micView: micView, holdLine: holdLine, caughtUp: caughtUp, surfaceChanged: surfaceChanged,
     _math: { videoTarget: videoTarget, indicatorTarget: indicatorTarget, delta: delta, average: average, pathOf: pathOf } };

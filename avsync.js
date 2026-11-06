@@ -20,11 +20,17 @@ const FIELDS = Object.freeze({
   mic_follow_toggle: { def: true },
   apply_mp3: { def: true },
   engine_chromium: { def: true }, engine_firefox: { def: false }, engine_safari: { def: false },
+  // iosdelay (1.99alg): how Safari / iPhone / iPad cams wait while engine_safari is on. Before Safari / iOS 27 WebKit (every iPhone
+  // browser, Chrome too) has no cam delay of its own (no jitterBufferTarget / playoutDelayHint): av-sync.js holds the cam's frames in a
+  // worker (av-sync-hold.js). auto: the browser's own delay where it has one, else the frame hold; hold: always the frame hold on
+  // WebKit; off: only the browser's own (no cam delay before iOS 27, as before)
+  safari_method: { def: "auto", choices: ["auto", "hold", "off"] },
   fallback_rtc_ms: { def: 500, min: 0, max: 4000 }, fallback_mp3_ms: { def: 1500, min: 0, max: 4000 },
   // 1.99ait avf (F4): the mic signs' own fallback while the room audio isn't measured (they need about the whole audio path, the
   // cams far less - one shared number could not serve both)
   fallback_ind_rtc_ms: { def: 2000, min: 0, max: 5000 }, fallback_ind_mp3_ms: { def: 3000, min: 0, max: 5000 },
   k_pt_ms: { def: 0, min: -3000, max: 3000 }, k_re_ms: { def: 0, min: -3000, max: 3000 },
+  k_hold_ms: { def: 0, min: -1000, max: 1000 },   // iosdelay: added to a frame-held cam's delay (+ = later), on top of k_pt / k_re
   ind_path_ms: { def: 300, min: 0, max: 3000 }, k_ind_ms: { def: 0, min: -3000, max: 3000 },
   cap_ms: { def: 3000, min: 0, max: 4000 }, cap_ind_ms: { def: 3000, min: 0, max: 5000 },
   deadband_ms: { def: 40, min: 0, max: 500 }, period_s: { def: 2, min: 1, max: 10 },
@@ -146,6 +152,13 @@ function viewerOn(user) {
   const mode = CFG.cfg.mode;
   return !!(user && user.userId) && (mode === "everyone" || mode === "admins" && SP.can(user, "pepe.rooms_commands_audio"));
 }
+/** iosdelay: the Safari delay method for this viewer, on av-sync.js's script tag (data-avsync-hold) - the frame hold has to be on a cam's
+ *  receiver before its first frame, before the page has asked for these settings. "" = not for them (unticking "Enable Safari video
+ *  delay" or "Delay relayed cams", or the method off, stops it from the next page load). */
+function holdHint(user) {
+  const c = CFG.cfg;
+  return viewerOn(user) && c.apply_video && c.engine_safari && c.safari_method !== "off" ? c.safari_method : "";
+}
 function answer(roomId, paths, user) {
   const c = CFG.cfg, dbg = SP.can(user, "pepe.rooms_commands_audio"), cams = {};
   const LC = require("./livecam");
@@ -154,12 +167,13 @@ function answer(roomId, paths, user) {
     if (hold) cams[path] = hold;
   }
   return { ok: true, on: viewerOn(user), dbg, audio: roomAudio(roomId), cams,
-    k: { pt: c.k_pt_ms, re: c.k_re_ms, ind: c.k_ind_ms }, fallback: { rtc: c.fallback_rtc_ms, mp3: c.fallback_mp3_ms },
+    k: { pt: c.k_pt_ms, re: c.k_re_ms, ind: c.k_ind_ms, hold: c.k_hold_ms }, fallback: { rtc: c.fallback_rtc_ms, mp3: c.fallback_mp3_ms },
     fallback_ind: { rtc: c.fallback_ind_rtc_ms, mp3: c.fallback_ind_mp3_ms }, mic_follow_toggle: c.mic_follow_toggle,   // 1.99ait avf (F4, F5)
     cap: c.cap_ms, cap_ind: c.cap_ind_ms, deadband: c.deadband_ms, period_s: c.period_s,
     apply: { video: c.apply_video, mic: c.apply_mic, mp3: c.apply_mp3, mic_card: c.apply_mic_card, mic_chat: c.apply_mic_chat,
              mic_list: c.apply_mic_list },   // 1.99ahm: + card / chat / people list
-    engines: { chromium: c.engine_chromium, firefox: c.engine_firefox, safari: c.engine_safari }, ind_path_ms: c.ind_path_ms, mods_instant: c.mods_instant };
+    engines: { chromium: c.engine_chromium, firefox: c.engine_firefox, safari: c.engine_safari }, safari_method: c.safari_method,   // iosdelay
+    ind_path_ms: c.ind_path_ms, mods_instant: c.mods_instant };
 }
 async function view() {
   await init();
@@ -217,6 +231,6 @@ function register(app, { addUser }) {
     try { const result = await save(req.user, req.body || {}); res.json({ ok: true, ...result, view: await view() }); } catch (e) { fail(res, e); }
   });
 }
-module.exports = { register, init, normalize, current, save, cleanLat, noteAudio, audioMeta, serverOffsetMs, viewerOn, view, FIELDS, DEFAULTS,
+module.exports = { register, init, normalize, current, save, cleanLat, noteAudio, audioMeta, serverOffsetMs, viewerOn, holdHint, view, FIELDS, DEFAULTS,
   _setClock: (fn) => { NOW = fn || (() => Date.now()); },
   _reset: () => { CFG = { v: 0, cfg: { ...DEFAULTS }, at: null }; AUDIO.clear(); ROOM_CACHE.clear(); ready = null; saving = Promise.resolve(); } };
