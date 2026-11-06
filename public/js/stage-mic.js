@@ -410,18 +410,22 @@
         card.hidden = true; v.hidden = false;
         v.setAttribute('aria-label', _t('js.pad.live.aria', '{name}\'s cam, live', { name: t.s.name }));
         if (ss.blocked) tapAll.hidden = false;
-        ss.onfail = function () { if (my === t.gen) rewatch(my); };
+        ss.onfail = function () { if (my === t.gen) rewatch(my, ss); };
       }
       // mfix review: the connection dropped after it played (Pepe re-opened the relay, its publisher restarted): watch again at once
       // with a fresh ticket while the tile is still live (the route says no otherwise) - no "couldn't open" card for a short
-      // reconnect; at most REWATCH_MAX times in REWATCH_WIN_MS, then the card and the usual retry
-      function rewatch(my) {
+      // reconnect; at most REWATCH_MAX times in REWATCH_WIN_MS, then the card and the usual retry. camstutter review: a session the
+      // server ended after 20 s+ of playing (its relay re-published - fast_end) is a free reconnect (PATVRtc.freeRewatch)
+      function rewatch(my, was) {
         var t0 = Date.now();
         t.rew = (t.rew || []).filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
         // 1.99afl (S4): the reconnects are used up - the video kept dropping (not a refused open)
         var give = function () { if (my === t.gen) { stopLive(true); failed(_t('js.stage.mf.dropping', 'the live video kept dropping'), false, 'dropping'); } };
-        if (t.rew.length >= REWATCH_MAX) return give();
-        t.rew.push(t0);
+        var free = !!(was && window.PATVRtc && PATVRtc.freeRewatch && PATVRtc.freeRewatch(was));
+        if (!free) {
+          if (t.rew.length >= REWATCH_MAX) return give();
+          t.rew.push(t0);
+        }
         if (t.sess) { try { t.sess.close(); } catch (er) { /* gone */ } t.sess = null; }
         showCard(_t('js.stage.mf.reconnecting', 'reconnecting…'));
         post(base + '/watch', wb({})).then(function (d) {

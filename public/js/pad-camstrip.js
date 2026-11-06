@@ -208,17 +208,20 @@
         t.sess = ss; t.state = 'live';
         badge.textContent = _t('js.pad.live.badge', '⚡ LIVE'); badge.classList.add('on');
         tap.hidden = !ss.blocked; say('', false); over.hidden = tap.hidden;
-        ss.onfail = function () { if (my === t.gen) rewatch(my); };
+        ss.onfail = function () { if (my === t.gen) rewatch(my, ss); };
         paint();
       }
       // mfix review: the connection dropped after it played (Pepe re-opened the relay, its publisher restarted): while the site
       // still says the cam is connecting / live, watch again with a fresh ticket (the same slot) - at most REWATCH_MAX times in
-      // REWATCH_WIN_MS, then the tile's "the live cam stopped" with ↻ Retry
-      function rewatch(my) {
+      // REWATCH_WIN_MS, then the tile's "the live cam stopped" with ↻ Retry. camstutter review: a session the server ended after
+      // 20 s+ of playing (its relay re-published - fast_end) is a free reconnect (PATVRtc.freeRewatch)
+      function rewatch(my, was) {
         var t0 = Date.now();
         t.rew = (t.rew || []).filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
-        if (t.rew.length >= REWATCH_MAX) return t.ended('gone');
-        t.rew.push(t0);
+        if (!(was && window.PATVRtc && PATVRtc.freeRewatch && PATVRtc.freeRewatch(was))) {
+          if (t.rew.length >= REWATCH_MAX) return t.ended('gone');
+          t.rew.push(t0);
+        }
         if (t.sess) { try { t.sess.close(); } catch (e) { /* gone */ } t.sess = null; }
         t.state = 'connecting'; badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on'); paint();
         post(base + '/beat', t.ref).then(function (k) {

@@ -26,6 +26,8 @@
 // to re-encode, a dead-relay restart, a re-open), so the page's onfail -> reconnect runs then, instead of after ICE
 // 'disconnected' + the 5-s blip grace (~7-10 s of a frozen picture). Only that definite end - a blip still gets its grace. The
 // live-cam setting fast_end (livecam.js) says whether the page asks for it; without RTCDtlsTransport nothing changes.
+// PATVRtc.freeRewatch(session) (review): true when the server ended a session that had played 20 s or more - the pages don't
+// count that reconnect against their REWATCH_MAX, so fastEnd costs no more reconnects than the old slow detection did.
 (function () {
   'use strict';
   var iceCache = null;
@@ -84,7 +86,9 @@
     if (resource) fetch(resource, { method: 'DELETE', credentials: 'omit', keepalive: true }).catch(function () {});
   }
   function session(pc, resource, o) {
-    var s = { pc: pc, closed: false, onfail: null }, lostT = null;
+    // (camstutter review: at / serverEnd / playedMs - when it started playing, whether the SERVER ended it and after how long:
+    // freeRewatch)
+    var s = { pc: pc, closed: false, onfail: null, at: Date.now(), serverEnd: false, playedMs: 0 }, lostT = null;
     s.close = function () { if (s.closed) return; s.closed = true; clearTimeout(lostT); try { pc.close(); } catch (e) {} drop(resource); };
     function fail() { if (s.closed) return; s.close(); if (s.onfail) s.onfail(); }
     pc.addEventListener('connectionstatechange', function () {
@@ -93,8 +97,23 @@
       else if (st === 'failed' || st === 'closed') fail();
       else if (st === 'disconnected' && !lostT) lostT = setTimeout(fail, 5000);   // brief blips heal themselves
     });
-    if (o && o.fastEnd) serverEnd(pc, fail);
+    if (o && o.fastEnd) {
+      serverEnd(pc, function () {
+        if (s.closed) return;                            // (our own close is never the server's)
+        s.serverEnd = true; s.playedMs = Math.max(0, Date.now() - s.at);
+        fail();
+      });
+    }
     return s;
+  }
+  // camstutter review (2026-11-06): with fastEnd every re-publish of a cam's relay ends the session at once - two re-publishes
+  // ~2 s apart cost a page TWO of its reconnects (REWATCH_MAX in REWATCH_WIN_MS) where the old ~11 s detection cost one, so a
+  // relay that restarted a few times ended the tile ("gone" / "the live video kept dropping") where it used to recover. A
+  // reconnect after the SERVER ended a session that had played FREE_PLAYED_MS or more is free: that session was fine, the relay
+  // moved on. A short-lived one still counts, so a relay that keeps failing still ends the tile.
+  var FREE_PLAYED_MS = 20000;
+  function freeRewatch(ss) {
+    return !!(ss && ss.serverEnd === true && typeof ss.playedMs === 'number' && ss.playedMs >= FREE_PLAYED_MS);
   }
   // camstutter: the server ended this session (its DTLS close_notify): fail at once - see the header. A transport that is already
   // closed / failed when we look counts too (checked on the next turn, once the caller has set onfail). Never throws (no
@@ -255,5 +274,5 @@
     });
   }
 
-  window.PATVRtc = { ice: ice, play: play, publish: publish, listen: listen, watch: watch };
+  window.PATVRtc = { ice: ice, play: play, publish: publish, listen: listen, watch: watch, freeRewatch: freeRewatch };
 })();

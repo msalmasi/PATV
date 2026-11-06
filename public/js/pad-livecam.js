@@ -186,16 +186,19 @@
         function playing(ss) {
           sess = ss;
           badge.textContent = _t('js.pad.live.badge', '⚡ LIVE'); badge.classList.add('on');
-          ss.onfail = function () { if (my === gen) rewatch(); };
+          ss.onfail = function () { if (my === gen) rewatch(ss); };
         }
         // mfix review: the connection dropped after it played (Pepe re-opened the relay - e.g. by the exact name for a pad's mic
         // stage - or its publisher restarted): while the site still says the cam is connecting / live, watch again with a fresh
-        // ticket (the same slot) - at most REWATCH_MAX times in REWATCH_WIN_MS, then "the live cam stopped"
-        function rewatch() {
+        // ticket (the same slot) - at most REWATCH_MAX times in REWATCH_WIN_MS, then "the live cam stopped". camstutter review: a
+        // session the server ended after 20 s+ of playing (its relay re-published - fast_end) is a free reconnect (PATVRtc.freeRewatch)
+        function rewatch(was) {
           var t0 = Date.now();
           rew = rew.filter(function (x) { return t0 - x < REWATCH_WIN_MS; });
-          if (rew.length >= REWATCH_MAX) return ended('gone');
-          rew.push(t0);
+          if (!(was && window.PATVRtc && PATVRtc.freeRewatch && PATVRtc.freeRewatch(was))) {
+            if (rew.length >= REWATCH_MAX) return ended('gone');
+            rew.push(t0);
+          }
           if (sess) { try { sess.close(); } catch (e) { /* gone */ } sess = null; }
           badge.textContent = _t('js.pad.live.reconnecting', 'reconnecting…'); badge.classList.remove('on');
           post(base + '/beat', ref).then(function (k) {

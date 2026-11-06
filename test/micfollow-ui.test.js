@@ -805,9 +805,9 @@ test("mfix review stage-mic.js: a live mic tile whose connection drops re-watche
 
 test("mfix review: the strip (pad-camstrip.js) and a cam slot on the stage (stage-room.js) re-watch a dropped connection too - bounded, the slot kept", () => {
   const strip = read("public", "js", "pad-camstrip.js");
-  assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my\); \};/);
+  assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my, ss\); \};/);   // (camstutter review: + the ended session - PATVRtc.freeRewatch)
   assert.match(strip, /REWATCH_MAX = 4, REWATCH_WIN_MS = 3 \* 60 \* 1000/);
-  assert.match(strip, /function rewatch\(my\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, t\.ref\)[^]*?PATVRtc\.watch\(/);   // (1.99aid privacy controls round 3 - F2: t.ref = {login} or a frog cam's {id})
+  assert.match(strip, /function rewatch\(my, was\) \{[^]*?post\(base \+ '\/beat'[^]*?post\(base, t\.ref\)[^]*?PATVRtc\.watch\(/);   // (1.99aid privacy controls round 3 - F2: t.ref = {login} or a frog cam's {id})
   const room = read("public", "js", "stage-room.js");
   assert.match(room, /ss\.onfail = function \(\) \{ if \(g === my\.gen\) rewatch\(\); \};/);
   assert.match(room, /CAM_REWATCH_MAX = 4/);

@@ -612,10 +612,33 @@ function sweep(t = now()) {
 // list), so every kick went out twice and the second always logged "[API] session not found" (~3k lines a day on the VPS). Now the
 // first route only - the second only when the first ROUTE is missing (a 404 that isn't MediaMTX's own JSON error: another version).
 const KICK_ROUTES = ["/v3/webrtcsessions/kick/", "/v3/webrtc/sessions/kick/"];
+// camstutter review (2026-11-06): a MediaMTX that dropped the first route but answered unknown routes with its own JSON error would
+// make every kick a silent no-op (bans, the 18+ gate, covers, room audio). So, at most once an hour and only on a kick (never a
+// timer), the first route's LIST is asked for: anything but a 200 = this process sends each kick to BOTH routes again (as before
+// camstutter) and says so once in the log; a 200 later = one route again. A failed check (MediaMTX down) changes nothing.
+const KICK_CHECK = { ok: null, at: 0 };
+const KICK_CHECK_MS = 60 * 60 * 1000;
+function kickRouteCheck(api, http, t = Date.now()) {
+  if (KICK_CHECK.at && t - KICK_CHECK.at < KICK_CHECK_MS) return;
+  KICK_CHECK.at = t;
+  try {
+    const u = new URL(api + "/v3/webrtcsessions/list");
+    const req = http.request({ host: u.hostname, port: u.port || 80, path: u.pathname, method: "GET", timeout: 3000 }, (r) => {
+      r.resume();
+      const ok = r.statusCode === 200;
+      if (!ok && KICK_CHECK.ok !== false) console.warn(`[livecam] MediaMTX kick route check: ${u.pathname} answered ${r.statusCode} - reader kicks go to both routes`);
+      else if (ok && KICK_CHECK.ok === false) console.log("[livecam] MediaMTX kick route check: the first route answers again - one route per kick");
+      KICK_CHECK.ok = ok;
+    });
+    req.on("error", () => {}); req.on("timeout", () => req.destroy());
+    req.end();
+  } catch (e) { /* no MediaMTX */ }
+}
 function kickHttp(id, done) {
   if (!/^[0-9a-f-]{36}$/i.test(String(id || ""))) return;
   const http = require("http");
   const api = String(process.env.MEDIAMTX_API || "http://127.0.0.1:9997").replace(/\/+$/, "");
+  kickRouteCheck(api, http);
   const go = (i) => {
     if (i >= KICK_ROUTES.length) { if (done) done(); return; }
     try {
@@ -624,7 +647,7 @@ function kickHttp(id, done) {
         let body = "";
         r.setEncoding("utf8");
         r.on("data", (c) => { if (body.length < 512) body += c; });
-        r.on("end", () => { if (r.statusCode === 404 && !/^\s*\{/.test(body)) go(i + 1); else if (done) done(); });
+        r.on("end", () => { if (KICK_CHECK.ok === false || (r.statusCode === 404 && !/^\s*\{/.test(body))) go(i + 1); else if (done) done(); });
         r.on("error", () => { if (done) done(); });
       });
       req.on("error", () => { if (done) done(); }); req.on("timeout", () => req.destroy());
@@ -2063,5 +2086,6 @@ module.exports = {
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setKick: (fn) => { kickImpl = fn; },
   _kickHttp: kickHttp,                // camstutter: the real kick (tests point MEDIAMTX_API at a fake)
+  _kickCheck: KICK_CHECK,             // camstutter review: the route check's state (tests reset it)
   _reset: () => { SESS.clear(); BY_PATH.clear(); COOL.clear(); RV_STARTING.clear(); BOT = null; OPTOUT = new Set(); CFG = { v: 0, cfg: { ...DEFAULTS }, at: null, by: null }; ready = null; SYNC_AT = 0; FAILS = []; },
 };
