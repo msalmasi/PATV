@@ -398,7 +398,8 @@
               if (k && (k.ok === false || k.state === 'ended')) { stopLive(false); failed(cardText(t.s), false, cardWhy(t.s)); }
             }).catch(function () { /* a blip: the next beat */ });
           }, BEAT_MS);
-          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); });
+          // camstutter: fastEnd - the server ending the session (the relay re-published) reconnects at once (webrtc-client.js)
+          return PATVRtc.watch(d.whep, v, { timeout: 40000, fastEnd: d.fast_end === true, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); });
         // 1.99afl (S4): the server gave a ticket but this browser couldn't connect to the video (WHEP / ICE) - not Pepe's refusal
         }).catch(function (er) { if (my === t.gen && !(er && er.cancelled)) { stopLive(true); failed(_t('js.stage.mf.connect', 'couldn\'t connect to the live video'), false, 'connect'); } });
       }
@@ -426,7 +427,7 @@
         post(base + '/watch', wb({})).then(function (d) {
           if (my !== t.gen) return null;
           if (!d || !d.ok || !d.whep) { stopLive(true); failed(cardText(t.s), false, cardWhy(t.s)); return null; }
-          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); },
+          return PATVRtc.watch(d.whep, v, { timeout: 40000, fastEnd: d.fast_end === true, cancelled: function () { return my !== t.gen; } }).then(function (ss) { playing(ss, my); },
             function (er) { if (!(er && er.cancelled)) give(); });
         }).catch(give);
       }

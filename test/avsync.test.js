@@ -112,7 +112,7 @@ test("review fix: the pad page loads av-sync.js only while the mode applies to t
   const page = async (user) => {
     const r = await fetch(base + "/p/alpha", { headers: user ? { "x-test-user": user } : {} });
     const html = await r.text(); assert.equal(r.status, 200, html.slice(0, 300));
-    assert.match(html, /webrtc-client\.js\?v=6/, "the WebRTC block itself renders");
+    assert.match(html, /webrtc-client\.js\?v=7/, "the WebRTC block itself renders");
     return /av-sync\.js/.test(html);
   };
   try {

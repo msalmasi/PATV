@@ -205,14 +205,16 @@
             return post(base, ref).then(function (d2) {
               if (my !== gen) return null;
               if (!d2 || !d2.ok || !d2.whep) return ended(d2 && d2.code, d2 && d2.error);
-              return PATVRtc.watch(d2.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
+              return PATVRtc.watch(d2.whep, video, { timeout: 40000, fastEnd: d2.fast_end === true, cancelled: function () { return my !== gen; } }).then(function (ss) {
                 if (my !== gen) { ss.close(); return; }
                 playing(ss);
               }, function (e) { if (my === gen && !(e && e.cancelled)) ended('gone'); });
             });
           }).catch(function () { if (my === gen) ended('gone'); });
         }
-        PATVRtc.watch(d.whep, video, { timeout: 40000, cancelled: function () { return my !== gen; } }).then(function (ss) {
+        // camstutter: fastEnd - the server ending the session (the relay re-published) reconnects at once (webrtc-client.js); the
+        // session goes on to the strip when it is pinned (handed over: strip.adopt), and keeps it
+        PATVRtc.watch(d.whep, video, { timeout: 40000, fastEnd: d.fast_end === true, cancelled: function () { return my !== gen; } }).then(function (ss) {
           if (my !== gen) { ss.close(); return; }
           playing(ss);
         }, function (e) {

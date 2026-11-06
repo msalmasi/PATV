@@ -571,7 +571,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(plain, RTC, name + ": no WebRTC without the setting");
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
-    assert.match(html, /webrtc-client\.js\?v=6/, name);   // avsync: register live-cam receivers before attaching the stream
+    assert.match(html, /webrtc-client\.js\?v=7/, name);   // avsync: register live-cam receivers before attaching the stream
     assert.match(html, /webrtc\.css\?v=9/, name);   // micfollow: + the 🎙 mic stage layouts; wave2 WP-4: dynamic + cover tiles; 1.99ahq stage cover: 8; 1.99ain corner buttons auto-hide: 9
   }
   // review fix: lip sync's controller loads only while its mode applies to the viewer (avsync.viewerOn -> avsyncOn), before
@@ -580,7 +580,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(await render(on), /av-sync\.js/, name + ": no lip sync controller while off");
     assert.doesNotMatch(await render({ ...on, avsyncOn: false }), /av-sync\.js/, name);
     const html = await render({ ...on, avsyncOn: true });
-    assert.match(html, /av-sync\.js\?v=8"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=6"/, name);   // (wave2 WP-4: 3 - the ring; 1.99ahm: 4 - the On the mic card / chat lines; 5 - the people list's 🎙; 1.99ahp: 6 - stable slots' places; 1.99ait avf: 7 - the toggle's on / off, the mic signs' fallback; Room Dock: 8 - visible moved surfaces keep the shared sync session)
+    assert.match(html, /av-sync\.js\?v=8"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=7"/, name);   // (wave2 WP-4: 3 - the ring; 1.99ahm: 4 - the On the mic card / chat lines; 5 - the people list's 🎙; 1.99ahp: 6 - stable slots' places; 1.99ait avf: 7 - the toggle's on / off, the mic signs' fallback; Room Dock: 8 - visible moved surfaces keep the shared sync session)
     assert.doesNotMatch(await render({ ...offFn, avsyncOn: true }), /av-sync\.js/, name + ": never without WebRTC");
   }
   assert.match(await renderHome(on), /stage-lowlat\.js\?v=3"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=25/);   // (upnext2: 25)   // 1.99ajq dockpol: 20; 1.99ajr golive merged: 21; train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19

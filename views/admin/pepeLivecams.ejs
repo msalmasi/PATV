@@ -26,6 +26,8 @@
       <legend>Switches</legend>
       <label><input type="checkbox" name="enabled"> Live cams on (the kill switch - off ends every live cam at once)</label>
       <label><input type="checkbox" name="close_idle"> Pepe closes cams nobody used for the idle time below (never one with live viewers)</label>
+      <%# camstutter (2026-11-05): webrtc-client.js fastEnd - site only, off on prod until checked on staging %>
+      <label><input type="checkbox" name="fast_end"> Viewers reconnect at once when the server restarts a cam's relay (its video server ends their session - Pepe switching a cam to re-encode, a dead-relay restart) instead of after ~7-10 s of a frozen picture. Only that definite end counts, never a network blip</label>
     </fieldset>
     <fieldset>
       <legend>Stream</legend>

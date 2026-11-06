@@ -655,7 +655,7 @@
 <% if (chatOnly_) { %>
   <%# 1.99ajh dockpop: the window's room audio (⚡ WebRTC) and the camera sheet's ▶ Live need the WebRTC client; av-sync holds mic grab /
       drop lines to the audio (both only while their switches say so, as on the pad page) %>
-  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9"><% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %><script src="/public/js/webrtc-client.js?v=6"></script><% } %>
+  <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9"><% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %><script src="/public/js/webrtc-client.js?v=7"></script><% } %>
 <% } else { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0 || !!(RS.featured && RS.featured.next);
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
@@ -665,10 +665,10 @@
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=9">
   <%# review fix: lip sync (avsync.viewerOn) - while its mode is off for this viewer the controller isn't loaded, so nothing polls %>
   <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=8"></script><% } %>
-  <script src="/public/js/webrtc-client.js?v=6"></script>
+  <script src="/public/js/webrtc-client.js?v=7"></script>
   <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 - the ⚡ <video> follows PATVStage.nativeControls %>
   <script src="/public/js/pad-reveal.js?v=2"></script><%# (1.99aid privacy controls S4t: v2 - a reason when the site asks) wave 2: Reveal on the mic stage's covers (window.PATVReveal) + the J-18 toggle's state %>
-  <script src="/public/js/stage-mic.js?v=17"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile; (dock3 1.99akf) v17: no such tag %>
+  <script src="/public/js/stage-mic.js?v=18"></script><%# micfollow: 🎙 On the mic - the pad's mic-follows stage (needs WebRTC); 1.99ahp v9: stable slots (v8 was 1.99ahn's resuming…); 1.99ahq v10: the stage cover; 1.99aid (privacy controls S5) v11: veiled cams; (S4) v12: 👁 View cam on a cover; (V-1) v13: 📌 a veiled cam from the picker; (1.99ajw padppl rework) v16: the "not the Camfrog user" tag on a tile; (dock3 1.99akf) v17: no such tag; (camstutter) v18: fast_end - reconnects at once when the server ends the session %>
   <% } %><% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=25"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once); upnext2: v25 - the card's 4 s minimum, the kept player's hand-over, the 📼 lower-third / slate %>
   <link rel="stylesheet" href="/public/css/stage-upnext.css?v=2">
   <link rel="stylesheet" href="/public/css/stagecap.css?v=2">
@@ -951,7 +951,7 @@
   <script src="/public/js/pad-pepe.js?v=2"></script><%# 1.99qr: the 🐸 Pepe submenu (⋯ menu + cam preview); v2 (1.99aid privacy controls round 3 - F2): 👀 / 🔥 on a frog-name cam by its id %>
 <% if (typeof signedIn !== 'undefined' && signedIn) { %><div id="oacPromptOn" hidden></div><script src="/public/js/onair-consent.js?v=2" defer></script><% } %><%# 1.99aag: 📺 an admin asks for your OK (pad / cam on Pepe's main stream); 1.99ajh dockpop v2: stop() (the chat window's wipe) %>
   <% if (typeof onairAdmin !== 'undefined' && onairAdmin) { %><div id="oaCamRoom" data-room="<%= room.id %>" hidden></div><script src="/public/js/onair-cam.js?v=2"></script><% } %><%# 1.99aag: 📺 Put on Pepe's cam (admins) %>
-  <script src="/public/js/pad-livecam.js?v=12"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id %>
+  <script src="/public/js/pad-livecam.js?v=13"></script><%# 1.99yh: 📡 ▶ Live on the cam popover (livecam.js); v8 (1.99ahn): relay_lost; v9 (1.99aid privacy controls S5): a veiled cam by its id; v10 (S4): View for moderation + PATVCamRevealOpen; v11 (V-5): the ghost bypass asks why; v12 (round 3 - F2): a frog-name cam pins to the strip by its id; v13 (camstutter): fast_end - reconnects at once when the server ends the session %>
   <script src="/public/js/room-mod.js?v=17"></script><%# v15 (1.99ajn padppl): 🚫 Block / ✅ Unblock + the website's bans in the person menu; v16 (review): one Website ban item, group headings, never taller than the window; v17 (dock3 1.99akf): no clash part in the block sheet's who line %>
   <% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><script src="/public/js/pad-ban-sheet.js?v=4"></script><script src="/public/js/gift-sheet.js?v=2"></script><% } %>
   <script src="/public/js/pad-tip.js?v=1"></script>

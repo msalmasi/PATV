@@ -171,6 +171,12 @@ const FIELDS = Object.freeze({
   // Pass-through falls back to re-encode by itself after pt_fallback_s without video. Prod default: reencode.
   source:        { def: STAGING ? "auto" : "reencode", choices: ["reencode", "passthrough", "auto"] },
   pt_fallback_s: { def: 6, min: 2, max: 30 },
+  // camstutter (2026-11-05): a viewer whose live-cam session the SERVER ended (MediaMTX closes every reader of a cam when its relay
+  // is re-published - Pepe's fallback to re-encode, a dead-relay restart, a re-open) reconnects at once, on that session's DTLS
+  // close (webrtc-client.js fastEnd), instead of after ICE "disconnected" + the 5-s blip grace (~7-10 s of a frozen picture). Only a
+  // definite end counts, never a network blip; the same reconnect as before, sooner. Site-only (not sent to Pepe); off on prod
+  // until checked on staging.
+  fast_end:      { def: STAGING, bool: true },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 const BOT_KEYS = ["enabled", "close_idle", "fps", "kbps", "keyint_s", "max_live", "pool_max", "idle_close_s", "close_method", "ui_budget_ms", "capture",
@@ -777,7 +783,7 @@ async function start(u, R, login, t = now(), opts = {}) {
   S.wantUntil = Math.max(S.wantUntil, t + cfg().linger_s * 1000);
   // (1.99aid privacy controls S5: a veiled session's key is its opaque id - never keyOf / the login)
   return { ok: true, key: S.veil ? S.veil.id : k, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t),
-           slots: { used: slotsOf(uid, t), max }, kbps: rateOf(S), expires: t + TICKET_MS };
+           slots: { used: slotsOf(uid, t), max }, kbps: rateOf(S), expires: t + TICKET_MS, fast_end: cfg().fast_end === true };   // (camstutter)
 }
 /** 1.99aid (privacy controls review RV-4): cam reveals in effect (camreveal.js)? Fails closed. */
 function crEffective(t = now()) { try { return require("./camreveal").effective(t) === true; } catch (e) { return false; } }
@@ -1288,7 +1294,8 @@ async function stageWatch(u, R, holderId, { beatOnly = false, login = null } = {
   v.via.add(H);
   v.beat = t;
   if (beatOnly) return { ok: true, state: stateOf(S, t) };
-  return { ok: true, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t), expires: t + TICKET_MS };
+  return { ok: true, whep: W().whepUrl(S.path) + "?pt=" + encodeURIComponent(readTicket(uid, S.path, t)), state: stateOf(S, t), expires: t + TICKET_MS,
+           fast_end: cfg().fast_end === true };      // camstutter: the client ends its session at once on the server's close
 }
 /** micfollow: a viewer stops watching a held cam through `holderId` (their tile left the stage). */
 function stageUnwatch(userId, roomId, login, holderId, t = now()) {

@@ -228,7 +228,7 @@
           return post(base, t.ref).then(function (d) {
             if (my !== t.gen) return null;
             if (!d || !d.ok || !d.whep) return t.ended(d && d.code, d && d.error);
-            return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
+            return PATVRtc.watch(d.whep, v, { timeout: 40000, fastEnd: d.fast_end === true, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
               if (my !== t.gen) { ss.close(); return; }
               playing(ss, my);
             }, function (e) { if (my === t.gen && !(e && e.cancelled)) t.ended('gone'); });
@@ -247,7 +247,8 @@
           if (d.slots && info && info.slots) { info.slots.used = d.slots.used; info.slots.max = d.slots.max; }
           t.state = 'connecting'; paint();
           beats(my);
-          return PATVRtc.watch(d.whep, v, { timeout: 40000, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
+          // camstutter: fastEnd - the server ending the session (the relay re-published) reconnects at once (webrtc-client.js)
+          return PATVRtc.watch(d.whep, v, { timeout: 40000, fastEnd: d.fast_end === true, cancelled: function () { return my !== t.gen; } }).then(function (ss) {
             if (my !== t.gen) { ss.close(); return; }
             playing(ss, my);
           }, function (e) {

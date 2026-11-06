@@ -358,7 +358,7 @@ test("strip: the memory is per account - another account on this browser gets no
   await flush();
   assert.deepEqual(asks(A2.posts), [{ login: "alice" }], "the same account (any case) gets its own back");
   const part = fs.readFileSync(path.join(repo, "views", "partials", "cam-strip.ejs"), "utf8");
-  assert.match(part, /pad-camstrip\.js\?v=6/, "the new script's version (v6: the review fixes)");
+  assert.match(part, /pad-camstrip\.js\?v=7/, "the new script's version (v6: the review fixes; v7: camstutter's fast_end)");
   assert.match(part, /viewer: <%- JSON\.stringify\(locals\.user \? String\(locals\.user\) : null\)\.replace\(\/<\/g, '\\\\u003c'\) %>/);
 });
 

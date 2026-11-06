@@ -21,6 +21,11 @@
 // Power Mode, Safari's per-site "Never Auto-Play", a muted-autoplay policy): the connection is up, so they resolve with
 // session.blocked = true and the page offers a tap-to-play (the session's media is fine - only autoplay was refused).
 // Before, Safari sat on "connecting" until the timeout and then reported the cam / stream as failed.
+// camstutter (2026-11-05): watch(url, video, {fastEnd: true}) - a live cam's session ends at once when the SERVER ends it (its
+// DTLS transport goes 'closed' / 'failed': MediaMTX closes every reader of a cam when the relay is re-published - Pepe's switch
+// to re-encode, a dead-relay restart, a re-open), so the page's onfail -> reconnect runs then, instead of after ICE
+// 'disconnected' + the 5-s blip grace (~7-10 s of a frozen picture). Only that definite end - a blip still gets its grace. The
+// live-cam setting fast_end (livecam.js) says whether the page asks for it; without RTCDtlsTransport nothing changes.
 (function () {
   'use strict';
   var iceCache = null;
@@ -78,7 +83,7 @@
   function drop(resource) {
     if (resource) fetch(resource, { method: 'DELETE', credentials: 'omit', keepalive: true }).catch(function () {});
   }
-  function session(pc, resource) {
+  function session(pc, resource, o) {
     var s = { pc: pc, closed: false, onfail: null }, lostT = null;
     s.close = function () { if (s.closed) return; s.closed = true; clearTimeout(lostT); try { pc.close(); } catch (e) {} drop(resource); };
     function fail() { if (s.closed) return; s.close(); if (s.onfail) s.onfail(); }
@@ -88,7 +93,24 @@
       else if (st === 'failed' || st === 'closed') fail();
       else if (st === 'disconnected' && !lostT) lostT = setTimeout(fail, 5000);   // brief blips heal themselves
     });
+    if (o && o.fastEnd) serverEnd(pc, fail);
     return s;
+  }
+  // camstutter: the server ended this session (its DTLS close_notify): fail at once - see the header. A transport that is already
+  // closed / failed when we look counts too (checked on the next turn, once the caller has set onfail). Never throws (no
+  // RTCDtlsTransport: the 'disconnected' path above, as before).
+  function serverEnd(pc, fail) {
+    try {
+      var seen = [];
+      (pc.getReceivers ? pc.getReceivers() : []).forEach(function (rx) {
+        var tr = rx && rx.transport;
+        if (!tr || seen.indexOf(tr) >= 0 || typeof tr.addEventListener !== 'function') return;
+        seen.push(tr);
+        var check = function () { if (tr.state === 'closed' || tr.state === 'failed') fail(); };
+        tr.addEventListener('statechange', check);
+        setTimeout(check, 0);
+      });
+    } catch (e) { /* the 'disconnected' path */ }
   }
   function closeQuietly(pc, resource) { try { pc.close(); } catch (e) {} drop(resource); }
   // 1.99zc: resolves 'playing' once the video plays, or 'blocked' when the browser refuses to start it (NotAllowedError:
@@ -201,6 +223,7 @@
   }
   // 1.99yh: a live cam (livecam.js) - WHEP, video only. Like listen(): Pepe starts publishing when asked (opening the
   // cam takes a few seconds), so a 404 is retried until the timeout. Resolves once the video plays (muted: a cam has no sound).
+  // camstutter: o.fastEnd (the ticket's fast_end) - the session fails at once when the server ends it (serverEnd).
   function watch(url, video, o) {
     o = o || {};
     if (!window.RTCPeerConnection || !window.MediaStream) return Promise.reject(new Error('This browser has no WebRTC'));
@@ -220,7 +243,7 @@
           return started(video);
         });
         var left = Math.max(1000, deadline - Date.now());
-        return timeout(go, left, 'Live cam').then(function (how) { var ss = session(pc, resource); ss.blocked = how === 'blocked'; return ss; }, function (e) {
+        return timeout(go, left, 'Live cam').then(function (how) { var ss = session(pc, resource, { fastEnd: o.fastEnd === true }); ss.blocked = how === 'blocked'; return ss; }, function (e) {
           closeQuietly(pc, resource);
           if (e && e.status === 404 && Date.now() + 1200 < deadline) {
             return new Promise(function (res) { setTimeout(res, 1000); }).then(attempt);
