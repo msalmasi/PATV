@@ -64,8 +64,10 @@ function sandbox(options = {}) {
   }
   // kinds: standard (jitterBufferTarget), legacy (playoutDelayHint), none; iosdelay: webkit (WebKit before iOS 27: only `transform`),
   // webkit27 (jitterBufferTarget + transform), chromium (jitterBufferTarget + playoutDelayHint + transform)
-  function receiver(kind = "standard") {
+  function receiver(kind = "standard", { transport = false } = {}) {
     const writes = [], hints = [], transforms = [], rx = { writes, hints, transforms };
+    if (transport) rx.transport = { state: "connected", listeners: [], addEventListener(k, fn) { if (k === "statechange") this.listeners.push(fn); },
+      removeEventListener(k, fn) { this.listeners = this.listeners.filter((f) => f !== fn); }, set(state) { this.state = state; this.listeners.slice().forEach((f) => f()); } };
     const prop = (name, list) => Object.defineProperty(rx, name, { configurable: true, get: () => list.at(-1), set: v => { if (options.setterThrows) throw new Error("unsupported"); list.push(v); } });
     if (kind === "standard" || kind === "webkit27" || kind === "chromium") prop("jitterBufferTarget", writes);
     if (kind === "legacy") prop("playoutDelayHint", writes);
@@ -910,7 +912,7 @@ const panel = (s) => s.document.body.children.find((e) => e.tagName === "ASIDE")
 test("iosdelay: iPhone Chrome with no delay of its own - the cam's frames are held in a worker, attached in ontrack before any frame, following the target", async () => {
   const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
   assert.equal(s.workers.length, 1, "the worker starts with the page (ready before the first cam)");
-  const w = s.workers[0]; assert.equal(w.url, "/public/js/av-sync-hold.js?v=1"); assert.deepEqual(w.posted, [{ ping: true }]);
+  const w = s.workers[0]; assert.equal(w.url, "/public/js/av-sync-hold.js?v=1"); assert.deepEqual(w.posted, [{ ping: true, report: false }], "no ?avsync=1: no reports (review fix F4)");
   w.onmessage({ data: { ready: true } });
   s.api.pad("pad"); const a = s.tile(s.receiver("webkit"));
   assert.equal(a.rx.transforms.length, 1, "attached synchronously in ontrack (watch() sets srcObject after)");
@@ -939,6 +941,7 @@ test("iosdelay: iPhone Chrome with no delay of its own - the cam's frames are he
 test("iosdelay: the worker's reports reach debug() and the ?avsync=1 panel's cam lines; a cam over a memory cap is said once in the console", async () => {
   const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, search: "?avsync=1", config: { ...SAFARI_ON, dbg: true } });
   const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  assert.deepEqual(w.posted[0], { ping: true, report: true }, "the panel asks the worker for its reports");
   s.api.pad("pad"); s.tile(s.receiver("webkit")); s.tile(s.receiver("standard")); s.media(); await s.advance(0);
   let lines = panel(s);
   assert.equal(lines[0], "sync for you: ON (your toggle)", "the first line as before");
@@ -947,13 +950,14 @@ test("iosdelay: the worker's reports reach debug() and the ?avsync=1 panel's cam
   w.onmessage({ data: { id: "h1", applied: 1380, target: 1400, frames: 42, kb: 120, over: "" } }); await s.advance(2000);
   lines = panel(s);
   assert.equal(lines[1], "cam 1: frame hold · target 1400 ms · applied 1380 ms · 42 frames held");
-  assert.deepEqual(plain(s.api.debug().tiles[0].frame_hold), { sent_ms: 1400, applied_ms: 1380, frames: 42, kb: 120, stopped: "" });
+  assert.deepEqual(plain(s.api.debug().tiles[0].frame_hold), { sent_ms: 1400, applied_ms: 1380, frames: 42, stopped: "", frames_in: false, key_out: false, ended: false });
   assert.equal(s.api.debug().tiles[1].frame_hold, null); assert.equal(s.api.debug().tiles[1].method, "jbt");
   assert.equal(s.warnings.length, 0);
   w.onmessage({ data: { id: "h1", applied: 0, target: 0, frames: 0, kb: 0, over: "tile" } }); w.onmessage({ data: { id: "h1", applied: 0, target: 0, frames: 0, kb: 0, over: "tile" } });
   await s.advance(2000);
   assert.equal(s.warnings.length, 1, "said once"); assert.match(s.warnings[0], /frame hold stopped.*memory cap.*undelayed/);
   assert.match(panel(s)[1], /stopped: memory cap - plays undelayed$/);
+  assert.equal(s.api.debug().tiles[0].supported, false, "it no longer claims to wait"); assert.equal(s.api.debug().tiles[0].target_ms, null);
   w.onmessage({ data: { id: "nobody", applied: 5 } }); w.onmessage({ data: "junk" }); w.onmessage({});   // unknown / odd messages are ignored
   // every string has its English text in locales/en.json (the other languages sync from it), and the JS fallback is that text
   const EN = JSON.parse(fs.readFileSync(path.join(__dirname, "../locales/en.json"), "utf8"));
@@ -1020,12 +1024,12 @@ test("iosdelay: Chromium's path is unchanged - a transform-capable Chrome never 
   assert.deepEqual(x.rx.transforms, []); assert.equal(x.rx.writes.at(-1), 1400);
 });
 
-test("iosdelay: a worker that fails (won't load, or breaks) - the transforms come off so the cams pass straight through, nothing claims a delay, said once; a blocked Worker never attaches", async () => {
+test("iosdelay: a worker that fails before it ran (won't load) - the transforms come off so the cams pass straight through, nothing claims a delay, said once; a blocked Worker never attaches", async () => {
   const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
-  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  const w = s.workers[0];
   s.api.pad("pad"); const a = s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
   let prevented = false; w.onerror({ preventDefault() { prevented = true; } });
-  assert.equal(a.rx.transforms.at(-1), null, "taken off: WebKit passes the frames straight through again");
+  assert.equal(a.rx.transforms.at(-1), null, "taken off: WebKit passes the frames straight through again (it never started)");
   assert.equal(s.api.debug().tiles[0].method, "none"); assert.equal(s.api.debug().tiles[0].supported, false); assert.equal(prevented, true);
   assert.equal(s.warnings.length, 1); assert.match(s.warnings[0], /frame hold could not run/);
   const b = s.tile(s.receiver("webkit")); assert.equal(b.rx.transforms.length, 0, "no new attach"); w.onerror({}); assert.equal(s.warnings.length, 1);
@@ -1036,6 +1040,129 @@ test("iosdelay: a worker that fails (won't load, or breaks) - the transforms com
   const old = sandbox({ ua: IPHONE, hold: "auto", config: SAFARI_ON });
   assert.equal(old.workers.length, 0); old.api.pad("pad"); const d = old.tile(old.receiver("webkit"));
   assert.equal(d.rx.transforms.length, 0); assert.equal(old.api.debug().tiles[0].method, "none");
+});
+
+test("review fix F2: a worker that ran and then threw keeps its transforms (taking one off would lose the frames it holds: a freeze, then a jump) and lets go of the delay - hold 0, it ramps out; nothing claims a delay; new cams aren't attached", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
+  assert.equal(holdPosts(w, "h1").at(-1), 1400);
+  w.onerror({ preventDefault() {} });
+  assert.equal(a.rx.transforms.length, 1, "still on the receiver"); assert.notEqual(a.rx.transforms.at(-1), null);
+  assert.equal(holdPosts(w, "h1").at(-1), 0, "let go: the worker ramps out");
+  assert.equal(s.api.debug().tiles[0].method, "off"); assert.equal(s.api.debug().tiles[0].supported, false); assert.equal(s.api.debug().tiles[0].target_ms, null);
+  assert.equal(s.warnings.length, 1); assert.match(s.warnings[0], /frame hold could not run/);
+  const n = w.posted.length; s.config.k.pt = 400; await s.advance(5000);
+  assert.equal(holdPosts(w, "h1").length, holdPosts(w, "h1").length); assert.ok(!w.posted.slice(n).some((m) => "hold" in m && m.hold > 0), "never asked to hold again");
+  const b = s.tile(s.receiver("webkit")); assert.equal(b.rx.transforms.length, 0, "no new attach");
+  a.pc.close(); await s.advance(2000); assert.ok(w.posted.some((m) => m.id === "h1" && m.close), "its state is still dropped when it closes");
+});
+
+test("review fix C1: the server ending a cam (its DTLS transport closes: a ban, a block, the 18+ gate, a cover, a veil, an opt-out) drops what the worker holds at once - never shown, whatever the page's fast_end or tick", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit", { transport: true })); s.media(); await s.advance(0);
+  assert.equal(holdPosts(w, "h1").at(-1), 1400);
+  a.rx.transport.set("closed");                                   // no advance: at once, before any tick
+  assert.deepEqual(w.posted.filter((m) => m.close), [{ id: "h1", close: true }]);
+  assert.equal(s.api.debug().tiles[0].frame_hold.ended, true);
+  const n = w.posted.length; s.config.k.pt = 400; await s.advance(5000);
+  assert.deepEqual(w.posted.slice(n).filter((m) => m.id === "h1"), [], "nothing more for it - not even a hold that would bring its state back");
+  a.pc.close(); await s.advance(2000); assert.equal(w.posted.filter((m) => m.close).length, 1, "closed once");
+  // a failed DTLS transport, and a failed connection, the same
+  const b = s.tile(s.receiver("webkit", { transport: true })); b.rx.transport.set("failed");
+  assert.ok(w.posted.some((m) => m.id === "h2" && m.close));
+  const c = s.tile(s.receiver("webkit")); c.pc.connectionState = "failed"; (c.pc.listeners.connectionstatechange || []).forEach((fn) => fn());
+  assert.ok(w.posted.some((m) => m.id === "h3" && m.close));
+  // a transport that wasn't there in ontrack is watched from the next tick
+  const late = s.tile(s.receiver("webkit")); const id = s.api.debug().tiles.at(-1).frame_hold && "h4";
+  late.rx.transport = s.receiver("webkit", { transport: true }).transport; await s.advance(2500);
+  late.rx.transport.set("closed"); assert.ok(w.posted.some((m) => m.id === id && m.close), "watched once it appeared");
+});
+
+test("review fix C2: a cam the worker reports dead (its stream broke) - the transform comes off, WebKit passes its frames straight through, said once; a stream that ended is quiet", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit")); const b = s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
+  w.onmessage({ data: { id: "h1", dead: true, over: "error" } });
+  assert.equal(a.rx.transforms.at(-1), null, "off the receiver"); assert.equal(b.rx.transforms.length, 1, "the other cam untouched");
+  assert.equal(s.api.debug().tiles[0].method, "none"); assert.equal(s.api.debug().tiles[0].supported, false); assert.equal(s.api.debug().tiles[0].frame_hold, null);
+  assert.ok(w.posted.some((m) => m.id === "h1" && m.close), "its state dropped in the worker");
+  assert.equal(s.warnings.length, 1); assert.match(s.warnings[0], /frame hold stopped \(its stream broke\).*undelayed until it reconnects/);
+  w.onmessage({ data: { id: "h1", dead: true, over: "error" } }); assert.equal(s.warnings.length, 1, "once");
+  w.onmessage({ data: { id: "h2", dead: true, over: "ended" } });
+  assert.equal(b.rx.transforms.at(-1), null); assert.equal(s.warnings.length, 1, "ended (the receiver stopped): quietly");
+  const c = s.tile(s.receiver("webkit")); assert.equal(c.rx.transforms.length, 1, "a reconnect is held again");
+});
+
+// a peer whose video stats say how many packets arrived and frames were decoded (the watchdog); the test moves them
+function flowPeer(s, flow) {
+  const pc = s.peer(); const base = pc.getStats.bind(pc);
+  pc.getStats = () => base().then((m) => { const row = m.get("in"); if (flow.packets != null) row.packetsReceived = flow.packets; if (flow.decoded != null) row.framesDecoded = flow.decoded; flow.reads = (flow.reads || 0) + 1; return m; });
+  return pc;
+}
+test("review fix C2: the watchdog - a key frame out of the worker and nothing decoded 4 s later, or packets for 20 s with no frame ever reaching it: the transform comes off; frames decoded after its key frame: it stops watching", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  // (no room audio: the transform is on from the first frame all the same, and no tick reads these stats - only the watchdog)
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } }); s.api.pad("pad"); await s.advance(0);
+  const grow = (flow, ms, decode) => { flow.packets += Math.round(ms / 10); if (decode) flow.decoded += Math.round(ms / 33); };
+  // 1. stuck: frames reach the worker, its key frame goes out, nothing is ever decoded
+  const f1 = { packets: 0, decoded: 0 }, a = s.tile(s.receiver("webkit"), flowPeer(s, f1));
+  w.onmessage({ data: { id: "h1", in: true } });
+  for (let i = 0; i < 4; i++) { grow(f1, 1000); await s.advance(1000); }
+  w.onmessage({ data: { id: "h1", key: true } });
+  for (let i = 0; i < 3; i++) { grow(f1, 1000); await s.advance(1000); }
+  assert.equal(a.rx.transforms.length, 1, "not yet: 3 s after its key frame");
+  for (let i = 0; i < 4; i++) { grow(f1, 1000); await s.advance(1000); }
+  assert.equal(a.rx.transforms.at(-1), null, "off: no frame got through"); assert.match(s.warnings.at(-1), /no frames got through/);
+  // 2. working: decoded after its key frame - the watchdog stops reading stats
+  const f2 = { packets: 0, decoded: 0 }, b = s.tile(s.receiver("webkit"), flowPeer(s, f2));
+  w.onmessage({ data: { id: "h2", in: true } });
+  for (let i = 0; i < 5; i++) { grow(f2, 1000); await s.advance(1000); }
+  w.onmessage({ data: { id: "h2", key: true } });
+  for (let i = 0; i < 10; i++) { grow(f2, 1000, true); await s.advance(1000); }
+  const reads = f2.reads; for (let i = 0; i < 10; i++) { grow(f2, 1000, true); await s.advance(1000); }
+  assert.equal(b.rx.transforms.length, 1); assert.equal(f2.reads, reads, "done watching");
+  // 3. frames never reach the worker: off only after 20 s of packets with nothing decoded (a long wait for a key frame is not judged sooner)
+  const f3 = { packets: 0, decoded: 0 }, c = s.tile(s.receiver("webkit"), flowPeer(s, f3));
+  for (let i = 0; i < 16; i++) { grow(f3, 1000); await s.advance(1000); }
+  assert.equal(c.rx.transforms.length, 1, "16 s: still waiting");
+  for (let i = 0; i < 12; i++) { grow(f3, 1000); await s.advance(1000); }
+  assert.equal(c.rx.transforms.at(-1), null, "off after ~20 s");
+  // 4. frames pass straight through (the worker never started them) and are decoded: never judged stuck
+  const f4 = { packets: 0, decoded: 0 }, d = s.tile(s.receiver("webkit"), flowPeer(s, f4));
+  for (let i = 0; i < 40; i++) { grow(f4, 1000, true); await s.advance(1000); }
+  assert.equal(d.rx.transforms.length, 1);
+  // 5. stats that don't say: not judged, one read
+  const f5 = {}, e = s.tile(s.receiver("webkit"), flowPeer(s, f5));
+  await s.advance(40000); assert.equal(e.rx.transforms.length, 1); assert.equal(f5.reads, 1);
+});
+
+test("review fix C3 / C4: k_hold_ms goes in before the cap (as k_pt / k_re) - the frame hold never passes cap_ms, and the panel's target is what the worker is asked", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, search: "?avsync=1", config: { ...SAFARI_ON, dbg: true, cap: 1450, k: { pt: 100, re: -100, ind: 0, hold: 300 } } });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
+  assert.equal(holdPosts(w, "h1").at(-1), 1450, "1400 + 300, capped at 1450");
+  assert.equal(s.api.debug().tiles[0].target_ms, 1450);
+  s.config.k.hold = -200; await s.advance(5000);
+  assert.equal(holdPosts(w, "h1").at(-1), 1200); assert.match(panel(s)[1], /^cam 1: frame hold · target 1200 ms/);
+  // a Chrome viewer on the same pad: k_hold doesn't touch its own delay
+  const c = sandbox({ config: { ...SAFARI_ON, cap: 1450, k: { pt: 100, re: -100, ind: 0, hold: 300 } } });
+  c.api.pad("pad"); const x = c.tile(c.receiver("standard")); c.media(); await c.advance(0);
+  assert.equal(x.rx.writes.at(-1), 1400);
+});
+
+test("review fix F6: switching the Safari delay method off reaches cams already held - hold 0 at the next settings, and they no longer claim to wait", async () => {
+  const s = sandbox({ ua: IPHONE, hold: "auto", webkit: true, config: SAFARI_ON });
+  const w = s.workers[0]; w.onmessage({ data: { ready: true } });
+  s.api.pad("pad"); const a = s.tile(s.receiver("webkit")); s.media(); await s.advance(0);
+  const box = s.element("div"); s.document.body.appendChild(box); s.api.decorate(box);
+  assert.equal(holdPosts(w, "h1").at(-1), 1400); assert.match(box.children[0].title, /cams/);
+  s.config.safari_method = "off"; await s.advance(6000);
+  assert.equal(holdPosts(w, "h1").at(-1), 0, "let go (it ramps out)");
+  assert.equal(s.api.debug().tiles[0].supported, false); assert.doesNotMatch(box.children[0].title, /cams/, "the toggle no longer claims the cams (the mic signs only)");
+  assert.equal(a.rx.transforms.length, 1, "the transform stays (taking it off would drop the frames it holds)");
+  s.config.safari_method = "auto"; await s.advance(6000); assert.equal(holdPosts(w, "h1").at(-1), 1400, "back on");
 });
 
 test("iosdelay: the page pins the hold worker's version, and the worker file is plain JS for a dedicated worker that never sends or stores anything", () => {
