@@ -7,6 +7,9 @@
 //   * livecam.js: the fast_end field (default per STAGING, admin checkbox, never sent to Pepe), the watch tickets carry it
 //   * the three live-cam pages pass it (stage-mic, the cam strip, the ▶ Live popover); cache-busters bumped
 //   * the MediaMTX kick: one route (the second only when the first route doesn't exist), no second "session not found"
+//   * review: a reconnect after the server ended a session that played 20 s+ is free (PATVRtc.freeRewatch) - the three pages'
+//     REWATCH_MAX budget is spent no faster than with the old slow detection (the cam strip driven for real); the kick's
+//     first route is checked (its list, at most hourly, on a kick) - missing = both routes for every kick, said once
 //   node --test test/camstutter.test.js
 "use strict";
 const test = require("node:test");
@@ -148,6 +151,138 @@ test("measured in the fake: a re-publish's freeze until the page reconnects - ~0
   off.ss.close();
 });
 
+// ── review (safety 3): a fast end costs no more of a page's reconnects than the old slow detection ───────────────────────────
+test("freeRewatch: a session the SERVER ended after 20 s+ of playing is a free reconnect; a short one, a blip, our own close are not", async () => {
+  const { R } = sandbox();
+  const long = await watched({ fastEnd: true });
+  long.ss.at -= 25000;                                       // it played 25 s
+  long.pc.dtls.set("closed");
+  assert.equal(long.fails.length, 1);
+  assert.ok(long.ss.serverEnd === true && long.ss.playedMs >= 25000, JSON.stringify({ e: long.ss.serverEnd, p: long.ss.playedMs }));
+  assert.equal(R.freeRewatch(long.ss), true, "played 25 s, then the relay re-published: free");
+  const short = await watched({ fastEnd: true });
+  short.ss.at -= 2000;                                       // the new publisher was replaced again 2 s later
+  short.pc.dtls.set("closed");
+  assert.equal(short.ss.serverEnd, true);
+  assert.equal(R.freeRewatch(short.ss), false, "a 2-s session: it counts (a relay that keeps failing still ends the tile)");
+  const blip = await watched({ fastEnd: true });
+  blip.ss.at -= 60000;
+  blip.pc.state("failed");                                    // the connection failed (not the server's DTLS close)
+  assert.equal(blip.fails.length, 1);
+  assert.equal(R.freeRewatch(blip.ss), false, "a failed connection counts, as before");
+  const off = await watched({});
+  off.ss.at -= 60000;
+  off.pc.state("failed");
+  assert.equal(R.freeRewatch(off.ss), false, "fast_end off: every reconnect counts, as before");
+  const own = await watched({ fastEnd: true });
+  own.ss.at -= 60000;
+  own.ss.close();
+  own.pc.dtls.set("closed");
+  assert.equal(own.ss.serverEnd, false, "our own close is never the server's");
+  for (const x of [null, undefined, {}, { serverEnd: "yes", playedMs: 1e9 }, { serverEnd: true, playedMs: "60000" }, { serverEnd: true, playedMs: 19999 }]) {
+    assert.equal(R.freeRewatch(x), false, JSON.stringify(x));
+  }
+  assert.equal(R.freeRewatch({ serverEnd: true, playedMs: 20000 }), true);
+});
+
+// the cam strip (pad-camstrip.js) for real, with a fake PATVRtc whose sessions the test ends
+function stripSandbox(freeRewatch) {
+  const posts = [], sessions = [];
+  const mk = (tag) => ({
+    tag, children: [], attrs: {}, listeners: {}, style: {}, textContent: "", hidden: false,
+    classList: { _s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, toggle(c, on) { if (on === undefined ? !this._s.has(c) : on) this._s.add(c); else this._s.delete(c); return this._s.has(c); }, contains(c) { return this._s.has(c); } },
+    appendChild(c) { this.children.push(c); c.parentNode = this; return c; }, removeChild(c) { this.children = this.children.filter((x) => x !== c); },
+    setAttribute(k, v) { this.attrs[k] = v; }, querySelector() { return null; }, addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); },
+    scrollIntoView() {}, play() { return Promise.resolve(); } });
+  const store = {};
+  const ctx = { document: { createElement: mk, addEventListener() {}, readyState: "complete" }, console,
+                setInterval: () => 1, clearInterval() {}, clearTimeout() {}, setTimeout: () => 1,
+                localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; }, removeItem: (k) => { delete store[k]; } },
+                fetch: (u, o) => {
+                  posts.push(u);
+                  const d = /\/livecam$/.test(u) ? { ok: true, whep: "/whep/x", fast_end: true } : /\/beat$/.test(u) ? { ok: true, state: "live" } : { ok: true };
+                  return Promise.resolve({ json: () => Promise.resolve(d) });
+                },
+                RTCPeerConnection: function () {},
+                PATVRtc: { watch: (url, v, o) => { const s = { close() {}, blocked: false, fastEnd: o && o.fastEnd }; sessions.push(s); return Promise.resolve(s); },
+                           freeRewatch } };
+  ctx.window = ctx; ctx.addEventListener = () => {};
+  vm.runInNewContext(read("public", "js", "pad-camstrip.js"), ctx);
+  return { ctx, posts, sessions, mk };
+}
+const flushAll = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
+test("the cam strip: relay re-publishes after 20 s+ of playing never use up the tile's reconnects; quick repeats still end it", async () => {
+  const { R } = sandbox();
+  // (a) every session plays a minute, then the server ends it (the relay re-published: Pepe's fallback, a restart) - 8 times in a row
+  const A = stripSandbox(R.freeRewatch);
+  const a = A.ctx.PATVCamStrip.init(A.mk("section"), "pad", {});
+  a.update({ on: true, slots: { used: 0, max: 4 }, watching: [] });
+  assert.equal(a.add({ login: "alice", display: "Alice" }), true);
+  await flushAll();
+  assert.equal(A.sessions.length, 1);
+  assert.equal(A.sessions[0].fastEnd, true, "the ticket's fast_end reaches watch()");
+  for (let i = 0; i < 8; i++) {
+    const ss = A.sessions[A.sessions.length - 1];
+    ss.serverEnd = true; ss.playedMs = 60000;
+    ss.onfail();
+    await flushAll();
+  }
+  assert.equal(A.sessions.length, 9, "8 free reconnects - the tile is still live (before: the 5th re-publish in 3 minutes ended it)");
+  // (b) the server ends each new session 2 s in (a relay that keeps failing) - REWATCH_MAX (4) reconnects, then the tile ends
+  const B = stripSandbox(R.freeRewatch);
+  const b = B.ctx.PATVCamStrip.init(B.mk("section"), "pad", {});
+  b.update({ on: true, slots: { used: 0, max: 4 }, watching: [] });
+  b.add({ login: "bob", display: "Bob" });
+  await flushAll();
+  for (let i = 0; i < 6; i++) {
+    const ss = B.sessions[B.sessions.length - 1];
+    ss.serverEnd = true; ss.playedMs = 2000;
+    if (ss.onfail) ss.onfail();
+    await flushAll();
+  }
+  assert.equal(B.sessions.length, 5, "the first + 4 reconnects, then it ends ('gone', ↻ Retry) - as before");
+  // (c) the double re-publish (prod 23:07:59 -> 23:08:01): a long session, then a 2-s one - ONE reconnect used, as with the old detection
+  const C = stripSandbox(R.freeRewatch);
+  const c = C.ctx.PATVCamStrip.init(C.mk("section"), "pad", {});
+  c.update({ on: true, slots: { used: 0, max: 4 }, watching: [] });
+  c.add({ login: "cara", display: "Cara" });
+  await flushAll();
+  for (let k = 0; k < 4; k++) {                               // 4 doubles: 4 counted reconnects, still alive (REWATCH_MAX = 4)
+    let ss = C.sessions[C.sessions.length - 1];
+    ss.serverEnd = true; ss.playedMs = 90000; ss.onfail(); await flushAll();
+    ss = C.sessions[C.sessions.length - 1];
+    ss.serverEnd = true; ss.playedMs = 2000; ss.onfail(); await flushAll();
+  }
+  assert.equal(C.sessions.length, 9, "4 double re-publishes = 4 counted reconnects: still live (with fast_end and no free rule: dead after the 2nd double)");
+  // (d) an old webrtc-client (no freeRewatch): every reconnect counts, as before
+  const D = stripSandbox(undefined);
+  const d = D.ctx.PATVCamStrip.init(D.mk("section"), "pad", {});
+  d.update({ on: true, slots: { used: 0, max: 4 }, watching: [] });
+  d.add({ login: "dan", display: "Dan" });
+  await flushAll();
+  for (let i = 0; i < 6; i++) {
+    const ss = D.sessions[D.sessions.length - 1];
+    ss.serverEnd = true; ss.playedMs = 60000;
+    if (ss.onfail) ss.onfail();
+    await flushAll();
+  }
+  assert.equal(D.sessions.length, 5, "no freeRewatch on the page: the old budget");
+});
+
+test("the mic stage and the ▶ Live popover use the same rule: the ended session goes to rewatch, a free one skips the budget", () => {
+  const mic = read("public", "js", "stage-mic.js");
+  assert.match(mic, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my, ss\); \};/);
+  assert.match(mic, /var free = !!\(was && window\.PATVRtc && PATVRtc\.freeRewatch && PATVRtc\.freeRewatch\(was\)\);\s*if \(!free\) \{\s*if \(t\.rew\.length >= REWATCH_MAX\) return give\(\);\s*t\.rew\.push\(t0\);\s*\}/);
+  const pop = read("public", "js", "pad-livecam.js");
+  assert.match(pop, /ss\.onfail = function \(\) \{ if \(my === gen\) rewatch\(ss\); \};/);
+  assert.match(pop, /if \(!\(was && window\.PATVRtc && PATVRtc\.freeRewatch && PATVRtc\.freeRewatch\(was\)\)\) \{\s*if \(rew\.length >= REWATCH_MAX\) return ended\('gone'\);\s*rew\.push\(t0\);\s*\}/);
+  const strip = read("public", "js", "pad-camstrip.js");
+  assert.match(strip, /ss\.onfail = function \(\) \{ if \(my === t\.gen\) rewatch\(my, ss\); \};/);
+  for (const [f, src] of [["stage-mic.js", mic], ["pad-livecam.js", pop], ["pad-camstrip.js", strip]]) {
+    assert.equal((src.match(/REWATCH_MAX = 4, REWATCH_WIN_MS = 3 \* 60 \* 1000/g) || []).length, 1, f + ": the budget itself is unchanged");
+  }
+});
+
 // ── the setting and the tickets ────────────────────────────────────────────────────────────────────────────────────────
 test("livecam.js: fast_end is a site switch - off on prod, on on staging; the admin page has it; Pepe never gets it", () => {
   const src = read("livecam.js");
@@ -232,7 +367,8 @@ test("the live-cam pages pass the ticket's fast_end to watch() (only a real true
 });
 
 // ── the MediaMTX kick: one route ───────────────────────────────────────────────────────────────────────────────────────────
-async function kickWith(handler) {
+// (the kicks only - the hourly route check's GET is its own test below; `check` = what that check last found: null = not yet)
+async function kickWith(handler, { check = null, kicks = 1 } = {}) {
   const hits = [];
   const server = http.createServer((req, res) => { hits.push(req.method + " " + req.url); handler(req, res); });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -240,25 +376,79 @@ async function kickWith(handler) {
   process.env.MEDIAMTX_API = "http://127.0.0.1:" + server.address().port;
   const LC = require(path.join(repo, "livecam"));
   try {
-    await new Promise((r) => LC._kickHttp("12345678-1234-1234-1234-123456789abc", r));
+    LC._kickCheck.ok = check; LC._kickCheck.at = Date.now();    // (no new check inside this helper)
+    for (let i = 0; i < kicks; i++) await new Promise((r) => LC._kickHttp("12345678-1234-1234-1234-123456789abc", r));
   } finally {
     if (old == null) delete process.env.MEDIAMTX_API; else process.env.MEDIAMTX_API = old;
     server.close();
   }
-  return hits;
+  return hits.filter((h) => h.startsWith("POST "));
 }
+const K1 = "POST /v3/webrtcsessions/kick/12345678-1234-1234-1234-123456789abc";
+const K2 = "POST /v3/webrtc/sessions/kick/12345678-1234-1234-1234-123456789abc";
 test("kick: MediaMTX v1.21 has the first route - one request (kicked, or its JSON 'session not found'), never the second", async () => {
   let hits = await kickWith((req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); });
-  assert.deepEqual(hits, ["POST /v3/webrtcsessions/kick/12345678-1234-1234-1234-123456789abc"]);
+  assert.deepEqual(hits, [K1]);
   hits = await kickWith((req, res) => { res.writeHead(404, { "content-type": "application/json" }); res.end('{"error":"session not found"}'); });
   assert.equal(hits.length, 1, "a session that's gone already: one request, one log line on the VPS (was two)");
+  hits = await kickWith((req, res) => { res.writeHead(404, { "content-type": "application/json" }); res.end('{"error":"session not found"}'); }, { check: true });
+  assert.deepEqual(hits, [K1], "the route check said the first route lists: one request");
 });
 test("kick: a MediaMTX without that route (another version: a plain 404) gets the other route", async () => {
   const hits = await kickWith((req, res) => {
     if (req.url.startsWith("/v3/webrtcsessions/")) { res.writeHead(404, { "content-type": "text/plain" }); res.end("404 page not found"); }
     else { res.writeHead(200); res.end("{}"); }
   });
-  assert.deepEqual(hits, ["POST /v3/webrtcsessions/kick/12345678-1234-1234-1234-123456789abc", "POST /v3/webrtc/sessions/kick/12345678-1234-1234-1234-123456789abc"]);
+  assert.deepEqual(hits, [K1, K2]);
+});
+test("kick (review): the route check found the first route's list missing - every kick goes to both routes, even on a JSON 404", async () => {
+  const hits = await kickWith((req, res) => { res.writeHead(404, { "content-type": "application/json" }); res.end('{"status":"error","error":"not found"}'); },
+    { check: false, kicks: 2 });
+  assert.deepEqual(hits, [K1, K2, K1, K2], "(as before camstutter: no kick can go silently nowhere)");
+});
+test("kick (review): the route check - one GET of the first route's list at most once an hour, on a kick; its answer decides; warned once", async () => {
+  const LC = require(path.join(repo, "livecam"));
+  let listStatus = 404;
+  const hits = [];
+  const server = http.createServer((req, res) => {
+    hits.push(req.method + " " + req.url);
+    if (req.method === "GET") { res.writeHead(listStatus, { "content-type": "application/json" }); res.end(listStatus === 200 ? '{"itemCount":0,"items":[]}' : '{"status":"error"}'); return; }
+    res.writeHead(404, { "content-type": "application/json" }); res.end('{"status":"error","error":"session not found"}');
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const old = process.env.MEDIAMTX_API, warn = console.warn, log = console.log, said = [];
+  process.env.MEDIAMTX_API = "http://127.0.0.1:" + server.address().port;
+  console.warn = (m) => said.push(String(m)); console.log = (m) => said.push(String(m));
+  const kick = () => new Promise((r) => LC._kickHttp("12345678-1234-1234-1234-123456789abc", r));
+  const until = async (fn) => { for (let i = 0; i < 100 && !fn(); i++) await tick(10); };
+  try {
+    LC._kickCheck.ok = null; LC._kickCheck.at = 0;
+    await kick();
+    await until(() => LC._kickCheck.ok !== null);
+    assert.equal(hits.filter((h) => h === "GET /v3/webrtcsessions/list").length, 1, "one GET of the list with the first kick");
+    assert.equal(LC._kickCheck.ok, false, "a 404 for the list: the first route is missing");
+    assert.equal(said.filter((m) => /kick route check: \/v3\/webrtcsessions\/list answered 404 - reader kicks go to both routes/.test(m)).length, 1, said.join(" | "));
+    hits.length = 0;
+    await kick(); await kick();
+    assert.deepEqual(hits, [K1, K2, K1, K2], "within the hour: no new check, both routes for every kick");
+    // an hour on: checked again (a MediaMTX upgrade without a site restart) - a 200 = one route again, said once
+    listStatus = 200;
+    LC._kickCheck.at = Date.now() - 61 * 60 * 1000;
+    hits.length = 0;
+    await kick();
+    await until(() => LC._kickCheck.ok === true);
+    assert.equal(LC._kickCheck.ok, true);
+    assert.ok(said.some((m) => /the first route answers again - one route per kick/.test(m)));
+    hits.length = 0;
+    await kick();
+    assert.deepEqual(hits, [K1], "one route again");
+    assert.equal(said.filter((m) => /answered 404/.test(m)).length, 1, "the warning was said once");
+  } finally {
+    console.warn = warn; console.log = log;
+    if (old == null) delete process.env.MEDIAMTX_API; else process.env.MEDIAMTX_API = old;
+    server.close();
+    LC._kickCheck.ok = null; LC._kickCheck.at = 0;
+  }
 });
 test("kick: a bad id never reaches MediaMTX", async () => {
   const LC = require(path.join(repo, "livecam"));
