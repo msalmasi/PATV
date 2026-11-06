@@ -1892,6 +1892,27 @@ function register(app, { addUser, isBotToken, bySlug, isLive }) {
     }
     res.json(beat(req.user.userId, R.id, ref));
   });
+  // pubswitch review (C2): the cam strip's one start-up report - sent only by a signed-in viewer's pad page that had remembered cams to
+  // bring back (pad-camstrip.js report): when its DOMContentLoaded / load came, whether the restore ran before the page was left. One
+  // log line of numbers (no login, no cam, nothing stored), so a page that stalls with a restore pending again can be proven from the log.
+  const bootHit = guard.limiter({ max: 20, windowMs: 10 * 60 * 1000 });
+  const BOOT_VIA = new Set(["now", "load", "timer", "hide", "noview"]);
+  app.post("/api/rooms/:slug/livecam/boot", addUser, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!fetchOnly(req, res)) return;
+    if (!req.user || !req.user.userId) return fail(res, refuse("signin"));
+    const k = "u:" + req.user.userId;
+    if (bootHit.blocked(k)) return res.status(429).json({ ok: false, code: "rate" });
+    bootHit.hit(k);
+    const R = bySlug(req.params.slug);
+    if (!R) return res.json({ ok: true });
+    const b = req.body && typeof req.body === "object" ? req.body : {};
+    const ms = (v) => { const n = typeof v === "number" ? Math.round(v) : NaN; return Number.isFinite(n) && n >= 0 && n < 3600 * 1000 ? n : -1; };
+    const n = typeof b.n === "number" && Number.isFinite(b.n) ? Math.min(8, Math.max(0, Math.round(b.n))) : 0;
+    const pad = String(R.slug || req.params.slug || "").replace(/[^\w-]/g, "").slice(0, 60);
+    console.log(`[livecam] boot pad=${pad} ran=${b.ran === 1 ? 1 : 0} via=${BOOT_VIA.has(b.via) ? b.via : "?"} n=${n} dcl=${ms(b.dcl)} load=${ms(b.load)} at=${ms(b.at)}`);
+    res.json({ ok: true });
+  });
   app.post("/api/rooms/:slug/livecam/stop", addUser, (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!fetchOnly(req, res)) return;

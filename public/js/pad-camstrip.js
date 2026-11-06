@@ -17,23 +17,33 @@
 // mfix review: a tile whose connection drops after it played is watched again while the site still says the cam is connecting /
 // live ("reconnecting…") - a few times, then "the live cam stopped" with ↻ Retry.
 // pubswitch (owner 2026-11-05: Players Lounge "lost the room dock layout" for him signed in, through reloads, a sign-out and the pad's
-//   level switch, until he cleared the site's data): every broken load carried a remembered pin whose cam couldn't start, and the
-//   page's own start-up (its deferred scripts, the Room Dock's DOMContentLoaded start) waited 16-61 s behind that connect. So:
-//   - remembered cams come back only after the page has finished loading (window load, or DOMContentLoaded + SETTLE_MS) - never
-//     while it is still being read - and without scrolling the page to the strip;
-//   - a remembered cam that ends (left cam, Pepe couldn't open it, the relay never came up...) is forgotten: it stays on the page
-//     as an "off" tile with ↻ Retry but the next load doesn't start it again (REMEMBER_ON: a full strip, live cams off here, a
-//     refusal for capacity / Pepe away / signed out, a network blip keep it remembered - those are refused at once, nothing connects);
+//   level switch, until he cleared the site's data): every broken load restored a remembered pin while the page was still being read,
+//   and the page's own start-up (its deferred scripts, the Room Dock's DOMContentLoaded start) came 16-61 s late or never - even on a
+//   load whose restore was refused at once (22:41:58Z: not_on_cam, nothing connected), so it was the tile made while the page was read,
+//   not the cam's connect. How that held the page up is not reproduced (no failing test for the stall itself). So:
+//   - remembered cams come back only after the page has finished loading (window load, or DOMContentLoaded + SETTLE_MS - always after
+//     DOMContentLoaded itself, never on a bare timer while deferred scripts still run) and without scrolling the page to the strip;
+//   - a page with remembered cams reports its start-up once (POST <base>/boot: DOMContentLoaded / load times, whether the restore ran -
+//     at the restore, or at pagehide when it never did), numbers only, so a recurrence can be proven from the site's log;
+//   - a remembered cam that ends for a reason about THE CAM (FORGET_ON: left cam, opted out, ended, no access, the relay never came up,
+//     this browser can't play it...) is forgotten: it stays on the page as an "off" tile with ↻ Retry but the next load doesn't start
+//     it again. Anything else - a full strip, capacity, Pepe away or offline, a site restart's "unwatched", a deploy's 502, beats that
+//     lapsed (an iPhone in the background), a relay restart, a network blip, a code this page doesn't know - keeps it remembered;
 //   - the memory is per ACCOUNT (opts.viewer, the partial's signed-in viewer): another account signed in on this browser never
 //     gets the first one's cams; the old per-browser key (patv.camstrip.<slug>) is dropped the first time a viewer's page loads.
+//     The key's tag is a hash of the username - not a secret (it can be matched against usernames): the first page after a sign-out
+//     drops every patv.camstrip.* key of the browser (partials/chat-sweep.ejs);
+//   - a pin made while the page loads keeps the remembered cams not brought back yet, and the restore reads the memory when it runs
+//     (another tab of the pad may have changed it meanwhile).
 (function () {
   'use strict';
   var _t = typeof window.__t === 'function' ? window.__t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var BEAT_MS = 15000, KEEP = 8, SETTLE_MS = 4000;
-  // (pubswitch) why a tile ended that keeps it remembered: not about this cam - no slot of yours, live cams off here, the site's or
-  // Pepe's capacity for a moment, a network blip, signed out (those are refused at once, nothing connects). Anything else - they left
-  // cam / opted out / ended it, the relay never came up or died, this browser can't play it - forgets it.
-  var REMEMBER_ON = { viewer_cap: 1, off: 1, room_off: 1, switched_off: 1, slots_busy: 1, budget: 1, nopepe: 1, list_unread: 1, rate: 1, signin: 1, net: 1 };
+  // (pubswitch review) why a tile ended that FORGETS it: about this cam - they left cam / closed it / opted out / are unavailable or went
+  // incognito, it was ended, no access to it or this pad's live room, Pepe couldn't open it, the relay never came up / never had a frame,
+  // the watch failed with the site answering, this browser can't play it. Any other end (or none, or one this page doesn't know) keeps it.
+  var FORGET_ON = { not_on_cam: 1, cam_closed: 1, opted_out: 1, unavailable: 1, veil_changed: 1, ended_by: 1, ended_by_admin: 1, blocked: 1,
+                    pad_access: 1, open_failed: 1, not_that_cam: 1, spawn_failed: 1, start_timeout: 1, no_video: 1, failed: 1, browser: 1 };
   var REWATCH_MAX = 4, REWATCH_WIN_MS = 3 * 60 * 1000;   // mfix review: re-watches after a dropped connection (rewatch)
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function post(url, body, keep) {
@@ -57,22 +67,38 @@
     tiles = tiles.filter(function (t) { return !t.forget; });          // (pubswitch: a cam that ended isn't brought back)
     try { localStorage.setItem(key, JSON.stringify(tiles.map(function (t) { return t.id ? { id: t.id, display: String(t.display || '').slice(0, 60) } : { login: t.login, display: String(t.display || t.login).slice(0, 60) }; }))); } catch (e) { /* not remembered */ }
   }
-  /** pubswitch: a short tag of the signed-in viewer for the storage key (keeps the memory per account; no name in the key) */
+  /** pubswitch: a short tag of the signed-in viewer for the storage key (keeps the memory per account; a hash of the username, not a
+   *  secret - the sign-out sweep drops these keys) */
   function viewerTag(v) {
     var s = String(v).toLowerCase(), h = 0x811c9dc5;
     for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
     return ('0000000' + h.toString(16)).slice(-8);
   }
-  /** pubswitch: fn once the page has finished loading (its own start-up first) - at once where there is no loading page */
+  // pubswitch review: has the page's DOMContentLoaded fired? (readyState 'interactive' comes BEFORE it - deferred scripts still run then)
+  var DCL = false;
+  try {
+    if (window.document && window.document.readyState === 'complete') DCL = true;
+    else if (window.document && window.document.addEventListener) window.document.addEventListener('DOMContentLoaded', function () { DCL = true; });
+  } catch (e) { /* no document */ }
+  function navTiming() {
+    try { var P = window.performance; return P && P.getEntriesByType ? P.getEntriesByType('navigation')[0] || null : null; } catch (e) { return null; }
+  }
+  function dclFired() {
+    if (DCL || window.document.readyState === 'complete') return true;
+    var n = navTiming();
+    return !!(n && n.domContentLoadedEventEnd > 0);          // (this script read after it: the page's own timing says)
+  }
+  /** pubswitch: fn(via) once the page has finished loading (its own start-up first) - at once ('now') where there is no loading page;
+   *  'load' = the window's load event, 'timer' = DOMContentLoaded + SETTLE_MS (the load event can wait on a slow picture or the
+   *  stage's stream) - never before DOMContentLoaded itself */
   function settled(fn) {
     var D = window.document;
-    if (!D || typeof D.readyState !== 'string' || D.readyState === 'complete') return fn();
+    if (!D || typeof D.readyState !== 'string' || D.readyState === 'complete') return fn('now');
     var done = false;
-    function go() { if (done) return; done = true; setTimeout(fn, 0); }
-    window.addEventListener('load', go);
-    // (the load event can wait on a slow picture or the stage's stream: the page's DOMContentLoaded start-up and a few seconds do)
-    function arm() { setTimeout(go, SETTLE_MS); }
-    if (D.readyState === 'loading' && D.addEventListener) D.addEventListener('DOMContentLoaded', arm); else arm();
+    function go(via) { if (done) return; done = true; setTimeout(function () { fn(via); }, 0); }
+    window.addEventListener('load', function () { go('load'); });
+    function arm() { setTimeout(function () { go('timer'); }, SETTLE_MS); }
+    if (dclFired()) arm(); else if (D.addEventListener) D.addEventListener('DOMContentLoaded', arm);
   }
 
   function init(host, slug, opts) {
@@ -86,7 +112,8 @@
       KEY += '.' + viewerTag(opts.viewer);
     }
     var base = '/api/rooms/' + encodeURIComponent(slug) + '/livecam';
-    var info = null, restored = false, tiles = [], saved = load(KEY);
+    // (restored: the restore is scheduled; ran: it has run - until then `pending` holds the remembered cams not on screen yet)
+    var info = null, restored = false, ran = false, tiles = [], pending = load(KEY), reported = false;
     var head = el('div', 'cs-head'), title = el('h2', 'cs-title'), count = el('span', 'cs-count'), acts = el('span', 'cs-acts');
     title.appendChild(el('span', null, _t('js.pad.strip.title', '📌 Cam strip'))); title.appendChild(count);
     var hear = el('button', 'cs-btn cs-hear', _t('js.pad.live.audio', '🔊 Hear the room')); hear.type = 'button';
@@ -109,7 +136,22 @@
       hear.hidden = !ab || ab.classList.contains('hide') || ab.classList.contains('off') || ab.classList.contains('on');
       host.classList.toggle('cs-many', tiles.length > 1);
     }
-    function remember() { save(KEY, tiles); }
+    // (pubswitch review: until the restore has run, the remembered cams not brought back yet are kept too - a pin made while the page
+    // loads never wipes them; one already a tile here, ended or not, is the tile's to keep or forget)
+    function remember() {
+      var keep = tiles.filter(function (t) { return !t.forget; }).map(function (t) { return { id: t.id, login: t.login, display: t.display }; });
+      if (!ran) pending.forEach(function (w) { if (!find(keyOf(w))) keep.push({ id: frogId(w), login: frogId(w) ? null : String(w.login).toLowerCase(), display: w.display }); });
+      save(KEY, keep.slice(0, KEEP));
+    }
+    /** pubswitch review (C2): the one start-up report of a page with remembered cams (numbers only - no login, no cam) */
+    function report(didRun, via, n) {
+      if (reported || !opts.viewer || !n) return;
+      reported = true;
+      var nav = navTiming(), ms = function (v) { v = Math.round(Number(v) || 0); return v > 0 ? v : -1; }, at = -1;
+      try { at = window.performance && window.performance.now ? Math.round(window.performance.now()) : -1; } catch (e) { at = -1; }
+      post(base + '/boot', { ran: didRun ? 1 : 0, via: via, n: n, dcl: ms(nav && nav.domContentLoadedEventStart), load: ms(nav && nav.loadEventStart), at: at }, true)
+        .catch(function () { /* only a report */ });
+    }
     function find(key) { key = normKey(key); for (var i = 0; i < tiles.length; i++) if (tiles[i].key === key) return tiles[i]; return null; }
 
     function tile(who) {
@@ -140,8 +182,8 @@
         try { v.srcObject = null; } catch (e) { /* gone */ }
         t.state = 'ended'; badge.textContent = _t('js.pad.strip.off', 'off'); badge.classList.remove('on');
         tap.hidden = true; say(why(code, m), true);
-        // pubswitch: a cam that ended isn't started again by the next page load (↻ Retry here still can)
-        if (!REMEMBER_ON[code] && !t.forget) { t.forget = true; remember(); }
+        // pubswitch: a cam that ended for a reason about the cam isn't started again by the next page load (↻ Retry here still can)
+        if (FORGET_ON[code] && !t.forget) { t.forget = true; remember(); }
         paint();
       };
       t.stop = function (tell, keep) {
@@ -210,8 +252,9 @@
             playing(ss, my);
           }, function (e) {
             if (my !== t.gen || (e && e.cancelled)) return;
+            // (pubswitch review: the site unreachable too = a network blip, not the cam - 'net' keeps it remembered)
             post(base + '/beat', t.ref).then(function (k) { if (my === t.gen) t.ended(k && k.state === 'ended' ? k.why : 'failed'); },
-              function () { if (my === t.gen) t.ended('failed'); });
+              function () { if (my === t.gen) t.ended('net', _t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
             post(base + '/stop', t.ref).catch(function () {});
           });
         }).catch(function () { if (my === t.gen) t.ended('net', _t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
@@ -219,6 +262,7 @@
       // the popover hands over a cam that's already playing: same slot on the server, so nothing is asked again
       t.take = function (h) {
         var my = ++t.gen;
+        if (t.forget) { t.forget = false; remember(); }          // (pubswitch review C5: playing again on this tile - remembered again)
         try { v.srcObject = h.stream; var p = v.play(); if (p && p.catch) p.catch(function () { tap.hidden = false; over.hidden = false; }); } catch (e) { /* the next beat says */ }
         beats(my);
         playing(h.sess, my);
@@ -276,15 +320,18 @@
       t.take(h);
       return true;
     };
-    function restore() {
+    function restore(via) {
       if (!info || info.signin) { restored = false; return; }      // (live cams went off meanwhile: the next live view tries again)
+      // (pubswitch review C6: the memory as it is NOW - another tab of this pad and account may have closed or pinned one meanwhile;
+      // what this page wrote while loading is in it too)
+      var list = load(KEY).filter(function (w) { return !find(keyOf(w)); });
+      ran = true; pending = [];
+      report(true, via, list.length);
       var room = Math.max(0, slots() - liveTiles());                // (a pin made while the page loaded holds a slot already)
-      saved.forEach(function (w) {
-        if (find(keyOf(w))) return;
+      list.forEach(function (w) {
         var t = put(w, true);
         if (room > 0) { room--; t.start(); } else t.ended('viewer_cap');
       });
-      saved = [];
       paint();
     }
     api.update = function (inf) {
@@ -306,6 +353,8 @@
     // leaving frees the slots at once (keepalive); a page restored from the back-forward cache starts them again
     var wasLive = [];
     window.addEventListener('pagehide', function () {
+      // (pubswitch review C2: left with remembered cams the restore never brought back - what prod's stalled loads did: the report)
+      if (!ran && pending.length) report(false, restored ? 'hide' : 'noview', pending.length);
       wasLive = tiles.filter(function (t) { return t.state !== 'ended'; });
       tiles.forEach(function (t) { t.stop(true, true); });
     });
