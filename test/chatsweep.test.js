@@ -279,7 +279,8 @@ test("the partial is static: one script, nothing printed from the request, the m
   assert.doesNotMatch(PARTIAL, /<%[=-]/, "no output tags (only the <%# comment)");
   assert.doesNotMatch(SCRIPT, /=>|\blet\b|\bconst\b|`/, "ES5: runs on any browser the site supports");
   assert.doesNotMatch(SCRIPT, /\.exec\(|m\[1\]|match\(/, "the value isn't read (always 1)");
-  assert.ok(Buffer.byteLength(PARTIAL.replace(/<%#[\s\S]*?%>\s*/, "")) < 1400, "small (bytes on the one page after a sign-out)");
+  // (pubswitch review P1: + the cam strip memories' sweep, ~180 bytes - 1400 -> 1600)
+  assert.ok(Buffer.byteLength(PARTIAL.replace(/<%#[\s\S]*?%>\s*/, "")) < 1600, "small (bytes on the one page after a sign-out)");
   vm.createScript(SCRIPT);   // parses
 });
 
