@@ -300,3 +300,9 @@ test("review safety F4: the 📼 player - \"✕ Take them out\" for whoever may 
   assert.equal(other.box.querySelector("[data-after-x]"), null, "anyone else: no ✕");
   assert.doesNotMatch(other.box.textContent, /added by/, "and no name");
 });
+
+test("review F8: while ▶ is off the sheet looks again every 20 s - the title ends and ▶ comes back without reopening it; a closed sheet stops looking", () => {
+  assert.match(SRC, /var BLOCK_LOOK_MS = 20000, blockT = null;/);
+  assert.match(SRC, /blockT = setTimeout\(function \(\) \{ blockT = null; if \(host\.isConnected === false \|\| !blocked\(\)\) return; info\(\); \}, BLOCK_LOOK_MS\);/);
+  assert.match(SRC, /if \(bl\) \{ b0\.setAttribute\('data-blocked', '1'\); b0\.disabled = true; blockLook\(\); \}/);
+});

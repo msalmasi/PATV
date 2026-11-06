@@ -199,7 +199,7 @@ test("the pad got busy under the sheet: a busy refusal WITH can_replace becomes 
   assert.match(s.P.msg.textContent, /instead of “Charade \(1963\)”/);
 });
 
-test("someone who may not change it: the plain button, a line saying why the pick waits; the busy refusal shows as before and nothing is re-asked", async () => {
+test("someone who may not change it: the plain button, a line saying why the pick waits; upnext2 review F8 (1.99??): the ▶ the server would refuse as busy is off until it ends - nothing is sent", async () => {
   const s = sheet({ onPad: { ...ON, can_replace: false }, play: [
     { status: 409, j: { ok: false, error: "This pad is already playing from the library - stop it first.", code: "busy_library", can_replace: false, playing: "Charade (1963)" } }] });
   s.flow.info();
@@ -207,14 +207,14 @@ test("someone who may not change it: the plain button, a line saying why the pic
   await s.pick();
   assert.equal(s.btn().textContent, "▶ Play on Night Orchard");
   assert.equal(s.now().textContent, "📼 Now on Night Orchard: “Charade (1963)” - only whoever started it, the pad’s owner or an admin can change it, so a new pick waits until it ends.");
+  assert.equal(s.btn().disabled, true, "off while it's on (it used to be pressed and refused busy)");
   s.btn().click();
-  s.yes().click();
   await tick();
-  assert.equal(s.plays().length, 1);
-  assert.equal(s.plays()[0].body.replace, undefined);
+  assert.equal(s.plays().length, 0, "nothing sent");
   assert.equal(s.askBox(), null, "no confirm offered");
-  assert.equal(s.P.msg.textContent, "This pad is already playing from the library - stop it first.");
-  assert.equal(s.btn().disabled, false);
+  s.flow.info();                                                // (still on: still off)
+  await tick();
+  assert.equal(s.btn().disabled, true);
 });
 
 test("a 📼 queue on the pad (yours): the confirm says it ends the queue; a paid pick says 'instead for N PAT'; your own play has no 'started by' line", async () => {

@@ -191,6 +191,13 @@
     };
     // (review F8: something is on and this viewer may not replace it - ▶ now would only be refused "busy")
     var blocked = function () { return !!(onPad && onPad.title && !onPad.can_replace) && when() !== 'later'; };
+    // (while ▶ is off the sheet looks again every BLOCK_LOOK_MS - the title ends and ▶ comes back without reopening it; a closed sheet stops)
+    var BLOCK_LOOK_MS = 20000, blockT = null;
+    var blockLook = function () {
+      if (blockT) return;
+      blockT = setTimeout(function () { blockT = null; if (host.isConnected === false || !blocked()) return; info(); }, BLOCK_LOOK_MS);
+      if (blockT && blockT.unref) blockT.unref();
+    };
     var drawNow = function () {
       var el = P.pick.querySelector('[data-now]');
       if (!el) return;
@@ -198,7 +205,7 @@
       if (b0 && !b0.hasAttribute('data-done')) {
         // review F8: the way forward is the primary button - "+ Add to the queue" when ▶ can't play it now
         var bl = blocked(), adds = addMode() !== 'list';
-        if (bl) { b0.setAttribute('data-blocked', '1'); b0.disabled = true; }
+        if (bl) { b0.setAttribute('data-blocked', '1'); b0.disabled = true; blockLook(); }
         else if (b0.hasAttribute('data-blocked')) { b0.removeAttribute('data-blocked'); b0.disabled = false; }
         b0.classList.toggle('primary', !(bl && adds));
         P.pick.querySelectorAll('[data-add]').forEach(function (b) { b.classList.toggle('primary', bl && adds); });
