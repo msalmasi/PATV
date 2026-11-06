@@ -65,6 +65,7 @@
     if (a.hasAttribute('data-skip')) return '[data-skip="' + a.getAttribute('data-skip') + '"]';
     if (a.hasAttribute('data-mv')) return '[data-mv="' + a.getAttribute('data-mv') + '"][data-to="' + a.getAttribute('data-to') + '"]';
     if (a.hasAttribute('data-rm')) return '[data-rm="' + a.getAttribute('data-rm') + '"]';
+    if (a.hasAttribute('data-after-x')) return '[data-after-x]';
     if (a.classList.contains('pq-scrub')) return '.pq-scrub';
     if (a.tagName === 'SUMMARY' && a.parentNode) return (a.parentNode.classList.contains('pq-log') ? '.pq-log' : '.pq-q') + ' > summary';
     if (a.tagName === 'A') return '.pq-q a';
@@ -109,11 +110,15 @@
               '<button type="button" class="sact" data-rm="' + x.index + '" aria-label="' + esc(_t('js.plex.q_remove', 'Remove')) + '">✕</button></span>' : '') + '</li>';
         }).join('') + '</ol>' + (can ? '<a class="muted" href="/stage">' + esc(_t('js.plexq.manage', 'Edit the queue ›')) + '</a>' : '') + '</details>';
     }
-    // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue
+    // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue. review
+    // fixes (1.99??): who added them only to whoever may take them out (them, the pad's owner, an admin - can_withdraw), with ✕ Take them out
     if (!q && j.after && j.after.next && j.after.next.length) {
+      var aw = j.after.can_withdraw === true;
       h += '<details class="pq-q"><summary>' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +
         j.after.next.map(function (x) { return '<li><span>' + esc(label(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + '</span>' : '') + '</span></li>'; }).join('') + '</ol>' +
-        (j.after.by ? '<p class="muted">' + esc(_t('js.plexq.after_by', 'added by {name}', { name: j.after.by })) + '</p>' : '') + '</details>';
+        (j.after.by ? '<p class="muted">' + esc(_t('js.plexq.after_by', 'added by {name}', { name: j.after.by })) + '</p>' : '') +
+        (aw ? '<p><button type="button" class="sact" data-after-x="1">' + esc(_t('js.plexq.after_x', '✕ Take them out')) + '</button></p>' +
+              (can ? '' : '<p class="pq-msg muted" role="status" aria-live="polite"></p>') : '') + '</details>';
     }
     if (can && j.log && j.log.length) {
       h += '<details class="pq-log"><summary>' + esc(_t('js.plexq.log', 'Who did what')) + '</summary><ul>' + j.log.map(function (l) {
@@ -157,6 +162,11 @@
   }
   box.addEventListener('click', function (ev) {
     var b = ev.target.closest('button');
+    // (upnext2 review fixes: the titles waiting behind a single title - their owner may take them out without controlling what's on)
+    if (b && b.hasAttribute('data-after-x') && last && last.after && last.after.can_withdraw && !busy && b.getAttribute('aria-disabled') !== 'true') {
+      if (confirm(_t('js.plexq.q_after_x', 'Take these titles out? They won’t play after this one (nothing is charged).'))) act('/api/medialib/queue/after/cancel', null, b);
+      return;
+    }
     if (!b || !last || !last.can_control || busy || b.getAttribute('aria-disabled') === 'true') return;
     if (b.hasAttribute('data-skip')) { act('/api/medialib/seek', { offset: Math.max(0, Math.floor(pos() + Number(b.getAttribute('data-skip')))) }, b); return; }
     if (b.hasAttribute('data-mv')) { act('/api/medialib/queue/edit', { op: 'move', index: +b.getAttribute('data-mv'), to: +b.getAttribute('data-to') }, b); return; }

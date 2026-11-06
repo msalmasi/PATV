@@ -2202,10 +2202,12 @@
       });   // micfollow: 🎙 On the mic; privacy and management still apply immediately
       // upnext2: a 📼 "Coming up next" was set / its stream came up on this pad - the stage asks now (the card on every open page within a
       // round trip, not at its next 10 s poll); the first answer only notes where it is
+      // (review fixes 1.99??: the switcher keeps it - PATVPadStage.stv: it also knows the long-poll is there, so it polls every 10 s while a 📼
+      // title is on, and spreads the asks of every open page over a moment)
       safe('stagever', function () {
         if (d.stv == null) return;
-        var was = stvSeen; stvSeen = d.stv;
-        if (was != null && was !== d.stv && window.PATVPadStage && typeof PATVPadStage.poll === 'function') PATVPadStage.poll();
+        stvSeen = d.stv;
+        if (window.PATVPadStage && typeof PATVPadStage.stv === 'function') PATVPadStage.stv(d.stv);
       });
       safe('feed', function () { addFeed(d.feed, first, late); });      // 1.99ahm: (T3) a backlog's grab / drop lines are not held
       safe('rpm', function () { if (roomPm) roomPm.update(d); });        // 1.99ajd roompm: after the lines (an answer goes below its echo)

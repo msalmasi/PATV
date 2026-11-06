@@ -250,6 +250,8 @@
 .st-l3-x:hover, .st-l3-x:focus-visible { opacity: 1; }
 .st-l3-x:focus-visible { outline: 2px solid var(--l3-gold); outline-offset: -2px; }
 #rmStage.rmd-controls-on .st-l3 { inset-block-end: calc(7% + 48px); }   /* (the Room Dock's overlay controls are up: step above them) */
+/* upnext2 review F1 (1.99??): the strip's one announcement per title - read by screen readers, never seen */
+.st-l3 .st-l3-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 480px) { .st-l3 { inset-block-end: 5%; font-size: 11px; } .st-l3-tag { padding-inline: .5em; } .st-l3-title { padding-inline: .55em; } }
 @keyframes stL3In { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
 [dir="rtl"] .st-l3 { animation-name: stL3InRtl; }

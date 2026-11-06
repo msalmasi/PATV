@@ -85,7 +85,8 @@ test("home: setPill (the switcher's onAir) only toggles .live/.off - the slate s
   const html = await renderHome({ tops });
   const fn = between(html, "function setPill(on, how) {", "\n    }\n");
   assert.match(fn, /stageEl\.classList\.toggle\('live', on\); stageEl\.classList\.toggle\('off', !on\);/);
-  assert.match(html, /onAir: function \(on, sub\) \{ setPill\(on,/);
+  // (upnext2 review F5 1.99??: the off-air slate - {slate} - is OFF AIR here: setPill(false), the homepage's own slate with its Next up)
+  assert.match(html, /onAir: function \(on, sub, x\) \{ var air = !!on && !\(x && x\.slate\); setPill\(air,/);
 });
 
 test("stage-room.js: a stream coming back on the 10 s /api/stage poll calls onAir(true) and starts the player", async () => {

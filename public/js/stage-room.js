@@ -64,6 +64,12 @@
 // for a booked 📼 start within 5 min (12 s when it first applies, then 12 s every 2 min; ✕ hides it for the visit), and the off-air slate
 // naming a booked 📼 start within the hour. Public facts only (coming: title / kind / season / episode / year / time; a poster key only signed
 // in - mainstage.comingOf). While a 📼 title is on screen the page asks every LIB_POLL_MS, and every 3 s from just before its end.
+// upnext2 review fixes (1.99??): a 📼 queue's kept player shows the old title's tail to its last frame - the card goes up once it stalls (the
+// UP NEXT strip until then: it covered the last 4-10 s of every title, sound on); the strip shows twice (12 s a minute before the end, then the
+// last 15 s - not the subtitles' whole last minute), is announced once per title (its countdown was read out every second), never jumps
+// under a pointer / finger (the Dock's controls woke on the tap that aimed at ✕), no "COMING UP AT" over someone's stream, an embed, a cam
+// or Pepe's stream (the off-air slate says it); a page on the /live long-poll (stv) polls every 10 s - the wake is its fast path - spread
+// over a moment after each wake; no poster key in `coming`.
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -125,10 +131,10 @@
     var ends = Number(x.ends_at) > 0 ? Number(x.ends_at) : null, at = Number(x.at) > 0 ? Number(x.at) : null, n = null;
     if (x.next && typeof x.next === 'object') {
       var ep = x.next.kind === 'episode', title = unText(x.next.title, 200), show = ep ? unText(x.next.show, 200) : '';
+      // (upnext2 review F7: text only - no poster key; the ✕ remembers a title by its name - upKey)
       if (title || show) {
-        var key = UN_KEY.test(String(x.next.key == null ? '' : x.next.key)) ? String(x.next.key) : null;
         n = { title: title, show: show || null, kind: ep ? 'episode' : 'movie', year: unInt(x.next.year, 1000, 9999), season: ep ? unInt(x.next.season, 0, 9999) : null,
-              episode: ep ? unInt(x.next.episode, 0, 9999) : null, key: key, poster: x.next.poster === true && !!key };
+              episode: ep ? unInt(x.next.episode, 0, 9999) : null };
       }
     }
     return ends || n || at ? { ends: ends, next: n, at: at } : null;
@@ -280,8 +286,9 @@
     }
     // ── upnext: 📼 "Coming up next" ──
     var UPNEXT_STANDBY_MS = 30000, UPNEXT_HANDOFF_MS = 20000, UPNEXT_POLL_MS = 3000;
-    // upnext2 (C): a card stays up at least UPNEXT_MIN_MS; a kept player counts as stalled once its picture stood UPNEXT_GAP_MS
-    var UPNEXT_MIN_MS = 4000, UPNEXT_GAP_MS = 600, LIB_POLL_MS = 5000, LIB_END_MS = 15000;
+    // upnext2 (C): a card stays up at least UPNEXT_MIN_MS; a kept player counts as stalled once its picture stood UPNEXT_GAP_MS. review F2: a
+    // kept player that never stalls (no break - the next title follows straight on) is handed over UPNEXT_TAIL_MS after the stream came up
+    var UPNEXT_MIN_MS = 4000, UPNEXT_GAP_MS = 600, UPNEXT_TAIL_MS = 12000, LIB_POLL_MS = 5000, LIB_END_MS = 15000, LIB_SOON_MS = 120000;
     var upCtl = null, upGone = {}, upTimer = null, upTimerFor = '', upFastT = null;
     function srvNow() { return Date.now() + skew; }
     function upBig(n) { return n.kind === 'episode' && n.show ? n.show : n.title || n.show || ''; }
@@ -362,8 +369,10 @@
     }
     function cardOn(s) { return !!(s && s.pending && !(upKeep(s) && videoAway())); }
     function upCard(id, n, kept) {
-      // upnext2 (C): shown = when it came up (the minimum), kept = a 📼 queue's own player plays on under it (its old title's tail first)
-      var D = document, my = { id: id, key: upKey(n), n: n, leaving: false, timers: [], handing: 0, shown: Date.now(), kept: !!kept, gap: !kept };
+      // upnext2 (C): shown = when it came up (the minimum), kept = a 📼 queue's own player plays on under it (its old title's tail first).
+      // review F2 (1.99??): a kept card WAITS (wait: not on the page - the UP NEXT strip says what's next, l3Want) until that player stalls - the
+      // old title's last seconds stay visible, with their sound; then it goes up (mount) and `shown` starts its minimum
+      var D = document, my = { id: id, key: upKey(n), n: n, leaving: false, timers: [], handing: 0, shown: Date.now(), kept: !!kept, gap: !kept, wait: !!kept, mounted: false };
       function el(tag, cls, txt) { var x = D.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; }
       function bars(cls) { var b = el('div', cls); for (var i = 0; i < 7; i++) b.appendChild(el('i')); return b; }
       var card = el('div', 'st-upnext'), big = upBig(n);
@@ -418,7 +427,6 @@
         }
         return (nn.title || '') + (nn.year ? ' (' + nn.year + ')' : '');
       }
-      my.timers.push(setTimeout(function () { sr.textContent = _t('js.stage.upnext.aria', 'Up next on the stage: {title} – starting…', { title: ariaTitle(my.n) }); }, 60));
       // 30 s in and still starting: the classic "PLEASE STAND BY" (static), from the server's moment - a page loaded mid-gap is on time too
       var standbyT = null;
       function standby() {
@@ -428,9 +436,17 @@
         card.setAttribute('data-state', 'standby'); word.textContent = _t('js.stage.upnext.standby', 'Please stand by');
       }
       standby();
-      o.wrap.insertBefore(card, o.wrap.firstChild || null);
-      upOverlays(true);
       my.el = card;
+      /** the card goes up: on the page, the player's overlays out of the way, announced (review F2: a kept one once its player stalled) */
+      function mount() {
+        if (my.mounted || my.leaving) return;
+        my.mounted = true; my.wait = false; my.shown = Date.now();
+        o.wrap.insertBefore(card, o.wrap.firstChild || null);
+        upOverlays(true);
+        my.timers.push(setTimeout(function () { sr.textContent = _t('js.stage.upnext.aria', 'Up next on the stage: {title} – starting…', { title: ariaTitle(my.n) }); }, 60));
+        if (upCtl === my) l3Sync(true);                       // (the UP NEXT strip gives way to it)
+      }
+      my.mount = mount;
       /** a newer answer for the same title: its moment, a poster that came (signed in) */
       my.update = function (nn) { var at0 = my.n.at; my.n = nn; setPic(nn); if (nn.at !== at0 && card.getAttribute('data-state') !== 'standby') standby(); };
       /** the stream is listed live: its player started behind the card - fade once it plays, at most UPNEXT_HANDOFF_MS. "Plays" = the reconnect
@@ -439,18 +455,20 @@
        *  it stalled under the card (`gap`: the overlay up, not playing, or the picture still for UPNEXT_GAP_MS - looked at from the card's first
        *  moment); and the card goes no sooner than UPNEXT_MIN_MS after it came up (outMin) */
       var gapLast = null, gapStill = 0;
+      function gapSeen() { my.gap = true; clearInterval(my.gapT); if (my.wait) mount(); }
       function gapLook() {
         if (my.gap || my.leaving) return;
         var st = null;
         try { st = player.running() && player.state ? player.state() : null; } catch (e) { st = null; }
         var over = !!(o.reconnect && o.reconnect.classList && !o.reconnect.classList.contains('hide'));
-        if (!st || !st.playing || over) { my.gap = true; return; }
+        if (!st || !st.playing || over) { gapSeen(); return; }
         var tm = Number(st.time) || 0;
-        if (gapLast !== null && Math.abs(tm - gapLast) < 0.05) { if (!gapStill) gapStill = Date.now(); else if (Date.now() - gapStill >= UPNEXT_GAP_MS) my.gap = true; }
+        if (gapLast !== null && Math.abs(tm - gapLast) < 0.05) { if (!gapStill) gapStill = Date.now(); else if (Date.now() - gapStill >= UPNEXT_GAP_MS) gapSeen(); }
         else gapStill = 0;
         gapLast = tm;
       }
-      if (my.kept) { gapLook(); my.gapT = setInterval(gapLook, 200); }        // (already stalled when the card came up: that's the gap)
+      if (my.kept) { gapLook(); if (!my.gap) my.gapT = setInterval(gapLook, 200); }   // (already stalled when the card came up: that's the gap)
+      else mount();
       my.outMin = function (fast) {
         if (my.leaving) return;
         var w = my.shown + UPNEXT_MIN_MS - Date.now();
@@ -466,6 +484,8 @@
           if (Date.now() - my.handing > UPNEXT_HANDOFF_MS) { my.out(true); return; }   // never played: the player's own "Reconnecting…" again
           if (!player.running()) return;
           if (my.kept) gapLook();
+          // (review F2: a kept player that never stalled - the next title followed its tail straight on: nothing to hand over)
+          if (my.wait && Date.now() - my.handing > UPNEXT_TAIL_MS) { my.out(false); return; }
           if (o.reconnect && o.reconnect.classList && !o.reconnect.classList.contains('hide')) { t0 = null; return; }
           var st = null;
           try { st = player.state ? player.state() : null; } catch (e) { st = null; }
@@ -482,13 +502,17 @@
         my.leaving = true;
         clearInterval(my.clock); clearInterval(my.watch); clearTimeout(standbyT); my.timers.forEach(clearTimeout);
         clearInterval(my.gapT); clearTimeout(my.minT); my.minT = null;                  // (upnext2)
-        if (upCtl === my) upCtl = null;
-        upOverlays(false);
-        card.classList.add('is-out');
+        var was = upCtl === my;
+        if (was) upCtl = null;
         var gone = function () { if (card.parentNode) card.parentNode.removeChild(card); };
-        var rm = false;
-        try { rm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { rm = false; }
-        if (fast) gone(); else setTimeout(gone, rm ? 250 : 700);
+        if (my.mounted) {
+          upOverlays(false);
+          card.classList.add('is-out');
+          var rm = false;
+          try { rm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { rm = false; }
+          if (fast) gone(); else setTimeout(gone, rm ? 250 : 700);
+        } else gone();
+        if (was && my.wait) l3Sync(true);                     // (review F2: the UP NEXT strip it had goes with it)
       };
       return my;
     }
@@ -537,17 +561,34 @@
       else if (!chosen) pickDefault();
       show();
     }
-    // ── upnext2 (D): the 📼 "UP NEXT" lower-third, "COMING UP AT", the off-air slate ──
-    var L3_SOON_MS = 60000, L3_AT_MS = 5 * 60000, L3_SHOW_MS = 12000, L3_EVERY_MS = 120000, SLATE_MS = 60 * 60000;
+    // ── upnext2 (D): the 📼 "UP NEXT" lower-third, the off-air slate ──
+    // review F7 (1.99??): the strip shows twice - L3_SHOW_MS from a minute before the end, then the last L3_LAST_MS (the subtitles burned into the
+    // foot of the picture were covered for the whole last minute); F6: no "COMING UP AT" strip over another stream (someone's OBS, an embed - over
+    // its own controls -, a cam, Pepe's stream): a booked 📼 start is named by the off-air slate while nothing is on, and by its card when it starts
+    var L3_SOON_MS = 60000, L3_SHOW_MS = 12000, L3_LAST_MS = 15000, SLATE_MS = 60 * 60000;
     var l3 = null, l3Tick = null, l3First = {}, slate = null;
     // a 📼 title is what's on screen (its stream plays - not a card)
     function libOn() { var s = cur(); return !!(s && s.lib && !s.pending && !s.cam && !s.embed && s.hls); }
-    // the poll: every LIB_POLL_MS while a 📼 title is on screen, every 3 s from LIB_END_MS before its end (a queue moving on; the long-poll's
-    // wake is the fast path - pads without it still catch the break)
+    // the poll while a 📼 title is on screen. review F10 / safety F8+F9 (1.99??): a page on the pad's /live long-poll (stvLive - it carried the
+    // stage version lately) is woken at every title change: the ordinary 10 s. Without it: every 10 s until LIB_SOON_MS before the end, then
+    // every LIB_POLL_MS, every 3 s from LIB_END_MS before it (the break's card) - it used to be every 5 s for a title's whole length
+    var STV_LIVE_MS = 45000, STV_JITTER_MS = 750, stvSeen = null, stvAt = 0, stvT = null;
+    function stvLive() { return stvAt > 0 && Date.now() - stvAt < STV_LIVE_MS; }
     function libPoll() {
-      if (!libOn()) return POLL_MS;
+      if (!libOn() || stvLive()) return POLL_MS;
       var left = coming && coming.ends ? coming.ends - srvNow() : Infinity;
-      return left < LIB_END_MS && left > -UPNEXT_STANDBY_MS ? UPNEXT_POLL_MS : LIB_POLL_MS;
+      return left < LIB_END_MS && left > -UPNEXT_STANDBY_MS ? UPNEXT_POLL_MS : left < LIB_SOON_MS && left > -UPNEXT_STANDBY_MS ? LIB_POLL_MS : POLL_MS;
+    }
+    /** upnext2: the pad's stage version from its /live long-poll (room.ejs, the homepage Dock for the stage's own pad) - a move = something
+     *  changed on the stage: ask now. review F9: every open page hears it at the same moment - each asks within STV_JITTER_MS, not all at once */
+    function stv(v) {
+      if (dead || v == null || v === '') return;
+      stvAt = Date.now();
+      var was = stvSeen; stvSeen = v;
+      if (!slots.some(function (x) { return x && x.pending; })) pollAt(libPoll());
+      if (was == null || was === v) return;
+      if (stvT) clearTimeout(stvT);
+      stvT = setTimeout(function () { stvT = null; poll(); }, Math.floor(Math.random() * STV_JITTER_MS));
     }
     function l3Title(n) { return n ? (n.kind === 'episode' && n.show ? n.show + (n.season != null && n.episode != null ? ' · S' + n.season + 'E' + n.episode : '') + (n.title ? ' · ' + n.title : '') : (n.title || '') + (n.year ? ' (' + n.year + ')' : '')) : ''; }
     function l3Time(ms) {
@@ -560,25 +601,20 @@
     function l3Hide(k) { l3First['x' + k] = 1; try { if (window.sessionStorage) sessionStorage.setItem('patv.l3x.' + padSlug + '.' + k, '1'); } catch (e) { /* this visit: memory */ } }
     // what the lower-third should say now -> {mode, k, tag, title, when} | null
     function l3Want() {
-      if (!coming || !coming.next || dead || view === 'mic' || cardOn(cur())) return null;
-      var t = srvNow(), n = coming.next, k;
-      if (libOn() && coming.ends) {
-        var left = coming.ends - t;
-        if (left > L3_SOON_MS || left < -10000) return null;
-        k = 'n:' + upKey(n);
-        return l3Gone(k) ? null : { mode: 'next', k: k, tag: _t('js.stage.l3.next', 'Up next'), title: l3Title(n), when: left > 0 ? _t('js.stage.l3.in', 'in {time}', { time: l3Clock(left / 1000) }) : '' };
+      if (dead || view === 'mic') return null;
+      var s = cur(), k;
+      // review F2: a queue's kept player still plays its old title's tail under a card that waits for the stall - "UP NEXT · <title>" meanwhile
+      if (upCtl && upCtl.wait && !upCtl.leaving && s && String(s.id) === upCtl.id) {
+        k = 'n:' + upKey(upCtl.n);
+        return l3Gone(k) ? null : { mode: 'next', k: k, tag: _t('js.stage.l3.next', 'Up next'), title: l3Title(upCtl.n), when: '' };
       }
-      if (coming.at && (cur() || (pepeOn && pepeHere))) {
-        var until = coming.at - t;
-        if (until > L3_AT_MS || until < -60000) return null;
-        k = 'a:' + coming.at + ':' + upKey(n);
-        if (l3Gone(k)) return null;
-        var first = l3First[k] || (l3First[k] = Date.now());
-        if ((Date.now() - first) % L3_EVERY_MS >= L3_SHOW_MS) return null;                  // (briefly on appear, then every couple of minutes)
-        return { mode: 'at', k: k, tag: _t('js.stage.l3.at', 'Coming up at {time}', { time: l3Time(coming.at) }), title: l3Title(n), when: '' };
-      }
-      return null;
+      if (!coming || !coming.next || cardOn(s) || !libOn() || !coming.ends) return null;
+      var left = coming.ends - srvNow(), n = coming.next;
+      if (!((left <= L3_SOON_MS && left > L3_SOON_MS - L3_SHOW_MS) || (left <= L3_LAST_MS && left > -10000))) return null;
+      k = 'n:' + upKey(n);
+      return l3Gone(k) ? null : { mode: 'next', k: k, tag: _t('js.stage.l3.next', 'Up next'), title: l3Title(n), when: left > 0 ? _t('js.stage.l3.in', 'in {time}', { time: l3Clock(left / 1000) }) : '' };
     }
+    function setText(el, v) { if (el && el.textContent !== v) el.textContent = v; }   // (review F1: a live region is rewritten only when it changes)
     // the off-air slate: nothing on this stage and a booked 📼 start within the hour - the stage box opens for it (onAir(true, …, {slate}): the page
     // says OFF AIR, the slate fills the player)
     function slateWant() { var t = srvNow(); return !!(coming && coming.at && coming.next && coming.at - t <= SLATE_MS && coming.at - t > -60000); }
@@ -592,16 +628,31 @@
         if (!l3 || l3.k !== w.k) {
           l3Off();
           var D = document, box = D.createElement('div'), tag = D.createElement('span'), ttl = D.createElement('span'), when = D.createElement('span'), x = D.createElement('button');
-          box.className = 'st-l3'; box.setAttribute('role', 'status'); box.setAttribute('data-mode', w.mode);
+          // review F1 (1.99??): the strip itself is no live region - its countdown was read out every second. A visually hidden status says the
+          // title ONCE (filled a moment after it's on the page - one filled at insert is often not announced); the strip's own text is for eyes
+          var sr = D.createElement('span');
+          box.className = 'st-l3'; box.setAttribute('data-mode', w.mode);
+          sr.className = 'st-l3-sr'; sr.setAttribute('role', 'status');
           tag.className = 'st-l3-tag'; ttl.className = 'st-l3-title'; when.className = 'st-l3-when';
+          tag.setAttribute('aria-hidden', 'true'); ttl.setAttribute('aria-hidden', 'true'); when.setAttribute('aria-hidden', 'true');
           x.type = 'button'; x.className = 'st-l3-x'; x.textContent = '✕'; x.setAttribute('aria-label', _t('js.stage.l3.hide', 'Hide'));
-          var k = w.k;
+          var k = w.k, said = _t('js.stage.l3.sr_next', 'Up next on the stage: {title}', { title: w.title });
           x.addEventListener('click', function () { l3Hide(k); l3Off(); });
-          box.appendChild(tag); box.appendChild(ttl); box.appendChild(when); box.appendChild(x);
+          // review F4 (1.99??): a tap / click on the strip never wakes the Room Dock's controls (they lifted it 48 px under the finger: the first
+          // tap on ✕ hit the video), and while a pointer is over it, it stays where it is (the controls showing / hiding moved it under the cursor)
+          var still = function (e) { if (e && e.stopPropagation) e.stopPropagation(); };
+          box.addEventListener('pointerdown', still); box.addEventListener('focusin', still);
+          box.addEventListener('pointerenter', function () {
+            clearTimeout(box.fz);
+            try { if (!box.style.bottom && window.getComputedStyle) box.style.bottom = window.getComputedStyle(box).bottom; } catch (e) { /* the CSS's own place */ }
+          });
+          box.addEventListener('pointerleave', function () { clearTimeout(box.fz); box.fz = setTimeout(function () { box.style.bottom = ''; }, 700); });
+          box.appendChild(sr); box.appendChild(tag); box.appendChild(ttl); box.appendChild(when); box.appendChild(x);
           o.wrap.appendChild(box);
-          l3 = { k: w.k, el: box, tag: tag, title: ttl, when: when };
+          l3 = { k: w.k, el: box, tag: tag, title: ttl, when: when, sr: sr };
+          l3.srT = setTimeout(function () { setText(sr, said); }, 60);
         }
-        l3.tag.textContent = w.tag; l3.title.textContent = w.title; l3.when.textContent = w.when;
+        setText(l3.tag, w.tag); setText(l3.title, w.title); setText(l3.when, w.when);
       }
       // the slate: nothing on this stage (the "nothing streaming" view) and a booked 📼 start within the hour
       if (idleNow() && slateWant()) {
@@ -612,15 +663,15 @@
           slate.appendChild(sk); slate.appendChild(st2); slate.appendChild(bug);
           o.wrap.appendChild(slate);
         }
-        slate.children[0].textContent = _t('js.stage.slate.at', 'Coming up at {time}', { time: l3Time(coming.at) });
-        slate.children[1].textContent = l3Title(coming.next);
+        setText(slate.children[0], _t('js.stage.slate.at', 'Coming up at {time}', { time: l3Time(coming.at) }));   // (review F1: only when it changes)
+        setText(slate.children[1], l3Title(coming.next));
       } else slateOff();
-      // ticking while something may come up (the countdown, the 5 min window); nothing to look for: no timer
+      // ticking while something may come up (the countdown, the slate's hour); nothing to look for: no timer
       var need = !!(coming && (coming.ends || coming.at));
       if (need && !l3Tick) l3Tick = setInterval(function () { l3Sync(); if (!slots.some(function (x) { return x && x.pending; })) pollAt(libPoll()); }, 1000);
       else if (!need && l3Tick) { clearInterval(l3Tick); l3Tick = null; }
     }
-    function l3Off() { if (l3) { if (l3.el.parentNode) l3.el.parentNode.removeChild(l3.el); l3 = null; } }
+    function l3Off() { if (l3) { clearTimeout(l3.srT); clearTimeout(l3.el.fz); if (l3.el.parentNode) l3.el.parentNode.removeChild(l3.el); l3 = null; } }
     function slateOff() { if (slate) { if (slate.parentNode) slate.parentNode.removeChild(slate); slate = null; } }
     function show() {
       if (dead) return;
@@ -971,10 +1022,11 @@
       if (micGraceTimer) { clearTimeout(micGraceTimer); micGraceTimer = null; }
       upSync(); try { upHide(true); } catch (e) { /* gone */ }      // (upnext: its timers and card)
       if (l3Tick) { clearInterval(l3Tick); l3Tick = null; } try { l3Off(); slateOff(); } catch (e) { /* gone */ }   // (upnext2)
+      if (stvT) { clearTimeout(stvT); stvT = null; }
       try { micStop(); } catch (e) { /* gone */ } try { camStop(); } catch (e) { /* gone */ }
       try { player.stop(); } catch (e) { /* gone */ } try { setEmbed(null); } catch (e) { /* gone */ }
     }
-    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic, destroy: destroy, watchLive: watchLive };
+    return { poll: poll, show: show, view: function () { return view; }, selection: selection, setMic: setMic, destroy: destroy, watchLive: watchLive, stv: stv };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.switcher = switcher;

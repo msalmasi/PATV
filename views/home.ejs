@@ -874,7 +874,9 @@
       api: '/api/stage', front: frontSlug, slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       featured: <%- JSON.stringify(locals.stageFeatured || null).replace(/</g, '\\u003c') %>,   // dock3 1.99akf
       posters: <%= typeof me !== 'undefined' && me ? 'true' : 'false' %>,   // upnext: the card's poster (the /api/medialib/poster proxy is for signed-in viewers)
-      onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
+      // (upnext2 review F5 / safety F10, 1.99??: the off-air slate naming a booked 📼 start - {slate} - is OFF AIR: the homepage's own slate with
+      // its "Next up" - it read ON AIR · live now and hid that slate)
+      onAir: function (on, sub, x) { var air = !!on && !(x && x.slate); setPill(air, air ? sub || _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now')); }
     });
 <%_ } _%>
 

@@ -24,6 +24,9 @@
 // queue that's playing" (it used to add to your queue on whatever pad it ran - another pad's sheet included), a single title -> "+ Add to the
 // queue" (on_pad.can_after: a queue of yours that plays after it - POST /api/medialib/queue/after, the price confirmed like a queue's),
 // anything else -> "+ My list". A paid add says what it adds before it's added (the server's `estimate`).
+// upnext2 review fixes (1.99??): someone who can't change what's on (F8) gets no pink "▶ Play on <pad>" the server would refuse as busy - it
+// is off, "+ Add to the queue" is the way forward and the line under the pick says so; titles of yours waiting behind it can be taken out
+// (✕ Take them out - POST /api/medialib/queue/after/cancel, safety F4).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -63,6 +66,7 @@
   function noticeText(q) {
     if (!q || !q.notice) return '';
     if (q.notice === 'after_cancelled') return _t('js.plex.qn_after', '📼 Your titles up next didn’t start: what they waited behind ended first. Nothing was charged.');
+    if (q.notice === 'after_removed') return _t('js.plex.qn_after_removed', '📼 Your titles up next were taken out by the pad’s owner or an admin. Nothing was charged.');
     if (q.notice === 'out_of_pat') return _t('js.plex.qn_out_of_pat', '📼 Your queue ended: you’re out of PAT - top up to keep watching.');
     if (q.notice === 'failed') return _t('js.plex.qn_failed', '📼 Your queue ended: several titles in a row didn’t play.');
     if (q.notice === 'no_encoder') return _t('js.plex.qn_no_encoder', '📼 Your queue ended: no library stream came free in time.');
@@ -185,14 +189,38 @@
       drawPrice();
       drawAdd();
     };
+    // (review F8: something is on and this viewer may not replace it - ▶ now would only be refused "busy")
+    var blocked = function () { return !!(onPad && onPad.title && !onPad.can_replace) && when() !== 'later'; };
     var drawNow = function () {
       var el = P.pick.querySelector('[data-now]');
       if (!el) return;
       var b0 = P.pick.querySelector('[data-play]');
+      if (b0 && !b0.hasAttribute('data-done')) {
+        // review F8: the way forward is the primary button - "+ Add to the queue" when ▶ can't play it now
+        var bl = blocked(), adds = addMode() !== 'list';
+        if (bl) { b0.setAttribute('data-blocked', '1'); b0.disabled = true; }
+        else if (b0.hasAttribute('data-blocked')) { b0.removeAttribute('data-blocked'); b0.disabled = false; }
+        b0.classList.toggle('primary', !(bl && adds));
+        P.pick.querySelectorAll('[data-add]').forEach(function (b) { b.classList.toggle('primary', bl && adds); });
+      }
       if (!onPad || when() === 'later' || (b0 && b0.hasAttribute('data-done'))) { el.classList.add('hide'); el.textContent = ''; return; }
       el.classList.remove('hide');
       el.textContent = onPad.can_replace ? _t('js.plex.now_on', '📼 Now on {pad}: “{now}” - ▶ swaps it for your pick.', { pad: opts.roomTitle(), now: onPad.title })
+        : !onPad.queue && onPad.can_after ? _t('js.plex.now_on_after', '📼 Now on {pad}: “{now}” - you can’t change it, but + Add to the queue plays your pick after it.', { pad: opts.roomTitle(), now: onPad.title })
         : _t('js.plex.now_on_locked', '📼 Now on {pad}: “{now}” - only whoever started it, the pad’s owner or an admin can change it, so a new pick waits until it ends.', { pad: opts.roomTitle(), now: onPad.title });
+      // safety F4: titles of yours waiting behind it - take them out before they start (they'd be charged as they play)
+      if (onPad.after && onPad.after.mine && onPad.after.count) {
+        var mineL = document.createElement('span'), x = document.createElement('button');
+        mineL.textContent = ' ' + _t('js.plex.after_mine', 'Your titles up next after it: {n}.', { n: onPad.after.count }) + ' ';
+        x.type = 'button'; x.className = 'btn'; x.setAttribute('data-after-x', '1'); x.textContent = _t('js.plex.after_x', '✕ Take them out');
+        el.appendChild(mineL); el.appendChild(x);
+      }
+    };
+    var withdrawAfter = function (btn) {
+      btn.disabled = true;
+      api('POST', '/api/medialib/queue/after/cancel', { room: opts.roomId() }).then(function () {
+        say(_t('js.plex.after_x_done', 'Taken out - nothing was charged.'), true);
+      }).catch(function (e) { say(e.message); }).then(function () { info(); });
     };
     // the confirm's lines about what comes off: someone else's play, a queue (its titles after this one don't play)
     var insteadLines = function () {
@@ -252,6 +280,8 @@
       if (ep) { openItem(ep.getAttribute('data-ep')); return; }
       var all = ev.target.closest('[data-series]');
       if (all) { openItem(all.getAttribute('data-series'), 'series_from'); return; }
+      var ax = ev.target.closest('[data-after-x]');
+      if (ax) { withdrawAfter(ax); return; }
       var add = ev.target.closest('[data-add]');
       if (add) { addToList(add); return; }
       var go = ev.target.closest('[data-play]');
@@ -260,7 +290,7 @@
     P.pick.addEventListener('input', function (ev) { if (ev.target.hasAttribute('data-o')) drawPrice(); });
     P.pick.addEventListener('change', function (ev) {
       if (ev.target.hasAttribute('data-when')) { var at = P.pick.querySelector('[data-at]'); if (at) at.classList.toggle('hide', ev.target.value !== 'later'); }
-      if (ev.target.hasAttribute('data-scope') || ev.target.hasAttribute('data-when') || ev.target.hasAttribute('data-at')) { drawNow(); drawPrice(); }
+      if (ev.target.hasAttribute('data-scope') || ev.target.hasAttribute('data-when') || ev.target.hasAttribute('data-at')) { drawNow(); drawPrice(); drawAdd(); }
     });
     var scope = function () { var s = P.pick.querySelector('[data-scope]'); return s ? s.value : 'episode'; };
     // 1.99lw: ▶ now, or 📅 book a slot for later (sized to the runtime)
@@ -341,7 +371,7 @@
     var addBtn = function (key) {
       return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '"' + (addMode() === 'after' ? ' title="' + esc(_t('js.plex.q_add_after_title', 'Plays after what’s on now')) + '"' : '') + '>' + esc(addLabel()) + '</button>' : '';
     };
-    var drawAdd = function () { host.querySelectorAll('[data-add]').forEach(function (b) { if (!b.disabled) b.textContent = addLabel(); }); };
+    var drawAdd = function () { host.querySelectorAll('[data-add]').forEach(function (b) { if (!b.disabled) b.textContent = addLabel(); }); drawNow(); };
     var openItem = function (key, wantScope) {
       say(_t('js.plex.loading', 'Loading…'), true);
       closeAsk(false);

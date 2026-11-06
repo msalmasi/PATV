@@ -216,3 +216,87 @@ test("E (review bug): your queue running on ANOTHER pad no longer turns this pad
   assert.equal(t.add().textContent, "+ My list");
   for (const k of ["js.plex.q_add_after", "js.plex.q_add_after_title", "js.plex.q_added_after", "js.plex.q_after_cost", "js.plex.q_add_cost", "js.plex.ask_add", "js.plex.qn_after"]) assert.ok(EN[k], k);
 });
+
+// ── upnext2 review fixes (1.99??) ──
+test("review F8: someone who can't change what's on gets no pink ▶ Play the server would refuse as busy - it's off, \"+ Add to the queue\" is the primary button and the line says so; back once the title ends", async () => {
+  let on = { ...SINGLE, by: "cedar-fable", mine: false, can_replace: false, slot_id: null };
+  const s = sheet({ onPad: () => on, perHour: 1000 });
+  s.flow.info(); await tick();
+  await s.pick();
+  assert.equal(s.play().disabled, true, "▶ off");
+  assert.equal(s.play().classList.contains("primary"), false);
+  assert.equal(s.add().textContent, "+ Add to the queue");
+  assert.equal(s.add().classList.contains("primary"), true, "the way forward");
+  assert.equal(s.P.pick.querySelector("[data-now]").textContent,
+               "📼 Now on Night Orchard: “Charade (1963)” - you can’t change it, but + Add to the queue plays your pick after it.");
+  on = null;                                                    // it ended: ▶ plays again
+  s.flow.info(); await tick();
+  assert.equal(s.play().disabled, false);
+  assert.equal(s.play().classList.contains("primary"), true);
+  assert.equal(s.add().classList.contains("primary"), false);
+  assert.equal(s.add().textContent, "+ My list");
+  // someone who may replace it: ▶ Play this instead stays the primary
+  const t = sheet({ onPad: SINGLE });
+  t.flow.info(); await tick();
+  await t.pick();
+  assert.deepEqual([t.play().disabled, t.play().classList.contains("primary"), t.add().classList.contains("primary")], [false, true, false]);
+  assert.equal(EN["js.plex.now_on_after"], "📼 Now on {pad}: “{now}” - you can’t change it, but + Add to the queue plays your pick after it.");
+});
+
+test("review safety F4: your titles waiting behind it - \"✕ Take them out\" in the pick's line -> ONE POST /queue/after/cancel for THIS pad; a notice when someone else took them out", async () => {
+  let on = { ...SINGLE, can_replace: false, slot_id: null, can_after: true, after: { count: 2, mine: true } };
+  const s = sheet({ onPad: () => on });
+  s.flow.info(); await tick();
+  await s.pick();
+  const line = s.P.pick.querySelector("[data-now]");
+  assert.match(line.textContent, /Your titles up next after it: 2\./);
+  const x = line.querySelector("[data-after-x]");
+  assert.ok(x);
+  assert.equal(x.textContent, "✕ Take them out");
+  on = { ...on, after: null };
+  x.click(); await tick();
+  const p = s.posts("/api/medialib/queue/after/cancel");
+  assert.equal(p.length, 1);
+  assert.deepEqual(p[0].body, { room: "Night.Orchard" });
+  assert.equal(s.P.msg.textContent, "Taken out - nothing was charged.");
+  assert.equal(s.P.pick.querySelector("[data-after-x]"), null, "read again: gone");
+  // someone else's waiting titles: no ✕ here
+  const t = sheet({ onPad: { ...SINGLE, after: { count: 1, mine: false }, can_after: false } });
+  t.flow.info(); await tick();
+  await t.pick();
+  assert.equal(t.P.pick.querySelector("[data-after-x]"), null);
+  for (const k of ["js.plex.after_mine", "js.plex.after_x", "js.plex.after_x_done", "js.plex.qn_after_removed", "js.plexq.after_x", "js.plexq.q_after_x"]) assert.ok(EN[k], k);
+  assert.match(SRC, /if \(q\.notice === 'after_removed'\) return _t\('js\.plex\.qn_after_removed'/);
+});
+
+test("review safety F4: the 📼 player - \"✕ Take them out\" for whoever may (can_withdraw: their owner, the pad's owner, an admin), even without control of the title on now; who added them only to those", async () => {
+  const src = read("public", "js", "pad-plexq.js");
+  const run = (player) => {
+    const doc = mkDoc();
+    const box = doc.body.appendChild(doc.createElement("div"));
+    box.id = "rmPlexQ"; box.setAttribute("data-room", "Night.Orchard");
+    doc.getElementById = (id) => (id === "rmPlexQ" ? box : null);
+    doc.addEventListener = () => {}; doc.hidden = false; doc.activeElement = null;
+    const calls = [];
+    const win = { document: doc, console, Date, Math, JSON, confirm: () => true, setTimeout: () => 0, setInterval: () => 0, clearInterval() {},
+                  fetch: async (url, o = {}) => { calls.push({ url, method: (o.method || "GET").toUpperCase(), body: o.body ? JSON.parse(o.body) : null });
+                                                 return { ok: true, status: 200, json: async () => (url.startsWith("/api/medialib/player") ? player : { ok: true }) }; } };
+    win.window = win;
+    vm.runInNewContext(src, win, { filename: "pad-plexq.js" });
+    return { box, calls };
+  };
+  const base = { ok: true, on: true, room: "Night.Orchard", title: "Charade (1963)", state: "playing", position: 10, duration: 6780, by: "cedar-fable", can_control: false, queue: null, log: [] };
+  const mine = run({ ...base, after: { count: 1, next: [{ key: "501", type: "movie", title: "Night of the Living Dead", year: 1968, duration: 5760 }], mine: true, can_withdraw: true, by: "me" } });
+  await tick();
+  const x = mine.box.querySelector("[data-after-x]");
+  assert.ok(x, "their owner, without control of the title on now");
+  assert.equal(x.textContent, "✕ Take them out");
+  x.click(); await tick();
+  const p = mine.calls.filter((c) => c.url === "/api/medialib/queue/after/cancel");
+  assert.equal(p.length, 1);
+  assert.deepEqual(p[0].body, { room: "Night.Orchard" });
+  const other = run({ ...base, after: { count: 1, next: [{ key: "501", type: "movie", title: "Night of the Living Dead", year: 1968, duration: 5760 }], mine: false, can_withdraw: false } });
+  await tick();
+  assert.equal(other.box.querySelector("[data-after-x]"), null, "anyone else: no ✕");
+  assert.doesNotMatch(other.box.textContent, /added by/, "and no name");
+});
