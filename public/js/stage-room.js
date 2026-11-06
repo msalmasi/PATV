@@ -605,15 +605,18 @@
       var s = cur(), k;
       // review F2: a queue's kept player still plays its old title's tail under a card that waits for the stall - "UP NEXT · <title>" meanwhile
       if (upCtl && upCtl.wait && !upCtl.leaving && s && String(s.id) === upCtl.id) {
-        k = 'n:' + upKey(upCtl.n);
+        k = 'n:' + l3Key(upCtl.n);
         return l3Gone(k) ? null : { mode: 'next', k: k, tag: _t('js.stage.l3.next', 'Up next'), title: l3Title(upCtl.n), when: '' };
       }
       if (!coming || !coming.next || cardOn(s) || !libOn() || !coming.ends) return null;
       var left = coming.ends - srvNow(), n = coming.next;
       if (!((left <= L3_SOON_MS && left > L3_SOON_MS - L3_SHOW_MS) || (left <= L3_LAST_MS && left > -10000))) return null;
-      k = 'n:' + upKey(n);
+      k = 'n:' + l3Key(n);
       return l3Gone(k) ? null : { mode: 'next', k: k, tag: _t('js.stage.l3.next', 'Up next'), title: l3Title(n), when: left > 0 ? _t('js.stage.l3.in', 'in {time}', { time: l3Clock(left / 1000) }) : '' };
     }
+    // (the strip's key is the title itself - the countdown strip (`coming`, text only) and the one over a kept player's tail (the marker, with
+    // its poster key) are the same strip: no second announcement, one ✕ for both)
+    function l3Key(n) { return [n.kind, n.show, n.title, n.season, n.episode, n.year].join('|'); }
     function setText(el, v) { if (el && el.textContent !== v) el.textContent = v; }   // (review F1: a live region is rewritten only when it changes)
     // the off-air slate: nothing on this stage and a booked 📼 start within the hour - the stage box opens for it (onAir(true, …, {slate}): the page
     // says OFF AIR, the slate fills the player)

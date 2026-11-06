@@ -450,3 +450,16 @@ test("review F5 / safety F10 (1.99??): the off-air slate ({slate}) is OFF AIR on
   home((on, how) => pills.push([on, how]), t, true, "📼 A title", null);
   assert.deepEqual(pills, [[false, "nothing streaming right now"], [true, "live now"], [true, "📼 A title"]]);
 });
+
+test("review F2 + F1: the countdown strip and the one over the kept player's tail are ONE strip (the same element, announced once) - the marker's poster key doesn't make it a new one", async () => {
+  const x = switcher({ slots: [LIBP()], featured: { id: "lib1", live: true, by: "auto", went: true }, coming: { ends_at: T0 + 5000, next: NEXT_EP } });
+  x.player.playing();
+  const b = l3(x);
+  assert.ok(b);
+  await x.adv(5500);
+  x.answer(() => ans([], PEND(EPISODE(x.now(), { key: "912", poster: true }), { went: true }), { now: x.now() }));
+  await x.poll();
+  assert.equal(x.card(), null, "the tail still plays");
+  assert.equal(l3(x), b, "the same strip");
+  assert.equal(b.querySelector(".st-l3-when").textContent, "", "no countdown over the tail");
+});
