@@ -506,7 +506,7 @@ test("B (instant): a 📼 marker / its stream coming up bumps the pad's stage ve
   } finally { if (had) require.cache[bp] = had; else delete require.cache[bp]; }
 });
 
-test("D (coming): what's coming on the pad's 📼 stage - a playing title's end, a queue's next title, a booked start's time + title; the poster key only signed in; never who queued it", async () => {
+test("D (coming): what's coming on the pad's 📼 stage - a playing title's end, a queue's next title, a booked start's time + title; no poster key (review F7 1.99??); never who queued it", async () => {
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   assert.equal(await S.comingOf(ROOM, VIEWER), null, "nothing on, nothing booked");
   // a queue: its next title, and when the one on now ends
@@ -516,10 +516,10 @@ test("D (coming): what's coming on the pad's 📼 stage - a playing title's end,
   await S.stageBump(ROOM);                                       // (the 2 s cache)
   const c = await S.comingOf(ROOM, VIEWER);
   assert.ok(Math.abs(c.ends_at - (Date.now() + (DUR - 600) * 1000)) < 5000, "ends when its last 1800 s have played");
-  assert.deepEqual(c.next, { title: "Second", kind: "episode", year: null, show: "The Show", season: 1, episode: 2, poster: true, key: "912" });
+  assert.deepEqual(c.next, { title: "Second", kind: "episode", year: null, show: "The Show", season: 1, episode: 2 });
   assert.equal(c.at, null);
   const out = await S.comingOf(ROOM, null);
-  assert.deepEqual([out.next.poster, "key" in out.next], [false, false], "signed out: no poster key");
+  assert.deepEqual(out, c, "the same for every viewer (no poster key - nothing draws one)");
   const blob = JSON.stringify([c, out]);
   for (const bad of [admin.username, owner.username, PLEX_TOKEN, FILE, "secret-library-path"]) assert.ok(!blob.includes(bad), "no " + bad);
   await L.stop(admin, ROOM);
@@ -538,7 +538,7 @@ test("D (coming): what's coming on the pad's 📼 stage - a playing title's end,
   await S.stageBump(ROOM);
   assert.equal(await S.comingOf(ROOM, VIEWER), null);
   // the pad page's first render and /api/stage carry it
-  assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /coming = await MS\.comingOf\(R\.id, req\.user \|\| null\);/);
+  assert.match(fs.readFileSync(path.join(repo, "bridge.js"), "utf8"), /coming = await MS\.comingOf\(R\.id\);/);
   assert.ok("coming" in (await S.roomStage(ROOM, VIEWER)));
 });
 

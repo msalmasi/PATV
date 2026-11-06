@@ -2466,10 +2466,9 @@ function register(app, { isBotToken, addUser }) {
         // newstream 1.99ala: the homepage's "Next up" (the off-air slate, the Dock's off-air bar) - the shown pad's next booking, public facts
         // only (home.nextSlot), cached per pad; it was drawn once at load
         if (home) next = await require("./home").nextUpCached(R.id).catch(() => null);
-        // upnext2 (D): what's coming on this pad's 📼 stage (the lower-third, "coming up at", the off-air slate) - a poster key only signed in,
-        // the sign-in read only while one is named
-        if (req.user === undefined && (await MS.comingPoster(R.id))) await new Promise((r) => addUser(req, res, r));
-        coming = await MS.comingOf(R.id, req.user || null);
+        // upnext2 (D): what's coming on this pad's 📼 stage (the lower-third, the off-air slate) - text only, the same for every viewer (review
+        // F7 1.99??: no poster key, so no sign-in read for it)
+        coming = await MS.comingOf(R.id);
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room

@@ -292,9 +292,13 @@ async function startTitle(q, i, { offset = 0, item = null, tracks = null } = {})
     await I().must("PUT", `/streams/${encodeURIComponent(name)}`, { rtmp: stage.RTMP_PUBLIC, key, ratingKey: String(it.key), offset: off, quality,
                                                                     audio: tr.audio, sub: tr.sub, title });
   } catch (e) {
-    await undo(e.message);
-    if (e && (e.status === 429 || e.status === 503)) e.busy = true;
-    throw e;
+    // upnext2 review (safety F12, 1.99??): 409 "already playing" THIS title on our stage = an earlier start of ours got there (the site restarted
+    // while it was on its way and the watcher asked again) - inside the pad's lock nothing else starts it: it plays, its charge stays
+    if (!(e && e.status === 409 && !e.slotGone && (await I().encoderHas(q.room_id, it.key)))) {
+      await undo(e.message);
+      if (e && (e.status === 429 || e.status === 503)) e.busy = true;
+      throw e;
+    }
   }
   await stage.libraryRetitle(q.slot_id, "📼 " + title);
   const left = Math.max(0, (it.duration || 0) - off) + totalSec(q.items.slice(i + 1));
@@ -598,6 +602,15 @@ async function watchIdle() {
       const s = await I().session(w.room_id);
       if (s && String(s.slot_id) === String(w.behind)) return;           // still behind it
       if (s || (await activeFor(w.room_id))) { await cancelAfter(w.room_id, "something else started on the stage", w.behind); return; }
+      // upnext2 review (safety F1, 1.99??): only a title that ENDED BY ITSELF (library_done / _error) hands the stage over - a Cut, a ⏹, a
+      // replace, a time-up, a start that failed: what they waited for is gone and nothing starts (a Cut in the break used to be followed by
+      // the adder's queue taking the pad's featured stage). Its slot still open (a resume between two slots): the next look decides.
+      const bs = w.behind ? await stage.getSlot(w.behind).catch(() => null) : null;
+      if (bs && !bs.settled && ["waiting", "active"].includes(bs.status)) return;
+      if (!bs || !["library_done", "library_error"].includes(bs.end_reason)) {
+        await cancelAfter(w.room_id, "what they waited behind was taken off the stage", w.behind);
+        return;
+      }
       const R = await I().roomOf(w.room_id);
       const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [w.user_id]))[0];
       const A = u ? await L().access(u) : null;
@@ -605,7 +618,7 @@ async function watchIdle() {
       const req = (w.prefs && w.prefs.req) || {};
       try {
         const x = await launch(u, A, R, { room: R.id, keys: w.items.map((it) => it.key), quality: req.quality, audio: req.audio, sub: req.sub, offset: req.offset,
-                                          estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null);
+                                          estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null, { after: true });
         await runQuery("UPDATE media_queues SET state = 'started', end_reason = ?, updated = ? WHERE id = ? AND state = 'after'", [`started as queue #${x.queue_id}`, NOW(), w.id]);
       } catch (e) { await cancelAfter(w.room_id, (e && e.message) || "it couldn't start", w.behind); }
     }).catch((e) => console.error("[mediaqueue] after:", conf.errLine(e)));
@@ -670,9 +683,25 @@ async function launch(user, A, R, b, booked, sys = {}) {
     const pv = priceView(A, S, built.total_sec);
     if (pv.estimate > 0 && !booked) {
       if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate, code: "estimate" });
-      if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
+      // upnext2 review (function F3 / safety F5, 1.99??): titles added behind a single title start later (sys.after) - what they cost now may be
+      // LESS than the figure their owner said yes to (a price drop, a pad limit that cut one), never more
+      const said = Math.floor(Number(b.estimate));
+      if (sys.after ? !(pv.estimate <= said) : said !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
     }
-    if (!I().isLibAdmin(user) || pv.per_hour > 0) await I().needEncoder(rep ? R.id : null);
+    // upnext2 review (safety F2, 1.99??): a paid queue's first hour is charged when its first title starts - after the station break. Without the
+    // points for it, it is refused NOW, as a ▶ Play's charge is at the press (it took the pad's stage for the break and then ended "out of
+    // PAT", again and again, never counted on the daily cap)
+    if (pv.per_hour > 0) {
+      const need = pv.per_hour * hoursNeeded(0, built.items[0].duration, built.offset), have = await balanceOf(user.userId);
+      if (have < need) {
+        throw Object.assign(refuse(402, `Starting it takes ${I().fmtPat(need)} PAT (its first title's started hours) and you have ${I().fmtPat(have)} - top up first.`,
+                                   { code: "pat", need, balance: have }), { outOfPat: true, need });   // (a booking's notice: "out of PAT")
+      }
+    }
+    // upnext2: the station break on this pad (the card now, the first title when it's over). review (safety F11): a queue that takes one asks
+    // for a free encoder too, a library admin's free one included (it holds it through the break)
+    const secs = await L().breakSec(R.id).catch(() => 0);
+    if (!I().isLibAdmin(user) || pv.per_hour > 0 || secs > 0) await I().needEncoder(rep ? R.id : null);
     const first = built.first && String(built.first.key) === built.items[0].key ? built.first : await I().fetchItem(built.items[0].key);
     if (!first || !["movie", "episode"].includes(first.type) || !first.file) throw refuse(400, "The first title has no playable file.", { code: "bad" });
     const o = {
@@ -702,7 +731,6 @@ async function launch(user, A, R, b, booked, sys = {}) {
     let r;
     try {
       // upnext2: the station break first (the card now, the first title when it's over - its charge is taken then, by startTitle)
-      const secs = await L().breakSec(R.id).catch(() => 0);
       r = secs > 0 ? await beginBreak(q, 0, secs, { offset: built.offset, item: first, tracks: { audio: o.audio, sub: o.sub } }) : null;
       if (!r) r = await startTitle(q, 0, { offset: built.offset, item: first, tracks: { audio: o.audio, sub: o.sub } });
       // 'starting' until now: a watcher (this process or another one on the same DB) leaves a queue alone while it starts
@@ -965,6 +993,7 @@ const prev = (user, room) => step(user, room, -1);
 async function retireForReplace(q0, user) {
   const q = await load(q0.id);
   if (!q || !["active", "starting"].includes(q.state)) return false;
+  await brkStop(q, user);
   await endQueue(q, `replaced by ${user.username}`, { by: user.username, slotDone: true, how: "replaced" });
   return true;                             // (the control log's line is the play's own "replace": <what was on> → <the new title>)
 }
@@ -973,10 +1002,16 @@ async function stop(user, q0, reason = "stopped") {
   if (!(await canControl(user, q0))) throw refuse(403, I().CONTROL_DENIED);
   return withLock(q0.room_id, async () => {
     const q = await load(q0.id);
-    if (q && q.state === "active") await endQueue(q, `${reason} by ${user.username}`, { by: user.username });
+    if (q && q.state === "active") { await brkStop(q, user); await endQueue(q, `${reason} by ${user.username}`, { by: user.username }); }
     await I().logControl(user, q0.room_id, "stop", "the queue", { queue_id: q0.id });
     return { ok: true };
   });
+}
+/** upnext2 review (safety F3, 1.99??): its starter ended the queue in a station break (⏹ / their own replace) - it counts on their daily cap even
+ *  when no title ever started (medialib.paidToday / freeToday) */
+async function brkStop(q, user) {
+  if (!q || !q.brk || !user || user.userId !== q.user_id) return;
+  try { await runQuery("UPDATE media_queues SET brk_stop = 1 WHERE id = ?", [q.id]); } catch (e) { /* the cap is best effort */ }
 }
 
 /** What's left: remove / move / add (titles already played or on now don't change). b = {op, index, to, keys} */
@@ -1070,12 +1105,18 @@ async function after(user, b = {}) {
       const room_ = S.library_queue_max_items - wait.items.length;
       if (room_ <= 0) throw refuse(409, `A queue holds at most ${S.library_queue_max_items} titles.`, { code: "queue_full" });
       let tot = totalSec(wait.items, Number((wait.prefs.req || {}).offset) || 0);
+      // upnext2 review (function F3 / safety F5, 1.99??): the pad's 📼 limit too, as the queue's start (launch) builds it - a grow past it was
+      // cut there at the hand-over, the estimate no longer matched, and the whole queue was cancelled ("confirm it again")
+      const capPad = await padCapSec(R.id, false), cap = Math.min(S.library_queue_max_hours * 3600, capPad);
       const put = [];
       for (const it of add.items.slice(0, room_)) {
-        if (tot + it.duration > S.library_queue_max_hours * 3600) break;
+        if (tot + it.duration > cap) break;
         put.push(it); tot += it.duration;
       }
-      if (!put.length) throw refuse(409, `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+      if (!put.length) {
+        throw refuse(409, capPad < S.library_queue_max_hours * 3600 ? `That doesn't fit: titles on this pad's stage run at most ${Math.floor(capPad / 60)} minutes in a row.`
+                                                                    : `A queue holds at most ${S.library_queue_max_hours} hours.`, { code: "queue_full" });
+      }
       const before = estimate(wait.per_hour, totalSec(wait.items, Number((wait.prefs.req || {}).offset) || 0));
       const cost = Math.max(0, estimate(wait.per_hour, tot) - before);
       if (cost > 0) {
@@ -1121,8 +1162,45 @@ async function cancelAfter(roomId, why, slotId = null) {
     await require("./inbox").addSafe(w.user_id, { kind: "media", title: `📼 Your titles up next on ${pad} didn't start`,
       body: `${String(why || "What they waited for ended").slice(0, 160)} - nothing was charged. Add them again any time.`, link: "/stage", ref: "mlibafter:" + w.id });
     console.log(`[mediaqueue] after-queue #${w.id} on ${roomId} ended: ${why}`);
+    try { stage.stageBump(roomId); } catch (e) { /* the 2 s cache: pages see it then */ }   // (upnext2 review: the lower-third's UP NEXT goes)
     return true;
   } catch (e) { console.error("[mediaqueue] after:", conf.errLine(e)); return false; }
+}
+/** upnext2 review (safety F4, 1.99??): "✕ Take my titles out" - the titles someone added behind a single title come out before they start (they
+ *  bill their owner per hour whenever it starts, maybe hours later). Their owner, or whoever may control them (the pad's owner, site staff,
+ *  a library admin - medialib.mayControl); someone else taking them out leaves their owner a notice. Nothing was ever charged. */
+async function withdrawAfter(user, room) {
+  await L().init();
+  if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
+  const R = await I().roomOf(room);
+  if (!R || !(await stage.seesPad(user, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
+  return withLock(R.id, async () => {
+    const w = await afterFor(R.id);
+    if (!w) throw refuse(404, "Nothing is waiting to play after this.", { code: "nothing_after" });
+    const own = w.user_id === user.userId;
+    if (!own && !(await I().mayControl(user, R.id, w.user_id))) {
+      throw refuse(403, "Only whoever added them, the pad's owner or an admin can take them out.", { code: "control_denied" });
+    }
+    const c = await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = ?, updated = ? WHERE id = ? AND state = 'after'",
+                             [NOW(), `withdrawn by ${user.username}`.slice(0, 120), own ? null : "after_removed", NOW(), w.id]);
+    if (!(c && c.changes)) throw refuse(409, "They've just started (or gone) - look again.", { code: "play_changed" });
+    if (!own) {
+      const pad = await padTitle(R.id);
+      await require("./inbox").addSafe(w.user_id, { kind: "media", title: `📼 Your titles up next on ${pad} were taken out`,
+        body: "The pad's owner or an admin took them out before they started - nothing was charged.", link: "/stage", ref: "mlibafter:" + w.id });
+    }
+    await I().logControl(user, R.id, "queue_remove", `${w.items.length} title(s) up next${own ? "" : ` (${w.username || "?"}'s)`}`, { queue_id: w.id });
+    console.log(`[mediaqueue] after-queue #${w.id} on ${R.id} withdrawn by ${user.username}`);
+    try { stage.stageBump(R.id); } catch (e) { /* the 2 s cache */ }
+    return { ok: true, withdrawn: w.items.length };
+  });
+}
+/** upnext2 review (safety F6): the single title carries on on a fresh slot (a seek / resume after media-control lost it, a long pause): the titles
+ *  behind it wait behind the new slot (inside the pad's lock - medialib.restart_). Never throws. */
+async function moveAfter(roomId, fromSlot, toSlot) {
+  try {
+    await runQuery("UPDATE media_queues SET behind = ?, updated = ? WHERE room_id = ? AND state = 'after' AND behind = ?", [String(toSlot), NOW(), String(roomId), String(fromSlot)]);
+  } catch (e) { console.error("[mediaqueue] after:", conf.errLine(e)); }
 }
 /** (inside the pad's lock - medialib.watchOne) The single title `s` ended by itself (how: finished / error): titles waiting behind it start -
  *  their owner's queue takes the stage over from that slot (launch with a system replace: the feature + the card carry, the station break).
@@ -1139,7 +1217,7 @@ async function startAfter(s, how, pos) {
   try {
     const r = await launch(u, A, R, { room: R.id, keys: w.items.map((x) => x.key), quality: req.quality, audio: req.audio, sub: req.sub, offset: req.offset,
                                       estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null,
-                           { rep, reason: how === "error" ? "library_error" : "library_done" });
+                           { rep, reason: how === "error" ? "library_error" : "library_done", after: true });
     await runQuery("UPDATE media_queues SET state = 'started', end_reason = ?, updated = ? WHERE id = ? AND state = 'after'", [`started as queue #${r.queue_id}`, NOW(), w.id]);
     console.log(`[mediaqueue] after-queue #${w.id} on ${s.room_id} started as queue #${r.queue_id} ("${s.title}" ${how})`);
     return true;
@@ -1200,6 +1278,8 @@ function routes(app, { J, me, timers = true }) {
   app.post("/api/medialib/queue/edit", ...J(async (req) => edit(me(req), (req.body || {}).room, req.body || {})));
   // upnext2 (E): "+ Add to the queue" behind a single title (a queue of the adder's own that starts when it ends)
   app.post("/api/medialib/queue/after", ...J(async (req) => after(me(req), req.body || {})));
+  // upnext2 review (safety F4, 1.99??): "✕ Take my titles out" - before they start
+  app.post("/api/medialib/queue/after/cancel", ...J(async (req) => withdrawAfter(me(req), (req.body || {}).room)));
 }
 
 module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostFor, nextEpisodeOf, preview, book, watchBookings, bookMinutes, BOOK_BUFFER_MIN, next, prev, stop, edit, views, viewOf: (q) => view(q), onWatch, watchIdle, restartCurrent, forRoomOf, activeFor, routes,
@@ -1207,4 +1287,5 @@ module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostF
                    _fast: (on) => { fastOn = !!on; },
                    breakDue, _now: () => NOW(),                                     // upnext2: the station break (medialib's clock is this one)
                    after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
+                   withdrawAfter, moveAfter,                                        // upnext2 review fixes (1.99??)
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)
