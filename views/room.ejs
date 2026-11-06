@@ -554,6 +554,7 @@
    // 1.99iv: 📺 Prime Time (premium.js) - the intro sweep on open + the ⋯ menu entry
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=5">
+<%- include('partials/bfcache-reload') %>
 <script src="/public/js/pad-chipfit.js?v=2" defer></script><%# 1.99za: the header badges give way to the name on one line %>
 <% if (dockOn_) { %><style>::view-transition-old(root), ::view-transition-new(root) { animation-duration: 150ms; }</style><link rel="stylesheet" href="/public/css/pad-dock.css?v=11"><script src="/public/js/dock-link.js?v=2"></script><script src="/public/js/pad-dock.js?v=12"></script><% if (locals.plexPlay && !chatOnly_) { %><script src="/public/js/plex-play.js?v=3"></script><% } %><script src="/public/js/pad-picker.js?v=4"></script><% } %><%# 1.99ajf dockclean: v3 / v2; 1.99ajh dockpop: v5 + dock-link.js (the chat window's channel); 1.99ajn padppl: js v6; 1.99ajq dockpol: css v7, js v7, picker v3; 1.99ajw casino2: css v8 / dock-link v2 / js v8 (the chat beside a casino table, 📼 Play from Plex); 1.99ajy dockmedia: css v9, js v9 (Now playing, the stage media bar, the embed row); dock3 1.99akf: css v10, js v10 (the mic bars, the Plex app, fullscreen in place); pausebars: css v11, js v11 (no mic bars while paused; the holder fit again on play / pause); plexreplace: plex-play.js v2 (▶ Play this instead), js v12 (the stage asks at once after a start); upnext2: plex-play.js v3 (+ Add to the queue behind a single title, on this pad only) %>
 <main class="ds-page rm chatlog<%= LK_ && LK_.accent ? ' pad-acc' : '' %><%= dockOn_ ? ' rm-dock' : '' %><%= chatOnly_ ? ' rmd-popout' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
@@ -2357,10 +2358,7 @@
     var blurAt = Date.now(), focusCheckAt = 0;
     window.addEventListener('blur', function () { blurAt = Date.now(); });
     window.addEventListener('focus', function () { var now = Date.now(); if (now - blurAt < 15000 || now - focusCheckAt < 15000) return; focusCheckAt = now; recheck(); });
-    window.addEventListener('pageshow', function (e) { if (e && e.persisted) location.reload(); });
-    <% } else if (dockOn_) { %>
-    window.addEventListener('pageshow', function (e) { if (e && e.persisted) recheck(); });
-    <% } %>
+    <% } %><%# (pubswitch review C3: a page brought back from the back/forward cache - the window's and the Dock page's - reloads: partials/bfcache-reload, every pad page) %>
   })();
   </script>
 <% } %>

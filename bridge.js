@@ -2667,8 +2667,10 @@ function register(app, { isBotToken, addUser }) {
     // cache (pubswitch: nor by the browser - below)
     const dockOn_ = require("./paddock").viewerOn(req.user), vt_ = signedIn && dockOn_ ? require("./roompm").tag(req.user.userId) : null;
     // pubswitch (owner 2026-11-05): EVERY pad page is this viewer's, at this pad's level, now - signed in or out. Without a header (signed
-    // out) or with a bare `private` (the Dock) a browser may still show a kept copy on Back / a restored tab: another account's page, or
-    // the page from before the owner changed who may see the pad (Back from Settings after Members -> Public came out of the bfcache).
+    // out) or with a bare `private` (the Dock) a browser may still show a kept copy on a restored tab: another account's page, or the page
+    // from before the owner changed who may see the pad (Back from Settings after Members -> Public came out of the bfcache). no-store
+    // alone doesn't keep a page out of the back/forward cache (Chrome may keep it until a cookie changes; WebKit keeps it): the page
+    // reloads itself when shown from it (partials/bfcache-reload - pubswitch review C3).
     res.set("Cache-Control", "private, no-store");
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access, adultGate,

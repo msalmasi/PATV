@@ -38,7 +38,7 @@ test("home.js: the Dock follows paddock.viewerOn (off = today's homepage, 'staff
   const src = rd("home.js");
   assert.match(src, /const padDockOn_ = require\("\.\/paddock"\)\.viewerOn\(req\.user\), vt_ = me && padDockOn_ \? require\("\.\/roompm"\)\.tag\(me\.userId\) : null;/);
   assert.match(src, /padDockOn: padDockOn_,\s+vt: vt_,/, "review: the viewer tag only for the Room Dock");
-  assert.match(src, /if \(vt_\) res\.set\("Cache-Control", "private"\);/, "and such a page is never kept by a shared cache");
+  assert.match(src, /res\.set\("Cache-Control", "private, no-store"\);/, "and such a page is never kept by a shared cache (pubswitch review C4: nor by a browser, signed in or out)");
   const ejsSrc = rd("views", "home.ejs");
   assert.match(ejsSrc, /const homeDock_ = !!locals\.padDockOn && roomGate_ === 'ok' && !hubChat_;/, "the 18+ gate and hub pads keep today's homepage");
   const PD = require(path.join(repo, "paddock")), SP = require(path.join(repo, "siteperms"));

@@ -1,0 +1,5 @@
+<%# pubswitch review (C3/C4): a page shown again from the browser's back/forward cache reloads. `Cache-Control: no-store` alone doesn't
+    keep it out (Chrome may keep a no-store page and drop it only when cookies change - a pad's level switch changes none; WebKit keeps
+    it), and what the page shows depends on who is signed in and on the pad's level NOW. Every pad page (room.ejs - the Dock, the
+    classic page, the chat window; padLocked.ejs) and the homepage. Static: nothing from the request is printed here. %>
+<script>window.addEventListener('pageshow', function (e) { if (e && e.persisted) location.reload(); });</script>

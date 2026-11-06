@@ -343,7 +343,9 @@ function register(app, { addUser, xpForNextLevel }) {
                         image: res.locals.ogBase + require("./og").pageUrl("Public Access TV"), url: res.locals.ogBase + "/" };
       // 1.99ajh dockpop review: the viewer tag only for the Room Dock, and a page that carries it is this viewer's alone (no shared cache)
       const padDockOn_ = require("./paddock").viewerOn(req.user), vt_ = me && padDockOn_ ? require("./roompm").tag(me.userId) : null;
-      if (vt_) res.set("Cache-Control", "private");
+      // pubswitch review (C4): the homepage is this viewer's, at the front pad's level, now - signed in or out (its live chat is
+      // padaccess.full's, its stage the viewer's): never kept by a browser either (and partials/bfcache-reload reloads it on Back)
+      res.set("Cache-Control", "private, no-store");
       // 1.99ajq dockpol (owner H5): the homepage stage shows the front pad's 🎙 mic-follows stage ONLY to a signed-in viewer who may see that pad
       // (its live chat is this card - padaccess.full, past the 18+ gate); everyone else gets Pepe's stream or the pad's permitted slots, never a
       // teaser of a pad they can't see. A featured slot still wins over it, as on the pad page (stage-room.js pickDefault).

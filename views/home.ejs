@@ -1,6 +1,7 @@
 <!-- views/home.ejs — the functional homepage (home.js). Explainers live on /about. -->
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- locals.dockFragment ? '' : include('layout', { title: 'Public Access Television', user: username }) %>
+<%- locals.dockFragment ? '' : include('partials/bfcache-reload') %><%# pubswitch review (C4): Back to the homepage reloads (its live chat follows the front pad's level and the viewer) %>
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const short = (n) => { n = Number(n) || 0; const a = Math.abs(n);
