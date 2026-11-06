@@ -506,7 +506,7 @@ test("B (instant): a 📼 marker / its stream coming up bumps the pad's stage ve
   } finally { if (had) require.cache[bp] = had; else delete require.cache[bp]; }
 });
 
-test("D (coming): what's coming on the pad's 📼 stage - a playing title's end, a queue's next title, a booked start's time + title; no poster key (review F7 1.99??); never who queued it", async () => {
+test("D (coming): what's coming on the pad's 📼 stage - a playing title's end, a queue's next title, a booked start's time + title; no poster key (review F7 1.99alc); never who queued it", async () => {
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   assert.equal(await S.comingOf(ROOM, VIEWER), null, "nothing on, nothing booked");
   // a queue: its next title, and when the one on now ends

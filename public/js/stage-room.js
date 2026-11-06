@@ -64,7 +64,7 @@
 // for a booked 📼 start within 5 min (12 s when it first applies, then 12 s every 2 min; ✕ hides it for the visit), and the off-air slate
 // naming a booked 📼 start within the hour. Public facts only (coming: title / kind / season / episode / year / time; a poster key only signed
 // in - mainstage.comingOf). While a 📼 title is on screen the page asks every LIB_POLL_MS, and every 3 s from just before its end.
-// upnext2 review fixes (1.99??): a 📼 queue's kept player shows the old title's tail to its last frame - the card goes up once it stalls (the
+// upnext2 review fixes (1.99alc): a 📼 queue's kept player shows the old title's tail to its last frame - the card goes up once it stalls (the
 // UP NEXT strip until then: it covered the last 4-10 s of every title, sound on); the strip shows twice (12 s a minute before the end, then the
 // last 15 s - not the subtitles' whole last minute), is announced once per title (its countdown was read out every second), never jumps
 // under a pointer / finger (the Dock's controls woke on the tap that aimed at ✕), no "COMING UP AT" over someone's stream, an embed, a cam
@@ -370,7 +370,7 @@
     function cardOn(s) { return !!(s && s.pending && !(upKeep(s) && videoAway())); }
     function upCard(id, n, kept) {
       // upnext2 (C): shown = when it came up (the minimum), kept = a 📼 queue's own player plays on under it (its old title's tail first).
-      // review F2 (1.99??): a kept card WAITS (wait: not on the page - the UP NEXT strip says what's next, l3Want) until that player stalls - the
+      // review F2 (1.99alc): a kept card WAITS (wait: not on the page - the UP NEXT strip says what's next, l3Want) until that player stalls - the
       // old title's last seconds stay visible, with their sound; then it goes up (mount) and `shown` starts its minimum
       var D = document, my = { id: id, key: upKey(n), n: n, leaving: false, timers: [], handing: 0, shown: Date.now(), kept: !!kept, gap: !kept, wait: !!kept, mounted: false };
       function el(tag, cls, txt) { var x = D.createElement(tag); if (cls) x.className = cls; if (txt != null) x.textContent = txt; return x; }
@@ -562,14 +562,14 @@
       show();
     }
     // ── upnext2 (D): the 📼 "UP NEXT" lower-third, the off-air slate ──
-    // review F7 (1.99??): the strip shows twice - L3_SHOW_MS from a minute before the end, then the last L3_LAST_MS (the subtitles burned into the
+    // review F7 (1.99alc): the strip shows twice - L3_SHOW_MS from a minute before the end, then the last L3_LAST_MS (the subtitles burned into the
     // foot of the picture were covered for the whole last minute); F6: no "COMING UP AT" strip over another stream (someone's OBS, an embed - over
     // its own controls -, a cam, Pepe's stream): a booked 📼 start is named by the off-air slate while nothing is on, and by its card when it starts
     var L3_SOON_MS = 60000, L3_SHOW_MS = 12000, L3_LAST_MS = 15000, SLATE_MS = 60 * 60000;
     var l3 = null, l3Tick = null, l3First = {}, slate = null;
     // a 📼 title is what's on screen (its stream plays - not a card)
     function libOn() { var s = cur(); return !!(s && s.lib && !s.pending && !s.cam && !s.embed && s.hls); }
-    // the poll while a 📼 title is on screen. review F10 / safety F8+F9 (1.99??): a page on the pad's /live long-poll (stvLive - it carried the
+    // the poll while a 📼 title is on screen. review F10 / safety F8+F9 (1.99alc): a page on the pad's /live long-poll (stvLive - it carried the
     // stage version lately) is woken at every title change: the ordinary 10 s. Without it: every 10 s until LIB_SOON_MS before the end, then
     // every LIB_POLL_MS, every 3 s from LIB_END_MS before it (the break's card) - it used to be every 5 s for a title's whole length
     var STV_LIVE_MS = 45000, STV_JITTER_MS = 750, stvSeen = null, stvAt = 0, stvT = null;
@@ -631,7 +631,7 @@
         if (!l3 || l3.k !== w.k) {
           l3Off();
           var D = document, box = D.createElement('div'), tag = D.createElement('span'), ttl = D.createElement('span'), when = D.createElement('span'), x = D.createElement('button');
-          // review F1 (1.99??): the strip itself is no live region - its countdown was read out every second. A visually hidden status says the
+          // review F1 (1.99alc): the strip itself is no live region - its countdown was read out every second. A visually hidden status says the
           // title ONCE (filled a moment after it's on the page - one filled at insert is often not announced); the strip's own text is for eyes
           var sr = D.createElement('span');
           box.className = 'st-l3'; box.setAttribute('data-mode', w.mode);
@@ -641,7 +641,7 @@
           x.type = 'button'; x.className = 'st-l3-x'; x.textContent = '✕'; x.setAttribute('aria-label', _t('js.stage.l3.hide', 'Hide'));
           var k = w.k, said = _t('js.stage.l3.sr_next', 'Up next on the stage: {title}', { title: w.title });
           x.addEventListener('click', function () { l3Hide(k); l3Off(); });
-          // review F4 (1.99??): a tap / click on the strip never wakes the Room Dock's controls (they lifted it 48 px under the finger: the first
+          // review F4 (1.99alc): a tap / click on the strip never wakes the Room Dock's controls (they lifted it 48 px under the finger: the first
           // tap on ✕ hit the video), and while a pointer is over it, it stays where it is (the controls showing / hiding moved it under the cursor)
           var still = function (e) { if (e && e.stopPropagation) e.stopPropagation(); };
           box.addEventListener('pointerdown', still); box.addEventListener('focusin', still);

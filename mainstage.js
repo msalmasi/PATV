@@ -190,7 +190,7 @@ function stageBump(roomId) {
 }
 const stageVer = (roomId) => stageVers.get(String(roomId || "")) || 0;
 // upnext2 (D): what's coming on a pad's 📼 stage for its pages (medialib.comingFor) - cached COMING_CACHE_MS per pad (the stage is polled; a
-// marker / a stream coming up clears it - stageBump). Text only - upnext2 review (safety F7, 1.99??): no poster key (nothing draws one; it made
+// marker / a stream coming up clears it - stageBump). Text only - upnext2 review (safety F7, 1.99alc): no poster key (nothing draws one; it made
 // every signed-in poll read the sign-in for a title's whole length) - the same for every viewer.
 // upnext2 review (safety F9): ONE look per pad at a time - a stage bump empties the cache and wakes every open page at once; they all share
 // the look in flight (comingFlight) instead of each running its own
@@ -1177,7 +1177,7 @@ async function endEffects(done, reason, actor, { bumped = false } = {}) {
     for (const [cid, sid] of clients) if (sid === res.id) clients.delete(cid);
     lastTick.delete(res.id);
     pubCache.clear();
-    // upnext2 review (function F9, 1.99??): a 📼 slot that ended (⏹, a Cut, a replace, time up) - its pages are told now: the card / the UP NEXT
+    // upnext2 review (function F9, 1.99alc): a 📼 slot that ended (⏹, a Cut, a replace, time up) - its pages are told now: the card / the UP NEXT
     // strip went with it (they stayed up to the next poll)
     // (a 📼 replace / swap: the new slot's marker told them already - libraryOpen)
     if (res.source === "library" && !bumped) stageBump(res.room_id || rooms.HOUSE_ROOM);
@@ -2116,7 +2116,7 @@ function whepOf(s) {
 }
 // What a stage shows: the slots live right now in a room (cached briefly; pages poll it).
 const pubCache = new Map();   // room id ("" = every room) -> {at, list, camLogins, featured}
-// upnext2 review (safety F9, 1.99??): ONE look per room at a time - a 📼 title change empties the cache and wakes every open page of the pad
+// upnext2 review (safety F9, 1.99alc): ONE look per room at a time - a 📼 title change empties the cache and wakes every open page of the pad
 // (stageBump), and they all asked at once against the empty cache (N pages = N looks). Callers now share the look in flight; a clear (a slot
 // moved) starts a new generation: a look that began before it still answers whoever waits on it, cached as already old (the next ask looks again)
 const pubFlight = new Map();
@@ -2745,7 +2745,7 @@ module.exports = {
   _setPepeAir: (fn) => { pepeAirImpl = typeof fn === "function" ? fn : null; },   // (dock3 review: tests - Pepe's stream on air or not)
   clockNow: () => now(),       // 1.99ajr golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
   stageBump, stageVer,         // upnext2: a pad's stage version (its /live long-poll's `stv`)
-  comingOf,                    // upnext2 (D): what's coming on a pad's 📼 stage (review F7 1.99??: no poster key - comingPoster is gone)
+  comingOf,                    // upnext2 (D): what's coming on a pad's 📼 stage (review F7 1.99alc: no poster key - comingPoster is gone)
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

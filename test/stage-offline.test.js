@@ -85,7 +85,7 @@ test("home: setPill (the switcher's onAir) only toggles .live/.off - the slate s
   const html = await renderHome({ tops });
   const fn = between(html, "function setPill(on, how) {", "\n    }\n");
   assert.match(fn, /stageEl\.classList\.toggle\('live', on\); stageEl\.classList\.toggle\('off', !on\);/);
-  // (upnext2 review F5 1.99??: the off-air slate - {slate} - is OFF AIR here: setPill(false), the homepage's own slate with its Next up)
+  // (upnext2 review F5 1.99alc: the off-air slate - {slate} - is OFF AIR here: setPill(false), the homepage's own slate with its Next up)
   assert.match(html, /onAir: function \(on, sub, x\) \{ var air = !!on && !\(x && x\.slate\); setPill\(air,/);
 });
 

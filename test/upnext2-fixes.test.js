@@ -1,4 +1,4 @@
-// upnext2 review fixes (1.99??): the station break / "+ Add to the queue" against the REAL media-control service (deploy/mediactl, a mocked
+// upnext2 review fixes (1.99alc): the station break / "+ Add to the queue" against the REAL media-control service (deploy/mediactl, a mocked
 // Plex + a fake ffmpeg) - the test/upnext-break.test.js harness - one test per finding of the two reviews of 559c2d08 (function: F3 F9,
 // safety: F1-F7 F9 F11-F13), each failing on that build:
 //   S1  a Cut / a failed start / a lost title in the break cancels the titles behind it; the watcher hands over only after a title that ended

@@ -2467,7 +2467,7 @@ function register(app, { isBotToken, addUser }) {
         // only (home.nextSlot), cached per pad; it was drawn once at load
         if (home) next = await require("./home").nextUpCached(R.id).catch(() => null);
         // upnext2 (D): what's coming on this pad's 📼 stage (the lower-third, the off-air slate) - text only, the same for every viewer (review
-        // F7 1.99??: no poster key, so no sign-in read for it)
+        // F7 1.99alc: no poster key, so no sign-in read for it)
         coming = await MS.comingOf(R.id);
       }
     } catch (e) { slots = []; stale = true; }   // (dock3 1.99akf: an error says so - an empty list read as "nothing is live" on the page)

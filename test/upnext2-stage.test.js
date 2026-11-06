@@ -127,7 +127,7 @@ test("B: room.ejs hands the /live answer's stv to the stage (PATVPadStage.stv); 
   assert.match(read("bridge.js"), /stv: \(\(\) => \{ try \{ return require\("\.\/mainstage"\)\.stageVer\(R\.id\); \} catch \(e\) \{ return 0; \} \}\)\(\),/);
 });
 
-test("B + review F9 (1.99??): the switcher's stv - the first answer only notes it; a move asks /api/stage within 750 ms (each page at its own moment, not all at once); the same again: nothing", async () => {
+test("B + review F9 (1.99alc): the switcher's stv - the first answer only notes it; a move asks /api/stage within 750 ms (each page at its own moment, not all at once); the same again: nothing", async () => {
   const x = switcher({ slots: [], pepeOn: true });
   const polls = () => x.calls.filter((c) => c.url === "/api/stage?room=pad").length;
   x.sw.stv(3);
@@ -188,7 +188,7 @@ test("C: a card stays up at least 4 s - the stream listed and playing a moment a
   assert.equal(x.card(), null);
 });
 
-test("C + review F2 (1.99??): a 📼 queue's kept player plays the title before's tail to its last frame - the UP NEXT strip meanwhile, the card once it stalls, gone once the new title moves (>= 4 s)", async () => {
+test("C + review F2 (1.99alc): a 📼 queue's kept player plays the title before's tail to its last frame - the UP NEXT strip meanwhile, the card once it stalls, gone once the new title moves (>= 4 s)", async () => {
   const x = switcher({ slots: [LIB({ title: "📼 The Show — S1E1 Pilot" })], featured: { id: "lib1", live: true, by: "auto", went: true } });
   x.player.playing(); x.player.muted = false;
   await x.adv(2000);
@@ -256,7 +256,7 @@ const slateOf = (x) => x.wrap.children.find((c) => c.classList.contains("st-slat
 const LIBP = (extra) => LIB(Object.assign({ lib: true, title: "📼 The Show — S1E1 Pilot" }, extra || {}));
 const NEXT_EP = { title: "Second", kind: "episode", show: "The Show", season: 1, episode: 2, year: null, poster: false };
 
-test("D + review F7 (1.99??): UP NEXT - over a 📼 title that plays, 12 s from a minute before its end, then its last 15 s, with a countdown; ✕ hides it for the visit", async () => {
+test("D + review F7 (1.99alc): UP NEXT - over a 📼 title that plays, 12 s from a minute before its end, then its last 15 s, with a countdown; ✕ hides it for the visit", async () => {
   const x = switcher({ slots: [LIBP()], featured: { id: "lib1", live: true, by: "auto", went: true }, coming: { ends_at: T0 + 90000, next: NEXT_EP } });
   assert.equal(x.sw.view(), "slot:lib1");
   assert.equal(l3(x), null, "90 s left: nothing yet");
@@ -294,7 +294,7 @@ test("D + review F7 (1.99??): UP NEXT - over a 📼 title that plays, 12 s from 
   assert.equal(l3(z), null);
 });
 
-test("review F1 (1.99??): the strip is announced ONCE per title - a hidden status line; its countdown (aria-hidden) and ✕ are outside it; the slate's text is written only when it changes", async () => {
+test("review F1 (1.99alc): the strip is announced ONCE per title - a hidden status line; its countdown (aria-hidden) and ✕ are outside it; the slate's text is written only when it changes", async () => {
   const x = switcher({ slots: [LIBP()], featured: { id: "lib1", live: true, by: "auto", went: true }, coming: { ends_at: T0 + 14000, next: NEXT_EP } });
   const b = l3(x);
   assert.ok(b);
@@ -323,7 +323,7 @@ test("review F1 (1.99??): the strip is announced ONCE per title - a hidden statu
   assert.equal(s.getAttribute("role"), "status");
 });
 
-test("review F4 (1.99??): a tap / click on the strip never reaches the Room Dock (its controls woke and lifted the strip under the finger); over it, it stays put", async () => {
+test("review F4 (1.99alc): a tap / click on the strip never reaches the Room Dock (its controls woke and lifted the strip under the finger); over it, it stays put", async () => {
   const x = switcher({ slots: [LIBP()], featured: { id: "lib1", live: true, by: "auto", went: true }, coming: { ends_at: T0 + 10000, next: NEXT_EP } });
   const b = l3(x);
   for (const ev of ["pointerdown", "focusin"]) {
@@ -337,7 +337,7 @@ test("review F4 (1.99??): a tap / click on the strip never reaches the Room Dock
   assert.match(js, /box\.fz = setTimeout\(function \(\) \{ box\.style\.bottom = ''; \}, 700\);/);
 });
 
-test("review F6 (1.99??): no \"COMING UP AT\" strip over a stream - Pepe's, someone's OBS, an embed, a cam; the off-air slate names a booked 📼 start while nothing is on", async () => {
+test("review F6 (1.99alc): no \"COMING UP AT\" strip over a stream - Pepe's, someone's OBS, an embed, a cam; the off-air slate names a booked 📼 start while nothing is on", async () => {
   const at = T0 + 3 * 60000, next = { title: "Night of the Living Dead", kind: "movie", year: 1968 };
   const over = [
     switcher({ slots: [], pepeOn: true, coming: { at, next } }),
@@ -382,7 +382,7 @@ test("D: the off-air slate names a booked 📼 start within the hour while nothi
   assert.deepEqual(far.air[far.air.length - 1], [true, null, { slate: true }]);
 });
 
-test("D + review F10 / safety F8 (1.99??): the poll - a page without the /live long-poll: 10 s, 5 s from 2 min before a 📼 title's end, 3 s in its last 15 s; on the long-poll (stv): the ordinary 10 s throughout", async () => {
+test("D + review F10 / safety F8 (1.99alc): the poll - a page without the /live long-poll: 10 s, 5 s from 2 min before a 📼 title's end, 3 s in its last 15 s; on the long-poll (stv): the ordinary 10 s throughout", async () => {
   const END = T0 + 180000;
   const x = switcher({ slots: [LIBP()], featured: { id: "lib1", live: true, by: "auto", went: true }, coming: { ends_at: END, next: NEXT_EP } });
   const polls = (y) => y.calls.filter((c) => c.url === "/api/stage?room=pad").length;
@@ -429,7 +429,7 @@ test("D: only known shapes, text only - a bad key / a stray field never reaches 
   assert.match(read("views", "room.ejs"), /coming: <%- JSON\.stringify\(RS\.coming \|\| null\)\.replace\(\/<\/g, '\\\\u003c'\) %>,/);
 });
 
-test("review F5 / safety F10 (1.99??): the off-air slate ({slate}) is OFF AIR on the classic homepage and the homepage Dock too - their own slate / off-air bar with its Next up stays", () => {
+test("review F5 / safety F10 (1.99alc): the off-air slate ({slate}) is OFF AIR on the classic homepage and the homepage Dock too - their own slate / off-air bar with its Next up stays", () => {
   const hd = read("public", "js", "home-dock.js");
   const m = /onAir: function \(on, sub, x\) \{ (var air = [^\n]*) \}\n/.exec(hd);
   assert.ok(m, "home-dock.js onAir");

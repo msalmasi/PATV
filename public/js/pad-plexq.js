@@ -111,7 +111,7 @@
         }).join('') + '</ol>' + (can ? '<a class="muted" href="/stage">' + esc(_t('js.plexq.manage', 'Edit the queue ›')) + '</a>' : '') + '</details>';
     }
     // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue. review
-    // fixes (1.99??): who added them only to whoever may take them out (them, the pad's owner, an admin - can_withdraw), with ✕ Take them out
+    // fixes (1.99alc): who added them only to whoever may take them out (them, the pad's owner, an admin - can_withdraw), with ✕ Take them out
     if (!q && j.after && j.after.next && j.after.next.length) {
       var aw = j.after.can_withdraw === true;
       h += '<details class="pq-q"><summary>' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +

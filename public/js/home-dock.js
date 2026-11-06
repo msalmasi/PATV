@@ -59,7 +59,7 @@
         api: frontSlug ? '/api/stage?room=' + encodeURIComponent(frontSlug) + '&home=1' : '/api/stage',
         slots: S.slots || [], pepeOn: !!S.pepeOn, pepeHere: S.pepeHere !== false, pepeWhep: S.pepeWhep || null, pepeSrc: S.pepeSrc || null, manage: !!S.manage, featured: S.featured || null,   // (dock3 1.99akf: the front pad's featured slot)
         posters: !!I.signed,                                // (upnext: the "Coming up next" card's poster - the site's proxy is for signed-in viewers)
-        // (upnext2 review F5 / safety F10, 1.99??: the off-air slate naming a booked 📼 start - {slate} - is OFF AIR here: the Dock's own off-air
+        // (upnext2 review F5 / safety F10, 1.99alc: the off-air slate naming a booked 📼 start - {slate} - is OFF AIR here: the Dock's own off-air
         // bar says "Next up" - it was "on", and that bar went)
         onAir: function (on, sub, x) { var air = !!on && !(x && x.slate); box.classList.toggle('is-on', air); box.classList.toggle('is-off', !air); }
       });
@@ -219,7 +219,7 @@
       if (!d || dead) return;
       latest = d;
       // upnext2: a 📼 "Coming up next" was set / its stream came up on the pad whose chat this is - when it's also the stage's pad, the stage
-      // asks now (the card within a round trip, not at its next 10 s poll); the first answer only notes where it is (review fixes 1.99??: the
+      // asks now (the card within a round trip, not at its next 10 s poll); the first answer only notes where it is (review fixes 1.99alc: the
       // switcher keeps it - sw.stv - and knows the long-poll wakes it: no faster poll while a 📼 title is on)
       if (d.stv != null) {
         stvSeen = d.stv;

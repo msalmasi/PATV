@@ -166,7 +166,7 @@ function init() {
       await addCol("media_queues", "brk TEXT");
       // upnext2 (E): an after-queue (state 'after') waits behind the single play on this slot (mediaqueue.after / startAfter)
       await addCol("media_queues", "behind TEXT");
-      // upnext2 review (safety F3, 1.99??): its STARTER ended it in its own station break (⏹ / their own ▶ Play this instead) - a refunded /
+      // upnext2 review (safety F3, 1.99alc): its STARTER ended it in its own station break (⏹ / their own ▶ Play this instead) - a refunded /
       // never-charged play that still took the pad's stage for the break: it counts towards the daily cap (paidToday / freeToday)
       await addCol("media_plays", "brk_stop INTEGER");
       await addCol("media_queues", "brk_stop INTEGER");
@@ -243,7 +243,7 @@ async function breakDue(roomId) {
 //   next     the title after it: a queue's next title, else (nothing on) a booked 📼 start's first title
 //   at       that booking's start time (only when nothing from the library is on the pad)
 const COMING_BOOK_MS = 60 * 60 * 1000;
-// (upnext2 review, safety F7 1.99??: no poster key - the lower-third and the slate draw none; it only made every signed-in viewer's poll read
+// (upnext2 review, safety F7 1.99alc: no poster key - the lower-third and the slate draw none; it only made every signed-in viewer's poll read
 // the sign-in for the length of a title. The page's ✕ remembers a title by its name)
 function comingInfo(it) {
   if (!it) return null;
@@ -297,7 +297,7 @@ async function fireBreak(roomId, playId) {
   const slot = await stage.getSlot(s.slot_id);
   if (!slot || slot.settled || !["waiting", "active"].includes(slot.status)) {
     await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), s.position);
-    // upnext2 review (safety F1, 1.99??): a Cut / time-up in the break - the titles someone added behind it never start (the watcher's path did
+    // upnext2 review (safety F1, 1.99alc): a Cut / time-up in the break - the titles someone added behind it never start (the watcher's path did
     // this; the break's own timer didn't, and the next watch started them as a fresh queue on the pad that was just Cut)
     await Qm.cancelAfter(roomId, `“${s.title || "what was on"}” was taken off the stage`, s.slot_id);
     return true;
@@ -325,7 +325,7 @@ async function fireBreak(roomId, playId) {
       armBreak(roomId, again);
       return false;
     }
-    // upnext2 review (safety F12, 1.99??): 409 "already playing" = an earlier start of THIS title got there (the site restarted while its
+    // upnext2 review (safety F12, 1.99alc): 409 "already playing" = an earlier start of THIS title got there (the site restarted while its
     // request was on the way, and the watcher asked again) - inside the pad's lock nothing else starts this stage: it's ours, it plays
     if (!(e && e.status === 409 && (await encoderHas(roomId, s.rating_key)))) {
       console.warn(`[medialib] ${roomId}: "${s.title}" didn't start after its station break: ${conf.errLine(e)}`);
@@ -411,7 +411,7 @@ async function countPlays(where, args) {
   try { const r = await getQuery(`SELECT ${PLAY_ONE} AS n FROM media_plays WHERE ${where}`, args); return (r[0] && r[0].n) || 0; }
   catch (e) { const r = await safeQuery(`SELECT COUNT(*) AS n FROM media_plays WHERE ${where}`, args); return (r[0] && r[0].n) || 0; }
 }
-// upnext2 review (safety F2 / F3, 1.99??): a play or a queue its starter ended in its own station break counts towards the daily cap - the
+// upnext2 review (safety F2 / F3, 1.99alc): a play or a queue its starter ended in its own station break counts towards the daily cap - the
 // break is 5-15 s of the pad's featured stage ("Coming up next") with nothing charged (a single play's hold is refunded, a queue charges when
 // its title starts): pressing ▶ and ⏹ again and again took the stage over without limit. A queue that already started a title counts once
 // through its plays (NOT EXISTS); one ended by someone else (the pad's owner, a Cut) never counts against its starter.
@@ -715,7 +715,7 @@ async function play(user, b = {}, how = {}) {
   // upnext2: the station break - not for a resume on a fresh slot (the same title carrying on: no "coming up next")
   const brk = carry ? 0 : await breakSec(R.id);
   // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word (plexreplace: the one it replaces is free).
-  // upnext2 review (safety F11, 1.99??): a play that takes a station break asks too, a library admin's free one included - it holds its
+  // upnext2 review (safety F11, 1.99alc): a play that takes a station break asks too, a library admin's free one included - it holds its
   // encoder through the break (busyOf), and its start landing after someone's paid break took the encoder they were waiting for
   if (paidRules || q.price > 0 || brk > 0) await needEncoder(rep ? R.id : null);
   let order = null;
@@ -951,7 +951,7 @@ async function restart_(user, R, s, p, offset, how) {
   try {
     const r = await play_(owner, { room: R.id, key: s.rating_key, offset: pos, quality: p.quality, audio: p.audio, sub: p.sub, _carry: carry },
                           swap ? { swap, actor: user.username } : {});
-    // upnext2 review (safety F6, 1.99??): the same title carries on on a fresh slot - titles someone added behind it wait behind THAT one now
+    // upnext2 review (safety F6, 1.99alc): the same title carries on on a fresh slot - titles someone added behind it wait behind THAT one now
     // (they were cancelled at the next watch: "something else started on the stage")
     if (r && r.slot && r.slot.id) await require("./mediaqueue").moveAfter(R.id, s.slot_id, r.slot.id);
     return { ...r, same_slot: false };
@@ -1124,7 +1124,7 @@ async function player(user, room) {
   if (s && s.state === "break" && s.brk_until) out.starts_at = Number(s.brk_until);
   if (s && !q) {                                                         // upnext2 (E): titles waiting behind this one
     const w = await Q.afterFor(R.id);
-    // (upnext2 review S13 / F4, 1.99??: who added them only to whoever may control them - them, the pad's owner, an admin - as `coming` never
+    // (upnext2 review S13 / F4, 1.99alc: who added them only to whoever may control them - them, the pad's owner, an admin - as `coming` never
     // names who queued it; mine / can_withdraw: the ✕ "Take my titles out")
     if (w) {
       const mine = !!(user && user.userId && w.user_id === user.userId), canW = mine || (await mayControl(user, R.id, w.user_id));
@@ -1316,7 +1316,7 @@ module.exports = { init, register, play, playFor, padState, stop, pause, resume,
                          mayControl, logControl, clock, CONTROL_DENIED,
                          noteRestart, retryRestart, _restarted: restarted, _recheck: (on) => { recheckOn = !!on; }, _posters: posterCache,   // 1.99acx; upnext review: _posters
                          onNow, replaceTarget, retire, wantsReplace, replaceWant,                        // plexreplace
-                         breakSec, armBreak, fireBreak, encoderHas, markBrkStop },                       // upnext2 (+ review fixes 1.99??)
+                         breakSec, armBreak, fireBreak, encoderHas, markBrkStop },                       // upnext2 (+ review fixes 1.99alc)
                    stageName, call, signHeaders, fmtTitle, upNextInfo, inviteItemLink, Refuse, _keys: keys,
                    breakSec, breakDue, armBreak, _brkTimers: (on) => { brkTimersOn = !!on; },      // upnext2: the station break
                    comingFor };                                                                    // upnext2 (D)

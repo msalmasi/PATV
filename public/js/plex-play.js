@@ -24,7 +24,7 @@
 // queue that's playing" (it used to add to your queue on whatever pad it ran - another pad's sheet included), a single title -> "+ Add to the
 // queue" (on_pad.can_after: a queue of yours that plays after it - POST /api/medialib/queue/after, the price confirmed like a queue's),
 // anything else -> "+ My list". A paid add says what it adds before it's added (the server's `estimate`).
-// upnext2 review fixes (1.99??): someone who can't change what's on (F8) gets no pink "▶ Play on <pad>" the server would refuse as busy - it
+// upnext2 review fixes (1.99alc): someone who can't change what's on (F8) gets no pink "▶ Play on <pad>" the server would refuse as busy - it
 // is off, "+ Add to the queue" is the way forward and the line under the pick says so; titles of yours waiting behind it can be taken out
 // (✕ Take them out - POST /api/medialib/queue/after/cancel, safety F4).
 (function () {

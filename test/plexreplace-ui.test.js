@@ -199,7 +199,7 @@ test("the pad got busy under the sheet: a busy refusal WITH can_replace becomes 
   assert.match(s.P.msg.textContent, /instead of “Charade \(1963\)”/);
 });
 
-test("someone who may not change it: the plain button, a line saying why the pick waits; upnext2 review F8 (1.99??): the ▶ the server would refuse as busy is off until it ends - nothing is sent", async () => {
+test("someone who may not change it: the plain button, a line saying why the pick waits; upnext2 review F8 (1.99alc): the ▶ the server would refuse as busy is off until it ends - nothing is sent", async () => {
   const s = sheet({ onPad: { ...ON, can_replace: false }, play: [
     { status: 409, j: { ok: false, error: "This pad is already playing from the library - stop it first.", code: "busy_library", can_replace: false, playing: "Charade (1963)" } }] });
   s.flow.info();

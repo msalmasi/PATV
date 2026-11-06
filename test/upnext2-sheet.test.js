@@ -217,7 +217,7 @@ test("E (review bug): your queue running on ANOTHER pad no longer turns this pad
   for (const k of ["js.plex.q_add_after", "js.plex.q_add_after_title", "js.plex.q_added_after", "js.plex.q_after_cost", "js.plex.q_add_cost", "js.plex.ask_add", "js.plex.qn_after"]) assert.ok(EN[k], k);
 });
 
-// ── upnext2 review fixes (1.99??) ──
+// ── upnext2 review fixes (1.99alc) ──
 test("review F8: someone who can't change what's on gets no pink ▶ Play the server would refuse as busy - it's off, \"+ Add to the queue\" is the primary button and the line says so; back once the title ends", async () => {
   let on = { ...SINGLE, by: "cedar-fable", mine: false, can_replace: false, slot_id: null };
   const s = sheet({ onPad: () => on, perHour: 1000 });
