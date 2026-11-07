@@ -39,6 +39,11 @@ Search hits are judged by their own ID only, since one search spans sections.
 The same check applies to search hits, item metadata and nested episodes, posters,
 stream starts and resumes, and the catalog routes. A remembered key is not an
 exception: item reads check the section again. File-root and RTMP guards still apply.
+A seek, a resume and an automatic restart (mode fallback, network blip, ingest retry)
+re-read the stream's section first. Only Plex's own answer stops the stream: the item
+is gone (404) or now sits in a denied section. When Plex can't be read (restarting,
+down, an error answer, or no answer within 5 s) the stream plays on with the section
+it was started from, as 1.6.0 did, and the next re-read asks again.
 
 An empty allow-list preserves legacy reads of sections outside the adult deny-list.
 It deliberately **does not enable the catalog**: `/catalog` and `/collections`
@@ -59,10 +64,16 @@ paths or Plex tokens. Summaries are capped at 1,000 characters (500 for episodes
 directors, cast and countries are capped at 3, 6 and 3. Catalog-related Plex reads
 share a service-wide limit of four requests per second, including concurrent clients.
 `since=<unix-seconds>` uses Plex's `updatedAt>>=` filter (sent as `updatedAt%3E%3E=`;
-a key of `updatedAt>=` would have its own `=` encoded, which Plex ignores). The mocked
-Plex verifies the filter as Plex reads it; it was checked on Plex 1.43.4 (2026-11-07).
-The site's nightly full read remains necessary to find deletions and to
-recover if that Plex version does not support the filter.
+a key of `updatedAt>=` would have its own `=` encoded, which Plex ignores). Episodes
+(`type=4`) send `episode.updatedAt>>=`: in a TV library a field without a type prefix
+is the show's (as plexapi documents it), so a bare filter would pick episodes by their
+show's update time.
+Movies and shows keep the bare field, which is their own. On Plex 1.43.4 (2026-11-07)
+only the movie form was checked against Plex's own count; check the show and episode
+forms the same way on the installed Plex (a show section's delta total against a count
+of rows whose own `updatedAt` is at or after `since`). The mocked Plex verifies each
+filter as Plex reads it. The site's nightly full read remains necessary to find
+deletions and to recover if that Plex version does not support the filter.
 
 The main agent fills the policy on the host, after owner approval:
 

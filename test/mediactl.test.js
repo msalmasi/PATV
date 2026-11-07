@@ -773,7 +773,7 @@ function clerkPlexFixture() {
   // updatedAt%3E=, or literal). A KEY spelled "updatedAt>=" - URLSearchParams encodes its own "=", updatedAt%3E%3D=<since> - is
   // no filter Plex knows: it answers the whole section (the 1.7.0 defect: total 15871 where Plex's own filter gives 125).
   // A field may carry a type prefix (movie. / show. / episode.). Without one, a TV library means the SHOW's field - plexapi
-  // documents Plex's rule as "in a TV show library viewCount is assumed to be show.viewCount", so an episode read (type=4) with
+  // documents it as "in a TV show library viewCount is assumed to be show.viewCount", so an episode read (type=4) with
   // a bare updatedAt filters on each episode's show; episode.updatedAt is the episode's own.
   const plexSince = (u, type) => {
     for (const [key, v] of u.searchParams) {
@@ -1263,7 +1263,7 @@ test("1.7.0: search never borrows a section from its container (one search spans
 });
 
 // ── review findings on the 1.7.0 fix (2026-11-07) ──
-// F1: in a TV library a filter field without a type prefix is the SHOW's (plexapi documents Plex's rule: "in a TV show library
+// F1: in a TV library a filter field without a type prefix is the SHOW's (as plexapi documents it: "in a TV show library
 // viewCount is assumed to be show.viewCount"). An episode delta (type=4) sent as a bare updatedAt>>= filtered on each episode's
 // show: a new episode of a show whose own updatedAt didn't move stayed out of the catalog until the next day's full read, and a
 // touched show brought every one of its episodes back. Episodes name their own field (episode.updatedAt>>=); shows (type=2)

@@ -194,9 +194,9 @@ function makePlex(cfg, req = request, now = Date.now) {
   const headers = () => ({ Accept: "application/json", "X-Plex-Token": cfg.plexToken, "X-Plex-Client-Identifier": "patv-mediactl",
                            "X-Plex-Product": "PATV mediactl", "X-Plex-Version": VERSION });
   const insecure = /^https:\/\/(127\.|localhost|\[::1\])/.test(cfg.plexUrl);
-  async function get(p, raw = false) {
+  async function get(p, raw = false, timeout = null) {
     if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
-    const r = await req(cfg.plexUrl + p, { headers: headers(), insecure, raw });
+    const r = await req(cfg.plexUrl + p, { headers: headers(), insecure, raw, ...(timeout ? { timeout } : {}) });
     if (r.status === 401) { const e = new Error("Plex refused the token"); e.status = 502; throw e; }
     if (r.status === 404) { const e = new Error("Not in the Plex library"); e.status = 404; throw e; }
     if (r.status >= 400) { const e = new Error(`Plex answered ${r.status}`); e.status = 502; throw e; }
@@ -367,7 +367,10 @@ function makePlex(cfg, req = request, now = Date.now) {
         if (!/^\d{1,12}$/.test(String(since))) throw fail(400, "bad since");
         // Plex reads the operator from the key: "updatedAt>>" + "=" is updatedAt>>= (on the wire updatedAt%3E%3E=<since>).
         // A key of "updatedAt>=" has its own "=" encoded (updatedAt%3E%3D=), a filter Plex ignores - the whole section came back.
-        q.set("updatedAt>>", String(since));
+        // In a TV library a field without a type prefix is the SHOW's (plexapi's search docs: "in a TV show library viewCount
+        // is assumed to be show.viewCount"), so episodes name their own: episode.updatedAt>>= (on the wire
+        // episode.updatedAt%3E%3E=<since>). Movies (checked on Plex 1.43.4) and shows keep the bare field, their own.
+        q.set(String(type) === "4" ? "episode.updatedAt>>" : "updatedAt>>", String(since));
       }
       const mc = await catalogGet(`/library/sections/${section}/all?${q}`);
       const raw = rowsOf(mc, size);
@@ -414,8 +417,9 @@ function makePlex(cfg, req = request, now = Date.now) {
       }
       return out;
     },
-    async item(key) {
-      const mc = await get(`/library/metadata/${key}`);
+    // opts.timeout: a shorter limit than the usual 15 s for this read (a remembered stream's re-check, see checkRemembered)
+    async item(key, { timeout = null } = {}) {
+      const mc = await get(`/library/metadata/${key}`, false, timeout);
       const m = inheritSection((mc.Metadata || [])[0], mc);
       if (!m || !sectionOk(cfg, m.librarySectionID)) throw unavailable();
       const out = { ...brief(m), summary: String(m.summary || "").slice(0, 600) };
@@ -643,11 +647,14 @@ const EXIT_WAIT_MS = 5000;
 const PUB_BUSY = /already publishing|NetStream\.Publish\.BadName/i;
 const PUB_RETRIES = 8;
 const PUB_RETRY_MS = 2500;
+// 1.7.0: how long a remembered stream's section re-check waits for Plex (a seek waits on it, and the site gives up after 15 s)
+const RECHECK_MS = 5000;
 function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.now(), probe = (file) => probeFile(cfg, file)) {
   const streams = new Map();   // stage -> state
   // 1.6.0: stage -> a promise that settles once the last ffmpeg killed on that stage has exited (or EXIT_WAIT_MS passed)
   const exiting = new Map();
   const exitWait = cfg.exitWaitMs || EXIT_WAIT_MS, pubRetryMs = cfg.pubRetryMs || PUB_RETRY_MS;   // (the tests shorten them)
+  const recheckMs = cfg.recheckMs || RECHECK_MS;
   const bump = (s) => (s.gen = (s.gen || 0) + 1);          // a seek / pause / resume / stop: older pending launches are void
   const streamOk = (s) => sectionOk(cfg, s.info && s.info.section);
   /** 1.6.0: wait until the ffmpeg last killed on this stage is gone. -> the ms waited (0 = nothing was on its way out) */
@@ -766,14 +773,24 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
   async function checkRemembered(s, g) {
     // A paused/failed stream can outlive a Plex move or a policy edit. Re-read its actual section before replaying it.
     // Empty lists retain the old metadata-read behavior and timing.
+    // Only Plex's own answer stops it: the item is gone (404) or sits in a section the policy denies (item() says 404 too).
+    // A Plex that can't be read - restarting for an update, crashed, an error answer, no answer within RECHECK_MS - is not
+    // a denial: the stream plays on with the section it was started from (checked then, still allowed), as 1.6.0 did, and the
+    // next seek / resume / restart asks again. (It used to kill and forget the stream, so a Plex restart ended the seek.)
     if (!hasSectionPolicy(cfg)) return;
     try {
-      const current = await plex.item(s.ratingKey);
+      const current = await plex.item(s.ratingKey, { timeout: recheckMs });
       if (streams.get(s.stage) !== s || s.gen !== g) return;
       if (!sectionOk(cfg, current.section)) throw fail(404, "Not in the Plex library");
       s.info.section = current.section;
     } catch (e) {
       if (streams.get(s.stage) !== s || s.gen !== g) return;
+      if (e.status !== 404 && streamOk(s)) {
+        console.warn(`[mediactl] ${s.stage}: couldn't re-read its item's section from Plex (${String(e.message || e).slice(0, 120)}) - playing on with the one it started with`);
+        return;
+      }
+      // (no title logged)
+      console.warn(`[mediactl] ${s.stage}: its item is gone from Plex or no longer in an allowed section - stream forgotten`);
       bump(s);
       kill(s);
       if (streams.get(s.stage) === s) streams.delete(s.stage);
@@ -785,7 +802,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
     try {
       if (hasSectionPolicy(cfg)) await checkRemembered(s, g);
       if (streams.get(s.stage) === s && s.state === "playing" && !s.proc && s.gen === g) launch(s);
-    } catch (e) { /* A denied/unreadable remembered item cannot restart. No title is logged. */ }
+    } catch (e) { /* A gone / denied remembered item cannot restart (checkRemembered logged it, without a title). */ }
   }
   return {
     list: () => [...streams.values()].map(view).filter(Boolean),
