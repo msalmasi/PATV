@@ -105,6 +105,19 @@ async function displayedVideoSize(input, sn, pr) {
   const quarterTurn = Math.abs(Math.round(rotation / 90)) % 2 === 1;
   return quarterTurn ? { w: Number(pr.video.height), h: Number(pr.video.width) } : { w: Number(pr.video.width), h: Number(pr.video.height) };
 }
+// story camera (1.99??): a video's length from the end of its last packet, for a file whose header has none. Demuxing only (no
+// decoding), the first video stream, the demuxer forced and local files only, as everywhere here; the ffprobe 4.2 on the VPS knows
+// every option used. -> seconds (ms precision), 0 when no packet has a time.
+async function packetSecs(input, ffmt) {
+  const r = await media.run(media.bin("ffprobe"), ["-v", "error", "-protocol_whitelist", "file", "-f", ffmt, "-select_streams", "v:0",
+    "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", input], { timeoutMs: 30000, maxOut: 8 * 1024 * 1024 });
+  let end = 0;
+  for (const line of String((r && r.out) || "").split(/\r?\n/)) {
+    const [pts, dur] = line.split(","), at = Number(pts) + (Number(dur) || 0);
+    if (Number.isFinite(at) && at > end) end = at;
+  }
+  return Math.round(end * 1000) / 1000;
+}
 async function picture(input, sn, edit, overlay) {
   const L = limits(), sharp = require("sharp");
   let intermediate = null, out = null;
@@ -133,6 +146,8 @@ async function video(input, sn, edit, overlay, caps, work) {
   if (!sn.ffmt) throw new media.MediaError("That video type isn't supported.");
   const pr = await media.probe(input, sn.ffmt).catch(() => null);
   if (!pr || !pr.video) throw new media.MediaError("A story needs a video track, not audio alone.");
+  // story camera (1.99??): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header
+  if (!Number.isFinite(pr.secs) || pr.secs <= 0) pr.secs = await packetSecs(input, sn.ffmt).catch(() => 0);
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) throw new media.MediaError("That video's length couldn't be read.");
   const sourceCap = Math.min(L.STORY_SRC_MAX_SECS, Number(caps.max_video_secs) || L.STORY_SRC_MAX_SECS);
   if (pr.secs > sourceCap) throw new media.MediaError("The source video is too long for a story edit.");
@@ -201,4 +216,4 @@ async function process(input, sn, attachment, caps = {}) {
     if (work && path.dirname(path.resolve(work)) === path.resolve(media.dir(), "tmp")) fs.rmSync(work, { recursive: true, force: true });
   }
 }
-module.exports = { cleanEdit, overlayCheck, process, Refuse };
+module.exports = { cleanEdit, overlayCheck, process, packetSecs, Refuse };

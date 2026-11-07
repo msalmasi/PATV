@@ -287,6 +287,8 @@
       <%# storyreact site (storyreact.js): ▲▼ votes, 💸 tips and ↩ replies on stories %>
       <fieldset class="fa-terms"><legend>Stories</legend>
         <label class="ck"><input type="checkbox" name="story_studio"<%= C.story_studio ? ' checked' : '' %>> Story Studio: the full-screen story editor (crop, text, stickers, mentions, trim)</label>
+        <%# story camera (1.99??, public/js/story-camera.js) %>
+        <label class="ck"><input type="checkbox" name="story_camera"<%= C.story_camera !== false ? ' checked' : '' %>> Story camera: Story Studio opens on a live camera (tap for a photo, hold for a video, flip, gallery). Off = the studio's picture / video picker only. Needs Story Studio on</label>
         <label class="ck"><input type="checkbox" name="story_votes"<%= C.story_votes !== false ? ' checked' : '' %>> Votes on stories (▲▼, the feed's vote rules; they don't count for activity rewards or achievements)</label>
         <label class="ck"><input type="checkbox" name="story_tips"<%= C.story_tips !== false ? ' checked' : '' %>> Tips on stories (💸, the normal tip: the full amount to the person in it or who posted it)</label>
         <label class="ck"><input type="checkbox" name="story_replies"<%= C.story_replies !== false ? ' checked' : '' %>> Replies to stories (a direct message under every DM rule)</label>

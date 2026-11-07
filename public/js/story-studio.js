@@ -106,6 +106,7 @@
     if (!done && s.attempt && s.attempt.stage === 'mine') return;
     if (!done && (s.d.file || s.busy) && !window.confirm(_t('js.feed.ss.discard', 'Discard this story?'))) return;
     if (!done) cancel(s);
+    if (s.cam) { var cam = s.cam; s.cam = null; cam.close(); }
     s.closed = true; settle(s); clearTimeout(s.suggestTimer); revoke(s);
     if (s.media && s.media.pause) s.media.pause();
     document.removeEventListener('keydown', s.key, true); document.removeEventListener('focusin', s.focus);
@@ -120,7 +121,7 @@
   function key(s, e) {
     if (!live(s)) return;
     s.touch();
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else close(s); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.cam) s.cam.cancel(); else if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else close(s); return; }
     if (e.key === 'Tab') {
       var list = focusables(s.sheet || s.root); if (s.sheetName === 'crop') list.unshift(s.preview); var i = list.indexOf(document.activeElement);
       if (!list.length) { e.preventDefault(); s.root.focus(); }
@@ -156,8 +157,10 @@
         f.value = '';
       });
       f.addEventListener('cancel', function () { settle(s); });
-      var pickButton = add(s.picks, iconButton(pair[1], function () { choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
+      // story camera: 📷 Camera opens the live camera when it can; otherwise the capture input (with its pick note, as ever)
+      var pickButton = add(s.picks, iconButton(pair[1], function () { if (pair[0] !== 'camera' || !camera(s)) choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
     });
+    s.retake = add(s.picks, iconButton(_t('js.feed.ss.retake', '🔄 Retake'), function () { camera(s); })); s.retake.setAttribute('data-picker', 'retake'); s.retake.hidden = true;
     s.filename = add(s.picks, el('span', 'sst-filename'));
     s.summary = add(s.body, el('aside', 'sst-summary')); add(s.summary, el('h3', 'ds-eyebrow', _t('js.feed.ss.summary', 'Story details')));
     add(s.summary, el('p', null, _t('js.feed.ss.canvas', 'Canvas 9:16'))); add(s.summary, el('p', null, _t('js.feed.ss.lifetime', 'Appears for 24 hours')));
@@ -189,14 +192,28 @@
     window.addEventListener('blur', s.away); window.addEventListener('focus', s.back); window.addEventListener('pageshow', s.back); window.addEventListener('pagehide', s.leave);
     if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
     cropGestures(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
+    // story camera: a new studio opens on the live camera; one reopened after a reload (ssfix) shows its picker and says what happened
+    if (!resumed) camera(s);
     var include = pad && !/^(?:user:|u\/|profile$)/i.test(String(pad)) ? '?pad=' + encodeURIComponent(pad) : '';
     req('/api/stories/targets' + include).then(function (data) {
       if (!live(s)) return;
       if (data.refusal || !data.pads || !data.pads.length) throw new Error(data.refusal || _t('js.feed.sc.nowhere', 'There\'s nowhere you can post a story right now.'));
       s.targets = data.pads; s.caps = data.caps || {}; s.as = data.as || ''; s.target = data.pads.filter(function (p) { return p.id === pad; })[0] || data.pads[0];
-      paintTarget(s); paintControls(s); say(s, '');
+      paintTarget(s); paintControls(s); say(s, s.camWhy || '');
       if (resumed) { s.d.nsfw = !!resumed.nsfw; say(s, resumed.phase === 'arrived' ? _t('js.feed.ss.reloaded_loading', 'The page reloaded while your file was opening, so it isn\'t here. Try again, or choose it from Gallery.') : resumed.picker === 'camera' ? _t('js.feed.ss.reloaded_camera', 'The page reloaded while the camera was open, so the picture didn\'t arrive. Try again - or take it with your camera app and choose it from Gallery.') : _t('js.feed.ss.reloaded_gallery', 'The page reloaded while you were choosing a file, so nothing arrived. Try again.'), true); }
-    }).catch(function (e) { if (live(s)) say(s, e.message || _t('js.feed.sc.unreachable', 'Couldn\'t reach the site.'), true); });
+    }).catch(function (e) { if (s.cam) { s.cam.close(); s.cam = null; } if (live(s)) say(s, e.message || _t('js.feed.sc.unreachable', 'Couldn\'t reach the site.'), true); });
+  }
+  // Story camera (1.99??, story-camera.js): the studio opens on the live camera when this browser can show one. A capture
+  // comes back through pick() exactly like a chosen file; without a camera the picker stays, with the reason.
+  // (with ssfix: the live camera never leaves the page, so a capture has no pick note; its 🖼️ is the studio's Gallery, note and all)
+  function camera(s) {
+    var C = window.patvStoryCamera; if (!C || !live(s) || s.busy) return false;
+    if (s.cam) s.cam.close(); closeSheet(s); if (s.media && s.media.pause) s.media.pause(); s.camWhy = '';
+    s.cam = C.open(s.root, { secs: function () { return s.caps.secs || 30; }, file: function (f, info) { s.cam = null; pick(s, f, 0, info); },
+      gallery: function () { choose(s, 'gallery'); },
+      close: function () { s.cam = null; if (!s.d.file) close(s); else (s.retake.hidden ? s.picks.querySelector('[data-picker="camera"]') : s.retake).focus(); },
+      unavailable: function (why) { s.cam = null; s.camWhy = why; if (live(s)) say(s, why); } });
+    return !!s.cam;
   }
   function paintTarget(s) {
     var p = s.target; if (!p) return;
@@ -256,24 +273,27 @@
   }
   // ssfix: every way a pick can fail is said out loud, in words that aren't the empty screen's own prompt.
   // ssfix2: n is the pick's note (0: none); a refusal is the end of it, an accepted file keeps it until it has opened.
-  function pick(s, file, n) {
+  // story camera: info = the camera's capture details ({ camera, secs, ... }; none for a chosen file)
+  function pick(s, file, n, info) {
     if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); pickDone(s, n); return; }
+    if (s.cam) { s.cam.close(); s.cam = null; }
     if (!file.size) { say(s, _t('js.feed.ss.empty_file', 'That file is empty. Try again, or choose another one.'), true); pickDone(s, n); return; }
     var type = String(file.type || '').toLowerCase();
-    if (/^video\//.test(type)) return use(s, file, 'video', false, n);
-    if (/^image\//.test(type)) return use(s, file, 'image', type === 'image/gif', n);
+    if (/^video\//.test(type)) return use(s, file, 'video', false, n, info);
+    if (/^image\//.test(type)) return use(s, file, 'image', type === 'image/gif', n, info);
     var id = s.sniffId = (s.sniffId || 0) + 1; say(s, _t('js.feed.sc.loading', 'Loading…'));
     sniff(file).then(function (found) {
       if (!live(s) || id !== s.sniffId) return;
       if (!found) { say(s, _t('js.feed.ss.file_type', 'That file isn\'t a picture or a video. Choose another one.'), true); pickDone(s, n); }
       else if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); pickDone(s, n); }
-      else use(s, file, found.kind, !!found.gif, n);
+      else use(s, file, found.kind, !!found.gif, n, info);
     }, function () { if (live(s) && id === s.sniffId) { say(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), true); pickDone(s, n); } });
   }
-  function use(s, file, kind, gif, n) {
+  function use(s, file, kind, gif, n, info) {
     s.sniffId = (s.sniffId || 0) + 1;     // a typed pick after an untyped one wins
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
     if (file.size > limit * 1024 * 1024) { say(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), true); pickDone(s, n); return; }
+    s.retake.hidden = !(info && info.camera); s.camWhy = '';
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
     var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw };
     s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
@@ -286,7 +306,7 @@
       if (!d.w || !d.h) return failed();
       d.decoded = true; d.legacy = d.gif; resetFrame(d);
       if (kind === 'video') {
-        d.duration = m.duration;
+        d.duration = isFinite(m.duration) ? m.duration : info && info.secs;   // a fresh recording can report no length
         if (!isFinite(d.duration) || d.duration < 1 || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
         else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
       }

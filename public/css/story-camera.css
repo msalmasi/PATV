@@ -1,0 +1,53 @@
+/* Story camera (1.99??, story-camera.js): the live camera Story Studio opens on - full screen over the studio, like IG /
+   Snapchat. It is a camera, so it stays dark (ds media tokens) whatever the page; the safe areas stay clear; touch
+   targets are at least 44px; the shutter never selects text or opens the long-press callout / context menu. */
+.sst.scam-open > .sst-card { visibility: hidden; }
+.sst.scam-open { -webkit-backdrop-filter: none; backdrop-filter: none; }   /* nothing behind the camera is seen: no blur to compute */
+.scam { position: absolute; inset: 0; z-index: var(--ds-z-sticky); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; isolation: isolate;
+  background: var(--ds-media-bg); color: var(--ds-text-strong); font-family: var(--ds-font); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.scam .scam-video, .scam .scam-freeze { position: absolute; inset: 0; z-index: var(--ds-z-raised); inline-size: 100%; block-size: 100%; object-fit: contain; background: var(--ds-media-bg); pointer-events: none; }
+.scam .scam-freeze { z-index: var(--ds-z-sticky); }
+.scam[data-facing="user"] .scam-video, .scam[data-facing="user"] .scam-freeze { transform: scaleX(-1); }
+.scam .scam-flash { position: absolute; inset: 0; z-index: var(--ds-z-nav); background: var(--ds-text-strong); opacity: 0; pointer-events: none; }
+.scam.scam-snap .scam-flash { animation: scam-flash 240ms ease-out; }
+.scam .scam-top, .scam .scam-note, .scam .scam-foot { position: relative; z-index: var(--ds-z-pop); }
+.scam .scam-top { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3);
+  padding-block: calc(var(--ds-sp-3) + env(safe-area-inset-top, 0px)) var(--ds-sp-6);
+  padding-inline: max(var(--ds-sp-3), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  background: linear-gradient(var(--ds-media-chip), transparent); }
+.scam .scam-btn { display: inline-grid; place-items: center; flex: none; inline-size: 48px; block-size: 48px; padding: 0; border: 0; border-radius: var(--ds-r-pill);
+  background: var(--ds-media-chip); color: var(--ds-text-strong); font: 400 22px/1 var(--ds-font-emoji); cursor: pointer; }
+.scam .scam-btn:disabled { opacity: .4; cursor: default; }
+.scam .scam-btn[hidden] { display: none; }
+.scam .scam-time { margin-inline: auto; padding: var(--ds-sp-1) var(--ds-sp-3); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scam .scam-time::before { content: ''; display: inline-block; inline-size: 8px; block-size: 8px; margin-inline-end: var(--ds-sp-1h); border-radius: 50%; background: var(--ds-danger-solid); vertical-align: 1px; }
+.scam .scam-note { align-self: center; justify-self: center; display: grid; justify-items: center; gap: var(--ds-sp-3); max-inline-size: min(320px, calc(100% - 2 * var(--ds-sp-6)));
+  padding: var(--ds-sp-4); border-radius: var(--ds-r-lg); background: var(--ds-media-panel); text-align: center; font-size: 15px; line-height: 1.4; }
+.scam .scam-note p { margin: 0; }
+.scam .scam-retry { min-block-size: 44px; padding: 0 var(--ds-sp-4); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font: 700 14px/1 var(--ds-font); cursor: pointer; }
+.scam .scam-foot { grid-row: 3; padding-block: var(--ds-sp-8) calc(var(--ds-sp-4) + env(safe-area-inset-bottom, 0px));
+  padding-inline: max(var(--ds-sp-6), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); background: linear-gradient(transparent, var(--ds-media-chip)); }
+.scam .scam-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; max-inline-size: 420px; margin-inline: auto; }
+.scam .scam-gallery { justify-self: start; }
+.scam .scam-hint { margin: var(--ds-sp-3) 0 0; text-align: center; font-size: 13px; line-height: 1.4; text-shadow: 0 1px 3px var(--ds-media-bg); }
+.scam-shutter { position: relative; display: block; inline-size: 84px; block-size: 84px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+  touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.scam-shutter svg { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; overflow: visible; transform: rotate(-90deg); pointer-events: none; }
+.scam-shutter .scam-ring-base { fill: none; stroke: var(--ds-text-strong); stroke-width: 5; }
+.scam-shutter .scam-ring { fill: none; stroke: var(--ds-danger-solid); stroke-width: 5; stroke-linecap: round; opacity: 0; }
+.scam-shutter .scam-disc { position: absolute; inset: 12px; border-radius: 50%; background: var(--ds-text-strong); pointer-events: none; transition: transform 140ms ease-out, background-color 140ms ease-out, border-radius 140ms ease-out; }
+.scam-shutter.scam-pressed .scam-disc { transform: scale(.9); }
+.scam-shutter[aria-disabled="true"] { opacity: .5; cursor: default; }
+.scam.scam-recording .scam-shutter .scam-ring { opacity: 1; animation: scam-ring var(--scam-secs, 30s) linear forwards; }
+.scam.scam-recording .scam-shutter .scam-disc { transform: scale(.5); border-radius: var(--ds-r-sm); background: var(--ds-danger-solid); }
+.scam .scam-shutter:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+@keyframes scam-ring { from { stroke-dashoffset: 238.76; } to { stroke-dashoffset: 0; } }
+@keyframes scam-flash { from { opacity: .8; } to { opacity: 0; } }
+/* a phone (or a portrait touch screen): the picture fills the screen, as in a camera app */
+@media (max-width: 760px), (pointer: coarse) and (orientation: portrait) {
+  .scam .scam-video, .scam .scam-freeze { object-fit: cover; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scam *, .scam *::before, .scam *::after { animation: none !important; transition: none !important; }
+  .scam.scam-recording .scam-shutter .scam-ring { stroke-dashoffset: 0; }   /* the time pill counts instead */
+}

@@ -420,7 +420,7 @@ test("Story camera: opening Story Studio goes straight to the live back camera; 
   assert.equal(P.doc.activeElement, shutter(P)); assert.match(shutter(P).getAttribute("aria-label"), /photo/i); assert.match(shutter(P).getAttribute("aria-label"), /hold/i);
   assert.match(view.querySelector(".scam-hint").textContent, /hold/i);
   assert.ok(!view.querySelector(".scam-flip").hidden, "two cameras: flip is offered");
-  for (const b of view.querySelectorAll("button")) assert.ok(b.getAttribute("aria-label"), "every camera control has a name");
+  for (const b of view.querySelectorAll("button")) assert.ok(b.getAttribute("aria-label") || b.textContent.trim(), "every camera control has a name");
   assert.ok(P.calls.some((c) => c.url.startsWith("/api/stories/targets")), "the studio still loads where it can post");
   assert.equal(root.querySelector(".sst-status").textContent, "");
 });
@@ -466,7 +466,7 @@ test("Story camera: press and hold records WebM with sound while held, stops on 
   await P.clock.tick(100); assert.equal(P.recorders.length, 1, "a hold past 250 ms records");
   const r = P.recorders[0];
   assert.equal(r.state, "recording"); assert.equal(r.options.mimeType, "video/webm;codecs=vp8,opus"); assert.equal(r.stream, P.streams[0]); assert.equal(r.stream.getAudioTracks().length, 1);
-  assert.ok(cam(P).classList.contains("scam-recording")); assert.match(s.getAttribute("aria-label"), /record/i);
+  assert.ok(cam(P).classList.contains("scam-recording")); assert.match(s.getAttribute("aria-label"), /record/i); assert.match(cam(P).querySelector(".scam-hint").textContent, /let go/i);
   assert.ok(cam(P).querySelector(".scam-flip").disabled); assert.ok(cam(P).querySelector(".scam-gallery").disabled);
   await P.clock.tick(4000); assert.match(cam(P).querySelector(".scam-time").textContent, /0:04 \/ 0:30/);
   fire(s, "pointerup"); assert.equal(r.stops, 1, "let go = stop"); fire(s, "click", { detail: 1 }); await flush(16);
@@ -673,12 +673,13 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);
-  const store = require(path.join(repo, "feedstore")), US = require(path.join(repo, "userstories"));
+  const store = require(path.join(repo, "feedstore")), US = require(path.join(repo, "userstories")), real = store.config;
   assert.equal(store.DEFAULTS.story_camera, true);
-  await store.init();
-  await store.setConfig({ story_studio: true }, "test"); assert.equal(US.cameraOn(), true);
-  await store.setConfig({ story_camera: false }, "test"); assert.equal(US.cameraOn(), false);
-  await store.setConfig({ story_camera: true, story_studio: false }, "test"); assert.equal(US.cameraOn(), false, "never without the studio");
+  try {
+    store.config = () => ({ ...store.DEFAULTS, story_studio: true }); assert.equal(US.cameraOn(), true, "on by default with the studio");
+    store.config = () => ({ ...store.DEFAULTS, story_studio: true, story_camera: false }); assert.equal(US.cameraOn(), false);
+    store.config = () => ({ ...store.DEFAULTS, story_studio: false, story_camera: true }); assert.equal(US.cameraOn(), false, "never without the studio");
+  } finally { store.config = real; }
   assert.match(fs.readFileSync(path.join(repo, "views/feedAdmin.ejs"), "utf8"), /name="story_camera"/);
   assert.match(fs.readFileSync(path.join(repo, "userstories.js"), "utf8"), /app\.locals\.storyCameraOn\s*=/);
 });

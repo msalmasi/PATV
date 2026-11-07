@@ -74,6 +74,8 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 const store = () => require("./feedstore");
 const fm = () => require("./feedmedia");
 const studioOn = () => !!store().config().story_studio;
+// story camera (1.99??): the studio opens on a live camera while this is on too (public/js/story-camera.js; never without the studio)
+const cameraOn = () => studioOn() && store().config().story_camera !== false;
 const exempt = (u) => SP.can(u, "feed.limits_exempt");   // 1.99ack (siteperms.js; was isStaff)
 const lc = (s) => String(s || "").trim().toLowerCase();
 
@@ -591,6 +593,7 @@ async function sweep() {
 // ── routes ──
 function register(app, { addUser, noTimers = false }) {
   app.locals.storyStudioOn = studioOn;
+  app.locals.storyCameraOn = cameraOn;
   if (!noTimers) { const timer = setInterval(() => sweep().catch(() => {}), 3600e3); if (timer.unref) timer.unref(); }
   const guard = require("./middleware/authGuard");
   const json = (req, res, next) => {
@@ -643,7 +646,7 @@ function register(app, { addUser, noTimers = false }) {
 }
 
 module.exports = { init, register, create, targets, people, personStory, personRows, profileUploaders, prefs, setPrefs, hide, unhide, isSubject, isPrivate,
-                   annotate, annotateStudio, preflight, postCheck, rateCheck, unmention, sweep, studioOn, setSafetyCheck, Refuse, _setClock,
+                   annotate, annotateStudio, preflight, postCheck, rateCheck, unmention, sweep, studioOn, cameraOn, setSafetyCheck, Refuse, _setClock,
                    STORY_MAX_SECS, STORY_MAX_IMAGE_MB, STORY_MAX_VIDEO_MB, STORY_PER_DAY, STORY_GAP_MS, WINDOW_MS,
                    STORY_W, STORY_H, STORY_VIDEO_W, STORY_VIDEO_H, STORY_SRC_MAX_SECS, STORY_SRC_VIDEO_MB, OVERLAY_MAX_MB, OVERLAY_PER_HOUR,
                    STORY_TEXTS_MAX, STORY_TEXT_LEN, STORY_STICKERS_MAX, STORY_MENTIONS_MAX };
