@@ -5,11 +5,11 @@
   if (window.patvStoryStudio) return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var W = 1080, H = 1920, CHUNK = 512 * 1024, current = null, serial = 0;
-  // ssfix (1.99??): a phone hands the page over to its camera or photo picker, and iOS may reclaim the hidden tab meanwhile and
+  // ssfix (1.99alt): a phone hands the page over to its camera or photo picker, and iOS may reclaim the hidden tab meanwhile and
   // bring it back RELOADED - the picture then reaches nobody and the studio is simply gone. While a picker is open, a small note in
   // this tab's session (which picker, the destination, the NSFW choice - never media) remembers it; a page that comes back
   // reloaded with an unanswered note reopens the studio there and says what happened. An answer, a cancel or a close drops it.
-  // ssfix2 (1.99??): the note lives until the picture has OPENED (phase 'arrived' after the change event: decoding a 12 MP photo
+  // ssfix2 (1.99alt): the note lives until the picture has OPENED (phase 'arrived' after the change event: decoding a 12 MP photo
   // right after the camera is the memory peak), and any kind of page load counts - WebKit brings a killed page back through
   // WebPageProxy::launchProcessForReload, a FrameLoadType::IndexedBackForward load, so an iPhone sees navigation type 'back_forward'
   // there (a page restored from the back/forward cache never re-runs this script). A picker that comes back with neither a change
