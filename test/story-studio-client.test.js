@@ -250,7 +250,10 @@ function studioPage(options = {}) {
     setTimeout: (fn, ms) => ms === 9000 ? 0 : setImmediate(fn), clearTimeout: (id) => clearImmediate(id),
     requestAnimationFrame: (f) => setImmediate(f), cancelAnimationFrame: (id) => clearImmediate(id),
     addEventListener: () => {}, removeEventListener: () => {}, confirm: () => true,
-    location: { reload() { throw new Error('must never reload'); }, pathname: '/feed', href: '/feed' },
+    location: { reload() { throw new Error('must never reload'); }, pathname: options.pathname || '/feed', search: '', href: options.pathname || '/feed' },
+    // ssfix: the tab's session storage (shared between the "before" and "after" page of a reload) and how this page was loaded
+    sessionStorage: options.sessionStorage,
+    performance: options.navigation ? { getEntriesByType: (t) => t === 'navigation' ? [{ type: options.navigation }] : [] } : undefined,
     CustomEvent: class extends Ev { constructor(type, options) { super(type, options); } },
     Image: function () { return doc.createElement('img'); },
     DOMParser: class { parseFromString() { const root = { nodeName: 'svg', attrs: { viewBox: '0 0 24 24' }, setAttribute(k, v) { this.attrs[k] = v; } }; return { documentElement: root, querySelector: () => null }; } },
@@ -492,6 +495,108 @@ test('Studio: starting Post freezes an already-held layer pointer', async () => 
   clickText(P, 'Cancel'); allocate(); await flush();
 });
 
+// ── ssfix: "camera - picture taken, then nothing happens" (owner, iPhone Chrome = WebKit, 2026-11-07) ──
+// iOS hands the page over to the camera; the tab can come back reloaded (the hidden page's process was reclaimed), or the
+// hand-off can carry a file without a usable type. Every one of those used to end with the empty "Choose a picture or video"
+// screen and no word about what went wrong.
+function memoryStorage() { return { _s: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this._s, k) ? this._s[k] : null; }, setItem(k, v) { this._s[k] = String(v); }, removeItem(k) { delete this._s[k]; } }; }
+function bytesFile(bytes, type, name) { const f = new Blob([new Uint8Array(bytes)], { type }); f.name = name; return f; }
+const JPEG_HEAD = [0xff, 0xd8, 0xff, 0xe1, 0x00, 0x18, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08];
+const MOV_HEAD = [0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0x71, 0x74, 0x20, 0x20];
+async function cameraHandOff(P, files, event = 'change') { const n = P.doc.querySelector('[data-pick="camera"]'); n.files = files; n.dispatchEvent(new Ev(event)); await flush(10); }
+function statusOf(P) { const s = P.doc.querySelector('.sst-status'); return { text: s.textContent, role: s.getAttribute('role'), error: s.classList.contains('sst-error') }; }
+const words = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+test('Studio ssfix: a camera hand-off without a usable type is read by its first bytes and posts as what it is', async () => {
+  for (const [type, name] of [['', 'image'], ['application/octet-stream', 'capture'], ['', '']]) {
+    const P = studioPage(), root = await studioOpen(P);
+    await cameraHandOff(P, [bytesFile(JPEG_HEAD, type, name)]);
+    assert.ok(root.classList.contains('sst-has-media'), `type ${JSON.stringify(type)} name ${JSON.stringify(name)}: the picture is in the editor`);
+    assert.equal(statusOf(P).error, false); assert.ok(P.doc.querySelector('.sst-source'));
+    assert.equal(P.doc.querySelector('.sst-post').disabled, false);
+    P.doc.querySelector('.sst-post').click(); await flush(20);
+    assert.equal(P.uploaded[0].body.kind, 'image'); assert.equal(P.calls.filter((c) => c.url === '/api/stories/mine').length, 1);
+  }
+  const Q = studioPage(), root = await studioOpen(Q);
+  await cameraHandOff(Q, [bytesFile(MOV_HEAD, '', 'capture')]);
+  assert.ok(root.classList.contains('sst-video'), 'a QuickTime/MP4 signature is a video'); assert.equal(statusOf(Q).error, false);
+});
+
+test('Studio ssfix: an empty, missing or unusable camera hand-off says so - never the empty prompt again, never "too big"', async () => {
+  const cases = [
+    ['no file at all', []],
+    ['an empty file', [bytesFile([], 'image/jpeg', 'image.jpg')]],
+    ['an empty file with no type', [bytesFile([], '', 'image')]],
+    ['not a picture or video', [bytesFile(Array.from(Buffer.from('%PDF-1.7\n%stuff')), '', 'document')]],
+  ];
+  for (const [label, files] of cases) {
+    const P = studioPage(), root = await studioOpen(P);
+    const prompt = P.doc.querySelector('.sst-empty p').textContent;
+    await cameraHandOff(P, files);
+    const st = statusOf(P);
+    assert.equal(st.role, 'alert', label + ': announced as an error'); assert.ok(st.error, label + ': shown as an error');
+    assert.ok(words(st.text).length > 0, label + ': has words');
+    assert.notEqual(words(st.text), words(prompt), label + ': not just the empty prompt again');
+    assert.doesNotMatch(st.text, /too big/i, label);
+    assert.ok(!root.classList.contains('sst-has-media'), label + ': nothing half-picked');
+    assert.equal(P.uploaded.length, 0);
+  }
+});
+
+test('Studio ssfix: a tab reloaded while the camera was open reopens the studio where it was and says the picture did not arrive', async () => {
+  const session = memoryStorage();
+  const P = studioPage({ sessionStorage: session }); await studioOpen(P);
+  P.doc.querySelector('.sst-destination').click(); clickText(P, 'Plain Pond');
+  P.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === '⚙️ Story options').click();
+  const check = P.doc.querySelector('.sst-sheet input[type="checkbox"]'); check.checked = true; check.dispatchEvent(new Ev('change')); clickText(P, 'Done');
+  P.doc.querySelector('[data-picker="camera"]').click();
+  assert.equal(Object.keys(session._s).length, 1, 'a small note in the tab session while the camera is open');
+  assert.doesNotMatch(Object.values(session._s)[0], /blob:|data:/, 'never the media itself');
+  // the tab comes back reloaded (iOS reclaimed the hidden page): the same script on a fresh page
+  const Q = studioPage({ sessionStorage: session, navigation: 'reload' }); await flush(6);
+  const root = Q.doc.querySelector('.sst'); assert.ok(root, 'the studio is open again');
+  assert.match(Q.doc.querySelector('.sst-destination').textContent, /Plain Pond/);
+  const st = statusOf(Q); assert.equal(st.role, 'alert'); assert.ok(st.error); assert.match(st.text, /reload/i); assert.match(st.text, /camera/i); assert.match(st.text, /Gallery/);
+  Q.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === '⚙️ Story options').click();
+  assert.equal(Q.doc.querySelector('.sst-sheet input[type="checkbox"]').checked, true, 'the NSFW choice is kept');
+  assert.equal(Object.keys(session._s).length, 0, 'the note is used once');
+  const R = studioPage({ sessionStorage: session, navigation: 'reload' }); await flush(6);
+  assert.equal(R.doc.querySelector('.sst'), null, 'a second reload is a normal page');
+  // the gallery picker gets its own words
+  const G = studioPage({ sessionStorage: session }); await studioOpen(G); G.doc.querySelector('[data-picker="gallery"]').click();
+  const H = studioPage({ sessionStorage: session }); await flush(6);
+  assert.ok(H.doc.querySelector('.sst')); assert.match(statusOf(H).text, /reload/i); assert.doesNotMatch(statusOf(H).text, /camera/i);
+});
+
+test('Studio ssfix: the reload note is only for a picker that never answered, on this page, lately', async () => {
+  const reopened = async (prepare, options = {}) => {
+    const session = memoryStorage(), P = studioPage({ sessionStorage: session }); await studioOpen(P);
+    P.doc.querySelector('[data-picker="camera"]').click(); await prepare(P, session);
+    const Q = studioPage(Object.assign({ sessionStorage: session }, options)); await flush(6); return !!Q.doc.querySelector('.sst');
+  };
+  assert.equal(await reopened(async () => {}), true, 'control: an unanswered camera');
+  assert.equal(await reopened(async (P) => { await cameraHandOff(P, [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]); }), false, 'the picture arrived');
+  assert.equal(await reopened(async (P) => { await cameraHandOff(P, [], 'cancel'); }), false, 'the camera was cancelled');
+  assert.equal(await reopened(async (P) => { key(P.doc.activeElement, 'Escape'); }), false, 'the studio was closed');
+  assert.equal(await reopened(async (P, session) => { const k = Object.keys(session._s)[0], v = JSON.parse(session._s[k]); v.at -= 11 * 60e3; session._s[k] = JSON.stringify(v); }), false, 'an old note');
+  assert.equal(await reopened(async () => {}, { pathname: '/p/another' }), false, 'another page');
+  assert.equal(await reopened(async () => {}, { navigation: 'back_forward' }), false, 'back/forward is not a reload');
+  assert.equal(await reopened(async (P, session) => { session._s[Object.keys(session._s)[0]] = '{not json'; }), false, 'a damaged note');
+  // storage that throws (private mode, blocked site data) leaves the studio working
+  const blocked = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
+  const B = studioPage({ sessionStorage: blocked }); const root = await studioOpen(B); B.doc.querySelector('[data-picker="camera"]').click();
+  await cameraHandOff(B, [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]); assert.ok(root.classList.contains('sst-has-media'));
+});
+
+test('Studio ssfix: the empty state centres its camera icon over the words, and a phone shows errors on an error plate', () => {
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
+  // .ds-ic is a fixed 1.25em box: as a grid item it sat at the start of the column the words make (80 px left at 390 px)
+  const empty = css.match(/\.sst \.sst-empty \{([^}]*)\}/)[1];
+  assert.match(empty, /justify-items:\s*center/);
+  const phone = css.slice(css.indexOf('@media (max-width: 760px)'));
+  assert.match(phone, /\.sst \.sst-status\.sst-error \{[^}]*background:\s*var\(--ds-danger-bg\)/);
+});
+
 
 
 // Story Studio viewer/strip cases: append after the shared VM harness (page, El, Ev, flush, key).
@@ -696,8 +801,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=2/);
-  assert.match(html, /story-studio\.css\?v=2/);
+  assert.match(html, /story-studio\.js\?v=3/);    // ssfix: the camera hand-off + the empty state's icon
+  assert.match(html, /story-studio\.css\?v=3/);
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
