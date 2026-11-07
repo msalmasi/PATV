@@ -10095,7 +10095,7 @@
   "sb.lead": "Các đoạn clip ngắn mà Pepe phát qua mic trong các phòng chat anh ấy có mặt. Phát bất kỳ clip nào với giá vài PAT, hoặc sở hữu một gói và phát thường xuyên theo thời gian hồi cho phép.",
   "sb.off": "Bảng âm thanh hiện đang tắt - bạn vẫn có thể xem qua.",
   "sb.how_h": "Cách hoạt động",
-  "sb.how": "Trong phòng, {!cmd} liệt kê những gì bạn có thể phát và {!play} phát một clip - hoặc chạm 🔊 Bảng âm thanh ở tab Trực tiếp của Pad. Mỗi lượt phát: thường {common}, hiếm {rare}, sử thi {epic} PAT, miễn phí (∞) với các clip bạn sở hữu. Mọi người dùng chung thời gian hồi: mỗi người một lượt phát mỗi 45 giây, cùng một clip mỗi 3 phút trong mỗi phòng.",
+  "sb.how": "Trong phòng, {!cmd} liệt kê những gì bạn có thể phát và {!play} phát một clip - hoặc chạm 🔊 Bảng âm thanh ở tab Trực tiếp của Pad. Mỗi lượt phát: thường {common}, hiếm {rare}, sử thi {epic} PAT, miễn phí (∞) với các clip bạn sở hữu. Mọi người dùng chung thời gian hồi: mỗi người một lượt phát mỗi 15 giây, cùng một clip mỗi phút trong mỗi phòng - và clip không được phát lên micro sẽ được hoàn lại và không tính thời gian hồi.",
   "sb.sp_allowance": "🎟️ Season Pass của bạn: bảng mùa không giới hạn, và bạn còn {n} gói tiêu chuẩn miễn phí trong tháng này.",
   "sb.sp_allowance_packs": "Season Pass của bạn 🎟️: tháng này bạn còn {n} gói tiêu chuẩn miễn phí.",
   "sb.season_chip": "chỉ mùa này",

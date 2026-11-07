@@ -10310,7 +10310,7 @@
   "sb.lead": "Brevi clip che Pepe riproduce al microfono nelle stanze chat in cui si trova. Riproduci una clip con qualche PAT, oppure possiedi un pacchetto e riproducilo quanto permettono i tempi di attesa.",
   "sb.off": "Le soundboard sono disattivate al momento - puoi comunque dare un'occhiata.",
   "sb.how_h": "Come funziona",
-  "sb.how": "In una stanza, {!cmd} elenca ciò che puoi riprodurre e {!play} ne riproduce una - oppure tocca Soundboard nella scheda Live di un pad. Per riproduzione: comune {common}, raro {rare}, epico {epic} PAT, gratis (∞) per le clip che possiedi. Tutti condividono i tempi di attesa: una riproduzione ogni 45 s per persona, la stessa clip una volta ogni 3 min per stanza.",
+  "sb.how": "In una stanza, {!cmd} elenca ciò che puoi riprodurre e {!play} ne riproduce una - oppure tocca Soundboard nella scheda Live di un pad. Per riproduzione: comune {common}, raro {rare}, epico {epic} PAT, gratis (∞) per le clip che possiedi. Tutti condividono i tempi di attesa: una riproduzione ogni 15 s per persona, la stessa clip una volta al minuto per stanza - e una clip che non ottiene il microfono viene rimborsata e non consuma il tempo di attesa.",
   "sb.sp_allowance": "Il tuo 🎟️ Season Pass: la soundboard della stagione è illimitata, e ti restano {n} pacchetto/i standard gratuito/i questo mese.",
   "sb.sp_allowance_packs": "Il tuo 🎟️ Season Pass: ti restano {n} pacchetto/i standard gratuiti questo mese.",
   "sb.season_chip": "solo questa stagione",

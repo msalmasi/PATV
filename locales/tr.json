@@ -10227,7 +10227,7 @@
   "sb.lead": "Pepe'nin bulunduğu sohbet odalarında mikrofonda çaldığı kısa klipler. Herhangi bir klibi birkaç PAT karşılığında çal ya da bir paketi satın al ve bekleme süreleri izin verdikçe sık sık çal.",
   "sb.off": "Ses panoları şu an kapalı - yine de göz atabilirsin.",
   "sb.how_h": "Nasıl çalışır",
-  "sb.how": "Bir odada {!cmd} çalabileceklerini listeler, {!play} birini çalar - ya da bir pad'in Canlı sekmesinde 🔊 Ses Panosu'na dokun. Oynatma başına: yaygın {common}, nadir {rare}, epik {epic} PAT, sahip olduğun klipler için ücretsiz (∞). Bekleme süreleri herkes için ortak: kişi başına 45 saniyede bir oynatma, aynı klip odada 3 dakikada bir.",
+  "sb.how": "Bir odada {!cmd} neler çalabileceğini listeler, {!play} ise birini çalar - ya da bir pad'in Canlı sekmesinde 🔊 Ses Panosu'na dokunabilirsin. Her oynatma için: yaygın {common}, nadir {rare}, epik {epic} PAT; sahip olduğun klipler ücretsiz (∞). Bekleme süreleri herkes için ortak: kişi başına 15 saniyede bir oynatma, aynı klip odada dakikada bir kez - mikrofon alamayan bir klip ise iade edilir ve bekleme süresi harcamaz.",
   "sb.sp_allowance": "🎟️ Season Pass'in: sezon panosu sınırsız ve bu ay {n} ücretsiz standart paketin kaldı.",
   "sb.sp_allowance_packs": "🎟️ Season Pass'in: bu ay {n} ücretsiz standart paketin kaldı.",
   "sb.season_chip": "yalnızca bu sezon",

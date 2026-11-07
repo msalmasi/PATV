@@ -10310,7 +10310,7 @@
   "sb.lead": "Courts extraits que Pepe joue au micro dans les salons de chat où il se trouve. Joue n'importe quel extrait pour quelques PAT, ou possède un pack et joue-le aussi souvent que les temps de recharge le permettent.",
   "sb.off": "Les soundboards sont désactivés pour le moment - tu peux quand même jeter un œil.",
   "sb.how_h": "Comment ça marche",
-  "sb.how": "Dans une salle, {!cmd} affiche ce que tu peux jouer et {!play} en joue un - ou appuie sur 🔊 Soundboard dans l'onglet En direct d'un pad. Par lecture : commun {common}, rare {rare}, épique {epic} PAT, gratuit (∞) pour les clips que tu possèdes. Les délais sont partagés : une lecture toutes les 45 s par personne, le même clip une fois toutes les 3 min par salle.",
+  "sb.how": "Dans un salon, {!cmd} affiche ce que tu peux jouer et {!play} en joue un - ou appuie sur 🔊 Soundboard dans l'onglet En direct d'un pad. Par lecture : commun {common}, rare {rare}, épique {epic} PAT, gratuit (∞) pour les clips que tu possèdes. Les délais sont partagés : une lecture toutes les 15 s par personne, le même clip une fois par minute par salon - et un clip qui n'obtient pas le micro est remboursé et ne compte pas dans les délais.",
   "sb.sp_allowance": "Ton 🎟️ Season Pass : le tableau de saison est illimité, et il te reste {n} pack(s) standard gratuit(s) ce mois-ci.",
   "sb.sp_allowance_packs": "Ton 🎟️ Season Pass : il te reste {n} pack(s) standard gratuit(s) ce mois-ci.",
   "sb.season_chip": "saison uniquement",

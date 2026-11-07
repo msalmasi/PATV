@@ -10225,7 +10225,7 @@
   "sb.lead": "Korte clips die Pepe afspeelt via de microfoon in de chatrooms waar hij is. Speel elke clip voor een paar PAT, of bezit een pakket en speel het zo vaak als de cooldowns toestaan.",
   "sb.off": "Soundboards zijn nu uitgeschakeld - je kunt nog wel rondkijken.",
   "sb.how_h": "Hoe het werkt",
-  "sb.how": "In een room toont {!cmd} wat je kunt afspelen en speelt {!play} er een af - of tik op 🔊 Soundboard op het Live-tabblad van een pad. Per afspelen: gewoon {common}, zeldzaam {rare}, episch {epic} PAT, gratis (∞) voor clips die je bezit. Iedereen deelt de cooldowns: één afspeelbeurt per 45 s per persoon, dezelfde clip één keer per 3 min per room.",
+  "sb.how": "In een room toont {!cmd} wat je kunt afspelen en {!play} speelt er een af - of tik op 🔊 Soundboard op het Live-tabblad van een Pad. Per afspelen: gewoon {common}, zeldzaam {rare}, episch {epic} PAT, gratis (∞) voor clips die je bezit. Iedereen deelt de cooldowns: één keer per 15 s per persoon, dezelfde clip één keer per minuut per room - en een clip die de microfoon niet krijgt wordt terugbetaald en kost geen cooldown.",
   "sb.sp_allowance": "Je 🎟️ Season Pass: het seizoensbord is onbeperkt, en je hebt deze maand nog {n} gratis standaardpakket(ten) over.",
   "sb.sp_allowance_packs": "Je 🎟️ Season Pass: je hebt deze maand nog {n} gratis standaardpakket(ten) over.",
   "sb.season_chip": "alleen dit seizoen",

@@ -10225,7 +10225,7 @@
   "sb.lead": "Kurze Clips, die Pepe in den Chaträumen, in denen er ist, über das Mikro abspielt. Spiele einen Clip für ein paar PAT ab, oder besitze ein Paket und spiele es so oft, wie die Abklingzeiten erlauben.",
   "sb.off": "Soundboards sind gerade ausgeschaltet - du kannst dich trotzdem umsehen.",
   "sb.how_h": "So funktioniert's",
-  "sb.how": "In einem Raum zeigt {!cmd} an, was du abspielen kannst, und {!play} spielt eines ab - oder tippe in einem Pad im Tab Live auf 🔊 Soundboard. Pro Wiedergabe: gewöhnlich {common}, selten {rare}, episch {epic} PAT, kostenlos (∞) für Clips, die dir gehören. Die Abklingzeiten gelten für alle: eine Wiedergabe alle 45 s pro Person, derselbe Clip einmal alle 3 Min. pro Raum.",
+  "sb.how": "In einem Raum zeigt {!cmd} an, was du abspielen kannst, und {!play} spielt eines ab – oder tippe bei einem Pad im Tab Live auf 🔊 Soundboard. Pro Wiedergabe: gewöhnlich {common}, selten {rare}, episch {epic} PAT, kostenlos (∞) für Clips, die dir gehören. Alle teilen die Abklingzeiten: eine Wiedergabe alle 15 s pro Person, derselbe Clip einmal pro Minute pro Raum – und ein Clip, der das Mikrofon nicht bekommt, wird erstattet und kostet keine Abklingzeit.",
   "sb.sp_allowance": "Dein 🎟️ Season Pass: das Season-Board ist unbegrenzt, und du hast diesen Monat noch {n} kostenlose Standard-Packs übrig.",
   "sb.sp_allowance_packs": "Dein 🎟️ Season Pass: du hast diesen Monat noch {n} kostenlose Standardpaket(e) übrig.",
   "sb.season_chip": "nur diese Season",

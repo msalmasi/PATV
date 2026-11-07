@@ -10485,7 +10485,7 @@
   "sb.lead": "Krótkie klipy, które Pepe odtwarza w mikrofon w pokojach czatu, do których dołączył. Odtwórz dowolny klip za kilka PAT albo miej pakiet i odtwarzaj go tak często, jak pozwalają przerwy.",
   "sb.off": "Soundboardy są teraz wyłączone - możesz jednak się rozejrzeć.",
   "sb.how_h": "Jak to działa",
-  "sb.how": "W pokoju {!cmd} pokazuje, co możesz odtworzyć, a {!play} odtwarza jeden z nich - albo dotknij 🔊 Soundboard w zakładce Na żywo w padzie. Za każde odtworzenie: zwykły {common}, rzadki {rare}, epicki {epic} PAT, za darmo (∞) klipy, które posiadasz. Wszyscy dzielą czas odnowienia: jedno odtworzenie co 45 s na osobę, ten sam klip raz na 3 min w pokoju.",
+  "sb.how": "W pokoju {!cmd} pokazuje, co możesz odtworzyć, a {!play} odtwarza jeden z nich - albo dotknij 🔊 Soundboard w zakładce Na żywo w padzie. Za każde odtworzenie: zwykły {common}, rzadki {rare}, epicki {epic} PAT, za darmo (∞) klipy, które posiadasz. Wszyscy dzielą przerwy: jedno odtworzenie co 15 s na osobę, ten sam klip raz na minutę w pokoju - a klip, który nie dostanie mikrofonu, zostaje zwrócony i nie liczy się do przerwy.",
   "sb.sp_allowance": "Twój 🎟️ Season Pass: tablica sezonowa jest bez limitu, a w tym miesiącu zostało ci {n} darmowych standardowych paczek.",
   "sb.sp_allowance_packs": "Twój 🎟️ Season Pass: w tym miesiącu zostało ci {n} darmowych standardowych pakietów.",
   "sb.season_chip": "tylko w tym sezonie",

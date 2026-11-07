@@ -10310,7 +10310,7 @@
   "sb.lead": "Clipes curtos que o Pepe toca no microfone nas salas de chat em que ele está. Toque qualquer clipe por alguns PAT, ou tenha um pacote e toque quantas vezes os cooldowns permitirem.",
   "sb.off": "Os soundboards estão desligados no momento - você ainda pode dar uma olhada.",
   "sb.how_h": "Como funciona",
-  "sb.how": "Em uma sala, {!cmd} lista o que você pode tocar e {!play} toca um - ou toque em 🔊 Soundboard na aba Ao vivo de um pad. Por reprodução: comum {common}, raro {rare}, épico {epic} PAT, grátis (∞) para os clipes que você tem. Todo mundo divide os tempos de espera: uma reprodução a cada 45 s por pessoa, o mesmo clipe uma vez a cada 3 min por sala.",
+  "sb.how": "Em uma sala, {!cmd} mostra o que você pode tocar e {!play} toca um - ou toque em 🔊 Soundboard na aba Ao vivo de um pad. Por reprodução: comum {common}, raro {rare}, épico {epic} PAT, grátis (∞) para os clipes que você tem. Todo mundo divide os cooldowns: uma reprodução a cada 15 s por pessoa, o mesmo clipe uma vez por minuto por sala - e um clipe que não chega a usar o microfone é reembolsado e não gasta cooldown.",
   "sb.sp_allowance": "Seu 🎟️ Season Pass: o painel da temporada é ilimitado, e você ainda tem {n} pacote(s) padrão grátis este mês.",
   "sb.sp_allowance_packs": "Seu 🎟️ Season Pass: você ainda tem {n} pacote(s) padrão grátis este mês.",
   "sb.season_chip": "só nesta temporada",
