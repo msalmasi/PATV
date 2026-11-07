@@ -143,7 +143,7 @@ test("history HTTP endpoint requires sign-in, is private, and ignores requested 
     assert.equal((await fetch(base+"/api/casino/me/hands")).status,401);
     const r=await fetch(base+"/api/casino/me/hands?uid=u1",{headers:{"x-test-user":"u5"}});
     assert.equal(r.headers.get("cache-control"),"no-store"); assert.deepEqual((await r.json()).hands,[]);
-    // 1.99?? train3 verify: 20 a minute per account (each call scans the finished rounds)
+    // 1.99alq train3 verify: 20 a minute per account (each call scans the finished rounds)
     const codes=[];
     for(let i=0;i<22;i++) codes.push((await fetch(base+"/api/casino/me/hands",{headers:{"x-test-user":"u6"}})).status);
     assert.deepEqual(codes.slice(0,19),Array(19).fill(200)); assert.deepEqual(codes.slice(19),[200,429,429]);

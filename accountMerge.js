@@ -295,7 +295,7 @@ const RULES = {
   "casino_actions.userId": { keep: "the casino's idempotency journal (an answer stored under the caller's key)" },
   // 1.99mj: the site's casino achievement counters (web-only players) follow the account; the same metric adds up
   "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
-  // 1.99?? train3: which one-time table notices the account has seen (casino/notices.js) - follows it; seen by either = seen
+  // 1.99alq train3: which one-time table notices the account has seen (casino/notices.js) - follows it; seen by either = seen
   "casino_notice_seen.userId": M({ key: ["notice"], merge: { at: "MIN" } }),
   "casino_settings.actor": { deny: NAME },
   // 1.99mw/1.99nc: Pepe's achievement counts so far (a base per metric, replaced at his next report) follow the account and add
@@ -393,7 +393,7 @@ const RULES = {
   "story_prefs.user_id": M({ key: [], merge: { capture_reacts: "MIN" } }), "story_hides.user_id": M({ key: ["capture_id"] }),
   // 💬 story reactions (storyreact.js): one vote per account per story (folded), tips + DM story references follow the account
   "story_votes.user_id": M({ key: ["story_id"] }),
-  // 1.99?? Story Studio: mentions follow the account; a removed mention stays removed after a merge.
+  // 1.99alq Story Studio: mentions follow the account; a removed mention stays removed after a merge.
   "story_mentions.user_id": M({ key: ["story_id"], merge: { created: "MIN", removed_at: "MAX" } }),
   "story_tips.sender_id": M(), "story_tips.recipient_id": M(),
   "dm_story_refs.sender_id": M(), "dm_story_refs.author_id": M(),

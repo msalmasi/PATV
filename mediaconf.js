@@ -128,7 +128,7 @@ function itemMap(v, shape) {
 const CLEAN = {
   clerk_enabled: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
   clerk_requests: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
-  // 1.99?? train3 verify: Plex writes many certifications with a country prefix ("gb/R18", "au/R18+", "de/18"); the catalog keeps
+  // 1.99alq train3 verify: Plex writes many certifications with a country prefix ("gb/R18", "au/R18+", "de/18"); the catalog keeps
   // the rating without it (plexcatalog.crow), so a typed prefix is taken off here too - it was dropped (the "/" didn't match), and
   // "R18" never matched a "gb/R18" title. Duplicates go.
   clerk_block_ratings: (v) => [...new Set(String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)))].slice(0, 30).join(","),

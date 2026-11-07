@@ -39,7 +39,7 @@ test("catalog searches retain Unicode titles in FTS and LIKE fallback", async (t
   }
 });
 
-// 1.99?? train3 verify (review): Plex's country-prefixed certifications are blocked like the bare ones
+// 1.99alq train3 verify (review): Plex's country-prefixed certifications are blocked like the bare ones
 test("a country-prefixed adult rating is blocked like the bare one; the settings cleaner takes the prefix off", async (t) => {
   const { crow, ratings, normRating } = require("../plexcatalog");
   for (const [raw, want] of [["gb/R18", "R18"], ["au/R18+", "R18+"], ["nz/ R18", "R18"], ["R", "R"], ["TV-MA", "TV-MA"], ["", ""], ["PG-13", "PG-13"]])
@@ -60,7 +60,7 @@ test("a country-prefixed adult rating is blocked like the bare one; the settings
   assert.deepEqual(await h.catalog.getByKeys(["30", "31"]), []);
   assert.equal(JSON.stringify(await h.catalog.rows()).includes("Prefixed"), false);
 });
-// 1.99?? train3 verify (review): dark means dark - with every clerk switch off the timer reads nothing
+// 1.99alq train3 verify (review): dark means dark - with every clerk switch off the timer reads nothing
 test("the catalog timer reads nothing while every clerk switch is off, and syncs once one is on", async (t) => {
   const off = await setup(t);
   assert.equal(off.catalog.inUse(off.cfg), false);
@@ -366,7 +366,7 @@ test("blocked or absent parent shows cannot leak through unrated episode rows in
   assert.equal((await h.catalog.read("SELECT key FROM plex_catalog WHERE key='21'")).length, 0);
 });
 
-// 1.99?? train3 review: the shelves listing's two aggregates (every visible row's genres, each shelf's visible members) scan the
+// 1.99alq train3 review: the shelves listing's two aggregates (every visible row's genres, each shelf's visible members) scan the
 // whole library - under the suite's load the 210k-row case below went past the 400 ms search budget ('too_broad'). They run on
 // a budget of their own, and the answer is kept until the catalog changes (any write) or the block list does.
 test("shelves' aggregates run on their own budget (a caller's read keeps the search cap), once per catalog change and block list", async (t) => {
@@ -426,7 +426,7 @@ test("shelves aggregates 10k films and 200k episodes without fetching metadata J
   assert.ok(result.genres.includes("Scale Cinema"));
   assert.ok(result.genres.includes("Scale Series"));
   assert.equal((await h.catalog.status()).count, 210005);
-  // 1.99?? train3 review: no wall-clock ceiling here (the suite's load is not the code's) - the two aggregates run on the
+  // 1.99alq train3 review: no wall-clock ceiling here (the suite's load is not the code's) - the two aggregates run on the
   // shelves budget, and a second ask with nothing changed reads no aggregate at all
   assert.deepEqual(armed.filter(aggregate).map((j) => j.budgetMs), [SHELVES_BUDGET_MS, SHELVES_BUDGET_MS]);
   t.diagnostic("shelves: 210005 rows with500/512-character summaries, " + elapsed.toFixed(1) + "ms");

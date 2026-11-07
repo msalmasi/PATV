@@ -281,7 +281,7 @@ test("admin routes preserve media.admin and same-site POST checks with no-store 
   }
   assert.equal((await invoke("GET", "", { user: { admin: false } })).status, 403);
   assert.equal((await invoke("GET", "/search", { user: null, query: { q: "lantern" } })).status, 403);
-  // 1.99?? train3 verify: the search spends MDBList's budget - a GET without the fetch header (cross-site) is refused, no call
+  // 1.99alq train3 verify: the search spends MDBList's budget - a GET without the fetch header (cross-site) is refused, no call
   const spent = h.calls.length;
   const cross = await invoke("GET", "/search", { query: { q: "lantern" } });
   assert.equal(cross.status, 403); assert.equal(h.calls.length, spent);

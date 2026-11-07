@@ -5,7 +5,7 @@ const path = require("path");
 const sqlite3 = require("sqlite3");
 
 const DAY = 86400000, SEARCH_BUDGET_MS = 400, SEARCH_QUEUE = 4;
-// 1.99?? train3 review: the shelves listing's two aggregates (every visible row's genres, each shelf's visible members) scan the
+// 1.99alq train3 review: the shelves listing's two aggregates (every visible row's genres, each shelf's visible members) scan the
 // whole library - a few hundred ms alone at 10k films + 200k episodes, past the 400 ms search budget under load. They get a
 // budget of their own (internal only: a caller's read() is still capped at the search budget), and shelves() keeps its
 // answer until the catalog changes (any write) or the block list does.
@@ -20,9 +20,9 @@ const fold = (v) => {
 const number = (v, fallback = 0) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : fallback;
 const strings = (v, n = 20, max = 80) => Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === "string").map((x) => text(x, max)).filter(Boolean))].slice(0, n) : [];
 const parsed = (v, d = []) => { try { return JSON.parse(v); } catch (_) { return d; } };
-const IDLE_CHECK_MIN = 5;      // 1.99?? train3 verify: minutes between looks while every clerk switch is off (start())
+const IDLE_CHECK_MIN = 5;      // 1.99alq train3 verify: minutes between looks while every clerk switch is off (start())
 const ratings = (v) => new Set(String(v == null ? DEFAULT_BLOCK : v).split(",").map((s) => s.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
-/** 1.99?? train3 verify: a certification without Plex's country prefix ("gb/R18" -> "R18", "au/R18+" -> "R18+"); every rating
+/** 1.99alq train3 verify: a certification without Plex's country prefix ("gb/R18" -> "R18", "au/R18+" -> "R18+"); every rating
  *  check (the block list in SQL and in code, the warn list) compares exact names, so a prefixed adult rating slipped through. */
 const normRating = (v) => { const t = text(v, 40); const m = /^[A-Za-z]{2}\/\s*(\S.*)$/.exec(t); return m ? m[1].trim() : t; };
 const coded = (code, message = code) => Object.assign(new Error(message), { code });
@@ -514,7 +514,7 @@ function createCatalog(options = {}) {
       rows: data.map((r) => crow(r)), shelves: lists.map((s) => ({ key: s.key, name: s.name, kind: s.kind, source: "kometa", ranked: false,
         members: members.filter((m) => m.shelf === s.key && allowedKeys.has(m.key)).map((m) => m.key) })).filter((s) => s.members.length) };
   }
-  // 1.99?? train3 verify: the timer syncs only while something uses the catalog (the clerk, its requests, its vectors or its
+  // 1.99alq train3 verify: the timer syncs only while something uses the catalog (the clerk, its requests, its vectors or its
   // lists - any of them on); with every switch off it reads nothing (no mediactl /sections, no Tautulli, no catalog file) and
   // looks again every IDLE_CHECK_MIN, so a switch turned on is picked up within minutes. "Sync now" on /admin/media still
   // pre-warms it by hand with everything off.

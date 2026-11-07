@@ -1,4 +1,4 @@
-// casino/notices.js — one-time notices at the casino tables (1.99?? train3, owner answer 1, 2026-11-07: "Poker timeout rule
+// casino/notices.js — one-time notices at the casino tables (1.99alq train3, owner answer 1, 2026-11-07: "Poker timeout rule
 // ok"). Hand-off 21's Hold'em timeout rule shipped live with no switch, so for its first WINDOW_MS after the first start that
 // has it, a player's first Hold'em buy-in carries a notice of it, once per account:
 //   * the window: casino_settings 'notice_from:<id>' = the first boot (or first check) with the notice - written once

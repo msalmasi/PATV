@@ -513,7 +513,7 @@ const DELETE_ROWS = [
   // storyreact site (storyreact.js): their story votes and the story references of the replies they sent (those messages are
   // blanked in step 3); story_tips are kept like post_tips (ledger evidence, no names in them)
   ["story_votes", "user_id", "uid"], ["dm_story_refs", "sender_id", "uid"],
-  ["story_mentions", "user_id", "uid"],                         // 1.99?? train3 verify (Story Studio): the chips naming them
+  ["story_mentions", "user_id", "uid"],                         // 1.99alq train3 verify (Story Studio): the chips naming them
   ["stage_leave", "user_id", "uid"], ["stage_leave", "login", "login"],      // stagefix site: "Take me off this Stage" (stageleave.js)
   ["stage_level", "user_id", "uid"], ["stage_level", "login", "login"],      // stagefix final round: the person's say over pins (stagepin.js)
   ["stage_pad_prefs", "user_id", "uid"], ["stage_pad_prefs", "login", "login"],
@@ -785,7 +785,7 @@ async function execute(userId, { force = false } = {}) {
     }
     // (their DM pictures go with the deleted messages: dmmedia.sweep purges the files after its grace period)
     // 4. clips they made / of them
-    // 1.99?? train3 verify (Story Studio): their stories' words and the chips on them go now, not at the next hourly sweep
+    // 1.99alq train3 verify (Story Studio): their stories' words and the chips on them go now, not at the next hourly sweep
     n("story_text_deleted", await run("story_text", ["story_id"], "DELETE FROM story_text WHERE story_id IN (SELECT id FROM media WHERE by_user_id = ?)", [uid]));
     n("story_chips_deleted", await run("story_mentions", ["story_id"], "DELETE FROM story_mentions WHERE story_id IN (SELECT id FROM media WHERE by_user_id = ?)", [uid]));
     n("clips_removed", await run("media", ["by_user_id", "deleted"], "UPDATE media SET deleted = 1 WHERE by_user_id = ? OR (? IS NOT NULL AND lower(subject_login) = ?)", [uid, login, login]));

@@ -162,7 +162,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     return { title: row.title, year: row.year, kind: row.kind, tmdb: row.tmdb, availability: row.availability };
   }
   const deepLimits = () => deepMax || require("./plexpad").DEEP_MAX;
-  const effectiveRating = (r, parents) => String(r.content_rating || (r.type === "episode" && parents.get(String(r.show_key)) || {}).content_rating || "").replace(/^[A-Za-z]{2}\/\s*/, "");   // 1.99?? train3 verify: never a country prefix ("gb/R18")
+  const effectiveRating = (r, parents) => String(r.content_rating || (r.type === "episode" && parents.get(String(r.show_key)) || {}).content_rating || "").replace(/^[A-Za-z]{2}\/\s*/, "");   // 1.99alq train3 verify: never a country prefix ("gb/R18")
   const allowed = (r, sections, s, parents = new Map()) => !!r && KEY.test(String(r.key)) && sections.has(String(r.section))
     && ["movie", "show", "episode"].includes(r.type) && !ratingNames(s.clerk_block_ratings == null ? "X,XXX,AO,R18,R18+" : s.clerk_block_ratings).has(String(effectiveRating(r, parents)).toUpperCase())
     && (r.type !== "episode" || (parents.has(String(r.show_key)) && parents.get(String(r.show_key)).type === "show"

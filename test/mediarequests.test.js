@@ -97,7 +97,7 @@ test("off until the flag is on (keys alone aren't enough)", async () => {
   const r = await R.search(u, "star");
   assert.deepEqual(r.map((x) => [x.type, x.title, x.year]), [["movie", "Star Wars", 1977], ["tv", "Game of Thrones", 2011]], "people (and adult titles) are left out");
   assert.equal(r[1].availability, "partial");
-  await assert.rejects(R.details("movie", 14), /isn't known/, "1.99?? train3 verify: an adult title has no details either");
+  await assert.rejects(R.details("movie", 14), /isn't known/, "1.99alq train3 verify: an adult title has no details either");
 });
 
 test("free request: made on behalf of the service user, status pending, shows in 'mine'", async () => {

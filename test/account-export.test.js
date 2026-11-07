@@ -117,7 +117,7 @@ test("the contents: the member's own data, by section", async () => {
   assert.equal(d.chat.chat_line_reports[0].decided_by, undefined, "not who handled it");
 });
 
-// 1.99?? train3 verify (Story Studio): the words on their own stories and the stories that mention them - never who posted those
+// 1.99alq train3 verify (Story Studio): the words on their own stories and the stories that mention them - never who posted those
 test("Story Studio: their stories' words and the mentions of them are in the export, never the other person's id or words", async () => {
   await require(path.join(repo, "userstories")).init();
   await runQuery("INSERT INTO media (id, kind, ct, file, by_user_id, created, expires, deleted, source) VALUES ('5e0000aa', 'photo', 'image/webp', 'm.webp', 'me', 1, 9e15, 0, 'user'), ('5e0000ab', 'photo', 'image/webp', 'n.webp', 'someoneelse', 1, 9e15, 0, 'user')");

@@ -56,7 +56,7 @@ Only an active seat list is passed to `H.startHand`, then the complete seat ring
 restored immediately. No sit/stand or PAT operation occurs during this filtering.
 A waiter only waits while the seats already playing can deal without them: when
 they can't (heads-up after a break, everyone back at once), every returning seat is
-dealt in at once, with only the engine's own blinds (h21 integration, 1.99??).
+dealt in at once, with only the engine's own blinds (h21 integration, 1.99alq).
 
 Timeouts check when free, otherwise fold, retaining the seat. Two consecutive
 timeouts sit out; a deliberate action resets the streak. An expired sit-out uses

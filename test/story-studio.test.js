@@ -146,7 +146,7 @@ test("a real 42s portrait video trims in one encoding pass, keeps audio/overlay 
   assert.equal(args[args.indexOf("-map_metadata") + 1], "-1"); assert.equal(args[args.indexOf("-map_chapters") + 1], "-1");
   for (let i = 0; i < args.length; i++) if (args[i] === "-i") { assert.equal(args[i - 4], "-protocol_whitelist"); assert.equal(args[i - 3], "file"); assert.equal(args[i - 2], "-f"); }
   assert.ok(args.includes("image2")); assert.ok(args.includes("0:a:0?")); assert.ok(args.includes("-sn") && args.includes("-dn"));
-  // 1.99??: the VPS's ffprobe 4.2 has no "stream_side_data" section name, so the rotation probe must read -show_streams
+  // 1.99alq: the VPS's ffprobe 4.2 has no "stream_side_data" section name, so the rotation probe must read -show_streams
   const rotationProbe = encoding.find(c => c.args.includes("-select_streams"));
   assert.ok(rotationProbe && rotationProbe.args.includes("-show_streams"));
   assert.ok(!rotationProbe.args.some(a => /stream_side_data/.test(a)), rotationProbe.args.join(" "));

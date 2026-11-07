@@ -34,7 +34,7 @@
     clearTimeout(toastTm);
     if (text) toastTm = setTimeout(() => { el.textContent = ""; }, bad ? 7000 : 4000);
   }
-  // 1.99?? train3 (owner answer 1): a one-time notice from the table (e.g. the Hold'em timeout rule at your first buy-in) -
+  // 1.99alq train3 (owner answer 1): a one-time notice from the table (e.g. the Hold'em timeout rule at your first buy-in) -
   // it stays until closed (a toast would be gone in 4 s)
   function note(text) {
     const el = $("cz-note");

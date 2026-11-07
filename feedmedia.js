@@ -323,7 +323,7 @@ function removeFiles(names) {
 }
 function tmpPath(id) { return path.join(dir(), "tmp", id + ".part"); }
 
-/** Abandoned chunk files (older than TMP_TTL) - and (1.99?? train3 verify) the mkdtemp work folders a restart mid-job leaves
+/** Abandoned chunk files (older than TMP_TTL) - and (1.99alq train3 verify) the mkdtemp work folders a restart mid-job leaves
  *  behind: Story Studio's story-*, the HEIC converter's heic-* (unlinkSync can't remove a folder, so they stayed for good). */
 function sweepTmp(now = Date.now()) {
   let n = 0;

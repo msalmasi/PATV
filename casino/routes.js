@@ -40,7 +40,7 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
                            "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand"]);
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
-const HANDS_PER_MIN = 20;          // 1.99?? train3 verify: GET /api/casino/me/hands per account a minute
+const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
 
 /** tablechat: the request's network for a network ban (netban.reqNet - the trusted proxy's address only; null = unknown) */
 function netOf(req) { try { return require("../netban").reqNet(req); } catch (e) { return null; } }
@@ -113,7 +113,7 @@ async function history(tableId, limit) {
 
 function register(app, { isBotToken, addUser }) {
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
-  // 1.99?? train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
+  // 1.99alq train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
   // when it opens; a script looping on it was unlimited database work)
   const handsHits = new Map();
   const handsOk = (uid, t = Date.now()) => {

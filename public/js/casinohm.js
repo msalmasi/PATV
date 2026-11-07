@@ -423,7 +423,7 @@
   $("cz-buygo").addEventListener("click", async () => {
     const j = await act("sit", Number($("cz-buyin").value));
     if (j && j.ok) { CZ.closeSheet("cz-buy"); CZ.toast(buyMode === "top" ? T("topped", "Chips added.") : T("seated", "You're seated. Good luck!"), false); }
-    // 1.99?? train3 (owner answer 1): the timeout rule, once per player in its first 7 days (casino/notices.js) - translated
+    // 1.99alq train3 (owner answer 1): the timeout rule, once per player in its first 7 days (casino/notices.js) - translated
     if (j && j.ok && j.notice && j.notice.id === "hm_timeout") CZ.note(T("rule_timeout", j.notice.text, { count: j.notice.mins }));
   });
   $("cz-deal").addEventListener("click", () => act("deal"));

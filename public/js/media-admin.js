@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   function api(method, url, body) {
-    var o = { method: method, credentials: "same-origin", headers: { Accept: "application/json", "X-Requested-With": "fetch" } };   // 1.99?? train3 verify (lists search)
+    var o = { method: method, credentials: "same-origin", headers: { Accept: "application/json", "X-Requested-With": "fetch" } };   // 1.99alq train3 verify (lists search)
     if (body) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
     return fetch(url, o).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: "HTTP " + r.status }; }).then(function (j) {
@@ -13,7 +13,7 @@
   }
   function msg(id, t, good) { var e = document.getElementById(id); if (e) { e.textContent = t || ""; e.style.color = good ? "#9ccc65" : ""; } }
 
-  // 1.99??: the clerk's rebuildable catalog. Metadata is text, never HTML.
+  // 1.99alq: the clerk's rebuildable catalog. Metadata is text, never HTML.
   var ct = function (key, fallback, values) {
     return window.__t ? window.__t("js.media.catalog." + key, fallback, values) : String(fallback).replace(/\{(\w+)\}/g, function (m, n) {
       return values && values[n] != null ? String(values[n]) : m;

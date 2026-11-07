@@ -58,7 +58,7 @@ test("the deletion job: story votes + sent story refs deleted, refs about them u
   await runQuery(`INSERT INTO dm_story_refs (message_id, conversation_id, story_id, sender_id, author_id, role, author_name, room_title, created) VALUES
                   (801, 'c1', '5a0000aa', 'gone', 'oth', 'uploader', 'Other', 'A Pad', 1), (802, 'c1', '5a0000ab', 'oth', 'gone', 'subject', 'Goner Cam', 'A Pad', 1)`);
   await runQuery("INSERT INTO story_prefs (user_id, captures_of_me, capture_reacts, updated) VALUES ('gone', 1, 0, 1)");
-  // 1.99?? train3 verify (Story Studio): the chips naming them, their stories' words and the chips on their stories go
+  // 1.99alq train3 verify (Story Studio): the chips naming them, their stories' words and the chips on their stories go
   await require(path.join(repo, "userstories")).init();
   await runQuery("INSERT INTO media (id, kind, ct, file, by_user_id, created, expires, deleted, source) VALUES ('5a0000ac', 'photo', 'image/webp', 'g.webp', 'gone', 1, 9e15, 0, 'user'), ('5a0000ad', 'photo', 'image/webp', 'o.webp', 'oth', 1, 9e15, 0, 'user')");
   await runQuery("INSERT INTO story_text (story_id, text, created) VALUES ('5a0000ac', 'GONER-WORDS', 1), ('5a0000ad', 'OTHER-WORDS', 1)");

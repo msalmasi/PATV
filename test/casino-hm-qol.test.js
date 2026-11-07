@@ -223,7 +223,7 @@ test("time bank uses only elapsed time on an action and keeps normal action limi
   for(let i=0;i<12;i++) assert.ok((await A(dan,"pre",["off"],{table:tid})).ok);
   assert.ok(!(await A(dan,"pre",["off"],{table:tid})).ok);
 });
-// 1.99?? h21 integration: a returning seat is never left waiting at a table that can't deal without it.
+// 1.99alq h21 integration: a returning seat is never left waiting at a table that can't deal without it.
 async function playOut(T, move, players) {
   while (T.eng.hand_active) { const uid = H.currentActor(T.eng); await move(players.find((p) => p.uid === uid), "fold"); }
 }

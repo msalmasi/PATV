@@ -249,7 +249,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("stories", "tips_sent", rows("story_tips", "sender_id = ?", [uid]));
   await put("stories", "tips_received", rows("story_tips", "recipient_id = ?", [uid], { omit: ["sender_id", "note"] }));
   await put("stories", "settings", rows("story_prefs", "user_id = ?", [uid]));
-  // 1.99?? train3 verify (Story Studio): the words on their own stories, and the stories that mention them (which story, where
+  // 1.99alq train3 verify (Story Studio): the words on their own stories, and the stories that mention them (which story, where
   // the chip sat, when, whether they took it off - never who posted it: that's the other person's)
   if ((await colsOf("story_text")).length && (await colsOf("media")).includes("by_user_id")) {
     await put("stories", "story_words", getQuery("SELECT t.story_id, t.text, t.created FROM story_text t JOIN media m ON m.id = t.story_id WHERE m.by_user_id = ? LIMIT " + MAX_ROWS, [uid]));

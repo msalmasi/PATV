@@ -1,4 +1,4 @@
-// Story Studio (1.99??): local drafts, one shared overlay renderer, and a versioned server edit.
+// Story Studio (1.99alq): local drafts, one shared overlay renderer, and a versioned server edit.
 // No media leaves the device before Post. Mentions remain removable data, never overlay pixels.
 (function () {
   'use strict';

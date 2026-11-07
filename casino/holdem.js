@@ -21,7 +21,7 @@ const fair = require("./fair");
 const money = require("./money");
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (casino/veil.js)
 const sizing = require("./sizing");
-const notices = require("./notices");     // 1.99?? train3: the timeout rule's one-time notice at a buy-in
+const notices = require("./notices");     // 1.99alq train3: the timeout rule's one-time notice at a buy-in
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -67,7 +67,7 @@ function install(core) {
     if (T.dl.sitout) delete T.dl.sitout[uid];
     if (T.pre) delete T.pre[uid];
   }
-  // 1.99?? h21 integration: only a seat sitting out holds off the idle close (its own sit-out limit governs it); a returning
+  // 1.99alq h21 integration: only a seat sitting out holds off the idle close (its own sit-out limit governs it); a returning
   // seat is dealt in whenever the table can deal, so one left alone has nobody to wait for and the 5-minute idle close runs
   const outHolds = (T) => T.eng.seats.some((k) => qos(T, k).out);
   function playable(T) { return H.seatedWithChips(T.eng).filter((uid) => !qos(T, uid).out && qos(T, uid).back !== "wait"); }
@@ -253,7 +253,7 @@ function install(core) {
     await emit(T, "line", `💺 ${name} buys in for ${fmt(amount)} chips${joining}. Stack: ${fmt(e.chips[actor.uid])}.`);
     if (!e.hand_active && H.canStart(e) && !T.dl.next) await emit(T, "line", "Enough players seated — !holdem deal to start the hand.");
     await save(T);
-    // 1.99?? train3 (owner answer 1): the timeout rule's one-time notice in its first 7 days (casino/notices.js) - Pepe PMs it to
+    // 1.99alq train3 (owner answer 1): the timeout rule's one-time notice in its first 7 days (casino/notices.js) - Pepe PMs it to
     // a Camfrog player; the website shows `notice` on the table page (translated)
     const note = await notices.take("hm_timeout", actor.uid, clock(), S.settings);
     if (note && actor.via === "room") return R(true, `you bought in for ${fmt(amount)}. ${note.text}`, { pm: true, notice: note });
@@ -321,7 +321,7 @@ function install(core) {
       const button = trial.includes(e.button) ? (trial.indexOf(e.button) + 1) % trial.length : 0;
       if (trial[(button + (trial.length === 2 ? 1 : 2)) % trial.length] === uid) { active = trial; break; }
     }
-    // 1.99?? h21 integration: a waiter only waits while a game runs without them. When the seats already playing can't deal a
+    // 1.99alq h21 integration: a waiter only waits while a game runs without them. When the seats already playing can't deal a
     // hand on their own (heads-up after a break, everyone back at once), every returning seat is dealt in now - otherwise the
     // table never dealt again and, with its idle close held off, stayed open (and held the room) until someone posted.
     if (active.length < 2) active = candidates;

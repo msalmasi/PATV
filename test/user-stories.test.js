@@ -640,7 +640,7 @@ test("Studio rejects the wrong overlay dimensions and removes the generated file
   } finally { fmedia.processImage = original; await store.setConfig(saved, "test"); }
 });
 
-// 1.99?? train3 verify (review): a chip only for someone who could see the story and take it off; the person named removes it
+// 1.99alq train3 verify (review): a chip only for someone who could see the story and take it off; the person named removes it
 // without needing to see the story; a later block takes the chip off for everyone
 test("Studio mentions: no chip across a block, with feed mentions off or outside an Approved pad; the named person removes theirs unseen", async () => {
   const saved = { ...store.config() }, author = await mkUser("ashcanvas"), blocked = await mkUser("ashblocked"), blocker = await mkUser("ashblocker");
@@ -685,7 +685,7 @@ test("Studio mentions: no chip across a block, with feed mentions off or outside
     await PA.setLevel(U.owner, R, "members"); await store.setConfig(saved, "test");
   }
 });
-// 1.99?? train3 verify (review): overlays have their own hourly cap (they skip the hourly count and the daily allowance)
+// 1.99alq train3 verify (review): overlays have their own hourly cap (they skip the hourly count and the daily allowance)
 test("Studio overlay uploads have their own hourly cap", async () => {
   const saved = { ...store.config() }, u = await mkUser("studioovlcap");
   try {
@@ -702,7 +702,7 @@ test("Studio overlay uploads have their own hourly cap", async () => {
     await post("/api/feed/uploads/" + ok.d.id + "/discard", u);
   } finally { await store.setConfig(saved, "test"); }
 });
-// 1.99?? train3 verify (review): a restart mid-compose leaves a story-* work folder; the tmp sweep removes it once stale
+// 1.99alq train3 verify (review): a restart mid-compose leaves a story-* work folder; the tmp sweep removes it once stale
 test("the tmp sweep removes stale story-* / heic-* work folders, never fresh ones or other folders", () => {
   const T = path.join(fmedia.dir(), "tmp"), old = Date.now() / 1000 - 3 * 3600;
   const mk = (name, stale) => { const d = path.join(T, name); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, "x.png"), "x"); if (stale) fs.utimesSync(d, old, old); return d; };

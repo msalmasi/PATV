@@ -657,7 +657,7 @@ function register(app, { addUser, isBotToken }) {
       const t = Date.now();
       if (!SP.can(u, "feed.limits_exempt")) {
         if (overlay) {
-          // 1.99?? train3 verify: an overlay is outside the hourly count / daily allowance (it's a layer of a story, counted with
+          // 1.99alq train3 verify: an overlay is outside the hourly count / daily allowance (it's a layer of a story, counted with
           // its source) - but uploading and discarding them over and over was unlimited picture decoding: its own hourly cap
           const ovl = await getQuery("SELECT COUNT(*) AS n FROM feed_attachments WHERE owner_id = ? AND purpose = 'story_ovl' AND created > ?", [u.userId, t - 3600e3]);
           if (ovl[0].n >= US.OVERLAY_PER_HOUR) return res.status(429).json({ ok: false, error: "You've made a lot of story edits this hour - try again later." });
