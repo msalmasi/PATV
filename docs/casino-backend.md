@@ -54,13 +54,15 @@ and blinds. `sitin` waits for a natural big-blind position; `sitin post` contrib
 one big blind on the next deal (a small blind already paid counts toward it).
 Only an active seat list is passed to `H.startHand`, then the complete seat ring is
 restored immediately. No sit/stand or PAT operation occurs during this filtering.
-If fewer than two active players can deal, the service waits; a returning waiter
-can choose post now. In particular, two returning waiters need one post-now choice.
+A waiter only waits while the seats already playing can deal without them: when
+they can't (heads-up after a break, everyone back at once), every returning seat is
+dealt in at once, with only the engine's own blinds (h21 integration, 1.99??).
 
 Timeouts check when free, otherwise fold, retaining the seat. Two consecutive
 timeouts sit out; a deliberate action resets the streak. An expired sit-out uses
 the existing keyed stand/payout path after the live hand ends. Sitting-out seats
-prevent the five-minute idle close from shortening their ten-minute limit.
+prevent the five-minute idle close from shortening their ten-minute limit; a
+returning seat does not (left alone, the table idle-closes and cashes it out).
 
 The bank is consumed by elapsed time when the normal action clock ends; an action
 deducts only the used seconds. During bank use, restart deducts elapsed time and

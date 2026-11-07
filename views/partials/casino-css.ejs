@@ -12,8 +12,9 @@
   .cz #cz-pre { flex-wrap: wrap; gap: 10px; }
   .cz #cz-pre label { padding: 8px 5px; cursor: pointer; }
   @media (max-width: 600px) {
-    .cz .dock-acts { display: flex; flex-wrap: nowrap; width: 100%; gap: 5px; }
-    .cz .dock-acts button { flex: 1; min-width: 0; padding: 12px 7px; }
+    <%# 1.99?? h21 integration: Hold'em's one-row phone bar only - blackjack (same partial, up to five buttons) keeps its wrapping grid %>
+    .cz[data-game="holdem"] .dock-acts { display: flex; flex-wrap: nowrap; width: 100%; gap: 5px; }
+    .cz[data-game="holdem"] .dock-acts button { flex: 1; min-width: 0; padding: 12px 7px; }
     .cz #cz-pre { max-height: 90px; overflow: auto; }
     .cz #cz-presets { flex-wrap: wrap; }
     .cz #cz-misc { flex-wrap: wrap; }

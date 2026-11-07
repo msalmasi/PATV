@@ -223,3 +223,42 @@ test("time bank uses only elapsed time on an action and keeps normal action limi
   for(let i=0;i<12;i++) assert.ok((await A(dan,"pre",["off"],{table:tid})).ok);
   assert.ok(!(await A(dan,"pre",["off"],{table:tid})).ok);
 });
+// 1.99?? h21 integration: a returning seat is never left waiting at a table that can't deal without it.
+async function playOut(T, move, players) {
+  while (T.eng.hand_active) { const uid = H.currentActor(T.eng); await move(players.find((p) => p.uid === uid), "fold"); }
+}
+test("heads-up after a break: the returning seat is dealt in whatever the button says", async () => {
+  const {T,move}=await setup(2);
+  await playOut(T, move, [ann,bob]); await later(16);           // hand 2: the button moved to Bob
+  assert.equal(T.eng.button,"u2"); assert.ok(T.eng.hand_active);
+  await move(ann,"sitout"); await playOut(T, move, [ann,bob]);
+  await later(16); assert.ok(!T.eng.hand_active);               // Bob alone: no hand
+  const before=Object.values(T.eng.chips).reduce((a,b)=>a+b,0);
+  await move(ann,"sitin"); assert.equal(T.qol.u1.back,"wait");
+  await later(16);                                              // the next hand deals both (Ann is not the next big blind)
+  assert.ok(T.eng.hand_active); assert.ok(T.eng.players.includes("u1")); assert.equal(T.qol.u1.back,null);
+  assert.equal(Object.values(T.eng.chips).reduce((a,b)=>a+b,0)+H.pot(T.eng),before);
+});
+test("everyone back at once: both returning seats are dealt in without a post", async () => {
+  const {T,move}=await setup(2);
+  await move(ann,"sitout"); await move(bob,"sitout"); await playOut(T, move, [ann,bob]);
+  await move(ann,"sitin"); await move(bob,"sitin");
+  const r=await move(bob,"deal"); assert.ok(r.ok,r.reply);
+  assert.deepEqual(T.eng.players.slice().sort(),["u1","u2"]); assert.equal(T.eng.contrib.u1+T.eng.contrib.u2,75);
+});
+test("a returning seat left alone is not held open: the idle close cashes it out", async () => {
+  const {tid,T,move}=await setup(2);
+  await move(ann,"sitout"); await playOut(T, move, [ann,bob]);
+  await move(ann,"sitin"); await move(bob,"stand");
+  assert.ok(!T.eng.seats.includes("u2"));
+  const stack=T.eng.chips.u1, balance=await bal("u1");
+  await later(16); await later(301);
+  assert.equal(svc.getTable(tid).status,"closed"); assert.equal(await bal("u1"),balance+stack);
+});
+test("the one-row phone action bar is Hold'em's only (blackjack shares the partial)", () => {
+  const css = fs.readFileSync(path.join(repo, "views", "partials", "casino-css.ejs"), "utf8");
+  assert.match(css, /\.cz\[data-game="holdem"\] \.dock-acts \{ display: flex; flex-wrap: nowrap;/);
+  assert.doesNotMatch(css, /\.cz \.dock-acts \{ display: flex/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "casino-hm.ejs"), "utf8"), /<main class="ds-page flow cz"[^>]* data-game="holdem"/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "casino-bj.ejs"), "utf8"), /<main class="ds-page flow cz"[^>]* data-game="bj"/);
+});

@@ -66,6 +66,9 @@ function install(core) {
     if (T.dl.sitout) delete T.dl.sitout[uid];
     if (T.pre) delete T.pre[uid];
   }
+  // 1.99?? h21 integration: only a seat sitting out holds off the idle close (its own sit-out limit governs it); a returning
+  // seat is dealt in whenever the table can deal, so one left alone has nobody to wait for and the 5-minute idle close runs
+  const outHolds = (T) => T.eng.seats.some((k) => qos(T, k).out);
   function playable(T) { return H.seatedWithChips(T.eng).filter((uid) => !qos(T, uid).out && qos(T, uid).back !== "wait"); }
 
   async function sitout(T, actor, back, post) {
@@ -290,7 +293,7 @@ function install(core) {
     await cashout(T, actor.uid, false);
     if (!e.seats.length) return closeTable(T, "table empty").then(() => R(true, "you left the table.", { quiet: true }));
     if (!e.hand_active && H.seatedWithChips(e).length < 2) T.dl.next = null;      // nobody left to deal to: wait, then close
-    if (!e.hand_active && !T.dl.next) T.dl.idle = e.seats.some((k) => qos(T,k).out || qos(T,k).back) ? null : clock() + HC.IDLE_SECS * 1000;
+    if (!e.hand_active && !T.dl.next) T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
     await save(T);
     return R(true, "you left the table.", { quiet: true });
   }
@@ -312,7 +315,10 @@ function install(core) {
       const button = trial.includes(e.button) ? (trial.indexOf(e.button) + 1) % trial.length : 0;
       if (trial[(button + (trial.length === 2 ? 1 : 2)) % trial.length] === uid) { active = trial; break; }
     }
-    if (active.length < 2) return false;
+    // 1.99?? h21 integration: a waiter only waits while a game runs without them. When the seats already playing can't deal a
+    // hand on their own (heads-up after a break, everyone back at once), every returning seat is dealt in now - otherwise the
+    // table never dealt again and, with its idle close held off, stayed open (and held the room) until someone posted.
+    if (active.length < 2) active = candidates;
     T.dl.next = null;
     T.dl.idle = null;
     if (!T.next || T.next.no !== e.hand_no + 1) await commitNext(T);
@@ -500,7 +506,7 @@ function install(core) {
       await closeTable(T, "everyone left");
       return;
     } else {
-      T.dl.idle = e.seats.some((k) => qos(T, k).out || qos(T, k).back) ? null : clock() + HC.IDLE_SECS * 1000;
+      T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
       await emit(T, "line", "Need another player with chips — !sit to buy in, then !holdem deal.");
     }
     await save(T);
@@ -640,12 +646,12 @@ function install(core) {
       await save(T);
     } else if (T.dl.next && T.dl.next <= t) {
       T.dl.next = null;
-      if (!(await beginHand(T))) T.dl.idle = e.seats.some((uid) => qos(T, uid).out || qos(T, uid).back) ? null : clock() + HC.IDLE_SECS * 1000;
+      if (!(await beginHand(T))) T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
       await save(T);
     } else if (T.dl.idle && T.dl.idle <= t) {
       T.dl.idle = null;
       if (e.hand_active) return save(T);
-      if (e.seats.some((uid) => qos(T,uid).out || qos(T,uid).back)) return save(T);
+      if (outHolds(T)) return save(T);
       await closeTable(T, "idle — no action");
     }
   }
@@ -691,7 +697,7 @@ function install(core) {
       }
       if (T.dl.next && T.dl.next < t + 1000) T.dl.next = t + HC.NEXT_SECS * 1000;
       if (T.dl.idle && T.dl.idle < t + 1000) T.dl.idle = t + HC.IDLE_SECS * 1000;
-      if (!T.dl.next && !T.dl.idle && !e.seats.some((k) => qos(T,k).out || qos(T,k).back)) T.dl.idle = t + HC.IDLE_SECS * 1000;
+      if (!T.dl.next && !T.dl.idle && !outHolds(T)) T.dl.idle = t + HC.IDLE_SECS * 1000;
     }
     await save(T);
   }
