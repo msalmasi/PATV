@@ -176,6 +176,11 @@ Each run takes a verified copy (online backup API + `integrity_check`), gzips it
 - The cron prune uses `find ... -maxdepth 1`, so it never touches `daily/`; the 14-day rule never touches the monthly
   files or anything else in `backups/` (`myapp-pre-*.db` snapshots, `*-keep-*` files).
 - It refuses to run (nothing written, nothing pruned, exit 1) with under 2 GB free in the backup folder.
+- **Not backed up (Train 3a, owner 2026-11-07: "Clerk backups skip it"):** the Plex catalog cache `plexcatalog.db` (+ `-wal`,
+  `-shm`; `plexcatalog.js`, its own SQLite file next to `myapp.db` - `/home/PATV/plexcatalog.db`, staging
+  `/home/PATV-staging/plexcatalog.db`, or `PLEX_CATALOG_DB` when set). It is rebuilt from Plex by its own sync (~161 MB), so
+  the nightly backup never carries it (`test/backup-daily.test.js`) and an off-site copy of the folder should exclude
+  `plexcatalog.db*` too.
 - One log line per run: daily file + size, monthly `created` / `kept` / `replaced 0-byte file`, `pruned=N`, free space.
 - Disk use: about 14 x 52 MB dailies + one ~52 MB file per month.
 - Options: `--db=PATH` / `--db=staging` (= `/home/PATV-staging/myapp.db`, default `--dir=/root/staging-backups`),

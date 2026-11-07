@@ -13,6 +13,9 @@
 //                                                       these after 365 days; it uses -maxdepth 1, so it never sees
 //                                                       daily/.
 // Refuses to start (exit 1) with less than ~2 GB free in <dir>.
+// Train 3a (owner 2026-11-07, "Clerk backups skip it"): ONE database - the Plex catalog cache beside it (plexcatalog.db
+// + -wal/-shm, plexcatalog.js: its own file, ~161 MB, rebuilt from Plex by its sync) is never in these backups
+// (test/backup-daily.test.js); off-site copies of the folder leave it out too (deploy/README.md "Database backups").
 //
 //   node backup-db.js [--db=/home/PATV/myapp.db | --db=staging] [--dir=/home/PATV/backups] [--date=YYYY-MM-DD]
 //   node backup-db.js --name=some_file.db   (one-off: just <dir>/some_file.db.gz - no daily/monthly/prune)

@@ -653,6 +653,8 @@ async function boot({ tick = true } = {}) {
   if (S.booted) return S.booted;
   S.booted = (async () => {
     await ensure();
+    // 1.99?? train3 (owner answer 1): the one-time table notices' windows start at the first boot that has them (casino/notices.js)
+    await require("./notices").stamp(clock()).catch((e) => console.error("[casino] notices:", e && e.message ? e.message : e));
     await loadSettings(true);
     await streamLoad();
     const rows = await getQuery("SELECT state FROM casino_tables WHERE status = 'open'");

@@ -295,6 +295,8 @@ const RULES = {
   "casino_actions.userId": { keep: "the casino's idempotency journal (an answer stored under the caller's key)" },
   // 1.99mj: the site's casino achievement counters (web-only players) follow the account; the same metric adds up
   "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
+  // 1.99?? train3: which one-time table notices the account has seen (casino/notices.js) - follows it; seen by either = seen
+  "casino_notice_seen.userId": M({ key: ["notice"], merge: { at: "MIN" } }),
   "casino_settings.actor": { deny: NAME },
   // 1.99mw/1.99nc: Pepe's achievement counts so far (a base per metric, replaced at his next report) follow the account and add
   // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)

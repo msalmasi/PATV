@@ -75,6 +75,13 @@ Settings (casino admin controls): `hm_sitout_mins=10`, `hm_timebank_secs=30`,
 Preset lists contain 1–8 positive values at most 1000; timers are bounded whole
 numbers. These are controls for the existing Hold'em engine switch, not new flags.
 
+**The rule's one-time notice (Train 3a, owner 2026-11-07):** the timeout rule shipped live, so for its first 7 days
+(casino_settings `notice_from:hm_timeout` = the first boot with it, never moved) a player's first Hold'em buy-in carries
+it once per account (`casino_notice_seen`): "New rule: if your timer and time bank run out you check (or fold if you can't
+check). Two timeouts in a row sit you out. Sitting out for N minutes cashes you out." (N = `hm_sitout_mins`). The
+website's sit answer carries `notice` (the table page's closable box, translated `js.casino.rule_timeout`); a Camfrog
+player gets the reply as a PM from Pepe. `casino/notices.js`, `test/casino-hm-notice.test.js`.
+
 Keyboard: F fold, C check/call, R or Enter confirm raise; arrows step one BB,
 Shift+arrows five BB; 1–5 choose pot presets; Escape clears a pre-move.
 Typing, modifier shortcuts and form controls retain their normal keys.

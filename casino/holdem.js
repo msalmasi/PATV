@@ -21,6 +21,7 @@ const fair = require("./fair");
 const money = require("./money");
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (casino/veil.js)
 const sizing = require("./sizing");
+const notices = require("./notices");     // 1.99?? train3: the timeout rule's one-time notice at a buy-in
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -252,6 +253,11 @@ function install(core) {
     await emit(T, "line", `💺 ${name} buys in for ${fmt(amount)} chips${joining}. Stack: ${fmt(e.chips[actor.uid])}.`);
     if (!e.hand_active && H.canStart(e) && !T.dl.next) await emit(T, "line", "Enough players seated — !holdem deal to start the hand.");
     await save(T);
+    // 1.99?? train3 (owner answer 1): the timeout rule's one-time notice in its first 7 days (casino/notices.js) - Pepe PMs it to
+    // a Camfrog player; the website shows `notice` on the table page (translated)
+    const note = await notices.take("hm_timeout", actor.uid, clock(), S.settings);
+    if (note && actor.via === "room") return R(true, `you bought in for ${fmt(amount)}. ${note.text}`, { pm: true, notice: note });
+    if (note) return R(true, `you bought in for ${fmt(amount)}.`, { quiet: true, notice: note });
     return R(true, `you bought in for ${fmt(amount)}.`, { quiet: true });
   }
 

@@ -8701,6 +8701,7 @@
   "js.casino.bb_n": "{n} BB",
   "js.casino.topped": "Chips added.",
   "js.casino.seated": "You're seated. Good luck!",
+  "js.casino.rule_timeout": {"one":"🆕 New rule: if your timer and time bank run out you check (or fold if you can't check). Two timeouts in a row sit you out. Sitting out for {count} minute cashes you out.","other":"🆕 New rule: if your timer and time bank run out you check (or fold if you can't check). Two timeouts in a row sit you out. Sitting out for {count} minutes cashes you out."},
   "js.casino.no_rake": "No rake",
   "js.casino.board": "Board",
   "js.casino.who_actions": "Actions for {name}",

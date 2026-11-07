@@ -50,6 +50,13 @@
   button.cz-pill { cursor: pointer; }
   .cz-toast { min-height: 22px; margin: 0 0 8px; text-align: center; font-size: var(--ds-fs-sm); color: #cfe8cf; }
   .cz-toast.bad { color: var(--bad); }
+  /* 1.99?? train3: a one-time table notice (casino-ui.js note) - stays until closed */
+  .cz-note { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
+             background: rgba(120, 200, 120, .12); border: 1px solid rgba(120, 200, 120, .35); color: #e6f4e6; font-size: var(--ds-fs-sm); line-height: 1.45; }
+  .cz-note[hidden] { display: none; }
+  .cz-note-txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .cz-note-x { flex: none; min-height: 32px; padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .25);
+               background: transparent; color: inherit; font: inherit; cursor: pointer; }
 
   /* ── buttons ── */
   /* game buttons: the ds .square shape (radius 10) for the dense table UI; every fill passes AA with its ink */

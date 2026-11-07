@@ -34,6 +34,16 @@
     clearTimeout(toastTm);
     if (text) toastTm = setTimeout(() => { el.textContent = ""; }, bad ? 7000 : 4000);
   }
+  // 1.99?? train3 (owner answer 1): a one-time notice from the table (e.g. the Hold'em timeout rule at your first buy-in) -
+  // it stays until closed (a toast would be gone in 4 s)
+  function note(text) {
+    const el = $("cz-note");
+    if (!el || !text) return;
+    el.querySelector(".cz-note-txt").textContent = text;
+    el.hidden = false;
+    const btn = el.querySelector("button");
+    if (btn && !btn.dataset.w) { btn.dataset.w = "1"; btn.addEventListener("click", () => { el.hidden = true; }); }
+  }
   let lastSaid = "";
   function announce(text) {
     const el = $("cz-live");
@@ -764,7 +774,7 @@
     };
   }
 
-  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
+  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, note, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew,
                 // 1.99ajw casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)

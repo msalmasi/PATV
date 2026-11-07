@@ -505,7 +505,7 @@ const DELETE_ROWS = [
   ["user_cosmetics", "user_id", "uid"], ["user_cosmetic_equips", "user_id", "uid"], ["user_sticker_packs", "user_id", "uid"], ["sb_owned", "user_id", "uid"],
   ["voice_owned", "user_id", "uid"], ["user_badges", "userId", "uid"], ["achievement_feed", "userId", "uid"], ["ach_marks", "userId", "uid"],
   ["activity_days", "userId", "uid"],
-  ["casino_ach_counts", "userId", "uid"], ["casino_ach_base", "userId", "uid"], ["user_roles", "userId", "uid"], ["pad_members", "user_id", "uid"],
+  ["casino_ach_counts", "userId", "uid"], ["casino_ach_base", "userId", "uid"], ["casino_notice_seen", "userId", "uid"], ["user_roles", "userId", "uid"], ["pad_members", "user_id", "uid"],
   ["pad_user_flairs", "user_id", "uid"], ["feed_room_members", "user_id", "uid"], ["launchpad_visits", "user_id", "uid"], ["premium_plus_waitlist", "user_id", "uid"],
   ["camfrog_userstats", "login", "login"], ["golive_log", "user_id", "uid"],
   ["help_misses", "user_id", "uid"], ["age_attest", "user_id", "uid"], ["plex_watch_stats", "user_id", "uid"],

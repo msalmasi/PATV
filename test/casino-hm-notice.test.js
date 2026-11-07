@@ -83,7 +83,7 @@ test("a website player's first Hold'em buy-in in the first 7 days carries the no
   assert.equal(r.reply, "you bought in for 2,000.", "the reply itself is unchanged");
   assert.equal(r.quiet, true, "the website keeps its quiet reply (the page shows the notice)");
   assert.deepEqual(r.notice, { id: "hm_timeout", mins: 10, text: TEXT(10) });
-  const again = await A(bob, "sit", ["500"], { table: tid });
+  const again = await A(bob, "sit", ["1000"], { table: tid });
   assert.ok(again.ok);
   assert.equal(again.notice, undefined, "a top-up: not again");
   const t2 = await table(eve);
@@ -101,8 +101,8 @@ test("a Camfrog player gets it as a PM from Pepe - once", async () => {
   assert.equal(r.reply, "you bought in for 2,000. " + TEXT(10));
   assert.equal(r.pm, true, "privately (Pepe PMs a pm reply)");
   assert.ok(!r.quiet, "not quiet - Pepe says it");
-  const again = await A(ann, "sit", ["100"], { table: tid });
-  assert.equal(again.reply, "you bought in for 100.");
+  const again = await A(ann, "sit", ["1000"], { table: tid });
+  assert.equal(again.reply, "you bought in for 1,000.");
   assert.equal(again.quiet, true);
   assert.equal(again.pm, undefined);
 });
