@@ -40,6 +40,7 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
                            "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand"]);
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
+const HANDS_PER_MIN = 20;          // 1.99?? train3 verify: GET /api/casino/me/hands per account a minute
 
 /** tablechat: the request's network for a network ban (netban.reqNet - the trusted proxy's address only; null = unknown) */
 function netOf(req) { try { return require("../netban").reqNet(req); } catch (e) { return null; } }
@@ -112,9 +113,21 @@ async function history(tableId, limit) {
 
 function register(app, { isBotToken, addUser }) {
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
+  // 1.99?? train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
+  // when it opens; a script looping on it was unlimited database work)
+  const handsHits = new Map();
+  const handsOk = (uid, t = Date.now()) => {
+    const a = (handsHits.get(uid) || []).filter((x) => t - x < 60e3);
+    const ok = a.length < HANDS_PER_MIN;
+    if (ok) a.push(t);
+    handsHits.set(uid, a);
+    if (handsHits.size > 20000) handsHits.clear();
+    return ok;
+  };
   app.get("/api/casino/me/hands", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ok:false,error:"Sign in to view your hands."});
+    if (!handsOk(String(req.user.userId))) return res.status(429).json({ok:false,error:"Slow down - try again in a minute.",hands:[]});
     try { res.json({ok:true,hands:await svc.myHands(req.user.userId,req.query.limit)}); }
     catch (e) { console.error("[casino] my hands:",e); res.status(500).json({ok:false,hands:[]}); }
   });
