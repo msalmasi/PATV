@@ -32,6 +32,7 @@ const TITLES = {
   "movie/11": { id: 11, title: "Star Wars", releaseDate: "1977-05-25", posterPath: "/sw.jpg" },
   "movie/12": { id: 12, title: "Finding Nemo", releaseDate: "2003-05-30", posterPath: "/fn.jpg", mediaInfo: { status: 5 } },
   "movie/13": { id: 13, title: "Already Asked", releaseDate: "2020-01-01", mediaInfo: { status: 3 } },
+  "movie/14": { id: 14, title: "Star Wars Adult Parody", releaseDate: "2012-01-01", adult: true },
   "tv/1399": { id: 1399, name: "Game of Thrones", firstAirDate: "2011-04-17", posterPath: "/got.jpg",
                seasons: [{ seasonNumber: 0, episodeCount: 5 }, { seasonNumber: 1, episodeCount: 10 }, { seasonNumber: 2, episodeCount: 10 }],
                mediaInfo: { status: 4, seasons: [{ seasonNumber: 1, status: 5 }] } },
@@ -44,7 +45,7 @@ const server = http.createServer((req, res) => {
     if (req.headers["x-api-key"] !== "test-overseerr-key") return send(403, { message: "bad key" });
     const u = new URL(req.url, "http://x");
     const p = u.pathname.replace(/^\/api\/v1/, "");
-    if (p === "/search") return send(200, { results: [{ mediaType: "movie", ...TITLES["movie/11"] }, { mediaType: "tv", ...TITLES["tv/1399"] }, { mediaType: "person", id: 5, name: "Someone" }] });
+    if (p === "/search") return send(200, { results: [{ mediaType: "movie", ...TITLES["movie/11"] }, { mediaType: "tv", ...TITLES["tv/1399"] }, { mediaType: "person", id: 5, name: "Someone" }, { mediaType: "movie", ...TITLES["movie/14"] }] });
     let m;
     if ((m = /^\/(movie|tv)\/(\d+)$/.exec(p))) { const t = TITLES[`${m[1]}/${m[2]}`]; return t ? send(200, t) : send(404, {}); }
     if (p === "/user") return send(200, { results: [{ id: 7, email: "Verified@Example.com", username: "vee" }, { id: 8, email: "unverified@example.com" }] });
@@ -94,8 +95,9 @@ test("off until the flag is on (keys alone aren't enough)", async () => {
   await assert.rejects(R.search(u, "star"), /switched off/);
   await conf.set({ requests_enabled: true, requests_per_day: 20 }, "test");
   const r = await R.search(u, "star");
-  assert.deepEqual(r.map((x) => [x.type, x.title, x.year]), [["movie", "Star Wars", 1977], ["tv", "Game of Thrones", 2011]], "people are left out");
+  assert.deepEqual(r.map((x) => [x.type, x.title, x.year]), [["movie", "Star Wars", 1977], ["tv", "Game of Thrones", 2011]], "people (and adult titles) are left out");
   assert.equal(r[1].availability, "partial");
+  await assert.rejects(R.details("movie", 14), /isn't known/, "1.99?? train3 verify: an adult title has no details either");
 });
 
 test("free request: made on behalf of the service user, status pending, shows in 'mine'", async () => {

@@ -128,8 +128,11 @@ function itemMap(v, shape) {
 const CLEAN = {
   clerk_enabled: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
   clerk_requests: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
-  clerk_block_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase()).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
-  clerk_warn_ratings: (v) => String(v == null ? "" : v).split(",").map((x) => x.trim()).filter((x) => /^[A-Za-z0-9 +\-]{1,30}$/.test(x)).slice(0, 30).join(","),
+  // 1.99?? train3 verify: Plex writes many certifications with a country prefix ("gb/R18", "au/R18+", "de/18"); the catalog keeps
+  // the rating without it (plexcatalog.crow), so a typed prefix is taken off here too - it was dropped (the "/" didn't match), and
+  // "R18" never matched a "gb/R18" title. Duplicates go.
+  clerk_block_ratings: (v) => [...new Set(String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)))].slice(0, 30).join(","),
+  clerk_warn_ratings: (v) => [...new Set(String(v == null ? "" : v).split(",").map((x) => x.trim().replace(/^[A-Za-z]{2}\/\s*/, "")).filter((x) => /^[A-Za-z0-9 +\-]{1,30}$/.test(x)))].slice(0, 30).join(","),
   catalog_sync_min: (v) => num(v, 10, 1440, 60),
   clerk_lists: (v) => v === true || v === "true" || v === "1",
   clerk_embed: (v) => v === true || v === "true" || v === "1",
@@ -195,4 +198,4 @@ function errLine(e) {
   return String((e && (e.publicMessage || e.message)) || e || "error").replace(/https?:\/\/\S+/g, "<url>").replace(/[A-Za-z0-9]{24,}/g, "…").slice(0, 200);
 }
 
-module.exports = { init, get, set, keys, on, libraryAllowed, errLine, DEFAULTS, DEFAULT_INVITE_ITEMS, DEFAULT_CREDIT_ITEMS, _S: S };
+module.exports = { init, get, set, keys, on, libraryAllowed, errLine, DEFAULTS, DEFAULT_INVITE_ITEMS, DEFAULT_CREDIT_ITEMS, _S: S, _CLEAN: CLEAN };

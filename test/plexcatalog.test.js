@@ -39,6 +39,43 @@ test("catalog searches retain Unicode titles in FTS and LIKE fallback", async (t
   }
 });
 
+// 1.99?? train3 verify (review): Plex's country-prefixed certifications are blocked like the bare ones
+test("a country-prefixed adult rating is blocked like the bare one; the settings cleaner takes the prefix off", async (t) => {
+  const { crow, ratings, normRating } = require("../plexcatalog");
+  for (const [raw, want] of [["gb/R18", "R18"], ["au/R18+", "R18+"], ["nz/ R18", "R18"], ["R", "R"], ["TV-MA", "TV-MA"], ["", ""], ["PG-13", "PG-13"]])
+    assert.equal(normRating(raw), want, raw);
+  assert.equal(crow(row(9, "Prefixed", { content_rating: "nz/R18" })).content_rating, "R18");
+  assert.ok(ratings("X, gb/R18").has("R18"));
+  // the settings cleaner, in a child (mediaconf opens the site database in its working directory)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plexcatalog-clean-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const out = require("child_process").execFileSync(process.execPath, ["-e", `
+    const C = require(${JSON.stringify(path.join(__dirname, "..", "mediaconf"))})._CLEAN;
+    process.stdout.write(JSON.stringify([C.clerk_block_ratings("X, gb/R18 ,au/R18+,R18"), C.clerk_warn_ratings("NR, us/Not Rated")]));
+    process.exit(0);`], { cwd: dir, encoding: "utf8" });
+  assert.deepEqual(JSON.parse(out), ["X,R18,R18+", "NR,Not Rated"]);
+  const h = await setup(t);
+  h.api.rows.push(row(30, "Prefixed Marker", { content_rating: "gb/R18" }), row(31, "Prefixed Plus", { content_rating: "au/R18+" }));
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  assert.deepEqual(await h.catalog.getByKeys(["30", "31"]), []);
+  assert.equal(JSON.stringify(await h.catalog.rows()).includes("Prefixed"), false);
+});
+// 1.99?? train3 verify (review): dark means dark - with every clerk switch off the timer reads nothing
+test("the catalog timer reads nothing while every clerk switch is off, and syncs once one is on", async (t) => {
+  const off = await setup(t);
+  assert.equal(off.catalog.inUse(off.cfg), false);
+  off.catalog.start();
+  await new Promise((r) => setTimeout(r, 80));
+  assert.deepEqual(off.calls, [], "no mediactl read with everything off");
+  assert.equal(fs.existsSync(path.join(off.dir, "catalog.db")), false, "no catalog file either");
+  for (const [k, v] of [["clerk_enabled", "staff"], ["clerk_requests", "everyone"], ["clerk_embed", true], ["clerk_lists", true]])
+    assert.equal(off.catalog.inUse({ ...off.cfg, [k]: v }), true, k);
+  const on = await setup(t); on.cfg.clerk_enabled = "staff";
+  on.catalog.start();
+  for (let i = 0; i < 150 && !on.calls.includes("/sections"); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.ok(on.calls.includes("/sections"), "the clerk on: the timer syncs");
+});
+
 async function setup(t, overrides = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plexcatalog-test-"));
   let clock = AT;

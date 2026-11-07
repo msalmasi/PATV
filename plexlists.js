@@ -335,7 +335,11 @@ function createLists(options = {}) {
       try { res.json(await fn(req)); } catch (_) { res.status(503).json({ ok: false, code: "lists_unavailable" }); }
     }];
     app.get("/api/media/admin/lists", ...route(() => list()));
-    app.get("/api/media/admin/lists/search", ...route((r) => search((r.query || {}).q)));
+    // 1.99?? train3 verify: a search spends MDBList's daily budget, and the same-site check is POST-only - a cross-site GET from
+    // an admin's browser (an <img> on any page) could burn it. A custom header can't be sent cross-site without a preflight.
+    const fetchOnly = (req, res, next) => ((typeof req.get === "function" ? req.get("X-Requested-With") : (req.headers || {})["x-requested-with"]) === "fetch"
+      ? next() : res.status(403).json({ ok: false, error: "cross-site request refused" }));
+    app.get("/api/media/admin/lists/search", fetchOnly, ...route((r) => search((r.query || {}).q)));
     app.post("/api/media/admin/lists/add", ...route((r) => add((r.body || {}).input)));
     app.post("/api/media/admin/lists/refresh", ...route((r) => refresh((r.body || {}).id)));
     app.post("/api/media/admin/lists/remove", ...route((r) => remove((r.body || {}).id)));

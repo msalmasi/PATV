@@ -158,7 +158,9 @@ async function search(user, q, page = 1) {
   // Overseerr wants reserved characters double-encoded in `query`
   const r = await api("GET", `/search?query=${encodeURIComponent(q).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase())}&page=${Math.max(1, Math.min(10, Number(page) || 1))}&language=en`);
   if (r.status !== 200 || !r.json) throw new Refuse(502, "The request server didn't answer the search.");
-  return (r.json.results || []).filter((x) => x.mediaType === "movie" || x.mediaType === "tv").slice(0, 20).map(shape);
+  // 1.99?? train3 verify: never a title TMDB marks adult (the clerk's chat offers and the /plex hub both search here; requests
+  // are off on 18+ pads, and the Seerr / TMDB side leaving adult titles out isn't something this site controls)
+  return (r.json.results || []).filter((x) => (x.mediaType === "movie" || x.mediaType === "tv") && x.adult !== true).slice(0, 20).map(shape);
 }
 async function details(type, tmdb) {
   if (!["movie", "tv"].includes(type) || !/^\d{1,9}$/.test(String(tmdb))) throw new Refuse(400, "Bad title.");
@@ -166,6 +168,7 @@ async function details(type, tmdb) {
   if (r.status === 404) throw new Refuse(404, "That title isn't known.");
   if (r.status !== 200 || !r.json) throw new Refuse(502, "The request server didn't answer.");
   const x = r.json;
+  if (x.adult === true) throw new Refuse(404, "That title isn't known.");    // 1.99?? train3 verify: as search() - never an adult title
   const mi = x.mediaInfo || {};
   const seasonState = new Map((mi.seasons || []).map((s) => [s.seasonNumber, s.status]));
   return {

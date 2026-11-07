@@ -189,5 +189,5 @@
     <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
   </section>
 </main>
-<script src="/public/js/media-admin.js?v=6" defer></script>
+<script src="/public/js/media-admin.js?v=7" defer></script>
 <%- include('partials/admin-close') %>

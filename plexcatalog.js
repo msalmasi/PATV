@@ -15,7 +15,11 @@ const fold = (v) => {
 const number = (v, fallback = 0) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Number(v) : fallback;
 const strings = (v, n = 20, max = 80) => Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === "string").map((x) => text(x, max)).filter(Boolean))].slice(0, n) : [];
 const parsed = (v, d = []) => { try { return JSON.parse(v); } catch (_) { return d; } };
-const ratings = (v) => new Set(String(v == null ? DEFAULT_BLOCK : v).split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));
+const IDLE_CHECK_MIN = 5;      // 1.99?? train3 verify: minutes between looks while every clerk switch is off (start())
+const ratings = (v) => new Set(String(v == null ? DEFAULT_BLOCK : v).split(",").map((s) => s.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
+/** 1.99?? train3 verify: a certification without Plex's country prefix ("gb/R18" -> "R18", "au/R18+" -> "R18+"); every rating
+ *  check (the block list in SQL and in code, the warn list) compares exact names, so a prefixed adult rating slipped through. */
+const normRating = (v) => { const t = text(v, 40); const m = /^[A-Za-z]{2}\/\s*(\S.*)$/.exec(t); return m ? m[1].trim() : t; };
 const coded = (code, message = code) => Object.assign(new Error(message), { code });
 const quiet = (ms) => { const d = new Date(ms), m = d.getUTCHours() * 60 + d.getUTCMinutes(); return m >= 220 && m < 260; };
 const run = (db, sql, args = []) => new Promise((resolve, reject) => db.run(sql, args, function (e) { e ? reject(e) : resolve({ changes: this.changes, lastID: this.lastID }); }));
@@ -35,7 +39,7 @@ function crow(input) {
   const o = { key: String(r.key), type, title: text(r.title), year: number(r.year, null), aired: /^\d{4}-\d{2}-\d{2}$/.test(r.aired || "") ? r.aired : null,
     added: Math.max(0, Math.floor(number(r.added))), updated: Math.max(0, Math.floor(number(r.updated))), duration: Math.max(0, number(r.duration)),
     summary: text(r.summary, type === "episode" ? 500 : 1000), tagline: text(r.tagline, 500), genres: strings(r.genres),
-    content_rating: text(r.content_rating, 40), rating: Math.max(0, Math.min(10, number(r.rating, 0))) || null,
+    content_rating: normRating(r.content_rating), rating: Math.max(0, Math.min(10, number(r.rating, 0))) || null,
     audience_rating: Math.max(0, Math.min(10, number(r.audience_rating, 0))) || null, studio: text(r.studio),
     directors: strings(r.directors, 3), cast: strings(r.cast, 6), countries: strings(r.countries, 3),
     imdb: /^tt\d{1,12}$/.test(r.imdb || "") ? r.imdb : null, tmdb: KEY.test(String(r.tmdb || "")) ? String(r.tmdb) : null,
@@ -492,12 +496,18 @@ function createCatalog(options = {}) {
       rows: data.map((r) => crow(r)), shelves: lists.map((s) => ({ key: s.key, name: s.name, kind: s.kind, source: "kometa", ranked: false,
         members: members.filter((m) => m.shelf === s.key && allowedKeys.has(m.key)).map((m) => m.key) })).filter((s) => s.members.length) };
   }
+  // 1.99?? train3 verify: the timer syncs only while something uses the catalog (the clerk, its requests, its vectors or its
+  // lists - any of them on); with every switch off it reads nothing (no mediactl /sections, no Tautulli, no catalog file) and
+  // looks again every IDLE_CHECK_MIN, so a switch turned on is picked up within minutes. "Sync now" on /admin/media still
+  // pre-warms it by hand with everything off.
+  const inUse = (cfg) => ["clerk_enabled", "clerk_requests"].some((k) => cfg[k] && cfg[k] !== "off") || cfg.clerk_embed === true || cfg.clerk_lists === true;
   function start() {
     if (timer || closed || options.readOnly) return;
     const tick = async () => {
-      try { await require("./mediaconf").init(); } catch (_) { /* injected test/tool settings */ }
-      if (!closed && !quiet(now())) await sync();
-      if (!closed) { timer = setTimeout(tick, Math.max(10, Math.min(1440, number(settings().catalog_sync_min, 60))) * 60000); if (timer.unref) timer.unref(); }
+      if (!options.settings) { try { await require("./mediaconf").init(); } catch (_) { /* a standalone tool */ } }
+      const on = inUse(settings() || {});
+      if (!closed && on && !quiet(now())) await sync();
+      if (!closed) { timer = setTimeout(tick, (on ? Math.max(10, Math.min(1440, number(settings().catalog_sync_min, 60))) : IDLE_CHECK_MIN) * 60000); if (timer.unref) timer.unref(); }
     };
     timer = setTimeout(tick, 0);
     if (timer.unref) timer.unref();
@@ -546,7 +556,7 @@ function createCatalog(options = {}) {
     listsCache().register(app, { addUser, noTimers });
     if (!noTimers) start();
   }
-  return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, importSnapshot, exportSnapshot, start, close, register, file };
+  return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, importSnapshot, exportSnapshot, start, close, register, file, inUse };
 }
 
 let singleton;
@@ -557,5 +567,5 @@ const current = () => {
   }
   return singleton;
 };
-module.exports = { createCatalog, crow, fold, ratings, quiet, SEARCH_BUDGET_MS, SEARCH_QUEUE };
+module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, SEARCH_BUDGET_MS, SEARCH_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);

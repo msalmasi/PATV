@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   function api(method, url, body) {
-    var o = { method: method, credentials: "same-origin", headers: { Accept: "application/json" } };
+    var o = { method: method, credentials: "same-origin", headers: { Accept: "application/json", "X-Requested-With": "fetch" } };   // 1.99?? train3 verify (lists search)
     if (body) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
     return fetch(url, o).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: "HTTP " + r.status }; }).then(function (j) {

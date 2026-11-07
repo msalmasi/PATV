@@ -13,7 +13,7 @@ const sameName = (left, right) => { const value = norm(left); return !!value && 
 const clean = (s, n = 100) => typeof s === "string" ? s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
 const integer = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
 const names = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => clean(x)).filter(Boolean).slice(0, 3) : [];
-const ratingNames = (s) => new Set(String(s == null ? "" : s).split(",").map((x) => x.trim().toUpperCase()).filter(Boolean));
+const ratingNames = (s) => new Set(String(s == null ? "" : s).split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
 const number = (v) => v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
 const rating = (r) => number(r.rating) != null ? number(r.rating) : number(r.audience_rating);
 const duration = (r) => Math.max(0, Number(r.duration) || 0);
@@ -162,7 +162,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     return { title: row.title, year: row.year, kind: row.kind, tmdb: row.tmdb, availability: row.availability };
   }
   const deepLimits = () => deepMax || require("./plexpad").DEEP_MAX;
-  const effectiveRating = (r, parents) => r.content_rating || (r.type === "episode" && parents.get(String(r.show_key)) || {}).content_rating || "";
+  const effectiveRating = (r, parents) => String(r.content_rating || (r.type === "episode" && parents.get(String(r.show_key)) || {}).content_rating || "").replace(/^[A-Za-z]{2}\/\s*/, "");   // 1.99?? train3 verify: never a country prefix ("gb/R18")
   const allowed = (r, sections, s, parents = new Map()) => !!r && KEY.test(String(r.key)) && sections.has(String(r.section))
     && ["movie", "show", "episode"].includes(r.type) && !ratingNames(s.clerk_block_ratings == null ? "X,XXX,AO,R18,R18+" : s.clerk_block_ratings).has(String(effectiveRating(r, parents)).toUpperCase())
     && (r.type !== "episode" || (parents.has(String(r.show_key)) && parents.get(String(r.show_key)).type === "show"
