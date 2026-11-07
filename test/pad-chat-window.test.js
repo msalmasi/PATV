@@ -447,3 +447,27 @@ test("tablechat: a viewer banned from the pad gets the embed's 'not open to you 
   const back = await getH("/p/" + MSLUG + "/chat?embed=1", U.other, FRAME);
   assert.match(back.text, /embed: true,/, "the ban lifted: straight back in (nothing remembered)");
 });
+
+// tablechat review (access F1): an Approved pad's embed for someone outside it answered padaccess's whole locked PAGE (navbar and all) inside
+// the table's panel, and never told the table (no 'gate'), so 💬 kept reopening it. The embed now answers its own "not open to you here" card
+// there too; the plain window and the pad page keep the locked page (the address alone, as before).
+test("tablechat review: an Approved pad's embed for an outsider is the embed's card (the table's panel closes and forgets it); the window keeps the locked page; members get the chat", async () => {
+  const FRAME = { "sec-fetch-dest": "iframe", "sec-fetch-site": "same-origin" };
+  await runQuery("INSERT INTO pad_access (room_id, level, updated, updated_by) VALUES (?, 'approved', ?, 'test')", [MEMBERS, Date.now()]);
+  PA._reset(); await PA.init();
+  try {
+    const no = await getH("/p/" + MSLUG + "/chat?embed=1", U.viewer, FRAME);
+    assert.equal(no.status, 200, no.text.slice(0, 200));
+    assert.match(no.text, /parent\.postMessage\(\{t:'patv-chat:closed',why:'gate'\},location\.origin\)/, "the card that closes the table's panel");
+    assert.doesNotMatch(no.text, /class="navbar"|rmFeed|LINE-one|Members\.Pad/, "no page, no chat, no title");
+    assert.equal(no.headers.get("x-frame-options"), "SAMEORIGIN"); assert.equal(no.headers.get("cache-control"), "private, no-store");
+    const top = await getH("/p/" + MSLUG + "/chat?embed=1", U.viewer, { "sec-fetch-dest": "document", "sec-fetch-site": "none" });
+    assert.equal(top.status, 403, "a top-level ?embed=1 is the plain window: the locked page");
+    assert.doesNotMatch(top.text, /patv-chat:closed/);
+    const plain = await getH("/p/" + MSLUG + "/chat", U.viewer, {});
+    assert.equal(plain.status, 403, "the window: the locked page, as before"); assert.doesNotMatch(plain.text, /patv-chat:closed/);
+    const staff = await getH("/p/" + MSLUG + "/chat?embed=1", U.staff, FRAME);
+    assert.equal(staff.status, 200); assert.match(staff.text, /embed: true,/, "site staff are inside every Approved pad: the chat");
+  } finally { await runQuery("DELETE FROM pad_access WHERE room_id = ?", [MEMBERS]); PA._reset(); await PA.init(); }
+  assert.match((await getH("/p/" + MSLUG + "/chat?embed=1", U.viewer, FRAME)).text, /embed: true,/, "a Members pad again: back in");
+});

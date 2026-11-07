@@ -180,7 +180,7 @@ test("unlisted pads: left out of the list (also as a 'recent' from the page) unl
   const own = await listOf(U.owner);
   assert.equal(own.pads.find((p) => p.room === P.unl.id).role, "pad", "its owner's list has it");
   const byAddr = await one(U.viewer, SLUG.unl);
-  assert.deepEqual(byAddr, { room: P.unl.id, slug: SLUG.unl, name: P.unl.id, role: "address", count: 8 }, "typed in full: reached, as p/<address> is");
+  assert.deepEqual(byAddr, { room: P.unl.id, slug: SLUG.unl, name: P.unl.id, role: "pad", count: 8 }, "typed in full: reached, as p/<address> is - its role never says it is unlisted (review)");
   assert.equal(await one(U.viewer, "p/" + SLUG.unl).then((p) => p && p.room), P.unl.id, "a p/ prefix is the same address");
   assert.equal(await one(U.viewer, "https://publicaccess.tv/p/" + SLUG.unl + "?x=1").then((p) => p && p.room), P.unl.id, "and a pasted link");
   assert.equal(await one(U.viewer, SLUG.unl.slice(0, -1)), null, "a partial address doesn't");
