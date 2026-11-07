@@ -9,6 +9,13 @@
 //   * a clip that played keeps it
 //   * the flood guard: 12 uploads per account per 10 min, played or not - never given back; a 429 from the play limit costs none
 //   * the clip line shows Pepe's own words for a coded mic miss (no_mic / mic_later / audio_failed) - "no cooldown - try again"
+// review (pttclip, 2026-11-07):
+//   * an open clip job is timed from Pepe's CLAIM (he gives up 7 min after it reached him, ahead of the site), not the upload - a
+//     clip that waited behind others is never swept (given back) while Pepe may still play it; one he said is playing gets 2 more
+//     minutes; when the site does give up it fails the job "unconfirmed" and says it didn't count (the line no longer vanishes)
+//   * a clip Pepe never takes (not pulling / not in the room) fails "nopepe" after 75 s - given back, said so
+//   * a recording that is the upload's own fault (Pepe's code bad_clip: unreadable / too short / too long) keeps its charge
+//   * a translated page shows a translated line per code (en.json js.pad.ptt.s_*), Pepe's own words on English pages
 //   node --test test/pttclip.test.js
 "use strict";
 const test = require("node:test");
@@ -103,19 +110,73 @@ test("an older Pepe: its first 'queued' answer is final, then the miss - still g
   assert.equal(plays(), 0);
 });
 
-test("a clip Pepe never answered for is given back when its job is swept", async () => {
+test("an open clip is timed from Pepe's claim, not the upload: past CLIP_TTL it fails 'unconfirmed', given back, still shown", async () => {
   reset();
   const id = await sent();
-  relay._jobs.get(id).at = Date.now() - 9 * 60 * 1000;                       // still 'queued' past CLIP_TTL
+  const j = relay._jobs.get(id);
+  j.at = Date.now() - 9 * 60 * 1000;                                         // uploaded 9 min ago...
+  j.claimed = Date.now() - 60 * 1000;                                        // ...Pepe took it a minute ago (it sat behind others)
   relay._sweep(Date.now());
-  assert.equal(relay._jobs.has(id), false);
-  assert.equal(plays(), 0, "the swept clip's hit came back");
-  // ...but a played clip that is swept later keeps its hit
+  assert.equal(j.state, "queued", "still open - Pepe may still play it (he gives up 7 min after it reached him)");
+  assert.equal(plays(), 1, "...and still charged");
+  j.claimed = Date.now() - 8.5 * 60 * 1000;                                  // Pepe never answered past CLIP_TTL from his claim
+  relay._sweep(Date.now());
+  assert.equal(j.state, "done");
+  assert.equal(j.result.ok, false);
+  assert.equal(j.result.code, "unconfirmed");
+  assert.match(j.result.msg, /didn.t count toward your limit/);
+  assert.equal(plays(), 0, "given back");
+  assert.equal(mine(id).code, "unconfirmed", "the clip line says what happened (it used to vanish)");
+  relay._sweep(Date.now() + 4 * 60 * 1000);
+  assert.equal(relay._jobs.has(id), false, "swept JOB_TTL after it finished");
+  assert.equal(plays(), 0);
+  // ...and a played clip that is swept later keeps its hit
   const id2 = await sent();
   relay.applyAcks([{ id: id2, ok: true, msg: "played" }]);
   relay._sweep(Date.now() + 4 * 60 * 1000);
   assert.equal(relay._jobs.has(id2), false);
   assert.equal(plays(), 1);
+});
+
+test("a clip Pepe said is playing gets 2 more minutes to say how it went", async () => {
+  reset();
+  const id = await sent();
+  const j = relay._jobs.get(id);
+  relay.applyAcks([{ id, ok: true, msg: "playing on the mic now", state: "playing" }]);
+  j.claimed = Date.now() - 8.5 * 60 * 1000;
+  relay._sweep(Date.now());
+  assert.equal(j.state, "playing", "playing now: not swept at CLIP_TTL");
+  assert.equal(plays(), 1);
+  relay._sweep(Date.now() + 2.5 * 60 * 1000);
+  assert.equal(j.state, "done");
+  assert.equal(j.result.code, "unconfirmed");
+  assert.equal(plays(), 0);
+});
+
+test("a clip Pepe never takes (not pulling, not in the room) fails 'nopepe' after 75 s - given back, never handed out after", async () => {
+  reset();
+  const { d } = await upload();
+  const j = relay._jobs.get(d.id);
+  relay._sweep(Date.now() + 30 * 1000);
+  assert.equal(j.state, "pending", "30 s: still waiting for Pepe");
+  relay._sweep(Date.now() + 80 * 1000);
+  assert.equal(j.state, "done");
+  assert.equal(j.result.code, "nopepe");
+  assert.match(j.result.msg, /didn.t count toward your limit/);
+  assert.equal(plays(), 0, "given back");
+  assert.equal(ups(), 1, "the upload still counts for the flood guard");
+  assert.deepEqual(relay.takeJobs(new Set([R.id])).filter((x) => x.id === d.id), [], "never handed to Pepe after");
+  assert.equal((await upload()).status, 200, "the next clip goes at once");
+});
+
+test("a recording that is the upload's own fault (Pepe's bad_clip) keeps its charge", async () => {
+  reset();
+  const id = await sent();
+  relay.applyAcks([{ id, ok: false, msg: "too short", code: "bad_clip" }]);
+  assert.equal(plays(), 1, "kept");
+  const r = await upload();
+  assert.equal(r.status, 429);
+  assert.match(r.d.error, /one every 30s/);
 });
 
 test("the flood guard: 12 uploads per 10 min, played or not, never given back; a play-limit 429 costs none", async () => {
@@ -146,16 +207,18 @@ test("mineFor carries a clip's code (the clip line reads it)", async () => {
 });
 
 // ── the clip line in the browser (public/js/room-bridge.js) ──
-function loadClient() {
+function loadClient(o = {}) {
   const ctx = {
     window: {}, console,
     navigator: { userAgent: "Mozilla/5.0 (Windows NT 10.0)", platform: "Win32", maxTouchPoints: 0, mediaDevices: {} },
-    document: { createElement: () => ({ classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } }, setAttribute() {}, appendChild() {}, addEventListener() {} }), hidden: false, addEventListener() {} },
+    document: { createElement: () => ({ classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } }, setAttribute() {}, appendChild() {}, addEventListener() {} }), hidden: false, addEventListener() {},
+                documentElement: o.lang ? { lang: o.lang } : undefined },
     localStorage: { getItem: () => null, setItem: () => {} },
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval: () => {}, requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
     fetch: () => Promise.resolve({ json: () => ({ ok: true }) }), Blob: class {},
     Date, JSON, Math, Number, String, Object, Array, Promise, isFinite, Uint8Array,
   };
+  if (o.t) ctx.__t = o.t;                 // a translated page's catalog lookup
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(repo, "public/js/room-bridge.js"), "utf8"), ctx);
   return ctx.window.PATVRoom;
@@ -175,4 +238,26 @@ test("the clip line: Pepe's own words for a coded mic miss; the old wording keep
   assert.equal(S({ state: "done", ok: false, msg: "couldn't get the mic - the room's mic stayed busy. Try again" }), "couldn’t get the mic, try again");
   // any other refusal: "not sent — why"
   assert.equal(S({ state: "done", ok: false, code: "refused", msg: "web mic isn't on in this room" }), "not sent — web mic isn't on in this room");
+});
+
+test("the clip line on a translated page: a translated line per code (en.json), Pepe's own words only on English pages", () => {
+  const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales/en.json"), "utf8"));
+  const keys = { no_mic: "js.pad.ptt.s_no_mic_free", mic_later: "js.pad.ptt.s_mic_later", audio_failed: "js.pad.ptt.s_audio_failed",
+                 nopepe: "js.pad.ptt.s_nopepe", unconfirmed: "js.pad.ptt.s_unconfirmed" };
+  const words = "Pepe couldn't get the mic (someone else took the mic) - no cooldown - try again";
+  // a German page with no catalog loaded: the English of each key (= en.json, i18n.test checks the defaults)
+  const S = loadClient({ lang: "de" }).clipStatus;
+  for (const [code, key] of Object.entries(keys)) {
+    assert.equal(typeof EN[key], "string", `${key} is in en.json`);
+    assert.equal(S({ state: "done", ok: false, code, msg: words }), EN[key], code);
+  }
+  // ...and with its catalog: the translated line
+  const T = loadClient({ lang: "de", t: (k, d) => "DE:" + k }).clipStatus;
+  for (const [code, key] of Object.entries(keys)) assert.equal(T({ state: "done", ok: false, code, msg: words }), "DE:" + key, code);
+  // an English page: Pepe's / the site's own words (the reason, the break's length)
+  const E = loadClient({ lang: "en" }).clipStatus;
+  for (const code of Object.keys(keys)) assert.equal(E({ state: "done", ok: false, code, msg: words }), words, code);
+  assert.equal(E({ state: "done", ok: false, code: "no_mic", msg: "" }), EN[keys.no_mic], "no words: the line");
+  // bad_clip / a refusal: "not sent — why", as before
+  assert.equal(E({ state: "done", ok: false, code: "bad_clip", msg: "too short" }), "not sent — too short");
 });

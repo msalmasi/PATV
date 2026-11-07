@@ -100,10 +100,14 @@ test("a waiting clip outlives the 3-minute job TTL; a finished one goes 3 minute
   assert.ok(relay._jobs.has(id), "the result vanished a minute after it played");
   relay._sweep(Date.now() + 4 * 60 * 1000);
   assert.equal(relay._jobs.has(id), false);
-  // an open clip still has a ceiling
+  // an open clip still has a ceiling - pttclip review: it is failed first (said on the clip line, its limit given back), then
+  // swept like any finished job
   const id2 = await postClip();
   relay._jobs.get(id2).at = Date.now() - 9 * 60 * 1000;
   relay._sweep(Date.now());
+  assert.equal(relay._jobs.get(id2).state, "done");
+  assert.equal(relay._jobs.get(id2).result.ok, false);
+  relay._sweep(Date.now() + 4 * 60 * 1000);
   assert.equal(relay._jobs.has(id2), false);
 });
 
