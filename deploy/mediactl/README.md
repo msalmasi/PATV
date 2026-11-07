@@ -32,6 +32,10 @@ site play a movie or an episode from the Plex library on a pad's stage.
 `MEDIACTL_SECTIONS` is the comma-separated allow-list of reviewed Plex section IDs.
 `MEDIACTL_SECTIONS_ADULT` is a comma-separated deny-list; a section in both lists is
 always denied. With either list set, an item without `librarySectionID` is denied.
+Plex 1.43 lists a show's episodes, a section's catalog and collections and a collection's
+members with `librarySectionID` only on the response's container, not on each row: such a
+row takes the container's ID (a row's own ID always wins; no ID on either is denied).
+Search hits are judged by their own ID only, since one search spans sections.
 The same check applies to search hits, item metadata and nested episodes, posters,
 stream starts and resumes, and the catalog routes. A remembered key is not an
 exception: item reads check the section again. File-root and RTMP guards still apply.
@@ -54,9 +58,10 @@ Catalog rows contain descriptive metadata and public metadata IDs, never media f
 paths or Plex tokens. Summaries are capped at 1,000 characters (500 for episodes);
 directors, cast and countries are capped at 3, 6 and 3. Catalog-related Plex reads
 share a service-wide limit of four requests per second, including concurrent clients.
-`since=<unix-seconds>` uses Plex's `updatedAt` filter; the mocked Plex verifies that
-filter is sent. The main agent must check delta filtering on the installed Plex
-version. The site's nightly full read remains necessary to find deletions and to
+`since=<unix-seconds>` uses Plex's `updatedAt>>=` filter (sent as `updatedAt%3E%3E=`;
+a key of `updatedAt>=` would have its own `=` encoded, which Plex ignores). The mocked
+Plex verifies the filter as Plex reads it; it was checked on Plex 1.43.4 (2026-11-07).
+The site's nightly full read remains necessary to find deletions and to
 recover if that Plex version does not support the filter.
 
 The main agent fills the policy on the host, after owner approval:

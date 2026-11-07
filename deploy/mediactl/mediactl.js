@@ -133,6 +133,14 @@ const sectionLists = (cfg) => ({ allowed: cfg.sections || [], adult: cfg.section
 const hasSectionPolicy = (cfg) => { const p = sectionLists(cfg); return p.allowed.length > 0 || p.adult.length > 0; };
 // The single policy used by metadata reads and remembered streams. Empty lists preserve 1.6.0's routes;
 // catalog routes additionally require an explicit allow-list. Missing section metadata fails closed with either list set.
+// Plex 1.43 puts librarySectionID ONCE on the MediaContainer of a listing that belongs to one section - a show's / season's
+// /allLeaves, /library/sections/<id>/all and /collections, a collection's /children (and /library/metadata/<key>) - and its
+// rows carry none of their own (checked against the real server, 2026-11-07: 0 of 381). Such a row takes the container's
+// id; a row's own id always wins; no id on either stays missing (fails closed). Never for /hubs/search: one search spans
+// sections, so its container says nothing about a row.
+const inheritSection = (m, mc) => (m && m.librarySectionID == null && mc && mc.librarySectionID != null
+  ? { ...m, librarySectionID: mc.librarySectionID } : m);
+const rowsOf = (mc, limit) => (Array.isArray(mc.Metadata) ? mc.Metadata.slice(0, limit) : []).map((m) => inheritSection(m, mc));
 function sectionOk(cfg, id) {
   const p = sectionLists(cfg);
   if (!p.allowed.length && !p.adult.length) return true;
@@ -357,10 +365,12 @@ function makePlex(cfg, req = request, now = Date.now) {
       const q = new URLSearchParams({ type: String(type), "X-Plex-Container-Start": String(start), "X-Plex-Container-Size": String(size), includeGuids: "1" });
       if (since != null && since !== "") {
         if (!/^\d{1,12}$/.test(String(since))) throw fail(400, "bad since");
-        q.set("updatedAt>=", String(since));
+        // Plex reads the operator from the key: "updatedAt>>" + "=" is updatedAt>>= (on the wire updatedAt%3E%3E=<since>).
+        // A key of "updatedAt>=" has its own "=" encoded (updatedAt%3E%3D=), a filter Plex ignores - the whole section came back.
+        q.set("updatedAt>>", String(since));
       }
       const mc = await catalogGet(`/library/sections/${section}/all?${q}`);
-      const raw = Array.isArray(mc.Metadata) ? mc.Metadata.slice(0, size) : [];
+      const raw = rowsOf(mc, size);
       const wantedType = { 1: "movie", 2: "show", 4: "episode" }[String(type)];
       const rows = raw.filter((m) => sameSection(m, section) && KEY_RE.test(String(m.ratingKey)) && m.type === wantedType).map(catalogRow);
       return { rows, ...pageInfo(mc, raw, start, size) };
@@ -371,7 +381,7 @@ function makePlex(cfg, req = request, now = Date.now) {
       let start = 0;
       do {
         const mc = await catalogGet(`/library/sections/${section}/collections?X-Plex-Container-Start=${start}&X-Plex-Container-Size=100`);
-        const raw = Array.isArray(mc.Metadata) ? mc.Metadata.slice(0, 100) : [];
+        const raw = rowsOf(mc, 100);
         for (const m of raw) {
           const key = String(m.ratingKey == null ? "" : m.ratingKey);
           if (!KEY_RE.test(key) || seen.has(key) || (m.librarySectionID != null && !sameSection(m, section))) continue;
@@ -380,7 +390,7 @@ function makePlex(cfg, req = request, now = Date.now) {
           let at = 0;
           do {
             const children = await catalogGet(`/library/collections/${key}/children?X-Plex-Container-Start=${at}&X-Plex-Container-Size=500`);
-            const items = Array.isArray(children.Metadata) ? children.Metadata.slice(0, 500) : [];
+            const items = rowsOf(children, 500);
             for (const child of items) {
               const k = String(child.ratingKey == null ? "" : child.ratingKey);
               if (sameSection(child, section) && KEY_RE.test(k) && !memberKeys.has(k) && members.length < 2000) { members.push(k); memberKeys.add(k); }
@@ -397,6 +407,7 @@ function makePlex(cfg, req = request, now = Date.now) {
     async search(q, limit = 20) {
       const mc = await get(`/hubs/search?query=${encodeURIComponent(q)}&limit=${clampInt(limit, 1, 50, 20)}&includeCollections=0&includeExternalMedia=0`);
       const out = [];
+      // a search spans sections: each row is judged by its own librarySectionID only (never the container's)
       for (const h of mc.Hub || []) {
         if (!["movie", "show", "episode"].includes(h.type)) continue;
         for (const m of h.Metadata || []) if (["movie", "show", "episode"].includes(m.type) && sectionOk(cfg, m.librarySectionID)) out.push(brief(m));
@@ -405,12 +416,12 @@ function makePlex(cfg, req = request, now = Date.now) {
     },
     async item(key) {
       const mc = await get(`/library/metadata/${key}`);
-      const m = (mc.Metadata || [])[0];
+      const m = inheritSection((mc.Metadata || [])[0], mc);
       if (!m || !sectionOk(cfg, m.librarySectionID)) throw unavailable();
       const out = { ...brief(m), summary: String(m.summary || "").slice(0, 600) };
       if (m.type === "show" || m.type === "season") {
         const eps = await get(`/library/metadata/${key}/allLeaves`);
-        out.episodes = (eps.Metadata || []).filter((m) => sectionOk(cfg, m.librarySectionID)).map(brief);
+        out.episodes = rowsOf(eps, Infinity).filter((e) => sectionOk(cfg, e.librarySectionID)).map(brief);
         return out;
       }
       const media = (m.Media || [])[0] || {};
@@ -438,7 +449,7 @@ function makePlex(cfg, req = request, now = Date.now) {
     },
     async poster(key) {
       const mc = await get(`/library/metadata/${key}`);
-      const m = (mc.Metadata || [])[0];
+      const m = inheritSection((mc.Metadata || [])[0], mc);
       if (m && !sectionOk(cfg, m.librarySectionID)) throw unavailable();
       const thumb = m && (m.thumb || m.parentThumb || m.grandparentThumb);
       if (!thumb) { const e = new Error("No poster"); e.status = 404; throw e; }
