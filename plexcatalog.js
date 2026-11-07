@@ -5,6 +5,11 @@ const path = require("path");
 const sqlite3 = require("sqlite3");
 
 const DAY = 86400000, SEARCH_BUDGET_MS = 400, SEARCH_QUEUE = 4;
+// 1.99?? train3 review: the shelves listing's two aggregates (every visible row's genres, each shelf's visible members) scan the
+// whole library - a few hundred ms alone at 10k films + 200k episodes, past the 400 ms search budget under load. They get a
+// budget of their own (internal only: a caller's read() is still capped at the search budget), and shelves() keeps its
+// answer until the catalog changes (any write) or the block list does.
+const SHELVES_BUDGET_MS = 2000;
 const DEFAULT_BLOCK = "X,XXX,AO,R18,R18+";
 const KEY = /^\d{1,12}$/;
 const text = (v, max = 200) => typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -60,7 +65,7 @@ function createCatalog(options = {}) {
   const sleep = options.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const log = options.log || console;
   let writer = null, initPromise = null, searchDb = null, tail = Promise.resolve(), fts = false, syncing = null, timer = null, closed = false;
-  let running = false;
+  let running = false, generation = 0, shelvesKept = null;
   const queue = [];
 
   async function connect(mode) {
@@ -134,13 +139,16 @@ function createCatalog(options = {}) {
     const job = tail.catch(() => {}).then(async () => {
       await init();
       await run(writer, "BEGIN IMMEDIATE");
-      try { const out = await fn({ run: (s, p) => run(writer, s, p), all: (s, p) => all(writer, s, p) }); await run(writer, "COMMIT"); return out; }
+      try { const out = await fn({ run: (s, p) => run(writer, s, p), all: (s, p) => all(writer, s, p) }); await run(writer, "COMMIT"); generation++; return out; }
       catch (e) { await run(writer, "ROLLBACK").catch(() => {}); throw e; }
     });
     tail = job.catch(() => {});
     return job;
   }
   function read(sql, params = [], { budgetMs = SEARCH_BUDGET_MS } = {}) {
+    return queued(sql, params, Math.max(1, Math.min(SEARCH_BUDGET_MS, number(budgetMs, SEARCH_BUDGET_MS))));
+  }
+  function queued(sql, params, budgetMs) {
     if (closed) return Promise.reject(coded("unavailable"));
     if (running && queue.length >= SEARCH_QUEUE) return Promise.reject(coded("busy"));
     return new Promise((resolve, reject) => { queue.push({ sql, params, budgetMs, resolve, reject }); pump(); });
@@ -154,12 +162,14 @@ function createCatalog(options = {}) {
       if (!searchDb) searchDb = await connect(sqlite3.OPEN_READONLY);
       let expired = false, retry = null;
       const interrupt = () => { try { searchDb.interrupt(); } catch (_) {} };
+      const budget = Math.max(1, Math.min(SHELVES_BUDGET_MS, number(job.budgetMs, SEARCH_BUDGET_MS)));
+      if (options.onRead) try { options.onRead({ sql: job.sql, budgetMs: budget }); } catch (_) { /* a test's observer */ }
       const t = setTimeout(() => {
         expired = true; interrupt();
         // sqlite3 schedules work on its pool. An interrupt just before the statement starts is a no-op;
         // repeat until its callback settles so the deadline also covers that scheduling race.
         retry = setInterval(interrupt, 5);
-      }, Math.max(1, Math.min(SEARCH_BUDGET_MS, number(job.budgetMs, SEARCH_BUDGET_MS))));
+      }, budget);
       try { const result = await all(searchDb, job.sql, job.params); if (expired) throw coded("too_broad"); return result; }
       catch (e) { throw expired || /interrupt/i.test(e.message || "") ? coded("too_broad") : e; }
       finally { clearTimeout(t); clearInterval(retry); }
@@ -180,9 +190,9 @@ function createCatalog(options = {}) {
         error: s.error || null, fts, syncing: !!syncing, v: s.v || 0 };
     } catch (_) { return { ready: false, at: null, full_at: null, version: null, sections: [], count: 0, error: "catalog unavailable", fts: false, v: 0 }; }
   }
-  function condition({ kind, show_key, keys } = {}, args = []) {
+  function condition({ kind, show_key, keys } = {}, args = [], blockSet = ratings(settings().clerk_block_ratings)) {
     const where = ["s.policy='allowed'"];
-    const block = [...ratings(settings().clerk_block_ratings)];
+    const block = [...blockSet];
     const unblocked = (alias) => {
       if (!block.length) return "1";
       args.push(...block);
@@ -246,14 +256,22 @@ function createCatalog(options = {}) {
     args.push(limit);
     return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where + " AND (" + like + ") LIMIT ?", args, filters));
   }
+  // A caller gets its own copy (a kept answer is never handed out to be changed).
+  const shelvesCopy = (v) => ({ ...v, genres: [...v.genres], shelves: v.shelves.map((r) => ({ ...r })), catalog: { ...v.catalog } });
   async function shelves() {
     const s = await status();
     if (!s.ready) return { ok: true, genres: [], shelves: [], v: s.v, catalog: { ready: false, at: s.at } };
-    const args = [], where = condition({}, args);
-    const genres = await read("SELECT DISTINCT g.genre FROM plex_catalog_genres g JOIN plex_catalog c ON c.key=g.key JOIN plex_sections s ON s.id=c.section WHERE " + where + " ORDER BY g.genre LIMIT 80", args);
-    const sh = await read("SELECT sh.name,sh.kind,sh.source,sh.ranked,COUNT(*) AS count FROM plex_shelves sh JOIN plex_shelf_members m ON m.shelf=sh.key JOIN plex_catalog c ON c.key=m.key JOIN plex_sections s ON s.id=c.section WHERE " + where + " GROUP BY sh.key ORDER BY sh.name LIMIT 150", args);
-    return { ok: true, genres: genres.map((r) => r.genre), shelves: sh.map((r) => ({ ...r, ranked: !!r.ranked })),
+    // one block list for the key AND the query - a change during the reads can never be kept under the other list's key
+    const block = ratings(settings().clerk_block_ratings);
+    const key = JSON.stringify([generation, [...block].sort(), s.at, s.full_at, s.v, s.count]);
+    if (shelvesKept && shelvesKept.key === key) return shelvesCopy(shelvesKept.value);
+    const args = [], where = condition({}, args, block);
+    const genres = await queued("SELECT DISTINCT g.genre FROM plex_catalog_genres g JOIN plex_catalog c ON c.key=g.key JOIN plex_sections s ON s.id=c.section WHERE " + where + " ORDER BY g.genre LIMIT 80", args, SHELVES_BUDGET_MS);
+    const sh = await queued("SELECT sh.name,sh.kind,sh.source,sh.ranked,COUNT(*) AS count FROM plex_shelves sh JOIN plex_shelf_members m ON m.shelf=sh.key JOIN plex_catalog c ON c.key=m.key JOIN plex_sections s ON s.id=c.section WHERE " + where + " GROUP BY sh.key ORDER BY sh.name LIMIT 150", args, SHELVES_BUDGET_MS);
+    const value = { ok: true, genres: genres.map((r) => r.genre), shelves: sh.map((r) => ({ ...r, ranked: !!r.ranked })),
       v: s.v, catalog: { ready: true, at: s.at } };
+    shelvesKept = { key, value };
+    return shelvesCopy(value);
   }
   async function revoke(tx, keys) {
     const clean = [...new Set(keys.map(String).filter((k) => KEY.test(k)))];
@@ -567,5 +585,5 @@ const current = () => {
   }
   return singleton;
 };
-module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, SEARCH_BUDGET_MS, SEARCH_QUEUE };
+module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, SEARCH_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
