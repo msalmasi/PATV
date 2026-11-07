@@ -305,6 +305,9 @@ function init() {
       await addColumn("stage_slots", "cam_login", "TEXT");            // 1.99zc: 🎬 a cam slot's Camfrog login (source 'cam')
       await addColumn("stage_slots", "cam_veil", "TEXT");             // 1.99aid (privacy controls V-1): {sess, alias, hood, id} - a frog-name cam
       await addColumn("stage_slots", "upnext", "TEXT");               // upnext: 📼 the title starting next - {title, kind, year, show, season, episode, key, poster, at}
+      // upnext3 (1.99ali): how far an end reached - 'pad' (every slot of the pad / the site cut at once: admin cut all, Pepe's !stage cut, a pad's
+      // "cut all") or 'ban' (cut + ban) - the 📼 picks waiting behind a slot that was cut start next unless the stage was cleared on purpose
+      await addColumn("stage_slots", "end_scope", "TEXT");
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -1086,23 +1089,57 @@ async function libraryUpNext(slotId, info) {
  * 'waiting' until the encoder publishes - inside the same limits (one library stream per pad, the site's max_concurrent).
  * -> the raw key, or throws Refuse.
  */
-async function libraryActivate(slotId, { title, minutes } = {}) {
+// upnext3 (1.99ali, owner 2026-11-07: "Wait for that to finish."): opts.replace = the pad's open 📼 slot this booking waited for - it ends
+// (opts.reason) and the booked slot opens in ONE transaction, as libraryOpen's swap: its feature moves over (unless the booked slot is featured
+// already), opts.upnext is its "Coming up next" marker from the same moment, the old slot's effects run once it committed.
+async function libraryActivate(slotId, { title, minutes, replace = null, reason = null, upnext = null, actor = null } = {}) {
   await init();
   const s = await getSlot(slotId);
   if (!s || s.source !== "library" || s.status !== "scheduled" || s.settled) throw new Refuse(409, "That booking isn't waiting to start.");
   const key = newKey();
   const m = Math.max(1, Math.min(24 * 60, Math.floor(Number(minutes)) || s.max_minutes));
+  const t = now();
+  const roomId = s.room_id || rooms.HOUSE_ROOM;
+  const swapId = replace ? String(replace).slice(0, 64) : null;
+  const swapWhy = /^library_[a-z_]{1,30}$/.test(String(reason || "")) ? String(reason) : "library_replaced";
+  const marker = swapId ? upnextClean(upnext, t) : null;
+  const who = (actor && String(actor).slice(0, 60)) || "system";
+  let replaced = null, carried = null;
   await tx(async () => {
-    const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [s.room_id]);
+    let old = null;
+    if (swapId) {
+      old = (await getQuery("SELECT * FROM stage_slots WHERE id = ?", [swapId]))[0];
+      if (!old || old.settled || old.source !== "library" || (old.room_id || rooms.HOUSE_ROOM) !== roomId || !["waiting", "active"].includes(old.status)) {
+        throw new Refuse(409, "What was playing has just ended.", "replace_gone");
+      }
+    }
+    const open = (await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [s.room_id])).filter((x) => !old || x.id !== old.id);
     if (open.some((x) => x.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library.");
     const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
-    if (all[0].n >= CONFIG.max_concurrent) throw new Refuse(409, "The site has the most streams open it allows right now.");
-    const r = await runQuery("UPDATE stage_slots SET status = 'waiting', key_hash = ?, max_minutes = ?, title = COALESCE(?, title), start_at = ? WHERE id = ? AND status = 'scheduled'",
-                             [sha(key), m, cleanTitle(title), now(), s.id]);
+    if (all[0].n - (old ? 1 : 0) >= CONFIG.max_concurrent) throw new Refuse(409, "The site has the most streams open it allows right now.");
+    const r = await runQuery("UPDATE stage_slots SET status = 'waiting', key_hash = ?, max_minutes = ?, title = COALESCE(?, title), start_at = ?, upnext = COALESCE(?, upnext) WHERE id = ? AND status = 'scheduled'",
+                             [sha(key), m, cleanTitle(title), t, marker ? JSON.stringify(marker) : null, s.id]);
     if (!r.changes) throw new Refuse(409, "That booking isn't waiting to start.");
+    if (old) {
+      // (as libraryOpen: one guarded statement moves the feature - never while another slot of the pad is featured; a booked slot that is
+      // featured already keeps its own)
+      if (!s.featured && old.featured && old.feature_by && (old.feature_by !== "auto" || marker)) {
+        const f = await runQuery(`UPDATE stage_slots SET featured = CASE WHEN id = ? THEN 1 ELSE 0 END, feature_by = CASE WHEN id = ? THEN ? ELSE feature_by END
+                                  WHERE id IN (?, ?) AND settled = 0 AND NOT EXISTS (SELECT 1 FROM stage_slots o WHERE o.room_id = ? AND o.id NOT IN (?, ?)
+                                  AND o.featured = 1 AND o.settled = 0 AND o.status IN ${OPEN})`,
+                                 [s.id, s.id, old.feature_by, s.id, old.id, roomId, s.id, old.id]);
+        if (f && f.changes) carried = old.feature_by;
+      }
+      replaced = await endSettle(old.id, swapWhy, who);
+      if (!replaced) throw new Refuse(409, "What was playing has just ended.", "replace_gone");
+      replaced.prev = { featured: !!old.featured, feature_by: old.feature_by || null, auto_off: !!old.auto_off };
+    }
   });
   pubCache.clear();
-  await event(s.id, "library", s.username, `📼 booked slot started (${m} min max)`, s.room_id);
+  if (marker) stageBump(roomId);
+  if (replaced) await endEffects(replaced, swapWhy, who, { bumped: !!marker });
+  await event(s.id, "library", s.username, `📼 booked slot started (${m} min max)` + (replaced ? `, after ${replaced.res.id}` : ""), s.room_id);
+  if (carried) await event(s.id, "featured", "system", `carried over from ${replaced.res.id} (${swapWhy}, ${carried})`, s.room_id);
   return libKey(s.stream, key);                                         // 1.99abc
 }
 /** 1.99lr: a fresh one-time key for an open library slot (the site restarted and forgot the raw key; the next title of a
@@ -1118,17 +1155,18 @@ async function libraryRekey(slotId) {
 }
 
 // ── settle: the ONLY place money comes back out of a slot ──
-async function end(slotId, reason, actor) {
+async function end(slotId, reason, actor, { scope = null } = {}) {
   await init();
-  const done = await endSettle(slotId, reason, actor);
+  const done = await endSettle(slotId, reason, actor, scope);
   await endEffects(done, reason, actor);
   return settledView(done && done.res);
 }
 // 1.99ajr golive: end()'s database half (settle, refund, the room's fee) - book's replace runs it INSIDE its own transaction, so a
 // new video that can't be booked leaves the old one playing - and its effects (relays, caches, the event, auto-feature), run
 // only once that transaction committed. -> {res, fee, prev: {featured, feature_by}} | null
-async function endSettle(slotId, reason, actor) {
+async function endSettle(slotId, reason, actor, scope = null) {
   let fee = null, prev = null;
+  const sc = scope === "pad" || scope === "ban" ? scope : null;          // upnext3: end_scope
   const res = await tx(async () => {
     const s = (await getQuery("SELECT * FROM stage_slots WHERE id = ?", [String(slotId || "")]))[0];
     if (!s || s.settled) return null;
@@ -1136,8 +1174,8 @@ async function endSettle(slotId, reason, actor) {
     const charged = chargeFor(s, s.live_ms);
     const refund = s.held - charged;
     const r = await runQuery(`UPDATE stage_slots SET status = 'ended', settled = 1, charged = ?, refunded = ?, ended = ?,
-                              end_reason = ?, ended_by = ?, key_hash = NULL, publishing = 0, featured = 0, upnext = NULL WHERE id = ? AND settled = 0`,
-                             [charged, refund, now(), String(reason || "ended"), actor || null, s.id]);
+                              end_reason = ?, ended_by = ?, key_hash = NULL, publishing = 0, featured = 0, upnext = NULL, end_scope = ? WHERE id = ? AND settled = 0`,
+                             [charged, refund, now(), String(reason || "ended"), actor || null, sc, s.id]);
     if (!r.changes) return null;
     if (refund > 0) {   // 1.99ga: logged only when it really moved (a merged-away booker's refund follows the merge)
       const r2 = await require("./ledger").post(s.userId, refund, `stage slot refund (${billedMinutes(s.live_ms)} of ${s.max_minutes} min used)`,
@@ -1456,7 +1494,13 @@ async function tickFuture(t) {
     // 1.99lw: a booked 📼 Plex slot is started by mediaqueue.watchBookings (it gets its key then); one that nobody
     // started (the media watcher down) ends after the start window like any slot that never went live
     if (s.source === "library") {
-      if (t > start + (C.start_window_min + 5) * 60000) await end(s.id, "no_room", "system");
+      if (t > start + (C.start_window_min + 5) * 60000) {
+        // upnext3 (1.99ali): one that waits for the library title on its pad (media_bookings 'waiting') is ended by its own watcher (its cap:
+        // the pad's 📼 limit after its time) - this backstop only past that cap too
+        const w = await libWaitOf(s.id);
+        const cap = w ? ((await limitsFor(s.room_id || rooms.HOUSE_ROOM).catch(() => ({ library_max: 360 }))).library_max || 360) : 0;
+        if (!w || t > start + (cap + C.start_window_min + 5) * 60000) await end(s.id, "no_room", "system");
+      }
       continue;
     }
     // reminder ~15 min before
@@ -2241,6 +2285,7 @@ async function roomStage(roomId, viewer) {
   const open = await openSlots(roomId);
   const live = await publicSlots(roomId);
   const fut = (await futureSlots(roomId)).filter((s) => s.status === "scheduled");
+  const futWaits = await libWaits(fut.slice(0, 6).filter((s) => s.source === "library").map((s) => s.id));   // upnext3: lib_wait
   const q = await queueFor(roomId);
   const mine = viewer && viewer.userId ? q.findIndex((x) => x.userId === viewer.userId) : -1;
   let featured = featuredPick(open, t);
@@ -2260,11 +2305,24 @@ async function roomStage(roomId, viewer) {
                            ...(upNextView(featured, t) ? { next: upNextFor(upNextView(featured, t), viewer) } : {}) } : null,   // (dock3 1.99akf: + went - the page's first featured marker; upnext: + next)
     coming: await comingOf(roomId),                                        // upnext2 (D): the page's first render - the lower-third / the slate
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
-      featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
+      featured: !!s.featured, title: s.title || null, mode: s.mode || "stream", ...(futWaits.has(s.id) ? { lib_wait: futWaits.get(s.id) } : {}) })),   // (upnext3: lib_wait)
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
     price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0, boost,
   };
 }
+// upnext3 (1.99ali): booked 📼 slots waiting for the library title on their pad (mediaqueue.watchBookings: media_bookings 'waiting') ->
+// Map slot id -> {title: what they wait for}. Never throws (no 📼 bookings yet: none).
+async function libWaits(ids) {
+  const out = new Map();
+  const list = (ids || []).filter(Boolean).map(String);
+  if (!list.length) return out;
+  try {
+    const rows = await getQuery(`SELECT slot_id, wait_for FROM media_bookings WHERE state = 'waiting' AND slot_id IN (${list.map(() => "?").join(",")})`, list);
+    for (const r of rows) out.set(String(r.slot_id), { title: r.wait_for ? String(r.wait_for).slice(0, 120) : null });
+  } catch (e) { /* no media_bookings table yet */ }
+  return out;
+}
+async function libWaitOf(id) { return (await libWaits([id])).get(String(id)) || null; }
 /** A room's schedule for its page (1.99bx): what's on now, the booked / scheduled slots ahead, the
  *  queue. Only public facts: names as shown on the stage, titles, featured / ordinary, stream / embed.
  *  Requests still waiting for the owner's OK are shown to the room's managers (manage = true) and, as
@@ -2286,9 +2344,10 @@ async function roomSchedule(roomId, viewer, manage) {
   const live = open.map((s) => ({ ...row(s), live: isLive(s, t), since: s.went_live || null, start_at: startOf(s),
                                   ends_by: (s.went_live || startOf(s)) + s.max_minutes * 60000 }))
     .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (b.live ? 1 : 0) - (a.live ? 1 : 0) || (a.since || a.start_at) - (b.since || b.start_at));
-  const upcoming = fut.filter((s) => s.status === "scheduled" || (s.status === "requested" && (manage || (me && s.userId === me))))
-    .slice(0, 40)
-    .map((s) => ({ ...row(s), start_at: startOf(s), status: s.status === "requested" ? "requested" : "scheduled" }));
+  const upFut = fut.filter((s) => s.status === "scheduled" || (s.status === "requested" && (manage || (me && s.userId === me)))).slice(0, 40);
+  const waits = await libWaits(upFut.filter((s) => s.source === "library").map((s) => s.id));      // upnext3: a 📼 booking waiting for the title on
+  const upcoming = upFut.map((s) => ({ ...row(s), start_at: startOf(s), status: s.status === "requested" ? "requested" : "scheduled",
+                                       ...(waits.has(s.id) ? { lib_wait: waits.get(s.id) } : {}) }));
   const queue = q.map((e, i) => ({ position: i + 1, display: e.displayname || e.username, username: e.username || null, minutes: e.minutes, featured: !!e.feature,
                                    title: e.title || null, mode: e.mode === "embed" ? "embed" : "stream", mine: !!me && e.userId === me }));
   // 1.99dt: the booker's profile link (one users lookup for the whole schedule; archived / unknown -> no link).
@@ -2340,7 +2399,9 @@ async function mine(userId) {
     const pos = await getQuery("SELECT COUNT(*) AS n FROM stage_queue WHERE room_id = ? AND status = 'waiting' AND created <= ?", [e.room_id, e.created]);
     queue.push({ id: e.id, room_id: e.room_id, minutes: e.minutes, feature: !!e.feature, mode: e.mode, position: pos[0].n, created: e.created });
   }
-  return { slots: rows.map((s) => view(s)), last: view(last), queue };
+  // upnext3 (1.99ali): a 📼 booking of mine that waits for the title on its pad says so (lib_wait)
+  const waits = await libWaits(rows.filter((s) => s.source === "library" && s.status === "scheduled").map((s) => s.id));
+  return { slots: rows.map((s) => (waits.has(s.id) ? { ...view(s), lib_wait: waits.get(s.id) } : view(s))), last: view(last), queue };
 }
 
 // ── bans ──
@@ -2596,7 +2657,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
       const b = req.body || {};
       // rankrule: "cut + ban" is checked before the cut (a refused ban cuts nothing); a cut alone is the pad's own programming
       if (b.ban && s.source !== "cam") await require("./staffrank").assert(req.user, s.userId);
-      const r = await end(s.id, "cut", actor(req));
+      const r = await end(s.id, "cut", actor(req), { scope: b.ban && s.source !== "cam" ? "ban" : null });   // (upnext3: a cut + ban clears the 📼 line)
       if (b.ban && s.source !== "cam") await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req), { me: req.user });   // 1.99zc: a cam slot's username is who put it up
       if (r && s.source !== "cam") rooms.notify(s.userId, { kind: "stage", title: "Your stage slot was cut", body: r.refund ? `${r.refund.toLocaleString("en-US")} PAT unused was refunded.` : "",
                                       link: "/stage", ref: "stage-cut:" + s.id, pm: false }).catch(() => {});
@@ -2698,7 +2759,9 @@ function register(app, { addUser, isBotToken, noTimers }) {
       const banSlot = b.ban && ids.length === 1 ? await getSlot(ids[0]) : null;
       if (banSlot) await require("./staffrank").assert(req.user, banSlot.userId);
       const out = [];
-      for (const id of ids) { const r = await end(id, "cut", actor(req)); if (r) out.push(r); }
+      // upnext3: a cut of the whole pad / site (no id) or a cut + ban clears the stage - the 📼 picks waiting behind it don't start (mediaqueue.afterEnded)
+      const scope = banSlot ? "ban" : b.id ? null : "pad";
+      for (const id of ids) { const r = await end(id, "cut", actor(req), { scope }); if (r) out.push(r); }
       if (banSlot) await ban(banSlot.username, b.reason || "cut from the stage", actor(req), { me: req.user });
       res.json({ ok: true, cut: out.length });
     } catch (e) { fail(res, e); }
@@ -2725,7 +2788,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       let n = 0;
       const room = b.room ? String(b.room) : null;
-      for (const s of await openSlots(room || undefined)) if (await end(s.id, "cut", "pepe:" + String(b.by || "bot").slice(0, 40))) n++;
+      for (const s of await openSlots(room || undefined)) if (await end(s.id, "cut", "pepe:" + String(b.by || "bot").slice(0, 40), { scope: "pad" })) n++;   // (upnext3: clears the stage)
       res.json({ ok: true, cut: n });
     } catch (e) { fail(res, e); }
   });
