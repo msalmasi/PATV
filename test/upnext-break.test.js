@@ -564,14 +564,16 @@ test("E: behind a single title (no queue) a member adds a title - their own queu
   assert.equal(onEncoder().ratingKey, encoder.ratingKey);
   const w = await afterRow();
   assert.deepEqual([w.user_id, w.behind, w.slot_id, w.per_hour], [payer.userId, a.slot.id, null, 1000]);
-  assert.deepEqual((await L.mine(payer, ROOM)).on_pad.after, { count: 1, mine: true });
+  assert.deepEqual((await L.mine(payer, ROOM)).on_pad.after, { count: 1, mine: true, place: 1, line: 1 });
   const pl = await L.player(VIEWER, ROOM);
   assert.deepEqual([pl.after.count, pl.after.next[0].title], [1, "Night of the Living Dead"]);
   await S.stageBump(ROOM);
   assert.equal((await S.comingOf(ROOM, VIEWER)).next.title, "Night of the Living Dead", "the lower-third's UP NEXT");
-  // the starter of the title on now may add behind their own title too (their slot isn't "another slot") - it grows nobody else's
+  // upnext3 (1.99ali, item 5): someone else lines up THEIR OWN queue after the payer's - second in line, billed to them; it grows nobody else's
   const other = await mkUser("pleb", 100000);
-  await assert.rejects(Q.after(other, { room: ROOM, key: "502", estimate: 2000 }), (e) => e.status === 403 && e.extra.code === "not_starter" && e.extra.by === payer.username);
+  const o = await Q.after(other, { room: ROOM, key: "502", estimate: 2000 });
+  assert.deepEqual([o.ok, o.place, o.line, o.items], [true, 2, 2, 1]);
+  assert.equal((await afterRow()).user_id, other.userId, "a row of their own");
   // its owner grows it: what it ADDS is confirmed
   await assert.rejects(Q.after(payer, { room: ROOM, key: "502" }), (e) => e.extra.code === "estimate" && e.extra.estimate === 1000, "2 h + 1.3 h = 4 started hours: +1000");
   const g = await Q.after(payer, { room: ROOM, key: "502", estimate: 1000 });
@@ -607,30 +609,41 @@ test("E: the title on now ends by itself -> the waiting queue takes the stage ov
   assert.equal(await bal(payer), 98000, "the first started hours as it starts");
 });
 
-test("E: ⏹ / ▶ Play this instead of the title on now = what the titles waited for is gone: they end (a notice; nothing charged)", async () => {
+test("E (upnext3, item 7 - \"Start them instead.\"): ⏹ of the title on now starts what's lined up after it (the swap: the slot carries over); ▶ Play this instead keeps them waiting behind the new title", async () => {
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
-  await L.playFor(admin, { room: ROOM, key: "500" });
+  const a = await L.playFor(admin, { room: ROOM, key: "500" });
   const payer = await mkUser("pleb", 100000);
   await Q.after(payer, { room: ROOM, key: "501" });
   assert.ok(await afterRow());
-  await L.stop(admin, ROOM);
-  assert.equal(await afterRow(), null);
-  const ended = (await getQuery("SELECT end_reason, notice FROM media_queues WHERE user_id = ? ORDER BY id DESC LIMIT 1", [payer.userId]))[0];
-  assert.deepEqual([ended.notice, /was stopped/.test(ended.end_reason)], ["after_cancelled", true]);
-  assert.match(JSON.stringify(await inbox(payer)), /didn't start/);
+  const r = await L.stop(admin, ROOM);
+  assert.equal(r.next_started, true);
+  assert.equal(await afterRow(), null, "used up");
+  const q = (await getQuery("SELECT * FROM media_queues WHERE user_id = ? AND state = 'active'", [payer.userId]))[0];
+  assert.ok(q, "the payer's own queue is on");
+  assert.equal(onEncoder().ratingKey, "501");
+  const sa = await S.getSlot(a.slot.id);
+  assert.deepEqual([sa.status, sa.end_reason], ["ended", "library_stopped"]);
+  assert.equal((await play(a.play_id)).end_reason, "stopped by " + admin.username);
+  assert.equal((await inbox(payer)).length, 0, "no \"didn't start\" notice");
   assert.equal(await bal(payer), 100000);
+  await clear();
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   await L.playFor(admin, { room: ROOM, key: "500" });
   await Q.after(payer, { room: ROOM, key: "501" });
-  await L.playFor(admin, { room: ROOM, key: "502", replace: true });
-  assert.equal(await afterRow(), null, "replaced: it ends too");
+  const b = await L.playFor(admin, { room: ROOM, key: "502", replace: true });
+  const w = await afterRow();
+  assert.ok(w && w.user_id === payer.userId, "replaced: still waiting");
+  assert.equal(w.behind, b.slot.id, "behind the new title");
 });
 
-test("E: not behind a running queue (its starter grows it), nothing on = ▶ Play; the pad's rules are ▶ Play's (banned, another slot of your own)", async () => {
+test("E: behind someone else's running queue a viewer lines up their own (upnext3, item 5) - its starter grows it instead (queue_on); nothing on = ▶ Play; the pad's rules are ▶ Play's (banned, another slot of your own)", async () => {
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   const u = await mkUser();
   await assert.rejects(Q.after(u, { room: ROOM, key: "501" }), (e) => e.status === 409 && e.extra.code === "nothing_on");
   await Q.startFor(admin, { room: ROOM, key: "911", scope: "season" });
-  await assert.rejects(Q.after(u, { room: ROOM, key: "501" }), (e) => e.status === 409 && e.extra.code === "queue_on");
+  const lu = await Q.after(u, { room: ROOM, key: "501" });
+  assert.deepEqual([lu.ok, lu.behind_queue, lu.place], [true, true, 1]);
+  await assert.rejects(Q.after(admin, { room: ROOM, key: "501" }), (e) => e.status === 409 && e.extra.code === "queue_on", "its starter adds to it");
   await clear();
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   await L.playFor(admin, { room: ROOM, key: "500" });

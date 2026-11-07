@@ -148,52 +148,82 @@ const activeQ = async () => (await getQuery("SELECT * FROM media_queues WHERE ro
 const lastQ = async (u) => (await getQuery("SELECT * FROM media_queues WHERE user_id = ? ORDER BY id DESC LIMIT 1", [u.userId]))[0] || null;
 const inbox = async (u) => getQuery("SELECT title, body FROM inbox WHERE user_id = ? ORDER BY rowid", [u.userId]).catch(() => []);
 
-test("S1 (safety F1): a Cut during a single play's break, then the break's own TIMER - the titles added behind it are cancelled; the next watch starts nothing on the pad that was Cut", async () => {
+// upnext3 (1.99ali, owner 2026-11-07 item 7: "Start them instead."): what S1 pinned is reversed for a Cut of ONE slot and a failed / lost start - the
+// picks waiting behind it are other people's and start next; a cut of the whole pad / site, a cut + ban, a ban (the stage cleared on purpose) still cancel them
+test("S1 (upnext3): a Cut of a single play in its break, then the break's own TIMER - what's lined up behind it starts next (its own break, the pad's stage); a cut of the whole pad clears it", async () => {
   const t0 = T;
   const a = await L.playFor(admin, { room: ROOM, key: "500" });                // in its 8 s break
   const adder = await mkUser("pleb", 0);
   await Q.after(adder, { room: ROOM, key: "501" });                          // free (price 0) - waits behind the title in its break
   assert.ok(await afterRow());
-  await S.end(a.slot.id, "cut", owner.username);                             // the pad's owner Cuts it
+  await S.end(a.slot.id, "cut", owner.username);                             // the pad's owner Cuts that one slot
   T = t0 + 8000;
   await L.breakDue(ROOM);                                                    // the break's timer path (not watchOne)
+  assert.equal(await afterRow(), null, "used up");
+  const q = await activeQ();
+  assert.ok(q && q.user_id === adder.userId, "the adder's queue takes the stage");
+  assert.equal((await featured()).id, q.slot_id, "the pad's featured stage: its card");
+  assert.equal((await inbox(adder)).length, 0);
+  await clear();
+  const t1 = T;
+  const b = await L.playFor(admin, { room: ROOM, key: "500" });
+  await Q.after(adder, { room: ROOM, key: "501" });
+  await S.end(b.slot.id, "cut", owner.username, { scope: "pad" });           // every slot of the pad (admin cut all / Pepe's !stage cut / "cut all")
+  T = t1 + 8000;
+  await L.breakDue(ROOM);
   assert.equal(await session(), null, "the cut play is closed");
-  assert.equal(await afterRow(), null, "what they waited for is gone");
+  assert.equal(await afterRow(), null);
   assert.equal((await lastQ(adder)).notice, "after_cancelled");
+  assert.match(JSON.stringify(await inbox(adder)), /stage cleared/);
   await L.watch();
   assert.equal(await activeQ(), null, "nothing takes the pad's stage");
   assert.equal(running().length, 0);
   assert.equal(await featured(), null);
 });
 
-test("S1: the break's start fails (media-control can't open it) - the titles behind it are cancelled with it, nothing takes the stage", async () => {
+test("S1 (upnext3): the break's start fails (media-control can't open it) - what's lined up behind it takes the stage over (the swap: the feature carries), its play ends 'didn't start'", async () => {
   const t0 = T;
-  await L.playFor(admin, { room: ROOM, key: "500" });
+  const a = await L.playFor(admin, { room: ROOM, key: "500" });
   const adder = await mkUser("pleb", 0);
   await Q.after(adder, { room: ROOM, key: "501" });
   plexFail.add("500");
   T = t0 + 8000;
   await L.breakDue(ROOM);
-  assert.equal(await session(), null, "didn't start");
-  assert.equal(await afterRow(), null);
-  await L.watch();
-  assert.equal(await activeQ(), null);
-  assert.equal(running().length, 0);
+  const q = await activeQ();
+  assert.ok(q && q.user_id === adder.userId);
+  const sa = await S.getSlot(a.slot.id);
+  assert.deepEqual([sa.status, sa.end_reason], ["ended", "library_failed"]);
+  assert.equal((await play(a.play_id)).end_reason, "didn't start");
+  assert.equal((await featured()).id, q.slot_id, "the feature carried over");
 });
 
-test("S1: the watcher starts waiting titles on its own (the site restarted at the hand-over) only after a title that ENDED BY ITSELF - never after a Cut", async () => {
+test("S1 (upnext3): the watcher starts waiting titles on its own (the site restarted at the hand-over) after a title that ended by itself AND after a Cut of that slot - never after a cut of the whole pad or a cut + ban", async () => {
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
-  // a Cut, then the site restarted before its watcher closed the play (no hand-over, no cancel)
+  const adder = await mkUser("pleb", 0);
+  for (const scope of ["pad", "ban"]) {
+    const a = await L.playFor(admin, { room: ROOM, key: "500" });
+    await pub(keyOf(last()));
+    await Q.after(adder, { room: ROOM, key: "501" });
+    await S.end(a.slot.id, "cut", owner.username, { scope });
+    await runQuery("DELETE FROM media_sessions WHERE room_id = ?", [ROOM]);
+    await L.watch();
+    assert.equal(await afterRow(), null, scope + ": cancelled");
+    assert.equal(await activeQ(), null, scope + ": nothing started");
+    await clear();
+    await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
+  }
+  // a Cut of that one slot, then the site restarted before its watcher closed the play (no hand-over)
   let a = await L.playFor(admin, { room: ROOM, key: "500" });
   await pub(keyOf(last()));
-  const adder = await mkUser("pleb", 0);
   await Q.after(adder, { room: ROOM, key: "501" });
   last().finish(); await settle();
   await S.end(a.slot.id, "cut", owner.username);
   await runQuery("DELETE FROM media_sessions WHERE room_id = ?", [ROOM]);
   await L.watch();
-  assert.equal(await afterRow(), null, "cancelled");
-  assert.equal(await activeQ(), null, "nothing started after the Cut");
+  assert.equal(await afterRow(), null, "used up");
+  assert.equal((await activeQ()).user_id, adder.userId, "it started after the Cut of that slot");
+  await clear();
+  await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });
   // the title ended by itself (library_done) and the site went down at the hand-over: they start now
   a = await L.playFor(admin, { room: ROOM, key: "500" });
   await pub(keyOf(last()));
@@ -297,7 +327,8 @@ test("S4 (safety F4): titles added behind a single title can be taken out before
   await Q.withdrawAfter(owner, ROOM);
   assert.equal((await lastQ(u)).notice, "after_removed");
   assert.match(JSON.stringify(await inbox(u)), /were taken out/);
-  assert.match(fs.readFileSync(path.join(repo, "mediaqueue.js"), "utf8"), /app\.post\("\/api\/medialib\/queue\/after\/cancel", \.\.\.J\(async \(req\) => withdrawAfter\(me\(req\), \(req\.body \|\| \{\}\)\.room\)\)\);/);
+  // (upnext3: + the row's id - the 📼 player's ✕ next to each one)
+  assert.match(fs.readFileSync(path.join(repo, "mediaqueue.js"), "utf8"), /app\.post\("\/api\/medialib\/queue\/after\/cancel", \.\.\.J\(async \(req\) => withdrawAfter\(me\(req\), \(req\.body \|\| \{\}\)\.room, \(req\.body \|\| \{\}\)\.id\)\)\);/);
 });
 
 test("S5 (function F3 / safety F5): growing titles behind a single title past the pad's 📼 limit is refused (queue_full); what was confirmed starts at the hand-over - at a price that dropped meanwhile too", async () => {
