@@ -187,13 +187,48 @@ function cmdLogResult(jobId, status, result) {
 }
 
 function limited(key, gap, burst, windowMs) {
-  const now = Date.now();
+  const why = limitWhy(key, gap, burst, windowMs);
+  if (why) return why;
+  limitMark(key, windowMs);
+  return null;
+}
+/** pttclip: why `key` may not go now (limited's refusal words), or null - counts nothing. */
+function limitWhy(key, gap, burst, windowMs, now = Date.now()) {
   const q = (hits.get(key) || []).filter((t) => now - t < windowMs);
-  if (q.length && now - q[q.length - 1] < gap) return `slow down — one every ${Math.round(gap / 1000)}s`;
+  if (gap && q.length && now - q[q.length - 1] < gap) return `slow down — one every ${Math.round(gap / 1000)}s`;
   if (q.length >= burst) return `slow down — ${burst} per ${Math.round(windowMs / 60000)} min`;
+  return null;
+}
+/** pttclip: count one for `key` now -> the hit's time (limitBack takes exactly that hit back). */
+function limitMark(key, windowMs, now = Date.now()) {
+  const q = (hits.get(key) || []).filter((t) => now - t < windowMs);
   q.push(now);
   hits.set(key, q);
-  return null;
+  return now;
+}
+/** pttclip: take back the hit limitMark counted for `key` at `t` (one of them, the newest) - true when there was one. */
+function limitBack(key, t) {
+  const q = hits.get(key);
+  const i = q ? q.lastIndexOf(t) : -1;
+  if (i < 0) return false;
+  q.splice(i, 1);
+  return true;
+}
+
+// pttclip (the owner, 2026-11-07: "push-to-talk web clips still charge their limit when the clip is uploaded, even if Pepe then
+// can't get the mic - fix this too"): per account, the push-to-talk PLAY limit (Pepe's pepe_relay CLIP_LIMIT, mirrored) counts
+// only clips that PLAYED - taken at the upload (three clips sent at once can't all wait for the mic) and given back EXACTLY once
+// however the clip ends without playing: any final not-ok answer from Pepe (the mic taken / full / Camfrog busy / the room's mic
+// break / a block / Pepe gone / the audio failing / a refusal / the recording lost on the way), or its job swept while still open
+// (Pepe never answered). The flood guard stays: CLIP_UP uploads per account whatever became of them (Pepe's CLIP_TRY_LIMIT),
+// never given back - an upload refused by the play limit costs none of it.
+const CLIP_PLAY = { gap: 30 * 1000, burst: 3, window: 10 * 60 * 1000 };
+const CLIP_UP = { burst: 12, window: 10 * 60 * 1000 };
+/** pttclip: a clip job that didn't play gives its play-limit hit back - once (j.limBack). True when it did. */
+function clipGiveBack(j) {
+  if (!j || j.kind !== "clip" || !j.lim || j.limBack) return false;
+  j.limBack = true;
+  return limitBack(j.lim.key, j.lim.t);
 }
 
 function sweep(now) {
@@ -208,7 +243,10 @@ function sweep(now) {
   for (const [id, j] of jobs) {
     const open = j.state !== "done";
     // 1.99ez: a cam clip (camclip.js) records for up to 30 s after Pepe gets to it - kept like a mic clip
-    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" || isSoundboard(j) ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
+    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" || isSoundboard(j) ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) {
+      if (open) clipGiveBack(j);        // pttclip: a clip Pepe never said played (no answer at all) - its play limit back
+      jobs.delete(id);
+    }
   }
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
   for (const [k, s] of mfSnaps) if (now - s.ts > SNAP_TTL) mfSnaps.delete(k);
@@ -228,6 +266,7 @@ function failJob(j, code, msg) {
   j.state = "done"; j.doneAt = Date.now();
   j.result = { ok: false, msg: clean(msg, 200), code };
   j.data = null;
+  clipGiveBack(j);                      // pttclip: (a clip failed here never played)
   notify(j);
 }
 function wakePullers() {
@@ -494,6 +533,8 @@ function applyAcks(acks) {
     j.result = { ok: !!a.ok, msg: vmask ? clean(vmask(clean(a.msg, 200)), 200) : clean(a.msg, 200) };
     if (typeof a.code === "string" && CODE_RE.test(a.code)) j.result.code = a.code;
     if (st === "done") j.doneAt = Date.now();
+    // pttclip: Pepe's final answer for a clip isn't "it played" (a mic miss, the audio failing, a refusal) - its play limit back, once
+    if (j.kind === "clip" && st === "done" && !j.result.ok) clipGiveBack(j);
     if (j.kind === "say") {
       j.ackAt = Date.now();
       // Pepe's own clock: how long the line waited in his say lane (pacing) and in his send queue
@@ -568,6 +609,8 @@ function mineFor(userId, roomId) {
       if (j.echoC) o.c = j.echoC;
       if (j.result && j.result.code) o.code = j.result.code;
     }
+    // pttclip: why a clip didn't play (Pepe's no_mic / mic_later / audio_failed) - the clip line shows his words for those
+    if (j.kind === "clip" && j.result && j.result.code) o.code = j.result.code;
     out.push(o);
   }
   return out.slice(-12);
@@ -867,9 +910,18 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     if (!buf || buf.length < 500) return res.status(400).json({ ok: false, error: "That recording is empty." });
     if (secs > CLIP_MAX_SECS + 1) return res.status(400).json({ ok: false, error: `Keep it under ${CLIP_MAX_SECS} seconds.` });
     const mime = String(req.get("content-type") || "audio/webm").split(";")[0].slice(0, 40);
-    const lim = limited("clip|" + u.userId, 30000, 3, 600000);
-    if (lim) return res.status(429).json({ ok: false, error: lim });
-    const j = newJob({ kind: "clip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display: await webName(u), data: buf, mime, secs });
+    // pttclip: the play limit (given back if the clip doesn't play) first - a refusal there costs no upload - then the flood guard
+    // (every upload, never given back); both checked before either is counted
+    const pk = "clip|" + u.userId, uk = "clipup|" + u.userId, display = await webName(u);   // (no await between check and count)
+    const lim = limitWhy(pk, CLIP_PLAY.gap, CLIP_PLAY.burst, CLIP_PLAY.window);
+    if (lim) return res.status(429).json({ ok: false, code: "rate", error: lim });
+    if (limitWhy(uk, 0, CLIP_UP.burst, CLIP_UP.window)) {
+      return res.status(429).json({ ok: false, code: "rate", error: `slow down — ${CLIP_UP.burst} clips per ${Math.round(CLIP_UP.window / 60000)} min, played or not` });
+    }
+    limitMark(uk, CLIP_UP.window);
+    const lt = limitMark(pk, CLIP_PLAY.window);
+    const j = newJob({ kind: "clip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display, data: buf, mime, secs,
+                       lim: { key: pk, t: lt } });
     console.log(`[bridge-relay] clip room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} bytes=${buf.length} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });

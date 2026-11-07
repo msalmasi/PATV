@@ -1306,6 +1306,9 @@
     if (s === 'waiting') return _t('js.pad.ptt.s_waiting', 'waiting for the mic…');
     if (s === 'playing') return _t('js.pad.ptt.s_playing', 'playing on the mic now');
     if (j.ok) return m === 'played' ? _t('js.pad.ptt.s_played', 'played') : (m || _t('js.pad.relay.sent', 'sent'));
+    // pttclip: a clip that didn't play costs no limit (the site and Pepe give it back) - Pepe's own words say why and whether to
+    // try again ("Pepe couldn't get the mic (...) - no cooldown - try again" / "... - it didn't count toward your limit")
+    if (m && (j.code === 'no_mic' || j.code === 'mic_later' || j.code === 'audio_failed')) return m;
     if (/couldn.t get the mic|stayed busy|dropped/i.test(m)) return _t('js.pad.ptt.s_no_mic', 'couldn’t get the mic, try again');
     return _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: m || _t('js.pad.relay.refused', 'refused') });
   }
