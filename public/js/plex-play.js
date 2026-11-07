@@ -70,7 +70,7 @@
     if (q.notice === 'out_of_pat') return _t('js.plex.qn_out_of_pat', '📼 Your queue ended: you’re out of PAT - top up to keep watching.');
     if (q.notice === 'failed') return _t('js.plex.qn_failed', '📼 Your queue ended: several titles in a row didn’t play.');
     if (q.notice === 'no_encoder') return _t('js.plex.qn_no_encoder', '📼 Your queue ended: no library stream came free in time.');
-    // upnext3 (1.99ali, item 10): a queue of yours paused for a booked stream / one that then couldn't carry on
+    // upnext3 (1.99alm, item 10): a queue of yours paused for a booked stream / one that then couldn't carry on
     if (q.notice === 'held') return _t('js.plex.qn_held', '📼 Your queue is paused for a stream booked for this time - it carries on right after it. Nothing more is charged until it does.');
     if (q.notice === 'held_cancelled') return _t('js.plex.qn_held_cancelled', '📼 Your paused queue didn’t carry on. Nothing more was charged.');
     return '';
@@ -222,7 +222,7 @@
       }
       if (!onPad || when() === 'later' || (b0 && b0.hasAttribute('data-done'))) { el.classList.add('hide'); el.textContent = ''; return; }
       el.classList.remove('hide');
-      // upnext3 (1.99ali): a booking due next (item 10: it plays right after the title on now - nothing replaces it meanwhile); someone else's
+      // upnext3 (1.99alm): a booking due next (item 10: it plays right after the title on now - nothing replaces it meanwhile); someone else's
       // running queue you may line up after (item 5)
       // (review ux 8: your paused queue - said once, here, never "only whoever started it…"; ux 13: your own booking says it's yours)
       var held = !!(onPad.after && onPad.after.mine && onPad.after.held);
@@ -410,7 +410,7 @@
       btn.textContent = playLabel(quote, 1);
     };
     // upnext2: where "+" adds on THIS pad - 'running' (a queue here you may grow), 'after' (behind the single title on), 'list' (this tab's list)
-    // upnext3 (1.99ali, item 5): 'after' behind someone else's RUNNING queue too - "+ Line up my queue" (a queue of yours that plays when it ends)
+    // upnext3 (1.99alm, item 5): 'after' behind someone else's RUNNING queue too - "+ Line up my queue" (a queue of yours that plays when it ends)
     var addMode = function () {
       if (onPad && onPad.queue && onPad.can_add) return 'running';
       if (onPad && onPad.can_after) return 'after';

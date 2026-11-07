@@ -148,7 +148,7 @@ const activeQ = async () => (await getQuery("SELECT * FROM media_queues WHERE ro
 const lastQ = async (u) => (await getQuery("SELECT * FROM media_queues WHERE user_id = ? ORDER BY id DESC LIMIT 1", [u.userId]))[0] || null;
 const inbox = async (u) => getQuery("SELECT title, body FROM inbox WHERE user_id = ? ORDER BY rowid", [u.userId]).catch(() => []);
 
-// upnext3 (1.99ali, owner 2026-11-07 item 7: "Start them instead."): what S1 pinned is reversed for a Cut of ONE slot and a failed / lost start - the
+// upnext3 (1.99alm, owner 2026-11-07 item 7: "Start them instead."): what S1 pinned is reversed for a Cut of ONE slot and a failed / lost start - the
 // picks waiting behind it are other people's and start next; a cut of the whole pad / site, a cut + ban, a ban (the stage cleared on purpose) still cancel them
 test("S1 (upnext3): a Cut of a single play in its break, then the break's own TIMER - what's lined up behind it starts next (its own break, the pad's stage); a cut of the whole pad clears it", async () => {
   const t0 = T;

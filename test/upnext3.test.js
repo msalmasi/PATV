@@ -1,4 +1,4 @@
-// upnext3 (1.99ali): the owner's answers of 2026-11-07 on the 📼 station break / "+ Add to the queue" against the REAL media-control service
+// upnext3 (1.99alm): the owner's answers of 2026-11-07 on the 📼 station break / "+ Add to the queue" against the REAL media-control service
 // (deploy/mediactl, a mocked Plex + a fake ffmpeg) - the test/upnext2-fixes.test.js harness:
 //   5   "Let someone add their own queue after someone else's queue." - a LINE behind a single title or a running queue: each person's own queue,
 //       billed to them, first come first served (AFTER_MAX), handed over whenever the stage frees up; the 📼 player lists it (titles for all,
@@ -147,7 +147,7 @@ test.after(() => { mstreams.stopAll(); server.close(); });
 // ───────────────────────── the reviews' findings (each failed on the reviewed build 559c2d08) ─────────────────────────
 
 
-// ───────────────────────── upnext3 (1.99ali): the owner's answers of 2026-11-07, items 5 / 7 / 10 ─────────────────────────
+// ───────────────────────── upnext3 (1.99alm): the owner's answers of 2026-11-07, items 5 / 7 / 10 ─────────────────────────
 const rowsOf = async (room = ROOM) => getQuery("SELECT * FROM media_queues WHERE room_id = ? AND state = 'after' ORDER BY id", [room]);
 const activeQ = async (room = ROOM) => (await getQuery("SELECT * FROM media_queues WHERE room_id = ? AND state = 'active' ORDER BY id DESC LIMIT 1", [room]))[0] || null;
 const lastQ = async (u) => (await getQuery("SELECT * FROM media_queues WHERE user_id = ? ORDER BY id DESC LIMIT 1", [u.userId]))[0] || null;
@@ -539,7 +539,7 @@ test("restart windows: a queue still 'starting' on the pad - the line waits for 
 });
 
 
-// ───────────────────────── upnext3 review fixes (1.99ali): the money review (1-7 + smaller notes) and the UX review (1-13) - each failed on 792ccd1b ─────────────────────────
+// ───────────────────────── upnext3 review fixes (1.99alm): the money review (1-7 + smaller notes) and the UX review (1-13) - each failed on 792ccd1b ─────────────────────────
 const DEAD = "http://127.0.0.1:9";
 async function mcDown(fn) { const url = process.env.MEDIACTL_URL; process.env.MEDIACTL_URL = DEAD; try { return await fn(); } finally { process.env.MEDIACTL_URL = url; } }
 const blip = async () => { throw new L.Refuse(503, "The Plex player can't be reached right now - try again in a bit.", { code: "encoder_down" }); };

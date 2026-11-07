@@ -113,7 +113,7 @@
               '<button type="button" class="sact" data-rm="' + x.index + '" aria-label="' + esc(_t('js.plex.q_remove', 'Remove')) + '">✕</button></span>' : '') + '</li>';
         }).join('') + '</ol>' + (can ? '<a class="muted" href="/stage">' + esc(_t('js.plexq.manage', 'Edit the queue ›')) + '</a>' : '') + '</details>';
     }
-    // upnext3 (1.99ali): who's lined up next, in order (medialib.player line[]) - a booking due now, a queue paused for it, each person's own queue
+    // upnext3 (1.99alm): who's lined up next, in order (medialib.player line[]) - a booking due now, a queue paused for it, each person's own queue
     // (behind a single title or a running queue); titles for everyone, who + ✕ only for whoever may take that row out (can_withdraw)
     if (Array.isArray(j.line) && j.line.length) {
       var lw = j.line.some(function (x) { return x.can_withdraw === true; });

@@ -845,7 +845,7 @@
         var ban = b.hasAttribute('data-ban');
         var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
-        // upnext3 (1.99ali, item 7): a 📼 slot with someone lined up after it (coming.queued) - a Cut takes off this title only; what's next starts
+        // upnext3 (1.99alm, item 7): a 📼 slot with someone lined up after it (coming.queued) - a Cut takes off this title only; what's next starts
         // (✕ in the 📼 player clears it first); a cut + ban clears the line too
         // review ux 2 / 3: whenever anyone is lined up (coming.line - a queue that still has titles too: its Cut ends the queue); a booking first
         // starts next (it is cancelled on the schedule, not in the 📼 player); a cut + ban cancels the picks lined up - a booking / a paused queue

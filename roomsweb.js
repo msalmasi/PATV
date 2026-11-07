@@ -251,7 +251,7 @@ function register(app, { addUser, isBotToken }) {
         const s = arg.toLowerCase() === "all" ? null : pick();
         const ids = s ? [s.id] : open.map((x) => x.id);
         let n = 0;
-        // upnext3 (1.99ali): "cut all" clears the pad's stage - the 📼 picks waiting behind it don't start (one slot: they do)
+        // upnext3 (1.99alm): "cut all" clears the pad's stage - the 📼 picks waiting behind it don't start (one slot: they do)
         for (const id of ids) if (await stage.end(id, "cut", who, { scope: s ? null : "pad" })) n++;
         return res.json({ ok: true, cut: n, message: n ? `cut ${n} slot${n === 1 ? "" : "s"} - unused PAT refunded` : "nothing to cut" });
       }

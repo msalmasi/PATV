@@ -47,7 +47,7 @@
     s.appendChild(el('span', 'tg' + (r.featured ? ' feat' : ''), r.featured ? '★ Featured' : 'Ordinary slot'));
     s.appendChild(el('span', 'tg', r.mode === 'embed' ? '▶ ' + (r.embed_label || 'Video link') : '🎥 Stream'));
     if (pend) s.appendChild(el('span', 'tg pend', '⏳ Waiting for the owner\'s OK'));
-    // upnext3 (1.99ali): a 📼 booking whose time came while a library title is on - it starts when that title ends
+    // upnext3 (1.99alm): a 📼 booking whose time came while a library title is on - it starts when that title ends
     if (r.lib_wait) s.appendChild(el('span', 'tg pend', typeof __t === 'function' ? __t('js.sched.lib_wait', '⏳ Waiting for the current title to finish') : '⏳ Waiting for the current title to finish'));
     if (r.mine) s.appendChild(el('span', 'tg you', 'You'));
     return s;

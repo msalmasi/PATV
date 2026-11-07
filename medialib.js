@@ -166,7 +166,7 @@ function init() {
       await addCol("media_queues", "brk TEXT");
       // upnext2 (E): an after-queue (state 'after') waits behind the single play on this slot (mediaqueue.after / startAfter)
       await addCol("media_queues", "behind TEXT");
-      // upnext3 (1.99ali): a queue PAUSED for a booking that came due (state 'after', resume = when; brk = where it carries on) - mediaqueue.holdQueue
+      // upnext3 (1.99alm): a queue PAUSED for a booking that came due (state 'after', resume = when; brk = where it carries on) - mediaqueue.holdQueue
       await addCol("media_queues", "resume INTEGER");
       // upnext2 review (safety F3, 1.99alc): its STARTER ended it in its own station break (⏹ / their own ▶ Play this instead) - a refunded /
       // never-charged play that still took the pad's stage for the break: it counts towards the daily cap (paidToday / freeToday)
@@ -262,7 +262,7 @@ async function comingFor(roomId) {
   if (s && s.state === "playing" && Number(s.duration) > 0) {
     out.ends_at = Math.round(Number(s.updated) + Math.max(0, Number(s.duration) - (Number(s.position) || 0)) * 1000);
   }
-  // upnext3 (1.99ali): what's next after the title on now - a booking whose time came (it plays right after this title, the rest of the queue after
+  // upnext3 (1.99alm): what's next after the title on now - a booking whose time came (it plays right after this title, the rest of the queue after
   // it - unless the queue is a booked one itself), else the queue's next title, else (a single title / a queue's last title) the line's head
   const lineAll = s || q ? await require("./mediaqueue").lineFor(id).catch(() => []) : [];
   const head = s ? lineAll[0] || null : null;
@@ -311,7 +311,7 @@ async function fireBreak(roomId, playId) {
   const slot = await stage.getSlot(s.slot_id);
   if (!slot || slot.settled || !["waiting", "active"].includes(slot.status)) {
     await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), s.position);
-    // upnext3 (1.99ali, item 7): a Cut / time-up in the break - what's lined up behind it starts next (their station break, their title); a cut of
+    // upnext3 (1.99alm, item 7): a Cut / time-up in the break - what's lined up behind it starts next (their station break, their title); a cut of
     // the whole pad, a cut + ban or a ban cleared the stage: it doesn't (mediaqueue.afterEnded - one rule for every path)
     await Qm.afterEnded(roomId, slot || s.slot_id);
     return true;
@@ -661,7 +661,7 @@ function replaceWant(b) {
 const wantsReplace = (b) => !!replaceWant(b);
 /** After the swap committed (the old slot ended 'library_replaced', the new one is open and featured): the old encoder off, its play closed
  *  (its held charge settled as it went - routed once it was on the stage), a queue ended - inside the pad's lock. Never throws. */
-// upnext3 (1.99ali): toSlot = the slot that took over - whoever is lined up behind what was on waits behind it now (▶ Play this instead: they keep
+// upnext3 (1.99alm): toSlot = the slot that took over - whoever is lined up behind what was on waits behind it now (▶ Play this instead: they keep
 // waiting behind the new title; a hand-over: the rest of the line behind the one that started). rep.why = a system hand-over (what was on ended
 // by itself / was stopped / failed - nothing of it is stopped here); rep.end / rep.hold = a queue's (mediaqueue.retireForReplace)
 async function retire(user, R, rep, toSlot = null) {
@@ -783,7 +783,7 @@ async function play(user, b = {}, how = {}) {
  * The pad rules for a new play / queue (shared with mediaqueue.js): one library stream per pad (a 📼 queue holds its pad
  * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
  */
-// upnext3 (1.99ali): system = a hand-over (the stage is this one's turn), booking = a booking's own start, resume = a paused queue carrying on (the
+// upnext3 (1.99alm): system = a hand-over (the stage is this one's turn), booking = a booking's own start, resume = a paused queue carrying on (the
 // same play - not counted on the cap again). A booking whose time came goes first: anything else (a fresh ▶, ▶ Play this instead, a queue's
 // start) is refused booking_next - controllers replacing again and again would starve it.
 async function preflight(user, A, R, { carry = false, replacing = null, behind = null, system = false, booking = false, resume = false } = {}) {
@@ -809,7 +809,7 @@ async function preflight(user, A, R, { carry = false, replacing = null, behind =
   if (!behind && !system && !booking && !carry && (await require("./mediaqueue").bookingDue(R.id))) {
     throw new Refuse(409, "A stream booked for this time plays on this pad's stage next - pick yours after it.", { code: "booking_next" });
   }
-  // upnext3 review (money 1, 1.99ali): nothing on, yet someone is lined up (a busy media-control held their start up, a restart between two) - they
+  // upnext3 review (money 1, 1.99alm): nothing on, yet someone is lined up (a busy media-control held their start up, a restart between two) - they
   // go first: a fresh ▶ / a queue's start would jump the line (▶ Play this instead keeps them waiting behind it - only when something is on)
   if (!behind && !system && !booking && !carry && !resume && !rep && !s && !otherQ.length && (await require("./mediaqueue").lineWaits(R.id))) {
     throw new Refuse(409, "Someone lined up on this pad starts next - try again in a moment.", { code: "line_next" });
@@ -914,7 +914,7 @@ async function stop(user, room, reason = "stopped") {
       catch (e) { console.warn("[medialib] stop: media-control:", conf.errLine(e)); }
     }
     if (s.state === "break") await markBrkStop(s.play_id, user);         // (upnext2 review S3: its starter's own ⏹ in the break - the cap)
-    // upnext3 (1.99ali, item 7 - owner 2026-11-07: "Start them instead."): whoever is lined up after it takes the stage over now (the swap: the
+    // upnext3 (1.99alm, item 7 - owner 2026-11-07: "Start them instead."): whoever is lined up after it takes the stage over now (the swap: the
     // feature + the card carry, their station break first); the stopped play settles as ever (refunded if it never got on the stage)
     const h = await require("./mediaqueue").startAfter(s, "stopped", pos != null ? pos : s.position,
                                                         { why: reason + " by " + user.username, reason: "library_" + reason, actor: user.username });
@@ -1121,7 +1121,7 @@ async function mine(user, roomId) {
         // title (a queue of yours that starts when it ends - mediaqueue.after: whoever may ▶ Play here; one already waiting: its owner grows it)
         const Qm = require("./mediaqueue"), qOn = conf.get().library_queue !== false && A.ok;
         if (cur.q) out.on_pad.can_add = !!(qOn && (await Qm.mayGrow(user, cur.q)));
-        // upnext3 (1.99ali, item 5): "+ Line up my queue after this one" behind someone else's running queue too, and in turn behind others lined
+        // upnext3 (1.99alm, item 5): "+ Line up my queue after this one" behind someone else's running queue too, and in turn behind others lined
         // up - your own row grows; a full line (AFTER_MAX people) or a queue of yours paused for a booking: no
         const line = await Qm.lineFor(R.id);
         const mineH = line.find((h) => h.row && h.row.user_id === user.userId) || null;
@@ -1167,7 +1167,7 @@ async function player(user, room) {
     if (v.starts_at) out.starts_at = v.starts_at;                      // upnext2: in its station break
   }
   if (s && s.state === "break" && s.brk_until) out.starts_at = Number(s.brk_until);
-  // upnext3 (1.99ali): who's lined up next, in order - a booking whose time came, a queue paused for it, then each person's own queue (behind a
+  // upnext3 (1.99alm): who's lined up next, in order - a booking whose time came, a queue paused for it, then each person's own queue (behind a
   // single title or a running queue). Titles for everyone; who, and ✕ Take them out, only for whoever may take that row out (its owner, the
   // pad's owner, an admin - upnext2 review S13 / F4: `coming` never names who queued it). A booking is taken out on /stage, not here.
   const line = await Q.lineFor(R.id).catch(() => []);
@@ -1300,7 +1300,7 @@ async function watchOne(s0, live) {
     // the stage ended it (Cut, time up, paused too long): stop the encoder (upnext2: none yet in a station break)
     if (s.state !== "break") { try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* unreachable: it'll fail to publish anyway */ } }
     await dropSession(s, "slot " + ((slot && slot.end_reason) || "ended"), m ? m.position : s.position);
-    // upnext3 (1.99ali, item 7): a Cut of this slot / time up / idle - what's lined up behind it starts; a cleared stage (a cut of the whole pad,
+    // upnext3 (1.99alm, item 7): a Cut of this slot / time up / idle - what's lined up behind it starts; a cleared stage (a cut of the whole pad,
     // a cut + ban, a ban) cancels it (mediaqueue.afterEnded)
     await require("./mediaqueue").afterEnded(s.room_id, slot || s.slot_id);
     return true;

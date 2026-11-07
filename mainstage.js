@@ -305,7 +305,7 @@ function init() {
       await addColumn("stage_slots", "cam_login", "TEXT");            // 1.99zc: 🎬 a cam slot's Camfrog login (source 'cam')
       await addColumn("stage_slots", "cam_veil", "TEXT");             // 1.99aid (privacy controls V-1): {sess, alias, hood, id} - a frog-name cam
       await addColumn("stage_slots", "upnext", "TEXT");               // upnext: 📼 the title starting next - {title, kind, year, show, season, episode, key, poster, at}
-      // upnext3 (1.99ali): how far an end reached - 'pad' (every slot of the pad / the site cut at once: admin cut all, Pepe's !stage cut, a pad's
+      // upnext3 (1.99alm): how far an end reached - 'pad' (every slot of the pad / the site cut at once: admin cut all, Pepe's !stage cut, a pad's
       // "cut all") or 'ban' (cut + ban) - the 📼 picks waiting behind a slot that was cut start next unless the stage was cleared on purpose
       await addColumn("stage_slots", "end_scope", "TEXT");
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
@@ -1089,7 +1089,7 @@ async function libraryUpNext(slotId, info) {
  * 'waiting' until the encoder publishes - inside the same limits (one library stream per pad, the site's max_concurrent).
  * -> the raw key, or throws Refuse.
  */
-// upnext3 (1.99ali, owner 2026-11-07: "Wait for that to finish."): opts.replace = the pad's open 📼 slot this booking waited for - it ends
+// upnext3 (1.99alm, owner 2026-11-07: "Wait for that to finish."): opts.replace = the pad's open 📼 slot this booking waited for - it ends
 // (opts.reason) and the booked slot opens in ONE transaction, as libraryOpen's swap: its feature moves over (unless the booked slot is featured
 // already), opts.upnext is its "Coming up next" marker from the same moment, the old slot's effects run once it committed.
 async function libraryActivate(slotId, { title, minutes, replace = null, reason = null, upnext = null, actor = null } = {}) {
@@ -1165,7 +1165,7 @@ async function end(slotId, reason, actor, { scope = null } = {}) {
 // 1.99ajr golive: end()'s database half (settle, refund, the room's fee) - book's replace runs it INSIDE its own transaction, so a
 // new video that can't be booked leaves the old one playing - and its effects (relays, caches, the event, auto-feature), run
 // only once that transaction committed. -> {res, fee, prev: {featured, feature_by}} | null
-// upnext3 review (money 4, 1.99ali): every end that clears a pad's stage on purpose (a cut of the whole pad / site, a cut + ban, a ban) bumps that
+// upnext3 review (money 4, 1.99alm): every end that clears a pad's stage on purpose (a cut of the whole pad / site, a cut + ban, a ban) bumps that
 // pad's count here - mediaqueue.handOver stops walking its 📼 line when one lands half-way through a hand-over (memory only: one process)
 const clears = new Map();
 function clearOf(roomId) { return clears.get(String(roomId || rooms.HOUSE_ROOM)) || { seq: 0, scope: null, title: null }; }
@@ -1504,7 +1504,7 @@ async function tickFuture(t) {
     // started (the media watcher down) ends after the start window like any slot that never went live
     if (s.source === "library") {
       if (t > start + (C.start_window_min + 5) * 60000) {
-        // upnext3 (1.99ali): one that waits for the library title on its pad (media_bookings 'waiting') is ended by its own watcher (its cap:
+        // upnext3 (1.99alm): one that waits for the library title on its pad (media_bookings 'waiting') is ended by its own watcher (its cap:
         // the pad's 📼 limit after its time) - this backstop only past that cap too
         const w = await libWaitOf(s.id);
         const cap = w ? ((await limitsFor(s.room_id || rooms.HOUSE_ROOM).catch(() => ({ library_max: 360 }))).library_max || 360) : 0;
@@ -2319,7 +2319,7 @@ async function roomStage(roomId, viewer) {
     price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0, boost,
   };
 }
-// upnext3 (1.99ali): booked 📼 slots waiting for the library title on their pad (mediaqueue.watchBookings: media_bookings 'waiting') ->
+// upnext3 (1.99alm): booked 📼 slots waiting for the library title on their pad (mediaqueue.watchBookings: media_bookings 'waiting') ->
 // Map slot id -> {title: what they wait for, ends_at}. Never throws (no 📼 bookings yet: none). review (ux 12): ends_at = when the title on its pad
 // should end (its session: playing - the last known position + the time since; in its station break - the break's end + its length), else null
 // (paused, between two titles) - the schedule says "After the current title · about <then>" instead of the booking's old time
@@ -2416,7 +2416,7 @@ async function mine(userId) {
     const pos = await getQuery("SELECT COUNT(*) AS n FROM stage_queue WHERE room_id = ? AND status = 'waiting' AND created <= ?", [e.room_id, e.created]);
     queue.push({ id: e.id, room_id: e.room_id, minutes: e.minutes, feature: !!e.feature, mode: e.mode, position: pos[0].n, created: e.created });
   }
-  // upnext3 (1.99ali): a 📼 booking of mine that waits for the title on its pad says so (lib_wait)
+  // upnext3 (1.99alm): a 📼 booking of mine that waits for the title on its pad says so (lib_wait)
   const waits = await libWaits(rows.filter((s) => s.source === "library" && s.status === "scheduled").map((s) => s.id));
   return { slots: rows.map((s) => (waits.has(s.id) ? { ...view(s), lib_wait: waits.get(s.id) } : view(s))), last: view(last), queue };
 }

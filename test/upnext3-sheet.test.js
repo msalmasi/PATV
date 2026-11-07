@@ -1,5 +1,5 @@
 "use strict";
-// upnext3 (1.99ali): the owner's answers of 2026-11-07 in the pages - the 📼 sheet (public/js/plex-play.js, the test/upnext2-sheet.test.js DOM):
+// upnext3 (1.99alm): the owner's answers of 2026-11-07 in the pages - the 📼 sheet (public/js/plex-play.js, the test/upnext2-sheet.test.js DOM):
 // "+ Line up my queue" behind someone else's running queue (item 5), your place in the line, a booking due next and a paused queue (item 10),
 // ▶ Play this instead keeps the line waiting (item 7); the 📼 player's line (pad-plexq.js: who's lined up, ✕ by id, ⏹ says what starts next);
 // the Cut confirm (stage-room.js); the schedule / Your bookings' "waiting for the current title to finish"; the strings (en.json, points)
@@ -142,7 +142,7 @@ function sheet({ onPad = null, queues = [], after = [], edit = [], perHour = 0, 
 }
 const SINGLE = { title: "Charade (1963)", queue: false, left: 0, by: "cedar-fable", mine: false, can_replace: true, slot_id: "6f1c2e0a-0b1d-4c55-9a7e-2d3f4a5b6c7d", can_after: true };
 
-// ───────────────────────── upnext3 (1.99ali): the sheet, the 📼 player, the Cut confirm, the schedule ─────────────────────────
+// ───────────────────────── upnext3 (1.99alm): the sheet, the 📼 player, the Cut confirm, the schedule ─────────────────────────
 const QUEUE_ON = { title: "The Show — S1E2 Second", queue: true, left: 1, by: "cedar-fable", mine: false, can_replace: false, slot_id: null, can_after: true };
 const NEW_KEYS = ["js.plex.qn_held", "js.plex.qn_held_cancelled", "js.plex.now_on_booking", "js.plex.now_on_after_q", "js.plex.after_mine_place",
                   "js.plex.instead_after", "js.plex.b_waits", "js.plex.q_add_line", "js.plex.q_add_line_title", "js.plex.q_added_line", "js.plex.q_line_cost",
@@ -312,7 +312,7 @@ test("strings: every new one is in en.json (in the source's words), none says PA
 });
 
 
-// ───────────────────────── upnext3 review fixes (1.99ali): the UX review in the pages - each failed on 792ccd1b ─────────────────────────
+// ───────────────────────── upnext3 review fixes (1.99alm): the UX review in the pages - each failed on 792ccd1b ─────────────────────────
 const LIST = [{ key: "500", label: "Charade (1963)", duration: 6780 }, { key: "502", label: "Carnival of Souls (1962)", duration: 4680 }];
 const NEW_KEYS2 = ["js.plex.q_line_list", "js.plex.q_line_list_cost", "js.plex.q_added_line_q", "js.plex.after_mine_q", "js.plex.after_mine_place_q", "js.plex.line_full",
                    "js.plex.now_on_held", "js.plex.held_x_ask", "js.plex.held_x_ask_paid", "js.plex.ask_take_out", "js.plex.held_x_done", "js.plex.now_on_booking_mine",

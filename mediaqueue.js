@@ -47,7 +47,7 @@ const MAX_FAILS = 3;                // titles in a row that never got going -> t
 const MAX_RESTARTS = 5;             // the same title lost this many times (mediactl restarting) -> the queue ends
 const RECENT_MS = 15 * 60 * 1000;   // an ended queue still shows (with why) this long
 const FAST_WINDOW = 15;             // a title this close to its end gets a one-off watch timed for its end
-const AFTER_MAX = 5;                // upnext3 (1.99ali): people lined up after what's on, at most (each one's own queue: lineFor)
+const AFTER_MAX = 5;                // upnext3 (1.99alm): people lined up after what's on, at most (each one's own queue: lineFor)
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn || (() => Date.now()); }
@@ -390,7 +390,7 @@ async function goTo(q, i, { offset = 0, noBreak = false, tracks = null } = {}) {
     if (q.fails >= MAX_FAILS) { await endOrHand(q, `${q.fails} titles in a row didn't play`, { notice: "failed", stageReason: "library_error" }); return { ended: true }; }
     if (brk) {
       brk = false;
-      // upnext3 (1.99ali, item 10): a booked 📼 start that came due waits for the title that was on - this title change is its moment: it
+      // upnext3 (1.99alm, item 10): a booked 📼 start that came due waits for the title that was on - this title change is its moment: it
       // plays now and this queue carries on right after it, from title i (yieldToBooking)
       const y = await yieldToBooking(q, i, { offset, tracks });
       if (y) return y;
@@ -605,7 +605,7 @@ async function watchIdle() {
       if (q && q.state === "starting") { await endQueue(q, "didn't finish starting", { stageReason: "library_failed" }); await afterEnded(q.room_id, q.slot_id); }
     }).catch((e) => console.error("[mediaqueue] stale start:", conf.errLine(e)));
   }
-  // upnext3 (1.99ali): a pad's 📼 line - handed over at once whenever the stage frees up (handOver, under the pad's lock); here only what a
+  // upnext3 (1.99alm): a pad's 📼 line - handed over at once whenever the stage frees up (handOver, under the pad's lock); here only what a
   // site restart or a busy media-control left (lineLook), and the waits' caps
   for (const r of await getQuery("SELECT DISTINCT room_id FROM media_queues WHERE state = 'after'")) {
     await withLock(r.room_id, () => lineLook(r.room_id)).catch((e) => console.error("[mediaqueue] line:", conf.errLine(e)));
@@ -674,7 +674,7 @@ async function launch(user, A, R, b, booked, sys = {}) {
     await I().preflight(user, A, R, { replacing: rep, system: !!sys.system, booking: !!booked });
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
-    // upnext3 review (money 3, 1.99ali): a booking's start checks the estimate its booker said yes to when they booked it (media_bookings.estimate
+    // upnext3 review (money 3, 1.99alm): a booking's start checks the estimate its booker said yes to when they booked it (media_bookings.estimate
     // - 0 = it was free then): a price rise while it waited never charges more - it doesn't start (bookingFailed words this refusal as the notice)
     if (pv.estimate > 0 && booked) {
       const said = Math.max(0, Math.floor(Number(booked.estimate) || 0));
@@ -791,7 +791,7 @@ function bookingsInit() {
         created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
       await runQuery("CREATE INDEX IF NOT EXISTS media_bookings_state ON media_bookings (state, start_at)");
       // upnext2 (D): the booking's first title (slim) - "COMING UP AT <time> · <title>" and the off-air slate name it
-      // upnext3 (1.99ali): state 'waiting' = its time came while a library title was on the pad - it starts when that title ends (wait_since:
+      // upnext3 (1.99alm): state 'waiting' = its time came while a library title was on the pad - it starts when that title ends (wait_since:
       // since when, wait_for: the title it waits for, free_at: when the stage came free for it - a busy media-control's retry window)
       for (const def of ["first TEXT", "wait_since INTEGER", "wait_for TEXT", "free_at INTEGER"]) {
         try { await runQuery(`ALTER TABLE media_bookings ADD COLUMN ${def}`); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
@@ -843,7 +843,7 @@ async function bookingFailed(bk, why0, slotEnd = true) {
   return true;
 }
 /** Booked 📼 slots whose time came: start them (called by watchIdle every tick). */
-// upnext3 (1.99ali, owner 2026-11-07: "Wait for that to finish."): a booking whose time comes while something from the library is on the pad (a
+// upnext3 (1.99alm, owner 2026-11-07: "Wait for that to finish."): a booking whose time comes while something from the library is on the pad (a
 // title, its station break, a queue) WAITS (state 'waiting', its booker told once): it plays right after the title on now (handOver when a
 // single title / a queue ends, yieldToBooking at a queue's next title change: the rest of that queue carries on after it), never cutting a
 // title. It waits at most the pad's 📼 limit after its time (no title is longer: only pauses / seeks back / chained bookings get near it) -
@@ -1075,7 +1075,7 @@ const prev = (user, room) => step(user, room, -1);
 
 /** plexreplace: a ▶ "Play this instead" took this queue's slot over (inside the pad's lock - medialib.retire): the title on now stops, its
  *  play closes ("replaced by <who>"), the queue ends - its slot already ended 'library_replaced' with the swap. */
-// upnext3 (1.99ali): rep.end = a system hand-over took the slot over after this queue ended by itself / was stopped (its own reason, notice and
+// upnext3 (1.99alm): rep.end = a system hand-over took the slot over after this queue ended by itself / was stopped (its own reason, notice and
 // who - endQueue); rep.hold = a booking that came due takes the stage at this queue's title change: the queue pauses (holdQueue), it carries
 // on after the booking (resumeQueue)
 async function retireForReplace(q0, user, rep = {}, toSlot = null) {
@@ -1169,7 +1169,7 @@ async function edit(user, room, b = {}) {
 // anyone else: not_starter. ⏹ / ▶ Play this instead / a Cut of the title on now = what it waited for is gone: it ends, with a notice.
 // Not behind a RUNNING queue: its starter's "+ Add to the queue that's playing" grows it (edit op add); anyone else's titles inside someone's
 // queue would need per-title billing - an owner question.
-// upnext3 (1.99ali, owner 2026-11-07: "Let someone add their own "queue" after someone else's queue."): the same behind someone else's RUNNING
+// upnext3 (1.99alm, owner 2026-11-07: "Let someone add their own "queue" after someone else's queue."): the same behind someone else's RUNNING
 // queue, and several people in turn - a LINE, first come first served (lineFor): each person's own queue (their titles, their estimate,
 // billed to them as it plays - never a title inside anyone else's queue), at most AFTER_MAX people; a second "+" by the same person grows
 // their own row (a library admin lines up their own too - never grows someone else's). Whenever the stage frees up - the title / queue on
@@ -1212,7 +1212,7 @@ async function bookingDue(roomId) {
 const transientErr = (e) => !!(e && (e.busy || e.status === 429 || e.status === 502 || e.status === 503 ||
   ["replace_gone", "busy_library", "site_full"].includes(e.code) || (e.extra && ["encoder_down", "encoder_busy", "busy_library", "busy_queue"].includes(e.extra.code))));
 const cleared = (sl) => !!(sl && (sl.end_reason === "banned" || sl.end_scope === "pad" || sl.end_scope === "ban"));
-// upnext3 review (ux 3, 1.99ali): what a stage cleared on purpose takes with it - the picks lined up behind what was on (kind 'after') always; a queue
+// upnext3 review (ux 3, 1.99alm): what a stage cleared on purpose takes with it - the picks lined up behind what was on (kind 'after') always; a queue
 // paused for a booking only when the WHOLE pad was cut (a cut + ban / a ban is aimed at one person: it carries on); a booking never (it has its own
 // time on the schedule, as every booking after it - it starts on the free stage; the banned person's own entries are refused at their start)
 const clearKinds = (scope) => (scope === "pad" ? ["after", "resume"] : ["after"]);
@@ -1300,7 +1300,7 @@ async function startHead(R, h, rep, { reason = "library_done", actor = null } = 
   await startNotice(R, u.userId, "after", r, w.id).catch(() => {});
   return { queue_id: r.queue_id, slot_id: r.slot.id };
 }
-/** upnext3 review (ux 5, 1.99ali): someone lined up may start hours after they pressed - their inbox says it's on now, about how many points it
+/** upnext3 review (ux 5, 1.99alm): someone lined up may start hours after they pressed - their inbox says it's on now, about how many points it
  *  takes as it plays, and how to stop it. kind = after (their own queue) | resume (a paused queue carrying on) | booking (one that waited). */
 async function startNotice(R, userId, kind, r, ref) {
   const q = r && r.queue_id ? await load(r.queue_id) : null;
@@ -1596,7 +1596,7 @@ async function cancelAfter(roomId, why, slotId = null) {
 /** upnext2 review (safety F4, 1.99alc): "✕ Take my titles out" - the titles someone added behind a single title come out before they start (they
  *  bill their owner per hour whenever it starts, maybe hours later). Their owner, or whoever may control them (the pad's owner, site staff,
  *  a library admin - medialib.mayControl); someone else taking them out leaves their owner a notice. Nothing was ever charged. */
-// upnext3 (1.99ali): which row of the line - `id` (the 📼 player's ✕ next to it), else your own, else (an older page) the first one
+// upnext3 (1.99alm): which row of the line - `id` (the 📼 player's ✕ next to it), else your own, else (an older page) the first one
 async function withdrawAfter(user, room, id = null) {
   await L().init();
   if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
@@ -1718,5 +1718,5 @@ module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostF
                    breakDue, _now: () => NOW(),                                     // upnext2: the station break (medialib's clock is this one)
                    after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
                    withdrawAfter, moveAfter,                                        // upnext2 review fixes (1.99alc)
-                   lineFor, handOver, afterEnded, cancelLine, bookingDue, lineWaits, AFTER_MAX,     // upnext3 (1.99ali): the pad's line
+                   lineFor, handOver, afterEnded, cancelLine, bookingDue, lineWaits, AFTER_MAX,     // upnext3 (1.99alm): the pad's line
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)

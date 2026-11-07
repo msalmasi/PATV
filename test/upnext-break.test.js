@@ -569,7 +569,7 @@ test("E: behind a single title (no queue) a member adds a title - their own queu
   assert.deepEqual([pl.after.count, pl.after.next[0].title], [1, "Night of the Living Dead"]);
   await S.stageBump(ROOM);
   assert.equal((await S.comingOf(ROOM, VIEWER)).next.title, "Night of the Living Dead", "the lower-third's UP NEXT");
-  // upnext3 (1.99ali, item 5): someone else lines up THEIR OWN queue after the payer's - second in line, billed to them; it grows nobody else's
+  // upnext3 (1.99alm, item 5): someone else lines up THEIR OWN queue after the payer's - second in line, billed to them; it grows nobody else's
   const other = await mkUser("pleb", 100000);
   const o = await Q.after(other, { room: ROOM, key: "502", estimate: 2000 });
   assert.deepEqual([o.ok, o.place, o.line, o.items], [true, 2, 2, 1]);
