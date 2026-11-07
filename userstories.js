@@ -60,6 +60,7 @@ const STORY_W = 1080, STORY_H = 1920;                  // Edited pictures and th
 const STORY_VIDEO_W = 720, STORY_VIDEO_H = 1280;        // Stored portrait H.264 output.
 const STORY_SRC_MAX_SECS = 180, STORY_SRC_VIDEO_MB = 100; // Edited sources, also bounded by the feed's caps.
 const OVERLAY_MAX_MB = 2;                              // A re-encoded PNG layer, counted with its source.
+const OVERLAY_PER_HOUR = 30;                           // 1.99?? train3 verify: overlay uploads an hour (their own cap - feedweb)
 const STORY_TEXTS_MAX = 3, STORY_TEXT_LEN = 120;         // Declared text layers; length is Unicode code points.
 const STORY_STICKERS_MAX = 10;                         // Owned PATV sticker layers, not Camfrog art.
 const STORY_MENTIONS_MAX = 5;                          // Removable account chips, never overlay pixels.
@@ -402,7 +403,7 @@ async function preflight(user, edit) {
   if (edit.overlay) await require("./storycompose").overlayCheck(u.userId, edit.overlay);
   return { u, R };
 }
-async function cleanMentions(u, raw) {
+async function cleanMentions(u, raw, rid) {
   if (raw === undefined) return [];
   if (!Array.isArray(raw) || raw.length > STORY_MENTIONS_MAX) throw new Refuse(400, `Choose up to ${STORY_MENTIONS_MAX} people to mention.`);
   const names = new Map();
@@ -412,14 +413,30 @@ async function cleanMentions(u, raw) {
     const name = lc(value.username);
     if (!names.has(name)) names.set(name, { name, x: Math.min(0.95, Math.max(0.05, value.x)), y: Math.min(0.95, Math.max(0.05, value.y)) });
   }
-  const known = new Map((await require("./feedmentions").accounts([...names.keys()])).map(a => [lc(a.username), a]));
-  return [...names.values()].map(value => {
+  const FM = require("./feedmentions");
+  const known = new Map((await FM.accounts([...names.keys()])).map(a => [lc(a.username), a]));
+  const out = [];
+  for (const value of names.values()) {
     const account = known.get(value.name);
     if (!account || account.archived_at) throw new Refuse(400, `@${value.name} isn't available for a story mention.`);
     if (account.userId === u.userId) throw new Refuse(400, `You can't mention yourself (@${value.name}) in a story.`);
     if (store().isPepe(account)) throw new Refuse(400, `@${value.name} can't be mentioned in a story.`);
-    return { userId: account.userId, x: value.x, y: value.y };
-  });
+    // 1.99?? train3 verify: a chip only for someone who could see the story and take it off - not across a block (either way;
+    // with story_block_hide on they couldn't even see the story to remove it, while everyone else saw "@them"), not on an
+    // Approved pad they're outside of or an 18+ pad they haven't passed the gate of, not with their feed mentions switched off.
+    // The same words as an unknown name, so the author can't tell which.
+    if (!(await mentionable(u, account, rid))) throw new Refuse(400, `@${value.name} isn't available for a story mention.`);
+    out.push({ userId: account.userId, x: value.x, y: value.y });
+  }
+  return out;
+}
+async function mentionable(author, account, rid) {
+  const FM = require("./feedmentions"), PA = require("./padaccess");
+  if (await FM.blockedEither(author.userId, account.userId)) return false;
+  if (await require("./mentions").feedOff(account.userId)) return false;
+  await PA.init();
+  const acct = (await PA.accountLite(account.userId)) || account;
+  return PA.canSee(acct, rid) && PA.adultGate(acct, rid) === "ok";
 }
 function editAlt(edit) {
   const cat = require("./stickers").CAT;
@@ -457,7 +474,7 @@ async function create(user, { attachment, pad, nsfw, mentions } = {}) {
     catch (e) { if (e.refuse) throw e; throw new Refuse(400, "That story edit isn't valid."); }
     await checkWordsAndStickers(u, rid, edit, false);
   }
-  const chips = studio ? await cleanMentions(u, mentions) : [];
+  const chips = studio ? await cleanMentions(u, mentions, rid) : [];
   // the safety check
   let verdict;
   try {
@@ -522,6 +539,8 @@ async function annotateStudio(viewer, items) {
   if (!ids.length) return items;
   const texts = new Map(), chips = new Map(), now = NOW();
   const cols = signed ? new Set((await getQuery("PRAGMA table_info(users)")).map(c => c.name)) : null;
+  // 1.99?? train3 verify: a block made after the story went up (either way) takes the chip off for everyone
+  const blocks = signed && (await getQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dm_blocks'")).length > 0;
   for (let i = 0; i < ids.length; i += 400) {
     const part = ids.slice(i, i + 400), marks = part.map(() => "?").join(",");
     const rows = await getQuery(`SELECT m.id,t.text FROM media m LEFT JOIN story_text t ON t.story_id=m.id
@@ -531,7 +550,9 @@ async function annotateStudio(viewer, items) {
       const found = await getQuery(`SELECT sm.story_id,sm.user_id,sm.x,sm.y,u.username,u.displayname FROM story_mentions sm
         JOIN media m ON m.id=sm.story_id JOIN users u ON u.userId=sm.user_id
         WHERE sm.story_id IN (${marks}) AND sm.removed_at IS NULL AND m.source='user' AND m.deleted=0 AND m.expires>? AND m.created>?
-        ${cols.has("archived_at") ? "AND COALESCE(u.archived_at,0)=0" : ""}`, [...part, now, now - WINDOW_MS]);
+        ${cols.has("archived_at") ? "AND COALESCE(u.archived_at,0)=0" : ""}
+        ${blocks ? `AND NOT EXISTS (SELECT 1 FROM dm_blocks b WHERE (b.blocker_id=sm.user_id AND b.blocked_id=m.by_user_id)
+                                                            OR (b.blocker_id=m.by_user_id AND b.blocked_id=sm.user_id))` : ""}`, [...part, now, now - WINDOW_MS]);
       for (const row of found) {
         if (!chips.has(row.story_id)) chips.set(row.story_id, []);
         chips.get(row.story_id).push({ u: row.username, d: row.displayname || null, x: row.x, y: row.y, mine: row.user_id === viewer.userId });
@@ -548,10 +569,13 @@ async function unmention(user, id) {
   const SR = require("./storyreact");
   if (!studioOn()) throw new Refuse(423, "Story Studio isn't switched on.");
   await init();
-  const found = await SR.storyFor(user, id);
-  const mine = found && (await getQuery("SELECT removed_at FROM story_mentions WHERE story_id=? AND user_id=?", [found.row.id, user.userId]))[0];
+  // 1.99?? train3 verify: the person named acts on THEIR mention row - seeing the story isn't needed (a block, a pad they left,
+  // the 18+ gate hid it from them and the chip stayed for everyone else). A row is theirs only; nothing else is revealed.
+  const sid = String(id || "");
+  if (!user || !user.userId || !/^[a-f0-9]{24}$/.test(sid)) throw new Refuse(404, SR.GONE);
+  const mine = (await getQuery("SELECT removed_at FROM story_mentions WHERE story_id=? AND user_id=?", [sid, user.userId]))[0];
   if (!mine) throw new Refuse(404, SR.GONE);
-  const r = await runQuery("UPDATE story_mentions SET removed_at=? WHERE story_id=? AND user_id=? AND removed_at IS NULL", [NOW(), found.row.id, user.userId]);
+  const r = await runQuery("UPDATE story_mentions SET removed_at=? WHERE story_id=? AND user_id=? AND removed_at IS NULL", [NOW(), sid, user.userId]);
   return { removed: !!r.changes };
 }
 async function sweep() {
@@ -621,5 +645,5 @@ function register(app, { addUser, noTimers = false }) {
 module.exports = { init, register, create, targets, people, personStory, personRows, profileUploaders, prefs, setPrefs, hide, unhide, isSubject, isPrivate,
                    annotate, annotateStudio, preflight, postCheck, rateCheck, unmention, sweep, studioOn, setSafetyCheck, Refuse, _setClock,
                    STORY_MAX_SECS, STORY_MAX_IMAGE_MB, STORY_MAX_VIDEO_MB, STORY_PER_DAY, STORY_GAP_MS, WINDOW_MS,
-                   STORY_W, STORY_H, STORY_VIDEO_W, STORY_VIDEO_H, STORY_SRC_MAX_SECS, STORY_SRC_VIDEO_MB, OVERLAY_MAX_MB,
+                   STORY_W, STORY_H, STORY_VIDEO_W, STORY_VIDEO_H, STORY_SRC_MAX_SECS, STORY_SRC_VIDEO_MB, OVERLAY_MAX_MB, OVERLAY_PER_HOUR,
                    STORY_TEXTS_MAX, STORY_TEXT_LEN, STORY_STICKERS_MAX, STORY_MENTIONS_MAX };

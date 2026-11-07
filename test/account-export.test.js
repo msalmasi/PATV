@@ -117,6 +117,19 @@ test("the contents: the member's own data, by section", async () => {
   assert.equal(d.chat.chat_line_reports[0].decided_by, undefined, "not who handled it");
 });
 
+// 1.99?? train3 verify (Story Studio): the words on their own stories and the stories that mention them - never who posted those
+test("Story Studio: their stories' words and the mentions of them are in the export, never the other person's id or words", async () => {
+  await require(path.join(repo, "userstories")).init();
+  await runQuery("INSERT INTO media (id, kind, ct, file, by_user_id, created, expires, deleted, source) VALUES ('5e0000aa', 'photo', 'image/webp', 'm.webp', 'me', 1, 9e15, 0, 'user'), ('5e0000ab', 'photo', 'image/webp', 'n.webp', 'someoneelse', 1, 9e15, 0, 'user')");
+  await runQuery("INSERT INTO story_text (story_id, text, created) VALUES ('5e0000aa', 'MY-STORY-WORDS', 5), ('5e0000ab', 'THEIR-STORY-WORDS', 6)");
+  await runQuery("INSERT INTO story_mentions (story_id, user_id, x, y, created) VALUES ('5e0000ab', 'me', .25, .75, 7), ('5e0000aa', 'someoneelse', .5, .5, 8)");
+  const d = await X.collect("me");
+  assert.deepEqual(d.stories.story_words, [{ story_id: "5e0000aa", text: "MY-STORY-WORDS", created: 5 }]);
+  assert.deepEqual(d.stories.mentions_of_you.map((m) => [m.story_id, m.x, m.y]), [["5e0000ab", 0.25, 0.75]]);
+  const s = JSON.stringify(d);
+  assert.equal(s.includes("THEIR-STORY-WORDS"), false); assert.equal(s.includes("someoneelse"), false);
+});
+
 test("adultgate site: the age confirmation (users.age_confirmed_at + its wording's version) and the Creators one are in the account section", async () => {
   await runQuery("ALTER TABLE users ADD COLUMN age_confirmed_at INTEGER").catch(() => {});
   await runQuery("ALTER TABLE users ADD COLUMN age_confirmed_v TEXT").catch(() => {});

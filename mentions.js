@@ -550,6 +550,12 @@ function register(app, { addUser }) {
  * 1.99kk: may a feed @mention notify this account now? (feedmentions.js) The same preferences as room alerts: the
  * "@mentions in posts and comments" switch (default on), the mute and the quiet hours (skipped, never queued).
  */
+/** 1.99?? train3 verify: did they switch "@mentions in posts, comments and stories" off? (the switch alone - not the mute or
+ *  quiet hours, which only hold notices back). A story chip is never put on someone who said no. */
+async function feedOff(userId) {
+  const r = await prefsRow(String(userId || ""));
+  return !!r && r.feed === 0;
+}
 async function feedAllowed(userId, t = NOW()) {
   const r = await prefsRow(String(userId || ""));
   if (!r) return true;
@@ -559,5 +565,5 @@ async function feedAllowed(userId, t = NOW()) {
   return true;
 }
 
-module.exports = { init, register, get, save, mute, feedAllowed, onLines, padMuted, setPadMute, padMutes, chatMentions, typedTargets, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
+module.exports = { init, register, get, save, mute, feedAllowed, feedOff, onLines, padMuted, setPadMute, padMutes, chatMentions, typedTargets, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
                    WORDS_MAX, ROOM_GAP_MS, HOUR_MAX, _setClock, _idle, _sent: sent, Refuse };

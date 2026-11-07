@@ -3,6 +3,10 @@
 // posting validate the declared words and ownership. Pixels are never trusted or served unchanged:
 // pictures first use feedmedia's decoder, video is encoded once with local-only inputs, and the final
 // composite goes through the existing story safety hook. Mentions are separate data, never pixels.
+// 1.99?? train3 verify - a design limit, on purpose: the word filter and the sticker ownership check read only what the edit
+// DECLARES (its texts, its sticker ids). The overlay's pixels come from the browser, so a modified client can draw any words, or
+// sticker art it doesn't own, into the layer; only the image-safety check (the story safety hook, on the composed result) sees
+// what was drawn. Moderation of a story's drawn words is the report / remove path, as for any picture.
 "use strict";
 const fs = require("fs"), path = require("path"), crypto = require("crypto");
 const media = require("./feedmedia");

@@ -271,5 +271,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { names, hashtags, inlineRefs, notify, notifyStory, accounts, suggest, register, MENTION_RE, TAG_RE, MAX_NAMES, PAIR_HOUR, AUTHOR_HOUR, RECIPIENT_HOUR,
+module.exports = { names, hashtags, inlineRefs, notify, notifyStory, accounts, blockedEither, suggest, register, MENTION_RE, TAG_RE, MAX_NAMES, PAIR_HOUR, AUTHOR_HOUR, RECIPIENT_HOUR,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => hits.clear() };

@@ -58,6 +58,12 @@ test("the deletion job: story votes + sent story refs deleted, refs about them u
   await runQuery(`INSERT INTO dm_story_refs (message_id, conversation_id, story_id, sender_id, author_id, role, author_name, room_title, created) VALUES
                   (801, 'c1', '5a0000aa', 'gone', 'oth', 'uploader', 'Other', 'A Pad', 1), (802, 'c1', '5a0000ab', 'oth', 'gone', 'subject', 'Goner Cam', 'A Pad', 1)`);
   await runQuery("INSERT INTO story_prefs (user_id, captures_of_me, capture_reacts, updated) VALUES ('gone', 1, 0, 1)");
+  // 1.99?? train3 verify (Story Studio): the chips naming them, their stories' words and the chips on their stories go
+  await require(path.join(repo, "userstories")).init();
+  await runQuery("INSERT INTO media (id, kind, ct, file, by_user_id, created, expires, deleted, source) VALUES ('5a0000ac', 'photo', 'image/webp', 'g.webp', 'gone', 1, 9e15, 0, 'user'), ('5a0000ad', 'photo', 'image/webp', 'o.webp', 'oth', 1, 9e15, 0, 'user')");
+  await runQuery("INSERT INTO story_text (story_id, text, created) VALUES ('5a0000ac', 'GONER-WORDS', 1), ('5a0000ad', 'OTHER-WORDS', 1)");
+  await runQuery(`INSERT INTO story_mentions (story_id, user_id, x, y, created) VALUES ('5a0000ad', 'gone', .5, .5, 1), ('5a0000ac', 'oth', .5, .5, 1),
+                  ('5a0000ad', 'third', .5, .5, 1)`);
   const fresh = await S.create({ get: () => "" }, "gone", "password");
   await D.request(reqOf("gone", fresh.id), { password: "pw-12345678", confirm: "goner" });
   clockAt += 14 * DAY + 1;
@@ -70,6 +76,9 @@ test("the deletion job: story votes + sent story refs deleted, refs about them u
                    "a reply to their story: unlinked (its card reads Story no longer available)");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_tips"))[0].n, 2, "story tips are kept");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_prefs WHERE user_id = 'gone'"))[0].n, 0);
+  assert.deepEqual(await getQuery("SELECT story_id, user_id FROM story_mentions ORDER BY story_id, user_id"), [{ story_id: "5a0000ad", user_id: "third" }],
+                   "the chip naming them and the chips on their story went; someone else's chip on someone else's story stayed");
+  assert.deepEqual((await getQuery("SELECT story_id FROM story_text ORDER BY story_id")).map((x) => x.story_id), ["5a0000ad"], "their story's words went");
   const rep = JSON.parse(row.report || "{}");
   assert.equal(rep.story_refs_unlinked, 1);
 });

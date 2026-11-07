@@ -640,6 +640,78 @@ test("Studio rejects the wrong overlay dimensions and removes the generated file
   } finally { fmedia.processImage = original; await store.setConfig(saved, "test"); }
 });
 
+// 1.99?? train3 verify (review): a chip only for someone who could see the story and take it off; the person named removes it
+// without needing to see the story; a later block takes the chip off for everyone
+test("Studio mentions: no chip across a block, with feed mentions off or outside an Approved pad; the named person removes theirs unseen", async () => {
+  const saved = { ...store.config() }, author = await mkUser("ashcanvas"), blocked = await mkUser("ashblocked"), blocker = await mkUser("ashblocker");
+  const quiet = await mkUser("ashquiet"), member = await mkUser("ashmember"), later = await mkUser("ashlater");
+  const M = require(path.join(repo, "mentions")), PA = require(path.join(repo, "padaccess")), R = await rooms.get(ROOM);
+  await runQuery(`CREATE TABLE IF NOT EXISTS dm_blocks (blocker_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+                  PRIMARY KEY (blocker_id, blocked_id))`);
+  await runQuery("INSERT OR IGNORE INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES (?,?,1), (?,?,1)",
+                 [author.userId, blocked.userId, blocker.userId, author.userId]);
+  await M.save(quiet.userId, { feed: false });
+  await PA.setLevel(U.owner, R, "public");
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    const aid = await editedUpload(author, studioEdit(ROOM, ["Moss on the steps"]));
+    for (const who of [blocked, blocker, quiet]) {
+      const r = await post("/api/stories/mine", author, { attachment: aid, pad: ROOM, mentions: [{ username: who.username, x: 0.5, y: 0.5 }] });
+      assert.equal(r.status, 400, who.username);
+      assert.equal(r.d.error, `@${who.username} isn't available for a story mention.`, "the same words as an unknown name");
+      assert.equal((await getQuery("SELECT state FROM feed_attachments WHERE id=?", [aid]))[0].state, "ready", "the upload stays unused");
+    }
+    // the person named removes their chip even when they can no longer see the story (a block made afterwards)
+    const story = await US.create(author, { attachment: aid, pad: ROOM, mentions: [{ username: later.username, x: 0.5, y: 0.5 }] });
+    assert.deepEqual(story.item.mentions.map(m => m.u), [later.username]);
+    await runQuery("INSERT INTO dm_blocks (blocker_id, blocked_id, created_at) VALUES (?,?,2)", [later.userId, author.userId]);
+    const seenBy = async (viewer) => ((await stories.forViewer(viewer, { room: ROOM }))[0] || { items: [] }).items.find(i => i.id === story.id);
+    assert.deepEqual((await seenBy(member)).mentions, [], "a block (either way) takes the chip off for everyone");
+    const gone = await post("/api/stories/" + story.id + "/unmention", later);
+    assert.equal(gone.status, 200, JSON.stringify(gone.d)); assert.equal(gone.d.removed, true);
+    assert.equal((await getQuery("SELECT removed_at FROM story_mentions WHERE story_id=? AND user_id=?", [story.id, later.userId]))[0].removed_at > 0, true);
+    assert.equal((await post("/api/stories/" + story.id + "/unmention", member)).status, 404, "a row is the named person's only");
+    assert.equal((await post("/api/stories/" + "zz" + "/unmention", later)).status, 404);
+    // an Approved pad: only someone inside it
+    await PA.setLevel(U.owner, R, "approved");
+    US._setClock(() => Date.now() + 3 * 86400e3);                           // past the owner's posting gap / day count
+    const aid2 = await editedUpload(U.owner, studioEdit(ROOM, ["Inside only"]));
+    const r = await post("/api/stories/mine", U.owner, { attachment: aid2, pad: ROOM, mentions: [{ username: member.username, x: 0.5, y: 0.5 }] });
+    assert.equal(r.status, 400, JSON.stringify(r.d)); assert.equal(r.d.error, `@${member.username} isn't available for a story mention.`);
+  } finally {
+    await runQuery("DELETE FROM dm_blocks WHERE blocker_id IN (?,?,?) OR blocked_id IN (?,?,?)", [author.userId, blocker.userId, later.userId, author.userId, blocked.userId, later.userId]);
+    await M.save(quiet.userId, { feed: true });
+    US._setClock(() => Date.now());
+    await PA.setLevel(U.owner, R, "members"); await store.setConfig(saved, "test");
+  }
+});
+// 1.99?? train3 verify (review): overlays have their own hourly cap (they skip the hourly count and the daily allowance)
+test("Studio overlay uploads have their own hourly cap", async () => {
+  const saved = { ...store.config() }, u = await mkUser("studioovlcap");
+  try {
+    await store.setConfig({ story_studio: true }, "test");
+    for (let n = 0; n < US.OVERLAY_PER_HOUR; n++) {
+      const id = await upload(u, { purpose: "story_ovl" });
+      await runQuery("UPDATE feed_attachments SET state='deleted' WHERE id=?", [id]);    // discarded: no open-upload slot held
+    }
+    const r = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story_ovl" });
+    assert.equal(r.status, 429); assert.match(r.d.error, /story edits this hour/);
+    await runQuery("UPDATE feed_attachments SET created = created - 3700000 WHERE owner_id=? AND purpose='story_ovl'", [u.userId]);
+    const ok = await post("/api/feed/uploads", u, { kind: "image", size: 100, purpose: "story_ovl" });
+    assert.equal(ok.status, 200, JSON.stringify(ok.d));
+    await post("/api/feed/uploads/" + ok.d.id + "/discard", u);
+  } finally { await store.setConfig(saved, "test"); }
+});
+// 1.99?? train3 verify (review): a restart mid-compose leaves a story-* work folder; the tmp sweep removes it once stale
+test("the tmp sweep removes stale story-* / heic-* work folders, never fresh ones or other folders", () => {
+  const T = path.join(fmedia.dir(), "tmp"), old = Date.now() / 1000 - 3 * 3600;
+  const mk = (name, stale) => { const d = path.join(T, name); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, "x.png"), "x"); if (stale) fs.utimesSync(d, old, old); return d; };
+  const staleStory = mk("story-abc123", true), staleHeic = mk("heic-def456", true), fresh = mk("story-fresh1", false), other = mk("keepme", true);
+  fmedia.sweepTmp();
+  assert.equal(fs.existsSync(staleStory), false); assert.equal(fs.existsSync(staleHeic), false);
+  assert.equal(fs.existsSync(fresh), true); assert.equal(fs.existsSync(other), true);
+  fs.rmSync(fresh, { recursive: true, force: true }); fs.rmSync(other, { recursive: true, force: true });
+});
 test("Studio overlay uploads do not consume hourly or daily allowance but still occupy open-upload slots", async () => {
   const saved = { ...store.config() };
   const u = await mkUser("studiolilacmesh", { camfrog: "cfstudiolilacmesh" });
