@@ -45,10 +45,12 @@ const DUR = 2400;
 const EPS = [["911", 1, 1, "Pilot"], ["912", 1, 2, "Second"], ["913", 1, 3, "Third"]];
 const brief = ([key, season, episode, title]) => ({ key, type: "episode", title, show: "The Show", season, episode, duration: DUR, show_key: "900", season_key: "901", poster: true });
 const plexFail = new Set();                                   // (a title media-control can't open any more: its start fails)
+const plexDown = new Set();                                   // (review fixes: Plex unreachable for this title - media-control answers 502)
 const plex = {
   async search() { return []; },
   async item(key) {
     if (plexFail.has(key)) { const err = new Error("Not in the Plex library"); err.status = 404; throw err; }
+    if (plexDown.has(key)) { const err = new Error("Plex can't be reached right now"); err.status = 502; throw err; }
     if (key === "900") return { key, type: "show", title: "The Show", episodes: EPS.map(brief) };
     const e = EPS.find((x) => x[0] === key);
     if (e) return { ...brief(e), file: FILE, width: 1920, height: 1080, hdr: false, audio: [], subs: [] };
@@ -113,6 +115,7 @@ async function clear() {
   for (const r of [ROOM, OTHER, THIRD]) await rooms.setStage(r, { upnext_break: "", slot_max_min: "" }, "test", { maxSlots: 4, maxPrice: 0, maxMinutes: 360 });
   await conf.set({ library_enabled: true, library_daily_cap: 50, library_free_daily_cap: 50 }, "test");
   plexFail.clear();
+  plexDown.clear();
   procs.length = 0;
   await settle();
 }
@@ -230,10 +233,12 @@ test("5: paid lines - every row bills its OWN owner as it plays; the queue in fr
   const starter = await mkUser("pleb", 1000);                              // its first hour only
   await Q.startFor(starter, { room: ROOM, keys: ["912", "913"], estimate: 2000 });
   const p = await goLive();
-  const broke = await mkUser("pleb", 0), payer = await mkUser("pleb", 5000);
+  // (review fixes: lining up needs the points for its first title at the press - owner answer 3; this one spends them before its turn)
+  const broke = await mkUser("pleb", 2000), payer = await mkUser("pleb", 5000);
   await Q.after(broke, { room: ROOM, key: "500", estimate: 2000 });
   await Q.after(payer, { room: ROOM, key: "501", estimate: 2000 });
-  assert.deepEqual([await bal(broke), await bal(payer)], [0, 5000], "nothing taken at the add");
+  assert.deepEqual([await bal(broke), await bal(payer)], [2000, 5000], "nothing taken at the add");
+  await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [broke.userId]);
   const q0 = await activeQ();
   await endIt(p);                                                            // 913 needs a 2nd hour: out of points -> hand over
   const ended = await qRow(q0.id);
@@ -241,7 +246,8 @@ test("5: paid lines - every row bills its OWN owner as it plays; the queue in fr
   assert.match(JSON.stringify(await inbox(starter)), /out of PAT/);
   const b = await lastQ(broke);
   assert.deepEqual([b.state, b.notice], ["ended", "after_cancelled"]);
-  assert.match(JSON.stringify(await inbox(broke)), /takes 2,000 PAT/);
+  assert.match(JSON.stringify(await inbox(broke)), /takes 2,000 points/, "(review fixes: the notice says points)");
+  assert.doesNotMatch(JSON.stringify(await inbox(broke)), /PAT/);
   const q = await activeQ();
   assert.equal(q.user_id, payer.userId, "the next one");
   assert.equal(onEncoder().ratingKey, "501");
@@ -529,4 +535,390 @@ test("restart windows: a queue still 'starting' on the pad - the line waits for 
   assert.equal((await qRow(q.id)).state, "ended");
   assert.equal((await S.getSlot(q.slot_id)).end_reason, "library_failed");
   assert.equal((await activeQ()).user_id, u2.userId, "the line's head starts");
+});
+
+
+// ───────────────────────── upnext3 review fixes (1.99ali): the money review (1-7 + smaller notes) and the UX review (1-13) - each failed on 792ccd1b ─────────────────────────
+const DEAD = "http://127.0.0.1:9";
+async function mcDown(fn) { const url = process.env.MEDIACTL_URL; process.env.MEDIACTL_URL = DEAD; try { return await fn(); } finally { process.env.MEDIACTL_URL = url; } }
+const blip = async () => { throw new L.Refuse(503, "The Plex player can't be reached right now - try again in a bit.", { code: "encoder_down" }); };
+
+test("money 1: the next in line held up by a busy media-control - a fresh ▶ / a queue start is refused line_next (the line goes first); a re-park behind what came on clears its retry clock (never cancelled later while it waits)", async () => {
+  await noBreak();
+  const u1 = await mkUser(), u3 = await mkUser(), booker = await mkUser();
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "502", start_at: T + 3 * 60000 });
+  await Q.after(u1, { room: ROOM, key: "501" });
+  T = bk.slot.start_at - 10000;
+  await mcDown(() => L.stop(admin, ROOM));                                   // ⏹ while media-control blips: the hand-over is held up
+  mstreams.stop(L.stageName(ROOM));
+  assert.equal(await session(), null);
+  assert.ok((await rowsOf())[0].retry_since, "held up");
+  await assert.rejects(L.playFor(u3, { room: ROOM, key: "502" }), (e) => e.status === 409 && e.extra.code === "line_next");
+  await assert.rejects(Q.startFor(u3, { room: ROOM, keys: ["911", "912"] }), (e) => e.status === 409 && e.extra.code === "line_next");
+  T = bk.slot.start_at + 1000;
+  await L.watch();                                                           // media-control back + the booking due: it goes first
+  const q = await activeQ();
+  assert.equal(q && q.user_id, booker.userId);
+  const rows = await rowsOf();
+  assert.deepEqual([rows.length, rows[0].behind, rows[0].retry_since], [1, q.slot_id, null], "re-parked behind the booking, its retry clock cleared");
+  T += 6 * 60000;
+  await L.watch();
+  assert.equal((await lastQ(u1)).state, "after", "still in line - not 'no library stream came free in time'");
+});
+
+test("money 2: a waiting booking's start window counts from when the stage really came free - a failed yield at a queue's title change (the queue kept the stage) never starts the clock; later, held up again, it waits out its window and starts", async () => {
+  await noBreak();
+  await Q.startFor(admin, { room: ROOM, keys: ["911", "912"] });
+  let p = await goLive();
+  const booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 5 * 60000 });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  assert.equal((await booking(bk.slot.id)).state, "waiting");
+  const orig = L._q.needEncoder;
+  L._q.needEncoder = blip;
+  try { await endIt(p); } finally { L._q.needEncoder = orig; }               // 911 ends = the booking's moment; the yield fails for now
+  assert.equal(onEncoder().ratingKey, "912", "the queue went on");
+  assert.equal((await booking(bk.slot.id)).free_at, null, "the stage never came free for it");
+  p = await goLive();
+  T += 40 * 60000;
+  L._q.needEncoder = blip;
+  try {
+    await L.stop(admin, ROOM);
+    assert.equal(await activeQ(), null);
+    T += 10000;
+    await L.watch();
+    assert.equal((await booking(bk.slot.id)).state, "waiting", "inside its start window from when the stage came free");
+  } finally { L._q.needEncoder = orig; }
+  T += 10000;
+  await L.watch();
+  const q = await activeQ();
+  assert.deepEqual([q && q.user_id, (await booking(bk.slot.id)).state], [booker.userId, "started"]);
+});
+
+test("money 3: a booking never starts for more than the estimate its booker said yes to - the price rose while it waited: it doesn't start (a notice in points, nothing taken); a price that fell starts it at the lower price", async () => {
+  await noBreak();
+  await conf.set({ library_price: 1000 }, "test");
+  const booker = await mkUser("pleb", 100000);
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 5 * 60000, estimate: 2000 });
+  await conf.set({ library_price: 5000 }, "test");
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  assert.equal(await activeQ(), null);
+  const b = await booking(bk.slot.id);
+  assert.equal(b.state, "failed");
+  assert.match(b.error, /about 10,000 points now - more than the 2,000 points you said yes to when you booked it/);
+  assert.equal(await bal(booker), 100000, "nothing taken");
+  assert.match(JSON.stringify(await inbox(booker)), /more than the 2,000 points you said yes to/);
+  await conf.set({ library_price: 1000 }, "test");
+  const bk2 = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 5 * 60000, estimate: 2000 });
+  await conf.set({ library_price: 500 }, "test");
+  T = bk2.slot.start_at + 1000;
+  await L.watch();
+  const q = await activeQ();
+  assert.deepEqual([q && q.user_id, q && q.per_hour], [booker.userId, 500]);
+  assert.equal(await bal(booker), 100000 - 1000, "its first title at the lower price");
+});
+
+test("money 4: a cut of the whole pad that lands half-way through a hand-over stops the walk - nobody else lined up starts on the pad that was just cleared, each is told it was cleared", async () => {
+  await noBreak();
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  const p = await goLive();
+  const u1 = await mkUser(), u2 = await mkUser();
+  await Q.after(u1, { room: ROOM, key: "501" });
+  await Q.after(u2, { room: ROOM, key: "502" });
+  const orig = Q.moveAfter;
+  let fired = false;
+  Q.moveAfter = async (room, from, to) => {                                  // (retire calls it right after the swap committed)
+    if (!fired) {
+      fired = true;
+      for (const s of await getQuery("SELECT id FROM stage_slots WHERE room_id = ? AND status IN ('waiting','active')", [ROOM])) await S.end(s.id, "cut", owner.username, { scope: "pad" });
+    }
+    return orig(room, from, to);
+  };
+  try { await endIt(p); } finally { Q.moveAfter = orig; }
+  assert.ok(fired);
+  assert.equal(await activeQ(), null, "nobody starts on the cleared pad");
+  assert.equal((await rowsOf()).length, 0);
+  for (const u of [u1, u2]) {
+    const r = await lastQ(u);
+    assert.deepEqual([r.state, r.notice], ["ended", "after_cancelled"]);
+    assert.match(JSON.stringify(await inbox(u)), /stage was cleared/);
+  }
+});
+
+test("money 5: a queue paused for a booking that can't carry on (its wait cap) says plainly that the unused part of the hour it paid for isn't refunded", async () => {
+  await rooms.setStage(ROOM, { upnext_break: 0, slot_max_min: 130 }, "test", { maxSlots: 4, maxPrice: 0, maxMinutes: 360 });
+  await conf.set({ library_price: 1000 }, "test");
+  const starter = await mkUser("pleb", 100000);
+  await Q.startFor(starter, { room: ROOM, keys: ["911", "912"], estimate: 2000 });
+  const p = await goLive();
+  const q0 = await activeQ();
+  const booker = await mkUser("pleb", 100000);
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 5 * 60000, estimate: 2000 });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  await endIt(p);                                                            // 911 ends -> the booking plays, q0 pauses
+  await goLive();
+  T += 131 * 60000;
+  await runQuery("UPDATE media_sessions SET updated = ?", [T]);
+  await L.watch();
+  const h = await qRow(q0.id);
+  assert.deepEqual([h.state, h.notice], ["ended", "held_cancelled"]);
+  const box = JSON.stringify(await inbox(starter));
+  assert.match(box, /didn't carry on/);
+  assert.match(box, /the 20 minutes left of the hour it had paid for aren't refunded/);
+});
+
+test("money 6: a booking is marked started inside its own start, before its first title goes out (a restart half-way never leaves it 'waiting' for a stream that played); a start that then fails puts it back, so it fails with a notice", async () => {
+  await noBreak();
+  const booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+  T = bk.slot.start_at + 1000;
+  const orig = S.libraryRetitle;
+  let seen = null;
+  S.libraryRetitle = async (...a) => { seen = (await booking(bk.slot.id)).state; return orig(...a); };
+  try { await L.watch(); } finally { S.libraryRetitle = orig; }
+  assert.equal(seen, "started");
+  assert.equal((await booking(bk.slot.id)).queue_id, (await activeQ()).id);
+  await clear();
+  await noBreak();
+  const bk2 = await Q.bookFor(booker, { room: ROOM, key: "502", start_at: T + 3 * 60000 });
+  T = bk2.slot.start_at + 1000;
+  S.libraryRetitle = async () => { throw new Error("boom"); };
+  try { await L.watch(); } finally { S.libraryRetitle = orig; }
+  const b2 = await booking(bk2.slot.id);
+  assert.deepEqual([b2.state, b2.error, b2.queue_id], ["failed", "boom", null]);
+  assert.match(JSON.stringify(await inbox(booker)), /didn't start/);
+});
+
+test("money 7: the booked slot's own refusals carry codes (site_full, busy_library) - a full site holds a booking up inside its start window instead of failing it at once", async () => {
+  const booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+  await S.setConfig({ max_concurrent: 1 }, "test");
+  try {
+    await L.playFor(admin, { room: OTHER, key: "500" });
+    T = bk.slot.start_at + 1000;
+    await assert.rejects(S.libraryActivate(bk.slot.id, { title: "📼 x", minutes: 100 }), (e) => e.status === 409 && e.code === "site_full");
+    await L.watch();
+    assert.equal((await booking(bk.slot.id)).state, "booked", "held up, not failed");
+    assert.equal((await S.getSlot(bk.slot.id)).status, "scheduled");
+  } finally { await S.setConfig({ max_concurrent: 6 }, "test"); }
+  T += 10000;
+  await L.watch();
+  assert.equal((await booking(bk.slot.id)).state, "started", "room again: it starts");
+  assert.match(fs.readFileSync(path.join(repo, "mainstage.js"), "utf8"), /already playing something from the library\.", "busy_library"\)/);
+});
+
+test("money (smaller): Plex / media-control answering 5xx when a queue's next title is fetched - it waits and tries that title again, never skips it", async () => {
+  await noBreak();
+  await Q.startFor(admin, { room: ROOM, keys: ["911", "912"] });
+  const p = await goLive();
+  const q0 = await activeQ();
+  plexDown.add("912");
+  await endIt(p);
+  const q = await qRow(q0.id);
+  assert.deepEqual([q.state, q.pos, q.fails], ["active", 1, 0]);
+  assert.ok(q.retry_since, "waits");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM media_plays WHERE queue_id = ? AND error IS NOT NULL", [q0.id]))[0].n, 0, "no skipped title");
+  plexDown.clear();
+  await L.watch();
+  assert.equal(onEncoder().ratingKey, "912");
+});
+
+test("money (smaller) + owner answer 3: lining up a paid queue needs the points for its first title's started hours at the press (nothing is taken) - empty accounts can't fill the line", async () => {
+  await noBreak();
+  await conf.set({ library_price: 1000 }, "test");
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const short = await mkUser("pleb", 1999), ok = await mkUser("pleb", 2000);
+  await assert.rejects(Q.after(short, { room: ROOM, key: "501", estimate: 2000 }),
+                       (e) => e.status === 402 && e.extra.code === "pat" && e.extra.need === 2000 && /2,000 points/.test(e.message) && !/\bPAT\b/.test(e.message));
+  const r = await Q.after(ok, { room: ROOM, key: "501", estimate: 2000 });
+  assert.equal(r.place, 1);
+  assert.equal(await bal(ok), 2000, "nothing taken");
+  assert.equal((await rowsOf()).length, 1);
+});
+
+test("ux 1 (privacy): the 'Who did what' log of a plain starter keeps only their own line-up entries - who else lined up, or was taken out, only for the pad's owner / an admin", async () => {
+  await noBreak();
+  const starter = await mkUser(), willow = await mkUser(), me = await mkUser();
+  await Q.startFor(starter, { room: ROOM, keys: ["912", "913"] });
+  await goLive();
+  await Q.after(willow, { room: ROOM, key: "500" });
+  await Q.after(me, { room: ROOM, key: "501" });
+  await Q.withdrawAfter(owner, ROOM, (await rowsOf())[1].id);
+  const ps = await L.player(starter, ROOM);
+  assert.equal(ps.can_control, true);
+  assert.ok(!ps.log.some((l) => ["queue_after", "queue_remove"].includes(l.action)), JSON.stringify(ps.log));
+  for (const u of [willow, me]) assert.ok(!JSON.stringify(ps.log).includes(u.username), u.username);
+  const po = await L.player(owner, ROOM);
+  assert.equal(po.log.filter((l) => l.action === "queue_after").length, 2);
+  assert.ok(po.log.some((l) => l.action === "queue_remove"));
+  const pa = await L.player(admin, ROOM);
+  assert.equal(pa.log.filter((l) => l.action === "queue_after").length, 2);
+  assert.ok(!("user_id" in po.log[0]), "no ids out");
+});
+
+test("ux 2: 'Coming up' says how many are lined up, whether a booking is first and how many a cleared stage would keep, whenever anyone is - a queue that still has titles included", async () => {
+  await noBreak();
+  await Q.startFor(admin, { room: ROOM, keys: ["911", "912", "913"] });
+  await goLive();
+  const u1 = await mkUser(), u2 = await mkUser(), booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "502", start_at: T + 3 * 60000 });
+  await Q.after(u1, { room: ROOM, key: "500" });
+  await Q.after(u2, { room: ROOM, key: "501" });
+  S.stageBump(ROOM);
+  let c = await S.comingOf(ROOM);
+  assert.equal(c.next.title, "Second", "the queue's own next title");
+  assert.deepEqual([c.line, c.line_head, c.line_kept, c.queued], [2, "after", 0, undefined]);
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  S.stageBump(ROOM);
+  c = await S.comingOf(ROOM);
+  assert.deepEqual([c.line, c.line_head, c.line_kept, c.queued, c.next.title], [3, "booking", 1, true, "Carnival of Souls"]);
+});
+
+test("ux 3: a cut + ban of one title cancels only the picks lined up behind it - a booking that waited starts on the free stage; a queue paused for a booking carries on when the booking is cut + banned; a cut of the whole pad ends a paused queue too, never a booking", async () => {
+  await noBreak();
+  const troll = await mkUser(), u1 = await mkUser(), booker = await mkUser();
+  await L.playFor(troll, { room: ROOM, key: "500" });
+  await goLive();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+  await Q.after(u1, { room: ROOM, key: "502" });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  assert.equal((await booking(bk.slot.id)).state, "waiting");
+  await S.end((await session()).slot_id, "cut", owner.username, { scope: "ban" });
+  await L.watch();
+  const c1 = await lastQ(u1);
+  assert.deepEqual([c1.state, c1.notice], ["ended", "after_cancelled"], "the pick behind it is cancelled");
+  let q = await activeQ();
+  assert.deepEqual([q && q.user_id, q && q.slot_id, (await booking(bk.slot.id)).state], [booker.userId, bk.slot.id, "started"], "the booking starts");
+  assert.doesNotMatch(JSON.stringify(await inbox(booker)), /didn't start/);
+  for (const scope of ["ban", "pad"]) {
+    await clear();
+    await noBreak();
+    const starter = await mkUser(), bkr = await mkUser();
+    await Q.startFor(starter, { room: ROOM, keys: ["911", "912"] });
+    const p = await goLive();
+    const q0 = await activeQ();
+    const b2 = await Q.bookFor(bkr, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+    T = b2.slot.start_at + 1000;
+    await L.watch();
+    await endIt(p);                                                          // the booking plays, q0 pauses
+    assert.equal((await qRow(q0.id)).state, "after");
+    await goLive();
+    await S.end(b2.slot.id, "cut", owner.username, { scope });
+    await L.watch();
+    q = await qRow(q0.id);
+    if (scope === "ban") assert.deepEqual([q.state, (await activeQ()).id], ["active", q0.id], "cut + ban of the booking: the paused queue carries on");
+    else assert.deepEqual([q.state, q.notice], ["ended", "held_cancelled"], "a cut of the whole pad: it ends too");
+  }
+});
+
+test("ux 5: whoever was lined up is told when their queue starts (paid: about how many points, charged as it plays; ⏹ in the 📼 player)", async () => {
+  await noBreak();
+  await conf.set({ library_price: 1000 }, "test");
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  const p = await goLive();
+  const u1 = await mkUser("pleb", 100000);
+  await Q.after(u1, { room: ROOM, key: "501", estimate: 2000 });
+  assert.equal((await inbox(u1)).length, 0);
+  await endIt(p);
+  assert.equal((await activeQ()).user_id, u1.userId);
+  const box = await inbox(u1);
+  assert.equal(box.length, 1);
+  assert.match(box[0].title, /Your queue on Break Pad is starting/);
+  assert.match(box[0].body, /“Night of the Living Dead \(1968\)” is on now - about 2,000 points in all, charged as it plays \(only what actually plays\)\. ⏹ in the pad's 📼 player stops it\./);
+});
+
+test("ux 7: a full line says so - the sheet's answer flags line_full for someone who isn't in it", async () => {
+  await noBreak();
+  await Q.startFor(admin, { room: ROOM, keys: ["912", "913"] });
+  await goLive();
+  const us = [];
+  for (let i = 0; i < 6; i++) us.push(await mkUser());
+  for (let i = 0; i < 5; i++) await Q.after(us[i], { room: ROOM, key: "500" });
+  const m = (await L.mine(us[5], ROOM)).on_pad;
+  assert.deepEqual([m.can_after, m.line_full, m.line_max], [false, true, 5]);
+  assert.equal("line_full" in (await L.mine(us[0], ROOM)).on_pad, false, "in it: your own row grows");
+});
+
+test("ux 8 / 13: the player says whether the pad has a station break (the ⏹ confirm), and a paused queue's row says whether it was paid (its take-out confirm) to whoever may take it out", async () => {
+  await conf.set({ library_price: 1000 }, "test");
+  await noBreak();
+  const starter = await mkUser("pleb", 100000);
+  await Q.startFor(starter, { room: ROOM, keys: ["911", "912"], estimate: 2000 });
+  const p = await goLive();
+  assert.equal((await L.player(starter, ROOM)).station_break, false);
+  const booker = await mkUser("pleb", 100000);
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 3 * 60000, estimate: 2000 });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  await endIt(p);
+  const po = await L.player(owner, ROOM), pv = await L.player(VIEWER, ROOM);
+  assert.deepEqual([po.line[0].kind, po.line[0].paid, "paid" in pv.line[0]], ["resume", true, false]);
+  await rooms.setStage(ROOM, { upnext_break: 8 }, "test", { maxSlots: 4, maxPrice: 0 });
+  assert.equal((await L.player(VIEWER, ROOM)).station_break, true);
+});
+
+test("ux 11: a booker who cancels their own waiting booking isn't told it 'didn't start'", async () => {
+  await noBreak();
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  assert.equal((await booking(bk.slot.id)).state, "waiting");
+  await S.end(bk.slot.id, "cancelled", booker.username);                    // (/api/stage/slots/:id/end by its booker)
+  await L.watch();
+  assert.equal((await booking(bk.slot.id)).state, "cancelled");
+  const box = await inbox(booker);
+  assert.equal(box.length, 1, JSON.stringify(box));
+  assert.match(box[0].title, /waits for the current title/);
+});
+
+test("ux 12: a waiting booking says when the title it waits for should end (lib_wait.ends_at) on the schedule, the pad's coming-up list and Your bookings", async () => {
+  await noBreak();
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const booker = await mkUser();
+  const bk = await Q.bookFor(booker, { room: ROOM, key: "501", start_at: T + 20 * 60000 });
+  T = bk.slot.start_at + 1000;
+  await L.watch();
+  const s = await session();
+  const want = Math.round(Number(s.updated) + (s.duration - (s.position || 0)) * 1000);
+  const sch = (await S.roomSchedule(ROOM, VIEWER, false)).upcoming.find((x) => x.lib_wait);
+  assert.deepEqual(sch.lib_wait, { title: "Charade (1963)", ends_at: want });
+  assert.equal((await S.mine(booker.userId)).slots.find((x) => x.id === bk.slot.id).lib_wait.ends_at, want);
+  assert.equal((await S.roomStage(ROOM, VIEWER)).upcoming.find((x) => x.id === bk.slot.id).lib_wait.ends_at, want);
+});
+
+test("ux 13: a booking waiting behind another BOOKED stream is told it waits for that stream (not 'right after the title')", async () => {
+  await noBreak();
+  const b1 = await mkUser(), b2 = await mkUser();
+  const k1 = await Q.bookFor(b1, { room: ROOM, key: "501", start_at: T + 3 * 60000 });
+  T = k1.slot.start_at + 1000;
+  await L.watch();
+  assert.equal((await activeQ()).user_id, b1.userId);
+  await goLive();
+  const k2 = await Q.bookFor(b2, { room: ROOM, key: "502", start_at: k1.slot.start_at + 102 * 60000 });
+  T = k2.slot.start_at + 1000;
+  await runQuery("UPDATE media_sessions SET updated = ?", [T]);
+  await L.watch();
+  assert.equal((await booking(k2.slot.id)).state, "waiting");
+  const box = JSON.stringify(await inbox(b2));
+  assert.match(box, /A booked stream \(“Night of the Living Dead \(1968\)”\) is still on - yours starts when it ends/);
+});
+
+test("ux 6: lining up behind someone else's running queue answers how many of its titles are still to come (behind_left)", async () => {
+  await noBreak();
+  await Q.startFor(admin, { room: ROOM, keys: ["911", "912", "913"] });
+  await goLive();
+  const r = await Q.after(await mkUser(), { room: ROOM, key: "500" });
+  assert.deepEqual([r.behind_queue, r.behind_left, r.behind], [true, 2, "The Show — S1E1 Pilot"]);
 });

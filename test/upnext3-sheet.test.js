@@ -51,6 +51,10 @@ class El extends Node_ {
   }
   set value(v) { this._value = String(v); }
   get checked() { return "checked" in this.attrs; }
+  // (review fixes: <details> open state, focus kept across a redraw)
+  get open() { return "open" in this.attrs; } set open(v) { if (v) this.attrs.open = ""; else delete this.attrs.open; }
+  contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }
+  getClientRects() { return this.isConnected ? [{}] : []; }
   setAttribute(k, v) { this.attrs[k] = String(v); } getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   hasAttribute(k) { return k in this.attrs; } removeAttribute(k) { delete this.attrs[k]; }
   appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.childNodes.push(c); return c; }
@@ -100,7 +104,7 @@ const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise((r
 
 // ── the sheet against a stubbed site (the plexreplace-ui.test.js harness + /queue/after, /queue/edit, mine().queues) ──
 const MOVIE = { key: "501", type: "movie", title: "Night of the Living Dead", year: 1968, duration: 5760, audio: [], subs: [], summary: "They're coming." };
-function sheet({ onPad = null, queues = [], after = [], edit = [], perHour = 0 } = {}) {
+function sheet({ onPad = null, queues = [], after = [], edit = [], perHour = 0, list = null } = {}) {
   const doc = mkDoc();
   const calls = [];
   const answers = { after: after.slice(), edit: edit.slice() };
@@ -114,7 +118,7 @@ function sheet({ onPad = null, queues = [], after = [], edit = [], perHour = 0 }
     else if (url === "/api/medialib/queue/edit") { const a = answers.edit.shift() || { status: 200, j: { ok: true, items: 4 } }; status = a.status; j = a.j; }
     return { ok: status < 400, status, json: async () => j };
   };
-  const store = {};
+  const store = list ? { "patv.plexList": JSON.stringify(list) } : {};
   const win = { document: doc, fetch: fetchStub, sessionStorage: { getItem: (k) => (k in store ? store[k] : null), setItem(k, v) { store[k] = String(v); } }, setTimeout, clearTimeout, console, Intl, Date, Math, JSON };
   win.window = win;
   vm.runInNewContext(SRC, win, { filename: "plex-play.js" });
@@ -159,7 +163,8 @@ test("5: behind someone else's RUNNING queue the pick offers \"+ Line up my queu
   assert.equal(p.length, 1);
   assert.deepEqual(p[0].body, { room: "Night.Orchard", key: "501", scope: "episode", offset: 0, quality: 720, audio: null, sub: null });
   assert.equal(s.posts("/api/medialib/queue/edit").length, 0, "never into their queue");
-  assert.equal(s.P.msg.textContent, "Lined up - your queue plays after “The Show — S1E2 Second”: 2 of 2 in line.");
+  // (review ux 6: it plays when that queue ends, not after the title on now)
+  assert.equal(s.P.msg.textContent, "Lined up - your queue plays when the queue that’s on ends (1 more after “The Show — S1E2 Second”): 2 of 2 in line.");
 });
 
 test("5: a paid line-up confirms the server's estimate in points, charged to you (nothing taken until it starts); yes = the same POST with that estimate", async () => {
@@ -179,7 +184,7 @@ test("5: your place in a longer line (✕ takes yours out); a full line / a queu
   s.flow.info(); await tick();
   await s.pick();
   const line = s.P.pick.querySelector("[data-now]");
-  assert.match(line.textContent, /Your queue is 3 of 4 in line after it\./);
+  assert.match(line.textContent, /Your queue is 3 of 4 in line after the queue that’s on \(1 more after this title\)\./, "(review ux 6)");
   assert.ok(line.querySelector("[data-after-x]"));
   const full = sheet({ onPad: { ...QUEUE_ON, can_after: false, after: { count: 1, mine: false, place: null, line: 5 } } });
   full.flow.info(); await tick();
@@ -202,8 +207,9 @@ test("10: a booking due next - the pick says a booked stream starts right after 
                     queues: [{ id: 9, room: "Night.Orchard", state: "after", held: true, notice: "held" }] });
   h.flow.info(); await tick();
   await h.pick();
-  assert.match(h.P.pick.querySelector("[data-now]").textContent, /Your queue is paused for a booked stream - it carries on right after it\./);
-  assert.match(h.P.info.textContent, /^📼 Your queue is paused for a stream booked for this time - it carries on right after it\. Nothing more is charged until it does\./);
+  // (review ux 8: said once - the pick's line, not the info line too, never "only whoever started it…")
+  assert.match(h.P.pick.querySelector("[data-now]").textContent, /^📼 Now on Night Orchard: “The Show — S1E2 Second” - your paused queue carries on right after it\. ✕ Take them out$/);
+  assert.doesNotMatch(h.P.info.textContent, /paused/);
   assert.match(SRC, /esc\(_t\('js\.plex\.b_waits', 'If something from the library is still on then, yours waits for that title to finish and starts right after it\.'\)\)/);
 });
 
@@ -212,7 +218,7 @@ test("7: ▶ Play this instead's confirm says what's lined up keeps waiting (beh
   s.flow.info(); await tick();
   await s.pick();
   s.play().click(); await tick();
-  assert.match(s.askBox().textContent, /What’s lined up after it \(2\) keeps waiting - it plays after yours\./);
+  assert.match(s.askBox().textContent, /The 2 lined up after it keep waiting - they play after yours\./, "(review ux 13: the plural)");
 });
 
 function player(j, { confirmAns = true } = {}) {
@@ -246,9 +252,10 @@ test("5: the 📼 player lists who's lined up next, in order, behind a running q
   assert.equal(sec.querySelector("summary").textContent, "Lined up next (3)");
   const items = sec.querySelectorAll("li");
   assert.equal(items.length, 3);
-  assert.match(items[0].textContent, /^Night of the Living Dead \(1968\) · 📅 booked for \d\d:\d\d$/);
+  // (review ux 13: the viewer's own clock, as the sheet says it - 12 h here)
+  assert.equal(items[0].textContent, "Night of the Living Dead (1968) · 📅 booked for " + new Date(LINE[0].at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }));
   assert.equal(items[1].textContent, "Charade (1963) +1 more");
-  assert.equal(items[2].textContent.replace("✕", ""), "The Show — S1E1 Pilot · added by me");
+  assert.equal(items[2].textContent.replace("✕", ""), "The Show — S1E1 Pilot · yours", "(review ux 13: your own row)");
   assert.equal(sec.querySelectorAll("[data-after-x]").length, 1, "✕ only on your own");
   assert.doesNotMatch(items[1].textContent, /added by/);
   sec.querySelector('[data-after-x="42"]').click(); await tick();
@@ -274,7 +281,7 @@ test("7: the player's ⏹ says what's lined up next starts right after it (its o
 
 test("7: a moderator's Cut of a 📼 slot with someone lined up says it starts next (✕ in the 📼 player clears it first); a cut + ban says it's cancelled too - coming.queued from the server", () => {
   const src = read("public", "js", "stage-room.js");
-  assert.match(src, /if \(act === 'cut' && cs && cs\.lib && cs\.id === b\.getAttribute\('data-id'\) && coming && coming\.next && coming\.queued\) \{/);
+  // (review fixes: the condition is coming.line > 0 now - the "ux 2 / 3" test below)
   assert.match(src, /_t\('js\.stage\.room\.q_cut_ban_next', 'What’s lined up after it from the library is cancelled too\.'\)/);
   assert.match(src, /_t\('js\.stage\.room\.q_cut_next', 'What’s lined up after it from the library starts next - take it out in the 📼 player first to leave the stage empty\.'\)/);
   assert.match(src, /n && x\.queued === true \? \{ ends: ends, next: n, at: at, queued: true \}/);
@@ -302,4 +309,175 @@ test("strings: every new one is in en.json (in the source's words), none says PA
       assert.equal(m[1].replace(/\\'/g, "'"), EN[k], k + ": the source's default = en.json");
     }
   }
+});
+
+
+// ───────────────────────── upnext3 review fixes (1.99ali): the UX review in the pages - each failed on 792ccd1b ─────────────────────────
+const LIST = [{ key: "500", label: "Charade (1963)", duration: 6780 }, { key: "502", label: "Carnival of Souls (1962)", duration: 4680 }];
+const NEW_KEYS2 = ["js.plex.q_line_list", "js.plex.q_line_list_cost", "js.plex.q_added_line_q", "js.plex.after_mine_q", "js.plex.after_mine_place_q", "js.plex.line_full",
+                   "js.plex.now_on_held", "js.plex.held_x_ask", "js.plex.held_x_ask_paid", "js.plex.ask_take_out", "js.plex.held_x_done", "js.plex.now_on_booking_mine",
+                   "js.plex.instead_after_n", "js.plexq.line_booked_by", "js.plexq.line_yours", "js.plexq.after_x_t", "js.plexq.q_stop_next_nb", "js.plexq.q_held_x",
+                   "js.plexq.q_held_x_paid", "js.stage.room.q_cut_next_booking", "js.stage.room.q_cut_ban_kept", "js.sched.lib_after", "js.sched.lib_about",
+                   "pad.sched.lib_after", "pad.sched.lib_about", "pad.golive.lib_after", "js.stage.lib_after", "js.stage.lib_after_about"];
+
+test("ux 4: behind someone else's title / running queue, my list's button lines it up - \"+ Line up my list\" = ONE POST /queue/after with the list (a paid one confirms in points first), never /queue/start; your own (you may replace it): ▶ Play my list as before", async () => {
+  const s = sheet({ onPad: QUEUE_ON, list: LIST, perHour: 1000, after: [{ status: 400, j: { ok: false, error: "x", code: "estimate", estimate: 4000 } },
+                                                                        { status: 200, j: { ok: true, after: true, items: 2, behind: "The Show — S1E2 Second", behind_queue: true, behind_left: 1, place: 1, line: 1 } }] });
+  s.flow.info(); await tick();
+  const lp = () => s.P.pick.parentNode.querySelector("[data-lplay]");
+  assert.equal(lp().textContent, "+ Line up my list");
+  lp().click(); await tick();
+  const ask = s.P.pick.parentNode.querySelector(".px-ask");
+  assert.equal(ask.querySelector("p").textContent, "Line up your list (2 titles) as your own queue? It plays when what’s on ends - about 4,000 points, charged to you as it plays (only what actually plays); nothing is taken until it starts.");
+  ask.querySelector("button.primary").click(); await tick();
+  const p = s.posts("/api/medialib/queue/after");
+  assert.deepEqual(p.map((x) => x.body), [{ room: "Night.Orchard", keys: ["500", "502"], quality: 720 }, { room: "Night.Orchard", keys: ["500", "502"], quality: 720, estimate: 4000 }]);
+  assert.equal(s.posts("/api/medialib/queue/start").length + s.posts("/api/medialib/queue/preview").length, 0, "never a start of its own");
+  assert.equal(s.P.msg.textContent, "Lined up - your queue plays when the queue that’s on ends (1 more after “The Show — S1E2 Second”): 1 of 1 in line.");
+  assert.equal(s.store["patv.plexList"], "[]", "the list is lined up: it empties");
+  const own = sheet({ onPad: { ...QUEUE_ON, mine: true, can_replace: true, slot_id: "q-slot-1", can_add: true }, list: LIST });
+  own.flow.info(); await tick();
+  assert.equal(own.P.pick.parentNode.querySelector("[data-lplay]").textContent, "▶ Play my list");
+});
+
+test("ux 7: a full line says so (not only the permissions sentence)", async () => {
+  const s = sheet({ onPad: { ...QUEUE_ON, can_after: false, line_full: true, line_max: 5, after: { count: 1, mine: false, place: null, line: 5 } } });
+  s.flow.info(); await tick();
+  await s.pick();
+  assert.match(s.P.pick.querySelector("[data-now]").textContent, /5 people are lined up after it already - try again when one has started\.$/);
+});
+
+test("ux 8: your paused queue's ✕ in the sheet asks first (a paid one: what it paid for isn't refunded), then says nothing more is charged", async () => {
+  const s = sheet({ onPad: { ...QUEUE_ON, can_after: false, after: { count: 2, mine: true, place: 2, line: 2, held: true, paid: true } },
+                    queues: [{ id: 9, room: "Night.Orchard", state: "after", held: true, notice: "held" }] });
+  s.flow.info(); await tick();
+  await s.pick();
+  s.P.pick.querySelector("[data-after-x]").click(); await tick();
+  assert.equal(s.posts("/api/medialib/queue/after/cancel").length, 0, "asks first");
+  const ask = s.P.pick.parentNode.querySelector(".px-ask");
+  assert.equal(ask.querySelector("p").textContent, "Take your paused queue out? It won’t carry on after the booked stream, and nothing more is charged - what it already paid for isn’t refunded.");
+  assert.equal(ask.querySelector("button.primary").textContent, "Yes, take it out");
+  ask.querySelector("button.primary").click(); await tick();
+  assert.equal(s.posts("/api/medialib/queue/after/cancel").length, 1);
+  assert.equal(s.P.msg.textContent, "Taken out - nothing more is charged.");
+  // (an ordinary row of yours: one tap, as before)
+  const r = sheet({ onPad: { ...QUEUE_ON, after: { count: 1, mine: true, place: 1, line: 1 } } });
+  r.flow.info(); await tick();
+  await r.pick();
+  r.P.pick.querySelector("[data-after-x]").click(); await tick();
+  assert.equal(r.posts("/api/medialib/queue/after/cancel").length, 1);
+});
+
+test("ux 13: your own booking due next says it's yours; behind a running queue your titles' line says it plays when that queue ends", async () => {
+  const at = Date.UTC(2026, 10, 7, 21, 0);
+  const s = sheet({ onPad: { ...SINGLE, can_replace: false, slot_id: null, booking: { at, mine: true } } });
+  s.flow.info(); await tick();
+  await s.pick();
+  assert.match(s.P.pick.querySelector("[data-now]").textContent, /^📼 Now on Night Orchard: “Charade \(1963\)” - your stream booked for .+ starts right after it, so a new pick waits until then\.$/);
+  const m = sheet({ onPad: { ...QUEUE_ON, left: 3, after: { count: 1, mine: true, place: 1, line: 1 } } });
+  m.flow.info(); await tick();
+  await m.pick();
+  assert.match(m.P.pick.querySelector("[data-now]").textContent, /Your queue plays when the queue that’s on ends \(3 more after this title\)\./);
+  const one = sheet({ onPad: { ...SINGLE, after: { count: 1, mine: false, place: null, line: 1 } } });
+  one.flow.info(); await tick();
+  await one.pick();
+  one.play().click(); await tick();
+  assert.match(one.askBox().textContent, /What’s lined up after it keeps waiting - it plays after yours\./);
+});
+
+// the player with a clock (its poll is guarded for 1.5 s) and answers that change
+function player2(answers, { confirmAns = true } = {}) {
+  const src = read("public", "js", "pad-plexq.js");
+  const doc = mkDoc();
+  const box = doc.body.appendChild(doc.createElement("div"));
+  box.id = "rmPlexQ"; box.setAttribute("data-room", "Night.Orchard");
+  doc.getElementById = (id) => (id === "rmPlexQ" ? box : null);
+  doc.addEventListener = () => {}; doc.hidden = false; doc.activeElement = null;
+  const clock = { t: Date.UTC(2026, 10, 7, 20, 0) };
+  class D extends Date { constructor(...a) { if (a.length) super(...a); else super(clock.t); } static now() { return clock.t; } }
+  const calls = [], asked = [];
+  let k = 0;
+  const win = { document: doc, console, Date: D, Math, JSON, confirm: (m) => { asked.push(m); return confirmAns; }, setTimeout: () => 0, setInterval: () => 0, clearInterval() {},
+                fetch: async (url, o = {}) => { calls.push({ url, method: (o.method || "GET").toUpperCase(), body: o.body ? JSON.parse(o.body) : null });
+                                               const j = url.startsWith("/api/medialib/player") ? answers[Math.min(k++, answers.length - 1)] : { ok: true };
+                                               return { ok: true, status: 200, json: async () => j }; } };
+  win.window = win;
+  vm.runInNewContext(src, win, { filename: "pad-plexq.js" });
+  const again = async () => { clock.t += 2000; win.PATVPlexQ.poll(); await tick(); };
+  return { box, calls, asked, doc, again };
+}
+
+test("ux 9: the player keeps each list's own open state and focus across a redraw - collapsing \"Lined up next\" and keeping focus on it survives a change in the line (focus never jumps to Up next)", async () => {
+  const LINE2 = LINE.slice(0, 2);
+  const p = player2([{ ...BASE, line: LINE }, { ...BASE, line: LINE2 }]);
+  await tick();
+  const det = p.box.querySelector("details.pq-line"), up = p.box.querySelector("details.pq-upnext");
+  assert.ok(det && up, "two lists, told apart");
+  assert.deepEqual([det.open, up.open], [true, false]);
+  det.open = false;
+  up.open = true;
+  p.doc.activeElement = det.querySelector("summary");
+  await p.again();
+  const det2 = p.box.querySelector("details.pq-line"), up2 = p.box.querySelector("details.pq-upnext");
+  assert.notEqual(det2, det, "redrawn");
+  assert.equal(det2.querySelector("summary").textContent, "Lined up next (2)");
+  assert.deepEqual([det2.open, up2.open], [false, true], "each keeps its own state");
+  assert.equal(p.doc.active, det2.querySelector("summary"), "focus back on the line's summary");
+});
+
+test("ux 10 / 13: each ✕ in the line names its first title; a booking says booked by, a paused queue started by, yours says yours; the ⏹ confirm drops the station break when the pad has none; a paused queue's ✕ asks in its own words", async () => {
+  const L3 = [{ ...LINE[0], by: "aster-fable" }, { id: 50, kind: "resume", count: 2, next: [{ key: "912", type: "episode", show: "The Show", season: 1, episode: 2, title: "Second", duration: 2400 }],
+               mine: false, can_withdraw: true, by: "rowan-fable", paid: true }, { ...LINE[1], can_withdraw: true, by: "willow-fable" }, LINE[2]];
+  const p = player2([{ ...BASE, can_control: true, station_break: false, line: L3 }]);
+  await tick();
+  const li = p.box.querySelector("details.pq-line").querySelectorAll("li");
+  assert.match(li[0].textContent, /· booked by aster-fable$/);
+  assert.match(li[1].textContent, /· ⏸ carries on after the booking · started by rowan-fable/);
+  assert.match(li[2].textContent, /· added by willow-fable/);
+  assert.match(li[3].textContent, /· yours/);
+  assert.equal(p.box.querySelector('[data-after-x="41"]').getAttribute("aria-label"), "Take out “Charade (1963)”");
+  assert.equal(p.box.querySelector('[data-after-x="50"]').getAttribute("aria-label"), "Take out “The Show — S1E2 Second”");
+  p.box.querySelector('[data-q="stop"]').click(); await tick();
+  assert.deepEqual(p.asked, ["Stop it? What’s lined up next starts right after."]);
+  p.box.querySelector('[data-after-x="50"]').click(); await tick();
+  assert.equal(p.asked[1], "Take this paused queue out? It won’t carry on after the booking, and nothing more is charged - what it already paid for isn’t refunded.");
+  assert.deepEqual(p.calls.filter((x) => x.url === "/api/medialib/queue/after/cancel").map((x) => x.body), [{ room: "Night.Orchard", id: 50 }]);
+});
+
+test("ux 2 / 3: the Cut confirm warns whenever anyone is lined up (coming.line - a queue with titles left too): a booking first says it starts next; a cut + ban says the picks are cancelled and what still starts", () => {
+  const src = read("public", "js", "stage-room.js");
+  assert.match(src, /if \(act === 'cut' && cs && cs\.lib && cs\.id === b\.getAttribute\('data-id'\) && coming && coming\.line > 0\) \{/);
+  assert.match(src, /_t\('js\.stage\.room\.q_cut_next_booking', 'A stream booked for this time starts next on this stage\.'\)/);
+  assert.match(src, /_t\('js\.stage\.room\.q_cut_ban_kept', 'A booked stream that’s due, or a queue paused for one, still starts next\.'\)/);
+  assert.match(src, /line: Math\.max\(0, Math\.min\(99, Math\.floor\(Number\(x\.line\)\) \|\| 0\)\), line_head: \['booking', 'resume', 'after'\]\.indexOf\(x\.line_head\) >= 0 \? x\.line_head : null,/);
+  const adm = read("public", "js", "stage-admin.js");
+  assert.match(adm, /'" data-lib="1"' : ''\) \+ '>✂ Cut<\/button>'/);
+  assert.match(adm, /Cut this 📼 slot\? Whoever is lined up after it from the library starts next\./);
+  assert.match(adm, /Cut this 📼 slot and ban them from booking\? The picks lined up after it are cancelled; a booking that is due still starts\./);
+  assert.match(read("views", "stageAdmin.ejs"), /stage-admin\.js\?v=6"/);
+});
+
+test("ux 12: a waiting booking shows 'After the current title · about <its end>' instead of its old time - the schedule (server render + its poll), the pad page's coming-up list, Your bookings", () => {
+  assert.match(read("views", "partials", "room-schedule.ejs"), /<% if \(r\.lib_wait\) \{ %><%- t\('pad\.sched\.lib_after'\) %><% if \(r\.lib_wait\.ends_at\) \{ %> · <%- t\('pad\.sched\.lib_about'\) %> <time data-ts="<%= r\.lib_wait\.ends_at %>" data-fmt="t"/);
+  const rs = read("public", "js", "room-schedule.js");
+  assert.match(rs, /if \(r\.lib_wait\) \{/);
+  assert.match(rs, /T\('js\.sched\.lib_after', 'After the current title'\)/);
+  assert.match(rs, /T\('js\.sched\.lib_about', 'about'\)/);
+  assert.match(read("views", "room.ejs"), /u\.lib_wait \? t\('pad\.golive\.lib_after'\) \+ \(u\.lib_wait\.ends_at \? ' ~' \+ /);
+  const sb = read("public", "js", "stage-book.js");
+  assert.match(sb, /x\.lib_wait \? \(x\.lib_wait\.ends_at \? esc\(_t\('js\.stage\.lib_after_about', 'after the current title \(about \{time\}\)', \{ time: hm\(x\.lib_wait\.ends_at\) \}\)\) : esc\(_t\('js\.stage\.lib_after', 'after the current title'\)\)\) : when\(x\.start_at\)/);
+});
+
+test("review strings: every new one is in en.json (in the source's words), none says PAT; the line's own changed strings too", () => {
+  const all = [SRC, read("public", "js", "pad-plexq.js"), read("public", "js", "stage-room.js"), read("public", "js", "stage-book.js"), read("public", "js", "room-schedule.js")].join("\n");
+  for (const k of NEW_KEYS2) {
+    assert.ok(EN[k], k);
+    assert.doesNotMatch(EN[k], /\bPAT\b/, k + ": points, not PAT");
+    if (k.startsWith("js.")) {
+      const m = all.match(new RegExp("_?_?T?t?\\('" + k.replace(/\./g, "\\.") + "', '((?:[^'\\\\]|\\\\.)*)'"));
+      assert.ok(m, k + " used in the client");
+      assert.equal(m[1].replace(/\\'/g, "'"), EN[k], k + ": the source's default = en.json");
+    }
+  }
+  assert.equal(EN["js.plex.instead_after"], "What’s lined up after it keeps waiting - it plays after yours.");
 });
