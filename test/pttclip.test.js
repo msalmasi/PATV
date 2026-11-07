@@ -1,4 +1,4 @@
-// pttclip (1.99??): a push-to-talk web clip's limit is charged only for a clip that PLAYED.
+// pttclip (1.99alo): a push-to-talk web clip's limit is charged only for a clip that PLAYED.
 // The owner, 2026-11-07: "push-to-talk web clips still charge their limit when the clip is uploaded, even if Pepe then can't get
 // the mic - fix this too." bridge-relay's POST /api/rooms/:slug/clip took limited("clip|<account>", 30 s, 3 per 10 min) at the
 // UPLOAD and never gave it back: a clip Pepe couldn't get the mic for (taken / full / busy / the room's mic break / a block / he
