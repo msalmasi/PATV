@@ -1669,7 +1669,7 @@
     "!speak [text]"
    ],
    "summary": "Make Pepe speak your words aloud on the mic in his cloned voice — 5,000 PAT (admins free).",
-   "details": "Make Pepe **speak your words aloud on the mic** in his cloned voice — **5,000 PAT** (admins free). Add `-v <voice>` to pick a specific voice, e.g. `!say welcome to the room -v woodie`. See the available voices with **!mic tts voices**. (Requires voice/TTS to be switched on.)",
+   "details": "Make Pepe **speak your words aloud on the mic** in his cloned voice — **5,000 PAT** (admins free). Add `-v <voice>` to pick a specific voice, e.g. `!say welcome to the room -v woodie`. See the available voices with **!mic tts voices**. (Requires voice/TTS to be switched on.) If Pepe can't get the mic for it (someone else took it, the mic stayed busy), you're refunded and there's no cooldown - try again. If he keeps losing the mic race in a room, he sits its mic out for a minute or two - lines are refused meanwhile, nothing charged.",
    "examples": [
     "!say welcome to the room -v woodie"
    ],
@@ -8442,7 +8442,7 @@
     "!sb remove <label>"
    ],
    "summary": "Make Pepe play a soundboard clip on the mic - a few PAT per play, free for clips you own.",
-   "details": "`!sb` lists what you can play in this room: the room's own board (Prime Time pads), the **global** board, the season's board while a season is on (October, November and December so far) and the **packs**. `!sb <clip>` plays one (the closest label wins). Per play: common **1,000**, rare **2,500**, epic **5,000** PAT, the season board 2,500 (unlimited with a Season Pass), a room clip whatever its owner set - and **free** for packs you own. Legendary clips are own-only. Bought the 🎃 Spooky Season board in October? Its clips stay yours, free for good: `!sb kept` lists them (only the people who bought it can play them).\n\nEveryone shares the limits, owners and Season Pass included: one sound per person every 45 s (6 per 10 min), the same clip once per room every 3 minutes, one sound per room every 12 s, at most 3 waiting. Season Pass clips jump the soundboard queue. A clip that can't start within a minute is refunded.\n\nPad owners and room mods: `!sb on|off` switches it in the room (`!say` isn't affected), `!sb add <label> = <line> -v <voice> -p <price>` adds a line Pepe says, `!sb addmic <label> @user` adds that person's last mic-up (unless they typed `!likeness soundboard off` - they earn 30% of every paid play), `!sb remove <label>`. Clips in a community (cloned) voice pay its owner 30%.\n\nBuy packs, the season board, All-Access and legendaries - and preview every clip - at [/soundboards](/soundboards), or tap 🔊 Soundboard on a pad's Live tab.",
+   "details": "`!sb` lists what you can play in this room: the room's own board (Prime Time pads), the **global** board, the season's board while a season is on (October, November and December so far) and the **packs**. `!sb <clip>` plays one (the closest label wins). Per play: common **1,000**, rare **2,500**, epic **5,000** PAT, the season board 2,500 (unlimited with a Season Pass), a room clip whatever its owner set - and **free** for packs you own. Legendary clips are own-only. Bought the 🎃 Spooky Season board in October? Its clips stay yours, free for good: `!sb kept` lists them (only the people who bought it can play them).\n\nEveryone shares the limits, owners and Season Pass included: one sound per person every 15 s (12 per 10 min), the same clip once per room every 60 s, one sound per room every 12 s, at most 3 waiting. Season Pass clips jump the soundboard queue. A clip that doesn't get the mic (someone else took it, the mic stayed busy) is refunded and costs no cooldown - try again. If Pepe keeps losing the mic race in a room, he sits its mic out for a minute or two - clips are refused meanwhile, nothing charged.\n\nPad owners and room mods: `!sb on|off` switches it in the room (`!say` isn't affected), `!sb add <label> = <line> -v <voice> -p <price>` adds a line Pepe says, `!sb addmic <label> @user` adds that person's last mic-up (unless they typed `!likeness soundboard off` - they earn 30% of every paid play), `!sb remove <label>`. Clips in a community (cloned) voice pay its owner 30%.\n\nBuy packs, the season board, All-Access and legendaries - and preview every clip - at [/soundboards](/soundboards), or tap 🔊 Soundboard on a pad's Live tab.",
    "examples": [
     "!sb",
     "!sb airhorn",
@@ -8610,5 +8610,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "75a8795a7ffaf68a"
+ "hash": "29cb9cb9ab383004"
 }
