@@ -772,21 +772,33 @@ function clerkPlexFixture() {
   // What Plex 1.43 reads as an "updated at least" filter: the key updatedAt>> or updatedAt> (on the wire updatedAt%3E%3E= /
   // updatedAt%3E=, or literal). A KEY spelled "updatedAt>=" - URLSearchParams encodes its own "=", updatedAt%3E%3D=<since> - is
   // no filter Plex knows: it answers the whole section (the 1.7.0 defect: total 15871 where Plex's own filter gives 125).
-  const plexSince = u => {
-    const v = u.searchParams.get("updatedAt>>") ?? u.searchParams.get("updatedAt>");
-    return v == null ? null : Number(v);
+  // A field may carry a type prefix (movie. / show. / episode.). Without one, a TV library means the SHOW's field - plexapi
+  // documents Plex's rule as "in a TV show library viewCount is assumed to be show.viewCount", so an episode read (type=4) with
+  // a bare updatedAt filters on each episode's show; episode.updatedAt is the episode's own.
+  const plexSince = (u, type) => {
+    for (const [key, v] of u.searchParams) {
+      const f = /^(?:(movie|show|episode)\.)?updatedAt>>?$/.exec(key);
+      if (f) return { since: Number(v), on: f[1] || (type === "episode" ? "show" : type) };
+    }
+    return null;
   };
+  const updatedOn = (m, on) => (on === "show" && m.type === "episode" ? (items[m.grandparentRatingKey] || {}).updatedAt : m.updatedAt);
   state.request = async (url, opts = {}) => {
     const u = new URL(url);
     state.seen.push({ url, path: u.pathname, query: u.searchParams, headers: opts.headers || {}, at: performance.now() });
+    // Plex not answering (restarting for an update, crashed, stalled) or answering with an error: state.down = "refused",
+    // "stall" (no answer until the request's own timeout runs out) or an HTTP status
+    if (state.down === "refused") throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:32400"), { code: "ECONNREFUSED" });
+    if (state.down === "stall") return new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), opts.timeout ?? 15000));
+    if (typeof state.down === "number") return { status: state.down, json: null, text: "" };
     if (u.pathname === "/hubs/search") return response({ ...(state.searchContainerSection != null ? { librarySectionID: Number(state.searchContainerSection) } : {}),
       Hub: [{ type: "movie", Metadata: state.search.map(k => items[k]) }] });
     if (u.pathname === "/library/sections") return response({ Directory: state.sections });
     let match;
     if ((match = /^\/library\/sections\/(\d+)\/all$/.exec(u.pathname))) {
       const type = { 1: "movie", 2: "show", 4: "episode" }[u.searchParams.get("type")];
-      const since = plexSince(u);
-      const all = state.catalog.map(k => items[k]).filter(m => (state.ignoreCatalogType || !type || m.type === type) && (since == null || m.updatedAt >= since));
+      const since = plexSince(u, type);
+      const all = state.catalog.map(k => items[k]).filter(m => (state.ignoreCatalogType || !type || m.type === type) && (since == null || updatedOn(m, since.on) >= since.since));
       const { rows, container } = listing(match[1], all);
       if (state.ignoreCatalogBounds) return response({ ...container, Metadata: rows, totalSize: rows.length, offset: 0, size: rows.length });
       return page(u, opts, rows, container);
@@ -826,20 +838,21 @@ function plexQueryKeys(url) {
     return [decodeURIComponent(i < 0 ? pair : pair.slice(0, i)), i < 0 ? "" : decodeURIComponent(pair.slice(i + 1))];
   }) : [];
 }
-function assertPlexSince(url, since) {
+const isUpdatedAt = (k) => /^(?:[a-z]+\.)?updatedAt/.test(k);
+function assertPlexSince(url, since, keys = ["updatedAt>>", "updatedAt>"]) {
   const raw = new URL(url).search;
   assert.ok(!/updatedAt%3E%3D=/i.test(raw), `the since filter's own "=" was encoded (Plex ignores updatedAt%3E%3D=): ${raw}`);
-  const filters = plexQueryKeys(url).filter(([k]) => k.startsWith("updatedAt"));
+  const filters = plexQueryKeys(url).filter(([k]) => isUpdatedAt(k));
   assert.equal(filters.length, 1, `exactly one updatedAt filter: ${raw}`);
-  assert.ok(["updatedAt>>", "updatedAt>"].includes(filters[0][0]), `Plex reads updatedAt>>= (or updatedAt>=), got key ${JSON.stringify(filters[0][0])}`);
+  assert.ok(keys.includes(filters[0][0]), `Plex reads ${keys.map(k => k + "=").join(" or ")}, got key ${JSON.stringify(filters[0][0])}`);
   assert.equal(filters[0][1], String(since));
 }
 
-async function clerkHarness(t, env = {}) {
+async function clerkHarness(t, env = {}, extra = {}) {
   const fixture = clerkPlexFixture();
-  const config = M.loadConfig({ MEDIACTL_SECRET: SECRET, MEDIACTL_ALLOW: "127.0.0.1/32,::1", PLEX_TOKEN: "invented-fixture-token",
+  const config = { ...M.loadConfig({ MEDIACTL_SECRET: SECRET, MEDIACTL_ALLOW: "127.0.0.1/32,::1", PLEX_TOKEN: "invented-fixture-token",
     PLEX_URL: "http://plex.invalid", MEDIACTL_MEDIA_ROOTS: media + path.sep,
-    MEDIACTL_RTMP_ALLOW: "rtmp://stream.publicaccess.tv/", MEDIACTL_SECTIONS: "71,72", MEDIACTL_SECTIONS_ADULT: "72", ...env });
+    MEDIACTL_RTMP_ALLOW: "rtmp://stream.publicaccess.tv/", MEDIACTL_SECTIONS: "71,72", MEDIACTL_SECTIONS_ADULT: "72", ...env }), ...extra };
   const plex = M.makePlex(config, fixture.request);
   const spawned = [];
   const spawn = (cmd, args) => {
@@ -980,7 +993,7 @@ test("1.7.0: catalog pages expose bounded metadata, delta filters and no source 
   assertClerkNoDeniedMetadata(second.json);
   const sent = h.fixture.seen.filter(c => c.path === "/library/sections/71/all");
   assertPlexSince(sent[0].url, 1700000000);
-  assert.ok(!plexQueryKeys(sent[1].url).some(([k]) => k.startsWith("updatedAt")), "no since: no updatedAt filter at all");
+  assert.ok(!plexQueryKeys(sent[1].url).some(([k]) => isUpdatedAt(k)), "no since: no updatedAt filter at all");
   assert.equal(sent[0].query.get("type"), "1");
   assert.equal(Number(sent[0].query.get("X-Plex-Container-Size") || sent[0].headers["X-Plex-Container-Size"]), 1);
   assert.equal(Number(sent[1].query.get("X-Plex-Container-Start") || sent[1].headers["X-Plex-Container-Start"]), 1);
@@ -1168,7 +1181,7 @@ test("1.7.0 on Plex 1.43: a since (delta) read reaches Plex as updatedAt>>= and 
     assert.deepEqual([delta.json.rows.map(r => r.key), delta.json.next], [["7101"], null]);
     const full = await h.request("GET", "/catalog?section=71&type=1");
     assert.deepEqual([full.json.total, full.json.rows.map(r => r.key)], [2, ["7101", "7102"]]);
-    assert.ok(!plexQueryKeys(h.fixture.seen[h.fixture.seen.length - 1].url).some(([k]) => k.startsWith("updatedAt")), "a full read carries no updatedAt filter");
+    assert.ok(!plexQueryKeys(h.fixture.seen[h.fixture.seen.length - 1].url).some(([k]) => isUpdatedAt(k)), "a full read carries no updatedAt filter");
     const before = h.fixture.seen.length;
     assert.equal((await h.request("GET", "/catalog?section=71&type=1&since=yesterday")).status, 400);
     assert.equal(h.fixture.seen.length, before, "a bad since never reaches Plex");
@@ -1247,4 +1260,113 @@ test("1.7.0: search never borrows a section from its container (one search spans
   assert.equal(r.status, 200);
   assert.deepEqual(r.json.results.map(x => [x.key, x.section]), [["7101", "71"]]);
   assertClerkNoDeniedMetadata(r.json);
+});
+
+// ── review findings on the 1.7.0 fix (2026-11-07) ──
+// F1: in a TV library a filter field without a type prefix is the SHOW's (plexapi documents Plex's rule: "in a TV show library
+// viewCount is assumed to be show.viewCount"). An episode delta (type=4) sent as a bare updatedAt>>= filtered on each episode's
+// show: a new episode of a show whose own updatedAt didn't move stayed out of the catalog until the next day's full read, and a
+// touched show brought every one of its episodes back. Episodes name their own field (episode.updatedAt>>=); shows (type=2)
+// and movies keep the bare field, which is their own.
+function addLanternShow(fixture) {
+  fixture.items["7120"] = { ratingKey: "7120", librarySectionID: "71", type: "show", title: "Invented Lantern Show", leafCount: 1, updatedAt: 1600000000 };
+}
+
+test("1.7.0 in a TV library: an episode delta filters on the episode's own updatedAt (episode.updatedAt>>=), never its show's", async t => {
+  for (const plex143 of [false, true]) {
+    const h = await clerkHarness(t);
+    h.fixture.plex143 = plex143;
+    addOrchardEpisodes(h.fixture);
+    addLanternShow(h.fixture);
+    const it = h.fixture.items;
+    it["7110"].updatedAt = 1600000000;   // the show itself: untouched since long before the last sync
+    it["7111"].updatedAt = 1700001000;   // an episode whose metadata changed since
+    it["7112"].updatedAt = 1600000000;   // an episode untouched since
+    it["7113"].updatedAt = 1700002000;   // a new episode of that existing show
+    h.fixture.catalog = ["7111", "7112", "7113"];
+    const sent = () => h.fixture.seen.filter(c => c.path === "/library/sections/71/all").at(-1).url;
+    const delta = await h.request("GET", "/catalog?section=71&type=4&since=1700000000");
+    assert.equal(delta.status, 200);
+    assert.deepEqual([delta.json.total, delta.json.rows.map(r => r.key)], [2, ["7111", "7113"]],
+      `plex143=${plex143}: the changed and the new episode, although their show's own updatedAt didn't move`);
+    assertPlexSince(sent(), 1700000000, ["episode.updatedAt>>"]);
+    assert.ok(/[?&]episode\.updatedAt%3E%3E=1700000000(&|$)/.test(new URL(sent()).search), `on the wire: episode.updatedAt%3E%3E=<since> - ${new URL(sent()).search}`);
+    // the show touched since (a refresh), most of its episodes not: only the episodes that changed come back
+    it["7110"].updatedAt = 1700005000;
+    const touched = await h.request("GET", "/catalog?section=71&type=4&since=1700000000");
+    assert.deepEqual([touched.json.total, touched.json.rows.map(r => r.key)], [2, ["7111", "7113"]], "not every episode of a touched show");
+    // shows (type=2): the show's own field, bare - as for movies
+    h.fixture.catalog = ["7110", "7120"];
+    const shows = await h.request("GET", "/catalog?section=71&type=2&since=1700000000");
+    assertPlexSince(sent(), 1700000000);
+    assert.deepEqual([shows.json.total, shows.json.rows.map(r => [r.key, r.type])], [1, [["7110", "show"]]]);
+    // a full read of episodes carries no updatedAt filter of any kind
+    h.fixture.catalog = ["7111", "7112", "7113"];
+    const full = await h.request("GET", "/catalog?section=71&type=4");
+    assert.deepEqual(full.json.rows.map(r => r.key), ["7111", "7112", "7113"]);
+    assert.ok(!plexQueryKeys(sent()).some(([k]) => isUpdatedAt(k)), "a full read carries no updatedAt filter");
+  }
+});
+
+// F2: with a section policy set, a seek, a resume and every automatic restart (mode fallback, network blip, "Already publishing"
+// retry) re-read the item first. A Plex that couldn't be read (restarting for an update, crashed, an error answer, no answer)
+// counted as a denied section: the stream was killed and forgotten, where 1.6.0 played on from the file it had. Only Plex's own
+// answer - the item is gone (404) or now sits in a section the policy denies - stops it. Otherwise it plays on with the section
+// it was started from, and the next re-read asks again. The re-read has its own short limit, so a stalled Plex can't hold a
+// seek past the site's 15 s.
+const waitFor = async (cond, ms = 3000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await new Promise(r => setTimeout(r, 10)); return cond(); };
+const ssOf = (p) => { const i = p.args.indexOf("-ss"); return i < 0 ? null : p.args[i + 1]; };
+
+test("1.7.0 review: a Plex that can't be read doesn't end a stream - seek, resume and the automatic restart play on; Plex's own 404 / denial still stops it", async t => {
+  const h = await clerkHarness(t, {}, { recheckMs: 100 });
+  const stream = async (stage) => (await h.request("GET", `/streams/${stage}`)).json.stream;
+  for (const down of ["refused", 503, 401, "stall"]) {
+    const stage = `plex-down-${down}`;
+    h.fixture.down = null;
+    assert.equal((await h.request("PUT", `/streams/${stage}`, { ...START, ratingKey: "7101", title: "Invented stream" })).status, 200);
+    h.fixture.down = down;
+    // a seek while Plex can't be read
+    let before = h.spawned.length;
+    const t0 = Date.now();
+    const seek = await h.request("POST", `/streams/${stage}/seek`, { offset: 60 });
+    assert.equal(seek.status, 200, `${down}: the seek goes through (${JSON.stringify(seek.json)})`);
+    assert.ok(Date.now() - t0 < 3000, `${down}: the seek answers within the re-read's own limit, not after Plex's 15 s`);
+    assert.equal(h.spawned.length, before + 1); assert.equal(ssOf(h.spawned.at(-1)), "60.000");
+    const now = await stream(stage);
+    assert.deepEqual([now.state, now.offset], ["playing", 60]);
+    // pause -> resume
+    assert.equal((await h.request("POST", `/streams/${stage}/pause`)).status, 200);
+    before = h.spawned.length;
+    assert.equal((await h.request("POST", `/streams/${stage}/resume`)).status, 200, `${down}: the resume goes through`);
+    assert.equal(h.spawned.length, before + 1);
+    // the automatic restart: this ffmpeg dies before its first frame -> the next mode, after the same re-read
+    before = h.spawned.length;
+    h.spawned.at(-1).emit("exit", 1);
+    assert.ok(await waitFor(() => h.spawned.length === before + 1), `${down}: the automatic restart went ahead`);
+    assert.equal((await stream(stage)).mode, "hwdl");
+    // Plex answers again - and says the item moved to the adult section: the next seek is refused and the stream forgotten
+    h.fixture.down = null;
+    h.fixture.items["7101"].librarySectionID = "72";
+    before = h.spawned.length;
+    assert.equal((await h.request("POST", `/streams/${stage}/seek`, { offset: 90 })).status, 404);
+    assert.equal(h.spawned.length, before); assert.equal(await stream(stage), null);
+    h.fixture.items["7101"].librarySectionID = "71";
+  }
+  // the item gone from Plex (Plex's own 404): a resume is refused and the stream forgotten, nothing starts
+  const saved = h.fixture.items["7102"];
+  assert.equal((await h.request("PUT", "/streams/plex-gone", { ...START, ratingKey: "7102", title: "Invented stream" })).status, 200);
+  assert.equal((await h.request("POST", "/streams/plex-gone/pause")).status, 200);
+  delete h.fixture.items["7102"];
+  let before = h.spawned.length;
+  assert.equal((await h.request("POST", "/streams/plex-gone/resume")).status, 404);
+  assert.equal(h.spawned.length, before); assert.equal(await stream("plex-gone"), null);
+  // ...and an automatic restart of it doesn't start either
+  h.fixture.items["7102"] = saved;
+  assert.equal((await h.request("PUT", "/streams/plex-gone-auto", { ...START, ratingKey: "7102", title: "Invented stream" })).status, 200);
+  delete h.fixture.items["7102"];
+  before = h.spawned.length;
+  h.spawned.at(-1).emit("exit", 1);
+  assert.ok(await waitFor(() => h.streamSet.get("plex-gone-auto") == null), "forgotten once Plex said the item is gone");
+  assert.equal(h.spawned.length, before);
+  h.fixture.items["7102"] = saved;
 });
