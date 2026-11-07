@@ -219,11 +219,24 @@ function limitBack(key, t) {
 // can't get the mic - fix this too"): per account, the push-to-talk PLAY limit (Pepe's pepe_relay CLIP_LIMIT, mirrored) counts
 // only clips that PLAYED - taken at the upload (three clips sent at once can't all wait for the mic) and given back EXACTLY once
 // however the clip ends without playing: any final not-ok answer from Pepe (the mic taken / full / Camfrog busy / the room's mic
-// break / a block / Pepe gone / the audio failing / a refusal / the recording lost on the way), or its job swept while still open
-// (Pepe never answered). The flood guard stays: CLIP_UP uploads per account whatever became of them (Pepe's CLIP_TRY_LIMIT),
-// never given back - an upload refused by the play limit costs none of it.
+// break / a block / Pepe gone / the audio failing / a refusal / the recording lost on the way / he gave up on it), or its job
+// failed by the sweep (Pepe never took it, or never answered - see CLIP_PENDING_TTL). Not bad_clip (the recording's own fault).
+// The flood guard stays: CLIP_UP uploads per account whatever became of them (Pepe's CLIP_TRY_LIMIT), never given back - an
+// upload refused by the play limit costs none of it.
 const CLIP_PLAY = { gap: 30 * 1000, burst: 3, window: 10 * 60 * 1000 };
 const CLIP_UP = { burst: 12, window: 10 * 60 * 1000 };
+// pttclip review: a clip Pepe never takes (not pulling, not in the room) fails after CLIP_PENDING_TTL - given back, said so (it used
+// to sit "sent — waiting for Pepe…" for 8 minutes and vanish). One he took is timed from his CLAIM, not the upload (clipOpenUntil):
+// his audio worker plays every room's clips in turn, each waiting up to 4 min for the mic, and HE gives up on a clip that hasn't
+// started 7 min after it reached him (pepe_relay RELAY_CLIP_GIVE_UP) - so his answer comes first and the site never gives back a
+// clip he may still play. One he said is playing gets CLIP_PLAYING_GRACE more to say how it went.
+const CLIP_PENDING_TTL = 75 * 1000;
+const CLIP_PLAYING_GRACE = 2 * 60 * 1000;
+/** pttclip review: when an open clip job stops waiting for Pepe's answer (failed "unconfirmed" in the sweep). */
+function clipOpenUntil(j) {
+  const base = (j.claimed || j.at) + CLIP_TTL;
+  return j.playingAt ? Math.max(base, j.playingAt + CLIP_PLAYING_GRACE) : base;
+}
 /** pttclip: a clip job that didn't play gives its play-limit hit back - once (j.limBack). True when it did. */
 function clipGiveBack(j) {
   if (!j || j.kind !== "clip" || !j.lim || j.limBack) return false;
@@ -235,7 +248,14 @@ function sweep(now) {
   for (const j of jobs.values()) {
     // 1.99ye: a say that Pepe never picked up never left the site - say so (the page offers Retry); one he picked up but
     // never confirmed may or may not be in the room (it is never re-offered, so a retry is the member's call)
-    if (j.kind !== "say" || j.state === "done") continue;
+    if (j.state === "done") continue;
+    if (j.kind === "clip") {
+      // pttclip review: a clip Pepe never took / never answered for - given back (failJob) and said, kept on the clip line
+      if (j.state === "pending") { if (now - j.at > CLIP_PENDING_TTL) failJob(j, "nopepe", "Pepe isn't taking clips right now — it didn't count toward your limit"); }
+      else if (now > clipOpenUntil(j)) failJob(j, "unconfirmed", "Pepe didn't say whether it played — it didn't count toward your limit");
+      continue;
+    }
+    if (j.kind !== "say") continue;
     const pendTtl = now - lastPull < 60 * 1000 ? SAY_PENDING_TTL : SAY_PENDING_TTL_SYNC;
     if (j.state === "pending" && now - j.at > pendTtl) failJob(j, "nopepe", "Pepe isn't picking up messages right now — try again in a moment");
     else if (j.state === "claimed" && now - j.claimed > SAY_CLAIM_TTL) failJob(j, "unconfirmed", "Pepe didn't confirm it — it may not have reached the room");
@@ -243,7 +263,9 @@ function sweep(now) {
   for (const [id, j] of jobs) {
     const open = j.state !== "done";
     // 1.99ez: a cam clip (camclip.js) records for up to 30 s after Pepe gets to it - kept like a mic clip
-    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" || isSoundboard(j) ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) {
+    // pttclip review: an open push-to-talk clip is timed from Pepe's claim (clipOpenUntil - the loop above fails it first)
+    const over = j.kind === "clip" ? now > clipOpenUntil(j) : now - j.at > (j.kind === "camclip" || isSoundboard(j) ? CLIP_TTL : JOB_TTL);
+    if (open ? over : now - (j.doneAt || j.at) > JOB_TTL) {
       if (open) clipGiveBack(j);        // pttclip: a clip Pepe never said played (no answer at all) - its play limit back
       jobs.delete(id);
     }
@@ -533,8 +555,11 @@ function applyAcks(acks) {
     j.result = { ok: !!a.ok, msg: vmask ? clean(vmask(clean(a.msg, 200)), 200) : clean(a.msg, 200) };
     if (typeof a.code === "string" && CODE_RE.test(a.code)) j.result.code = a.code;
     if (st === "done") j.doneAt = Date.now();
-    // pttclip: Pepe's final answer for a clip isn't "it played" (a mic miss, the audio failing, a refusal) - its play limit back, once
-    if (j.kind === "clip" && st === "done" && !j.result.ok) clipGiveBack(j);
+    // pttclip: Pepe's final answer for a clip isn't "it played" (a mic miss, the audio failing, a refusal) - its play limit back, once.
+    // pttclip review: not for a recording that is the upload's own fault (bad_clip: unreadable / too short / too long - Pepe keeps
+    // his hit too), so a crafted upload can't make him fetch + decode 12 clips per 10 min for free
+    if (j.kind === "clip" && st === "done" && !j.result.ok && j.result.code !== "bad_clip") clipGiveBack(j);
+    if (j.kind === "clip" && st === "playing" && !j.playingAt) j.playingAt = Date.now();   // pttclip review: clipOpenUntil
     if (j.kind === "say") {
       j.ackAt = Date.now();
       // Pepe's own clock: how long the line waited in his say lane (pacing) and in his send queue

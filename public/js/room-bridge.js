@@ -1298,6 +1298,18 @@
   // queued -> waiting (someone else holds the mic) -> playing -> done: "played", or not ok with
   // "couldn't get the mic ..." after a patient wait. Older Pepes ack once ("queued ...") then again
   // when it plays / is dropped - those messages still read right.
+  // pttclip review: a clip that didn't play, by Pepe's (or the site's) code - a translated page's line ('' = not one of these)
+  function clipMissLine(code) {
+    if (code === 'no_mic') return _t('js.pad.ptt.s_no_mic_free', 'Pepe couldn’t get the mic — no cooldown, try again');
+    if (code === 'mic_later') return _t('js.pad.ptt.s_mic_later', 'Pepe can’t get the mic here right now — it didn’t count toward your limit');
+    if (code === 'audio_failed') return _t('js.pad.ptt.s_audio_failed', 'Pepe’s audio failed while playing it — no cooldown, try again');
+    if (code === 'nopepe') return _t('js.pad.ptt.s_nopepe', 'Pepe isn’t taking clips right now — it didn’t count toward your limit');
+    if (code === 'unconfirmed') return _t('js.pad.ptt.s_unconfirmed', 'Pepe didn’t say whether it played — it didn’t count toward your limit');
+    return '';
+  }
+  function pageEnglish() {
+    try { var l = document.documentElement && document.documentElement.lang; return !l || /^en(?:-|$)/i.test(String(l)); } catch (e) { return true; }
+  }
   function clipStatus(j) {
     if (!j) return '';
     var s = j.state, m = String(j.msg || '');
@@ -1307,8 +1319,10 @@
     if (s === 'playing') return _t('js.pad.ptt.s_playing', 'playing on the mic now');
     if (j.ok) return m === 'played' ? _t('js.pad.ptt.s_played', 'played') : (m || _t('js.pad.relay.sent', 'sent'));
     // pttclip: a clip that didn't play costs no limit (the site and Pepe give it back) - Pepe's own words say why and whether to
-    // try again ("Pepe couldn't get the mic (...) - no cooldown - try again" / "... - it didn't count toward your limit")
-    if (m && (j.code === 'no_mic' || j.code === 'mic_later' || j.code === 'audio_failed')) return m;
+    // try again ("Pepe couldn't get the mic (...) - no cooldown - try again" / "... - it didn't count toward your limit").
+    // pttclip review: those words are English - a translated page shows its own line for the code (clipMissLine)
+    var miss = clipMissLine(j.code);
+    if (miss) return m && pageEnglish() ? m : miss;
     if (/couldn.t get the mic|stayed busy|dropped/i.test(m)) return _t('js.pad.ptt.s_no_mic', 'couldn’t get the mic, try again');
     return _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: m || _t('js.pad.relay.refused', 'refused') });
   }
