@@ -144,7 +144,7 @@ const SINGLE = { title: "Charade (1963)", queue: false, left: 0, by: "cedar-fabl
 
 // ───────────────────────── upnext3 (1.99ali): the sheet, the 📼 player, the Cut confirm, the schedule ─────────────────────────
 const QUEUE_ON = { title: "The Show — S1E2 Second", queue: true, left: 1, by: "cedar-fable", mine: false, can_replace: false, slot_id: null, can_after: true };
-const NEW_KEYS = ["js.plex.qn_held", "js.plex.qn_held_cancelled", "js.plex.now_on_booking", "js.plex.now_on_after_q", "js.plex.after_held", "js.plex.after_mine_place",
+const NEW_KEYS = ["js.plex.qn_held", "js.plex.qn_held_cancelled", "js.plex.now_on_booking", "js.plex.now_on_after_q", "js.plex.after_mine_place",
                   "js.plex.instead_after", "js.plex.b_waits", "js.plex.q_add_line", "js.plex.q_add_line_title", "js.plex.q_added_line", "js.plex.q_line_cost",
                   "js.plexq.line_n", "js.plexq.line_booking", "js.plexq.line_resume", "js.plexq.line_more", "js.plexq.q_stop_next", "js.stage.room.q_cut_next",
                   "js.stage.room.q_cut_ban_next", "js.stage.lib_wait", "js.sched.lib_wait", "pad.sched.lib_wait", "pad.golive.lib_wait"];
@@ -451,7 +451,7 @@ test("ux 2 / 3: the Cut confirm warns whenever anyone is lined up (coming.line -
   assert.match(src, /_t\('js\.stage\.room\.q_cut_ban_kept', 'A booked stream that’s due, or a queue paused for one, still starts next\.'\)/);
   assert.match(src, /line: Math\.max\(0, Math\.min\(99, Math\.floor\(Number\(x\.line\)\) \|\| 0\)\), line_head: \['booking', 'resume', 'after'\]\.indexOf\(x\.line_head\) >= 0 \? x\.line_head : null,/);
   const adm = read("public", "js", "stage-admin.js");
-  assert.match(adm, /'" data-lib="1"' : ''\) \+ '>✂ Cut<\/button>'/);
+  assert.match(adm, /\(s\.library \? ' data-lib="1"' : ''\) \+ '>✂ Cut<\/button>'/);
   assert.match(adm, /Cut this 📼 slot\? Whoever is lined up after it from the library starts next\./);
   assert.match(adm, /Cut this 📼 slot and ban them from booking\? The picks lined up after it are cancelled; a booking that is due still starts\./);
   assert.match(read("views", "stageAdmin.ejs"), /stage-admin\.js\?v=6"/);

@@ -15,6 +15,7 @@
   var mmss = function (s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
   var when = function (ms) { var d = new Date(Number(ms)); return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
+  var hm = function (ms) { return new Date(Number(ms)).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };   // (upnext3 review: a 📼 booking's wait)
   var KEY_STORE = 'stageKey:';
   var slot = null, polling = null, roomState = null, whenTouched = false;
 
@@ -188,7 +189,10 @@
     var up = list.filter(function (x) { return x.status === 'scheduled' || x.status === 'requested'; });
     var h = '';
     up.forEach(function (x) {
-      h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' + when(x.start_at) + ' · ' + esc(_t('js.stage.n_min', '{n} min', { n: x.max_minutes })) + (x.featured ? ' · ' + esc(_t('js.stage.featured', '★ featured')) : '') +
+      // (upnext3 review ux 12: a 📼 booking waiting for the title on its pad - when that title should end, not its old time)
+      h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' +
+           (x.lib_wait ? (x.lib_wait.ends_at ? esc(_t('js.stage.lib_after_about', 'after the current title (about {time})', { time: hm(x.lib_wait.ends_at) })) : esc(_t('js.stage.lib_after', 'after the current title'))) : when(x.start_at)) +
+           ' · ' + esc(_t('js.stage.n_min', '{n} min', { n: x.max_minutes })) + (x.featured ? ' · ' + esc(_t('js.stage.featured', '★ featured')) : '') +
            (x.embed_label ? ' · ' + esc(x.embed_label) : '') + (x.status === 'requested' ? ' · <i>' + esc(_t('js.stage.waiting_owner', 'waiting for the owner')) + '</i>' : '') +
            (x.lib_wait ? ' · <i>' + esc(_t('js.stage.lib_wait', '⏳ Waiting for the current title to finish - it starts right after it')) + '</i>' : '') +   // (upnext3: a 📼 booking)
            (x.held ? ' · ' + esc(_t('js.stage.n_held', '{n} PAT held', { n: fmt(x.held) })) : '') + '</span>' +

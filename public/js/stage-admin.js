@@ -52,8 +52,9 @@
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) + (s.relay ? ' · browser' : '') + '</td>' +
         '<td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td><td>' + when(s.created) + '</td>' +
         '<td><span class="row" style="margin:0">' + (s.featured && s.feature_by === 'auto' ? '<button type="button" class="btn" data-autocancel="' + esc(s.id) + '">Cancel auto-feature</button>' : '') +
-        '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '">✂ Cut</button>' +
-        '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '" data-ban="1">Cut + ban</button></span></td></tr>';
+        // (upnext3 review ux 2: a 📼 slot's Cut starts whoever is lined up after it - its confirm says so)
+        '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '"' + (s.library ? ' data-lib="1"' : '') + '>✂ Cut</button>' +
+        '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '" data-ban="1"' + (s.library ? ' data-lib="1"' : '') + '>Cut + ban</button></span></td></tr>';
     }).join('') : '<tr><td colspan="6" class="muted">Nobody has the stage - Pepe\'s stream is on.</td></tr>';
     $('cutAll').disabled = !o.length;
     var b = S.bans || [];
@@ -83,8 +84,11 @@
     var b = e.target.closest('button');
     if (!b) return;
     if (b.hasAttribute('data-cut')) {
-      var ban = b.hasAttribute('data-ban');
-      if (!confirm(ban ? 'Cut this slot to Pepe and ban them from booking?' : 'Cut this slot to Pepe? Unused PAT is refunded.')) return;
+      var ban = b.hasAttribute('data-ban'), lib = b.hasAttribute('data-lib');
+      var cq = lib ? (ban ? 'Cut this 📼 slot and ban them from booking? The picks lined up after it are cancelled; a booking that is due still starts.'
+                          : 'Cut this 📼 slot? Whoever is lined up after it from the library starts next.')
+                   : (ban ? 'Cut this slot to Pepe and ban them from booking?' : 'Cut this slot to Pepe? Unused PAT is refunded.');
+      if (!confirm(cq)) return;
       b.disabled = true;
       post('/api/stage/admin/cut', { id: b.getAttribute('data-cut'), ban: ban }).then(function (j) { if (!j.ok) alert(j.error); load(); });
     } else if (b.hasAttribute('data-autocancel')) {

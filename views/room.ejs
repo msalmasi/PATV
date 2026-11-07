@@ -750,7 +750,9 @@
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">
-        <% RS.upcoming.forEach((u) => { %><li><%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(u.start_at, 'full') %><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%- t('pad.golive.min', { n: u.minutes }) %><%- u.featured ? ' · ' + t('pad.golive.featured') : '' %><%= u.title ? ' · ' + u.title : '' %><%- u.lib_wait ? ' · ' + t('pad.golive.lib_wait') : '' %></span></li><% }) %>
+        <%# upnext3 review (ux 12): a 📼 booking waiting for the title on - "after the current title ~<its end>" instead of its old time %>
+        <% const tzT_ = locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time; %>
+        <% RS.upcoming.forEach((u) => { %><li><%- u.lib_wait ? t('pad.golive.lib_after') + (u.lib_wait.ends_at ? ' ~' + tzT_(u.lib_wait.ends_at, 'time') : '') : tzT_(u.start_at, 'full') %><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%- t('pad.golive.min', { n: u.minutes }) %><%- u.featured ? ' · ' + t('pad.golive.featured') : '' %><%= u.title ? ' · ' + u.title : '' %><%- u.lib_wait ? ' · ' + t('pad.golive.lib_wait') : '' %></span></li><% }) %>
       </ul>
     <% } %>
   </section>

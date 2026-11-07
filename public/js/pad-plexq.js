@@ -16,8 +16,8 @@
     var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
   }
-  // upnext3: a booking's time on the line ("booked for 21:00")
-  function hm(ms) { var t = new Date(Number(ms) || 0); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); }
+  // upnext3: a booking's time on the line ("booked for 9:00 PM") - review ux 13: the viewer's own clock, as the sheet says it
+  function hm(ms) { var t = new Date(Number(ms) || 0); try { return t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); } }
   function label(it) {
     if (!it) return '';
     return it.type === 'episode' && it.show ? it.show + ' — S' + (it.season == null ? 0 : it.season) + 'E' + (it.episode == null ? 0 : it.episode) + ' ' + (it.title || '')
@@ -69,6 +69,7 @@
     if (a.hasAttribute('data-rm')) return '[data-rm="' + a.getAttribute('data-rm') + '"]';
     if (a.hasAttribute('data-after-x')) return a.getAttribute('data-after-x') && a.getAttribute('data-after-x') !== '1' ? '[data-after-x="' + a.getAttribute('data-after-x') + '"]' : '[data-after-x]';
     if (a.classList.contains('pq-scrub')) return '.pq-scrub';
+    if (a.tagName === 'SUMMARY' && a.hasAttribute('data-sum')) return '[data-sum="' + a.getAttribute('data-sum') + '"]';   // (review ux 9: each list its own)
     if (a.tagName === 'SUMMARY' && a.parentNode) return (a.parentNode.classList.contains('pq-log') ? '.pq-log' : '.pq-q') + ' > summary';
     if (a.tagName === 'A') return '.pq-q a';
     return null;
@@ -104,7 +105,7 @@
         '<p class="pq-msg muted" role="status" aria-live="polite"></p>';
     }
     if (q && q.next && q.next.length) {
-      h += '<details class="pq-q"' + (can && q.next.length <= 5 ? ' open' : '') + '><summary>' + esc(_t('js.plexq.up_next_n', 'Up next ({count})', { count: q.next.length })) + '</summary><ol>' +
+      h += '<details class="pq-q pq-upnext"' + (can && q.next.length <= 5 ? ' open' : '') + '><summary data-sum="up">' + esc(_t('js.plexq.up_next_n', 'Up next ({count})', { count: q.next.length })) + '</summary><ol>' +
         q.next.map(function (x, k) {
           return '<li><span>' + esc(label(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + '</span>' : '') + '</span>' + (can
             ? '<span class="pq-li"><button type="button" class="sact" data-mv="' + x.index + '" data-to="' + (x.index - 1) + '"' + (k ? '' : ' disabled') + ' aria-label="' + esc(_t('js.plex.q_up', 'Move up')) + '">↑</button>' +
@@ -116,14 +117,20 @@
     // (behind a single title or a running queue); titles for everyone, who + ✕ only for whoever may take that row out (can_withdraw)
     if (Array.isArray(j.line) && j.line.length) {
       var lw = j.line.some(function (x) { return x.can_withdraw === true; });
-      h += '<details class="pq-q pq-line"' + (j.line.length <= 3 ? ' open' : '') + '><summary>' + esc(_t('js.plexq.line_n', 'Lined up next ({count})', { count: j.line.length })) + '</summary><ol>' +
+      h += '<details class="pq-q pq-line"' + (j.line.length <= 3 ? ' open' : '') + '><summary data-sum="line">' + esc(_t('js.plexq.line_n', 'Lined up next ({count})', { count: j.line.length })) + '</summary><ol>' +
         j.line.map(function (x) {
           var first = (x.next || [])[0];
           var kind = x.kind === 'booking' ? _t('js.plexq.line_booking', '📅 booked for {time}', { time: hm(x.at) })
             : x.kind === 'resume' ? _t('js.plexq.line_resume', '⏸ carries on after the booking') : '';
+          // (review ux 13: whose it is in its own words - booked by / started by / added by; your own row says yours)
+          var who = x.mine === true ? _t('js.plexq.line_yours', 'yours')
+            : !x.by ? '' : x.kind === 'booking' ? _t('js.plexq.line_booked_by', 'booked by {name}', { name: x.by })
+            : x.kind === 'resume' ? _t('js.plexq.by', 'started by {name}', { name: x.by }) : _t('js.plexq.after_by', 'added by {name}', { name: x.by });
           return '<li><span>' + esc(first ? label(first) : '…') + (x.count > 1 ? ' <span class="muted">' + esc(_t('js.plexq.line_more', '+{n} more', { n: x.count - 1 })) + '</span>' : '') +
-            (kind ? ' <span class="muted">· ' + esc(kind) + '</span>' : '') + (x.by ? ' <span class="muted">· ' + esc(_t('js.plexq.after_by', 'added by {name}', { name: x.by })) + '</span>' : '') + '</span>' +
-            (x.can_withdraw === true && x.id != null ? '<span class="pq-li"><button type="button" class="sact" data-after-x="' + esc(x.id) + '" aria-label="' + esc(_t('js.plexq.after_x', '✕ Take them out')) + '">✕</button></span>' : '') + '</li>';
+            (kind ? ' <span class="muted">· ' + esc(kind) + '</span>' : '') + (who ? ' <span class="muted">· ' + esc(who) + '</span>' : '') + '</span>' +
+            // (review ux 10: each ✕ names what it takes out)
+            (x.can_withdraw === true && x.id != null ? '<span class="pq-li"><button type="button" class="sact" data-after-x="' + esc(x.id) + '" aria-label="' +
+              esc(_t('js.plexq.after_x_t', 'Take out “{title}”', { title: first ? label(first) : '…' })) + '">✕</button></span>' : '') + '</li>';
         }).join('') + '</ol>' + (lw && !can ? '<p class="pq-msg muted" role="status" aria-live="polite"></p>' : '') + '</details>';
     }
     // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue. review
@@ -131,14 +138,14 @@
     // (an older server without line[])
     else if (!q && j.after && j.after.next && j.after.next.length) {
       var aw = j.after.can_withdraw === true;
-      h += '<details class="pq-q"><summary>' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +
+      h += '<details class="pq-q pq-aft"><summary data-sum="aft">' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +
         j.after.next.map(function (x) { return '<li><span>' + esc(label(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + '</span>' : '') + '</span></li>'; }).join('') + '</ol>' +
         (j.after.by ? '<p class="muted">' + esc(_t('js.plexq.after_by', 'added by {name}', { name: j.after.by })) + '</p>' : '') +
         (aw ? '<p><button type="button" class="sact" data-after-x="1">' + esc(_t('js.plexq.after_x', '✕ Take them out')) + '</button></p>' +
               (can ? '' : '<p class="pq-msg muted" role="status" aria-live="polite"></p>') : '') + '</details>';
     }
     if (can && j.log && j.log.length) {
-      h += '<details class="pq-log"><summary>' + esc(_t('js.plexq.log', 'Who did what')) + '</summary><ul>' + j.log.map(function (l) {
+      h += '<details class="pq-log"><summary data-sum="log">' + esc(_t('js.plexq.log', 'Who did what')) + '</summary><ul>' + j.log.map(function (l) {
         var t = new Date(l.ts);
         return '<li><span class="muted">' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + '</span> ' +
           esc(l.username || '?') + ' ' + esc(ACTIONS[l.action] || l.action) + (l.detail ? ' <span class="muted">' + esc(l.detail) + '</span>' : '') + '</li>';
@@ -147,11 +154,12 @@
     // (1.99ajy dockmedia: the same markup is not written again - nothing moves under a pointer or a keyboard; an action always redraws (act))
     if (h === lastH && box.firstChild) { drawTimes(); return; }
     lastH = h;
-    var openQ = box.querySelector('details.pq-q'), openL = box.querySelector('details.pq-log');
-    var keepQ = openQ ? openQ.open : null, keepL = openL ? openL.open : null, fk = focusKey();
+    // (review ux 9: each list - Up next, Lined up next, the older after-list, the log - keeps its OWN open state)
+    var LISTS = ['details.pq-upnext', 'details.pq-line', 'details.pq-aft', 'details.pq-log'], keep = {};
+    LISTS.forEach(function (sel) { var d = box.querySelector(sel); if (d) keep[sel] = !!d.open; });
+    var fk = focusKey();
     box.innerHTML = h;
-    if (keepQ != null && box.querySelector('details.pq-q')) box.querySelector('details.pq-q').open = keepQ;
-    if (keepL != null && box.querySelector('details.pq-log')) box.querySelector('details.pq-log').open = keepL;
+    LISTS.forEach(function (sel) { var d = box.querySelector(sel); if (d && keep[sel] != null) d.open = keep[sel]; });
     var back = fk && box.querySelector(fk);
     if (back && !back.disabled && back.getClientRects().length) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
     drawTimes();
@@ -184,7 +192,11 @@
       // upnext3: one row of the line by its id (✕ next to it); an older server's single "after" row
       var xid = b.getAttribute('data-after-x'), row = xid && xid !== '1' && Array.isArray(last.line) ? last.line.filter(function (x) { return String(x.id) === xid; })[0] : null;
       if (row ? row.can_withdraw === true : !!(last.after && last.after.can_withdraw)) {
-        if (confirm(_t('js.plexq.q_after_x', 'Take these titles out? They won’t play after this one (nothing is charged).'))) act('/api/medialib/queue/after/cancel', row ? { id: row.id } : null, b);
+        var qx = row && row.kind === 'resume'
+          ? (row.paid === true ? _t('js.plexq.q_held_x_paid', 'Take this paused queue out? It won’t carry on after the booking, and nothing more is charged - what it already paid for isn’t refunded.')
+                               : _t('js.plexq.q_held_x', 'Take this paused queue out? It won’t carry on after the booking, and nothing more is charged.'))
+          : _t('js.plexq.q_after_x', 'Take these titles out? They won’t play after this one (nothing is charged).');
+        if (confirm(qx)) act('/api/medialib/queue/after/cancel', row ? { id: row.id } : null, b);
       }
       return;
     }
@@ -194,8 +206,10 @@
     if (b.hasAttribute('data-rm')) { act('/api/medialib/queue/edit', { op: 'remove', index: +b.getAttribute('data-rm') }, b); return; }
     var a = b.getAttribute('data-q');
     // upnext3 (item 7): what's lined up after it starts right away (its own station break)
-    if (a === 'stop' && !confirm(Array.isArray(last.line) && last.line.length ? _t('js.plexq.q_stop_next', 'Stop it? What’s lined up next starts right after (its own station break first).')
-                                                                              : _t('js.plexq.q_stop', 'Stop the queue and end the library slot?'))) return;
+    if (a === 'stop' && !confirm(Array.isArray(last.line) && last.line.length
+      ? (last.station_break === false ? _t('js.plexq.q_stop_next_nb', 'Stop it? What’s lined up next starts right after.')
+                                      : _t('js.plexq.q_stop_next', 'Stop it? What’s lined up next starts right after (its own station break first).'))
+      : _t('js.plexq.q_stop', 'Stop the queue and end the library slot?'))) return;
     var url = { prev: '/api/medialib/queue/prev', next: '/api/medialib/queue/next', pause: '/api/medialib/pause', resume: '/api/medialib/resume', stop: '/api/medialib/stop' }[a];
     if (url) act(url, null, b);
   });

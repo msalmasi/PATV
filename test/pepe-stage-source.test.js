@@ -231,7 +231,7 @@ test("/stage/admin: the source card (default, Twitch embed button, link form, Ba
   const ejs = require("ejs");
   const file = path.join(repo, "views", "stageAdmin.ejs");
   const tpl = fs.readFileSync(file, "utf8");
-  assert.match(tpl, /stage-admin\.js\?v=5/);
+  assert.match(tpl, /stage-admin\.js\?v=6/);   // (upnext3 review: v6)
   const render = (pepe_src) => ejs.render(tpl.replace(/<%- include\([^%]*%>/g, ""), {
     user: "admin", isAdmin: true, state: { config: S.config(), open: [], upcoming: [], log: [], bans: [], events: [], rtmp_app: "stage -> live", relays: 0, pepe_src } }, { filename: file });
   const def = render(S.pepeSource());

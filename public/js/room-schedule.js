@@ -40,6 +40,8 @@
   } catch (e) { /* no Intl */ }
   localize(box);
 
+  // (upnext3 review: the page's strings when it has them - __t - else the English)
+  function T(k, d) { return typeof __t === 'function' ? __t(k, d) : d; }
   function tags(r, pend) {
     var s = el('span', 'tags');
     s.appendChild(el('span', 'tg' + (r.featured ? ' feat' : ''), r.featured ? '★ Featured' : 'Ordinary slot'));
@@ -84,7 +86,13 @@
     }, function (r) {
       var pend = r.status === 'requested';
       var li = el('li', 'srow' + (pend ? ' pend' : '') + (r.mine ? ' mine' : ''));
-      var w = el('span', 'when'); w.appendChild(time(r.start_at, r.minutes)); w.appendChild(document.createTextNode(' · ' + r.minutes + ' min'));
+      var w = el('span', 'when');
+      // upnext3 review (ux 12): a 📼 booking waiting for the title on - when that title should end ("about 1:50 PM"), not its old booked time
+      if (r.lib_wait) {
+        w.appendChild(document.createTextNode(T('js.sched.lib_after', 'After the current title')));
+        if (Number(r.lib_wait.ends_at) > 0) { w.appendChild(document.createTextNode(' · ' + T('js.sched.lib_about', 'about') + ' ')); w.appendChild(time(Number(r.lib_wait.ends_at), 0, 't')); }
+      } else w.appendChild(time(r.start_at, r.minutes));
+      w.appendChild(document.createTextNode(' · ' + r.minutes + ' min'));
       li.appendChild(w); li.appendChild(who(r)); li.appendChild(tags(r, pend));
       return li;
     });

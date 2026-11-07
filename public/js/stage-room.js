@@ -137,8 +137,15 @@
               episode: ep ? unInt(x.next.episode, 0, 9999) : null };
       }
     }
-    // (upnext3: queued = the next title is someone lined up / a booking - a Cut of this slot starts it)
-    return ends || n || at ? (n && x.queued === true ? { ends: ends, next: n, at: at, queued: true } : { ends: ends, next: n, at: at }) : null;
+    // (upnext3: queued = the next title is someone lined up / a booking - a Cut of this slot starts it; review ux 2 / 3: line = how many are lined
+    // up whenever anyone is - a queue with titles left too - line_head = what kind is first, line_kept = how many a cut + ban keeps: counts only)
+    var c = ends || n || at ? (n && x.queued === true ? { ends: ends, next: n, at: at, queued: true } : { ends: ends, next: n, at: at }) : null;
+    if (c && Number(x.line) > 0) {
+      var ln = { line: Math.max(0, Math.min(99, Math.floor(Number(x.line)) || 0)), line_head: ['booking', 'resume', 'after'].indexOf(x.line_head) >= 0 ? x.line_head : null,
+                 line_kept: Math.max(0, Math.min(99, Math.floor(Number(x.line_kept)) || 0)) };
+      c.line = ln.line; c.line_head = ln.line_head; c.line_kept = Math.min(ln.line_kept, ln.line);
+    }
+    return c;
   }
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
@@ -840,9 +847,15 @@
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
         // upnext3 (1.99ali, item 7): a 📼 slot with someone lined up after it (coming.queued) - a Cut takes off this title only; what's next starts
         // (✕ in the 📼 player clears it first); a cut + ban clears the line too
+        // review ux 2 / 3: whenever anyone is lined up (coming.line - a queue that still has titles too: its Cut ends the queue); a booking first
+        // starts next (it is cancelled on the schedule, not in the 📼 player); a cut + ban cancels the picks lined up - a booking / a paused queue
+        // still start
         var cs = cur();
-        if (act === 'cut' && cs && cs.lib && cs.id === b.getAttribute('data-id') && coming && coming.next && coming.queued) {
-          q += '\n\n' + (ban ? _t('js.stage.room.q_cut_ban_next', 'What’s lined up after it from the library is cancelled too.')
+        if (act === 'cut' && cs && cs.lib && cs.id === b.getAttribute('data-id') && coming && coming.line > 0) {
+          var kept = coming.line_kept || 0, picks = coming.line - kept;
+          q += '\n\n' + (ban ? (picks > 0 ? _t('js.stage.room.q_cut_ban_next', 'What’s lined up after it from the library is cancelled too.') + (kept ? ' ' : '') : '') +
+                                 (kept ? _t('js.stage.room.q_cut_ban_kept', 'A booked stream that’s due, or a queue paused for one, still starts next.') : '')
+                             : coming.line_head === 'booking' ? _t('js.stage.room.q_cut_next_booking', 'A stream booked for this time starts next on this stage.')
                              : _t('js.stage.room.q_cut_next', 'What’s lined up after it from the library starts next - take it out in the 📼 player first to leave the stage empty.'));
         }
         if (!confirm(q)) return;
