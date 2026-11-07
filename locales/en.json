@@ -2531,6 +2531,7 @@
   "js.feed.ss.busy_pick": "Wait until this story is posted, then choose another.",
   "js.feed.ss.reloaded_camera": "The page reloaded while the camera was open, so the picture didn't arrive. Try again - or take it with your camera app and choose it from Gallery.",
   "js.feed.ss.reloaded_gallery": "The page reloaded while you were choosing a file, so nothing arrived. Try again.",
+  "js.feed.ss.reloaded_loading": "The page reloaded while your file was opening, so it isn't here. Try again, or choose it from Gallery.",
   "js.feed.ss.source": "Selected story media",
   "js.feed.ss.source_long": "Choose a video between 1 and {n} seconds.",
   "js.feed.ss.trim_needed": "Choose up to {n} seconds to keep.",

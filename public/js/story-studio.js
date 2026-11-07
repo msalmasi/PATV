@@ -9,12 +9,17 @@
   // bring it back RELOADED - the picture then reaches nobody and the studio is simply gone. While a picker is open, a small note in
   // this tab's session (which picker, the destination, the NSFW choice - never media) remembers it; a page that comes back
   // reloaded with an unanswered note reopens the studio there and says what happened. An answer, a cancel or a close drops it.
-  var NOTE = 'patv.storyStudio.picking', NOTE_MS = 10 * 60 * 1000;
+  // ssfix2 (1.99??): the note lives until the picture has OPENED (phase 'arrived' after the change event: decoding a 12 MP photo
+  // right after the camera is the memory peak), and any kind of page load counts - WebKit brings a killed page back through
+  // WebPageProxy::launchProcessForReload, a FrameLoadType::IndexedBackForward load, so an iPhone sees navigation type 'back_forward'
+  // there (a page restored from the back/forward cache never re-runs this script). A picker that comes back with neither a change
+  // nor a cancel is said out loud after BACK_MS, and leaving the page after coming back drops the note (engines with no 'cancel').
+  var NOTE = 'patv.storyStudio.picking', NOTE_MS = 10 * 60 * 1000, BACK_MS = 3000;
   function session() { try { return window.sessionStorage || null; } catch (e) { return null; } }
   function page() { return String(location.pathname || '') + String(location.search || ''); }
-  function notePicking(s, which) {
-    var st = session(); if (!st) return;
-    try { st.setItem(NOTE, JSON.stringify({ v: 1, picker: which, pad: s.target ? s.target.id : s.pad, nsfw: !!s.d.nsfw, at: Date.now(), page: page() })); } catch (e) { /* blocked storage: the studio works without it */ }
+  function notePicking(s) {
+    var st = session(), p = s.pending; if (!st || !p) return;
+    try { st.setItem(NOTE, JSON.stringify({ v: 1, picker: p.picker, phase: p.phase, pad: s.target ? s.target.id : s.pad, nsfw: !!s.d.nsfw, at: Date.now(), page: page() })); } catch (e) { /* blocked storage: the studio works without it */ }
   }
   function dropNote() { var st = session(); if (st) try { st.removeItem(NOTE); } catch (e) { /* blocked */ } }
   function takeNote() {
@@ -22,9 +27,23 @@
     try { raw = st.getItem(NOTE); if (raw != null) st.removeItem(NOTE); } catch (e) { return null; }
     try { note = raw == null ? null : JSON.parse(raw); } catch (e) { return null; }
     if (!note || note.v !== 1 || (note.picker !== 'camera' && note.picker !== 'gallery') || typeof note.pad !== 'string' || note.page !== page()) return null;
+    if (note.phase != null && note.phase !== 'open' && note.phase !== 'arrived') return null;
     var age = Date.now() - Number(note.at); if (!(age >= 0 && age <= NOTE_MS)) return null;
-    try { var nav = window.performance && window.performance.getEntriesByType && window.performance.getEntriesByType('navigation')[0]; if (nav && nav.type === 'back_forward') return null; } catch (e) { /* old engine */ }
     return note;
+  }
+  function hiddenNow() { return document.visibilityState ? document.visibilityState === 'hidden' : !!document.hidden; }
+  // The pick is answered or given up: forget it (here and in the tab session).
+  function settle(s) { var p = s.pending; if (p) clearTimeout(p.timer); s.pending = null; dropNote(); }
+  // The picture of pick n has opened, or was refused: only then is the note done with.
+  function pickDone(s, n) { if (n && s.pending && s.pending.n === n) settle(s); }
+  // The page is back from the picker (or the user is touching it, so no picker is open): if no answer comes within BACK_MS, say so.
+  function back(s) {
+    var p = s.pending; if (!live(s) || !p || p.phase !== 'open' || !p.away || hiddenNow()) return;
+    p.back = true; clearTimeout(p.timer);
+    p.timer = setTimeout(function () {
+      if (!live(s) || s.pending !== p || p.phase !== 'open') return;
+      settle(s); say(s, p.picker === 'camera' ? _t('js.feed.ss.no_camera_file', 'No picture arrived from the camera. Try again, or choose it from Gallery.') : _t('js.feed.ss.no_file', 'No file arrived. Try again.'), true);
+    }, BACK_MS);
   }
   // What a picked file is: the browser's type, else its first bytes - an iOS camera or file-provider hand-off can come without a
   // usable type. The signatures are the server's (feedmedia.sniff), which checks the assembled upload again anyway.
@@ -87,9 +106,11 @@
     if (!done && s.attempt && s.attempt.stage === 'mine') return;
     if (!done && (s.d.file || s.busy) && !window.confirm(_t('js.feed.ss.discard', 'Discard this story?'))) return;
     if (!done) cancel(s);
-    s.closed = true; dropNote(); clearTimeout(s.suggestTimer); revoke(s);
+    s.closed = true; settle(s); clearTimeout(s.suggestTimer); revoke(s);
     if (s.media && s.media.pause) s.media.pause();
     document.removeEventListener('keydown', s.key, true); document.removeEventListener('focusin', s.focus);
+    document.removeEventListener('visibilitychange', s.vis); document.removeEventListener('pointerdown', s.touch, true);
+    window.removeEventListener('blur', s.away); window.removeEventListener('focus', s.back); window.removeEventListener('pageshow', s.back); window.removeEventListener('pagehide', s.leave);
     if (s.resize) window.removeEventListener('resize', s.resize);
     if (s.viewport) window.visualViewport.removeEventListener('resize', s.viewport);
     s.root.remove(); document.body.style.overflow = s.oldOverflow; current = null;
@@ -98,6 +119,7 @@
   function focusables(root) { return Array.prototype.filter.call(root.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), function (n) { return !n.disabled && n.tabIndex !== -1 && !n.hidden && n.offsetParent !== null && getComputedStyle(n).visibility !== 'hidden'; }); }
   function key(s, e) {
     if (!live(s)) return;
+    s.touch();
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else close(s); return; }
     if (e.key === 'Tab') {
       var list = focusables(s.sheet || s.root); if (s.sheetName === 'crop') list.unshift(s.preview); var i = list.indexOf(document.activeElement);
@@ -126,14 +148,14 @@
     s.handles = add(s.preview, el('div', 'sst-handles')); s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
       var f = add(s.picks, input('file')); f.accept = 'image/*,video/*'; f.hidden = true; f.setAttribute('data-pick', pair[0]); if (pair[0] === 'camera') f.setAttribute('capture', 'environment');
-      // ssfix: a hand-off with no file says so (it was a silent no-op)
+      // ssfix: a hand-off with no file says so (it was a silent no-op). ssfix2: a file keeps the note ('arrived') until it has opened
       f.addEventListener('change', function () {
-        dropNote(); var file = f.files && f.files[0];
-        if (file) pick(s, file);
-        else say(s, pair[0] === 'camera' ? _t('js.feed.ss.no_camera_file', 'No picture arrived from the camera. Try again, or choose it from Gallery.') : _t('js.feed.ss.no_file', 'No file arrived. Try again.'), true);
+        var file = f.files && f.files[0], p = s.pending, n = 0;
+        if (!file) { settle(s); say(s, pair[0] === 'camera' ? _t('js.feed.ss.no_camera_file', 'No picture arrived from the camera. Try again, or choose it from Gallery.') : _t('js.feed.ss.no_file', 'No file arrived. Try again.'), true); }
+        else { if (p) { clearTimeout(p.timer); p.phase = 'arrived'; n = p.n; notePicking(s); } pick(s, file, n); }
         f.value = '';
       });
-      f.addEventListener('cancel', dropNote);
+      f.addEventListener('cancel', function () { settle(s); });
       var pickButton = add(s.picks, iconButton(pair[1], function () { choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
     });
     s.filename = add(s.picks, el('span', 'sst-filename'));
@@ -157,6 +179,14 @@
     s.key = function (e) { key(s, e); }; document.addEventListener('keydown', s.key, true);
     s.focus = function (e) { if (live(s) && !s.root.contains(e.target)) { var fs = focusables(s.root); (fs[0] || s.root).focus(); } }; document.addEventListener('focusin', s.focus);
     s.resize = function () { layoutHandles(s); }; window.addEventListener('resize', s.resize);
+    // ssfix2: where the page is while a picker is out - away (hidden, blurred) and back (visible, focused, restored, touched)
+    s.away = function () { if (s.pending && s.pending.phase === 'open') s.pending.away = true; };
+    s.back = function () { back(s); };
+    s.touch = function () { if (s.pending && s.pending.phase === 'open') { s.pending.away = true; back(s); } };   // a picker is modal: a touch means it's gone
+    s.vis = function () { if (hiddenNow()) s.away(); else back(s); };
+    s.leave = function () { var p = s.pending; if (p && p.phase === 'open' && (p.back || !p.away)) settle(s); };   // left after coming back; not while the camera is in front
+    document.addEventListener('visibilitychange', s.vis); document.addEventListener('pointerdown', s.touch, true);
+    window.addEventListener('blur', s.away); window.addEventListener('focus', s.back); window.addEventListener('pageshow', s.back); window.addEventListener('pagehide', s.leave);
     if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
     cropGestures(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
     var include = pad && !/^(?:user:|u\/|profile$)/i.test(String(pad)) ? '?pad=' + encodeURIComponent(pad) : '';
@@ -165,7 +195,7 @@
       if (data.refusal || !data.pads || !data.pads.length) throw new Error(data.refusal || _t('js.feed.sc.nowhere', 'There\'s nowhere you can post a story right now.'));
       s.targets = data.pads; s.caps = data.caps || {}; s.as = data.as || ''; s.target = data.pads.filter(function (p) { return p.id === pad; })[0] || data.pads[0];
       paintTarget(s); paintControls(s); say(s, '');
-      if (resumed) { s.d.nsfw = !!resumed.nsfw; say(s, resumed.picker === 'camera' ? _t('js.feed.ss.reloaded_camera', 'The page reloaded while the camera was open, so the picture didn\'t arrive. Try again - or take it with your camera app and choose it from Gallery.') : _t('js.feed.ss.reloaded_gallery', 'The page reloaded while you were choosing a file, so nothing arrived. Try again.'), true); }
+      if (resumed) { s.d.nsfw = !!resumed.nsfw; say(s, resumed.phase === 'arrived' ? _t('js.feed.ss.reloaded_loading', 'The page reloaded while your file was opening, so it isn\'t here. Try again, or choose it from Gallery.') : resumed.picker === 'camera' ? _t('js.feed.ss.reloaded_camera', 'The page reloaded while the camera was open, so the picture didn\'t arrive. Try again - or take it with your camera app and choose it from Gallery.') : _t('js.feed.ss.reloaded_gallery', 'The page reloaded while you were choosing a file, so nothing arrived. Try again.'), true); }
     }).catch(function (e) { if (live(s)) say(s, e.message || _t('js.feed.sc.unreachable', 'Couldn\'t reach the site.'), true); });
   }
   function paintTarget(s) {
@@ -219,26 +249,31 @@
   }
   function canFill(d) { var r = d.w / d.h / (W / H); return Math.min(r, 1 / r) >= .05; }
   function resetFrame(d) { d.zoom = 1; d.crop = null; framing(d); d.fit = Math.abs(d.w / d.h / (W / H) - 1) <= .2 ? 'fill' : 'fit'; }
-  function choose(s, which) { notePicking(s, which); s.picks.querySelector('[data-pick="' + which + '"]').click(); }
-  // ssfix: every way a pick can fail is said out loud, in words that aren't the empty screen's own prompt
-  function pick(s, file) {
-    if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); return; }
-    if (!file.size) { say(s, _t('js.feed.ss.empty_file', 'That file is empty. Try again, or choose another one.'), true); return; }
+  function choose(s, which) {
+    if (s.pending) clearTimeout(s.pending.timer);
+    s.pending = { n: ++serial, picker: which, phase: 'open', away: false, back: false, timer: null };
+    notePicking(s); s.picks.querySelector('[data-pick="' + which + '"]').click();
+  }
+  // ssfix: every way a pick can fail is said out loud, in words that aren't the empty screen's own prompt.
+  // ssfix2: n is the pick's note (0: none); a refusal is the end of it, an accepted file keeps it until it has opened.
+  function pick(s, file, n) {
+    if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); pickDone(s, n); return; }
+    if (!file.size) { say(s, _t('js.feed.ss.empty_file', 'That file is empty. Try again, or choose another one.'), true); pickDone(s, n); return; }
     var type = String(file.type || '').toLowerCase();
-    if (/^video\//.test(type)) return use(s, file, 'video', false);
-    if (/^image\//.test(type)) return use(s, file, 'image', type === 'image/gif');
+    if (/^video\//.test(type)) return use(s, file, 'video', false, n);
+    if (/^image\//.test(type)) return use(s, file, 'image', type === 'image/gif', n);
     var id = s.sniffId = (s.sniffId || 0) + 1; say(s, _t('js.feed.sc.loading', 'Loading…'));
     sniff(file).then(function (found) {
       if (!live(s) || id !== s.sniffId) return;
-      if (!found) say(s, _t('js.feed.ss.file_type', 'That file isn\'t a picture or a video. Choose another one.'), true);
-      else if (s.busy) say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true);
-      else use(s, file, found.kind, !!found.gif);
-    }, function () { if (live(s) && id === s.sniffId) say(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), true); });
+      if (!found) { say(s, _t('js.feed.ss.file_type', 'That file isn\'t a picture or a video. Choose another one.'), true); pickDone(s, n); }
+      else if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); pickDone(s, n); }
+      else use(s, file, found.kind, !!found.gif, n);
+    }, function () { if (live(s) && id === s.sniffId) { say(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), true); pickDone(s, n); } });
   }
-  function use(s, file, kind, gif) {
+  function use(s, file, kind, gif, n) {
     s.sniffId = (s.sniffId || 0) + 1;     // a typed pick after an untyped one wins
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
-    if (file.size > limit * 1024 * 1024) { say(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), true); return; }
+    if (file.size > limit * 1024 * 1024) { say(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), true); pickDone(s, n); return; }
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
     var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw };
     s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
@@ -256,9 +291,12 @@
         else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
       }
       render(s); paintControls(s);
+      // ssfix2: the note goes once the picture has been painted (two frames on), not at 'load': the paint decode is the peak
+      var frame = window.requestAnimationFrame ? function (f) { window.requestAnimationFrame(f); } : function (f) { setTimeout(f, 16); };
+      frame(function () { frame(function () { pickDone(s, n); }); });
     }
     function failed() {
-      if (!live(s) || id !== s.pickId) return; d.decoded = false; d.legacy = false;
+      if (!live(s) || id !== s.pickId) return; d.decoded = false; d.legacy = false; pickDone(s, n);
       say(s, _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.'), true);
       s.recovery.textContent = ''; s.recovery.hidden = false;
       add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); }));
@@ -497,7 +535,7 @@
   }
   document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-story-compose]'); if (!b || (e.button != null && e.button !== 0)) return; e.preventDefault(); open(b.getAttribute('data-pad') || '', b); });
   window.patvStoryStudio = { open: function (pad, opener) { return open(pad, opener); } };
-  // ssfix: back from a picker as a reloaded page - reopen where the story was, and say the picture didn't arrive
+  // ssfix: back from a picker as a reloaded page (WebKit: a 'back_forward' load) - reopen where the story was, and say the picture didn't arrive
   function resume() { var note = takeNote(); if (note && !current) open(note.pad, document.querySelector('[data-story-compose]'), note); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', resume); else resume();
 })();
