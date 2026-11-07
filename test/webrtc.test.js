@@ -586,7 +586,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.match(await render({ ...on, avsyncOn: true, avsyncHold: "auto" }), /<script src="\/public\/js\/av-sync\.js\?v=9" data-avsync-hold="auto"><\/script>\s*<script src="\/public\/js\/webrtc-client\.js\?v=7"/, name);
     assert.doesNotMatch(html, /data-avsync-hold/, name + ": no flag without avsyncHold");
   }
-  assert.match(await renderHome(on), /stage-lowlat\.js\?v=3"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=25/);   // (upnext2: 25)   // 1.99ajq dockpol: 20; 1.99ajr golive merged: 21; train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19
+  assert.match(await renderHome(on), /stage-lowlat\.js\?v=3"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=26/);   // (upnext3: 26; upnext2: 25)   // 1.99ajq dockpol: 20; 1.99ajr golive merged: 21; train2: 14 = stagefix's 13 + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19
   assert.match(await renderRoom(on), /stage-lowlat\.js\?v=3/);   // 1.99ajy dockmedia: v3 (the ⚡ <video> follows PATVStage.nativeControls)
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);
