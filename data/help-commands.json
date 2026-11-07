@@ -6579,7 +6579,7 @@
   },
   {
    "id": "mic-alerts-on-off-music-on-off",
-   "title": "!mic alerts · music · onair · regrab",
+   "title": "!mic alerts · music · onair · regrab · fastgrab",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6590,10 +6590,12 @@
     "!mic alerts on|off",
     "!mic music on|off",
     "!mic onair on|off",
-    "!mic regrab fast|normal"
+    "!mic regrab fast|normal",
+    "!mic fastgrab on|off",
+    "!mic fastgrab inline on|off"
    ],
    "summary": "alerts switches the alert sound channel on or off for this room — the full alert controls are under !alerts.",
-   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed and the stage sources (`!onair setup sources`) while they're on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off.",
+   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed and the stage sources (`!onair setup sources`) while they're on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off. **fastgrab on** (per room, off by default): while a soundboard clip, a paid `!say` or an alert waits for a full mic, Pepe's grab goes out the instant someone drops it, so he wins a mic people are fighting over - one try per drop, two per clip, six a minute; never while his mic is blocked, on a mic break, left out by `!mic lock` or holding that mic on purpose, and after four grabs that didn't play in ten minutes it rests in that room for fifteen (the normal grab carries on; the room's mic break is untouched). Switching it off stops a waiting grab at once. `!mic fastgrab` alone shows how it's doing (won / lost / busy), `!mic fastgrab hook` the packet hook's own count. **fastgrab inline** sends that grab from inside the packet hook itself - for a staging test only.",
    "examples": [
     "!mic onair on"
    ],
@@ -8610,5 +8612,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "29cb9cb9ab383004"
+ "hash": "2df3654132644e04"
 }
