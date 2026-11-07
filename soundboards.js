@@ -73,8 +73,11 @@ const DEFAULTS = Object.freeze({
   pack_price: 250000, voice_pack_price: 400000, season_price: 600000, all_access_price: 1500000,
   room_default_price: 1000, room_max_price: 10000,
   sp_packs: 1, report_hide: 3, pack_voice_pct: 15,
-  // Pepe's limits (D: apply to owners and Season Pass too)
-  cd_user_gap: 45, cd_user_burst: 6, cd_user_window: 600, cd_clip_room: 180, cd_room_gap: 12, cd_room_burst: 20, cd_room_window: 600,
+  // Pepe's limits (D: apply to owners and Season Pass too). 1.99alk saycool (the owner, 2026-11-07: "the cooldown is too aggressive.
+  // Also it counts failed grabs to the cooldown"): per person 45 s -> 15 s (a common clip is at most 6 s, the room's own gap is 12 s),
+  // 6 -> 12 per 10 min, the same clip per room 3 min -> 60 s; the room's flood guard (12 s, 20 per 10 min) unchanged. Pepe charges
+  // them only for a clip that PLAYED (one that didn't get the mic is refunded and gives every cooldown back - pepe_soundboard.py).
+  cd_user_gap: 15, cd_user_burst: 12, cd_user_window: 600, cd_clip_room: 60, cd_room_gap: 12, cd_room_burst: 20, cd_room_window: 600,
   cd_legend_user: 600, cd_legend_room: 300, queue_max: 3, start_within: 150,
 });
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
@@ -581,7 +584,8 @@ async function roomBoard(user, roomId) {
   // 1.99tf: the room's own switch + Pepe admins' master switch (Pepe's report, padowner.soundboardState) - the drawer says why
   let room = { on: true, why: null };
   if (roomId) { try { room = await require("./padowner").soundboardState(roomId); } catch (e) { room = { on: true, why: null }; } }
-  return { on: CONFIG.enabled, room_on: room.on, room_why: room.why, pass, tabs, owned: [...items] };
+  // 1.99alk saycool: `gap` = the per-person cooldown (s) the drawer's ring shows (it was a hard-coded 45 s)
+  return { on: CONFIG.enabled, room_on: room.on, room_why: room.why, pass, tabs, owned: [...items], gap: CONFIG.cd_user_gap };
 }
 
 // ── buying ──

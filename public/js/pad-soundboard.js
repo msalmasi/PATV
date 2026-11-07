@@ -1,15 +1,18 @@
 // The pad's 🔊 Soundboard drawer (1.99rh, soundboards.js) under the Live tab's relay box: tabs Room / Global / Season / Packs /
 // Legendary, a button per clip (label, rarity border, price or ∞). A click sends `!sb <clip id>` through the existing web
 // relay (POST /api/rooms/:slug/say) - Pepe plays it as the account's linked Camfrog name, with every cooldown, price and
-// queue rule of chat. A ring shows the 45 s per-person cooldown; 🚩 reports a clip. Strings: __t (js.sbd.*).
+// queue rule of chat. A ring shows the per-person cooldown (the drawer answer's `gap`, the admin setting cd_user_gap - 1.99alk
+// saycool: 15 s, it was a hard-coded 45 s); it comes off as soon as the clip turns out not to have played (Pepe couldn't get the
+// mic, refused it, it expired - a failed grab costs no cooldown, the owner 2026-11-07). 🚩 reports a clip. Strings: __t (js.sbd.*).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var host = document.getElementById('rmSb');
   if (!host) return;
   var slug = host.getAttribute('data-slug');
-  var GAP = 45000;
-  var last = 0, data = null, tab = null, timer = null, pending = null;
+  var GAP_DEF = 15;                                   // s - an answer without `gap` (an older site)
+  var last = 0, data = null, tab = null, timer = null, pending = null, heard = false;
+  function gapMs() { var g = data && Number(data.gap); return (g > 0 ? g : GAP_DEF) * 1000; }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   var toggle = el('button', 'rb-btn sbd-toggle', '🔊 ' + _t('js.sbd.open', 'Soundboard')); toggle.type = 'button';
   toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'sbd-' + slug);
@@ -27,7 +30,7 @@
   function say(t, c) { status.textContent = t || ''; status.className = 'sbd-msg' + (c ? ' ' + c : ''); }
   function num(n) { return Number(n || 0).toLocaleString(); }
   function ring() {
-    var left = Math.max(0, GAP - (Date.now() - last));
+    var GAP = gapMs(), left = last ? Math.max(0, GAP - (Date.now() - last)) : 0;
     grid.style.setProperty('--sbd-cd', left ? String(Math.round(100 * left / GAP)) : '0');
     grid.classList.toggle('cooling', left > 0);
     grid.querySelectorAll('.sbd-b').forEach(function (b) { b.disabled = left > 0; });
@@ -76,8 +79,8 @@
       .then(function (d) { if (d && d.ok) { data = d; paint(); } else say((d && d.error) || _t('js.sbd.failed', 'Couldn\'t load the soundboard.'), 'bad'); });
   }
   function play(c) {
-    if (Date.now() - last < GAP) return;
-    last = Date.now(); ring();
+    if (last && Date.now() - last < gapMs()) return;
+    last = Date.now(); heard = false; ring();
     say(_t('js.sbd.sending', 'Asking Pepe to play {label}…', { label: c.label }));
     fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({ text: '!sb ' + c.id }) })
@@ -93,10 +96,12 @@
     var j = jobs.filter(function (x) { return x.id === pending; })[0];
     if (!j) return;
     if (j.state === 'waiting') say(_t('js.sbd.waiting', 'Waiting for the mic…'));
-    else if (j.state === 'playing') say(_t('js.sbd.playing', 'Playing on the mic now.'), 'ok');
+    else if (j.state === 'playing') { heard = true; say(_t('js.sbd.playing', 'Playing on the mic now.'), 'ok'); }
     else if (j.state === 'done') {
       say(j.ok ? (j.msg === 'played' ? _t('js.sbd.played', 'Playback finished.') : (j.msg || _t('js.sbd.queued', 'Sent - Pepe answers in the chat.'))) :
-        (j.msg || _t('js.sbd.failed_play', 'Pepe couldn\'t take that one.')), j.ok ? 'ok' : 'bad');
+        (j.msg || _t('js.sbd.no_mic', 'Pepe couldn\'t get the mic - no cooldown, try again.')), j.ok ? 'ok' : 'bad');
+      // 1.99alk saycool: only a clip that played (or started) keeps the cooldown - Pepe gives his back for one that didn't
+      if (!heard && j.msg !== 'played') { last = 0; ring(); }
       pending = null;
     }
   } };
