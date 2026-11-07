@@ -798,6 +798,110 @@ test("drawer consumes existing relay snapshots for waiting, playback and failure
   assert.equal(calls.length, 2, "no separate status polling channel");
 });
 
+// 1.99alk saycool (the owner, 2026-11-07: "For the soundboard / say, the cooldown is too aggressive. Also it counts failed grabs to
+// the cooldown."): Pepe's per-person limits loosened (45 s -> 15 s, 6 -> 12 per 10 min, the same clip 3 min -> 60 s) - the room's
+// flood guard (12 s, 20 per 10 min) unchanged; the drawer's ring follows the setting and comes off when a clip never played.
+test("1.99alk saycool: the soundboard's per-person defaults are loosened, the room's flood guard stays, Pepe's sync + the drawer carry them", async () => {
+  const c = SB.config();
+  assert.deepEqual([c.cd_user_gap, c.cd_user_burst, c.cd_user_window, c.cd_clip_room], [15, 12, 600, 60], "per person: 15 s, 12 per 10 min; the same clip per room: 60 s");
+  assert.deepEqual([c.cd_room_gap, c.cd_room_burst, c.cd_room_window], [12, 20, 600], "the room's flood guard: one per 12 s, 20 per 10 min (unchanged)");
+  assert.deepEqual([c.cd_legend_user, c.cd_legend_room, c.queue_max, c.start_within], [600, 300, 3, 150], "legendaries, the queue, the start window unchanged");
+  const sync = (await call("POST", "/api/soundboards/bot/sync", null, { password: "bot" })).d;
+  assert.equal(sync.cfg.cd_user_gap, 15, "Pepe's sync hands him the 15 s");
+  const drawer = (await call("GET", "/api/rooms/sb-room/soundboard", U.alice)).d;
+  assert.equal(drawer.gap, 15, "the drawer gets the per-person gap (its ring was a hard-coded 45 s)");
+  await SB.setConfig({ cd_user_gap: 20 }, "test");
+  assert.equal((await call("GET", "/api/rooms/sb-room/soundboard", U.alice)).d.gap, 20, "a saved admin value wins in the drawer too");
+  await SB.setConfig({ cd_user_gap: 15 }, "test");
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.match(en["sb.how"], /one play every 15 s per person, the same clip once a minute per room/, "the store's copy says the new limits");
+  assert.doesNotMatch(en["sb.how"], /45 s|3 min/);
+});
+
+test("1.99alk saycool: the drawer's cooldown ring follows the setting and comes off when the clip never played (no cooldown for a failed grab)", async () => {
+  const vm = require("node:vm");
+  const run = (drawerData) => {
+    const nodes = [];
+    const make = (tag) => {
+      const e = { tag, children: [], attrs: {}, listeners: {}, textContent: "", className: "", disabled: false,
+        style: { setProperty() {} }, appendChild(x) { this.children.push(x); },
+        setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; }, removeAttribute(k) { delete this.attrs[k]; },
+        addEventListener(k, f) { this.listeners[k] = f; },
+        querySelectorAll(sel) { return sel === ".sbd-b" ? nodes.filter((x) => x.className.startsWith("sbd-b ")) : []; } };
+      e.classList = { contains(c) { return e.className.split(" ").includes(c); }, toggle(c, on) {
+        e.className = e.className.split(" ").filter((x) => x && x !== c).concat(on ? [c] : []).join(" ");
+      } };
+      nodes.push(e); return e;
+    };
+    const host = make("div"); host.attrs["data-slug"] = "sb-room";
+    const window = {}, posts = [];
+    vm.runInNewContext(fs.readFileSync(path.join(repo, "public/js/pad-soundboard.js"), "utf8"), {
+      window, Date, document: { getElementById: () => host, createElement: make, createTextNode: (t) => ({ textContent: t }) },
+      setTimeout() {}, clearTimeout() {}, fetch: async (url) => {
+        if (url.endsWith("/say")) posts.push(url);
+        return { json: async () => url.endsWith("/say") ? { ok: true, id: "job" + posts.length } : drawerData };
+      }
+    });
+    const D = {
+      window, posts, nodes,
+      async open() { nodes.find((x) => x.className.includes("sbd-toggle")).listeners.click(); await new Promise(setImmediate); },
+      async play() { nodes.find((x) => x.className.startsWith("sbd-b ")).listeners.click(); await new Promise(setImmediate); },
+      grid: () => nodes.find((x) => x.className.startsWith("sbd-grid")),
+      toggle: () => nodes.find((x) => x.className.includes("sbd-toggle")),
+      status: () => nodes.find((x) => x.attrs.role === "status"),
+      btn: () => nodes.find((x) => x.className.startsWith("sbd-b ")),
+    };
+    return D;
+  };
+  const data = { ok: true, on: true, gap: 15, tabs: [{ key: "global", name: "Global", emoji: "", clips: [{ id: "clip", label: "Bell", free: true }] }] };
+
+  // the ring is the setting's 15 s, not 45
+  let d = run(data);
+  await d.open(); await d.play();
+  assert.equal(d.toggle().attrs["data-cd"], "15", "the ring counts down the per-person gap the site hands it");
+  assert.ok(d.grid().classList.contains("cooling") && d.btn().disabled, "...and the buttons wait it out");
+
+  // a failed grab: done, not ok, never played -> the ring comes off at once, the message says so
+  d.window.PATVSoundboard.update([{ id: "job1", state: "waiting" }]);
+  d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: false,
+    msg: "Pepe couldn't get the mic (someone else took the mic) - refunded. No cooldown - try again." }]);
+  assert.ok(!d.grid().classList.contains("cooling") && !d.btn().disabled && d.toggle().attrs["data-cd"] == null,
+    "a clip that never got the mic leaves no cooldown on the drawer");
+  assert.match(d.status().textContent, /couldn't get the mic.*No cooldown - try again/);
+  assert.match(d.status().className, /bad/);
+  await d.play();
+  assert.equal(d.posts.length, 2, "...so the same person can ask again right away");
+
+  // an older Pepe's failure without a message: the drawer's own words
+  d.window.PATVSoundboard.update([{ id: "job2", state: "done", ok: false, msg: "" }]);
+  assert.equal(d.status().textContent, "Pepe couldn't get the mic - no cooldown, try again.");
+  assert.ok(!d.grid().classList.contains("cooling"));
+
+  // Pepe refused it before queueing (his own cooldown / a switch): a typed answer, never played -> no ring either
+  await d.play();
+  d.window.PATVSoundboard.update([{ id: "job3", state: "done", ok: true, msg: "answered privately" }]);
+  assert.ok(!d.grid().classList.contains("cooling"), "nothing played: no cooldown shown");
+
+  // a clip that PLAYED keeps its cooldown
+  d = run(data);
+  await d.open(); await d.play();
+  d.window.PATVSoundboard.update([{ id: "job1", state: "playing" }]);
+  d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: true, msg: "played" }]);
+  assert.ok(d.grid().classList.contains("cooling") && d.btn().disabled, "a clip that played keeps the per-person cooldown");
+  // an error mid-clip (it started) is not a failed grab: the cooldown stands
+  d = run(data);
+  await d.open(); await d.play();
+  d.window.PATVSoundboard.update([{ id: "job1", state: "playing" }]);
+  d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: false, msg: "Pepe couldn't play it - try again" }]);
+  assert.ok(d.grid().classList.contains("cooling"), "a clip that started keeps its cooldown");
+
+  // an older site answer without `gap`: the new default
+  d = run({ ...data, gap: undefined });
+  await d.open(); await d.play();
+  assert.equal(d.toggle().attrs["data-cd"], "15", "no gap in the answer: 15 s");
+  assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-soundboard\.js\?v=6/, "the drawer's cache-buster moved on");
+});
+
 test("1.99ahe October make-good: whoever BOUGHT the 🎃 Spooky Season board keeps its clips after 1 Nov (drawer + Pepe's sync); nobody else does", async (t) => {
   assert.deepEqual([...SB.KEPT_SEASONS], ["2026-10"], "only October's store copy promised a board that outlives its season");
   const kbuy = await mkUser("kbuy"), kcomp = await mkUser("kcomp"), kpass = await mkUser("kpass"), knone = await mkUser("knone");
