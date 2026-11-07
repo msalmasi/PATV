@@ -88,8 +88,11 @@ function removeOutput(out) { if (out) media.removeFiles([out.file, out.thumb, ou
 async function displayedVideoSize(input, sn, pr) {
   let result;
   try {
+    // 1.99??: -show_streams, not -show_entries stream_side_data=...: the VPS's ffprobe 4.2 has no "stream_side_data" section
+    // name (ffprobe 5+ added it), so that option failed to parse there and every edited video was refused. Both versions put
+    // the "rotate" tag and the display matrix's "rotation" in the stream entry read below.
     result = await media.run(media.bin("ffprobe"), ["-v", "error", "-protocol_whitelist", "file", "-f", sn.ffmt,
-      "-select_streams", "v:0", "-show_entries", "stream_tags=rotate:stream_side_data=rotation", "-of", "json", input], { timeoutMs: 30000 });
+      "-select_streams", "v:0", "-show_streams", "-of", "json", input], { timeoutMs: 30000 });
     result = JSON.parse(result.out || "{}");
   } catch (_) { throw new media.MediaError("That video's rotation couldn't be read."); }
   const stream = Array.isArray(result.streams) ? result.streams[0] || {} : {};
