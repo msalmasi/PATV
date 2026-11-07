@@ -18,7 +18,8 @@
 //                          false: reached by their address only) are left out unless the viewer manages that pad or it is one of the
 //                          table's; a recent slug from the page never reaches one.
 // one(T, user, slug, net)  one pad by its exact address - "p/<address>" typed in the picker, the chat that follows the tab - or null. An
-//                          address reaches an unlisted pad (role "address"), as typing p/<address> does; nothing else is looked up by name.
+//                          address reaches an unlisted pad, as typing p/<address> does; nothing else is looked up by name. (review: its
+//                          role is "pad" like any other's - the answer never says a pad is unlisted)
 // more(T, user, pads)      are there pads beyond the table's own that this viewer's chat could open? (the 💬 Chat shows with no table pad;
 //                          memory only - the list applies the bans)
 // The search box filters the list in the page; only a full address is ever sent here.
@@ -137,8 +138,7 @@ async function one(T, user, raw, net) {
   const g = await gate(user, a, net);
   if (!g.ok || g.R !== R) return null;
   const own = (await require("./people").padsFor(T, user, net)).find((p) => p.chat && String(p.room) === String(R.id));
-  const role = own ? own.role : require("../rooms").isListed(R.id) ? "pad" : "address";
-  return entry(R, g, role);
+  return entry(R, g, own ? own.role : "pad");
 }
 
 async function more(T, user, pads) {

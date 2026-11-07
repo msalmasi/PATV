@@ -2835,5 +2835,6 @@ module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === 
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)
+  embedClosed,                                          // tablechat review: padaccess.js answers it for an Approved pad's embed
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)
   cursorNow: () => cursor };          // CL8: the newest feed cursor (the history answer's `cursor`)

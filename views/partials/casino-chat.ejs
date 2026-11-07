@@ -8,7 +8,9 @@
     window collapses to the bar with Bring it here (cz-chat-retired).
     tablechat (owner 2026-11-07: any pad's chat from a table, advertised there or not): ▾ (and 💬 with no pad of the table's own) opens the
     PICKER in the panel (casino-chat.js builds it: a search box, the table's pads, Recent, More pads - body.cz-chat-pk-on; the frame keeps
-    running under it); it makes the float / the sheet tall so a phone's keyboard leaves the list in view. %>
+    running under it); it makes the float / the sheet tall so a phone's keyboard leaves the list in view - review: not while the table
+    needs you (body.cz-chat-act: Fold / Call / Raise stay above it); a 44px Back on a phone; .cz-chat-sub = "Not this table's chat" under
+    the name of a pad that isn't the table's. %>
 <style>
   body { --czc-w: 360px; --czc-sheet: min(60dvh, 540px); }
   body.cz-chat-float { --czc-w: 340px; }
@@ -70,6 +72,11 @@
                 color: var(--ds-text-muted, #aaa); font: 600 13px/1.2 var(--ds-font); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cz-pk-back:is(:hover, :focus-visible) { color: var(--ds-text, #fff); background: var(--ds-hover, rgba(255,255,255,.08)); }
   .cz-pk-back[hidden] { display: none; }
+  /* (review: a 44px target on a phone) */
+  body.cz-chat-sheet .cz-pk-back { min-height: 44px; }
+  /* review: a chat that isn't this table's pad says so under its name (the people at the table may not be there) */
+  .cz-chat-n:has(.cz-chat-sub) a, .cz-chat-sub { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .cz-chat-sub { color: var(--ds-text-muted, #a1a1aa); font: 500 11px/1.25 var(--ds-font); }
   .cz-pk-ql { position: relative; display: block; margin: 0; }
   .cz-pk-ql .ds-ic { position: absolute; inset-inline-start: 12px; inset-block-start: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; opacity: .75; }
   /* (16px text: iPhone WebKit doesn't zoom the page on focus) */

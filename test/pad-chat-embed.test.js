@@ -403,7 +403,7 @@ test("tablechat: ▾ opens the picker with EVERY pad the server lists - the tabl
   assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1", "a pad the table never advertised: its chat beside the table");
   assert.equal(pickerOf(p).hidden, true); assert.equal(p.doc.body.classList.contains("cz-chat-pk-on"), false);
   assert.equal(p.panel.querySelector(".cz-chat-n a").href, "/p/big-room");
-  assert.deepEqual(JSON.parse(p.ss.get("patv.cz.chat.0123456789")), { u: "viewer", room: "Big.Room", slug: "big-room", name: "Café Royale", role: "pad" }, "remembered for this table in this tab - and for this viewer (review)");
+  assert.deepEqual(JSON.parse(p.ss.get("patv.cz.chat.0123456789")), { u: "viewer", slug: "big-room" }, "remembered for this table in this tab - for this viewer, and no name (review)");
   // a people update that doesn't list it keeps it (any pad's chat may be here); the frame's gate decides access
   p.people(PADS, true);
   assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1");
@@ -437,12 +437,12 @@ test("tablechat: the search filters in the page (nothing typed is sent); p/<addr
   await tick(400);
   assert.equal(p.asked.length, 1, "a name with no match is never sent");
   typeIn(p, "p/hidden-den");
-  assert.match(pickerOf(p).querySelector(".cz-pk-st").textContent, /Looking up p\/hidden-den…/);
-  await tick(400);
+  assert.match(pickerOf(p).querySelector(".cz-pk-st").textContent, /Press Enter to look up p\/hidden-den/, "(review: asked after a pause in the typing)");
+  await tick(800);
   assert.deepEqual(p.asked.slice(1), ["/api/casino/t/0123456789/chatpads?slug=hidden-den"], "an address typed as one: that one pad is asked");
   assert.deepEqual(groupsOf(p), [["By address", ["Hidden Den"]]]);
   typeIn(p, "https://publicaccess.tv/p/night-gone");
-  await tick(400);
+  await tick(800);
   assert.equal(p.asked.at(-1), "/api/casino/t/0123456789/chatpads?slug=night-gone", "a pasted link");
   assert.equal(pickerOf(p).querySelector(".cz-pk-st").textContent, "No pad matches “https://publicaccess.tv/p/night-gone”.", "the server said no: nothing");
   const q = typeIn(p, "hidden-den");
@@ -737,7 +737,7 @@ test("tablechat review: 💬 while the picker is over a chat closes the picker o
   const item = pickerOf(p).querySelector('[data-slug="big-room"]');
   item.focus(); item.dispatchEvent(new Event("click"));      // (Enter on a focused pad = its click)
   assert.equal(p.doc.activeElement, pick, "focus on ▾, not lost to the page");
-  assert.equal(p.panel.querySelector(".cz-chat-sub").textContent, "p/big-room · not this table's chat", "the header says where you'd be typing");
+  assert.equal(p.panel.querySelector(".cz-chat-sub").textContent, "Not this table's chat · p/big-room", "the header says where you'd be typing (the note first: a narrow header cuts the address)");
   pick.dispatchEvent(new Event("click"));
   assert.deepEqual(groupsOf(p), [["At this table", ["Night Orchard"]], ["Recent", ["Café Royale", "Lily Pond"]], ["More pads", ["Quiet Room"]]], "the pick is in Recent at once");
   pickerOf(p).querySelector('[data-slug="night-orchard"]').dispatchEvent(new Event("click"));

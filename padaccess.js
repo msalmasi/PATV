@@ -556,6 +556,13 @@ function register(app, { addUser }) {
       if (inside(u, R.id)) return next();
       if (/^\/settings\/?$/.test(sub)) return next();             // padsettings.js: owners + staff only anyway
       if (/^\/owner\/?$/.test(sub)) return next();                // 1.99qr: padowner.js - owners + staff only anyway
+      // tablechat review: the chat EMBED (a casino table's 💬 Chat panel frames /p/<slug>/chat?embed=1) answers its own "not open to you
+      // here" card - the locked page drew the whole site in the panel and never told the table, which kept reopening it. The card names
+      // nothing but the address, as the locked page; the window and every other page keep the locked page.
+      if (/^\/chat\/?$/.test(sub)) {
+        const B = require("./bridge");
+        if (B.chatEmbedAsked(req)) return B.embedClosed(req, res, require("./pads").padSlug(R));
+      }
       return lockedPage(req, res, R, u);
     } catch (e) { next(e); }
   });
