@@ -10194,7 +10194,6 @@
   "js.sbd.sfx": "Sound effects",
   "js.sbd.failed": "Couldn't load the soundboard.",
   "js.sbd.failed_play": "Pepe couldn't take that one.",
-  "js.sbd.no_mic": "Pepe couldn't get the mic - no cooldown, try again.",
   "js.sbd.free": "free",
   "js.sbd.off": "Soundboards are switched off right now.",
   "js.sbd.off_admins": "The soundboard is taking a break everywhere right now (Pepe's admins switched it off).",

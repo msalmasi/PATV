@@ -2,8 +2,9 @@
 // Legendary, a button per clip (label, rarity border, price or ∞). A click sends `!sb <clip id>` through the existing web
 // relay (POST /api/rooms/:slug/say) - Pepe plays it as the account's linked Camfrog name, with every cooldown, price and
 // queue rule of chat. A ring shows the per-person cooldown (the drawer answer's `gap`, the admin setting cd_user_gap - 1.99alk
-// saycool: 15 s, it was a hard-coded 45 s); it comes off as soon as the clip turns out not to have played (Pepe couldn't get the
-// mic, refused it, it expired - a failed grab costs no cooldown, the owner 2026-11-07). 🚩 reports a clip. Strings: __t (js.sbd.*).
+// saycool: 15 s, it was a hard-coded 45 s; 0 = none); it comes off as soon as the clip turns out not to have played (Pepe couldn't
+// get the mic, refused it, it expired, its audio failed - he refunds those and gives his cooldown back: a failed grab costs no
+// cooldown, the owner 2026-11-07). 🚩 reports a clip. Strings: __t (js.sbd.*).
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -12,7 +13,10 @@
   var slug = host.getAttribute('data-slug');
   var GAP_DEF = 15;                                   // s - an answer without `gap` (an older site)
   var last = 0, data = null, tab = null, timer = null, pending = null, heard = false;
-  function gapMs() { var g = data && Number(data.gap); return (g > 0 ? g : GAP_DEF) * 1000; }
+  function gapMs() {                                  // 1.99alk review: a saved 0 (no per-person gap) is 0, not the default
+    var g = data && data.gap != null && data.gap !== '' ? Number(data.gap) : NaN;
+    return (isFinite(g) && g >= 0 ? g : GAP_DEF) * 1000;
+  }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   var toggle = el('button', 'rb-btn sbd-toggle', '🔊 ' + _t('js.sbd.open', 'Soundboard')); toggle.type = 'button';
   toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'sbd-' + slug);
@@ -99,9 +103,10 @@
     else if (j.state === 'playing') { heard = true; say(_t('js.sbd.playing', 'Playing on the mic now.'), 'ok'); }
     else if (j.state === 'done') {
       say(j.ok ? (j.msg === 'played' ? _t('js.sbd.played', 'Playback finished.') : (j.msg || _t('js.sbd.queued', 'Sent - Pepe answers in the chat.'))) :
-        (j.msg || _t('js.sbd.no_mic', 'Pepe couldn\'t get the mic - no cooldown, try again.')), j.ok ? 'ok' : 'bad');
-      // 1.99alk saycool: only a clip that played (or started) keeps the cooldown - Pepe gives his back for one that didn't
-      if (!heard && j.msg !== 'played') { last = 0; ring(); }
+        (j.msg || _t('js.sbd.failed_play', 'Pepe couldn\'t take that one.')), j.ok ? 'ok' : 'bad');
+      // 1.99alk saycool: only a clip that played keeps the cooldown - Pepe gives his back for one that didn't (1.99alj review: a
+      // failure after it started too - the audio failing is refunded with no cooldown), so the ring comes off with his
+      if (!(j.ok && (j.msg === 'played' || heard))) { last = 0; ring(); }
       pending = null;
     }
   } };
