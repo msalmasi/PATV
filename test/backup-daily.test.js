@@ -151,3 +151,47 @@ test("the CLI: --db=staging never defaults to prod's folder; --date is validated
   assert.throws(() => parseDate("20261008"), /bad --date/);
   assert.equal(parseDate("2026-10-08").getDate(), 8);
 });
+
+// Train 3a (owner answer 5, 2026-11-07: "Clerk backups skip it"): the Plex catalog cache (plexcatalog.js - its own SQLite file
+// next to the site database, ~161 MB, rebuilt from Plex by its sync) is never part of the nightly backup, even while the
+// catalog's own connection holds its WAL (plexcatalog.db-wal / -shm on disk).
+test("the Plex catalog cache next to myapp.db (plexcatalog.db + -wal/-shm) is never in the nightly backup", async () => {
+  const site = fs.mkdtempSync(path.join(tmp, "site-"));
+  const dbPath = path.join(site, "myapp.db");
+  fs.copyFileSync(await makeDb(6), dbPath);
+  const { createCatalog } = require(path.join(repo, "plexcatalog"));
+  const envBefore = process.env.PLEX_CATALOG_DB, cwd = process.cwd();
+  delete process.env.PLEX_CATALOG_DB;
+  process.chdir(site);
+  let cat;
+  try {
+    cat = createCatalog({ settings: () => ({}), log: quiet, noTimers: true });
+  } finally {
+    process.chdir(cwd);
+    if (envBefore !== undefined) process.env.PLEX_CATALOG_DB = envBefore;
+  }
+  assert.equal(cat.file, path.join(site, "plexcatalog.db"), "the catalog's file is plexcatalog.db next to myapp.db (the site's cwd)");
+  await cat.init();
+  try {
+    for (const f of ["plexcatalog.db", "plexcatalog.db-wal", "plexcatalog.db-shm"]) assert.ok(fs.existsSync(path.join(site, f)), f + " on disk");
+    const dir = path.join(site, "backups");
+    const r = await run({ dbPath, dir, now: parseDate("2026-11-07"), free: plenty, log: quiet });
+    const walk = (d, pre = "") => fs.readdirSync(d, { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name), pre + e.name + "/") : [pre + e.name]));
+    assert.deepEqual(walk(dir).sort(), ["daily/database_backup_daily_2026-11-07.db.gz", "database_backup_2026-11.db.gz"],
+      "only the site database's two files - no catalog copy, no -wal / -shm");
+    const restored = r.file + ".restored.db";
+    fs.writeFileSync(restored, zlib.gunzipSync(fs.readFileSync(r.file)));
+    const db = await open(restored);
+    const tables = (await q(db, "all", "SELECT name FROM sqlite_master WHERE type = 'table'")).map((x) => x.name);
+    await close(db);
+    fs.unlinkSync(restored);
+    assert.deepEqual(tables, ["users"], "the backup holds the site database alone (no plex_catalog / plex_shelves tables)");
+    assert.deepEqual(fs.readdirSync(site).filter((f) => /plexcatalog/.test(f)).sort(),
+      ["plexcatalog.db", "plexcatalog.db-shm", "plexcatalog.db-wal"], "the live catalog is left untouched");
+  } finally {
+    await cat.close();
+  }
+  const src = fs.readFileSync(path.join(repo, "backup-db.js"), "utf8");
+  assert.ok(!/plexcatalog/.test(src.replace(/\/\/[^\n]*/g, "")), "backup-db.js never names the catalog in code (it backs up one database)");
+});
