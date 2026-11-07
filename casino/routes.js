@@ -13,6 +13,7 @@
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
 //   GET  /api/casino/t/:id/people           1.99ajw casino2: the seats for the person menu + the table's pads (signed in; casino/people.js)
 //   GET  /api/casino/t/:id/pads             1.99ajw casino2: the table's pads alone (its 💬 Chat; anyone)
+//   GET  /api/casino/t/:id/chatpads         tablechat: every pad chat the viewer may open from the table (?recent=, ?slug=; casino/chatpads.js)
 //   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
 //   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
@@ -40,6 +41,8 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
 
+/** tablechat: the request's network for a network ban (netban.reqNet - the trusted proxy's address only; null = unknown) */
+function netOf(req) { try { return require("../netban").reqNet(req); } catch (e) { return null; } }
 function clientIp(req) {
   try { return require("../middleware/authGuard").clientIp(req); } catch (e) { return req.ip || null; }
 }
@@ -204,6 +207,7 @@ function register(app, { isBotToken, addUser }) {
   // 1.99ajw casino2: the seats as the person menu needs them + the table's pads (casino/people.js) - asked when the seats or the rooms
   // change and on a click with an old answer, never by the 1-2 s poll. Seats are for signed-in viewers; the pads (the 💬 Chat) for all.
   const people = require("./people");
+  const chatpads = require("./chatpads");      // tablechat: the 💬 Chat's gate, picker and `more`
   app.get("/api/casino/t/:id/people", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
@@ -214,9 +218,9 @@ function register(app, { isBotToken, addUser }) {
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
     try {
       await svc.refreshVeil(T);        // 1.99ajw casino2 rework: the same masks as the table view (casino/veil.js)
-      const pads = await people.padsFor(T, req.user);
+      const pads = await people.padsFor(T, req.user, netOf(req));
       const blk = await people.blocksOf(req.user);
-      res.json({ ok: true, pepe: await people.pepeInfo(), pads, seats: await people.seatsFor(T, req.user, pads), ...(blk ? { blk } : {}) });
+      res.json({ ok: true, pepe: await people.pepeInfo(), pads, more: await chatpads.more(T, req.user, pads), seats: await people.seatsFor(T, req.user, pads), ...(blk ? { blk } : {}) });
     } catch (e) {
       console.error("[casino] people:", e);
       res.status(500).json({ ok: false, error: "Couldn't load the table's people." });
@@ -230,8 +234,27 @@ function register(app, { isBotToken, addUser }) {
     await svc.boot();
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
-    try { res.json({ ok: true, pads: await people.padsFor(T, req.user || null) }); }
+    try { const pads = await people.padsFor(T, req.user || null, netOf(req)); res.json({ ok: true, pads, more: await chatpads.more(T, req.user || null, pads) }); }
     catch (e) { console.error("[casino] pads:", e); res.status(500).json({ ok: false, pads: [] }); }
+  });
+  // tablechat (owner 2026-11-07: "let users pull up any pad chats regardless if its been advertised or added to a room chat"): the 💬 Chat's
+  // picker - every pad chat this viewer may open (casino/chatpads.js: the table's own first, ?recent= slugs the page remembers, then the
+  // rest), or one pad by its exact address (?slug=). Anyone (a guest: Public pads); private no-store; 40 a minute per account / address.
+  // The frame itself is gated again by the chat embed (chatpads.gate) - nothing here is trusted by it.
+  app.get("/api/casino/t/:id/chatpads", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
+    const key = req.user && req.user.userId ? "u:" + req.user.userId : "ip:" + (svc.ipHash(clientIp(req)) || "?");
+    if (!chatpads.rateOk(key)) return res.status(429).json({ ok: false, error: "Slow down." });
+    await svc.boot();
+    const T = svc.getTable(req.params.id);
+    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    const q = req.query || {}, user = req.user && req.user.userId ? req.user : null;
+    try {
+      if (q.slug != null) return res.json({ ok: true, pad: await chatpads.one(T, user, String(q.slug), netOf(req)) });
+      const recent = typeof q.recent === "string" ? q.recent.slice(0, 800).split(",") : [];
+      res.json({ ok: true, pads: await chatpads.list(T, user, { net: netOf(req), recent }) });
+    } catch (e) { console.error("[casino] chatpads:", e); res.status(500).json({ ok: false, pads: [] }); }
   });
 
   app.get("/api/casino/t/:id/history", async (req, res) => {

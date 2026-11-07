@@ -5,7 +5,10 @@
     Review fixes: the table is centred in the room left of the docked panel (and the footer makes room too); the float and the sheet make
     room while the table needs you (your turn, a Blackjack bet or insurance - body.cz-chat-act); a phone's sticky action dock rides above an
     open sheet then; a sheet / float grows while a sheet is open in the chat (cz-chat-tall: ⚔️ Duel's stake); a chat that moved to its own
-    window collapses to the bar with Bring it here (cz-chat-retired). %>
+    window collapses to the bar with Bring it here (cz-chat-retired).
+    tablechat (owner 2026-11-07: any pad's chat from a table, advertised there or not): ▾ (and 💬 with no pad of the table's own) opens the
+    PICKER in the panel (casino-chat.js builds it: a search box, the table's pads, Recent, More pads - body.cz-chat-pk-on; the frame keeps
+    running under it); it makes the float / the sheet tall so a phone's keyboard leaves the list in view. %>
 <style>
   body { --czc-w: 360px; --czc-sheet: min(60dvh, 540px); }
   body.cz-chat-float { --czc-w: 340px; }
@@ -58,8 +61,40 @@
   /* (the phone's sticky action dock rides above the minimized bar, and above the open sheet while the table needs you) */
   body.cz-chat-sheet.cz-chat-mini .cz .dock { inset-block-end: calc(52px + env(safe-area-inset-bottom, 0px)); }
   body.cz-chat-sheet.cz-chat-act:not(.cz-chat-mini) .cz .dock { inset-block-end: calc(var(--czc-sheet) + var(--ds-sp-2, 8px)); }
-  .cz-chat-menu { position: absolute; z-index: calc(var(--ds-z-sticky) + 1); }
-  .cz-chat-menu .pm-pop-i[aria-checked="true"] { color: var(--ds-text-strong, #fff); font-weight: 700; }
+  /* tablechat: the picker - every pad chat this viewer may open (casino-chat.js) - in the panel, over the frame (which keeps running) */
+  .cz-chat-pk { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; outline: 0; }
+  .cz-chat-pk[hidden], body.cz-chat-mini .cz-chat-pk { display: none !important; }
+  body.cz-chat-pk-on .cz-chat-b, body.cz-chat-pk-on .cz-chat-bar { visibility: hidden; height: 0; flex: 0 0 0; overflow: hidden; padding: 0; }
+  .cz-pk-top { display: flex; flex-direction: column; gap: var(--ds-sp-2, 8px); padding: var(--ds-sp-2, 8px) var(--ds-sp-3, 12px); border-block-end: 1px solid var(--ds-line, rgba(255,255,255,.12)); }
+  .cz-pk-back { align-self: flex-start; min-height: 32px; margin: 0; padding: 0 var(--ds-sp-2, 8px); border: 0; border-radius: var(--ds-r-md, 10px); background: transparent;
+                color: var(--ds-text-muted, #aaa); font: 600 13px/1.2 var(--ds-font); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cz-pk-back:is(:hover, :focus-visible) { color: var(--ds-text, #fff); background: var(--ds-hover, rgba(255,255,255,.08)); }
+  .cz-pk-back[hidden] { display: none; }
+  .cz-pk-ql { position: relative; display: block; margin: 0; }
+  .cz-pk-ql .ds-ic { position: absolute; inset-inline-start: 12px; inset-block-start: 50%; transform: translateY(-50%); font-size: 14px; pointer-events: none; opacity: .75; }
+  /* (16px text: iPhone WebKit doesn't zoom the page on focus) */
+  .cz-pk-q { box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 0 var(--ds-sp-3, 12px) 0 36px; border: 1px solid var(--ds-line, rgba(255,255,255,.16)); border-radius: var(--ds-r-md, 10px);
+             background: var(--ds-surface-2, #232327); color: var(--ds-text, #eee); font: 16px/1.25 var(--ds-font); -webkit-appearance: none; appearance: none; }
+  .cz-pk-q::placeholder { color: var(--ds-text-muted, #a1a1aa); opacity: 1; }
+  .cz-pk-q:focus-visible { outline: 2px solid var(--ds-focus, #ffd740); outline-offset: 1px; }
+  .cz-pk-l { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-block: var(--ds-sp-1, 4px) var(--ds-sp-2, 8px); }
+  .cz-pk-h { margin: var(--ds-sp-2, 8px) var(--ds-sp-3, 12px) 2px; color: var(--ds-text-muted, #a1a1aa); font: 700 11px/1.3 var(--ds-font); letter-spacing: .06em; text-transform: uppercase; }
+  .cz-pk-i { display: flex; align-items: center; gap: var(--ds-sp-3, 12px); box-sizing: border-box; width: 100%; min-height: 52px; margin: 0; padding: 6px var(--ds-sp-3, 12px); border: 0;
+             background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+  .cz-pk-i:hover { background: var(--ds-hover, rgba(255,255,255,.06)); }
+  .cz-pk-i:focus-visible { outline: 2px solid var(--ds-focus, #ffd740); outline-offset: -2px; background: var(--ds-hover, rgba(255,255,255,.06)); }
+  .cz-pk-ic { flex: none; width: 22px; text-align: center; font: 16px/1 var(--ds-font-emoji, inherit); }
+  .cz-pk-t { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+  .cz-pk-n, .cz-pk-m { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cz-pk-n { color: var(--ds-text, #eee); font: 600 var(--ds-fs-sm, 14px)/1.25 var(--ds-font); }
+  .cz-pk-m { color: var(--ds-text-muted, #a1a1aa); font-size: 12px; line-height: 1.3; }
+  .cz-pk-i[aria-current="true"] .cz-pk-n { color: var(--ds-text-strong, #fff); font-weight: 700; }
+  .cz-pk-i[aria-current="true"] .cz-pk-ic { color: var(--gold, #ffd740); }
+  .cz-pk-st { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2, 8px); margin: 0; padding: var(--ds-sp-2, 8px) var(--ds-sp-3, 12px) var(--ds-sp-3, 12px); color: var(--ds-text-muted, #a1a1aa); font-size: 13px; line-height: 1.45; }
+  .cz-pk-st[hidden], .cz-pk-foot[hidden] { display: none; }
+  .cz-pk-foot { margin: 0; padding: var(--ds-sp-2, 8px) var(--ds-sp-3, 12px) calc(var(--ds-sp-3, 12px) + env(safe-area-inset-bottom, 0px)); border-block-start: 1px solid var(--ds-line, rgba(255,255,255,.12)); font-size: 13px; }
+  .cz-pk-foot a { color: var(--gold, #ffd740); }
+  .cz-chat-pick[aria-expanded="true"] { color: var(--ds-text, #fff); background: var(--ds-hover, rgba(255,255,255,.08)); }
   /* the 💬 pill while the chat is open here */
   #cz-chatbtn[aria-expanded="true"] { border-color: var(--gold); background: rgba(255,215,64,.12); color: var(--ds-text-strong, #fff); }
   /* 1.99ajw casino2: a seat's avatar + name as the person menu's button (casino-ui.js seatWho) - the seat's own look */
@@ -83,7 +118,7 @@
   <div class="cz-chat-h">
     <span class="ds-ic" aria-hidden="true">💬</span>
     <h2 class="cz-chat-n" id="cz-chat-n"></h2>
-    <button type="button" class="cz-chat-pick" hidden aria-haspopup="menu" aria-label="<%- t('casino.chat_switch') %>" title="<%- t('casino.chat_switch') %>"><span class="ds-ic" aria-hidden="true">▾</span></button>
+    <button type="button" class="cz-chat-pick" hidden aria-controls="cz-chat-pk" aria-expanded="false" aria-label="<%- t('casino.chat_switch') %>" title="<%- t('casino.chat_switch') %>"><span class="ds-ic" aria-hidden="true">▾</span></button>
     <span class="cz-chat-dot" role="img" aria-label="<%- t('casino.chat_new') %>" hidden></span>
     <span class="cz-chat-sp"></span>
     <button type="button" class="cz-chat-win" aria-label="<%- t('casino.chat_window') %>" title="<%- t('casino.chat_window') %>"><span class="ds-ic" aria-hidden="true">↗️</span></button>
@@ -93,4 +128,4 @@
   <div class="cz-chat-bar" role="status" hidden><span class="cz-chat-bar-t"></span><button type="button" class="cz-btn sm ghost"><%- t('casino.chat_bring') %></button></div>
   <div class="cz-chat-b"></div>
 </aside>
-<script src="/public/js/casino-chat.js?v=1" defer></script>
+<script src="/public/js/casino-chat.js?v=2" defer></script>

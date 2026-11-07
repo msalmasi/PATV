@@ -7,7 +7,9 @@
 // pads = [{room, slug, name, role: home | pushed | advert, chat}] - the live bridged pads of the rooms the table plays in (home first, then
 // the pushed ones), then the rooms it is advertised in (a web-only table is often only advertised - the owner's table of 2026-11-04 was);
 // chat = the pad chat window's own gate says yes for this viewer (bridge.chatGate: the bridge perk, members-tier access, the 18+ gate, the
-// Room Dock), so the control only offers a chat that would open.
+// Room Dock), so the control only offers a chat that would open. tablechat (owner 2026-11-07): chat = the TABLE CHAT's gate (casino/
+// chatpads.js gate - chatGate and not banned from that pad; the frame's embed asks the same), and the 💬 Chat's picker offers every other
+// pad's chat the viewer may open too (GET /api/casino/t/:id/chatpads) - these stay on top of it.
 //
 // seats = {<seat hash>: person} (the seat hash = the table view's `seat`, never an account id):
 //   * {me: true, display}                     the viewer's own seat (no menu)
@@ -49,8 +51,8 @@ const lc = (s) => String(s == null ? "" : s).toLowerCase();
 const B = () => require("../bridge");
 const svc = () => require("./service");
 
-/** the table's pads (see the top) for `user` (null = signed out) */
-async function padsFor(T, user) {
+/** the table's pads (see the top) for `user` (null = signed out); net = the request's network (netban.reqNet - a network ban; null = unknown) */
+async function padsFor(T, user, net = null) {
   const S = svc();
   const list = S.roomsOf(T).map((id, i) => [id, i ? "pushed" : "home"])
     .concat((Array.isArray(T.adverts) ? T.adverts : []).map((id) => [id, "advert"]));
@@ -61,7 +63,7 @@ async function padsFor(T, user) {
     const R = B().liveBridged(id);
     if (!R) continue;
     let gate = null;
-    try { gate = await B().chatGate(user || null, R.slug); } catch (e) { gate = null; }
+    try { gate = await require("./chatpads").gate(user || null, R.slug, net); } catch (e) { gate = null; }
     const name = (gate && gate.info && gate.info.title) || R.name || id;
     out.push({ room: String(id), slug: (gate && gate.slug) || R.slug, name: String(name).slice(0, 80), role, chat: !!(gate && gate.ok) });
   }

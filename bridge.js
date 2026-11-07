@@ -2519,6 +2519,9 @@ function register(app, { isBotToken, addUser }) {
   // cached (rows are per viewer), never indexed, never framed (it has a composer and money actions - pad pages send no frame header).
   // 1.99ajw casino2: ?embed=1 from a same-origin frame (chatEmbedAsked) = the casino tables' 💬 Chat panel - the same page and every
   // rule above; only its frame headers differ (SAMEORIGIN / frame-ancestors 'self', for that variant alone - the window stays DENY)
+  // tablechat (owner 2026-11-07: any pad's chat from a table, advertised there or not): the embed's gate is the TABLE CHAT's
+  // (casino/chatpads.js gate - this gate and not banned from the pad: a pad ban, a whole-bridge block, a login or network ban), so the pad
+  // a table page asks for is never trusted - a pad the viewer can't open beside a table answers the "not open to you here" card
   app.get("/p/:slug/chat", addUser, async (req, res) => {
     const embed = chatEmbedAsked(req);
     res.set({ "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive", "X-Frame-Options": embed ? "SAMEORIGIN" : "DENY",
@@ -2532,6 +2535,7 @@ function register(app, { isBotToken, addUser }) {
     // 1.99ajw casino2 review F7: the embed whose gate says no (the pad went offline, signed out in another tab, the Room Dock changed) answers
     // a small card that tells the table page (patv-chat:closed, why 'gate') - never a redirect, which drew the whole pad page in the panel
     if (!gate.ok) return embed ? embedClosed(req, res, slug) : toPad();
+    if (embed && (await require("./casino/chatpads").banned(live.id, req.user, require("./netban").reqNet(req)))) return embedClosed(req, res, slug);
     let linked = false, login = null;
     if (signedIn) {
       try { login = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { login = null; }
