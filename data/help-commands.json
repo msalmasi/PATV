@@ -1276,7 +1276,7 @@
     "!livecam ask on|off"
    ],
    "summary": "Can people on the website see your cam (live, snapshots, clips) - and who?",
-   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`) - it also lets the room's pad show whoever holds the mic on its stage (a pad setting, off by default). Admins also: `!livecam passthru` shows how pass-through (cams sent on untouched) is set - its source, kill switch and catch-up; `!livecam passthru catchup on|off` (off by default) lets such a cam catch up after a stall - its late frames go out at once, a brief skip - instead of keeping the stall as extra delay behind the room audio.",
+   "details": "Signed-in members of a room's PATV pad can see someone's cam on the website: press **▶ Live** to watch it live (Pepe relays it, about a second behind; nothing is recorded), take a snapshot or record a short clip. `!livecam off` keeps your cam off the website completely - no live video, snapshots or clips, and any live relay stops at once; it also keeps your cam off pads' automatic mic stages (a pad can show whoever holds the mic on its own stage). `!livecam on` allows it again. While it's on, choose who: `!livecam members` (verified members: a linked Camfrog name or a verified account - the default), `!livecam everyone` (any signed-in member), `!livecam followers` (people who follow you on PATV) or `!livecam request` (only people you say yes to). With members / followers, people who don't qualify can still ask you - `!livecam ask off` stops that. When someone asks, Pepe PMs you: `!camok <name>` lets them watch for 6 hours, `!camok <name> always` for good, `!camno <name>` says no. It's the same setting as Settings → Privacy on publicaccess.tv. `!bridge hide` and `!incognito on` keep your cam off the website too. Whenever someone opens your cam there, Pepe tells you by PM who it was (`!whowatching` shows everyone; `!blockviewer <name>` blocks one person). `!livecam` shows your settings. Admins: `!bridge livecams on|off` per room (needs `!bridge cams on`) - it also lets the room's pad show whoever holds the mic on its stage (a pad setting, off by default). Admins also: `!livecam passthru` shows how pass-through (cams sent on untouched) is set - its source, kill switch and catch-up; `!livecam passthru catchup on|off` (off by default) lets such a cam catch up after a stall - its late frames go out at once, a brief skip - instead of keeping the stall as extra delay behind the room audio. `!livecam pool` shows Pepe's cam pool - the cam windows open now, the most open at once and the capacity he gives the website; `!livecam pool reset` forgets a Camfrog cam limit he learned, at once.",
    "examples": [
     "!livecam off",
     "!livecam followers",
@@ -1401,11 +1401,14 @@
     "!plex next | prev | pause | resume | stop | np",
     "!plex skip +10 · !plex skip -2 · !plex seek 1:02:30",
     "!plex queue <title>",
+    "!plex instead <title> · !plex <title> instead",
     "!plex <title> -cam · !plex cam <title>",
-    "!plex on|off · !plex nl on|off"
+    "!plex on|off · !plex nl on|off",
+    "!plex random <show> · !plex latest <show> · !plex last 3 <show>",
+    "!plex shelves · !plex surprise · !plex another · !plex clerk on|off · !plex embed on|off|status|backfill|pause (bot admins)"
    ],
    "summary": "Put a movie or a show from the Plex library on this pad's stage - just ask Pepe (\"pepe play the matrix\") and he checks with YOU before anything plays.",
-   "details": "Say it in plain words - `pepe play the matrix`, `pepe can we watch the office season 2`, `pepe put on the next episode` - or type `!plex <title>` (`!watch` works too). Plain words work in English, Spanish, Portuguese, French, German, Italian and Dutch; `!plex <title>` works in every room. Pepe looks it up in the Plex library and answers with the best match (title, year or episode, length, price) or a short numbered list, then waits about a minute for **your** answer: `yes`, a number (`2`, `the 1979 one`) or `no`. Nobody else can confirm your pick, and nothing plays until you do - a paid pick, or one for Pepe's cam, needs a real `yes` (`ok` isn't enough). It starts on this room's pad stage under your PATV account, with the same rules as publicaccess.tv/stage's 📼 Play from Plex: Plex members play free (a few a day), everyone else pays PAT per started hour (taken when it starts, refunded if it never gets on), one library stream per pad. A season plays back to back as one queue. **While it plays:** `pepe pause` / `pepe resume` / `pepe skip ahead 5 minutes` / `pepe next episode` / `pepe stop the movie` (`!plex next`, `!plex skip +10`, `!plex seek 1:02:30`, `!plex stop`) for whoever started it, the pad's owner and admins; `pepe what's playing?` / `!plex np` for anyone. `!plex queue <title>` (or `pepe queue the matrix next`) puts a title right after what's on in your own queue (it adds to that queue's bill - Pepe says how much first). **Pepe's cam:** staff can add `-cam` (or say `pepe put alien on your cam`) to play it on Pepe's main stream instead (publicaccess.tv, Twitch, his Camfrog cam) when Plex on air is allowed; if something is on, say `replace` or `next`. You need a PATV account linked to your chat name (`!signup` is free); from the pad's web chat it runs as your account. Room mods: `!plex on|off` for the whole feature here, `!plex nl on|off` for the plain-words asks.",
+   "details": "Say it in plain words - `pepe play the matrix`, `pepe can we watch the office season 2`, `pepe put on the next episode` - or type `!plex <title>` (`!watch` works too). Plain words work in English, Spanish, Portuguese, French, German, Italian and Dutch; `!plex <title>` works in every room. Pepe looks it up in the Plex library and answers with the best match (title, year or episode, length, price) or a short numbered list, then waits about a minute for **your** answer: `yes`, a number (`2`, `the 1979 one`) or `no`. Nobody else can confirm your pick, and nothing plays until you do - a paid pick, or one for Pepe's cam, needs a real `yes` (`ok` isn't enough). It starts on this room's pad stage under your PATV account, with the same rules as publicaccess.tv/stage's 📼 Play from Plex: Plex members play free (a few a day), everyone else pays PAT per started hour (taken when it starts, refunded if it never gets on), one library stream per pad. A season plays back to back as one queue. **While it plays:** `pepe pause` / `pepe resume` / `pepe skip ahead 5 minutes` / `pepe next episode` / `pepe stop the movie` (`!plex next`, `!plex skip +10`, `!plex seek 1:02:30`, `!plex stop`) for whoever started it, the pad's owner and admins; `pepe what's playing?` / `!plex np` for anyone. `!plex queue <title>` (or `pepe queue the matrix next`) puts a title right after what's on in your own queue (it adds to that queue's bill - Pepe says how much first). **Something else instead:** if a title is on and you may control it (you started it, it's your pad, or you're an admin), just ask for another - Pepe asks `play X instead of Y?` (a real `yes`, or `replace it`) and swaps it in one go - the stage goes straight to the new title, no stop in between; a queue's own starter says `pepe play X instead` (or `!plex instead <title>`) - a plain ask still queues it next. Anyone else hears what's on. **Pepe's cam:** staff can add `-cam` (or say `pepe put alien on your cam`) to play it on Pepe's main stream instead (publicaccess.tv, Twitch, his Camfrog cam) when Plex on air is allowed; if something is on, say `replace` or `next`. You need a PATV account linked to your chat name (`!signup` is free); from the pad's web chat it runs as your account. Room mods: `!plex on|off` for the whole feature here, `!plex nl on|off` for the plain-words asks. **Video clerk (room opt-in):** mods can use `!plex clerk on|off`. When the site also enables the clerk, ask for a random episode, the latest episode, the first or last few episodes, a genre or a shelf. `!plex random simpsons`, `!plex latest south park`, `!plex last 3 south park` and `!plex surprise` work too. Every pick still waits for a yes. Say `another` for a different choice, up to five times. Lists show the count and any cut before confirmation; paid lists show the estimate. Content warnings add information without another confirmation step. Describe a scene or episode and the clerk checks its recall against the library before offering it. Ask \"pepe is Alien on Plex?\", \"pepe what is new on Plex?\" or \"pepe recommend a movie\" to browse. If a named title is missing, the site may offer a request with its cost; PAT and request-credit offers need a strong yes. \"Request it\" on a newer-film notice opens a separate request confirmation. Request rights, credits, Scout passes, approval and refunds follow the site.\n\n**Bot admins, global:** `!plex embed on|off|status|backfill|pause` manages local embeddings of library text (never video). Both the site and bot embedding switches must be on. `backfill` resumes missing or changed rows; `pause` pauses backfill, while `off` also disables query embeddings. Work waits for local chat requests and skips 03:40–04:20 UTC. Status shows rows done/left, rate, last error and Spark state. These commands must be typed in a room; operational replies are private.\n\n**Shelves and lists:** `!plex shelves` or \"pepe what shelves do you have?\" shows up to ten available shelves and configured lists with local counts. Ask for a pick from one. Outside lists only use titles already matched in the library; the displayed count is local matches, not completeness. Where a configured list provides ranks, \"the IMDb top 100\" filters actual ranks and the confirmation may show one. Without ranks, Pepe says it is a shelf or unranked list and does not promise a rank. An unknown list produces no pick and may suggest a nearby available name. Site admins configure outside lists; chat never adds or refreshes one.",
    "examples": [
     "pepe play the matrix",
     "!plex the office s2e5",
@@ -1413,7 +1416,9 @@
     "!plex yes",
     "!plex skip +10",
     "!plex np",
-    "!plex alien -cam"
+    "!plex alien -cam",
+    "!plex embed status",
+    "!plex shelves"
    ],
    "keywords": [
     "plex",
@@ -2058,6 +2063,25 @@
    ]
   },
   {
+   "id": "whyname",
+   "title": "!whyname <user>",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!whyname"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!whyname <user>"
+   ],
+   "summary": "Explain name evidence privately.",
+   "details": "Admins only, answered by private message. Shows up to six names with their addressable, known or rejected state, type, evidence sources and confidence. Unconfirmed names are for recall only.",
+   "examples": [
+    "!whyname mossbird"
+   ],
+   "keywords": []
+  },
+  {
    "id": "memory",
    "title": "!memory recall [user]",
    "category": "chat",
@@ -2070,7 +2094,7 @@
     "!memory recall [user]"
    ],
    "summary": "See what the bot has learned about a user.",
-   "details": "See what the bot has learned about a user. Someone who switched Pepe's memory off (`!remember off`) shows nothing here - only Pepe's owners and admins are told (privately) that they opted out, and since when; asking about yourself shows your own switch.",
+   "details": "See what the bot has learned about a user. Someone who switched Pepe's memory off (`!remember off`) shows nothing here - only Pepe's owners and admins are told (privately) that they opted out, and since when; asking about yourself shows your own switch. Admins can use `!whyname <user>` for a private name-evidence explanation.",
    "examples": [],
    "keywords": []
   },
@@ -2261,14 +2285,24 @@
    "category": "games",
    "role": "everyone",
    "commands": [
-    "!holdem"
+    "!holdem",
+    "!sitout",
+    "!sitin",
+    "!pre",
+    "!checkfold",
+    "!callany"
    ],
    "aliases": [],
    "syntax": [
-    "!holdem start [sb]/[bb]"
+    "!holdem start [sb]/[bb]",
+    "!sitout",
+    "!sitin [post]",
+    "!pre check_fold|check|call|call_any|fold|off",
+    "!checkfold",
+    "!callany"
    ],
    "summary": "Open a table at the given blinds, e.g.",
-   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5,000/10,000; `100k`/`2.5m` style amounts work too). One table at a time; buy-ins range 20–200 big blinds, for everyone.\n**💎 High Roller tables** (High Rollers only; anyone can watch): `!holdem start hr` or one of the ladder's blinds - **100K/200K, 250K/500K, 500K/1M, 1M/2M, 2.5M/5M, 5M/10M**. Only High Rollers can open or sit at them, and they get the High Roller chips on publicaccess.tv and the stream overlay.\n**Hosts of a publicaccess.tv table:** `!holdem advertise <room>` / `!holdem unadvertise <room>` - one announcement line with the link in another room (+ a reminder before a hand, at most every 10 minutes).",
+   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5,000/10,000; `100k`/`2.5m` style amounts work too). One table at a time; buy-ins range 20–200 big blinds, for everyone.\n**💎 High Roller tables** (High Rollers only; anyone can watch): `!holdem start hr` or one of the ladder's blinds - **100K/200K, 250K/500K, 500K/1M, 1M/2M, 2.5M/5M, 5M/10M**. Only High Rollers can open or sit at them, and they get the High Roller chips on publicaccess.tv and the stream overlay.\n**Hosts of a publicaccess.tv table:** `!holdem advertise <room>` / `!holdem unadvertise <room>` - one announcement line with the link in another room (+ a reminder before a hand, at most every 10 minutes).\n**PATV tables:** `!raise 3bb` raises TO three big blinds; `!raise +2bb` adds two big blinds to the current bet; `!raise 75%` and `!bet pot` size from the pot after calling. `!pre check_fold|check|call|call_any|fold|off` sets one server-held pre-move for this street (`!checkfold` / `!callany` are shortcuts). `!sitout` keeps your seat and chips for the next hand; `!sitin` waits for the big blind, or `!sitin post` posts now. A 30-second time bank is used automatically, refills five seconds per ten hands and caps at sixty. A timeout checks or folds and keeps the seat; two in a row sit out, then ten minutes sitting out returns the stack as PAT. On the web, My hands includes your last twenty hands and replay. Losing hands are mucked unless Show my hand is selected; the shuffle proof still reveals the deck.",
    "examples": [
     "!holdem start 100k/200k",
     "!holdem start 25/50"
@@ -4964,7 +4998,7 @@
     "!stream via [whip|rtmp]"
    ],
    "summary": "Start or stop the live stream, or check it.",
-   "details": "Start or stop the live stream, or check it. `auto on` keeps it live — it comes back by itself if it drops; `!stream stop` holds it off until you start it again or Pepe restarts. Pepe's stream normally goes out over WHIP (low latency). If WHIP breaks while RTMP still works, he switches to RTMP for now and back to WHIP by himself once WHIP is healthy again (each switch is about 5-10 seconds off air and blinks Pepe's cam, so a game on the stream holds the switch back to WHIP until it ends, and a switch to RTMP for up to 30 minutes). A network outage never makes him switch. If the stream server refuses both paths (or the site gets no picture from either), he gives RTMP a quick try and goes straight back to WHIP, then tries RTMP again after 20 and 40 minutes and every 2 hours after that while it lasts. If WHIP is switched off he moves the stream to RTMP, after a game on it (at most 30 minutes). `!stream via` shows the path, `!stream via rtmp` switches to RTMP and keeps it there, `!stream via whip` goes back to WHIP.",
+   "details": "Start or stop the live stream, or check it. `auto on` keeps it live — it comes back by itself if it drops; `!stream stop` holds it off until you start it again or Pepe restarts. If OBS itself closes or crashes, Pepe starts it again by himself within a minute; one that runs but stops answering gets a clean close after a minute or two (four while the site still shows the stream or can't tell), and a force-close only if it won't. `!stream stop` keeps his hands off OBS too, until `!stream start` or his next restart - to close or work on OBS on purpose, run `python obs_control.py hold` on the VM first (`python obs_control.py release` ends it). In a network outage he restarts nothing and starts the stream the moment the stream server answers again - `!stream status` says what he's waiting for. Pepe's stream normally goes out over WHIP (low latency). If WHIP breaks while RTMP still works, he switches to RTMP for now and back to WHIP by himself once WHIP is healthy again (each switch is about 5-10 seconds off air and blinks Pepe's cam, so a game on the stream holds the switch back to WHIP until it ends, and a switch to RTMP for up to 30 minutes). A network outage never makes him switch. If the stream server refuses both paths (or the site gets no picture from either), he gives RTMP a quick try and goes straight back to WHIP, then tries RTMP again after 20 and 40 minutes and every 2 hours after that while it lasts. If WHIP is switched off he moves the stream to RTMP, after a game on it (at most 30 minutes). `!stream via` shows the path, `!stream via rtmp` switches to RTMP and keeps it there, `!stream via whip` goes back to WHIP.",
    "examples": [
     "!stream stop"
    ],
@@ -5776,7 +5810,7 @@
     "appeal [user]"
    ],
    "summary": "Automod polices mic-hogging and mod-power abuse with an escalating strike ladder.",
-   "details": "Automod polices mic-hogging and mod-power abuse with an **escalating strike ladder**. Each strike levies a growing PAT fine (50k → 150k → 450k…); a user who can't afford it takes a **double** strike instead, and they're told their count, the fine, and why. `!strike user` shows their strikes/role/timeout status; `!strike appeal user` removes the last strike, refunds its fine and lifts any timeout. (Non-admins can appeal via a community vote — see **!strike appeal** in Games & Activities.)",
+   "details": "Automod polices mic-hogging and mod-power abuse with an **escalating strike ladder**. Each strike levies a growing PAT fine (50k → 150k → 450k…); a user who can't afford it takes a **double** strike instead, and they're told their count, the fine, and why. `!strike user` shows their strikes/role/timeout status; `!strike appeal user` removes the last strike, refunds its fine and lifts any timeout. (Non-admins can appeal via a community vote — see **!strike appeal** in Games & Activities.) For long mic holds, the someone-waiting check is off by default - see `!automod michog`.",
    "examples": [
     "!strike user",
     "!strike appeal user"
@@ -6098,15 +6132,17 @@
    ],
    "aliases": [],
    "syntax": [
-    "!automod [action] [user]"
+    "!automod [action] [user]",
+    "!automod michog"
    ],
    "summary": "Set automatic moderator counter-actions.",
-   "details": "Set automatic moderator counter-actions. When a mod event is detected, the bot automatically sends the counter-command. Actions:\n\n`!automod unblock user` — auto-unblock when blocked\n\n`!automod block user` — auto-block when unblocked\n\n`!automod unpunish user` — auto-unpunish when punished\n\n`!automod punish user` — auto-punish when unpunished\n\n`!automod unban user` — auto-unban when banned\n\n`!automod ban user` — auto-ban when unbanned\n\n`!automod friend user` — auto-give friend when role removed\n\n`!automod moderator user` — auto-give moderator when role removed\n\n`!automod remove user` — auto-remove role when given\n\n`!automod defend user` — demote kicker to friend when this user is kicked\n\n`!automod protect user` — auto-kick whoever kicks this user\n\n`!automod` — list current rules\n\n`!automod remove [action] [user]` — remove a specific rule\n\n`!automod clear` — clear all rules\n\nRules persist between restarts.",
+   "details": "Set automatic moderator counter-actions. When a mod event is detected, the bot automatically sends the counter-command. Actions:\n\n`!automod unblock user` — auto-unblock when blocked\n\n`!automod block user` — auto-block when unblocked\n\n`!automod unpunish user` — auto-unpunish when punished\n\n`!automod punish user` — auto-punish when unpunished\n\n`!automod unban user` — auto-unban when banned\n\n`!automod ban user` — auto-ban when unbanned\n\n`!automod friend user` — auto-give friend when role removed\n\n`!automod moderator user` — auto-give moderator when role removed\n\n`!automod remove user` — auto-remove role when given\n\n`!automod defend user` — demote kicker to friend when this user is kicked\n\n`!automod protect user` — auto-kick whoever kicks this user\n\n`!automod` — list current rules\n\n`!automod remove [action] [user]` — remove a specific rule\n\n`!automod clear` — clear all rules\n\nRules persist between restarts.\n\n`!automod michog` — the mic-hog **someone-waiting check** in this room: is it on here (and for all rooms), are music holds judged, its timings, and a **dry run** for everyone on the mic right now (\"would be judged: someone asked for the mic 40 s ago\" or why not), sent to you as a PM because it names people. It never judges anyone; with the check off it is only a preview from the recent chat. With the check on in a room, a long mic hold there is judged only while the mic is full and someone is waiting for it (a request for the mic typed in the room, or a web clip queued) - a request that names nobody counts against the longest hold only - at most once per person every 5 minutes, 15 minutes after a not-disruptive verdict and 30 after a strike (the defaults; admins can change them). It ships **off**; turn it on in Pepe's admin panel (Automod behaviour → Mic-hog policing), for all rooms or one room.",
    "examples": [
     "!automod unblock user",
     "!automod block user",
     "!automod unpunish user",
-    "!automod punish user"
+    "!automod punish user",
+    "!automod michog"
    ],
    "keywords": []
   },
@@ -8574,5 +8610,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "d1b2de432a976367"
+ "hash": "75a8795a7ffaf68a"
 }
