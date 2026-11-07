@@ -503,7 +503,7 @@ test("booking a 📼 slot for later: sized to the runtime + 5 min, starts by its
   try { await L.watch(); } finally { Q._setClock(null); }
   const bk2 = (await getQuery("SELECT * FROM media_bookings WHERE slot_id = ?", [r2.slot.id]))[0];
   assert.equal(bk2.state, "failed");
-  assert.match(bk2.error, /out of PAT/);
+  assert.match(bk2.error, /out of points/, "(upnext3 review: the notice says points)");
   assert.equal((await slotOf(r2.slot.id)).status, "ended");
   assert.equal(mstreams.list().filter((x) => x.state === "playing").length, 0);
   // cancelled before its time (the user ended the booking)

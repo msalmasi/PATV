@@ -242,7 +242,8 @@ const padTitle = async (roomId) => { const R = await I().roomOf(roomId).catch(()
 async function startTitle(q, i, { offset = 0, item = null, tracks = null } = {}) {
   const ref = q.items[i];
   if (!ref) throw refuse(400, "No such title in the queue.");
-  const it = item || await I().fetchItem(ref.key);
+  // (upnext3 review, money: Plex / media-control answering 5xx or unreachable = try this title again - goTo's busy path - never a skip)
+  const it = item || await I().fetchItem(ref.key).catch((e) => { if (e && [429, 502, 503].includes(e.status)) e.busy = true; throw e; });
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw refuse(400, "That title has no playable file.");
   const slot = await stage.getSlot(q.slot_id);
   if (!slot || slot.settled || !["waiting", "active"].includes(slot.status)) throw Object.assign(refuse(409, "The queue's slot has ended."), { slotGone: true });
@@ -622,7 +623,8 @@ async function watchIdle() {
       if (q.brk) { if (Number(q.brk.until) > NOW()) return; await startAfterBreak(q, q.brk); n++; return; }
       if (q.retry_since && NOW() - q.retry_since > RETRY_MS) {
         await endQueue(q, "no free encoder", { notice: "no_encoder" });
-        await cancelLine(q.room_id, "no library stream came free in time");              // (upnext3: the encoders are the site's - none for them either)
+        // (upnext3: the encoders are the site's - none for the picks lined up either; review money 5: a paused queue keeps its place - its own cap)
+        await cancelLine(q.room_id, "no library stream came free in time", { kinds: ["after"] });
         n++; return;
       }
       await goTo(q, q.pos, { noBreak: true });                         // (upnext2: an encoder retry / a restart between titles - had its break)
@@ -672,6 +674,15 @@ async function launch(user, A, R, b, booked, sys = {}) {
     await I().preflight(user, A, R, { replacing: rep, system: !!sys.system, booking: !!booked });
     const built = await build(b, S, await padCapSec(R.id, !!booked));
     const pv = priceView(A, S, built.total_sec);
+    // upnext3 review (money 3, 1.99ali): a booking's start checks the estimate its booker said yes to when they booked it (media_bookings.estimate
+    // - 0 = it was free then): a price rise while it waited never charges more - it doesn't start (bookingFailed words this refusal as the notice)
+    if (pv.estimate > 0 && booked) {
+      const said = Math.max(0, Math.floor(Number(booked.estimate) || 0));
+      if (!(pv.estimate <= said)) {
+        throw refuse(409, `It costs about ${I().fmtPat(pv.estimate)} points now - ${said ? `more than the ${I().fmtPat(said)} points you said yes to when you booked it` : "it was free when you booked it"}. Book it again to play it.`,
+                     { estimate: pv.estimate, code: "estimate" });
+      }
+    }
     if (pv.estimate > 0 && !booked) {
       if (b.estimate == null || b.estimate === "") throw refuse(400, `This queue costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to start.`, { estimate: pv.estimate, code: "estimate" });
       // upnext2 review (function F3 / safety F5, 1.99alc): titles added behind a single title start later (sys.after) - what they cost now may be
@@ -725,6 +736,13 @@ async function launch(user, A, R, b, booked, sys = {}) {
                                 opened.slot.id, t, t, t]);
     // upnext3: the line's row that this is - used up now (a restart from here on finds the queue, never the row again: never two starts)
     if (sys.afterId) await runQuery("UPDATE media_queues SET state = 'started', end_reason = ?, updated = ? WHERE id = ? AND state = 'after'", [`started as queue #${ins.id}`, t, sys.afterId]);
+    // upnext3 review (money 6): a booking likewise - 'started' with its queue now, not after its first title went out (a restart between left it
+    // 'waiting': a "didn't start" notice for a stream that played, and yieldToBooking couldn't tell its queue was a booked one)
+    let bkWas = null;
+    if (booked) {
+      bkWas = ((await getQuery("SELECT state FROM media_bookings WHERE slot_id = ?", [booked.slot_id]))[0] || {}).state || null;
+      await runQuery("UPDATE media_bookings SET state = 'started', queue_id = ?, updated = ? WHERE slot_id = ? AND state IN ('booked','waiting')", [ins.id, t, booked.slot_id]);
+    }
     const q = await load(ins.id);
     let r;
     try {
@@ -740,6 +758,10 @@ async function launch(user, A, R, b, booked, sys = {}) {
       L()._keys.delete(R.id);
       // (upnext3: the line's row waits again - the hand-over cancels it with this reason, a notice to its owner)
       if (sys.afterId) await runQuery("UPDATE media_queues SET state = 'after', end_reason = NULL WHERE id = ? AND state = 'started'", [sys.afterId]).catch(() => {});
+      // (review money 6: the booking too - its watcher / the hand-over fails it with this reason, or tries again)
+      if (booked && ["booked", "waiting"].includes(bkWas)) {
+        await runQuery("UPDATE media_bookings SET state = ?, queue_id = NULL WHERE slot_id = ? AND state = 'started' AND queue_id = ?", [bkWas, booked.slot_id, q.id]).catch(() => {});
+      }
       throw e;
     }
     if (rep && !sys.rep) await I().logControl(user, R.id, "replace", `${rep.title || "?"} → ${r.title}`, { play_id: r.play_id, queue_id: q.id });
@@ -808,7 +830,8 @@ async function book(user, b = {}) {
   return { ok: true, slot: r.slot, minutes, items: built.items.length, total_sec: built.total_sec, truncated: built.truncated, estimate: pv.estimate,
            status: r.slot.status, title };
 }
-async function bookingFailed(bk, why, slotEnd = true) {
+async function bookingFailed(bk, why0, slotEnd = true) {
+  const why = points(why0);                                             // (review ux 13: a notice says points, the refusal it quotes too)
   const c = await runQuery("UPDATE media_bookings SET state = 'failed', error = ?, updated = ? WHERE slot_id = ? AND state IN ('booked','waiting')", [String(why).slice(0, 200), NOW(), bk.slot_id]);
   if (!(c && c.changes)) return false;                                  // (upnext3: once - the hand-over and the watcher may both see it)
   if (slotEnd) await stage.end(bk.slot_id, "library_failed", "system").catch(() => {});
@@ -826,7 +849,7 @@ async function bookingFailed(bk, why, slotEnd = true) {
 // title. It waits at most the pad's 📼 limit after its time (no title is longer: only pauses / seeks back / chained bookings get near it) -
 // then it fails like any booking that couldn't start (a notice; nothing was ever taken). Another booked queue on the pad is never cut short.
 /** (inside the lock) the booking's time came with `title` on the pad: it waits for it - once: its booker is told, the pages too */
-async function bookingWaits(bk, title, cap) {
+async function bookingWaits(bk, title, cap, { booked = false } = {}) {
   const t = NOW();
   const c = await runQuery("UPDATE media_bookings SET state = 'waiting', wait_since = ?, wait_for = ?, updated = ? WHERE slot_id = ? AND state = 'booked'",
                            [t, title ? String(title).replace(/^📼\s*/, "").slice(0, 120) : null, t, bk.slot_id]);
@@ -834,7 +857,9 @@ async function bookingWaits(bk, title, cap) {
   const pad = await padTitle(bk.room_id);
   const hrs = Math.max(1, Math.round((cap - Number(bk.start_at)) / 3600000));
   await require("./inbox").addSafe(bk.user_id, { kind: "media", title: `📼 Your booked Plex stream on ${pad} waits for the current title to finish`,
-    body: `${title ? `“${String(title).replace(/^📼\s*/, "")}” is still on` : "Something from the library is still on"} - yours starts right after it (it can wait up to ${hrs} h after its time). Nothing is taken until it starts.`,
+    body: (booked ? `A booked stream${title ? ` (“${String(title).replace(/^📼\s*/, "")}”)` : ""} is still on - yours starts when it ends`
+                  : `${title ? `“${String(title).replace(/^📼\s*/, "")}” is still on` : "Something from the library is still on"} - yours starts right after it`) +
+          ` (it can wait up to ${hrs} h after its time). Nothing is taken until it starts.`,
     link: "/stage", ref: "mlibbook-wait:" + bk.slot_id });
   console.log(`[mediaqueue] booking ${bk.slot_id} on ${bk.room_id} waits for "${title || "?"}" (until ${new Date(cap).toISOString()} at most)`);
   try { stage.stageBump(bk.room_id); } catch (e) { /* the 2 s cache */ }
@@ -855,8 +880,9 @@ async function watchBookings() {
       const slot = await stage.getSlot(bk.slot_id);
       if (!slot || slot.settled || slot.status === "ended") {
         await runQuery("UPDATE media_bookings SET state = 'cancelled', updated = ? WHERE slot_id = ?", [NOW(), bk.slot_id]);
-        // (upnext3: one that waited, or that nobody started in time, says so - a booker who cancelled it themselves knows)
-        if (cur.state === "waiting" || (slot && ["no_room", "never_live", "library_failed"].includes(slot.end_reason))) {
+        // (upnext3: one that waited, or that nobody started in time, says so - a booker who cancelled it themselves knows: review ux 11 - a waiting
+        // one too, /api/stage/slots/:id/end by its booker = 'cancelled')
+        if ((cur.state === "waiting" && !(slot && slot.end_reason === "cancelled")) || (slot && ["no_room", "never_live", "library_failed"].includes(slot.end_reason))) {
           const pad = await padTitle(bk.room_id);
           await require("./inbox").addSafe(bk.user_id, { kind: "media", title: `📼 Your booked Plex stream on ${pad} didn't start`,
             body: `Its slot ended before it could start (${(slot && slot.end_reason) || "ended"}) - nothing was taken.`, link: "/stage", ref: "mlibbook-fail:" + bk.slot_id });
@@ -877,7 +903,11 @@ async function watchBookings() {
       if (on || starting) {
         const cap = await bookingWaitCap(cur);
         if (NOW() > cap) { await bookingFailed(cur, `What was playing on the pad didn't finish in time (it may wait ${Math.round((cap - cur.start_at) / 60000)} minutes after its time).`); n++; return; }
-        if (cur.state === "booked") await bookingWaits(cur, on && !on.busy ? on.title : null, cap);
+        // (review ux 13: behind another BOOKED stream it waits for that whole stream - its notice says so)
+        const bookedOn = !!(on && !on.busy && on.q && (await getQuery("SELECT 1 FROM media_bookings WHERE queue_id = ? LIMIT 1", [on.q.id]))[0]);
+        if (cur.state === "booked") await bookingWaits(cur, on && !on.busy ? on.title : null, cap, { booked: bookedOn });
+        // (review money 2: the stage isn't free - a start window from an earlier moment never carries over to when it is)
+        if (cur.free_at) await runQuery("UPDATE media_bookings SET free_at = NULL WHERE slot_id = ?", [cur.slot_id]);
         return;
       }
       const head = (await lineFor(R.id))[0];
@@ -894,7 +924,7 @@ async function watchBookings() {
         // no free encoder / unreachable: try again next tick - for the start window from when the stage came free for it (upnext3: a booking
         // that waited gets its window then, not from its booked time)
         if (transientErr(e) && stillBooked && NOW() - Math.max(Number(cur.start_at), Number(cur.free_at) || 0) < windowMs) return;
-        await bookingFailed(cur, e && e.outOfPat ? "You're out of PAT - top up to keep watching." : (e && e.message) || "It couldn't start.");
+        await bookingFailed(cur, e && e.outOfPat ? "You're out of points - top up to keep watching." : (e && e.message) || "It couldn't start.");
       }
       n++;
     }).catch((e) => console.error("[mediaqueue] booking:", conf.errLine(e)));
@@ -1182,27 +1212,39 @@ async function bookingDue(roomId) {
 const transientErr = (e) => !!(e && (e.busy || e.status === 429 || e.status === 502 || e.status === 503 ||
   ["replace_gone", "busy_library", "site_full"].includes(e.code) || (e.extra && ["encoder_down", "encoder_busy", "busy_library", "busy_queue"].includes(e.extra.code))));
 const cleared = (sl) => !!(sl && (sl.end_reason === "banned" || sl.end_scope === "pad" || sl.end_scope === "ban"));
+// upnext3 review (ux 3, 1.99ali): what a stage cleared on purpose takes with it - the picks lined up behind what was on (kind 'after') always; a queue
+// paused for a booking only when the WHOLE pad was cut (a cut + ban / a ban is aimed at one person: it carries on); a booking never (it has its own
+// time on the schedule, as every booking after it - it starts on the free stage; the banned person's own entries are refused at their start)
+const clearKinds = (scope) => (scope === "pad" ? ["after", "resume"] : ["after"]);
+const scopeOf = (sl) => (sl && sl.end_scope === "pad" ? "pad" : "ban");
+// (review ux 13: a notice quoting a refusal says points - "Starting it takes 2,000 PAT ..." is "2,000 points" there)
+const points = (t) => String(t == null ? "" : t).replace(/\bPAT\b/g, "points");
 /** (inside the lock) one row of the line ends unstarted - its owner gets a notice. -> ended it? */
-async function cancelRow(w, why, notice = null) {
-  const held = w.resume != null;
+async function cancelRow(w, why0, notice = null) {
+  const held = w.resume != null, why = points(why0);
   const c = await runQuery("UPDATE media_queues SET state = 'ended', ended_at = ?, end_reason = ?, notice = ?, updated = ? WHERE id = ? AND state = 'after'",
                            [NOW(), ((held ? "didn't carry on: " : "didn't start: ") + String(why || "")).slice(0, 120), notice || (held ? "held_cancelled" : "after_cancelled"), NOW(), w.id]);
   if (!(c && c.changes)) return false;
   const pad = await padTitle(w.room_id);
+  // (review money 5: a paused queue that paid for a started hour and played only part of it - said plainly, not "nothing more was charged" alone)
+  const unusedMin = held && Number(w.per_hour) > 0 ? Math.floor(Math.max(0, Number(w.paid_hours) * 3600 - Number(w.played_sec || 0)) / 60) : 0;
   await require("./inbox").addSafe(w.user_id, held
-    ? { kind: "media", title: `📼 Your queue on ${pad} didn't carry on`, body: `${String(why || "It couldn't carry on").slice(0, 160)} - nothing more was charged.`, link: "/stage", ref: "mlibheld:" + w.id }
+    ? { kind: "media", title: `📼 Your queue on ${pad} didn't carry on`, link: "/stage", ref: "mlibheld-end:" + w.id,   // (review: its own ref - "mlibheld:" is the pause's)
+        body: `${String(why || "It couldn't carry on").slice(0, 160)} - nothing more was charged` +
+              (unusedMin > 0 ? `; the ${unusedMin} minute${unusedMin === 1 ? "" : "s"} left of the hour it had paid for ${unusedMin === 1 ? "isn't" : "aren't"} refunded.` : ".") }
     : { kind: "media", title: `📼 Your titles up next on ${pad} didn't start`,
         body: `${String(why || "What they waited for ended").slice(0, 160)} - nothing was charged. Add them again any time.`, link: "/stage", ref: "mlibafter:" + w.id });
   console.log(`[mediaqueue] ${held ? "paused queue" : "after-queue"} #${w.id} on ${w.room_id} ended: ${why}`);
   return true;
 }
-/** (inside the lock) the stage was cleared on purpose (a cut of the whole pad, a cut + ban, a ban, Play from Plex off, no encoder anywhere): the
- *  whole line ends unstarted, a notice to each; bookings = the ones that waited for what was on fail too. Never throws. -> how many */
-async function cancelLine(roomId, why, { bookings = false } = {}) {
+/** (inside the lock) Play from Plex off / no encoder anywhere / the stage cleared on purpose: the line's rows of `kinds` end unstarted (the picks
+ *  lined up - 'after' - and queues paused for a booking - 'resume'), a notice to each. A booking is never cancelled here (review ux 3: its own
+ *  watcher starts it, or fails it for a reason of its own - Play from Plex off included). Never throws. -> how many */
+async function cancelLine(roomId, why, { kinds = ["after", "resume"] } = {}) {
   let n = 0;
   try {
     for (const h of await lineFor(roomId)) {
-      if (h.kind === "booking") { if (bookings && h.bk.state === "waiting" && (await bookingFailed(h.bk, why))) n++; continue; }
+      if (h.kind === "booking" || !kinds.includes(h.kind)) continue;
       if (await cancelRow(h.row, why)) n++;
     }
   } catch (e) { console.error("[mediaqueue] line:", conf.errLine(e)); }
@@ -1212,7 +1254,7 @@ async function cancelLine(roomId, why, { bookings = false } = {}) {
 /** (inside the lock) a line's head that won't start for a reason of its own: it ends with that reason, the next one tries */
 async function dropHead(h, e) {
   const why = (e && e.message) || "it couldn't start";
-  if (h.kind === "booking") return bookingFailed(h.bk, e && e.outOfPat && !/takes/.test(why) ? "You're out of PAT - top up to keep watching." : why);
+  if (h.kind === "booking") return bookingFailed(h.bk, e && e.outOfPat && !/takes/.test(why) ? "You're out of points - top up to keep watching." : why);
   return cancelRow(h.row, why);
 }
 /** (inside the lock) a busy / unreachable media-control held a head up: it keeps its place (the watcher tries again - RETRY_MS for a row, a
@@ -1222,9 +1264,14 @@ async function noteRetry(h) {
   else await runQuery("UPDATE media_queues SET retry_since = COALESCE(retry_since, ?) WHERE id = ?", [NOW(), h.row.id]).catch(() => {});
 }
 /** everyone still lined up waits behind slot `slotId` now */
+// (review money 1: and their retry clock starts over - a busy media-control that once held one up never cancels it while it waits behind a title)
 async function lineBehind(roomId, slotId) {
   if (!slotId) return;
-  await runQuery("UPDATE media_queues SET behind = ?, updated = ? WHERE room_id = ? AND state = 'after'", [String(slotId), NOW(), String(roomId)]).catch(() => {});
+  await runQuery("UPDATE media_queues SET behind = ?, retry_since = NULL, updated = ? WHERE room_id = ? AND state = 'after'", [String(slotId), NOW(), String(roomId)]).catch(() => {});
+}
+/** a booking whose time came waits on pad roomId (it goes first) / anyone is lined up (review money 1: a fresh ▶ on a free stage waits for them) */
+async function lineWaits(roomId) {
+  return (await lineFor(roomId).catch(() => [])).some((h) => h.kind !== "booking");
 }
 /** (inside the lock) start the line's head `h` - a booking (its slot), a paused queue (it carries on), a person's row (their own queue) - taking
  *  the stage over from `rep` (an open slot: the swap) or on a free stage (rep null). Every one of its owner's rules applies again now
@@ -1236,16 +1283,37 @@ async function startHead(R, h, rep, { reason = "library_done", actor = null } = 
   if (!A.ok) throw refuse(403, A.message || "Playing from Plex isn't open to you right now.");
   const sys = { rep, reason, actor, system: true };
   if (h.kind === "booking") {
-    const r = await launch(u, A, R, { ...parse(h.bk.req, {}), room: R.id }, { slot_id: h.bk.slot_id }, sys);
-    await runQuery("UPDATE media_bookings SET state = 'started', queue_id = ?, updated = ? WHERE slot_id = ?", [r.queue_id, NOW(), h.bk.slot_id]);
+    // (review money 3: its confirmed estimate goes with it; money 6: launch marks it 'started' with its queue)
+    const r = await launch(u, A, R, { ...parse(h.bk.req, {}), room: R.id }, { slot_id: h.bk.slot_id, estimate: h.bk.estimate }, sys);
+    if (h.bk.state === "waiting") await startNotice(R, u.userId, "booking", r, h.bk.slot_id).catch(() => {});   // (review ux 5: one that waited is told)
     return { queue_id: r.queue_id, slot_id: r.slot.id };
   }
-  if (h.kind === "resume") return resumeQueue(u, A, R, h.row, sys);
+  if (h.kind === "resume") {
+    const r = await resumeQueue(u, A, R, h.row, sys);
+    await startNotice(R, u.userId, "resume", r, h.row.id).catch(() => {});
+    return r;
+  }
   const w = h.row, req = (w.prefs && w.prefs.req) || {};
   const r = await launch(u, A, R, { room: R.id, keys: w.items.map((x) => x.key), quality: req.quality, audio: req.audio, sub: req.sub, offset: req.offset,
                                     estimate: w.prefs && w.prefs.est ? w.prefs.est : undefined }, null, { ...sys, after: true, afterId: w.id });
   console.log(`[mediaqueue] after-queue #${w.id} on ${R.id} started as queue #${r.queue_id}`);
+  await startNotice(R, u.userId, "after", r, w.id).catch(() => {});
   return { queue_id: r.queue_id, slot_id: r.slot.id };
+}
+/** upnext3 review (ux 5, 1.99ali): someone lined up may start hours after they pressed - their inbox says it's on now, about how many points it
+ *  takes as it plays, and how to stop it. kind = after (their own queue) | resume (a paused queue carrying on) | booking (one that waited). */
+async function startNotice(R, userId, kind, r, ref) {
+  const q = r && r.queue_id ? await load(r.queue_id) : null;
+  if (!q) return;
+  const pad = R.title || R.id, from = Math.max(0, Number(q.pos) || 0), first = q.items[from] ? fmtTitle(q.items[from]) : (r.title || null);
+  const est = kind === "resume"
+    ? (Number(q.per_hour) > 0 ? Math.max(0, Math.ceil((q.played_sec + totalSec(q.items.slice(from))) / 3600) - q.paid_hours) * q.per_hour : 0)
+    : Math.max(0, Number(r.estimate) || 0);
+  const cost = est > 0 ? ` - about ${I().fmtPat(est)} points ${kind === "resume" ? "more" : "in all"}, charged as it plays (only what actually plays)` : "";
+  const title = kind === "resume" ? `📼 Your queue on ${pad} carries on` : kind === "booking" ? `📼 Your booked Plex stream on ${pad} is starting` : `📼 Your queue on ${pad} is starting`;
+  await require("./inbox").addSafe(userId, { kind: "media", title, link: "/p/" + encodeURIComponent(R.slug || R.id),
+    body: `${first ? `“${first}” is ${q.brk ? "up next, after the pad's station break" : "on now"}` : q.brk ? "It's up next, after the pad's station break" : "It's on now"}${cost}. ⏹ in the pad's 📼 player stops it.`,
+    ref: `mlibstart:${kind}:${ref}` + (kind === "resume" ? ":" + NOW() : "") });
 }
 /**
  * (inside the pad's lock - never withLock) The stage on pad R frees up: `from` comes off ({slot_id, s, q, starter, by, title, open, why,
@@ -1257,6 +1325,7 @@ async function startHead(R, h, rep, { reason = "library_done", actor = null } = 
  */
 async function handOver(R, from, { reason = "library_done", actor = null } = {}) {
   let open = !!(from && from.open && from.slot_id), retired = false;
+  const seq0 = stage.clearOf(R.id).seq;                                 // (review money 4: a cut of the whole pad / a cut + ban landing half-way)
   for (let k = 0; k < AFTER_MAX + 3; k++) {
     const h = (await lineFor(R.id))[0];
     if (!h) break;
@@ -1272,6 +1341,13 @@ async function handOver(R, from, { reason = "library_done", actor = null } = {})
         if (!sl || sl.settled || !["waiting", "active"].includes(sl.status)) { open = false; retired = true; }   // (the swap had happened)
       }
       console.warn(`[mediaqueue] ${R.id}: the next ${h.kind} (${h.username || h.user_id}) didn't take the stage: ${conf.errLine(e)}`);
+      // (review money 4: the stage was cleared on purpose meanwhile - what it clears goes, with that reason, and nobody else starts in this walk;
+      // a booking / a paused queue it keeps: their own watcher, on the next look)
+      const c = stage.clearOf(R.id);
+      if (c.seq !== seq0) {
+        await cancelLine(R.id, c.title ? `“${String(c.title).replace(/^📼\s*/, "")}” was cut and the stage cleared` : "the pad's stage was cut and cleared", { kinds: clearKinds(c.scope) });
+        break;
+      }
       if (transientErr(e)) { await noteRetry(h); break; }
       await dropHead(h, e);
     }
@@ -1284,7 +1360,8 @@ async function afterEnded(roomId, slot) {
   try {
     const sl = slot && typeof slot === "object" ? slot : slot ? await stage.getSlot(slot).catch(() => null) : null;
     if (!conf.on.library()) { await cancelLine(roomId, "Play from Plex was switched off"); return { started: false }; }
-    if (cleared(sl)) { await cancelLine(roomId, `“${String(sl.title || "what was on").replace(/^📼\s*/, "")}” was cut and the stage cleared`, { bookings: true }); return { started: false }; }
+    // (review ux 3: the picks behind it go - a paused queue too when the whole pad was cut; a booking, or a paused queue after a cut + ban, starts)
+    if (cleared(sl)) await cancelLine(roomId, `“${String(sl.title || "what was on").replace(/^📼\s*/, "")}” was cut and the stage cleared`, { kinds: clearKinds(scopeOf(sl)) });
     if (!(await lineFor(roomId)).length) return { started: false };
     const R = await I().roomOf(roomId);
     if (!R) return { started: false };
@@ -1324,7 +1401,7 @@ async function holdQueue(q, hold, toSlot) {
   const pad = await padTitle(q.room_id), nxt = q.items[h.pos];
   await require("./inbox").addSafe(q.user_id, { kind: "media", title: `📼 Your queue on ${pad} pauses for a booked stream`,
     body: `A stream booked for this time plays now; your queue carries on right after it${nxt ? `, from “${fmtTitle(nxt)}”` : ""}. Nothing more is charged until it does.`,
-    link: "/stage", ref: "mlibheld:" + q.id });
+    link: "/stage", ref: "mlibheld:" + q.id + ":" + NOW() });          // (review: a queue may pause twice - each pause is told)
   console.log(`[mediaqueue] queue #${q.id} on ${q.room_id} paused at ${h.pos + 1}/${q.items.length} for a booking (behind slot ${toSlot})`);
   return true;
 }
@@ -1377,7 +1454,9 @@ async function yieldToBooking(q, i, { offset = 0, tracks = null } = {}) {
     return { ok: true, break: true, held: true, queue_id: r.queue_id, price: 0 };
   } catch (e) {
     console.warn(`[mediaqueue] ${R.id}: the booking due didn't take the stage at queue #${q.id}'s title change: ${conf.errLine(e)}`);
-    if (transientErr(e)) await noteRetry(h); else await dropHead(h, e);
+    // (review money 2: held up for now - the queue keeps the stage, so no start window begins: the booking tries again at the next title change, or
+    // when the stage really frees up)
+    if (!transientErr(e)) await dropHead(h, e);
     const q2 = await load(q.id);
     if (q2 && q2.state === "active") return null;                     // (refused before the swap: the queue goes on as ever)
     // the swap happened and the booking then failed: the paused queue is next - it carries on on a fresh slot
@@ -1407,8 +1486,9 @@ async function lineLook(roomId) {
     for (const h of rows) {
       if (String(h.row.behind || "") === String(cur.slot_id)) continue;
       const bs = h.row.behind ? await stage.getSlot(h.row.behind).catch(() => null) : null;
-      if (cleared(bs)) await cancelRow(h.row, "the stage was cleared");
-      else await runQuery("UPDATE media_queues SET behind = ?, updated = ? WHERE id = ? AND state = 'after'", [String(cur.slot_id), NOW(), h.row.id]);
+      if (cleared(bs) && clearKinds(scopeOf(bs)).includes(h.kind)) await cancelRow(h.row, "the stage was cleared");
+      // (review money 1: waiting behind what's on now - its retry clock starts over)
+      else await runQuery("UPDATE media_queues SET behind = ?, retry_since = NULL, updated = ? WHERE id = ? AND state = 'after'", [String(cur.slot_id), NOW(), h.row.id]);
     }
     return;
   }
@@ -1464,7 +1544,7 @@ async function after(user, b = {}) {
       await runQuery("UPDATE media_queues SET prefs = ? WHERE id = ?", [JSON.stringify({ ...wait.prefs, est: (wait.prefs.est || 0) + cost }), wait.id]);
       await I().logControl(user, R.id, "queue_after", `+${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: wait.id });
       const ln = await lineFor(R.id);
-      return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: nowTitle,
+      return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0,
                place: ln.findIndex((h) => h.row && h.row.id === wait.id) + 1, line: ln.length };
     }
     if (rows.filter((x) => x.resume == null).length >= AFTER_MAX) {
@@ -1476,6 +1556,16 @@ async function after(user, b = {}) {
     if (pv.estimate > 0) {
       if (b.estimate == null || b.estimate === "") throw refuse(400, `This costs about ${I().fmtPat(pv.estimate)} PAT as it plays - confirm it to add it.`, { estimate: pv.estimate, code: "estimate" });
       if (Math.floor(Number(b.estimate)) !== pv.estimate) throw refuse(409, `The estimate is ${I().fmtPat(pv.estimate)} PAT now - confirm it again.`, { estimate: pv.estimate, code: "estimate" });
+    }
+    // upnext3 review (money, owner answer 3 "paid queue needs the first title's points at the press"): lining up is a press - without the points for
+    // its first title's started hours it is refused now (nothing is taken; the hand-over asks again when its turn comes). Empty accounts can't fill
+    // the line (AFTER_MAX) until their turn.
+    if (pv.per_hour > 0) {
+      const need = pv.per_hour * hoursNeeded(0, built.items[0].duration, built.offset), have = await balanceOf(user.userId);
+      if (have < need) {
+        throw refuse(402, `Lining it up takes ${I().fmtPat(need)} points (its first title's started hours - nothing is taken until it starts) and you have ${I().fmtPat(have)} - top up first.`,
+                     { code: "pat", need, balance: have });
+      }
     }
     const t = NOW();
     const req = { quality: b.quality, audio: b.audio, sub: b.sub, offset: built.offset };
@@ -1490,7 +1580,7 @@ async function after(user, b = {}) {
                 (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free"));
     try { stage.stageBump(R.id); } catch (e) { /* the 2 s cache: pages see it then */ }
     return { ok: true, after: true, queue_id: ins.id, added: built.items.length, items: built.items.length, total_sec: built.total_sec, estimate: pv.estimate,
-             per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: nowTitle, behind_queue: !!cur.q, place, line: ln.length };
+             per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0, place, line: ln.length };
   });
 }
 /** (inside the pad's lock) What an after-queue waited for is gone (⏹, a replace, a Cut): it ends, its owner gets a notice. slotId = only the
@@ -1542,7 +1632,7 @@ async function withdrawAfter(user, room, id = null) {
 async function moveAfter(roomId, fromSlot, toSlot) {
   if (!fromSlot || !toSlot) return;
   try {
-    await runQuery("UPDATE media_queues SET behind = ?, updated = ? WHERE room_id = ? AND state = 'after' AND behind = ?", [String(toSlot), NOW(), String(roomId), String(fromSlot)]);
+    await runQuery("UPDATE media_queues SET behind = ?, retry_since = NULL, updated = ? WHERE room_id = ? AND state = 'after' AND behind = ?", [String(toSlot), NOW(), String(roomId), String(fromSlot)]);
   } catch (e) { console.error("[mediaqueue] after:", conf.errLine(e)); }
 }
 /** (inside the pad's lock - medialib.watchOne) The single title `s` ended by itself (how: finished / error): titles waiting behind it start -
@@ -1628,5 +1718,5 @@ module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostF
                    breakDue, _now: () => NOW(),                                     // upnext2: the station break (medialib's clock is this one)
                    after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
                    withdrawAfter, moveAfter,                                        // upnext2 review fixes (1.99alc)
-                   lineFor, handOver, afterEnded, cancelLine, bookingDue, AFTER_MAX,     // upnext3 (1.99ali): the pad's line
+                   lineFor, handOver, afterEnded, cancelLine, bookingDue, lineWaits, AFTER_MAX,     // upnext3 (1.99ali): the pad's line
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)

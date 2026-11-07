@@ -624,7 +624,8 @@ test("E (upnext3, item 7 - \"Start them instead.\"): ⏹ of the title on now sta
   const sa = await S.getSlot(a.slot.id);
   assert.deepEqual([sa.status, sa.end_reason], ["ended", "library_stopped"]);
   assert.equal((await play(a.play_id)).end_reason, "stopped by " + admin.username);
-  assert.equal((await inbox(payer)).length, 0, "no \"didn't start\" notice");
+  // (upnext3 review ux 5: the one notice says it's starting - never "didn't start")
+  assert.deepEqual((await inbox(payer)).map((x) => /is starting/.test(x.title)), [true], "no \"didn't start\" notice");
   assert.equal(await bal(payer), 100000);
   await clear();
   await rooms.setStage(ROOM, { upnext_break: 0 }, "test", { maxSlots: 4, maxPrice: 0 });

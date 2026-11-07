@@ -163,7 +163,7 @@ test("S1 (upnext3): a Cut of a single play in its break, then the break's own TI
   const q = await activeQ();
   assert.ok(q && q.user_id === adder.userId, "the adder's queue takes the stage");
   assert.equal((await featured()).id, q.slot_id, "the pad's featured stage: its card");
-  assert.equal((await inbox(adder)).length, 0);
+  assert.deepEqual((await inbox(adder)).map((x) => /is starting/.test(x.title)), [true], "(upnext3 review ux 5: told it's starting - nothing else)");
   await clear();
   const t1 = T;
   const b = await L.playFor(admin, { room: ROOM, key: "500" });
@@ -258,13 +258,15 @@ test("S2: titles behind a single title whose owner has no points for them when i
   const a = await L.playFor(admin, { room: ROOM, key: "500" });
   const k = keyOf(last()), p0 = await pub(k);
   await conf.set({ library_price: 1000 }, "test");
-  const payer = await mkUser("pleb", 0);
+  // (upnext3 review: lining up needs the first title's points at the press - owner answer 3; this one spends them before its turn)
+  const payer = await mkUser("pleb", 2000);
   await Q.after(payer, { room: ROOM, key: "501", estimate: 2000 });        // (nothing is taken until it starts)
+  await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [payer.userId]);
   last().finish(); await settle(); await unpub(k, p0.cid);
   await L.watch();
   assert.equal(await afterRow(), null);
   assert.equal((await lastQ(payer)).notice, "after_cancelled");
-  assert.match(JSON.stringify(await inbox(payer)), /takes 2,000 PAT/);
+  assert.match(JSON.stringify(await inbox(payer)), /takes 2,000 points/, "(upnext3 review: a notice says points)");
   assert.equal(await activeQ(), null);
   assert.equal((await S.getSlot(a.slot.id)).end_reason, "library_done");
   assert.equal(await featured(), null, "no card for a start that can't happen");
@@ -358,7 +360,7 @@ test("S5: a price that ROSE between the add and the hand-over: it doesn't start 
   last().finish(); await settle(); await unpub(k, p0.cid);
   await L.watch();
   assert.equal(await activeQ(), null);
-  assert.match(JSON.stringify(await inbox(payer)), /3,000 PAT now/);
+  assert.match(JSON.stringify(await inbox(payer)), /3,000 points now/, "(upnext3 review: a notice says points)");
   assert.equal(await bal(payer), 100000);
 });
 

@@ -1114,9 +1114,10 @@ async function libraryActivate(slotId, { title, minutes, replace = null, reason 
       }
     }
     const open = (await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [s.room_id])).filter((x) => !old || x.id !== old.id);
-    if (open.some((x) => x.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library.");
+    // (upnext3 review, money 7: codes as libraryOpen's - a booking's start retries them in its start window, mediaqueue.transientErr)
+    if (open.some((x) => x.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library.", "busy_library");
     const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
-    if (all[0].n - (old ? 1 : 0) >= CONFIG.max_concurrent) throw new Refuse(409, "The site has the most streams open it allows right now.");
+    if (all[0].n - (old ? 1 : 0) >= CONFIG.max_concurrent) throw new Refuse(409, "The site has the most streams open it allows right now.", "site_full");
     const r = await runQuery("UPDATE stage_slots SET status = 'waiting', key_hash = ?, max_minutes = ?, title = COALESCE(?, title), start_at = ?, upnext = COALESCE(?, upnext) WHERE id = ? AND status = 'scheduled'",
                              [sha(key), m, cleanTitle(title), t, marker ? JSON.stringify(marker) : null, s.id]);
     if (!r.changes) throw new Refuse(409, "That booking isn't waiting to start.");
@@ -1164,6 +1165,10 @@ async function end(slotId, reason, actor, { scope = null } = {}) {
 // 1.99ajr golive: end()'s database half (settle, refund, the room's fee) - book's replace runs it INSIDE its own transaction, so a
 // new video that can't be booked leaves the old one playing - and its effects (relays, caches, the event, auto-feature), run
 // only once that transaction committed. -> {res, fee, prev: {featured, feature_by}} | null
+// upnext3 review (money 4, 1.99ali): every end that clears a pad's stage on purpose (a cut of the whole pad / site, a cut + ban, a ban) bumps that
+// pad's count here - mediaqueue.handOver stops walking its 📼 line when one lands half-way through a hand-over (memory only: one process)
+const clears = new Map();
+function clearOf(roomId) { return clears.get(String(roomId || rooms.HOUSE_ROOM)) || { seq: 0, scope: null, title: null }; }
 async function endSettle(slotId, reason, actor, scope = null) {
   let fee = null, prev = null;
   const sc = scope === "pad" || scope === "ban" ? scope : null;          // upnext3: end_scope
@@ -1190,6 +1195,10 @@ async function endSettle(slotId, reason, actor, scope = null) {
       fee = await require("./boosts").routeInTx({ ref: "slot:" + s.id, kind: "slot_fee", room_id: roomId, payer_id: s.userId, payer_name: s.username,
         amount: charged, owner_self: !!(RS.owner && RS.owner.userId === s.userId), via: "web", flow: "stage_slot",
         detail: `${s.displayname || s.username}: ${billedMinutes(s.live_ms)} min` });
+    }
+    if (sc || reason === "banned") {
+      const k = String(s.room_id || rooms.HOUSE_ROOM);
+      clears.set(k, { seq: clearOf(k).seq + 1, scope: sc || "ban", title: s.title || null });
     }
     return { id: s.id, charged, refund, userId: s.userId, room_id: s.room_id, status: s.status, source: s.source || null, cam_login: s.cam_login || null,
              cam_veil: camVeilOf(s) };
@@ -2311,14 +2320,22 @@ async function roomStage(roomId, viewer) {
   };
 }
 // upnext3 (1.99ali): booked 📼 slots waiting for the library title on their pad (mediaqueue.watchBookings: media_bookings 'waiting') ->
-// Map slot id -> {title: what they wait for}. Never throws (no 📼 bookings yet: none).
+// Map slot id -> {title: what they wait for, ends_at}. Never throws (no 📼 bookings yet: none). review (ux 12): ends_at = when the title on its pad
+// should end (its session: playing - the last known position + the time since; in its station break - the break's end + its length), else null
+// (paused, between two titles) - the schedule says "After the current title · about <then>" instead of the booking's old time
 async function libWaits(ids) {
   const out = new Map();
   const list = (ids || []).filter(Boolean).map(String);
   if (!list.length) return out;
   try {
-    const rows = await getQuery(`SELECT slot_id, wait_for FROM media_bookings WHERE state = 'waiting' AND slot_id IN (${list.map(() => "?").join(",")})`, list);
-    for (const r of rows) out.set(String(r.slot_id), { title: r.wait_for ? String(r.wait_for).slice(0, 120) : null });
+    const rows = await getQuery(`SELECT b.slot_id, b.wait_for, s.state, s.updated, s.position, s.duration, s.brk_until FROM media_bookings b
+                                 LEFT JOIN media_sessions s ON s.room_id = b.room_id
+                                 WHERE b.state = 'waiting' AND b.slot_id IN (${list.map(() => "?").join(",")})`, list);
+    for (const r of rows) {
+      const d = Number(r.duration) || 0, left = Math.max(0, d - (Number(r.position) || 0)) * 1000;
+      const ends = !d ? null : r.state === "playing" ? Math.round(Number(r.updated) + left) : r.state === "break" && Number(r.brk_until) > 0 ? Math.round(Number(r.brk_until) + left) : null;
+      out.set(String(r.slot_id), { title: r.wait_for ? String(r.wait_for).slice(0, 120) : null, ...(ends ? { ends_at: ends } : {}) });
+    }
   } catch (e) { /* no media_bookings table yet */ }
   return out;
 }
@@ -2808,6 +2825,7 @@ module.exports = {
   _setPepeAir: (fn) => { pepeAirImpl = typeof fn === "function" ? fn : null; },   // (dock3 review: tests - Pepe's stream on air or not)
   clockNow: () => now(),       // 1.99ajr golive: the stage's clock (the /api/stage answer's `now` - where a video slot is)
   stageBump, stageVer,         // upnext2: a pad's stage version (its /live long-poll's `stv`)
+  clearOf,                     // upnext3 review (money 4): a pad's stage cleared on purpose - its count (mediaqueue.handOver)
   comingOf,                    // upnext2 (D): what's coming on a pad's 📼 stage (review F7 1.99alc: no poster key - comingPoster is gone)
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },

@@ -264,7 +264,8 @@ async function comingFor(roomId) {
   }
   // upnext3 (1.99ali): what's next after the title on now - a booking whose time came (it plays right after this title, the rest of the queue after
   // it - unless the queue is a booked one itself), else the queue's next title, else (a single title / a queue's last title) the line's head
-  const head = s ? ((await require("./mediaqueue").lineFor(id).catch(() => []))[0] || null) : null;
+  const lineAll = s || q ? await require("./mediaqueue").lineFor(id).catch(() => []) : [];
+  const head = s ? lineAll[0] || null : null;
   const headNext = head && head.first ? comingInfo(head.first) : null;
   if (s && q && Number(s.queue_id) === Number(q.id)) {
     const booked = head && head.kind === "booking" ? (await safeQuery("SELECT 1 FROM media_bookings WHERE queue_id = ? LIMIT 1", [q.id])).length > 0 : false;
@@ -272,6 +273,9 @@ async function comingFor(roomId) {
   }
   if (s && !q) out.next = headNext;                                       // (upnext2 E: titles behind a single title)
   if (out.next && headNext && out.next === headNext) out.queued = true;   // (upnext3: it is the line's - a Cut of this title starts it; stage-room's confirm)
+  // upnext3 review (ux 2 / 3): whenever anyone is lined up - how many, what kind is first, how many a cleared stage keeps (a booking, a queue paused
+  // for one) - a Cut of what's on starts the line even while a queue still has titles (stage-room's confirm). Counts only, never who.
+  if (lineAll.length) { out.line = lineAll.length; out.line_head = lineAll[0].kind; out.line_kept = lineAll.filter((h) => h.kind !== "after").length; }
   if (!s && !q) {
     const now = Date.now();
     const bk = (await safeQuery(`SELECT b.start_at, b.req, b.first, sl.title FROM media_bookings b JOIN stage_slots sl ON sl.id = b.slot_id
@@ -805,6 +809,11 @@ async function preflight(user, A, R, { carry = false, replacing = null, behind =
   if (!behind && !system && !booking && !carry && (await require("./mediaqueue").bookingDue(R.id))) {
     throw new Refuse(409, "A stream booked for this time plays on this pad's stage next - pick yours after it.", { code: "booking_next" });
   }
+  // upnext3 review (money 1, 1.99ali): nothing on, yet someone is lined up (a busy media-control held their start up, a restart between two) - they
+  // go first: a fresh ▶ / a queue's start would jump the line (▶ Play this instead keeps them waiting behind it - only when something is on)
+  if (!behind && !system && !booking && !carry && !resume && !rep && !s && !otherQ.length && (await require("./mediaqueue").lineWaits(R.id))) {
+    throw new Refuse(409, "Someone lined up on this pad starts next - try again in a moment.", { code: "line_next" });
+  }
   if (isLibAdmin(user) || carry) return;
   if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.", { code: "pad" });
   if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.", { code: "banned" });
@@ -1118,8 +1127,11 @@ async function mine(user, roomId) {
         const mineH = line.find((h) => h.row && h.row.user_id === user.userId) || null;
         const people = line.filter((h) => h.kind === "after").length;
         if (!out.on_pad.can_add) out.on_pad.can_after = !!(qOn && !(mineH && mineH.kind === "resume") && ((mineH && mineH.kind === "after") || people < Qm.AFTER_MAX));
+        // (upnext3 review, ux 7: a full line says so - not only the permissions sentence)
+        if (!out.on_pad.can_add && !mineH && qOn && people >= Qm.AFTER_MAX) { out.on_pad.line_full = true; out.on_pad.line_max = Qm.AFTER_MAX; }
+        // (ux 8: a paused queue of yours that was paid - its ✕ says what it paid for isn't refunded)
         if (line.length) out.on_pad.after = { count: mineH ? mineH.count : line[0].count, mine: !!mineH, place: mineH ? line.indexOf(mineH) + 1 : null, line: line.length,
-                                              ...(mineH && mineH.kind === "resume" ? { held: true } : {}) };
+                                              ...(mineH && mineH.kind === "resume" ? { held: true, ...(Number(mineH.row.per_hour) > 0 && Number(mineH.row.paid_hours) > 0 ? { paid: true } : {}) } : {}) };
         // (item 10: a booking whose time came plays right after this title - ▶ Play this instead waits for it: booking_next)
         const bk = line.find((h) => h.kind === "booking");
         if (bk) { out.on_pad.booking = { at: bk.at, mine: bk.user_id === user.userId }; out.on_pad.can_replace = false; }
@@ -1167,8 +1179,10 @@ async function player(user, room) {
       const canW = h.kind !== "booking" && sees;
       const from = h.kind === "resume" ? Math.max(0, Number(h.row.brk && h.row.brk.pos != null ? h.row.brk.pos : h.row.pos) || 0) : 0;
       const items = h.kind === "booking" ? (h.first ? [h.first] : []) : h.row.items.slice(from);
+      // (review ux 8: a paused queue that was paid - its ✕ confirm says what it paid for isn't refunded; only to whoever may take it out)
+      const paid = canW && h.kind === "resume" && Number(h.row.per_hour) > 0 && Number(h.row.paid_hours) > 0;
       out.line.push({ id: h.kind === "booking" ? null : h.row.id, kind: h.kind, count: h.count, next: items.slice(0, can || sees ? 60 : 10), mine, can_withdraw: canW,
-                      ...(sees ? { by: h.username || null } : {}), ...(h.kind === "booking" ? { at: h.at } : {}) });
+                      ...(sees ? { by: h.username || null } : {}), ...(h.kind === "booking" ? { at: h.at } : {}), ...(paid ? { paid: true } : {}) });
     }
     // (an older page: `after` = your own row, else the first person's)
     const w = line.find((h) => h.kind === "after" && h.user_id === (user && user.userId)) || line.find((h) => h.kind === "after");
@@ -1177,7 +1191,16 @@ async function player(user, room) {
       out.after = { count: w.row.items.length, next: x.next, mine: x.mine, can_withdraw: x.can_withdraw, ...(x.by ? { by: x.by } : {}) };
     }
   }
-  if (can) out.log = await getQuery("SELECT ts, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 8", [R.id]);
+  // upnext3 review (ux 13): whether this pad has a station break (the ⏹ confirm: what's lined up next starts "after its own break" - or right away)
+  out.station_break = (await breakSec(R.id).catch(() => 0)) > 0;
+  // upnext3 review (ux 1, privacy - upnext2 S13 / F4): who lined up after what's on, or was taken out, only for the pad's owner / staff / a library
+  // admin (mayControl with no starter) - a plain starter of what's on keeps only their own line-up entries
+  if (can) {
+    const all = await mayControl(user, R.id, null);
+    const rows = await getQuery("SELECT ts, user_id, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 24", [R.id]);
+    out.log = rows.filter((l) => all || !["queue_after", "queue_remove"].includes(l.action) || (user && l.user_id === user.userId))
+      .slice(0, 8).map((l) => ({ ts: l.ts, username: l.username, action: l.action, detail: l.detail }));
+  }
   return out;
 }
 

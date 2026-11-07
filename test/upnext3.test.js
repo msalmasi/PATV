@@ -374,9 +374,10 @@ test("10 (\"Wait for that to finish.\"): a booked start whose time comes while a
   await L.watch();
   assert.equal((await inbox(booker)).length, 1, "told once");
   const sch = await S.roomSchedule(ROOM, VIEWER, false);
-  assert.deepEqual(sch.upcoming.find((x) => x.lib_wait).lib_wait, { title: "Charade (1963)" });
-  assert.deepEqual((await S.mine(booker.userId)).slots.find((x) => x.id === bk.slot.id).lib_wait, { title: "Charade (1963)" });
-  assert.deepEqual((await S.roomStage(ROOM, VIEWER)).upcoming.find((x) => x.id === bk.slot.id).lib_wait, { title: "Charade (1963)" });
+  // (review ux 12: + ends_at - the "ux 12" test below)
+  assert.equal(sch.upcoming.find((x) => x.lib_wait).lib_wait.title, "Charade (1963)");
+  assert.equal((await S.mine(booker.userId)).slots.find((x) => x.id === bk.slot.id).lib_wait.title, "Charade (1963)");
+  assert.equal((await S.roomStage(ROOM, VIEWER)).upcoming.find((x) => x.id === bk.slot.id).lib_wait.title, "Charade (1963)");
   await assert.rejects(L.playFor(admin, { room: ROOM, key: "502", replace: true }), (e) => e.status === 409 && e.extra.code === "booking_next");
   const m = await L.mine(admin, ROOM);
   assert.deepEqual([m.on_pad.can_replace, m.on_pad.booking.at], [false, bk.slot.start_at]);
@@ -627,8 +628,8 @@ test("money 4: a cut of the whole pad that lands half-way through a hand-over st
   await L.playFor(admin, { room: ROOM, key: "500" });
   const p = await goLive();
   const u1 = await mkUser(), u2 = await mkUser();
-  await Q.after(u1, { room: ROOM, key: "501" });
-  await Q.after(u2, { room: ROOM, key: "502" });
+  const a1 = await Q.after(u1, { room: ROOM, key: "501" });
+  const a2 = await Q.after(u2, { room: ROOM, key: "502" });
   const orig = Q.moveAfter;
   let fired = false;
   Q.moveAfter = async (room, from, to) => {                                  // (retire calls it right after the swap committed)
@@ -642,10 +643,10 @@ test("money 4: a cut of the whole pad that lands half-way through a hand-over st
   assert.ok(fired);
   assert.equal(await activeQ(), null, "nobody starts on the cleared pad");
   assert.equal((await rowsOf()).length, 0);
-  for (const u of [u1, u2]) {
-    const r = await lastQ(u);
+  for (const [u, a] of [[u1, a1], [u2, a2]]) {
+    const r = await qRow(a.queue_id);
     assert.deepEqual([r.state, r.notice], ["ended", "after_cancelled"]);
-    assert.match(JSON.stringify(await inbox(u)), /stage was cleared/);
+    assert.match(JSON.stringify(await inbox(u)), /was cut and the stage cleared/);
   }
 });
 
@@ -755,10 +756,10 @@ test("ux 1 (privacy): the 'Who did what' log of a plain starter keeps only their
   assert.ok(!ps.log.some((l) => ["queue_after", "queue_remove"].includes(l.action)), JSON.stringify(ps.log));
   for (const u of [willow, me]) assert.ok(!JSON.stringify(ps.log).includes(u.username), u.username);
   const po = await L.player(owner, ROOM);
-  assert.equal(po.log.filter((l) => l.action === "queue_after").length, 2);
-  assert.ok(po.log.some((l) => l.action === "queue_remove"));
-  const pa = await L.player(admin, ROOM);
-  assert.equal(pa.log.filter((l) => l.action === "queue_after").length, 2);
+  const theirs = (log) => log.filter((l) => l.action === "queue_after" && [willow.username, me.username].includes(l.username)).length;
+  assert.equal(theirs(po.log), 2);
+  assert.ok(po.log.some((l) => l.action === "queue_remove" && l.username === owner.username));
+  assert.equal(theirs((await L.player(admin, ROOM)).log), 2);
   assert.ok(!("user_id" in po.log[0]), "no ids out");
 });
 
