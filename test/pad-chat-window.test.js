@@ -424,3 +424,26 @@ test("casino2: a chat beside a casino table and a pad tab of the same pad are ON
   const noted = W.sweep(CHAT);         // (what forRoom lists from, before its privacy filters - test/bridge-web-presence.test.js has those)
   assert.equal(noted.filter((x) => x.userId === U.unlinked.userId).length, 1, "one entry for the account, whichever surfaces poll");
 });
+
+// ── tablechat (owner 2026-11-07: "let users pull up any pad chats regardless if its been advertised"): the EMBED's gate is the table chat's
+// (casino/chatpads.js gate) - the window's own gate AND not banned from the pad (listenban: a pad ban, a whole-bridge block, a login ban, a
+// network ban). Whatever pad id the table page asks for, the frame opens only through it. The plain window is unchanged (as the pad page).
+test("tablechat: a viewer banned from the pad gets the embed's 'not open to you here' card (any pad, asked from any table); the plain window as before", async () => {
+  const FRAME = { "sec-fetch-dest": "iframe", "sec-fetch-site": "same-origin" };
+  await require(path.join(repo, "feedstore")).init();
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, 'otherone', 'test', 'boss', ?, NULL)", [U.other.userId, MEMBERS, Date.now()]);
+  try {
+    const no = await getH("/p/" + MSLUG + "/chat?embed=1", U.other, FRAME);
+    assert.equal(no.status, 200);
+    assert.match(no.text, /parent\.postMessage\(\{t:'patv-chat:closed',why:'gate'\},location\.origin\)/, "the card that closes the table's panel");
+    assert.doesNotMatch(no.text, /rmFeed|rmInit|chatOnly|id="rm/, "no chat, no room data");
+    assert.doesNotMatch(no.text, /ban/i, "the card says nothing about why");
+    const ok = await getH("/p/" + MSLUG + "/chat?embed=1", U.viewer, FRAME);
+    assert.equal(ok.status, 200); assert.match(ok.text, /embed: true,/, "someone else (not banned): the chat");
+    const plain = await getH("/p/" + MSLUG + "/chat", U.other, {});
+    assert.equal(plain.status, 200, "the plain window is the pad page's rule (its own posting / listening refusals apply)");
+    assert.match(plain.text, /embed: false,/);
+  } finally { await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [U.other.userId]); }
+  const back = await getH("/p/" + MSLUG + "/chat?embed=1", U.other, FRAME);
+  assert.match(back.text, /embed: true,/, "the ban lifted: straight back in (nothing remembered)");
+});

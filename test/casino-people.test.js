@@ -249,7 +249,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
                      "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
   const chat = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");
-  assert.match(chat, /casino-chat\.js\?v=1/);
+  assert.match(chat, /casino-chat\.js\?v=2/);   // (tablechat: v2 - the picker)
   assert.match(fs.readFileSync(path.join(repo, "views", "partials", "casino-top.ejs"), "utf8"), /id="cz-chatbtn" hidden/);
   assert.match(fs.readFileSync(path.join(repo, "views", "casino-bj.ejs"), "utf8"), /class="cz-who" data-pepe="1"/, "the dealer opens Pepe's menu");
   const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");

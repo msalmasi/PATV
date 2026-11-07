@@ -10,6 +10,9 @@
 //   * dock-link v2: pop-open / pop-alive keep embed: 1
 //   * the follow mark: a pad page whose chat FLOATS writes it when it goes (and on a casino link); not while docked or popped
 //   * casino-chat.js reads the mark once: under 2 minutes, one of the table's pads with a chat -> opened (+ a toast); writes it when it goes
+//   * tablechat (owner 2026-11-07): the panel's picker lists every pad chat the server says the viewer may open (the table's own on top,
+//     Recent, More pads); the search filters in the page, only a full address is asked; recent pads per viewer; a follow mark of another
+//     pad is asked of the server (its exact address)
 //   node --test test/pad-chat-embed.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -187,11 +190,12 @@ test("dock-link v2: embed survives clean() on pop-open / pop-alive only", () => 
 });
 
 // ── casino-chat.js on a minimal page ──
-function tablePage({ follow = null, pads = [], width = 1280 } = {}) {
+// (tablechat: `server` answers the page's fetches - url -> JSON or null; every asked url is kept in `asked`; `local` = localStorage; me / signed)
+function tablePage({ follow = null, pads = [], width = 1280, server = null, local = null, me = "", signed = true, fine = true } = {}) {
   const doc = new Document(), win = { listeners: {}, innerWidth: width, location: { origin: ORIGIN, pathname: TABLE } };
   win.addEventListener = (t, f) => { (win.listeners[t] ||= []).push(f); };
   win.dispatch = (t, e) => (win.listeners[t] || []).forEach((f) => f(e));
-  win.matchMedia = () => ({ matches: true });
+  win.matchMedia = () => ({ matches: !!fine });
   const ss = new Map(); if (follow) ss.set("patv.chat.follow", JSON.stringify(follow));
   const sessionStorage = { getItem: (k) => (ss.has(k) ? ss.get(k) : null), setItem: (k, v) => ss.set(k, String(v)), removeItem: (k) => ss.delete(k) };
   const mk = (tag, cls, parent, id) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (id) n.id = id; parent.appendChild(n); return n; };
@@ -203,12 +207,17 @@ function tablePage({ follow = null, pads = [], width = 1280 } = {}) {
   const bar = mk("div", "cz-chat-bar", panel); bar.hidden = true; mk("span", "cz-chat-bar-t", bar); mk("button", null, bar);
   mk("div", "cz-chat-b", panel);
   const toasts = [];
-  win.CZ = { tableId: "0123456789", T: (k, d, v) => String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m)), toast: (t) => toasts.push(t), people: () => null };
+  win.CZ = { tableId: "0123456789", T: (k, d, v) => String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m)), toast: (t) => toasts.push(t), people: () => null, me, signed };
   const sandbox = { window: win, document: doc, sessionStorage, screen: {}, CustomEvent: Event, location: win.location, setTimeout, clearTimeout, JSON, Date, matchMedia: win.matchMedia };
+  const asked = [];
+  if (server) {
+    sandbox.fetch = (url) => { asked.push(url); const d = server(url); return Promise.resolve({ ok: d != null, json: () => Promise.resolve(d) }); };
+  }
+  if (local) win.localStorage = { getItem: (k) => (local.has(k) ? local.get(k) : null), setItem: (k, v) => local.set(k, String(v)) };
   sandbox.addEventListener = win.addEventListener;
   vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "casino-chat.js"), "utf8"), sandbox);
-  const people = (list) => doc.dispatchEvent(new Event("cz:people", { detail: { ok: true, pads: list } }));
-  return { doc, win, panel, btn, ss, toasts, people, frame: () => panel.querySelector("iframe") };
+  const people = (list, more) => doc.dispatchEvent(new Event("cz:people", { detail: { ok: true, pads: list, more: !!more } }));
+  return { doc, win, panel, btn, ss, toasts, people, asked, frame: () => panel.querySelector("iframe") };
 }
 const PADS = [{ room: "Dock.Equipped", slug: "night-orchard", name: "Night Orchard", role: "advert", chat: true }, { room: "Dock.Plus", slug: "lantern", name: "Lantern", role: "home", chat: false }];
 
@@ -341,4 +350,205 @@ test("casino review: the table pages emit act for a Blackjack bet / insurance, t
   for (const f of ["casino-hm.ejs", "casino-bj.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", f), "utf8"), /flair\.css\?v=5/, f);   // (flairfix: v5)
   // F8: the table pages are never framed by another site
   assert.match(fs.readFileSync(path.join(repo, "casino", "routes.js"), "utf8"), /res\.set\(\{ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" \}\);/);
+});
+
+// ── tablechat (owner 2026-11-07: "Also for poker table chats, let users pull up any pad chats regardless if its been advertised or added to a
+// room chat"): the panel's picker - every pad chat the viewer may open (GET /api/casino/t/:id/chatpads, casino/chatpads.js) ──
+const ALL = [{ room: "Dock.Equipped", slug: "night-orchard", name: "Night Orchard", role: "advert", count: 4 },
+             { room: "Lily.Pond", slug: "lily-pond", name: "Lily Pond", role: "recent", count: 2 },
+             { room: "Big.Room", slug: "big-room", name: "Café Royale", role: "pad", count: 12 },
+             { room: "Quiet.Room", slug: "quiet-room", name: "Quiet Room", role: "pad", count: 0 }];
+const SECRET = { room: "Hidden.Den", slug: "hidden-den", name: "Hidden Den", role: "address", count: 3 };
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const chatServer = (extra = {}) => (url) => {
+  const u = new URL(url, ORIGIN);
+  if (u.pathname !== "/api/casino/t/0123456789/chatpads") return null;
+  if (u.searchParams.has("slug")) return { ok: true, pad: (extra.bySlug || {})[u.searchParams.get("slug")] || null };
+  return { ok: true, pads: extra.pads || ALL };
+};
+const pickerOf = (p) => p.panel.querySelector(".cz-chat-pk");
+const groupsOf = (p) => pickerOf(p).querySelectorAll(".cz-pk-g").map((g) => [g.querySelector(".cz-pk-h").textContent, g.querySelectorAll(".cz-pk-i").map((b) => b.querySelector(".cz-pk-n").textContent)]);
+const typeIn = (p, text) => { const q = pickerOf(p).querySelector(".cz-pk-q"); q.value = text; q.dispatchEvent(new Event("input")); return q; };
+const key = (el, k) => el.dispatchEvent(new Event("keydown", { key: k, bubbles: true }));
+
+test("tablechat: ▾ opens the picker with EVERY pad the server lists - the table's own on top, Recent, More pads; a pad never advertised here opens in the frame", async () => {
+  const p = tablePage({ server: chatServer(), local: new Map(), me: "viewer" });
+  p.people(PADS, true);
+  p.btn.dispatchEvent(new Event("click"));
+  assert.equal(p.frame().getAttribute("src"), "/p/night-orchard/chat?embed=1", "one pad of the table's own: 💬 opens it, as before");
+  const pick = p.panel.querySelector(".cz-chat-pick");
+  assert.equal(pick.hidden, false, "▾ shows: other pads' chats exist (more)");
+  pick.dispatchEvent(new Event("click"));
+  assert.ok(pickerOf(p) && !pickerOf(p).hidden, "the picker, in the panel");
+  assert.equal(pick.getAttribute("aria-expanded"), "true");
+  assert.equal(p.doc.body.classList.contains("cz-chat-pk-on"), true);
+  assert.equal(p.doc.body.classList.contains("cz-chat-tall"), true, "tall (room above a phone's keyboard)");
+  assert.ok(p.frame(), "the chat keeps running under it");
+  assert.equal(p.doc.activeElement, pickerOf(p).querySelector(".cz-pk-q"), "a mouse / keyboard: the search box has focus");
+  assert.deepEqual(groupsOf(p), [["At this table", ["Night Orchard"]]], "the table's own pads at once, while the list loads");
+  assert.match(pickerOf(p).querySelector(".cz-pk-st").textContent, /Loading pads…/);
+  await tick();
+  assert.deepEqual(p.asked, ["/api/casino/t/0123456789/chatpads?recent=night-orchard"], "one ask for the whole list, with the pads recently opened at a table");
+  assert.deepEqual(groupsOf(p), [["At this table", ["Night Orchard"]], ["Recent", ["Lily Pond"]], ["More pads", ["Café Royale", "Quiet Room"]]]);
+  const cur = pickerOf(p).querySelector('[data-slug="night-orchard"]');
+  assert.equal(cur.getAttribute("aria-current"), "true"); assert.equal(cur.querySelector(".cz-pk-ic").textContent, "✓");
+  assert.equal(cur.querySelector(".cz-pk-m").textContent, "advertised here · p/night-orchard · 4 in the room");
+  assert.equal(pickerOf(p).querySelector('[data-slug="quiet-room"] .cz-pk-m').textContent, "p/quiet-room", "nobody in the room: no count");
+  assert.equal(pickerOf(p).querySelector(".cz-pk-back").textContent, "‹ Back to Night Orchard");
+  pickerOf(p).querySelector('[data-slug="big-room"]').dispatchEvent(new Event("click"));
+  assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1", "a pad the table never advertised: its chat beside the table");
+  assert.equal(pickerOf(p).hidden, true); assert.equal(p.doc.body.classList.contains("cz-chat-pk-on"), false);
+  assert.equal(p.panel.querySelector(".cz-chat-n a").href, "/p/big-room");
+  assert.deepEqual(JSON.parse(p.ss.get("patv.cz.chat.0123456789")), { room: "Big.Room", slug: "big-room", name: "Café Royale", role: "pad" }, "remembered for this table in this tab");
+  // a people update that doesn't list it keeps it (any pad's chat may be here); the frame's gate decides access
+  p.people(PADS, true);
+  assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1");
+  // ✕ and 💬 again: the pad this tab last opened here
+  p.panel.querySelector(".cz-chat-x").dispatchEvent(new Event("click"));
+  assert.match(p.btn.querySelector(".cz-chat-lbl").textContent, /Chat · Café Royale/);
+  p.btn.dispatchEvent(new Event("click"));
+  assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1");
+});
+
+test("tablechat: the search filters in the page (nothing typed is sent); p/<address> or Enter with no match asks for that one pad; Escape clears, then closes", async () => {
+  const p = tablePage({ server: chatServer({ bySlug: { "hidden-den": SECRET } }), local: new Map(), me: "viewer" });
+  p.people([], true);
+  assert.equal(p.btn.hidden, false, "no pad of the table's own, but other pads' chats exist: 💬 shows");
+  assert.equal(p.btn.querySelector(".cz-chat-lbl").textContent, "Chat");
+  p.btn.dispatchEvent(new Event("click"));
+  assert.ok(pickerOf(p) && !pickerOf(p).hidden, "💬 with no table pad: the picker");
+  assert.equal(p.frame(), null);
+  assert.equal(p.panel.querySelector(".cz-chat-n").textContent, "Pick a pad's chat");
+  assert.equal(p.panel.querySelector(".cz-chat-win").hidden, true, "no chat yet: no ↗️");
+  await tick();
+  typeIn(p, "cafe");
+  assert.deepEqual(groupsOf(p), [["More pads", ["Café Royale"]]], "by name, accents folded");
+  typeIn(p, "QUIET-ro");
+  assert.deepEqual(groupsOf(p), [["More pads", ["Quiet Room"]]], "by address");
+  typeIn(p, "lily pond");
+  assert.deepEqual(groupsOf(p), [["Recent", ["Lily Pond"]]], "spaces match the address's dashes too");
+  typeIn(p, "zebra");
+  assert.deepEqual(groupsOf(p), []);
+  assert.equal(pickerOf(p).querySelector(".cz-pk-st").textContent, "No pad matches “zebra”.");
+  await tick(400);
+  assert.equal(p.asked.length, 1, "a name with no match is never sent");
+  typeIn(p, "p/hidden-den");
+  assert.match(pickerOf(p).querySelector(".cz-pk-st").textContent, /Looking up p\/hidden-den…/);
+  await tick(400);
+  assert.deepEqual(p.asked.slice(1), ["/api/casino/t/0123456789/chatpads?slug=hidden-den"], "an address typed as one: that one pad is asked");
+  assert.deepEqual(groupsOf(p), [["By address", ["Hidden Den"]]]);
+  typeIn(p, "https://publicaccess.tv/p/night-gone");
+  await tick(400);
+  assert.equal(p.asked.at(-1), "/api/casino/t/0123456789/chatpads?slug=night-gone", "a pasted link");
+  assert.equal(pickerOf(p).querySelector(".cz-pk-st").textContent, "No pad matches “https://publicaccess.tv/p/night-gone”.", "the server said no: nothing");
+  const q = typeIn(p, "hidden-den");
+  assert.deepEqual(groupsOf(p), [["By address", ["Hidden Den"]]], "(asked already this session)");
+  typeIn(p, "other-den");
+  key(q, "Enter");
+  await tick(20);
+  assert.equal(p.asked.at(-1), "/api/casino/t/0123456789/chatpads?slug=other-den", "Enter with no match: asks for it as an address");
+  typeIn(p, "royale");
+  key(q, "Enter");
+  assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1", "Enter: the first match");
+  // Escape: clears the box first, then closes the picker (back to the chat)
+  p.panel.querySelector(".cz-chat-pick").dispatchEvent(new Event("click"));
+  const q2 = typeIn(p, "lily");
+  key(q2, "Escape");
+  assert.equal(q2.value, ""); assert.equal(pickerOf(p).hidden, false);
+  key(q2, "Escape");
+  assert.equal(pickerOf(p).hidden, true); assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1", "the chat that was open");
+  assert.equal(p.doc.activeElement, p.panel.querySelector(".cz-chat-pick"), "focus back on ▾");
+  const src = fs.readFileSync(path.join(repo, "public", "js", "casino-chat.js"), "utf8");
+  assert.doesNotMatch(src, /[?&]q=/, "no search term parameter at all");
+});
+
+test("tablechat: arrows move through the pads; ✕ while picking closes the panel; a phone gets the list focused (no keyboard popping up)", async () => {
+  const p = tablePage({ server: chatServer(), local: new Map(), me: "viewer", width: 390, fine: false });
+  p.people([], true);
+  p.btn.dispatchEvent(new Event("click"));
+  assert.equal(p.doc.body.classList.contains("cz-chat-sheet"), true);
+  assert.equal(p.doc.activeElement, pickerOf(p), "touch: the picker region, not the search box");
+  await tick();
+  const q = pickerOf(p).querySelector(".cz-pk-q");
+  key(q, "ArrowDown");
+  assert.equal(p.doc.activeElement.getAttribute("data-slug"), "night-orchard");
+  key(p.doc.activeElement, "ArrowDown");
+  assert.equal(p.doc.activeElement.getAttribute("data-slug"), "lily-pond");
+  key(p.doc.activeElement, "End");
+  assert.equal(p.doc.activeElement.getAttribute("data-slug"), "quiet-room");
+  key(p.doc.activeElement, "Home"); key(p.doc.activeElement, "ArrowUp");
+  assert.equal(p.doc.activeElement, q, "up from the first pad: the search box");
+  // your turn on a phone: the sheet makes room (the picker too), and comes back
+  p.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: true, act: true } }));
+  assert.equal(p.doc.body.classList.contains("cz-chat-mini"), true);
+  p.doc.dispatchEvent(new Event("cz:state", { detail: { myTurn: false, act: false } }));
+  assert.equal(p.doc.body.classList.contains("cz-chat-mini"), false); assert.equal(pickerOf(p).hidden, false);
+  p.panel.querySelector(".cz-chat-x").dispatchEvent(new Event("click"));
+  assert.equal(p.panel.hidden, true); assert.equal(p.doc.body.classList.contains("cz-chat-on"), false);
+});
+
+test("tablechat: recent pads are kept per viewer (another account's list is ignored) and ride along with the list ask; guests get the sign-in link", async () => {
+  const local = new Map();
+  const p = tablePage({ server: chatServer(), local, me: "Viewer" });
+  p.people([], true);
+  p.btn.dispatchEvent(new Event("click")); await tick();
+  pickerOf(p).querySelector('[data-slug="quiet-room"]').dispatchEvent(new Event("click"));
+  p.panel.querySelector(".cz-chat-pick").dispatchEvent(new Event("click"));
+  pickerOf(p).querySelector('[data-slug="big-room"]').dispatchEvent(new Event("click"));
+  assert.deepEqual(JSON.parse(local.get("patv.cz.chat.recent")), { u: "viewer", s: ["big-room", "quiet-room"] });
+  assert.equal(pickerOf(p).querySelector(".cz-pk-foot").hidden, true, "signed in: no sign-in line");
+  // the next table page, same account: the recent slugs are sent (the server checks each again)
+  const q = tablePage({ server: chatServer(), local, me: "viewer" });
+  q.people([], true);
+  q.btn.dispatchEvent(new Event("click")); await tick();
+  assert.deepEqual(q.asked, ["/api/casino/t/0123456789/chatpads?recent=" + encodeURIComponent("big-room,quiet-room")]);
+  // another account on this browser: not theirs
+  const o = tablePage({ server: chatServer(), local, me: "someone-else" });
+  o.people([], true);
+  o.btn.dispatchEvent(new Event("click")); await tick();
+  assert.deepEqual(o.asked, ["/api/casino/t/0123456789/chatpads"]);
+  // a guest: the list (Public pads - the server's rule) and a sign-in link back to this table
+  const g = tablePage({ server: chatServer(), local: new Map(), signed: false });
+  g.people([], true);
+  g.btn.dispatchEvent(new Event("click")); await tick();
+  const a = pickerOf(g).querySelector(".cz-pk-foot a");
+  assert.equal(pickerOf(g).querySelector(".cz-pk-foot").hidden, false);
+  assert.equal(a.href, "/login?next=" + encodeURIComponent(TABLE)); assert.equal(a.textContent, "Sign in for members' pads");
+});
+
+test("tablechat: the list failing says so with Try again; no pads at all says so; 💬 hides when there's nothing to open", async () => {
+  let fail = true;
+  const p = tablePage({ server: (url) => (fail ? null : chatServer({ pads: [] })(url)), local: new Map() });
+  p.people([], false);
+  assert.equal(p.btn.hidden, true, "no table pad and nothing more: no 💬");
+  p.people([], true);
+  p.btn.dispatchEvent(new Event("click")); await tick();
+  const st = pickerOf(p).querySelector(".cz-pk-st");
+  assert.match(st.textContent, /Couldn't load the pads\./);
+  fail = false;
+  st.querySelector("button").dispatchEvent(new Event("click")); await tick();
+  assert.equal(pickerOf(p).querySelector(".cz-pk-st").textContent, "No pad chats are open to you right now.");
+});
+
+test("tablechat: the follow mark of a pad this table doesn't play in asks the server (its exact address) and opens if it may; never a table pad that said no", async () => {
+  const p = tablePage({ follow: { room: "Big_Room", slug: "big-room", at: Date.now() - 1000, audio: 1 }, server: chatServer({ bySlug: { "big-room": ALL[2] } }), local: new Map() });
+  p.people(PADS, true);
+  await tick();
+  assert.deepEqual(p.asked, ["/api/casino/t/0123456789/chatpads?slug=big-room"]);
+  assert.equal(p.frame().getAttribute("src"), "/p/big-room/chat?embed=1#listen", "it came along, playing");
+  assert.deepEqual(p.toasts, ["Your chat came along · ✕ closes it"]);
+  const q = tablePage({ follow: { room: "Gone", slug: "gone-pad", at: Date.now() - 1000 }, server: chatServer(), local: new Map() });
+  q.people(PADS, true); await tick();
+  assert.equal(q.frame(), null, "the server said no");
+  const r = tablePage({ follow: { room: "Dock_Plus", slug: "lantern", at: Date.now() - 1000 }, server: chatServer({ bySlug: { lantern: { room: "Dock.Plus", slug: "lantern", name: "Lantern", role: "home" } } }), local: new Map() });
+  r.people(PADS, true); await tick();
+  assert.deepEqual(r.asked, [], "a table pad whose chat said no isn't asked again");
+  assert.equal(r.frame(), null);
+  // a table pad whose chat stops being yours closes (the frame shows its own card too)
+  const s = tablePage({ server: chatServer(), local: new Map() });
+  s.people(PADS, true);
+  s.btn.dispatchEvent(new Event("click"));
+  assert.ok(s.frame());
+  s.people([{ ...PADS[0], chat: false }, PADS[1]], true);
+  assert.equal(s.frame(), null, "chat: false for the open table pad - closed");
 });
