@@ -119,5 +119,5 @@ test("flair.css: the Plex 📼 alone takes the Windows-only lifted face; every c
     assert.ok(!/flair\.css\?v=[0-4]\b/.test(src), v.join("/") + ": no old flair.css");
   }
   for (const v of [["home.ejs"], ["room.ejs"], ["partials", "pad-chat-history.ejs"]]) assert.ok(rd("views", ...v).includes("/public/js/chatlog-core.js?v=16"), v.join("/"));
-  for (const v of ["casino-bj.ejs", "casino-hm.ejs"]) assert.ok(rd("views", v).includes("/public/js/casino-ui.js?v=8"), v);
+  for (const v of ["casino-bj.ejs", "casino-hm.ejs"]) assert.ok(rd("views", v).includes("/public/js/casino-ui.js?v=9"), v);   // (train3 table notice: v9)
 });
