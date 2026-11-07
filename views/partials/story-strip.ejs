@@ -68,7 +68,7 @@
 <% if (showRooms && inl_.length) { %><script type="application/json" class="ss-data"><%- JSON.stringify(inl_).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
 <script src="/public/js/stories.js?v=13"<% if (me_) { %> data-me="<%= me_ %>"<% } %> defer></script>
 <% if (compose_) { %><% if (typeof storyStudioOn === 'function' && storyStudioOn()) { %>
-<link rel="stylesheet" href="/public/css/story-studio.css?v=2">
-<script src="/public/js/story-studio.js?v=2" defer></script>
+<link rel="stylesheet" href="/public/css/story-studio.css?v=3">
+<script src="/public/js/story-studio.js?v=3" defer></script>
 <% } else { %><script src="/public/js/story-compose.js?v=1" defer></script><% } %><% } %>
 <% } %>

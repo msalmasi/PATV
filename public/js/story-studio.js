@@ -5,6 +5,46 @@
   if (window.patvStoryStudio) return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var W = 1080, H = 1920, CHUNK = 512 * 1024, current = null, serial = 0;
+  // ssfix (1.99??): a phone hands the page over to its camera or photo picker, and iOS may reclaim the hidden tab meanwhile and
+  // bring it back RELOADED - the picture then reaches nobody and the studio is simply gone. While a picker is open, a small note in
+  // this tab's session (which picker, the destination, the NSFW choice - never media) remembers it; a page that comes back
+  // reloaded with an unanswered note reopens the studio there and says what happened. An answer, a cancel or a close drops it.
+  var NOTE = 'patv.storyStudio.picking', NOTE_MS = 10 * 60 * 1000;
+  function session() { try { return window.sessionStorage || null; } catch (e) { return null; } }
+  function page() { return String(location.pathname || '') + String(location.search || ''); }
+  function notePicking(s, which) {
+    var st = session(); if (!st) return;
+    try { st.setItem(NOTE, JSON.stringify({ v: 1, picker: which, pad: s.target ? s.target.id : s.pad, nsfw: !!s.d.nsfw, at: Date.now(), page: page() })); } catch (e) { /* blocked storage: the studio works without it */ }
+  }
+  function dropNote() { var st = session(); if (st) try { st.removeItem(NOTE); } catch (e) { /* blocked */ } }
+  function takeNote() {
+    var st = session(), raw = null, note = null; if (!st) return null;
+    try { raw = st.getItem(NOTE); if (raw != null) st.removeItem(NOTE); } catch (e) { return null; }
+    try { note = raw == null ? null : JSON.parse(raw); } catch (e) { return null; }
+    if (!note || note.v !== 1 || (note.picker !== 'camera' && note.picker !== 'gallery') || typeof note.pad !== 'string' || note.page !== page()) return null;
+    var age = Date.now() - Number(note.at); if (!(age >= 0 && age <= NOTE_MS)) return null;
+    try { var nav = window.performance && window.performance.getEntriesByType && window.performance.getEntriesByType('navigation')[0]; if (nav && nav.type === 'back_forward') return null; } catch (e) { /* old engine */ }
+    return note;
+  }
+  // What a picked file is: the browser's type, else its first bytes - an iOS camera or file-provider hand-off can come without a
+  // usable type. The signatures are the server's (feedmedia.sniff), which checks the assembled upload again anyway.
+  function sniff(file) {
+    try {
+      var head = file.slice(0, 64);
+      var read = head.arrayBuffer ? head.arrayBuffer() : new Promise(function (resolve, reject) { var r = new FileReader(); r.onload = function () { resolve(r.result); }; r.onerror = function () { reject(r.error); }; r.readAsArrayBuffer(head); });
+      return read.then(function (buffer) {
+        var b = new Uint8Array(buffer), at = function (o, n) { return String.fromCharCode.apply(null, Array.prototype.slice.call(b, o, o + n)); };
+        if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { kind: 'image' };
+        if (b[0] === 0x89 && at(1, 3) === 'PNG') return { kind: 'image' };
+        if (at(0, 6) === 'GIF87a' || at(0, 6) === 'GIF89a') return { kind: 'image', gif: true };
+        if (at(0, 4) === 'RIFF' && at(8, 4) === 'WEBP') return { kind: 'image' };
+        if (at(0, 4) === 'RIFF' && at(8, 4) === 'AVI ') return { kind: 'video' };
+        if (at(4, 4) === 'ftyp') { var brand = at(8, 4).toLowerCase(); return /^(?:avif|avis|heic|heix|hevc|hevx|mif1|msf1|heim|heis)$/.test(brand) ? { kind: 'image' } : /^m4[abp] $/.test(brand) ? null : { kind: 'video' }; }
+        if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return { kind: 'video' };
+        return null;
+      });
+    } catch (e) { return Promise.reject(e); }
+  }
   // The picture's ink palette, kept equal to padlook.PALETTE by the client test.
   var COLORS = ['#ffffff', '#000000', '#66bb6a', '#c6e94f', '#26c6da', '#4fc3f7', '#64b5f6', '#9fa8da', '#ba68c8', '#f06292', '#ef5350', '#ff8a50', '#ffca28', '#b0bec5'];
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -47,7 +87,7 @@
     if (!done && s.attempt && s.attempt.stage === 'mine') return;
     if (!done && (s.d.file || s.busy) && !window.confirm(_t('js.feed.ss.discard', 'Discard this story?'))) return;
     if (!done) cancel(s);
-    s.closed = true; clearTimeout(s.suggestTimer); revoke(s);
+    s.closed = true; dropNote(); clearTimeout(s.suggestTimer); revoke(s);
     if (s.media && s.media.pause) s.media.pause();
     document.removeEventListener('keydown', s.key, true); document.removeEventListener('focusin', s.focus);
     if (s.resize) window.removeEventListener('resize', s.resize);
@@ -66,9 +106,9 @@
       else if (!e.shiftKey && (i < 0 || i === list.length - 1)) { e.preventDefault(); list[0].focus(); }
     }
   }
-  function open(pad, opener) {
+  function open(pad, opener, resumed) {
     if (current) return;
-    var s = { id: ++serial, opener: opener || document.activeElement, urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
+    var s = { id: ++serial, opener: opener || document.activeElement, pad: String(pad || ''), urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
     current = s; s.root = el('div', 'sst ds-scrim sheet'); s.root.setAttribute('role', 'dialog'); s.root.setAttribute('aria-modal', 'true'); s.root.tabIndex = -1; s.root.setAttribute('aria-label', _t('js.feed.sc.title', 'Add your story'));
     s.root.addEventListener('click', function (e) { if (e.target === s.root) close(s); });
     s.oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; add(document.body, s.root);
@@ -86,8 +126,15 @@
     s.handles = add(s.preview, el('div', 'sst-handles')); s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
       var f = add(s.picks, input('file')); f.accept = 'image/*,video/*'; f.hidden = true; f.setAttribute('data-pick', pair[0]); if (pair[0] === 'camera') f.setAttribute('capture', 'environment');
-      f.addEventListener('change', function () { if (f.files && f.files[0]) pick(s, f.files[0]); f.value = ''; });
-      var pickButton = add(s.picks, iconButton(pair[1], function () { f.click(); })); pickButton.setAttribute('data-picker', pair[0]);
+      // ssfix: a hand-off with no file says so (it was a silent no-op)
+      f.addEventListener('change', function () {
+        dropNote(); var file = f.files && f.files[0];
+        if (file) pick(s, file);
+        else say(s, pair[0] === 'camera' ? _t('js.feed.ss.no_camera_file', 'No picture arrived from the camera. Try again, or choose it from Gallery.') : _t('js.feed.ss.no_file', 'No file arrived. Try again.'), true);
+        f.value = '';
+      });
+      f.addEventListener('cancel', dropNote);
+      var pickButton = add(s.picks, iconButton(pair[1], function () { choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
     });
     s.filename = add(s.picks, el('span', 'sst-filename'));
     s.summary = add(s.body, el('aside', 'sst-summary')); add(s.summary, el('h3', 'ds-eyebrow', _t('js.feed.ss.summary', 'Story details')));
@@ -118,6 +165,7 @@
       if (data.refusal || !data.pads || !data.pads.length) throw new Error(data.refusal || _t('js.feed.sc.nowhere', 'There\'s nowhere you can post a story right now.'));
       s.targets = data.pads; s.caps = data.caps || {}; s.as = data.as || ''; s.target = data.pads.filter(function (p) { return p.id === pad; })[0] || data.pads[0];
       paintTarget(s); paintControls(s); say(s, '');
+      if (resumed) { s.d.nsfw = !!resumed.nsfw; say(s, resumed.picker === 'camera' ? _t('js.feed.ss.reloaded_camera', 'The page reloaded while the camera was open, so the picture didn\'t arrive. Try again - or take it with your camera app and choose it from Gallery.') : _t('js.feed.ss.reloaded_gallery', 'The page reloaded while you were choosing a file, so nothing arrived. Try again.'), true); }
     }).catch(function (e) { if (live(s)) say(s, e.message || _t('js.feed.sc.unreachable', 'Couldn\'t reach the site.'), true); });
   }
   function paintTarget(s) {
@@ -171,13 +219,28 @@
   }
   function canFill(d) { var r = d.w / d.h / (W / H); return Math.min(r, 1 / r) >= .05; }
   function resetFrame(d) { d.zoom = 1; d.crop = null; framing(d); d.fit = Math.abs(d.w / d.h / (W / H) - 1) <= .2 ? 'fill' : 'fit'; }
+  function choose(s, which) { notePicking(s, which); s.picks.querySelector('[data-pick="' + which + '"]').click(); }
+  // ssfix: every way a pick can fail is said out loud, in words that aren't the empty screen's own prompt
   function pick(s, file) {
-    if (s.busy) return;
-    var kind = /^video\//.test(file.type) ? 'video' : /^image\//.test(file.type) || /\.(?:heic|heif)$/i.test(file.name) ? 'image' : null;
+    if (s.busy) { say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true); return; }
+    if (!file.size) { say(s, _t('js.feed.ss.empty_file', 'That file is empty. Try again, or choose another one.'), true); return; }
+    var type = String(file.type || '').toLowerCase();
+    if (/^video\//.test(type)) return use(s, file, 'video', false);
+    if (/^image\//.test(type)) return use(s, file, 'image', type === 'image/gif');
+    var id = s.sniffId = (s.sniffId || 0) + 1; say(s, _t('js.feed.sc.loading', 'Loading…'));
+    sniff(file).then(function (found) {
+      if (!live(s) || id !== s.sniffId) return;
+      if (!found) say(s, _t('js.feed.ss.file_type', 'That file isn\'t a picture or a video. Choose another one.'), true);
+      else if (s.busy) say(s, _t('js.feed.ss.busy_pick', 'Wait until this story is posted, then choose another.'), true);
+      else use(s, file, found.kind, !!found.gif);
+    }, function () { if (live(s) && id === s.sniffId) say(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), true); });
+  }
+  function use(s, file, kind, gif) {
+    s.sniffId = (s.sniffId || 0) + 1;     // a typed pick after an untyped one wins
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
-    if (!kind || !file.size || file.size > limit * 1024 * 1024) { say(s, kind ? _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }) : _t('js.feed.ss.file_type', 'Choose a picture or video.'), true); return; }
+    if (file.size > limit * 1024 * 1024) { say(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), true); return; }
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
-    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: file.type === 'image/gif' || /\.gif$/i.test(file.name), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw };
+    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw };
     s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
     m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
@@ -199,7 +262,7 @@
       say(s, _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.'), true);
       s.recovery.textContent = ''; s.recovery.hidden = false;
       add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); }));
-      add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { s.picks.querySelector('[data-pick="gallery"]').click(); })); paintControls(s);
+      add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { choose(s, 'gallery'); })); paintControls(s);
     }
     m.addEventListener(kind === 'video' ? 'loadedmetadata' : 'load', loaded); m.addEventListener('error', failed); m.src = objectURL(s, file);
     say(s, ''); render(s); paintControls(s);
@@ -433,5 +496,8 @@
     setTimeout(function () { node.remove(); }, 9000);
   }
   document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-story-compose]'); if (!b || (e.button != null && e.button !== 0)) return; e.preventDefault(); open(b.getAttribute('data-pad') || '', b); });
-  window.patvStoryStudio = { open: open };
+  window.patvStoryStudio = { open: function (pad, opener) { return open(pad, opener); } };
+  // ssfix: back from a picker as a reloaded page - reopen where the story was, and say the picture didn't arrive
+  function resume() { var note = takeNote(); if (note && !current) open(note.pad, document.querySelector('[data-story-compose]'), note); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', resume); else resume();
 })();

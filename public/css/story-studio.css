@@ -30,7 +30,8 @@
 .sst .sst-layer { pointer-events: auto; position: absolute; transform: translate(-50%, -50%); min-inline-size: 36px; min-block-size: 36px; border: 1px solid transparent; border-radius: var(--ds-r-xs); background: transparent; color: var(--ds-text-strong); padding: 0; touch-action: none; }
 .sst .sst-layer.selected { border-color: var(--ds-ac); }
 .sst .sst-mention { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); inline-size: max-content; max-inline-size: 90%; padding: var(--ds-sp-1) var(--ds-sp-2); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4); color: var(--ds-text-muted); font-size: 14px; }
+.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4); color: var(--ds-text-muted); font-size: 14px; }
+/* (ssfix: .ds-ic is a fixed 1.25em box - as a grid item it sat at the start of the column the words make, not over them) */
 .sst .sst-empty .ds-ic { font-size: 36px; }
 .sst .sst-picks { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; }
 .sst .sst-picks .ds-btn { min-block-size: 36px; inline-size: auto; padding-inline: var(--ds-sp-2); flex: none; }
@@ -139,6 +140,8 @@
   .sst .sst-progress, .sst .sst-recovery { flex-wrap: wrap; }
   .sst .sst-recovery .ds-btn { white-space: normal; }
   .sst .sst-status, .sst .sst-progress, .sst .sst-recovery { background: var(--ds-media-bg); }
+  /* (ssfix: an error keeps its plate on a phone too - a bare red line under the picture read as nothing having happened) */
+  .sst .sst-status.sst-error { background: var(--ds-danger-bg); }
   .sst.sst-busy .sst-tools, .sst.sst-busy .sst-picks { display: none; }
   .sst .sst-colors { flex-wrap: nowrap; inline-size: 100%; overflow-x: auto; padding: var(--ds-sp-1); }
   .sst .sst-colors button { flex: none; border-radius: var(--ds-r-pill); }
