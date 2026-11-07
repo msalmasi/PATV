@@ -744,37 +744,95 @@ function clerkPlexFixture() {
     members: ["7101", "7201", "7301", "7401", "7102"], seen: [],
   };
   const response = value => ({ status: 200, json: { MediaContainer: JSON.parse(JSON.stringify(value)) } });
-  const page = (u, opts, rows) => {
+  const page = (u, opts, rows, container = {}) => {
     const h = opts.headers || {};
     const start = Number(u.searchParams.get("X-Plex-Container-Start") || h["X-Plex-Container-Start"] || 0);
     const size = Number(u.searchParams.get("X-Plex-Container-Size") || h["X-Plex-Container-Size"] || rows.length || 1);
-    return response({ Metadata: rows.slice(start, start + size), totalSize: rows.length, offset: start,
+    return response({ ...container, Metadata: rows.slice(start, start + size), totalSize: rows.length, offset: start,
       size: rows.slice(start, start + size).length });
+  };
+  // Plex 1.43.4 as checked against the real server (CT 102 loopback sidecar, 2026-11-07): the listing endpoints - a show's
+  // /allLeaves, /library/sections/<id>/all, a section's /collections, a collection's /children - put librarySectionID ONCE, on
+  // the MediaContainer; the rows carry none of their own (0 of 381 rows checked). With state.plex143 the fake answers the same
+  // way: the rows of the listing's own section lose their id and the container carries it (a number, as Plex's JSON has it);
+  // a row of ANOTHER section keeps its own id (so a cross-section row stays detectable). state.containerSection = null leaves
+  // the container without an id too (no id anywhere); a string makes the container claim that section. state.bareItems does
+  // the same to /library/metadata/<key> (real Plex keeps an id on those rows; mediactl must not depend on it).
+  const listing = (natural, rows, on = state.plex143) => {
+    if (!on) return { rows, container: {} };
+    const own = natural == null ? null : String(natural);
+    const out = rows.map(m => {
+      if (!m || own == null || String(m.librarySectionID) !== own) return m;
+      const { librarySectionID, ...rest } = m;
+      return rest;
+    });
+    const claimed = state.containerSection === undefined ? own : state.containerSection;
+    return { rows: out, container: claimed == null ? {} : { librarySectionID: Number(claimed) } };
+  };
+  // What Plex 1.43 reads as an "updated at least" filter: the key updatedAt>> or updatedAt> (on the wire updatedAt%3E%3E= /
+  // updatedAt%3E=, or literal). A KEY spelled "updatedAt>=" - URLSearchParams encodes its own "=", updatedAt%3E%3D=<since> - is
+  // no filter Plex knows: it answers the whole section (the 1.7.0 defect: total 15871 where Plex's own filter gives 125).
+  const plexSince = u => {
+    const v = u.searchParams.get("updatedAt>>") ?? u.searchParams.get("updatedAt>");
+    return v == null ? null : Number(v);
   };
   state.request = async (url, opts = {}) => {
     const u = new URL(url);
     state.seen.push({ url, path: u.pathname, query: u.searchParams, headers: opts.headers || {}, at: performance.now() });
-    if (u.pathname === "/hubs/search") return response({ Hub: [{ type: "movie", Metadata: state.search.map(k => items[k]) }] });
+    if (u.pathname === "/hubs/search") return response({ ...(state.searchContainerSection != null ? { librarySectionID: Number(state.searchContainerSection) } : {}),
+      Hub: [{ type: "movie", Metadata: state.search.map(k => items[k]) }] });
     if (u.pathname === "/library/sections") return response({ Directory: state.sections });
     let match;
     if ((match = /^\/library\/sections\/(\d+)\/all$/.exec(u.pathname))) {
       const type = { 1: "movie", 2: "show", 4: "episode" }[u.searchParams.get("type")];
-      const since = Number(u.searchParams.get("updatedAt>=") || 0);
-      const rows = state.catalog.map(k => items[k]).filter(m => (state.ignoreCatalogType || !type || m.type === type) && (!since || m.updatedAt >= since));
-      if (state.ignoreCatalogBounds) return response({ Metadata: rows, totalSize: rows.length, offset: 0, size: rows.length });
-      return page(u, opts, rows);
+      const since = plexSince(u);
+      const all = state.catalog.map(k => items[k]).filter(m => (state.ignoreCatalogType || !type || m.type === type) && (since == null || m.updatedAt >= since));
+      const { rows, container } = listing(match[1], all);
+      if (state.ignoreCatalogBounds) return response({ ...container, Metadata: rows, totalSize: rows.length, offset: 0, size: rows.length });
+      return page(u, opts, rows, container);
     }
-    if (/^\/library\/sections\/\d+\/collections$/.test(u.pathname)) return page(u, opts, state.collections);
-    if (/^\/library\/(?:metadata|collections)\/\d+\/children$/.test(u.pathname)) return page(u, opts, state.members.map(k => items[k]));
-    if ((match = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(u.pathname))) return response({ Metadata: state.leaves.map(k => items[k]) });
+    if ((match = /^\/library\/sections\/(\d+)\/collections$/.exec(u.pathname))) {
+      const { rows, container } = listing(match[1], state.collections);
+      return page(u, opts, rows, container);
+    }
+    if ((match = /^\/library\/(?:metadata|collections)\/(\d+)\/children$/.exec(u.pathname))) {
+      const header = state.collections.find(c => c.ratingKey === match[1]);
+      const { rows, container } = listing(header && header.librarySectionID != null ? header.librarySectionID : "71", state.members.map(k => items[k]));
+      return page(u, opts, rows, container);
+    }
+    if ((match = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(u.pathname))) {
+      const parent = items[match[1]];
+      const { rows, container } = listing(parent && parent.librarySectionID, state.leaves.map(k => items[k]));
+      return response({ ...container, Metadata: rows });
+    }
     if ((match = /^\/library\/metadata\/(\d+)$/.exec(u.pathname))) {
       const item = items[match[1]] || state.collections.find(c => c.ratingKey === match[1]);
-      return item ? response({ Metadata: [item] }) : { status: 404 };
+      if (!item) return { status: 404 };
+      const { rows, container } = listing(item.librarySectionID, [item], !!state.bareItems);
+      return response({ ...container, Metadata: rows });
     }
     if (u.pathname === "/photo/:/transcode") return { status: 200, headers: { "content-type": "image/jpeg" }, body: Buffer.from([255, 216, 255]) };
     return { status: 404 };
   };
   return state;
+}
+
+// The filter keys Plex itself reads from a request: it splits the raw query on "&" and on each pair's FIRST raw "=", then
+// decodes the key (so updatedAt%3E%3E=5 is the key "updatedAt>>", and updatedAt%3E%3D=5 is the key "updatedAt>=").
+function plexQueryKeys(url) {
+  const raw = new URL(url).search.replace(/^\?/, "");
+  return raw ? raw.split("&").map(pair => {
+    const i = pair.indexOf("=");
+    return [decodeURIComponent(i < 0 ? pair : pair.slice(0, i)), i < 0 ? "" : decodeURIComponent(pair.slice(i + 1))];
+  }) : [];
+}
+function assertPlexSince(url, since) {
+  const raw = new URL(url).search;
+  assert.ok(!/updatedAt%3E%3D=/i.test(raw), `the since filter's own "=" was encoded (Plex ignores updatedAt%3E%3D=): ${raw}`);
+  const filters = plexQueryKeys(url).filter(([k]) => k.startsWith("updatedAt"));
+  assert.equal(filters.length, 1, `exactly one updatedAt filter: ${raw}`);
+  assert.ok(["updatedAt>>", "updatedAt>"].includes(filters[0][0]), `Plex reads updatedAt>>= (or updatedAt>=), got key ${JSON.stringify(filters[0][0])}`);
+  assert.equal(filters[0][1], String(since));
 }
 
 async function clerkHarness(t, env = {}) {
@@ -921,7 +979,8 @@ test("1.7.0: catalog pages expose bounded metadata, delta filters and no source 
   assert.equal(second.status, 200); assert.deepEqual(second.json.rows.map(r => r.key), ["7102"]); assert.equal(second.json.next, null);
   assertClerkNoDeniedMetadata(second.json);
   const sent = h.fixture.seen.filter(c => c.path === "/library/sections/71/all");
-  assert.equal(sent[0].query.get("updatedAt>="), "1700000000");
+  assertPlexSince(sent[0].url, 1700000000);
+  assert.ok(!plexQueryKeys(sent[1].url).some(([k]) => k.startsWith("updatedAt")), "no since: no updatedAt filter at all");
   assert.equal(sent[0].query.get("type"), "1");
   assert.equal(Number(sent[0].query.get("X-Plex-Container-Size") || sent[0].headers["X-Plex-Container-Size"]), 1);
   assert.equal(Number(sent[1].query.get("X-Plex-Container-Start") || sent[1].headers["X-Plex-Container-Start"]), 1);
@@ -1032,4 +1091,160 @@ test("1.7.0: new routes retain signing and replay protection, and unsupported ro
   assert.equal(first.status, 200); assert.equal(repeated.status, 401);
   const missing = await h.request("GET", "/unsupported-feature");
   assert.equal(missing.status, 404); assert.deepEqual(missing.json, { ok: false, error: "not found" });
+});
+
+// ── 1.7.0 against Plex 1.43's real answer shape (the pre-install check, 2026-11-07, real Plex 1.43.4 in a loopback sidecar):
+// listing rows carry no librarySectionID of their own - only the MediaContainer does - and a since filter must reach Plex as
+// updatedAt>>= (URLSearchParams turned "updatedAt>=" into updatedAt%3E%3D=, which Plex ignores). The fake: state.plex143. ──
+function addOrchardEpisodes(fixture) {
+  for (const [key, index] of [["7112", 3], ["7113", 4]])
+    fixture.items[key] = { ...fixture.items["7111"], ratingKey: key, title: `Orchard Episode ${index}`, index };
+}
+
+test("1.7.0 on Plex 1.43: a show's and a season's episodes come back although allLeaves rows only carry the container's section", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.plex143 = true;
+  addOrchardEpisodes(h.fixture);
+  h.fixture.leaves = ["7111", "7112", "7113", "7211"];
+  // the fake answers like the real server: the container has the id, the show's own rows have none
+  const raw = await h.fixture.request("http://plex.invalid/library/metadata/7110/allLeaves");
+  assert.equal(raw.json.MediaContainer.librarySectionID, 71);
+  assert.equal(raw.json.MediaContainer.Metadata.filter(m => m.librarySectionID != null).length, 1, "only the other section's row has an id of its own");
+  for (const key of ["7110", "7115"]) {
+    const r = await h.request("GET", `/item/${key}`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.item.episodes.length, 3, `${key}: every episode of the show, not 0`);
+    assert.deepEqual(r.json.item.episodes.map(e => [e.key, e.episode, e.season, e.section, e.show_key, e.season_key]), [
+      ["7111", 2, 1, "71", "7110", "7115"], ["7112", 3, 1, "71", "7110", "7115"], ["7113", 4, 1, "71", "7110", "7115"]]);
+    assertClerkNoDeniedMetadata(r.json);   // 7211 keeps its own (adult) id: a row's own id wins over the container's
+  }
+  // no policy at all (1.6.0's behaviour): the same episodes, labelled with the section they inherit
+  const legacy = await clerkHarness(t, { MEDIACTL_SECTIONS: "", MEDIACTL_SECTIONS_ADULT: "" });
+  legacy.fixture.plex143 = true;
+  addOrchardEpisodes(legacy.fixture);
+  legacy.fixture.leaves = ["7111", "7112", "7113"];
+  const lr = await legacy.request("GET", "/item/7110");
+  assert.deepEqual(lr.json.item.episodes.map(e => [e.key, e.section]), [["7111", "71"], ["7112", "71"], ["7113", "71"]]);
+});
+
+test("1.7.0 on Plex 1.43: catalog pages fill from rows that only carry the container's section", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.plex143 = true;
+  addOrchardEpisodes(h.fixture);
+  h.fixture.catalog = ["7101", "7102", "7201", "7301"];
+  const all = await h.request("GET", "/catalog?section=71&type=1&size=500");
+  assert.equal(all.status, 200);
+  assert.deepEqual(all.json.rows.map(r => [r.key, r.type, r.section]), [["7101", "movie", "71"], ["7102", "movie", "71"]]);
+  assert.deepEqual([all.json.total, all.json.next], [4, null]);
+  assertClerkNoDeniedMetadata(all.json);   // rows of other sections keep their own ids and are dropped
+  const pages = [];
+  for (let start = 0, guard = 0; start != null && guard < 10; guard++) {
+    const p = await h.request("GET", `/catalog?section=71&type=1&size=1&start=${start}`);
+    assert.equal(p.status, 200);
+    pages.push(p.json.rows.map(r => r.key));
+    start = p.json.next;
+  }
+  assert.deepEqual(pages, [["7101"], ["7102"], [], []], "paging walks Plex's pages; only the section's own rows fill them");
+  h.fixture.catalog = ["7111", "7112", "7113"];
+  const eps = await h.request("GET", "/catalog?section=71&type=4&size=500");
+  assert.deepEqual(eps.json.rows.map(r => [r.key, r.section, r.show_key, r.season_key, r.episode]),
+    [["7111", "71", "7110", "7115", 2], ["7112", "71", "7110", "7115", 3], ["7113", "71", "7110", "7115", 4]]);
+  h.fixture.catalog = ["7110"];
+  assert.deepEqual((await h.request("GET", "/catalog?section=71&type=2")).json.rows.map(r => [r.key, r.type, r.section]), [["7110", "show", "71"]]);
+});
+
+test("1.7.0 on Plex 1.43: a since (delta) read reaches Plex as updatedAt>>= and comes back narrowed", async t => {
+  for (const plex143 of [false, true]) {   // rows with their own ids (the since filter alone) and Plex 1.43's real shape
+    const h = await clerkHarness(t);
+    h.fixture.plex143 = plex143;
+    h.fixture.items["7102"].updatedAt = 1600000000;   // untouched since long before the last sync
+    h.fixture.catalog = ["7101", "7102"];
+    const delta = await h.request("GET", "/catalog?section=71&type=1&since=1700000000");
+    assert.equal(delta.status, 200);
+    const sent = h.fixture.seen.filter(c => c.path === "/library/sections/71/all");
+    assert.equal(sent.length, 1);
+    assertPlexSince(sent[0].url, 1700000000);
+    assert.equal(delta.json.total, 1, `plex143=${plex143}: Plex narrowed the read to what changed since (not the whole section)`);
+    assert.deepEqual([delta.json.rows.map(r => r.key), delta.json.next], [["7101"], null]);
+    const full = await h.request("GET", "/catalog?section=71&type=1");
+    assert.deepEqual([full.json.total, full.json.rows.map(r => r.key)], [2, ["7101", "7102"]]);
+    assert.ok(!plexQueryKeys(h.fixture.seen[h.fixture.seen.length - 1].url).some(([k]) => k.startsWith("updatedAt")), "a full read carries no updatedAt filter");
+    const before = h.fixture.seen.length;
+    assert.equal((await h.request("GET", "/catalog?section=71&type=1&since=yesterday")).status, 400);
+    assert.equal(h.fixture.seen.length, before, "a bad since never reaches Plex");
+  }
+});
+
+test("1.7.0 on Plex 1.43: an inherited section goes through the same fail-closed policy - adult / off denied, no id anywhere denied", async t => {
+  const h = await clerkHarness(t);   // MEDIACTL_SECTIONS 71,72 + MEDIACTL_SECTIONS_ADULT 72: 72 adult (adult wins), 73 off
+  h.fixture.plex143 = true;
+  h.fixture.bareItems = true;        // /library/metadata/<key> rows without their own id too
+  addOrchardEpisodes(h.fixture);
+  const transcodes = () => h.fixture.seen.filter(c => c.path === "/photo/:/transcode").length;
+  const item = await h.request("GET", "/item/7101");
+  assert.equal(item.status, 200);
+  assert.equal(item.json.item.section, "71", "an allowed item's row inherits the container's section");
+  assert.equal((await h.request("GET", "/poster/7101")).status, 200);
+  const shown = transcodes();
+  for (const key of ["7201", "7301", "7211", "7311"]) {
+    const it = await h.request("GET", `/item/${key}`), poster = await h.request("GET", `/poster/${key}`);
+    assert.equal(it.status, 404, `item ${key}`); assert.equal(poster.status, 404, `poster ${key}`);
+    assertClerkNoDeniedMetadata([it.json, poster.json]);
+  }
+  assert.equal(transcodes(), shown, "a denied poster never fetches image bytes");
+  assert.equal((await h.request("PUT", "/streams/inherit-start", { ...START, ratingKey: "7201", title: "Invented stream" })).status, 404);
+  assert.equal(h.spawned.length, 0, "nothing starts from an inherited adult section");
+  // a listing whose container names a denied section: rows without their own id are denied with it
+  h.fixture.bareItems = false;
+  h.fixture.containerSection = "72";
+  h.fixture.catalog = ["7101", "7102"]; h.fixture.leaves = ["7111", "7112", "7113"]; h.fixture.members = ["7101", "7102"];
+  const cat = await h.request("GET", "/catalog?section=71&type=1");
+  assert.equal(cat.status, 200); assert.deepEqual(cat.json.rows, []); assert.equal(cat.json.total, 2);
+  const show = await h.request("GET", "/item/7110");
+  assert.equal(show.status, 200); assert.deepEqual(show.json.item.episodes, []);
+  const col = await h.request("GET", "/collections?section=71");
+  assert.equal(col.status, 200); assert.deepEqual(col.json.collections, [], "shelves the container puts in the adult section are left out");
+  for (const r of [cat, show, col]) assertClerkNoDeniedMetadata(r.json);
+  // no id anywhere (neither the row nor its container): fail closed
+  h.fixture.containerSection = null;
+  const cat0 = await h.request("GET", "/catalog?section=71&type=1");
+  assert.deepEqual(cat0.json.rows, []); assert.equal(cat0.json.total, 2);
+  assert.deepEqual((await h.request("GET", "/item/7110")).json.item.episodes, []);
+  assert.deepEqual((await h.request("GET", "/collections?section=71")).json.collections.map(c => [c.key, c.members]), [["7150", []], ["7450", []]],
+    "a header may still inherit its reviewed section; members with no section anywhere never do");
+  h.fixture.bareItems = true;
+  assert.equal((await h.request("GET", "/item/7101")).status, 404);
+  assert.equal((await h.request("GET", "/poster/7101")).status, 404);
+  assert.equal(transcodes(), shown);
+  // an adult-only policy: other sections keep working when inherited, adult and unknown are still refused
+  const a = await clerkHarness(t, { MEDIACTL_SECTIONS: "", MEDIACTL_SECTIONS_ADULT: "72" });
+  a.fixture.plex143 = true; a.fixture.bareItems = true;
+  const off = await a.request("GET", "/item/7301");
+  assert.equal(off.status, 200); assert.equal(off.json.item.section, "73");
+  assert.equal((await a.request("GET", "/item/7201")).status, 404);
+  a.fixture.containerSection = null;
+  assert.equal((await a.request("GET", "/item/7301")).status, 404, "no id anywhere fails closed with either list set");
+});
+
+test("1.7.0 on Plex 1.43: collection members fill from children that only carry the container's section", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.plex143 = true;
+  h.fixture.members = ["7101", "7201", "7102"];
+  const r = await h.request("GET", "/collections?section=71");
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.collections, [
+    { key: "7150", title: "Cedar Favourites", count: 2, members: ["7101", "7102"] },
+    { key: "7450", title: "Cedar Lanterns", count: 2, members: ["7101", "7102"] }]);
+  assertClerkNoDeniedMetadata(r.json);
+  assert.ok(!h.fixture.seen.some(c => /\/(7250|7350)\/children$/.test(c.path)), "denied collection member lists are never fetched");
+});
+
+test("1.7.0: search never borrows a section from its container (one search spans sections): a row without its own id is left out", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.searchContainerSection = "71";
+  h.fixture.search = ["7101", "7401"];
+  const r = await h.request("GET", "/search?q=paper");
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json.results.map(x => [x.key, x.section]), [["7101", "71"]]);
+  assertClerkNoDeniedMetadata(r.json);
 });
