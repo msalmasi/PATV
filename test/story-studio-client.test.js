@@ -217,6 +217,8 @@ const TARGETS = { ok: true, pads: [
 ], caps: { secs: 30, imageMb: 10, videoMb: 60, srcSecs: 180, srcVideoMb: 100, overlayMb: 2, textsMax: 3, textLen: 120, stickersMax: 10, mentionsMax: 5, studio: true }, as: 'Pixel Otter' };
 function studioPage(options = {}) {
   const doc = makeDoc('pixelotter'), calls = [], draws = [], blobs = new Map(), revoked = [], uploaded = [], events = [];
+  // ssfix2: timers the test lets run itself (options.hold: their delays), and the window's own listeners (blur/focus/pageshow/pagehide)
+  const held = [], winListeners = [];
   let urlN = 0, uploadN = 0, context;
   doc.dispatchEvent = (ev) => { for (const l of doc.listeners.filter((x) => x.type === ev.type)) l.fn(ev); events.push(ev); return !ev.defaultPrevented; };
   doc.fonts = { load: async (...args) => { calls.push({ font: args }); } };
@@ -247,9 +249,10 @@ function studioPage(options = {}) {
   const win = { document: doc, console, Promise, JSON, Math, Date, Object, Array, String, Number, Error, encodeURIComponent, isFinite, parseInt, Intl, Blob,
     getComputedStyle: () => ({ direction: 'ltr' }), innerHeight: 812,
     URL: { createObjectURL: (blob) => { const u = 'blob:local-' + ++urlN; blobs.set(u, blob); return u; }, revokeObjectURL: (u) => { revoked.push(u); blobs.delete(u); } },
-    setTimeout: (fn, ms) => ms === 9000 ? 0 : setImmediate(fn), clearTimeout: (id) => clearImmediate(id),
+    setTimeout: (fn, ms) => { if (ms === 9000) return 0; if (options.hold && options.hold.includes(ms)) { const h = { fn, ms }; held.push(h); return h; } return setImmediate(fn); },
+    clearTimeout: (id) => { const i = held.indexOf(id); if (i >= 0) held.splice(i, 1); else if (!(id && id.fn)) clearImmediate(id); },
     requestAnimationFrame: (f) => setImmediate(f), cancelAnimationFrame: (id) => clearImmediate(id),
-    addEventListener: () => {}, removeEventListener: () => {}, confirm: () => true,
+    addEventListener: (type, fn) => { winListeners.push({ type, fn }); }, removeEventListener: (type, fn) => { const i = winListeners.findIndex((l) => l.type === type && l.fn === fn); if (i >= 0) winListeners.splice(i, 1); }, confirm: () => true,
     location: { reload() { throw new Error('must never reload'); }, pathname: options.pathname || '/feed', search: '', href: options.pathname || '/feed' },
     // ssfix: the tab's session storage (shared between the "before" and "after" page of a reload) and how this page was loaded
     sessionStorage: options.sessionStorage,
@@ -276,7 +279,7 @@ function studioPage(options = {}) {
   };
   win.window = win; context = vm.createContext(win); vm.runInContext(SRC('story-studio.js'), context);
   const opener = doc.body.appendChild(doc.createElement('button')); opener.setAttribute('data-story-compose', ''); opener.setAttribute('data-pad', options.pad || 'aurora.pad'); opener.focus();
-  return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response };
+  return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response, held, winListeners };
 }
 async function studioOpen(P) { P.opener.click(); await flush(); assert.ok(P.doc.querySelector('.sst')); return P.doc.querySelector('.sst'); }
 async function studioPick(P, type = 'image/jpeg', size = 8) { const f = new Blob([new Uint8Array(size)], { type }); f.name = type.startsWith('video') ? 'workshop.mp4' : type === 'image/gif' ? 'workshop.gif' : 'workshop.jpg'; const n = P.doc.querySelector('[data-pick="gallery"]'); n.files = [f]; n.dispatchEvent(new Ev('change')); await flush(); return f; }
@@ -580,7 +583,9 @@ test('Studio ssfix: the reload note is only for a picker that never answered, on
   assert.equal(await reopened(async (P) => { key(P.doc.activeElement, 'Escape'); }), false, 'the studio was closed');
   assert.equal(await reopened(async (P, session) => { const k = Object.keys(session._s)[0], v = JSON.parse(session._s[k]); v.at -= 11 * 60e3; session._s[k] = JSON.stringify(v); }), false, 'an old note');
   assert.equal(await reopened(async () => {}, { pathname: '/p/another' }), false, 'another page');
-  assert.equal(await reopened(async () => {}, { navigation: 'back_forward' }), false, 'back/forward is not a reload');
+  // ssfix2: WebKit (every iPhone browser) brings a page whose process was killed back with WebPageProxy::launchProcessForReload,
+  // which loads the current history item as FrameLoadType::IndexedBackForward - so the page sees navigation type 'back_forward'
+  assert.equal(await reopened(async () => {}, { navigation: 'back_forward' }), true, 'a killed page comes back as a back/forward load');
   assert.equal(await reopened(async (P, session) => { session._s[Object.keys(session._s)[0]] = '{not json'; }), false, 'a damaged note');
   // storage that throws (private mode, blocked site data) leaves the studio working
   const blocked = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); }, removeItem() { throw new Error('denied'); } };
@@ -595,6 +600,112 @@ test('Studio ssfix: the empty state centres its camera icon over the words, and 
   assert.match(empty, /justify-items:\s*center/);
   const phone = css.slice(css.indexOf('@media (max-width: 760px)'));
   assert.match(phone, /\.sst \.sst-status\.sst-error \{[^}]*background:\s*var\(--ds-danger-bg\)/);
+});
+
+// ── ssfix2 (review of ssfix): the picker can come back with no event at all; the note must live through the decode; a killed
+// iPhone page comes back as back/forward; a picker with no 'cancel' event must not leave a note behind ──
+function fireWin(P, type) { for (const l of P.winListeners.filter((x) => x.type === type)) l.fn(new Ev(type)); }
+function setHidden(P, hidden) { P.doc.hidden = hidden; P.doc.visibilityState = hidden ? 'hidden' : 'visible'; P.doc.dispatchEvent(new Ev('visibilitychange')); }
+async function later(P) { await flush(2); while (P.held.length) P.held.shift().fn(); await flush(10); }
+const BACK_MS = 3000;
+function noteCount(session) { return Object.keys(session._s).length; }
+
+test('Studio ssfix2: a page killed while the camera was open comes back as back/forward (WebKit) and the studio still says so', async () => {
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session }); await studioOpen(P);
+  P.doc.querySelector('.sst-destination').click(); clickText(P, 'Plain Pond');
+  P.doc.querySelector('[data-picker="camera"]').click(); setHidden(P, true);           // the camera is in front; then iOS kills the page
+  const Q = studioPage({ sessionStorage: session, navigation: 'back_forward' }); await flush(6);
+  assert.ok(Q.doc.querySelector('.sst'), 'the studio is open again');
+  assert.match(Q.doc.querySelector('.sst-destination').textContent, /Plain Pond/);
+  const st = statusOf(Q); assert.equal(st.role, 'alert'); assert.match(st.text, /reload/i); assert.match(st.text, /camera/i);
+  assert.equal(noteCount(session), 0, 'used once');
+});
+
+test('Studio ssfix2: a camera that comes back with no change and no cancel says so after a short wait', async () => {
+  // the page went away for the camera (hidden), came back, and nothing arrived: the words appear only after the grace period
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session, hold: [BACK_MS] }), root = await studioOpen(P);
+  P.doc.querySelector('[data-picker="camera"]').click(); setHidden(P, true); await flush();
+  assert.equal(statusOf(P).error, false, 'nothing said while the camera is in front');
+  setHidden(P, false); await flush();
+  assert.equal(statusOf(P).error, false, 'not before the grace period: the file can still be on its way');
+  await later(P);
+  const st = statusOf(P); assert.equal(st.role, 'alert'); assert.ok(st.error); assert.match(st.text, /camera/i); assert.match(st.text, /Gallery/);
+  assert.ok(!root.classList.contains('sst-has-media'));
+  assert.equal(noteCount(session), 0, 'an answered return drops the note');
+  const R = studioPage({ sessionStorage: session, navigation: 'reload' }); await flush(6);
+  assert.equal(R.doc.querySelector('.sst'), null, 'a later reload is a normal page');
+  // a picture that is late after all still opens, and the words go away
+  await cameraHandOff(P, [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]);
+  assert.ok(root.classList.contains('sst-has-media')); assert.equal(statusOf(P).error, false); assert.equal(statusOf(P).text, '');
+  // the listeners leave with the studio
+  key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null);
+  assert.deepEqual(P.winListeners.filter((l) => /^(?:blur|focus|pageshow|pagehide)$/.test(l.type)), []);
+  assert.deepEqual(P.doc.listeners.filter((l) => /^(?:visibilitychange|pointerdown)$/.test(l.type)), []);
+});
+
+test('Studio ssfix2: a file that arrives within the grace period opens with no false alarm', async () => {
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session, hold: [BACK_MS] }), root = await studioOpen(P);
+  P.doc.querySelector('[data-picker="camera"]').click(); setHidden(P, true); setHidden(P, false); fireWin(P, 'focus');
+  await cameraHandOff(P, [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]); await later(P);
+  assert.ok(root.classList.contains('sst-has-media')); assert.equal(statusOf(P).error, false); assert.equal(noteCount(session), 0);
+});
+
+test('Studio ssfix2: other returns with no answer - a blur/focus dialog, a gallery sheet then a tap, a restored page - say so too', async () => {
+  const cases = [
+    ['desktop dialog (blur, focus)', 'gallery', (P) => { fireWin(P, 'blur'); fireWin(P, 'focus'); }, /no file/i],
+    ['gallery sheet, then a tap on the page', 'gallery', (P) => { P.doc.querySelector('.sst-preview').dispatchEvent(new Ev('pointerdown', { bubbles: true, button: 0, pointerId: 1 })); }, /no file/i],
+    ['camera, then a key on the page', 'camera', (P) => { key(P.doc.querySelector('.sst-preview'), 'a'); }, /camera/i],
+    ['page hidden, restored from the back/forward cache', 'camera', (P) => { setHidden(P, true); P.doc.hidden = false; P.doc.visibilityState = 'visible'; fireWin(P, 'pageshow'); }, /camera/i],
+  ];
+  for (const [label, picker, back, words] of cases) {
+    const session = memoryStorage(), P = studioPage({ sessionStorage: session, hold: [BACK_MS] }); await studioOpen(P);
+    P.doc.querySelector('[data-picker="' + picker + '"]').click(); back(P); await later(P);
+    const st = statusOf(P); assert.equal(st.role, 'alert', label); assert.match(st.text, words, label); assert.equal(noteCount(session), 0, label);
+  }
+  // still away (the camera is in front): nothing is said and the note stays for the reload that may come
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session, hold: [BACK_MS] }); await studioOpen(P);
+  P.doc.querySelector('[data-picker="camera"]').click(); setHidden(P, true); fireWin(P, 'focus'); await later(P);
+  assert.equal(statusOf(P).error, false); assert.equal(noteCount(session), 1);
+});
+
+test('Studio ssfix2: the note lives until the picture has opened - the decode is the memory peak - and a reload then says so', async () => {
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session }), root = await studioOpen(P);
+  P.doc.querySelector('[data-picker="camera"]').click();
+  const input = P.doc.querySelector('[data-pick="camera"]'); input.files = [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]; input.dispatchEvent(new Ev('change'));
+  assert.equal(noteCount(session), 1, 'kept while the picture opens');
+  const killed = memoryStorage(); Object.assign(killed._s, session._s);                // the page killed right now
+  await flush(10); assert.ok(root.classList.contains('sst-has-media')); assert.equal(noteCount(session), 0, 'dropped once it has opened');
+  const Q = studioPage({ sessionStorage: killed, navigation: 'back_forward' }); await flush(6);
+  assert.ok(Q.doc.querySelector('.sst'), 'the studio is open again');
+  const st = statusOf(Q); assert.equal(st.role, 'alert'); assert.match(st.text, /reload/i); assert.match(st.text, /opening/i); assert.doesNotMatch(st.text, /camera was open/i);
+  // a typeless camera file keeps it through the byte check too
+  const S2 = memoryStorage(), T = studioPage({ sessionStorage: S2 }); await studioOpen(T); T.doc.querySelector('[data-picker="camera"]').click();
+  const ti = T.doc.querySelector('[data-pick="camera"]'); ti.files = [bytesFile(JPEG_HEAD, '', 'image')]; ti.dispatchEvent(new Ev('change'));
+  assert.equal(noteCount(S2), 1); await flush(10); assert.equal(noteCount(S2), 0);
+  // every refusal or failure drops it at once (nothing is opening any more)
+  const refusals = [
+    ['an empty file', {}, [bytesFile([], 'image/jpeg', 'image.jpg')]],
+    ['too big', {}, [new Blob([new Uint8Array(11 * 1024 * 1024)], { type: 'image/jpeg' })]],
+    ['not a picture', {}, [bytesFile(Array.from(Buffer.from('%PDF-1.7\n%stuff')), '', 'document')]],
+    ['cannot be previewed', { decode: false }, [bytesFile(JPEG_HEAD, 'image/jpeg', 'image.jpg')]],
+  ];
+  for (const [label, options, files] of refusals) {
+    const s = memoryStorage(), R = studioPage(Object.assign({ sessionStorage: s }, options)); await studioOpen(R); R.doc.querySelector('[data-picker="camera"]').click();
+    await cameraHandOff(R, files); assert.ok(statusOf(R).error, label); assert.equal(noteCount(s), 0, label);
+  }
+});
+
+test('Studio ssfix2: with no cancel event (older engines), a picker the user came back from leaves no note behind', async () => {
+  // back (focus), then the page is left (pagehide) before the grace period ends: a later Back/reload must not reopen the studio
+  const session = memoryStorage(), P = studioPage({ sessionStorage: session, hold: [BACK_MS] }); await studioOpen(P);
+  P.doc.querySelector('[data-picker="gallery"]').click(); fireWin(P, 'blur'); fireWin(P, 'focus'); fireWin(P, 'pagehide');
+  assert.equal(noteCount(session), 0, 'dropped on leaving');
+  const Q = studioPage({ sessionStorage: session, navigation: 'back_forward' }); await flush(6);
+  assert.equal(Q.doc.querySelector('.sst'), null, 'no studio, no wrong words');
+  // but a page that is unloaded while the camera is still in front keeps it
+  const s2 = memoryStorage(), R = studioPage({ sessionStorage: s2, hold: [BACK_MS] }); await studioOpen(R);
+  R.doc.querySelector('[data-picker="camera"]').click(); setHidden(R, true); fireWin(R, 'pagehide');
+  assert.equal(noteCount(s2), 1);
 });
 
 
