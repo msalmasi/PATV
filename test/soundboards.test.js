@@ -872,10 +872,13 @@ test("1.99alk saycool: the drawer's cooldown ring follows the setting and comes 
   await d.play();
   assert.equal(d.posts.length, 2, "...so the same person can ask again right away");
 
-  // an older Pepe's failure without a message: the drawer's own words
+  // a failure without a message (a relay refusal - nothing to do with the mic): the drawer's own generic words, never a mic claim
+  // (1.99alk review: it said "Pepe couldn't get the mic - no cooldown, try again"; Pepe sends his own words for a mic miss)
   d.window.PATVSoundboard.update([{ id: "job2", state: "done", ok: false, msg: "" }]);
-  assert.equal(d.status().textContent, "Pepe couldn't get the mic - no cooldown, try again.");
+  assert.equal(d.status().textContent, "Pepe couldn't take that one.");
   assert.ok(!d.grid().classList.contains("cooling"));
+  const en0 = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en0["js.sbd.no_mic"], undefined, "no unused 'couldn't get the mic' string left behind");
 
   // Pepe refused it before queueing (his own cooldown / a switch): a typed answer, never played -> no ring either
   await d.play();
@@ -888,17 +891,26 @@ test("1.99alk saycool: the drawer's cooldown ring follows the setting and comes 
   d.window.PATVSoundboard.update([{ id: "job1", state: "playing" }]);
   d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: true, msg: "played" }]);
   assert.ok(d.grid().classList.contains("cooling") && d.btn().disabled, "a clip that played keeps the per-person cooldown");
-  // an error mid-clip (it started) is not a failed grab: the cooldown stands
+  // 1.99alk review: the audio failing after the clip started - Pepe (1.99alj) refunds it and gives his cooldown back, so the
+  // drawer's ring comes off too (it kept a 15 s ring Pepe no longer had)
   d = run(data);
   await d.open(); await d.play();
   d.window.PATVSoundboard.update([{ id: "job1", state: "playing" }]);
-  d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: false, msg: "Pepe couldn't play it - try again" }]);
-  assert.ok(d.grid().classList.contains("cooling"), "a clip that started keeps its cooldown");
+  d.window.PATVSoundboard.update([{ id: "job1", state: "done", ok: false,
+    msg: "Bell didn't play (Pepe's audio failed) - refunded. No cooldown - try again." }]);
+  assert.ok(!d.grid().classList.contains("cooling") && !d.btn().disabled, "a clip whose audio failed leaves no cooldown on the drawer");
+  assert.match(d.status().textContent, /Pepe's audio failed.*No cooldown - try again/);
 
   // an older site answer without `gap`: the new default
   d = run({ ...data, gap: undefined });
   await d.open(); await d.play();
   assert.equal(d.toggle().attrs["data-cd"], "15", "no gap in the answer: 15 s");
+  // 1.99alk review: a saved 0 s gap (cleanConfig allows it) is no ring at all - not the 15 s default while Pepe allows the next
+  d = run({ ...data, gap: 0 });
+  await d.open(); await d.play();
+  assert.ok(!d.grid().classList.contains("cooling") && !d.btn().disabled && d.toggle().attrs["data-cd"] == null, "gap 0: no ring");
+  await d.play();
+  assert.equal(d.posts.length, 2, "...and the next play goes straight out");
   assert.match(fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8"), /pad-soundboard\.js\?v=6/, "the drawer's cache-buster moved on");
 });
 
