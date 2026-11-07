@@ -137,7 +137,8 @@
               episode: ep ? unInt(x.next.episode, 0, 9999) : null };
       }
     }
-    return ends || n || at ? { ends: ends, next: n, at: at } : null;
+    // (upnext3: queued = the next title is someone lined up / a booking - a Cut of this slot starts it)
+    return ends || n || at ? (n && x.queued === true ? { ends: ends, next: n, at: at, queued: true } : { ends: ends, next: n, at: at }) : null;
   }
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
@@ -837,6 +838,13 @@
         var ban = b.hasAttribute('data-ban');
         var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
               : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
+        // upnext3 (1.99ali, item 7): a 📼 slot with someone lined up after it (coming.queued) - a Cut takes off this title only; what's next starts
+        // (✕ in the 📼 player clears it first); a cut + ban clears the line too
+        var cs = cur();
+        if (act === 'cut' && cs && cs.lib && cs.id === b.getAttribute('data-id') && coming && coming.next && coming.queued) {
+          q += '\n\n' + (ban ? _t('js.stage.room.q_cut_ban_next', 'What’s lined up after it from the library is cancelled too.')
+                             : _t('js.stage.room.q_cut_next', 'What’s lined up after it from the library starts next - take it out in the 📼 player first to leave the stage empty.'));
+        }
         if (!confirm(q)) return;
         b.disabled = true;
         fetch('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-id')) + '/' + act, { method: 'POST', credentials: 'same-origin',

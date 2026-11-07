@@ -271,6 +271,7 @@ async function comingFor(roomId) {
     out.next = head && head.kind === "booking" && !booked ? headNext : q.items[q.pos + 1] ? comingInfo(q.items[q.pos + 1]) : headNext;
   }
   if (s && !q) out.next = headNext;                                       // (upnext2 E: titles behind a single title)
+  if (out.next && headNext && out.next === headNext) out.queued = true;   // (upnext3: it is the line's - a Cut of this title starts it; stage-room's confirm)
   if (!s && !q) {
     const now = Date.now();
     const bk = (await safeQuery(`SELECT b.start_at, b.req, b.first, sl.title FROM media_bookings b JOIN stage_slots sl ON sl.id = b.slot_id

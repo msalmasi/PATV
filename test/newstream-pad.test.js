@@ -135,8 +135,8 @@ test("2: the 📼 player and the Go live card ask at once when the stage's poll 
   // the scripts hand their poll out; their cache-busters moved
   assert.match(read("public", "js", "pad-plexq.js"), /window\.PATVPlexQ = \{ poll: function \(\) \{ if \(Date\.now\(\) - askedAt >= 1500\) poll\(\); \} \};/, "(never twice in a moment)");
   assert.match(read("public", "js", "room-schedule.js"), /window\.PATVRoomSchedule = \{ poll: function \(\) \{ if \(Date\.now\(\) - askedAt >= 1500\) poll\(\); \} \};/);
-  assert.match(read("views", "room.ejs"), /pad-plexq\.js\?v=6/);   // (upnext2: v6)
-  assert.match(read("views", "partials", "room-schedule.ejs"), /room-schedule\.js\?v=6/);
+  assert.match(read("views", "room.ejs"), /pad-plexq\.js\?v=7/);   // (upnext2: v6; upnext3: v7)
+  assert.match(read("views", "partials", "room-schedule.ejs"), /room-schedule\.js\?v=7/);
 });
 
 test("1d: \"Watch ›\" opens Live AND the stream for this viewer - the stage's own pick (PATVPadStage.watchLive: an unfeatured stream is nobody's default, review F2)", async () => {

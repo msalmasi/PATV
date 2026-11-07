@@ -70,6 +70,9 @@
     if (q.notice === 'out_of_pat') return _t('js.plex.qn_out_of_pat', '📼 Your queue ended: you’re out of PAT - top up to keep watching.');
     if (q.notice === 'failed') return _t('js.plex.qn_failed', '📼 Your queue ended: several titles in a row didn’t play.');
     if (q.notice === 'no_encoder') return _t('js.plex.qn_no_encoder', '📼 Your queue ended: no library stream came free in time.');
+    // upnext3 (1.99ali, item 10): a queue of yours paused for a booked stream / one that then couldn't carry on
+    if (q.notice === 'held') return _t('js.plex.qn_held', '📼 Your queue is paused for a stream booked for this time - it carries on right after it. Nothing more is charged until it does.');
+    if (q.notice === 'held_cancelled') return _t('js.plex.qn_held_cancelled', '📼 Your paused queue didn’t carry on. Nothing more was charged.');
     return '';
   }
 
@@ -175,7 +178,7 @@
         if (j.daily_left != null) bits.push(_t('js.plex.plays_left', '{left} of {cap} plays left today', { left: j.daily_left, cap: j.daily_cap }));
         if (j.access && j.access.until) bits.push(_t('js.plex.access_until', 'your Plex access runs until {date}', { date: day(j.access.until) }));
         noteQueues(j);
-        var ended = (j.queues || []).filter(function (q) { return q.state === 'ended' && q.notice; })[0];
+        var ended = (j.queues || []).filter(function (q) { return (q.state === 'ended' || (q.state === 'after' && q.held)) && q.notice; })[0];   // (upnext3: + a paused one)
         P.info.textContent = (ended ? noticeText(ended) + ' ' : '') + bits.join(' · ');
         noteOnPad(j.on_pad || null);
       }).catch(function (e) { P.info.textContent = e.message; });
@@ -184,7 +187,11 @@
     var noteOnPad = function (x) {
       onPad = x && x.title ? { title: String(x.title), queue: !!x.queue, left: Math.max(0, Number(x.left) || 0), by: x.by || null, mine: !!x.mine, can_replace: !!x.can_replace,
                                slot_id: x.slot_id ? String(x.slot_id) : null, can_add: x.can_add === true, can_after: x.can_after === true,
-                               after: x.after && typeof x.after === 'object' ? { count: Math.max(0, Number(x.after.count) || 0), mine: x.after.mine === true } : null } : null;
+                               // upnext3: + where you are in the line after it (place of line), a queue of yours paused for a booking, a booking due next
+                               after: x.after && typeof x.after === 'object' ? { count: Math.max(0, Number(x.after.count) || 0), mine: x.after.mine === true,
+                                                                                place: Number(x.after.place) > 0 ? Number(x.after.place) : null, line: Math.max(0, Number(x.after.line) || 0),
+                                                                                held: x.after.held === true } : null,
+                               booking: x.booking && Number(x.booking.at) > 0 ? { at: Number(x.booking.at), mine: x.booking.mine === true } : null } : null;
       drawNow();
       drawPrice();
       drawAdd();
@@ -212,13 +219,20 @@
       }
       if (!onPad || when() === 'later' || (b0 && b0.hasAttribute('data-done'))) { el.classList.add('hide'); el.textContent = ''; return; }
       el.classList.remove('hide');
-      el.textContent = onPad.can_replace ? _t('js.plex.now_on', '📼 Now on {pad}: “{now}” - ▶ swaps it for your pick.', { pad: opts.roomTitle(), now: onPad.title })
+      // upnext3 (1.99ali): a booking due next (item 10: it plays right after the title on now - nothing replaces it meanwhile); someone else's
+      // running queue you may line up after (item 5)
+      el.textContent = onPad.booking ? _t('js.plex.now_on_booking', '📼 Now on {pad}: “{now}” - a stream booked for {time} starts right after it, so a new pick waits until then.', { pad: opts.roomTitle(), now: onPad.title, time: whenTxt(onPad.booking.at) })
+        : onPad.can_replace ? _t('js.plex.now_on', '📼 Now on {pad}: “{now}” - ▶ swaps it for your pick.', { pad: opts.roomTitle(), now: onPad.title })
+        : onPad.queue && onPad.can_after ? _t('js.plex.now_on_after_q', '📼 Now on {pad}: “{now}” from someone’s queue - you can’t change it, but + Line up my queue plays yours when that queue ends.', { pad: opts.roomTitle(), now: onPad.title })
         : !onPad.queue && onPad.can_after ? _t('js.plex.now_on_after', '📼 Now on {pad}: “{now}” - you can’t change it, but + Add to the queue plays your pick after it.', { pad: opts.roomTitle(), now: onPad.title })
         : _t('js.plex.now_on_locked', '📼 Now on {pad}: “{now}” - only whoever started it, the pad’s owner or an admin can change it, so a new pick waits until it ends.', { pad: opts.roomTitle(), now: onPad.title });
       // safety F4: titles of yours waiting behind it - take them out before they start (they'd be charged as they play)
       if (onPad.after && onPad.after.mine && onPad.after.count) {
         var mineL = document.createElement('span'), x = document.createElement('button');
-        mineL.textContent = ' ' + _t('js.plex.after_mine', 'Your titles up next after it: {n}.', { n: onPad.after.count }) + ' ';
+        // (upnext3: your place in the line when others are in it too; a queue of yours paused for a booking)
+        mineL.textContent = ' ' + (onPad.after.held ? _t('js.plex.after_held', 'Your queue is paused for a booked stream - it carries on right after it.')
+          : onPad.after.line > 1 && onPad.after.place ? _t('js.plex.after_mine_place', 'Your queue is {place} of {line} in line after it.', { place: onPad.after.place, line: onPad.after.line })
+          : _t('js.plex.after_mine', 'Your titles up next after it: {n}.', { n: onPad.after.count })) + ' ';
         x.type = 'button'; x.className = 'btn'; x.setAttribute('data-after-x', '1'); x.textContent = _t('js.plex.after_x', '✕ Take them out');
         el.appendChild(mineL); el.appendChild(x);
       }
@@ -237,6 +251,8 @@
       if (onPad.queue) out += (onPad.left === 1 ? _t('js.plex.instead_queue_1', 'It ends the 📼 queue that’s playing too (1 more title after this one).')
         : onPad.left > 1 ? _t('js.plex.instead_queue_n', 'It ends the 📼 queue that’s playing too ({n} more titles after this one).', { n: onPad.left })
         : _t('js.plex.instead_queue_last', 'It ends the 📼 queue that’s playing too (it’s on its last title).')) + '\n\n';
+      // upnext3 (item 7): what's lined up after it keeps waiting - behind yours now
+      if (onPad.after && onPad.after.line) out += _t('js.plex.instead_after', 'What’s lined up after it ({n}) keeps waiting - it plays after yours.', { n: onPad.after.line }) + '\n\n';
       return out;
     };
     // a refusal that says you may replace what's on: -> true (the caller asks again, as a replace naming what's on NOW) - the pad got busy under
@@ -349,7 +365,8 @@
               : '<div><b>' + esc(_t('js.plex.free', 'Free')) + '</b> <span class="muted">' + esc(MEMBER ? _t('js.plex.free_member', '(Plex member)') : _t('js.plex.free_admin', '(site admin)')) +
                 ' · ' + esc(_t('js.plex.q_one_play', 'the whole queue counts as one play')) + '</span></div>') +
               (j.truncated ? '<div class="muted">' + esc(_t('js.plex.q_cut', 'Cut to fit: a queue holds at most {hours} hours and {max} titles.', { hours: j.max_hours, max: j.max_items })) + '</div>' : '') +
-              (j.slot_minutes ? '<div class="muted">' + esc(_t('js.plex.b_slot', '📅 A {min}-minute slot: the runtime plus a few minutes. It starts by itself at that time; the price rules are the same, charged as it plays.', { min: j.slot_minutes })) + '</div>' : '');
+              (j.slot_minutes ? '<div class="muted">' + esc(_t('js.plex.b_slot', '📅 A {min}-minute slot: the runtime plus a few minutes. It starts by itself at that time; the price rules are the same, charged as it plays.', { min: j.slot_minutes })) +
+                                ' ' + esc(_t('js.plex.b_waits', 'If something from the library is still on then, yours waits for that title to finish and starts right after it.')) + '</div>' : '');
             var at = atMs();
             btn.textContent = when() === 'later' ? (at ? _t('js.plex.b_book_for', '📅 Book it for {time}', { time: whenTxt(at) }) : _t('js.plex.b_pick', 'Pick a start time')) : playLabel(j.estimate, j.items.length);
           }).catch(function (e) { if (seq === qSeq) pr.textContent = e.message; });
@@ -366,17 +383,21 @@
       btn.textContent = playLabel(quote, 1);
     };
     // upnext2: where "+" adds on THIS pad - 'running' (a queue here you may grow), 'after' (behind the single title on), 'list' (this tab's list)
+    // upnext3 (1.99ali, item 5): 'after' behind someone else's RUNNING queue too - "+ Line up my queue" (a queue of yours that plays when it ends)
     var addMode = function () {
       if (onPad && onPad.queue && onPad.can_add) return 'running';
-      if (onPad && !onPad.queue && onPad.can_after) return 'after';
+      if (onPad && onPad.can_after) return 'after';
       return 'list';
     };
+    var lineMode = function () { return addMode() === 'after' && !!(onPad && onPad.queue); };
     var addLabel = function () {
       var m = addMode();
-      return m === 'running' ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing') : m === 'after' ? _t('js.plex.q_add_after', '+ Add to the queue') : _t('js.plex.q_add', '+ My list');
+      return m === 'running' ? _t('js.plex.q_add_running', '+ Add to the queue that’s playing')
+        : m === 'after' ? (lineMode() ? _t('js.plex.q_add_line', '+ Line up my queue') : _t('js.plex.q_add_after', '+ Add to the queue')) : _t('js.plex.q_add', '+ My list');
     };
     var addBtn = function (key) {
-      return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '"' + (addMode() === 'after' ? ' title="' + esc(_t('js.plex.q_add_after_title', 'Plays after what’s on now')) + '"' : '') + '>' + esc(addLabel()) + '</button>' : '';
+      var tip = addMode() !== 'after' ? '' : lineMode() ? _t('js.plex.q_add_line_title', 'Your own queue, charged to you - it plays when the queue that’s on ends') : _t('js.plex.q_add_after_title', 'Plays after what’s on now');
+      return QUEUES ? '<button type="button" class="btn" data-add="' + esc(key) + '"' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + esc(addLabel()) + '</button>' : '';
     };
     var drawAdd = function () { host.querySelectorAll('[data-add]').forEach(function (b) { if (!b.disabled) b.textContent = addLabel(); }); drawNow(); };
     var openItem = function (key, wantScope) {
@@ -631,14 +652,17 @@
       var now = onPad ? onPad.title : '';
       btn.disabled = true;
       api('POST', '/api/medialib/queue/after', body).then(function (j) {
-        say(_t('js.plex.q_added_after', 'Added - it plays after “{now}” ({n} up next).', { now: j.behind || now, n: j.items }), true);
+        // (upnext3: in a line - behind someone else's queue, or others already lined up - it says where)
+        say(j.line > 1 || j.behind_queue ? _t('js.plex.q_added_line', 'Lined up - your queue plays after “{now}”: {place} of {line} in line.', { now: j.behind || now, place: j.place || 1, line: j.line || 1 })
+          : _t('js.plex.q_added_after', 'Added - it plays after “{now}” ({n} up next).', { now: j.behind || now, n: j.items }), true);
         info();
         if (opts.onStarted) { try { opts.onStarted({ after: true }); } catch (e) { /* the page's own */ } }
       }).catch(function (e) {
         var d = e.data || {};
         if (d.code === 'estimate' && d.estimate && d.estimate !== est) {
           btn.disabled = false;
-          ask(_t('js.plex.q_after_cost', 'Add it to play after “{now}”? About {price} PAT, charged as it plays (only what actually plays) - nothing is taken until it starts.', { now: now, price: fmt(d.estimate) }) + '\n\n' +
+          ask((lineMode() ? _t('js.plex.q_line_cost', 'Line up your own queue to play when “{now}”’s queue ends? About {price} points, charged to you as it plays (only what actually plays) - nothing is taken until it starts.', { now: now, price: fmt(d.estimate) })
+                          : _t('js.plex.q_after_cost', 'Add it to play after “{now}”? About {price} PAT, charged as it plays (only what actually plays) - nothing is taken until it starts.', { now: now, price: fmt(d.estimate) })) + '\n\n' +
               _t('js.plex.q_rights', 'Only show what we have the rights to show - every play is logged.'),
               _t('js.plex.ask_add', 'Yes, add it'), btn, function () { addAfter(btn, key, d.estimate); });
           return;

@@ -143,7 +143,7 @@ test("live detection ignores Twitch: off air on his HLS = off air, whatever Twit
   for (const v of ["home.ejs", "room.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
     assert.ok(src.includes("pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\\\u003c') %>"), v + " passes st.pepe_src (escaped)");
-    assert.match(src, /stage-room\.js\?v=25/, v + " cache-buster");   // (upnext2: 25)     // train2: 14 = stagefix's 13 (Take me off this Stage) + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19; 1.99ajq dockpol: 20 (destroy); 1.99ajr golive merged: 21
+    assert.match(src, /stage-room\.js\?v=26/, v + " cache-buster");   // (upnext2: 25)     // train2: 14 = stagefix's 13 (Take me off this Stage) + micfollow's 12 merged; wave2 WP-4: 18; 1.99ahq stage cover: 19; 1.99ajq dockpol: 20 (destroy); 1.99ajr golive merged: 21
   }
 });
 

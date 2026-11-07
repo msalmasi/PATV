@@ -95,7 +95,7 @@
 <% if (locals.avsyncOn) { %><script src="/public/js/av-sync.js?v=9"<% if (locals.avsyncHold) { %> data-avsync-hold="<%= locals.avsyncHold %>"<% } %>></script><% } %>
 <script src="/public/js/webrtc-client.js?v=7"></script>
 <script src="/public/js/stage-lowlat.js?v=3"></script><%# 1.99ajy dockmedia: v3 %>
-<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=25"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once); upnext2: v25 - the card's 4 s minimum, the kept player's hand-over, the 📼 lower-third / slate %>
+<% } %><% if (typeof user !== 'undefined' && user) { %><script src="/public/js/twitch-btn.js?v=2"></script><script src="/public/js/onair-bar.js?v=7"></script><% } %><script src="/public/js/stage-room.js?v=26"></script><%# upnext: v23 - the 📼 "Coming up next" card; newstream: v24 - the poll follows the tab (hidden + nothing playing: no turn; back: at once); upnext2: v25 - the card's 4 s minimum, the kept player's hand-over, the 📼 lower-third / slate %>
 <link rel="stylesheet" href="/public/css/stage-upnext.css?v=2">
 <%# 1.99aal: 🟣 Twitch relay switch (admins; the API refuses everyone else and the button never shows) %>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=2">

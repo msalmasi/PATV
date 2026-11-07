@@ -190,6 +190,7 @@
     up.forEach(function (x) {
       h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' + when(x.start_at) + ' · ' + esc(_t('js.stage.n_min', '{n} min', { n: x.max_minutes })) + (x.featured ? ' · ' + esc(_t('js.stage.featured', '★ featured')) : '') +
            (x.embed_label ? ' · ' + esc(x.embed_label) : '') + (x.status === 'requested' ? ' · <i>' + esc(_t('js.stage.waiting_owner', 'waiting for the owner')) + '</i>' : '') +
+           (x.lib_wait ? ' · <i>' + esc(_t('js.stage.lib_wait', '⏳ Waiting for the current title to finish - it starts right after it')) + '</i>' : '') +   // (upnext3: a 📼 booking)
            (x.held ? ' · ' + esc(_t('js.stage.n_held', '{n} PAT held', { n: fmt(x.held) })) : '') + '</span>' +
            (x.mode !== 'embed' ? '<button type="button" class="btn" data-key="' + esc(x.id) + '">' + esc(_t('js.stage.key', 'Key')) + '</button>' : '') +
            '<button type="button" class="btn danger" data-cancel="' + esc(x.id) + '">' + esc(_t('js.stage.cancel', 'Cancel')) + '</button></li>';

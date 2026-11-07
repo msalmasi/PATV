@@ -226,8 +226,8 @@ test("2d: destroy() drops the tab listeners (the homepage's front-pad swap); a p
   assert.equal(bare.sw.view(), "slot:s1");
 });
 
-test("2e: room.ejs and home.ejs load the new stage-room.js (v=24; upnext2: v=25)", () => {
-  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=25/, v);
+test("2e: room.ejs and home.ejs load the new stage-room.js (v=24; upnext2: v=25; upnext3: v=26)", () => {
+  for (const v of ["room.ejs", "home.ejs"]) assert.match(read("views", v), /stage-room\.js\?v=26/, v);
 });
 
 test("1e: \"Watch ›\" (the Feed / About line) is the viewer's OWN pick - the first live stream when the stage shows nothing; never over Pepe's stream, a stream on screen or the mic stage; never a cam", async () => {

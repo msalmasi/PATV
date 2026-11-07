@@ -16,6 +16,8 @@
     var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
   }
+  // upnext3: a booking's time on the line ("booked for 21:00")
+  function hm(ms) { var t = new Date(Number(ms) || 0); return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); }
   function label(it) {
     if (!it) return '';
     return it.type === 'episode' && it.show ? it.show + ' — S' + (it.season == null ? 0 : it.season) + 'E' + (it.episode == null ? 0 : it.episode) + ' ' + (it.title || '')
@@ -65,7 +67,7 @@
     if (a.hasAttribute('data-skip')) return '[data-skip="' + a.getAttribute('data-skip') + '"]';
     if (a.hasAttribute('data-mv')) return '[data-mv="' + a.getAttribute('data-mv') + '"][data-to="' + a.getAttribute('data-to') + '"]';
     if (a.hasAttribute('data-rm')) return '[data-rm="' + a.getAttribute('data-rm') + '"]';
-    if (a.hasAttribute('data-after-x')) return '[data-after-x]';
+    if (a.hasAttribute('data-after-x')) return a.getAttribute('data-after-x') && a.getAttribute('data-after-x') !== '1' ? '[data-after-x="' + a.getAttribute('data-after-x') + '"]' : '[data-after-x]';
     if (a.classList.contains('pq-scrub')) return '.pq-scrub';
     if (a.tagName === 'SUMMARY' && a.parentNode) return (a.parentNode.classList.contains('pq-log') ? '.pq-log' : '.pq-q') + ' > summary';
     if (a.tagName === 'A') return '.pq-q a';
@@ -110,9 +112,24 @@
               '<button type="button" class="sact" data-rm="' + x.index + '" aria-label="' + esc(_t('js.plex.q_remove', 'Remove')) + '">✕</button></span>' : '') + '</li>';
         }).join('') + '</ol>' + (can ? '<a class="muted" href="/stage">' + esc(_t('js.plexq.manage', 'Edit the queue ›')) + '</a>' : '') + '</details>';
     }
+    // upnext3 (1.99ali): who's lined up next, in order (medialib.player line[]) - a booking due now, a queue paused for it, each person's own queue
+    // (behind a single title or a running queue); titles for everyone, who + ✕ only for whoever may take that row out (can_withdraw)
+    if (Array.isArray(j.line) && j.line.length) {
+      var lw = j.line.some(function (x) { return x.can_withdraw === true; });
+      h += '<details class="pq-q pq-line"' + (j.line.length <= 3 ? ' open' : '') + '><summary>' + esc(_t('js.plexq.line_n', 'Lined up next ({count})', { count: j.line.length })) + '</summary><ol>' +
+        j.line.map(function (x) {
+          var first = (x.next || [])[0];
+          var kind = x.kind === 'booking' ? _t('js.plexq.line_booking', '📅 booked for {time}', { time: hm(x.at) })
+            : x.kind === 'resume' ? _t('js.plexq.line_resume', '⏸ carries on after the booking') : '';
+          return '<li><span>' + esc(first ? label(first) : '…') + (x.count > 1 ? ' <span class="muted">' + esc(_t('js.plexq.line_more', '+{n} more', { n: x.count - 1 })) + '</span>' : '') +
+            (kind ? ' <span class="muted">· ' + esc(kind) + '</span>' : '') + (x.by ? ' <span class="muted">· ' + esc(_t('js.plexq.after_by', 'added by {name}', { name: x.by })) + '</span>' : '') + '</span>' +
+            (x.can_withdraw === true && x.id != null ? '<span class="pq-li"><button type="button" class="sact" data-after-x="' + esc(x.id) + '" aria-label="' + esc(_t('js.plexq.after_x', '✕ Take them out')) + '">✕</button></span>' : '') + '</li>';
+        }).join('') + '</ol>' + (lw && !can ? '<p class="pq-msg muted" role="status" aria-live="polite"></p>' : '') + '</details>';
+    }
     // upnext2 (E): titles someone added behind a single title ("+ Add to the queue") - they play after it, as that person's own queue. review
     // fixes (1.99alc): who added them only to whoever may take them out (them, the pad's owner, an admin - can_withdraw), with ✕ Take them out
-    if (!q && j.after && j.after.next && j.after.next.length) {
+    // (an older server without line[])
+    else if (!q && j.after && j.after.next && j.after.next.length) {
       var aw = j.after.can_withdraw === true;
       h += '<details class="pq-q"><summary>' + esc(_t('js.plexq.after_n', 'Up next, after this ({count})', { count: j.after.count || j.after.next.length })) + '</summary><ol>' +
         j.after.next.map(function (x) { return '<li><span>' + esc(label(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + '</span>' : '') + '</span></li>'; }).join('') + '</ol>' +
@@ -163,8 +180,12 @@
   box.addEventListener('click', function (ev) {
     var b = ev.target.closest('button');
     // (upnext2 review fixes: the titles waiting behind a single title - their owner may take them out without controlling what's on)
-    if (b && b.hasAttribute('data-after-x') && last && last.after && last.after.can_withdraw && !busy && b.getAttribute('aria-disabled') !== 'true') {
-      if (confirm(_t('js.plexq.q_after_x', 'Take these titles out? They won’t play after this one (nothing is charged).'))) act('/api/medialib/queue/after/cancel', null, b);
+    if (b && b.hasAttribute('data-after-x') && last && !busy && b.getAttribute('aria-disabled') !== 'true') {
+      // upnext3: one row of the line by its id (✕ next to it); an older server's single "after" row
+      var xid = b.getAttribute('data-after-x'), row = xid && xid !== '1' && Array.isArray(last.line) ? last.line.filter(function (x) { return String(x.id) === xid; })[0] : null;
+      if (row ? row.can_withdraw === true : !!(last.after && last.after.can_withdraw)) {
+        if (confirm(_t('js.plexq.q_after_x', 'Take these titles out? They won’t play after this one (nothing is charged).'))) act('/api/medialib/queue/after/cancel', row ? { id: row.id } : null, b);
+      }
       return;
     }
     if (!b || !last || !last.can_control || busy || b.getAttribute('aria-disabled') === 'true') return;
@@ -172,7 +193,9 @@
     if (b.hasAttribute('data-mv')) { act('/api/medialib/queue/edit', { op: 'move', index: +b.getAttribute('data-mv'), to: +b.getAttribute('data-to') }, b); return; }
     if (b.hasAttribute('data-rm')) { act('/api/medialib/queue/edit', { op: 'remove', index: +b.getAttribute('data-rm') }, b); return; }
     var a = b.getAttribute('data-q');
-    if (a === 'stop' && !confirm(_t('js.plexq.q_stop', 'Stop the queue and end the library slot?'))) return;
+    // upnext3 (item 7): what's lined up after it starts right away (its own station break)
+    if (a === 'stop' && !confirm(Array.isArray(last.line) && last.line.length ? _t('js.plexq.q_stop_next', 'Stop it? What’s lined up next starts right after (its own station break first).')
+                                                                              : _t('js.plexq.q_stop', 'Stop the queue and end the library slot?'))) return;
     var url = { prev: '/api/medialib/queue/prev', next: '/api/medialib/queue/next', pause: '/api/medialib/pause', resume: '/api/medialib/resume', stop: '/api/medialib/stop' }[a];
     if (url) act(url, null, b);
   });

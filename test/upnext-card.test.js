@@ -353,7 +353,7 @@ test("cleanFeat keeps only known shapes of next (and the card never takes a key 
 test("views + strings + styles: the css is linked, stage-room.js v23, the posters flag on every surface, en.json, motion rules", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const src = read("views", v);
-    assert.match(src, /stage-room\.js\?v=25/, v);   // (upnext2: 25)
+    assert.match(src, /stage-room\.js\?v=26/, v);   // (upnext2: 25)
     assert.match(src, /\/public\/css\/stage-upnext\.css\?v=2/, v);   // (upnext2: v2 - the lower-third / the slate)
   }
   assert.match(read("views", "room.ejs"), /posters: <%= signedIn_ \? 'true' : 'false' %>/);
