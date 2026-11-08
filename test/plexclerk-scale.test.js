@@ -161,6 +161,27 @@ test("lists: the membership read starts from the members, and adding a list matc
   assert.deepEqual((await lists.shelves()).map((r) => [r.name, r.count]), [["IMDb Top 250", 2]]);
 });
 
+test("an outside list named like 'Oscar Best Picture Winners' answers 'an oscar winner'; IMDb Top 250 answers 'the imdb top 100'", async (t) => {
+  const h = await setup(t);
+  const cfg = { ...SETTINGS, clerk_lists: true };
+  const lists = createLists({ catalog: h.catalog, settings: () => cfg, key: () => "fixture-only", now: () => AT, request: async () => { throw new Error("offline"); } });
+  t.after(() => lists.close());
+  assert.equal((await lists.importSnapshot({ configured: [
+    { id: "8101", name: "Oscar Best Picture Winners", ranked: false, items: [{ type: "movie", title: "Fixture Film 7", year: 1997 }, { type: "movie", title: "Fixture Film 8", year: 1998 }] },
+    { id: "8102", name: "IMDb Top 250", ranked: true, items: [{ rank: 3, type: "movie", title: "Fixture Film 9", year: 1999 }, { rank: 180, type: "movie", title: "Fixture Film 10", year: 2000 }] }] })).ok, true);
+  const finder = createFinder({ catalog: h.catalog, settings: () => cfg, lists, now: () => AT, rng: () => 0, deepMax: { movie: 2, show: 10 },
+    requests: { search: async () => [], details: async () => null }, vectors: { nearest: async () => [] } });
+  const ctx = { seenKeys: [], maxSec: 4 * 3600, allowSeerr: false };
+  for (const raw of ["an oscar winner", "an Oscar-winning film", "something from the oscars", "something from the best picture winners"]) {
+    const out = await finder.find({ ask: { select: "random" }, raw, limit: 3 }, ctx);
+    assert.equal(out.shelf_missing, undefined, raw);
+    assert.deepEqual(out.rows.map((r) => r.key).sort(), ["7", "8"], raw);
+    assert.equal(out.rows[0].shelf.name, "Oscar Best Picture Winners");
+  }
+  const ranked = await finder.find({ ask: { select: "random" }, raw: "something from the imdb top 100", limit: 3 }, ctx);
+  assert.deepEqual(ranked.rows.map((r) => [r.key, r.shelf.rank]), [["9", 3]], "rank 180 is past the top 100");
+});
+
 test("the admin lists panel says why an action was refused (the maintenance window, the key, the input, the limits)", () => {
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "js", "media-admin.js"), "utf8");
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "locales", "en.json"), "utf8"));
