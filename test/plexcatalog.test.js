@@ -455,22 +455,47 @@ test("shelves aggregates 10k films and 200k episodes without fetching metadata J
 
 // ── 1.99?? catfix (prod 2026-11-08: the clerk turned on, the card said "Last sync: Never" / "catalog source unavailable") ──
 // Proven on prod (read-only, the site's own mediactl client): every catalog page answers in under 4 s, but mediactl 1.7.0
-// answers a section's /collections only after walking every collection's members at its four Plex reads a second, and the
-// largest movie section's walk takes minutes - the client gave up after 15 s with no byte received. The run threw away the
-// whole section it had just read (no "at", no "full_at"), and every next run started over and failed at the same read.
-test("catfix: a section's /collections walk longer than the old 15 s no longer fails the sync (mediactl 1.7.0)", async (t) => {
+// answers a section's /collections only after walking every collection's members, and the largest movie section has 1381
+// collections whose member reads take Plex ~2-3 s each - that walk did not answer within 15 minutes (about an hour), while
+// the site's client gave up after 15 s with no byte received. The run threw away the whole section it had just read (no
+// "at", no "full_at"), and every next run started over and failed at the same read.
+test("catfix: a 1.7.0 whole-section /collections walk that takes too long skips that section's shelves - the sync still finishes", async (t) => {
   const h = await setup(t);
-  h.api.walkMs = 4 * 60000;   // one section's whole collections walk inside one answer (minutes on prod)
+  h.api.walkMs = 30000;   // a small section's whole walk (one with 51 collections took 48 s on prod): fits
   const r = await h.catalog.sync({ full: true });
   assert.equal(r.ok, true, JSON.stringify(r));
   const cols = h.reads.filter((x) => x.route.startsWith("/collections"));
   assert.equal(cols.length, 2, "one whole-section answer per allowed section");
-  assert.ok(cols.every((x) => x.timeout >= 10 * 60000), "1.7.0's walk gets a timeout fit for it: " + cols.map((x) => x.timeout));
+  assert.ok(cols.every((x) => x.timeout >= 60000 && x.timeout <= 300000), "1.7.0's whole answer gets minutes, not 15 s: " + cols.map((x) => x.timeout));
   const pages = h.reads.filter((x) => x.route.startsWith("/catalog"));
   assert.ok(pages.every((x) => x.timeout >= 30000 && x.timeout <= 120000), "a page keeps a page's timeout: " + pages.map((x) => x.timeout));
   assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Quiet Comedies", 2]]);
-  const st = await h.catalog.status();
-  assert.equal(st.ready, true); assert.equal(st.error, null); assert.equal(st.at, AT); assert.equal(st.full_at, AT);
+  let st = await h.catalog.status();
+  assert.deepEqual([st.ready, st.error, st.at, st.full_at, st.shelves_skipped], [true, null, AT, AT, []]);
+  // the big section's walk (about an hour on prod): no answer in time - its shelves stay as they were, the sync finishes
+  h.api.walkMs = 3600000;
+  h.calls.length = 0;
+  h.setClock(AT + 86400000);
+  const big = await h.catalog.sync({ full: true });
+  assert.equal(big.ok, true, JSON.stringify(big));
+  assert.equal(h.calls.filter((c) => c.startsWith("/collections?section=1")).length, 1, "no second try of an hour-long walk (1.7.0 keeps walking after the site leaves)");
+  st = await h.catalog.status();
+  assert.deepEqual([st.ready, st.error, st.full_at], [true, null, AT + 86400000]);
+  assert.deepEqual(st.shelves_skipped.map((x) => x.section), ["1", "2"]);
+  assert.match(st.shelves_skipped[0].why, /^no answer within \d+ s$/);
+  assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Quiet Comedies", 2]], "the shelves read before are kept");
+  assert.ok(h.logs.some((l) => /collections of section 1 \(movies\) not refreshed: no answer within \d+ s - media-control 1\.7\.1 reads them a page at a time/.test(l)), h.logs.join("\n"));
+});
+
+test("catfix: shelves are read by the daily full sweep only - a delta never walks /collections", async (t) => {
+  const h = await setup(t);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  h.calls.length = 0;
+  h.setClock(AT + 3600000);
+  const delta = await h.catalog.sync();
+  assert.deepEqual([delta.ok, delta.full], [true, false]);
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("/collections")), [], "a large section's shelves are thousands of slow Plex reads");
+  assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Quiet Comedies", 2]], "the sweep's shelves stay");
 });
 
 test("catfix: mediactl 1.7.1 answers /collections a page of shelves at a time; every page is stored, a repeated shelf once", async (t) => {
@@ -534,10 +559,11 @@ test("catfix: a read that fails for a passing reason is tried again after a wait
 
 test("catfix: the last sync error says which read failed, how, after how many tries - and when", async (t) => {
   const h = await setup(t);
-  h.api.walkMs = 10 * 3600000;   // a walk nothing waits for
+  h.api.version = "1.7.1";   // a paged shelves read that never answers: tried again, then the sweep stops there (and carries on later)
+  h.api.hook = (route) => route.startsWith("/collections") ? Promise.reject(timeoutError()) : undefined;
   const r = await h.catalog.sync({ full: true });
   assert.equal(r.ok, false);
-  assert.match(r.error, /^catalog source unavailable: collections of section 1 \(movies\) - no answer within \d+ s \(2 tries\)$/);
+  assert.match(r.error, /^catalog source unavailable: collections of section 1 \(movies\) - no answer within \d+ s \(4 tries\)$/);
   const st = await h.catalog.status();
   assert.equal(st.error, r.error);
   assert.equal(st.error_at, AT);
@@ -553,7 +579,7 @@ test("catfix: the last sync error says which read failed, how, after how many tr
   assert.equal((await z.catalog.sync()).error, "catalog source unavailable: movie page from 0 of section 1 (movies) - media-control isn't configured on the site");
   for (const l of [...h.logs, ...x.logs, ...y.logs, ...z.logs]) assert.equal(/Quiet Harbor|Window Office|Fixture Cinema|Fixture Series/.test(l), false, "no titles in the log: " + l);
   // a successful sync clears the error and its time
-  h.api.walkMs = 0;
+  h.api.hook = null;
   h.setClock(AT + 60000);
   assert.equal((await h.catalog.sync({ full: true })).ok, true);
   const ok = await h.catalog.status();
