@@ -462,3 +462,172 @@ test("the card shows the model while the catalog is still being counted, and the
     assert.ok(lines.includes(want), JSON.stringify(embed) + " -> " + JSON.stringify(lines));
   }
 });
+
+// ── plexvectors 1.99?? (follow-up to 1.99amg): once vectors exist, a FILM vector search at prod's size fell back to word search
+// every time, silently. Prod has 30,682 films; MAX_MOVIES was 20,000. An ask over every film ("a film about ...") was refused
+// before any read (more keys than MAX_MOVIES) - and plexfind never even asked (its own 20,000 cap on the pool). A filtered ask
+// (one genre, under 20k keys) found more than 20,000 film vectors, took the "partial" path - the supplied keys 400 at a time,
+// every chunk a chat read of 768-byte blobs, never cached - and ran out of the 400 ms budget: 405 ms and [] every time (bench:
+// tools/plexvectors-scale.js). And any cache there was died with every embed_put (vector_rev) and every catalog write
+// (catalog_rev): a backfill writes all day, so it would have been a whole reload per ask even under the cap.
+const BUDGET = require("../plexvectors").BUDGET;
+// what the chat and background lanes hand back: how many vector blobs each read (a whole reload is every film's)
+function counting(h) {
+  const blobs = { chat: 0, admin: 0 };
+  const count = (lane, rows) => { for (const r of rows || []) if (r && Buffer.isBuffer(r.v)) blobs[lane]++; return rows; };
+  const catalog = { ...h.catalog, read: async (...args) => count("chat", await h.catalog.read(...args)),
+    admin: { ...h.catalog.admin, read: async (...args) => count("admin", await h.catalog.admin.read(...args)) } };
+  return { catalog, blobs, reset() { blobs.chat = 0; blobs.admin = 0; }, total: () => blobs.chat + blobs.admin };
+}
+// a 768-dim int8 vector for every visible film bigCatalog made but the last `spare` (left for embed_put), and for the blocked
+// films too (vectors that slipped past a sync's block list - never offered); the vectors at the `keep` positions are returned
+async function filmVectors(h, { dim = 768, spare = 24, keep = [] } = {}) {
+  let seed = 88172645;
+  const random = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return ((seed >>> 0) % 255) - 127; };
+  const kept = new Map();
+  let films = [], blocked = [], spares = [];
+  await h.catalog.write(async (tx) => {
+    const all = await tx.all("SELECT key,data,content_rating FROM plex_catalog WHERE type='movie' ORDER BY key");
+    const visible = all.filter((r) => r.content_rating !== "X"), hidden = all.filter((r) => r.content_rating === "X");
+    blocked = hidden.map((r) => r.key);
+    spares = visible.slice(visible.length - spare).map((r) => r.key);
+    films = visible.slice(0, visible.length - spare).map((r) => r.key);
+    const position = new Map(films.map((key, i) => [key, i]));
+    const stored = visible.slice(0, visible.length - spare).concat(hidden);
+    for (let start = 0; start < stored.length; start += 64) {
+      const batch = stored.slice(start, start + 64), params = [];
+      for (const r of batch) {
+        const buffer = Buffer.from(Int8Array.from({ length: dim }, random).buffer), at = position.get(r.key);
+        if (keep.includes(at)) kept.set(at, { key: r.key, v: buffer.toString("base64") });
+        if (at == null && !kept.has("blocked")) kept.set("blocked", { key: r.key, v: buffer.toString("base64") });
+        params.push(r.key, MODEL, dim, textHash(documentText(JSON.parse(r.data))), 1, buffer, "movie", null);
+      }
+      await tx.run("INSERT INTO plex_vectors(key,model,dim,hash,scale,v,kind,show_key) VALUES " + batch.map(() => "(?,?,?,?,?,?,?,?)").join(","), params);
+    }
+    await tx.run("UPDATE plex_vector_docs SET hash=(SELECT hash FROM plex_vectors v WHERE v.key=plex_vector_docs.key),dirty=0 WHERE key IN (SELECT key FROM plex_vectors)");
+  });
+  return { films, blocked, spares, kept };
+}
+const median = (list) => list.slice().sort((a, b) => a - b)[Math.floor(list.length / 2)];
+
+test("the film index follows each embed_put without reading every film again, and the chat lane never reads film vectors", async (t) => {
+  const snapshot = fixture();
+  for (let i = 0; i < 500; i++) snapshot.rows.push(row(5000 + i, "Synthetic film " + i));
+  const h = await setup(t, snapshot), c = counting(h);
+  const vectors = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT });
+  const films = Array.from({ length: 500 }, (_, i) => String(5000 + i)), current = await h.catalog.getByKeys(films);
+  for (let i = 0; i < current.length; i += 64)
+    assert.equal((await h.vectors.put({ model: MODEL, dim: 4, vecs: current.slice(i, i + 64).map((r) => ({ key: r.key, hash: textHash(documentText(r)),
+      ...quantize([1, (Number(r.key) % 7) / 7, 0, 0]) })) })).stored, Math.min(64, current.length - i));
+  const keys = ["1", "2", ...films], ask = (values) => vectors.nearest({ qvec: qvec(values), kind: "movie", keys });
+  assert.equal((await ask([1, 0, 0, 0])).length, 30);
+  await vectors.idle();
+  assert.ok(c.total() >= 500, "the first ask read the films' vectors once: " + JSON.stringify(c.blobs));
+  for (let i = 0; i < 3; i++) assert.equal((await ask([1, 0, 0, 0])).length, 30);
+  await vectors.idle();
+  assert.equal(c.blobs.chat, 0, "the chat lane never reads film vectors: " + JSON.stringify(c.blobs));
+  c.reset();
+  for (let i = 0; i < 3; i++) assert.equal((await ask([1, 0, 0, 0])).length, 30);
+  await vectors.idle();
+  assert.equal(c.total(), 0, "asking again reads no vector: " + JSON.stringify(c.blobs));
+  // a backfill step: the bot stores one more film (embed_put) - the next ask finds it, having read only that one vector
+  await store(h, "2", [0, 0, 1, 0]);
+  c.reset();
+  const after = await ask([0, 0, 1, 0]);
+  assert.equal(after[0] && after[0].key, "2", "the film stored a moment ago is the nearest: " + JSON.stringify(after.slice(0, 2)));
+  await vectors.idle();
+  assert.ok(c.total() <= 2, "an embed_put is read on its own, not with every film again: " + JSON.stringify(c.blobs));
+  // a catalog write (a sync, a play count) keeps the index; a film whose summary changed is never offered on its old vector
+  await change(h, "2", { summary: "A newly written space mission." });
+  c.reset();
+  assert.equal((await ask([0, 0, 1, 0])).some((r) => r.key === "2"), false);
+  await change(h, "5003", { rating: 8 });
+  assert.equal((await ask([1, 0, 0, 0])).some((r) => r.key === "5003"), false, "a dirty doc stays out until it's hashed again");
+  await vectors.idle();
+  assert.equal(c.total(), 0, "a catalog write is no reason to read the films again: " + JSON.stringify(c.blobs));
+  // a policy change: the index is built again from what is still visible
+  h.cfg.clerk_block_ratings += ",PG";
+  assert.deepEqual(await ask([1, 0, 0, 0]), []);
+  await vectors.idle();
+  assert.equal(c.blobs.chat, 0);
+});
+
+test("prod size (30,682 films with 768-dim vectors): every film or one genre answers from vectors inside the 400 ms budget, warm; the clerk's find() uses them", { timeout: 300000 }, async (t) => {
+  const h = await setup(t, { ...fixture(), rows: [] }, {}, { noFts: false });
+  await bigCatalog(h);
+  await h.vectors.configure({ model: MODEL, dim: 768 });
+  const PLANT = 12344;
+  const { films, blocked, spares, kept } = await filmVectors(h, { keep: [PLANT] });
+  assert.equal(films.length + spares.length, PROD.films);
+  const c = counting(h);
+  const vectors = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT });
+  const planted = kept.get(PLANT).key, query = (v) => ({ model: MODEL, dim: 768, scale: 1, v });
+  const ask = (keys, v = kept.get(PLANT).v) => vectors.nearest({ qvec: query(v), kind: "movie", keys, budgetMs: BUDGET });
+  const everyFilm = films.concat(spares);
+  // the first ask after a start may answer from words only while the films load (background lane) - on time, never wrong
+  let started = performance.now();
+  const cold = await ask(everyFilm);
+  const coldMs = performance.now() - started;
+  assert.ok(coldMs < BUDGET + 150, "the first ask returns on time: " + coldMs.toFixed(1) + " ms");
+  assert.ok(!cold.length || cold[0].key === planted, "a cold answer is the right one or none");
+  await vectors.idle();
+  const warm = [];
+  for (let i = 0; i < 5; i++) {
+    started = performance.now();
+    const hits = await ask(everyFilm);
+    warm.push(performance.now() - started);
+    assert.equal(hits.length, 30, "an ask over all " + everyFilm.length + " films answers from vectors (it was [] - more keys than MAX_MOVIES)");
+    assert.equal(hits[0].key, planted);
+    assert.ok(hits[0].score > .99 && hits.every((r) => r.why === "vector"));
+  }
+  // one genre: half the films (under the old 20,000 cap, with more film vectors than it: the uncached partial path, 405 ms and [])
+  const half = everyFilm.filter((_, i) => i % 2 === 0);
+  assert.ok(half.includes(planted) && half.length < 20000);
+  const filtered = [];
+  for (let i = 0; i < 5; i++) {
+    started = performance.now();
+    const hits = await ask(half);
+    filtered.push(performance.now() - started);
+    assert.equal(hits.length, 30, "an ask over one genre answers from vectors (it was [] - the partial path ran out of time)");
+    assert.equal(hits[0].key, planted);
+    assert.ok(hits.every((r) => half.includes(r.key)), "only the keys asked about");
+  }
+  t.diagnostic(`30,682 films x 768 int8: first ask ${coldMs.toFixed(1)} ms (${cold.length} hits); warm every film median ${median(warm).toFixed(1)} ms, max ${Math.max(...warm).toFixed(1)} ms; warm one genre median ${median(filtered).toFixed(1)} ms`);
+  assert.ok(Math.max(...warm, ...filtered) < BUDGET, "every warm ask inside the chat budget");
+  assert.ok(median(warm) < 200, "a warm ask over every film well inside the budget: " + median(warm).toFixed(1) + " ms");
+  assert.equal(c.blobs.chat, 0, "the chat lane never reads film vectors: " + JSON.stringify(c.blobs));
+  // a film whose vector slipped past a sync's block list is never offered, even asked about by key with its own vector
+  const leak = await ask(everyFilm.concat(blocked), kept.get("blocked").v);
+  assert.equal(leak.some((r) => blocked.includes(r.key)), false, "a blocked film is never offered");
+  // a backfill step between asks: the bot stores the 24 films still without a vector, 12 a call (pepe_plexembed keeps a body under
+  // 16 KB); the next ask finds them, having read only those 24 vectors
+  const unit = quantize(Array.from({ length: 768 }, (_, i) => i === 0 ? 1 : 0));
+  const rows = await h.catalog.getByKeys(spares);
+  c.reset();
+  for (let i = 0; i < rows.length; i += 12)
+    assert.equal((await h.vectors.put({ model: MODEL, dim: 768, vecs: rows.slice(i, i + 12).map((r) => ({ key: r.key, hash: textHash(documentText(r)), ...unit })) })).stored, 12);
+  const fresh = await vectors.nearest({ qvec: { model: MODEL, dim: 768, ...unit }, kind: "movie", keys: everyFilm, budgetMs: BUDGET, limit: 30 });
+  assert.equal(fresh.filter((r) => spares.includes(r.key)).length, 24, "the 24 films stored a moment ago are offered");
+  await vectors.idle();
+  assert.ok(c.total() <= 24 * 2, "the puts were read on their own, not with every film again: " + JSON.stringify(c.blobs));
+  // the clerk's find(): an unfiltered "a film about ..." and a one-genre ask both offer films by their vectors
+  const { createFinder } = require("../plexfind");
+  const finder = createFinder({ catalog: h.catalog, settings: () => h.cfg, now: () => AT, rng: () => 0, vectors,
+    lists: { shelves: async () => [], members: async () => [] }, requests: { search: async () => [], details: async () => null } });
+  const ctx = { seenKeys: [], maxSec: 4 * 3600, allowSeerr: false }, raw = "a film about a lighthouse keeper";
+  for (const want of [{ kind: "movie", about: "a lighthouse keeper who forgets the sea" }, { kind: "movie", genres: ["Drama"], about: "a lighthouse keeper who forgets the sea" }]) {
+    await finder.find({ ask: want, raw, limit: 20, qvec: query(kept.get(PLANT).v) }, ctx);   // the kept roots, read once
+    started = performance.now();
+    const out = await finder.find({ ask: want, raw, limit: 20, qvec: query(kept.get(PLANT).v) }, ctx);
+    const ms = performance.now() - started;
+    t.diagnostic(`find(${JSON.stringify(want)}): ${ms.toFixed(1)} ms, ${out.rows.length} rows, ${out.rows.filter((r) => r.why === "vector").length} from vectors`);
+    assert.ok(out.rows.some((r) => r.why === "vector"), "the clerk offers films by what they're about: " + JSON.stringify(want));
+    assert.equal(out.rows[0].key, planted);
+  }
+  // what it costs: the films' int8 vectors in typed arrays, about a byte a dimension a film
+  const stats = vectors.stats();
+  t.diagnostic("film index: " + JSON.stringify(stats));
+  assert.equal(stats.films, PROD.films);
+  assert.ok(stats.bytes >= PROD.films * 768 && stats.bytes <= PROD.films * 768 * 1.25, "about one byte per dimension per film: " + stats.bytes);
+  await vectors.idle();
+});
