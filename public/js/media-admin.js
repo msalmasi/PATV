@@ -6,7 +6,8 @@
     if (body) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
     return fetch(url, o).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: "HTTP " + r.status }; }).then(function (j) {
-        if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+        // plexlists 1.99??: the server's reason code rides along (the outside-lists card says why)
+        if (!r.ok || j.ok === false) { var err = new Error(j.error || ("HTTP " + r.status)); err.code = j.code; throw err; }
         return j;
       });
     });
@@ -106,11 +107,27 @@
   function clClear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function clText(parent, tag, value) { var node = document.createElement(tag); node.textContent = value; parent.appendChild(node); return node; }
   function clStatus(value) { var node = document.getElementById("clStatus"); if (node) node.textContent = value; }
+  // plexlists 1.99??: why an add / refresh / search was refused (the server's code), or the caller's generic line
+  function clWhy(e, otherwise) {
+    switch (e && e.code) {
+      case "lists_busy": return lt("busy", "The catalog is busy right now. Try again in a minute.");
+      case "invalid_list": return lt("why_invalid_list", "Use an MDBList list number, or a list link like https://mdblist.com/lists/user-name/list-name.");
+      case "not_found": return lt("why_not_found", "MDBList has no list there. Check the number or the link.");
+      case "ambiguous_list": return lt("why_ambiguous_list", "That link matches more than one list. Add the list by its number instead.");
+      case "list_limit": return lt("why_list_limit", "The outside-list limit is reached. Remove a list before adding another.");
+      case "quiet": return lt("why_quiet", "Outside lists aren’t read during the nightly maintenance window (03:40-04:20 UTC). Try again after it.");
+      case "rate_limited": case "daily_budget": return lt("why_rate_limited", "MDBList’s allowance for today is used up, or it asked us to wait. Try again later.");
+      case "provider_auth": return lt("why_provider_auth", "MDBList refused the API key. Check MDBLIST_API_KEY on the server.");
+      case "provider_unavailable": case "provider_timeout": case "provider_invalid": return lt("why_provider", "MDBList didn’t answer properly. Try again later.");
+      case "list_too_large": return lt("why_list_too_large", "That list is too large to read (more than 20,000 titles).");
+      default: return otherwise();
+    }
+  }
   function clAction(button, route, body) {
     button.disabled = true; msg("clMsg", lt("working", "Working…"));
     return api("POST", "/api/media/admin/lists/" + route, body).then(function () {
       msg("clMsg", lt("updated", "List settings updated."), true); return clLoad();
-    }).catch(function () { msg("clMsg", lt("failed", "The list action could not finish. Refresh the page to check its status.")); })
+    }).catch(function (e) { msg("clMsg", clWhy(e, function () { return lt("failed", "The list action could not finish. Refresh the page to check its status."); })); })
       .then(function () { button.disabled = false; });
   }
   function clButton(parent, label, route, body) {
@@ -139,7 +156,9 @@
   }
   function clLoad() {
     if (!document.getElementById("clerkLists")) return Promise.resolve();
-    return api("GET", "/api/media/admin/lists").then(clDraw).catch(function () { clStatus(lt("load_failed", "Could not read the outside lists. Refresh the page to try again.")); });
+    return api("GET", "/api/media/admin/lists").then(clDraw).catch(function (e) {
+      clStatus(e && e.code === "lists_busy" ? lt("busy", "The catalog is busy right now. Try again in a minute.") : lt("load_failed", "Could not read the outside lists. Refresh the page to try again."));
+    });
   }
   var clAdd = document.getElementById("clAdd");
   if (clAdd) clAdd.addEventListener("click", function () {
@@ -158,7 +177,7 @@
         clButton(row, lt("add", "Add list"), "add", { input: String(list.id) });
       });
       if (!(result.lists || []).length) clText(out, "p", lt("no_results", "No matching lists."));
-    }).catch(function () { msg("clMsg", lt("search_failed", "Could not search lists. Try again later.")); })
+    }).catch(function (e) { msg("clMsg", clWhy(e, function () { return lt("search_failed", "Could not search lists. Try again later."); })); })
       .then(function () { clSearch.disabled = false; });
   });
   clLoad();

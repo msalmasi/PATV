@@ -9,8 +9,11 @@ const fold = (v) => txt(v, 1000).toLowerCase().normalize("NFKD").replace(/([a-z]
 const integer = (v) => v !== null && v !== "" && Number.isSafeInteger(Number(v)) ? Number(v) : null;
 const quiet = (at) => { const d = new Date(at), m = d.getUTCHours() * 60 + d.getUTCMinutes(); return m >= 220 && m < 260; };
 const coded = (code) => Object.assign(new Error(code), { code });
-const CODES = new Set(["needs_key", "invalid_list", "ambiguous_list", "not_found", "list_limit", "invalid_query", "quiet", "rate_limited", "daily_budget", "provider_auth", "provider_unavailable", "provider_invalid", "provider_timeout", "list_too_large", "lists_unavailable", "closed"]);
-const failure = (e) => ({ ok: false, code: CODES.has(e && e.code) ? e.code : "lists_unavailable" });
+const CODES = new Set(["needs_key", "invalid_list", "ambiguous_list", "not_found", "list_limit", "invalid_query", "quiet", "rate_limited", "daily_budget", "provider_auth", "provider_unavailable", "provider_invalid", "provider_timeout", "list_too_large", "lists_busy", "lists_unavailable", "closed"]);
+// plexlists 1.99??: a catalog read past its budget (too_broad) or a full read queue (busy) passes - the card says "busy, try
+// again", not "unavailable". Every other unknown failure is still lists_unavailable.
+const BUSY = new Set(["too_broad", "busy"]);
+const failure = (e) => ({ ok: false, code: CODES.has(e && e.code) ? e.code : BUSY.has(e && e.code) ? "lists_busy" : "lists_unavailable" });
 const parsed = (s, fallback) => { try { return JSON.parse(s); } catch (_) { return fallback; } };
 
 // Do not redirect: the query contains a credential. No URL, body, or native error escapes this function.
@@ -50,11 +53,33 @@ function createLists(options = {}) {
   const now = options.now || Date.now, request = options.request || requestJSON;
   const timeoutMs = Math.max(1, Math.min(TIMEOUT, Number(options.timeoutMs) || TIMEOUT));
   const interval = options.setInterval || setInterval, clear = options.clearInterval || clearInterval;
+  const log = options.log || console;
   let initPromise, tail = Promise.resolve(), timer = null, closed = false, tickPromise = null;
   const keyed = () => typeof getKey() === "string" && getKey().trim().length > 0;
   const enabled = () => keyed() && settings().clerk_lists === true;
   const clean = (value, max) => { const s = txt(value, max), key = getKey(); return key && (s.includes(key) || s.includes(encodeURIComponent(key))) ? "" : s; };
   const listId = (id) => { const v = String(id || "").replace(/^mdblist:/, ""); if (!ID.test(v)) throw coded("invalid_list"); return v; };
+  // plexlists 1.99?? (prod 2026-11-08: the card's every load failed on a read past the 400 ms chat search budget): the card's
+  // reads and a list's add / refresh / rematch run on the catalog's admin lane (its own bound). Chat reads keep catalog.read.
+  const slow = () => catalog.admin || catalog;
+  // ...and the real reason a read failed goes to the server log, once a streak per place (failure() hands the card only a
+  // class). Known codes (invalid_list, quiet, ...) already tell the admin; the key is taken out of anything logged.
+  const told = new Map();
+  const redact = (value) => {
+    let s = String(value == null ? "" : value); const key = getKey();
+    if (typeof key === "string" && key.trim()) for (const k of [key, encodeURIComponent(key)]) s = s.split(k).join("[key]");
+    return txt(s, 300);
+  };
+  function tell(where, e) {
+    const r = failure(e);
+    if (r.code !== "lists_busy" && r.code !== "lists_unavailable") return r;
+    if (e && e.code === r.code && e.message === r.code) return r; // our own rethrow: its reason was told where it was caught
+    const code = redact(e && e.code), message = redact(e && e.message);
+    const line = "[plexlists] " + where + " failed (" + r.code + "): " + (code || "error") + (message && message !== code ? " - " + message : "");
+    if (told.get(where) !== line) { told.set(where, line); try { (log.error || log.log).call(log, line); } catch (_) { /* never fails a read */ } }
+    return r;
+  }
+  const fine = (where) => { told.delete(where); };
   function init() {
     if (!initPromise) initPromise = catalog.write(async (tx) => {
       await tx.run(`CREATE TABLE IF NOT EXISTS plex_lists (id TEXT PRIMARY KEY,name TEXT NOT NULL,ranked INTEGER NOT NULL DEFAULT 0,
@@ -64,12 +89,12 @@ function createLists(options = {}) {
         PRIMARY KEY(list_id,item_no,key),FOREIGN KEY(list_id) REFERENCES plex_lists(id) ON DELETE CASCADE,
         FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)`);
       await tx.run("CREATE INDEX IF NOT EXISTS plex_list_member_key ON plex_list_members(key,list_id)");
-    }).catch((e) => { initPromise = null; throw coded("lists_unavailable"); });
+    }).catch((e) => { initPromise = null; tell("init", e); throw coded("lists_unavailable"); });
     return initPromise;
   }
-  function queued(fn) {
+  function queued(fn, where = "action") {
     const job = tail.then(async () => { if (closed) throw coded("closed"); if (!keyed()) throw coded("needs_key"); await init(); return fn(); });
-    tail = job.catch(() => {}); return job.catch(failure);
+    tail = job.catch(() => {}); return job.catch((e) => tell(where, e));
   }
   function item(raw) {
     const r = raw || {}, type = r.type || r.mediatype;
@@ -170,7 +195,7 @@ function createLists(options = {}) {
     throw coded("list_too_large");
   }
   async function match(entries) {
-    const rows = [...await catalog.rows({ kind: "movie" }), ...await catalog.rows({ kind: "show" })];
+    const rows = [...await slow().rows({ kind: "movie" }), ...await slow().rows({ kind: "show" })];
     const index = new Map();
     for (const r of rows) for (const [field, value] of [["imdb", r.imdb], ["tmdb", r.tmdb], ["tvdb", r.type === "show" && r.tvdb], ["title", fold(r.title)]]) {
       if (!value) continue; const id = r.type + ":" + field + ":" + value;
@@ -188,7 +213,7 @@ function createLists(options = {}) {
         && !["imdb", "tmdb", ...(r.type === "show" ? ["tvdb"] : [])].some((k) => r[k] && c[k] && String(r[k]) !== String(c[k])));
       for (const hit of hits) members.push({ key: hit.key, rank: r.rank, item_no });
     });
-    const safe = new Set((await catalog.getByKeys([...new Set(members.map((m) => m.key))])).map((r) => r.key));
+    const safe = new Set((await slow().getByKeys([...new Set(members.map((m) => m.key))])).map((r) => r.key));
     return members.filter((m) => safe.has(m.key));
   }
   async function store(value, readAt = now(), replace = true) {
@@ -208,6 +233,7 @@ function createLists(options = {}) {
   }
   async function safeMembers(filters = {}, publicRead = true) {
     if (publicRead ? !enabled() : !keyed()) return [];
+    const db = publicRead ? catalog : slow(); // the admin card's reads on the admin lane; chat's on the search budget
     await init(); const args = [], where = [];
     if (filters.id) { where.push("l.id=?"); args.push(listId(filters.id)); }
     if (filters.name) { where.push("lower(l.name)=lower(?)"); args.push(txt(filters.name)); }
@@ -217,9 +243,13 @@ function createLists(options = {}) {
       const conditions = [...where], values = [...args];
       let base = "SELECT m.key,m.rank,m.item_no,l.id,l.name,l.ranked";
       if (final) base += ",c.type AS current_type";
-      base += " FROM plex_list_members m JOIN plex_lists l ON l.id=m.list_id";
+      // plexlists 1.99?? (prod 2026-11-08): with no ANALYZE stats SQLite put plex_catalog in the outer loop ("SCAN c") - every
+      // row's JSON checked to find the members of no list at all: 651 ms over 255,833 rows, past the search budget. CROSS JOIN
+      // fixes the loop order (SQLite keeps a CROSS JOIN's left table outside): lists (at most 20) -> their members by
+      // list_id (or key + list_id for a key lookup) -> each member's catalog row by key. The cost follows the members.
+      base += " FROM plex_lists l CROSS JOIN plex_list_members m ON m.list_id=l.id";
       if (final) {
-        base += " JOIN plex_catalog c ON c.key=m.key JOIN plex_sections cs ON cs.id=c.section";
+        base += " CROSS JOIN plex_catalog c ON c.key=m.key CROSS JOIN plex_sections cs ON cs.id=c.section";
         // Membership contains only movie/show roots. Recheck both stored projections together with
         // current section policy in this same final read, after getByKeys may have yielded.
         conditions.push("cs.policy='allowed'", "c.type IN ('movie','show')", "json_valid(c.data)",
@@ -229,16 +259,18 @@ function createLists(options = {}) {
           conditions.push("UPPER(TRIM(COALESCE(" + field + ",''))) NOT IN (" + blocked.map(() => "?").join(",") + ")"); values.push(...blocked);
         }
       }
-      if (!Array.isArray(filters.keys)) return catalog.read(base + (conditions.length ? " WHERE " + conditions.join(" AND ") : ""), values);
+      if (!Array.isArray(filters.keys)) return db.read(base + (conditions.length ? " WHERE " + conditions.join(" AND ") : ""), values);
       const keys = [...new Set(filters.keys.map(String).filter((k) => /^\d{1,12}$/.test(k)))], out = [];
       for (let n = 0; n < keys.length; n += 400) {
         const part = keys.slice(n, n + 400);
-        out.push(...await catalog.read(base + " WHERE " + [...conditions, "m.key IN (" + part.map(() => "?").join(",") + ")"].join(" AND "), [...values, ...part]));
+        out.push(...await db.read(base + " WHERE " + [...conditions, "m.key IN (" + part.map(() => "?").join(",") + ")"].join(" AND "), [...values, ...part]));
       }
       return out;
     }
     const candidates = await selected();
-    const safe = new Map((await catalog.getByKeys([...new Set(candidates.map((m) => m.key))])).map((r) => [r.key, r]));
+    // No member (no lists yet, or none matching the filters): nothing the final re-check could return, so nothing more to read.
+    if (!candidates.length) return [];
+    const safe = new Map((await db.getByKeys([...new Set(candidates.map((m) => m.key))])).map((r) => [r.key, r]));
     // Removal/refresh can overlap the catalog lookup. Return only membership still configured now.
     const blockPolicy = policy(), current = await selected(true, blockPolicy);
     if (policy() !== blockPolicy) return []; // A settings edit during SQL cannot validate a stale allow decision.
@@ -248,50 +280,51 @@ function createLists(options = {}) {
   async function list() {
     if (!keyed()) return { ok: true, configured: false, message: "needs MDBLIST_API_KEY" };
     try {
-      await init(); const lists = await catalog.read("SELECT id,name,ranked,items,last_read,last_error FROM plex_lists ORDER BY name,id");
+      await init(); const lists = await slow().read("SELECT id,name,ranked,items,last_read,last_error FROM plex_lists ORDER BY name,id");
       const members = await safeMembers({}, false), by = new Map();
       for (const m of members) { if (!by.has(m.id)) by.set(m.id, new Set()); by.get(m.id).add(m.item_no); }
       if (!keyed()) return { ok: true, configured: false, message: "needs MDBLIST_API_KEY" };
+      fine("list");
       return { ok: true, configured: true, enabled: enabled(), lists: lists.map((l) => ({ ...l, ranked: !!l.ranked, matched: (by.get(l.id) || new Set()).size, unmatched: l.items - (by.get(l.id) || new Set()).size })) };
-    } catch (e) { return failure(e); }
+    } catch (e) { return tell("list", e); }
   }
   const add = (input) => queued(async () => {
     const ref = reference(input), meta = metadata((await call(ref.path)).json, ref.id);
-    const old = (await catalog.read("SELECT id FROM plex_lists WHERE id=?", [meta.id]))[0];
+    const old = (await slow().read("SELECT id FROM plex_lists WHERE id=?", [meta.id]))[0];
     if (old) return { ok: true, id: old.id, existing: true };
-    if ((await catalog.read("SELECT COUNT(*) AS n FROM plex_lists"))[0].n >= MAX_LISTS) throw coded("list_limit");
+    if ((await slow().read("SELECT COUNT(*) AS n FROM plex_lists"))[0].n >= MAX_LISTS) throw coded("list_limit");
     const id = await store(await fetchList(meta)); return { ok: true, id };
-  });
+  }, "add");
   const search = (query) => queued(async () => {
     const q = txt(query, 120); if (q.length < 2) throw coded("invalid_query");
     const body = (await call("/lists/search", { query: q, limit: 10, offset: 0 })).json;
     if (!Array.isArray(body)) throw coded("provider_invalid");
     return { ok: true, lists: body.filter((r) => r && ID.test(String(r.id)) && r.private !== true).slice(0, 10).map((r) => ({ id: String(r.id), name: clean(r.name, 200) || "MDBList " + r.id, items: Math.max(0, integer(r.items) || 0) })) };
-  });
+  }, "search");
   async function refreshOne(id, force) {
-    const l = (await catalog.read("SELECT * FROM plex_lists WHERE id=?", [listId(id)]))[0];
+    const l = (await slow().read("SELECT * FROM plex_lists WHERE id=?", [listId(id)]))[0];
     if (!l) throw coded("not_found");
     if (!force && (l.last_read > now() - DAY || l.retry_at > now())) return { ok: true, id: l.id, cached: true };
     try {
       const meta = metadata((await call("/lists/" + l.id)).json, l.id);
       await store(await fetchList(meta)); return { ok: true, id: l.id };
     } catch (e) {
-      const code = failure(e).code;
+      const code = tell("refresh", e).code;
       await catalog.write((tx) => tx.run("UPDATE plex_lists SET last_attempt=?,last_error=?,retry_at=? WHERE id=?", [now(), code, now() + 30 * 60000, l.id]));
       throw coded(code);
     }
   }
-  const refresh = (id) => queued(() => refreshOne(id, true));
-  const remove = (id) => queued(async () => { await catalog.write((tx) => tx.run("DELETE FROM plex_lists WHERE id=?", [listId(id)])); return { ok: true }; });
+  const refresh = (id) => queued(() => refreshOne(id, true), "refresh");
+  const remove = (id) => queued(async () => { await catalog.write((tx) => tx.run("DELETE FROM plex_lists WHERE id=?", [listId(id)])); return { ok: true }; }, "remove");
   const rematch = () => queued(async () => {
-    for (const l of await catalog.read("SELECT * FROM plex_lists")) await store({ id: l.id, name: l.name, ranked: !!l.ranked, items: parsed(l.entries, []) }, l.last_read, false);
+    for (const l of await slow().read("SELECT * FROM plex_lists")) await store({ id: l.id, name: l.name, ranked: !!l.ranked, items: parsed(l.entries, []) }, l.last_read, false);
     return { ok: true };
-  });
+  }, "rematch");
   const importSnapshot = (snapshot) => queued(async () => {
     if (!snapshot || !Array.isArray(snapshot.configured) || snapshot.configured.length > MAX_LISTS) throw coded("invalid_list");
     const rows = snapshot.configured.map(adapter); // Validate before any writes. Fixture-only internal method; no HTTP route.
     for (const r of rows) await store(r); return { ok: true, count: rows.length };
-  });
+  }, "import");
   async function shelves() {
     try {
       const rows = await safeMembers(), out = new Map();
@@ -299,8 +332,9 @@ function createLists(options = {}) {
         if (!out.has(r.id)) out.set(r.id, { id: "mdblist:" + r.id, name: r.name, source: "mdblist", ranked: !!r.ranked, keys: new Set(), kinds: new Set() });
         out.get(r.id).keys.add(r.key); out.get(r.id).kinds.add(r.kind);
       }
+      fine("chat read");
       return [...out.values()].map((r) => ({ id: r.id, name: r.name, count: r.keys.size, kind: r.kinds.size === 1 ? [...r.kinds][0] : "mixed", source: r.source, ranked: r.ranked })).sort((a, b) => a.name.localeCompare(b.name));
-    } catch (_) { return []; }
+    } catch (e) { tell("chat read", e); return []; }
   }
   async function members(filters = {}) {
     try {
@@ -309,16 +343,17 @@ function createLists(options = {}) {
         const k = r.id + ":" + r.key, old = unique.get(k);
         if (!old || (r.rank != null && (old.rank == null || r.rank < old.rank))) unique.set(k, { key: r.key, rank: r.ranked ? r.rank : null, list_id: "mdblist:" + r.id, name: r.name, source: "mdblist", ranked: !!r.ranked });
       }
+      fine("chat read");
       return [...unique.values()].sort((a, b) => (a.rank == null ? Infinity : a.rank) - (b.rank == null ? Infinity : b.rank) || a.key.localeCompare(b.key));
-    } catch (_) { return []; }
+    } catch (e) { tell("chat read", e); return []; }
   }
   function tick() {
     if (!enabled() || closed || quiet(now())) return Promise.resolve({ ok: true, skipped: true });
     if (!tickPromise) tickPromise = queued(async () => {
       if (!enabled() || quiet(now())) return { ok: true, skipped: true };
-      const due = await catalog.read("SELECT id FROM plex_lists WHERE last_read<=? AND retry_at<=? ORDER BY last_read,last_attempt,id LIMIT 1", [now() - DAY, now()]);
+      const due = await slow().read("SELECT id FROM plex_lists WHERE last_read<=? AND retry_at<=? ORDER BY last_read,last_attempt,id LIMIT 1", [now() - DAY, now()]);
       return due.length ? refreshOne(due[0].id, false) : { ok: true, cached: true };
-    }).finally(() => { tickPromise = null; });
+    }, "daily refresh").finally(() => { tickPromise = null; });
     return tickPromise;
   }
   function start() { if (!timer && !closed) { timer = interval(() => { void tick(); }, 60000); if (timer && timer.unref) timer.unref(); } }

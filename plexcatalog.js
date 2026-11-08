@@ -10,6 +10,13 @@ const DAY = 86400000, SEARCH_BUDGET_MS = 400, SEARCH_QUEUE = 4;
 // budget of their own (internal only: a caller's read() is still capped at the search budget), and shelves() keeps its
 // answer until the catalog changes (any write) or the block list does.
 const SHELVES_BUDGET_MS = 2000;
+// plexlists 1.99?? (prod 2026-11-08, /admin/media "Outside lists": "Could not read the outside lists"): admin and background
+// reads - the outside-lists card, a list's add / refresh / rematch matching every film and show - are not chat searches.
+// They get the admin lane (catalog.admin: the same queue and connection, this bound, never a caller's choice). Chat paths
+// keep read() and its search budget. Measured on prod (read-only, 255,833 rows): a list's match reads every film (30,682 in
+// 1,142 ms with no budget) and every show (4,257 in 446 ms) - both past 400 ms, so an add failed there too. About 3.5x that.
+const ADMIN_BUDGET_MS = 4000;
+const MAX_BUDGET_MS = Math.max(SHELVES_BUDGET_MS, ADMIN_BUDGET_MS);
 const DEFAULT_BLOCK = "X,XXX,AO,R18,R18+";
 const KEY = /^\d{1,12}$/;
 const text = (v, max = 200) => typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -233,7 +240,7 @@ function createCatalog(options = {}) {
       if (!searchDb) searchDb = await connect(sqlite3.OPEN_READONLY);
       let expired = false, retry = null;
       const interrupt = () => { try { searchDb.interrupt(); } catch (_) {} };
-      const budget = Math.max(1, Math.min(SHELVES_BUDGET_MS, number(job.budgetMs, SEARCH_BUDGET_MS)));
+      const budget = Math.max(1, Math.min(MAX_BUDGET_MS, number(job.budgetMs, SEARCH_BUDGET_MS)));
       if (options.onRead) try { options.onRead({ sql: job.sql, budgetMs: budget }); } catch (_) { /* a test's observer */ }
       const t = setTimeout(() => {
         expired = true; interrupt();
@@ -289,7 +296,7 @@ function createCatalog(options = {}) {
     }
     return where.join(" AND ");
   }
-  async function safeRows(raw) {
+  async function safeRows(raw, rd = read) {
     const block = ratings(settings().clerk_block_ratings);
     const result = raw.map((r) => {
       const obj = crow(parsed(r.data, {}));
@@ -302,23 +309,29 @@ function createCatalog(options = {}) {
     const by = new Map();
     for (let i = 0; i < keys.length; i += 400) {
       const part = keys.slice(i, i + 400);
-      const members = await read("SELECT m.key,s.name FROM plex_shelf_members m JOIN plex_shelves s ON s.key=m.shelf WHERE m.key IN (" + part.map(() => "?").join(",") + ")", part);
+      const members = await rd("SELECT m.key,s.name FROM plex_shelf_members m JOIN plex_shelves s ON s.key=m.shelf WHERE m.key IN (" + part.map(() => "?").join(",") + ")", part);
       for (const m of members) { if (!by.has(m.key)) by.set(m.key, []); by.get(m.key).push(m.name); }
     }
     for (const r of result) r.shelves = by.get(r.key) || [];
     return result;
   }
-  async function rows(filters = {}) {
+  // rows / getByKeys on a lane: read() (chat paths, the search budget) or adminRead (the admin lane below)
+  async function rowsOn(rd, filters = {}) {
     const args = [], where = condition(filters, args);
-    return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where, args));
+    return safeRows(await rd("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where, args), rd);
   }
-  async function getByKeys(keys) {
+  async function getByKeysOn(rd, keys) {
     const order = [...new Set((keys || []).map(String))];
     const out = [];
-    for (let i = 0; i < order.length; i += 400) out.push(...await rows({ keys: order.slice(i, i + 400) }));
+    for (let i = 0; i < order.length; i += 400) out.push(...await rowsOn(rd, { keys: order.slice(i, i + 400) }));
     const by = new Map(out.map((r) => [r.key, r]));
     return order.map((key) => by.get(key)).filter(Boolean);
   }
+  async function rows(filters = {}) { return rowsOn(read, filters); }
+  async function getByKeys(keys) { return getByKeysOn(read, keys); }
+  // plexlists 1.99??: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
+  const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS);
+  const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys) };
   async function search(query, filters = {}) {
     const words = fold(query).split(" ").filter(Boolean).slice(0, 20);
     if (!words.length) return [];
@@ -682,7 +695,7 @@ function createCatalog(options = {}) {
   let outsideLists;
   function listsCache() {
     if (!outsideLists) outsideLists = options.lists || require("./plexlists").createLists({
-      catalog: { write, read, rows, getByKeys }, settings, now,
+      catalog: { write, read, rows, getByKeys, admin }, settings, now,
       permissions: options.permissions, guard: options.guard
     });
     return outsideLists;
@@ -810,7 +823,7 @@ function createCatalog(options = {}) {
     listsCache().register(app, { addUser, noTimers });
     if (!noTimers) start();
   }
-  return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, importSnapshot, exportSnapshot, start, close, register, file, inUse };
+  return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, admin, importSnapshot, exportSnapshot, start, close, register, file, inUse };
 }
 
 let singleton;
@@ -821,5 +834,7 @@ const current = () => {
   }
   return singleton;
 };
-module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, SEARCH_QUEUE };
+module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
+// plexlists 1.99??: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
+module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args) };
