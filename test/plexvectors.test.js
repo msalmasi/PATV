@@ -742,3 +742,47 @@ test("a cache from before plex_vectors.rev (prod's) gets the column once; its ol
   await vectors.idle();
   assert.equal(vectors.stats().films, 2);
 });
+
+// plexvectors 1.99?? review: the bot sends its model and dims with EVERY embed_todo (pepe_plexembed EmbedJob.step: op
+// "embed_todo", model, dim, limit, after - every ~1.6 s for hours during a backfill), and todo() hands them to configure().
+// configure() threw the films' index away (invalidate) even when the stored pair was the same - so on prod's one shared
+// instance every backfill step dropped every film's vector, the next person's ask found no index (cold: a whole re-read of
+// 30,682 films on the background lane, longer than the cold ask's wait on prod's CPU -> word search), and a library past the
+// memory cap lost its 10-minute back-off (filmRefused) and was read in full again on every ask.
+test("the bot's embed_todo (its model and dims on every call) keeps the films' index and the memory cap's back-off; a real model change drops them", async (t) => {
+  const snapshot = fixture();
+  for (let i = 0; i < 300; i++) snapshot.rows.push(row(5000 + i, "Synthetic film " + i));
+  const h = await setup(t, snapshot), c = counting(h);
+  const vectors = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT });   // one instance, as on prod
+  const films = Array.from({ length: 300 }, (_, i) => String(5000 + i)), current = await h.catalog.getByKeys(films);
+  for (let i = 0; i < current.length; i += 64)
+    assert.equal((await vectors.put({ model: MODEL, dim: 4, vecs: current.slice(i, i + 64).map((r) => ({ key: r.key, hash: textHash(documentText(r)),
+      ...quantize([1, (Number(r.key) % 7) / 7, 0, 0]) })) })).stored, Math.min(64, current.length - i));
+  const ask = () => vectors.nearest({ qvec: qvec([1, 0, 0, 0]), kind: "movie", keys: films });
+  await ask(); await vectors.idle();
+  assert.equal((await ask()).length, 30);
+  assert.equal(vectors.stats().films, 300);
+  c.reset();
+  // three backfill steps, exactly as the bot makes them (the same model and dims every time)
+  for (let i = 0; i < 3; i++) assert.equal((await vectors.todo({ model: MODEL, dim: 4, limit: 32 })).ok, true);
+  assert.equal(vectors.stats().films, 300, "an embed_todo with the stored model keeps the films' index");
+  assert.equal((await ask()).length, 30);
+  await vectors.idle();
+  assert.equal(c.total(), 0, "no film vector read again after the bot's embed_todo: " + JSON.stringify(c.blobs));
+  // a real model change (the registry moved): the old model's index goes, and a new-model ask never uses it
+  assert.equal((await vectors.todo({ model: "fixture-embedding-v2", dim: 4, limit: 32 })).ok, true);
+  assert.equal(vectors.stats().films, 0, "a model change drops the old model's index");
+  assert.deepEqual(await vectors.nearest({ qvec: qvec([1, 0, 0, 0], "fixture-embedding-v2"), kind: "movie", keys: films }), []);
+  await vectors.idle();
+  // the memory cap's back-off survives the bot's embed_todo too
+  const logs = [], capped = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT, filmMaxBytes: 1,
+    log: { log: (l) => logs.push(String(l)), error: (l) => logs.push(String(l)) } });
+  await capped.configure({ model: MODEL, dim: 4 });
+  const cappedAsk = () => capped.nearest({ qvec: qvec([1, 0, 0, 0]), kind: "movie", keys: films });
+  assert.deepEqual(await cappedAsk(), []);
+  await capped.idle();
+  assert.ok(logs.some((l) => /films refused/.test(l)), logs.join(" / "));
+  c.reset();
+  for (let i = 0; i < 3; i++) { await capped.todo({ model: MODEL, dim: 4, limit: 32 }); assert.deepEqual(await cappedAsk(), []); await capped.idle(); }
+  assert.equal(c.total(), 0, "past the cap: not read again on every ask between the bot's embed_todo calls: " + JSON.stringify(c.blobs));
+});
