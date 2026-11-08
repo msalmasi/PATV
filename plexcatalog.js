@@ -283,15 +283,17 @@ function createCatalog(options = {}) {
       finally { clearTimeout(t); clearInterval(retry); }
     })().then(job.resolve, job.reject).finally(() => { running = false; pump(); });
   }
-  async function state() {
-    const rows = await read("SELECT key,value FROM plex_catalog_state");
+  async function state(rd = read) {
+    const rows = await rd("SELECT key,value FROM plex_catalog_state");
     return Object.fromEntries(rows.map((r) => [r.key, parsed(r.value, null)]));
   }
   const putState = (tx, key, value) => tx.run("INSERT INTO plex_catalog_state(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [key, JSON.stringify(value)]);
-  async function status() {
+  async function status() { return statusOn(read); }
+  // 1.99?? plexclerk (rebase onto 1.99amd): status on a lane - admin.roots() reads it on the admin lane
+  async function statusOn(rd) {
     try {
-      const s = await state(), sections = await read("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
-      const count = (await read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n;
+      const s = await state(rd), sections = await rd("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
+      const count = (await rd("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n;
       // 1.99alx catfix: an unfinished full sweep - how far it got (the next run carries on from there)
       const p = s.progress && typeof s.progress === "object" ? s.progress : null;
       const allowedIds = sections.filter((x) => x.policy === "allowed").map((x) => String(x.id));
@@ -361,7 +363,10 @@ function createCatalog(options = {}) {
   async function getByKeys(keys) { return getByKeysOn(read, keys); }
   // plexlists 1.99amd: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
   const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS, true);
-  const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys) };
+  // 1.99?? plexclerk (rebase onto 1.99amd): + roots - a list's matching reads the clerk's kept films and shows, on this lane when
+  // they have to be read (one indexed read for every list, not two whole-kind reads per list)
+  const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys),
+    roots: () => rootsOn(adminRead, adminRead) };
   async function search(query, filters = {}) {
     const typed = fold(query).split(" ").filter(Boolean), meaningful = typed.filter((w) => !STOPWORDS.has(w));
     const words = (meaningful.length ? meaningful : typed).slice(0, 20);
@@ -391,8 +396,11 @@ function createCatalog(options = {}) {
   }
   /** 1.99?? plexclerk: every visible film and show, read once per catalog version (see ROOTS_BUDGET_MS) and shared: the rows
    *  are frozen, each caller gets its own arrays. A failed read is not kept (the next caller tries again). */
-  async function roots() {
-    const s = await status();
+  async function roots() { return rootsOn(read, (sql, args) => queued(sql, args, ROOTS_BUDGET_MS)); }
+  // 1.99?? plexclerk (rebase onto 1.99amd): roots on a lane - rd for the status and shelf reads, rootsRead for the one big read.
+  // The clerk's lane (read + the shelves' budget) and the admin lane (admin.roots) share one kept answer.
+  async function rootsOn(rd, rootsRead) {
+    const s = await statusOn(rd);
     // 1.99?? plexclerk review: never an empty library standing in for one that isn't ready or can't be read (status() says
     // ready:false when its own read fails) - a list rematch would store 0 members for every list
     if (!s.ready) throw coded("catalog_down", "catalog is not ready");
@@ -401,8 +409,8 @@ function createCatalog(options = {}) {
     if (!rootsKept || rootsKept.key !== key || now() - rootsKept.at > ROOTS_MAX_AGE_MS) {
       const value = (async () => {
         const args = [], where = condition({}, args, block);
-        const rows = await safeRows(await queued("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
-          " AND c.type IN ('movie','show')", args, ROOTS_BUDGET_MS));
+        const rows = await safeRows(await rootsRead("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
+          " AND c.type IN ('movie','show')", args), rd);
         for (const r of rows) Object.freeze(r);
         return { movies: rows.filter((r) => r.type === "movie"), shows: rows.filter((r) => r.type === "show") };
       })();
@@ -906,4 +914,5 @@ module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTi
 // 1.99?? plexclerk review: roots / byTitle too - production's finder and lists use this module, not an instance
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "roots", "byTitle", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
 // plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
-module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args) };
+module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args),
+  roots: (...args) => current().admin.roots(...args) };   // 1.99?? plexclerk (rebase onto 1.99amd): a list's matching

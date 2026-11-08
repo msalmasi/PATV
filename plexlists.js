@@ -196,9 +196,11 @@ function createLists(options = {}) {
   }
   async function match(entries) {
     // 1.99?? plexclerk: the catalog's kept films+shows (one indexed read) - two whole-kind reads were each past the read budget at
-    // the real library's size, so adding a list always failed (lists_unavailable)
-    const rows = typeof catalog.roots === "function" ? await catalog.roots().then((r) => [...r.movies, ...r.shows])
-      : [...await catalog.rows({ kind: "movie" }), ...await catalog.rows({ kind: "show" })];
+    // the real library's size, so adding a list always failed (lists_unavailable). Rebased onto 1.99amd: on the admin lane
+    // (admin.roots - the clerk's kept answer, read with the admin budget when it has to be read), once for every list
+    const db = slow();
+    const rows = typeof db.roots === "function" ? await db.roots().then((r) => [...r.movies, ...r.shows])
+      : [...await db.rows({ kind: "movie" }), ...await db.rows({ kind: "show" })];
     const index = new Map();
     for (const r of rows) for (const [field, value] of [["imdb", r.imdb], ["tmdb", r.tmdb], ["tvdb", r.type === "show" && r.tvdb], ["title", fold(r.title)]]) {
       if (!value) continue; const id = r.type + ":" + field + ":" + value;
@@ -216,7 +218,7 @@ function createLists(options = {}) {
         && !["imdb", "tmdb", ...(r.type === "show" ? ["tvdb"] : [])].some((k) => r[k] && c[k] && String(r[k]) !== String(c[k])));
       for (const hit of hits) members.push({ key: hit.key, rank: r.rank, item_no });
     });
-    const safe = new Set((await slow().getByKeys([...new Set(members.map((m) => m.key))])).map((r) => r.key));
+    const safe = new Set((await db.getByKeys([...new Set(members.map((m) => m.key))])).map((r) => r.key));
     return members.filter((m) => safe.has(m.key));
   }
   async function store(value, readAt = now(), replace = true) {
@@ -246,9 +248,14 @@ function createLists(options = {}) {
       const conditions = [...where], values = [...args];
       let base = "SELECT m.key,m.rank,m.item_no,l.id,l.name,l.ranked";
       if (final) base += ",c.type AS current_type";
-      // 1.99?? plexclerk: CROSS JOIN keeps the members as the outer loop (SQLite never reorders it) - left to the planner, the final
-      // read scanned the whole catalog first (json_valid on every row: 773 ms on prod, past the budget -> lists_unavailable)
-      base += final ? " FROM plex_list_members m CROSS JOIN plex_lists l ON l.id=m.list_id" : " FROM plex_list_members m JOIN plex_lists l ON l.id=m.list_id";
+      // plexlists 1.99amd + plexclerk (prod 2026-11-08): left to the planner (no ANALYZE stats) SQLite put plex_catalog in the outer
+      // loop ("SCAN c") - every row's JSON checked to find the members of no list at all: 651-773 ms over 255,833 rows, past the
+      // budget. A CROSS JOIN fixes the loop order (SQLite keeps its left table outside), the same for both reads: the members ->
+      // their list by id -> each member's catalog row by key; a key lookup starts at plex_list_member_key. The cost follows the
+      // members. Measured offline at the real library's size (the two orders alternated, 4 rounds): a full read costs the same
+      // either way (0 lists 0.1 ms, 20 x 1,000 members ~147 ms, 20 x 20,000 ~3.1-3.4 s), a list's members by id use the same
+      // index either way, and a key lookup starts at plex_list_member_key (1.3-1.8 ms vs 2.1-2.8 ms lists-first at 20 x 1,000).
+      base += " FROM plex_list_members m CROSS JOIN plex_lists l ON l.id=m.list_id";
       if (final) {
         base += " CROSS JOIN plex_catalog c ON c.key=m.key CROSS JOIN plex_sections cs ON cs.id=c.section";
         // Membership contains only movie/show roots. Recheck both stored projections together with

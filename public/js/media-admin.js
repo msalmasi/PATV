@@ -114,6 +114,8 @@
   function clWhy(e, otherwise) {
     switch (e && e.code) {
       case "lists_busy": return lt("busy", "The catalog is busy right now. Try again in a minute.");
+      // 1.99?? plexclerk (owner 2026-11-08, "unable to get external lists"): the key's own refusal says so
+      case "needs_key": return lt("why_needs_key", "Needs MDBLIST_API_KEY on the server (and a restart after adding it).");
       case "invalid_list": return lt("why_invalid_list", "Use an MDBList list number, or a list link like https://mdblist.com/lists/user-name/list-name.");
       case "not_found": return lt("why_not_found", "MDBList has no list there. Check the number or the link.");
       case "ambiguous_list": return lt("why_ambiguous_list", "That link matches more than one list. Add the list by its number instead.");
