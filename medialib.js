@@ -1025,6 +1025,7 @@ async function padState(user, room) {
   if (!R) return null;
   const s = await session(R.id);
   const q = await require("./mediaqueue").activeFor(R.id);
+  const A = await access(user);
   let library = null;
   if (s || q) {
     const p = s ? (await getQuery("SELECT user_id, username FROM media_plays WHERE id = ?", [s.play_id]))[0] || {} : {};
@@ -1040,6 +1041,28 @@ async function padState(user, room) {
                 // titles after this one (a replace ends them too)
                 can_replace: !!(user && user.userId && !(s && s.queue_id && !q) && (await mayControl(user, R.id, starter))),
                 left: q ? Math.max(0, q.items.length - q.pos - 1) : 0 };
+    // 1.99?? plexqueue (owner 2026-11-08: "i should get the option of adding to the queue as well"): what /stage's "+" offers THIS speaker here
+    // (lineInfo - the sheet's own rules), so Pepe can offer "queue it" beside "replace it": queue_as "append" (the END of a running queue they
+    // may grow) | "after" (a queue of their own lined up after what's on) | null (queue_why: queue_off / line_full / queue_held / busy / off);
+    // line = the pad's line as they stand in it; booking_due = a booked stream plays next (no replace then - /stage hides it too, preflight
+    // would say booking_next); eta_sec = about when what they'd add starts; queue_as is there at all = this site takes play mode "queue"
+    const MQ = require("./mediaqueue");
+    const on = await onNow(R).catch(() => null);
+    const li = on && !on.busy ? await lineInfo(user, R, on, A) : null;
+    library.can_after = !!(li && li.can_after);
+    library.queue_as = li && li.qOn ? (li.can_add ? "append" : li.can_after ? "after" : null) : null;
+    library.queue_why = library.queue_as ? null : !li ? "busy" : !A.ok ? "off" : !li.qOn ? "queue_off" : li.held ? "queue_held" : li.line_full ? "line_full" : "busy";
+    library.line = li ? { count: li.line.length, place: li.mineH ? li.line.indexOf(li.mineH) + 1 : null, mine: li.mineH ? li.mineH.count : 0, full: li.line_full,
+                          max: MQ.AFTER_MAX, held: li.held } : null;
+    library.booking_due = li && li.booking ? li.booking : null;
+    if (li && li.booking) library.can_replace = false;
+    library.eta_sec = null;
+    if (library.queue_as === "after") library.eta_sec = await MQ.lineEta(R.id, on, li.line, li.mineH ? li.line.indexOf(li.mineH) : Infinity).catch(() => null);
+    else if (library.queue_as === "append") {
+      const brk = await breakSec(R.id).catch(() => 0), rest = on.q.items.slice(on.q.pos + 1);
+      library.eta_sec = Math.round((on.s && Number(on.s.queue_id) === Number(on.q.id) ? MQ.liveLeft(on.s) : Number((on.q.items[on.q.pos] || {}).duration) || 0)
+                                   + MQ.totalSec(rest) + brk * (rest.length + 1));
+    }
     // plexreplace review fix: the slot a replace names (Pepe sends it back with the yes - replace_changed if it isn't what's on by then)
     if (library.can_replace) library.slot_id = q ? q.slot_id : s.slot_id;
   }
@@ -1047,7 +1070,6 @@ async function padState(user, room) {
   const RS = await rooms.stageSettings(R.id).catch(() => null);
   const slots = Math.max(1, Number(RS && RS.slot_count) || 1);
   const own = user && user.userId ? await safeQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]) : [];
-  const A = await access(user);
   const S = conf.get();
   const member = isMemberHow(A.how);
   let daily_left = null;
@@ -1081,6 +1103,36 @@ async function state(user) {
     queues: await require("./mediaqueue").views({ all: true }),
     queue_on: S.library_queue !== false,
   };
+}
+/**
+ * What "+ Add to the queue" means for `user` on pad R while `cur` (onNow, not busy) is on - ONE rule source for /stage's sheet (mine's on_pad)
+ * and, 1.99?? plexqueue, Pepe's padState:
+ *   upnext2 (E): a running queue you may grow (its starter, a library admin on a free one - mayGrow): can_add; or titles behind a single title
+ *   (a queue of yours that starts when it ends - mediaqueue.after: whoever may ▶ Play here; one already waiting: its owner grows it).
+ *   upnext3 (1.99alm, item 5): "+ Line up my queue after this one" behind someone else's running queue too, and in turn behind others lined
+ *   up - your own row grows; a full line (AFTER_MAX people) or a queue of yours paused for a booking: no (can_after).
+ * -> {qOn, can_add, can_after, line_full, line_max, after (the sheet's), booking ({at, mine} - a booking whose time came: it plays next), held
+ *    (a queue of yours paused for one), line (lineFor), mineH (your row of it)}
+ */
+async function lineInfo(user, R, cur, A) {
+  const Qm = require("./mediaqueue"), qOn = conf.get().library_queue !== false && !!(A && A.ok);
+  const out = { qOn, can_add: false, can_after: false, line_full: false, line_max: Qm.AFTER_MAX, after: null, booking: null, held: false, line: [], mineH: null };
+  if (!user || !user.userId || !cur || cur.busy) return out;
+  if (cur.q) out.can_add = !!(qOn && (await Qm.mayGrow(user, cur.q)));
+  const line = await Qm.lineFor(R.id);
+  const mineH = line.find((h) => h.row && h.row.user_id === user.userId) || null;
+  const people = line.filter((h) => h.kind === "after").length;
+  out.line = line;
+  out.mineH = mineH;
+  out.held = !!(mineH && mineH.kind === "resume");
+  if (!out.can_add) out.can_after = !!(qOn && !out.held && ((mineH && mineH.kind === "after") || people < Qm.AFTER_MAX));
+  if (!out.can_add && !mineH && qOn && people >= Qm.AFTER_MAX) out.line_full = true;
+  // (ux 8: a paused queue of yours that was paid - its ✕ says what it paid for isn't refunded)
+  if (line.length) out.after = { count: mineH ? mineH.count : line[0].count, mine: !!mineH, place: mineH ? line.indexOf(mineH) + 1 : null, line: line.length,
+                                 ...(out.held ? { held: true, ...(Number(mineH.row.per_hour) > 0 && Number(mineH.row.paid_hours) > 0 ? { paid: true } : {}) } : {}) };
+  const bk = line.find((h) => h.kind === "booking");
+  if (bk) out.booking = { at: bk.at, mine: bk.user_id === user.userId };
+  return out;
 }
 /** The Go-live page: may I play, on what terms, and what of mine is playing. */
 async function mine(user, roomId) {
@@ -1117,24 +1169,16 @@ async function mine(user, roomId) {
       if (cur && !cur.busy) {
         out.on_pad = { title: cur.title || null, queue: !!cur.q, left: cur.left, by: cur.by || null, mine: !!(cur.starter && cur.starter === user.userId),
                        can_replace: !!(A.ok && (await mayControl(user, R.id, cur.starter))) };
-        // upnext2 (E): "+ Add to the queue" - a running queue you may grow (its starter, a library admin on a free one), or titles behind a single
-        // title (a queue of yours that starts when it ends - mediaqueue.after: whoever may ▶ Play here; one already waiting: its owner grows it)
-        const Qm = require("./mediaqueue"), qOn = conf.get().library_queue !== false && A.ok;
-        if (cur.q) out.on_pad.can_add = !!(qOn && (await Qm.mayGrow(user, cur.q)));
-        // upnext3 (1.99alm, item 5): "+ Line up my queue after this one" behind someone else's running queue too, and in turn behind others lined
-        // up - your own row grows; a full line (AFTER_MAX people) or a queue of yours paused for a booking: no
-        const line = await Qm.lineFor(R.id);
-        const mineH = line.find((h) => h.row && h.row.user_id === user.userId) || null;
-        const people = line.filter((h) => h.kind === "after").length;
-        if (!out.on_pad.can_add) out.on_pad.can_after = !!(qOn && !(mineH && mineH.kind === "resume") && ((mineH && mineH.kind === "after") || people < Qm.AFTER_MAX));
+        // upnext2 (E) / upnext3 (1.99alm): "+ Add to the queue" / "+ Line up my queue" - lineInfo (1.99?? plexqueue: the same rules feed Pepe's
+        // padState, so chat offers exactly what this sheet does)
+        const li = await lineInfo(user, R, cur, A);
+        if (cur.q) out.on_pad.can_add = li.can_add;
+        if (!out.on_pad.can_add) out.on_pad.can_after = li.can_after;
         // (upnext3 review, ux 7: a full line says so - not only the permissions sentence)
-        if (!out.on_pad.can_add && !mineH && qOn && people >= Qm.AFTER_MAX) { out.on_pad.line_full = true; out.on_pad.line_max = Qm.AFTER_MAX; }
-        // (ux 8: a paused queue of yours that was paid - its ✕ says what it paid for isn't refunded)
-        if (line.length) out.on_pad.after = { count: mineH ? mineH.count : line[0].count, mine: !!mineH, place: mineH ? line.indexOf(mineH) + 1 : null, line: line.length,
-                                              ...(mineH && mineH.kind === "resume" ? { held: true, ...(Number(mineH.row.per_hour) > 0 && Number(mineH.row.paid_hours) > 0 ? { paid: true } : {}) } : {}) };
+        if (li.line_full) { out.on_pad.line_full = true; out.on_pad.line_max = li.line_max; }
+        if (li.after) out.on_pad.after = li.after;
         // (item 10: a booking whose time came plays right after this title - ▶ Play this instead waits for it: booking_next)
-        const bk = line.find((h) => h.kind === "booking");
-        if (bk) { out.on_pad.booking = { at: bk.at, mine: bk.user_id === user.userId }; out.on_pad.can_replace = false; }
+        if (li.booking) { out.on_pad.booking = li.booking; out.on_pad.can_replace = false; }
         if (out.on_pad.can_replace) out.on_pad.slot_id = cur.slot_id;   // (plexreplace review fix: the sheet's replace names it)
       } else if (cur && cur.busy) out.on_pad = { title: null, queue: true, left: 0, by: null, mine: false, can_replace: false };
     } catch (e) { /* the sheet still works: the server refuses a busy pad with can_replace */ }
@@ -1198,7 +1242,8 @@ async function player(user, room) {
   if (can) {
     const all = await mayControl(user, R.id, null);
     const rows = await getQuery("SELECT ts, user_id, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 24", [R.id]);
-    out.log = rows.filter((l) => all || !["queue_after", "queue_remove"].includes(l.action) || (user && l.user_id === user.userId))
+    // (1.99?? plexqueue: "pepe_after" = a line-up asked for in chat - the same privacy as the website's own queue_after row)
+    out.log = rows.filter((l) => all || !["queue_after", "queue_remove", "pepe_after"].includes(l.action) || (user && l.user_id === user.userId))
       .slice(0, 8).map((l) => ({ ts: l.ts, username: l.username, action: l.action, detail: l.detail }));
   }
   return out;

@@ -973,6 +973,53 @@ async function addCostFor(roomId, secs) {
   if (!q) return null;
   return addCost(q, await I().session(roomId), secs);
 }
+// ── 1.99?? plexqueue: about WHEN something added now starts (Pepe's "#3 in the queue - it starts in about 1h10") ──
+/** What's left of the title on now (a pad's media_sessions row), by its live position: the saved position + what has played since its last
+ *  look, plus what's left of its station break. Seconds. */
+function liveLeft(s) {
+  if (!s) return 0;
+  const pos = Math.max(0, Number(s.position) || 0) + (s.state === "playing" ? Math.max(0, (NOW() - Number(s.updated || NOW())) / 1000) : 0);
+  const brk = s.state === "break" && s.brk_until ? Math.max(0, (Number(s.brk_until) - NOW()) / 1000) : 0;
+  return Math.max(0, (Number(s.duration) || 0) - pos) + brk;
+}
+/** What's left of queue q's title on now: its session's (liveLeft) or - between two titles - the whole next title + what's left of its break */
+function queueNowLeft(q, s) {
+  if (s && Number(s.queue_id) === Number(q.id)) return liveLeft(s);
+  const cur = q.items[q.pos];
+  return (cur ? Math.max(0, Number(cur.duration) || 0) : 0) + (q.brk && q.brk.until ? Math.max(0, (Number(q.brk.until) - NOW()) / 1000) : 0);
+}
+/** About how long until the next row lined up on pad roomId starts - what's on (onNow's `cur`: a single title's live rest, a running queue's
+ *  titles still to come) + everyone ahead in `line` (lineFor; only its first `upto`: a booking's runtime, a paused queue's rest, a person's
+ *  titles) + the pad's station break at every title change on the way. Seconds, rounded (Pepe says "about"). */
+async function lineEta(roomId, cur, line, upto = Infinity) {
+  const brk = await L().breakSec(roomId).catch(() => 0);
+  let sec = 0, changes = 1;                                           // (1: the hand-over to it)
+  if (cur && cur.q) {
+    const rest = cur.q.items.slice(cur.q.pos + 1);
+    sec += queueNowLeft(cur.q, cur.s) + totalSec(rest);
+    changes += rest.length;
+  } else if (cur) sec += liveLeft(cur.s);
+  for (const h of (line || []).slice(0, upto)) {
+    if (h.kind === "booking") sec += Math.max(0, (Number(h.bk.minutes) || 0) - BOOK_BUFFER_MIN) * 60;
+    else if (h.kind === "resume") {
+      const b = h.row.brk || {};
+      sec += totalSec(h.row.items.slice(Math.max(0, Number(b.pos != null ? b.pos : h.row.pos) || 0)), Number(b.offset) || 0);
+    } else sec += totalSec(h.row.items, Number(((h.row.prefs || {}).req || {}).offset) || 0);
+    changes += Math.max(1, Number(h.count) || 1);
+  }
+  return Math.round(sec + brk * changes);
+}
+/** What lining `secs` of titles up after what's on would cost `user` (A = their access) - the figure after() wants confirmed: on a row of
+ *  theirs already waiting, what it ADDS to it; else a fresh queue's estimate (priceView). 0 = free. */
+async function afterCostFor(user, roomId, secs, A) {
+  const S = conf.get();
+  const w = user && user.userId ? (await lineRows(roomId)).find((x) => x.user_id === user.userId && x.resume == null) : null;
+  if (w) {
+    const tot = totalSec(w.items, Number(((w.prefs || {}).req || {}).offset) || 0);
+    return Math.max(0, estimate(w.per_hour, tot + Math.max(0, Number(secs) || 0)) - estimate(w.per_hour, tot));
+  }
+  return priceView(A || { free: true }, S, Math.max(0, Number(secs) || 0)).estimate;
+}
 /** The show's next episode after `cur` (Plex's allLeaves in watching order, specials skipped unless `cur` is one) -> a slim
  *  title, or null (a movie, the last episode, an older mediactl without show_key). */
 async function nextEpisodeOf(cur) {
@@ -1027,12 +1074,21 @@ async function addNext(user, room, keys, opts = {}) {
       if (est == null || est === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT to the queue as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
       if (Math.floor(Number(est)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
     }
-    q.items.splice(q.pos + 1, 0, ...put);
+    // 1.99?? plexqueue: opts.at "end" = /stage's "+ Add to the queue that's playing" (edit op add: on the END) - Pepe's "queue it"; else right
+    // after the title on now (Pepe's "play it next"). ahead = titles still to come before the first one added (its place = ahead + 1)
+    const end = !!(opts && opts.at === "end");
+    const ahead = end ? Math.max(0, q.items.length - q.pos - 1) : 0;
+    const between = end ? totalSec(q.items.slice(q.pos + 1)) : 0;
+    if (end) q.items.push(...put);
+    else q.items.splice(q.pos + 1, 0, ...put);
     const slot = await stage.getSlot(q.slot_id);
     if (slot) await stage.libraryExtend(q.slot_id, Math.ceil(((slot.live_ms || 0) / 1000 + left) / 60) + I().SLACK_MIN).catch(() => {});
     await saveItems(q);
-    await I().logControl(user, R.id, "queue_next", `${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: q.id });
-    return { ok: true, added: put.length, items: q.items.length, next: fmtTitle(put[0]), queue_id: q.id, cost };
+    await I().logControl(user, R.id, end ? "queue_add" : "queue_next", `${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: q.id });
+    const brk = await L().breakSec(R.id).catch(() => 0);
+    const eta_sec = Math.round(queueNowLeft(q, s) + between + brk * (ahead + 1));
+    return { ok: true, added: put.length, items: q.items.length, next: fmtTitle(put[0]), queue_id: q.id, cost, ahead, place: ahead + 1, eta_sec,
+             per_hour: Number(q.per_hour) || 0 };
   });
 }
 
@@ -1508,7 +1564,20 @@ async function after(user, b = {}) {
   return withLock(R.id, async () => {
     const cur = await I().onNow(R);
     if (cur && cur.busy) throw refuse(409, "A queue is starting on this pad - try again in a moment.", { code: "busy_queue" });
-    if (!cur) throw refuse(409, "Nothing is playing on this pad - ▶ Play starts it now.", { code: "nothing_on" });
+    if (!cur) {
+      // 1.99?? plexqueue: a queue still 'starting' (no session yet) is what's on - not "nothing is playing" (the site lens's finding g)
+      if ((await getQuery("SELECT 1 FROM media_queues WHERE room_id = ? AND state = 'starting' LIMIT 1", [R.id]))[0]) {
+        throw refuse(409, "A queue is starting on this pad - try again in a moment.", { code: "busy_queue" });
+      }
+      // ... and a live stream / an embed holding every stage slot of the pad isn't either: a Plex pick lines up only behind a Plex title - the
+      // stage's own way forward is a booked time (/stage "When: Later")
+      const RS = await rooms.stageSettings(R.id).catch(() => null);
+      const open = await getQuery("SELECT id FROM stage_slots WHERE room_id = ? AND status IN ('waiting','active')", [R.id]).catch(() => []);
+      if (open.length >= Math.max(1, Number(RS && RS.slot_count) || 1)) {
+        throw refuse(409, "Someone is live on this pad's stage - Plex picks line up only behind a Plex title; book a time for it on /stage.", { code: "slot_taken" });
+      }
+      throw refuse(409, "Nothing is playing on this pad - ▶ Play starts it now.", { code: "nothing_on" });
+    }
     // a running queue you may grow (yours, or a free one for a library admin): "+ Add to the queue that's playing" (edit op add)
     if (cur.q && (await mayGrow(user, cur.q))) throw refuse(409, "Your queue is playing on this pad - add to it.", { code: "queue_on" });
     const behind = String(cur.slot_id);
@@ -1544,8 +1613,10 @@ async function after(user, b = {}) {
       await runQuery("UPDATE media_queues SET prefs = ? WHERE id = ?", [JSON.stringify({ ...wait.prefs, est: (wait.prefs.est || 0) + cost }), wait.id]);
       await I().logControl(user, R.id, "queue_after", `+${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: wait.id });
       const ln = await lineFor(R.id);
+      const at = ln.findIndex((h) => h.row && h.row.id === wait.id) + 1;
+      // 1.99?? plexqueue: + about when it starts and its rate (Pepe says where it landed)
       return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0,
-               place: ln.findIndex((h) => h.row && h.row.id === wait.id) + 1, line: ln.length };
+               place: at, line: ln.length, eta_sec: await lineEta(R.id, cur, ln, Math.max(0, at - 1)), per_hour: Number(wait.per_hour) || 0 };
     }
     if (rows.filter((x) => x.resume == null).length >= AFTER_MAX) {
       throw refuse(409, `${AFTER_MAX} people are lined up after what's on already - try again when one has started.`, { code: "line_full", max: AFTER_MAX });
@@ -1580,8 +1651,42 @@ async function after(user, b = {}) {
                 (pv.per_hour ? `, est. ${pv.estimate} PAT` : ", free"));
     try { stage.stageBump(R.id); } catch (e) { /* the 2 s cache: pages see it then */ }
     return { ok: true, after: true, queue_id: ins.id, added: built.items.length, items: built.items.length, total_sec: built.total_sec, estimate: pv.estimate,
-             per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0, place, line: ln.length };
+             per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0, place, line: ln.length,
+             eta_sec: await lineEta(R.id, cur, ln, Math.max(0, place - 1)) };       // (1.99?? plexqueue: about when it starts)
   });
+}
+/**
+ * 1.99?? plexqueue (owner 2026-11-08: "when i use !plex to add stuff to the stage, or use the video clerk mode, i seem to get the option to
+ * replace whats on the stage, but i should get the option of adding to the queue as well"): Pepe's "add it to the queue" from chat
+ * (plexchat.js op play mode "queue") = exactly what /stage's "+" does for this person on this pad - one rule source, nothing copied:
+ *   * a running queue they may grow (theirs, or a free one for a library admin - mayGrow): the titles go on its END (addNext at "end" = edit op
+ *     add's rule: the queue's limits, what it adds to its bill confirmed);
+ *   * anything else from Plex on (a single title, someone else's running queue): a queue of their OWN lined up after it (after(): the line's
+ *     rules - who may ▶ Play here, AFTER_MAX people, their own row grows, the points for its first title at the press, billed as it plays);
+ *   * nothing on: nothing_on (Pepe asks a plain play); a live stream holding the pad's every slot: slot_taken; a queue starting: busy_queue.
+ * b = {key, scope?, keys?, estimate?}. -> addNext's / after()'s answer + how ("append" | "after"), place, eta_sec.
+ */
+async function queueFor(user, room, b = {}) {
+  await L().init();
+  if (!user || !user.userId) throw refuse(401, "Sign in first.", { code: "signin" });
+  await I().mustAccess(user);
+  if (conf.get().library_queue === false) throw refuse(403, "Queues are switched off right now.", { code: "queue_off" });
+  const R = await I().roomOf(room);
+  if (!R || !(await stage.seesPad(user, R.id))) throw refuse(404, "No such pad.", { code: "pad" });
+  const keys = Array.isArray(b.keys) && b.keys.length ? b.keys.map(String) : null;
+  const scope = ["season", "season_rest", "series_from"].includes(b.scope) ? b.scope : null;
+  const append = () => addNext(user, R.id, keys || [String(b.key)], { estimate: b.estimate, scope, at: "end" }).then((r) => ({ how: "append", ...r }));
+  const q = await activeFor(R.id);
+  if (q && (await mayGrow(user, q))) {
+    try { return await append(); }
+    catch (e) { if (!(e && e.extra && e.extra.code === "nothing_on")) throw e; }   // (it ended meanwhile: lined up / nothing on, below)
+  }
+  try {
+    return { how: "after", ...(await after(user, { room: R.id, ...(keys ? { keys } : { key: String(b.key), ...(scope ? { scope } : {}) }), estimate: b.estimate })) };
+  } catch (e) {
+    if (e && e.extra && e.extra.code === "queue_on") return append();             // (a queue of theirs started meanwhile: it grows)
+    throw e;
+  }
 }
 /** (inside the pad's lock) What an after-queue waited for is gone (⏹, a replace, a Cut): it ends, its owner gets a notice. slotId = only the
  *  one behind that slot (null: any). Never throws. -> ended one? */
@@ -1719,4 +1824,5 @@ module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostF
                    after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
                    withdrawAfter, moveAfter,                                        // upnext2 review fixes (1.99alc)
                    lineFor, handOver, afterEnded, cancelLine, bookingDue, lineWaits, AFTER_MAX,     // upnext3 (1.99alm): the pad's line
+                   queueFor, lineEta, afterCostFor, liveLeft,                       // 1.99?? plexqueue: Pepe's "add it to the queue"
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)
