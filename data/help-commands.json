@@ -4830,7 +4830,7 @@
     "!clipmic 3"
    ],
    "summary": "Post the audio of a recent mic-up to the room's pad, with its transcript - 500 PAT, 40% to the people heard.",
-   "details": "Pepe keeps the last few **mic-ups** of the room he's listening to (the last 30 per room, up to **15 minutes**). `!clipmic` posts the **last** one to the room's pad as an audio post, with its transcript as the caption; `!clipmic @user` posts that person's last mic-up; `!clipmic 3` merges the last 3 (up to 5). It follows the room's `!clip` switch (admins can still use it while it's off) and costs **500 PAT** (its own price, `clipmic`; admins free) - refunded if posting fails. **40%** of it goes to the people heard in the clip (a likeness royalty, paid by the website after a 24 h hold). Anyone who typed `!likeness clips off` can't be clipped.\n\nNever anyone who is `!incognito` or typed `!bridge hide`: Pepe doesn't keep their audio at all. Anyone heard in a posted clip can tap **Remove me** on it on the website.\n\n**Pepe's own mic-ups** count too: when he speaks on the mic (TTS replies, `!say`, DJ drops, spoken announcements) `!clipmic @pepe` clips his last line, and the website's 🔊 Clip works on his 🎙 lines. Only his TTS voice is kept - never music (Spotify), sound effects or jingles. Admins: `!clipmic status`, `!clipmic pepe on|off`.",
+   "details": "Pepe keeps the last few **mic-ups** of the room he's listening to (the last 30 per room, up to **15 minutes**). `!clipmic` posts the **last** one to the room's pad as an audio post, with its transcript as the caption; `!clipmic @user` posts that person's last mic-up; `!clipmic 3` merges the last 3 (up to 5). It follows the room's `!clip` switch (admins can still use it while it's off) and costs **500 PAT** (its own price, `clipmic`; admins free) - refunded if posting fails. **40%** of it goes to the people heard in the clip (a likeness royalty, paid by the website after a 24 h hold). Anyone who typed `!likeness clips off` can't be clipped.\n\nNever anyone who is `!incognito` or typed `!bridge hide`: Pepe doesn't keep their audio at all. Anyone heard in a posted clip can tap **Remove me** on it on the website.\n\n**Pepe's own mic-ups** count too: when he speaks on the mic (TTS replies, `!say`, DJ drops, spoken announcements) `!clipmic @pepe` clips his last line, and the website's 🔊 Clip works on his 🎙 lines. Only his TTS voice is kept - never music (Spotify), sound effects or jingles.\n\n**Web clips** count too: a push-to-talk clip someone sends from a pad page (🎙 Hold to talk) is kept, once Pepe has played it on the mic, as **that person's** mic-up - the whole recording, credited to them: the website's 🔊 Clip on its 🎙 line, `!clipmic @user` and `!clipmic` take it like anyone's (and so can the soundboard's `!sb addmic`). The same privacy rules apply - a sender who is private when it plays is never kept. Admins: `!clipmic status`, `!clipmic pepe on|off`, `!clipmic web on|off`.",
    "examples": [
     "!clipmic",
     "!clipmic @moxier",
@@ -8795,5 +8795,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "1981b0d0922437c4"
+ "hash": "85ec4d503e4743f2"
 }
