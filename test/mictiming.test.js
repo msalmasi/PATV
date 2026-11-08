@@ -367,6 +367,15 @@ test("card script, pure part: the site's fields; only what changes is sent; the 
     "🤝 Yield is ON for 5 more min (by Boss). Holding back in Players Lounge: Owner One, Bob (on the mic).");
 });
 
+test("card script, review: the confirm window's row says a contest shot keeps at least 350 ms; the second-click retry's row says it is for turning Talk on (letting go always waits 1 s)", () => {
+  const C = card({ online: false, mt: null, actions: [] }).api;
+  const hint = (f) => (C.ROWS.find((r) => r[0] === f) || [])[3] || "";
+  assert.match(hint("confirm"), /contest room/i);
+  assert.match(hint("confirm"), /at least 350 ms/);
+  assert.match(hint("clickretry"), /Talk on/);
+  assert.match(hint("clickretry"), /letting go always waits the full 1 s/i);
+});
+
 test("card script in a fake page: Pepe's values drawn, an edit + Save posts ONE change with only that field, Pepe's answer shows what he stored and clamped", async () => {
   await pepeSays();
   const view = (await api("GET", "boss")).d;
