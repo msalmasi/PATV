@@ -643,7 +643,9 @@ test("catfix: a sweep stopped part-way through a page run or by the maintenance 
   const again = await h.catalog.sync();
   assert.equal(again.ok, true, JSON.stringify(again));
   const first = h.calls.find((c) => c.startsWith("/catalog"));
-  assert.equal(first, "/catalog?section=1&type=1&start=6&size=500", "the page the window stopped, not the section's first");
+  // 1.99?? catfix review: from the page before the one the window stopped (re-read, so a title Plex removed while the sweep
+  // waited can't shift another past the cursor) - not the section's first
+  assert.equal(first, "/catalog?section=1&type=1&start=4&size=500", "the page before the one the window stopped, not the section's first");
   assert.equal(h.calls.some((c) => c.includes("section=1&type=1&start=0")), false);
   assert.equal((await h.catalog.getByKeys(["1", "8", "9"])).length, 3);
 });
@@ -731,4 +733,142 @@ test("catfix: an index built before (rowids not the keys) is rebuilt on open, in
   assert.deepEqual((await again.search("sunrise", { kind: "episode" })).map((r) => r.key), ["21"]);
   assert.deepEqual((await again.search("Comedies")).map((r) => r.key).sort(), ["1", "2"], "the shelf names come back too");
   } finally { await again.close(); }
+});
+
+// ── 1.99?? catfix review: shelves can't stop the sweep, paged shelves swap in whole, a resume re-reads the page before its
+// cursor, an import ends an unfinished sweep, and the stored tables (not only the read filter) stay clean across a resume ──
+/** mediactl 1.7.1's paged /collections for section 1 (section 2 has none); fail(start) -> true makes that page time out. */
+function pagedShelves(h, list, fail = () => false) {
+  h.api.version = "1.7.1";
+  h.api.hook = (route) => {
+    const u = new URL(route, "http://fixture.local");
+    if (u.pathname !== "/collections") return undefined;
+    const start = Number(u.searchParams.get("start")), size = Number(u.searchParams.get("size"));
+    if (fail(start)) return Promise.reject(timeoutError());
+    const all = u.searchParams.get("section") === "1" ? list() : [];
+    const page = all.slice(start, start + size);
+    return { status: 200, json: { ok: true, collections: page, total: all.length, next: start + page.length < all.length ? start + page.length : null } };
+  };
+}
+const shelfSet = (prefix, from, members = ["1", "2"]) => Array.from({ length: 12 }, (_, n) => ({ key: String(from + n), name: prefix + " " + String(n).padStart(2, "0"), members }));
+const shelfNames = async (h) => (await h.catalog.shelves()).shelves.map((s) => s.name);
+
+test("catfix review: on mediactl 1.7.1 a shelves page that keeps failing skips that section's shelves - the sweep finishes and the next run is a delta", async (t) => {
+  const h = await setup(t);
+  let shelves = shelfSet("Kept Shelf", 900), failAt = null;
+  pagedShelves(h, () => shelves, (start) => start === failAt);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  const before = await shelfNames(h);
+  assert.equal(before.length, 12);
+  // the next day Plex's collections have changed, and one page of section 1's shelves fails every time
+  h.setClock(AT + 86400000); h.calls.length = 0;
+  shelves = shelfSet("New Shelf", 950, ["1"]); failAt = 5;
+  const r = await h.catalog.sync();
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.full, true);
+  assert.equal(h.calls.filter((c) => c.startsWith("/collections?section=1&start=5&")).length, 4, "tried again, then given up");
+  const st = await h.catalog.status();
+  assert.deepEqual([st.ready, st.error, st.full_at, st.progress], [true, null, AT + 86400000, null], "the sweep finished");
+  assert.deepEqual(st.shelves_skipped.map((x) => x.section), ["1"]);
+  assert.match(st.shelves_skipped[0].why, /^no answer within \d+ s \(4 tries\)$/);
+  assert.deepEqual(await shelfNames(h), before, "the section keeps every shelf it had - not the first page of the new ones");
+  // the next run is an ordinary delta: titles added to Plex keep arriving
+  h.setClock(AT + 86400000 + 3600000); h.calls.length = 0;
+  h.api.rows.push(row(9, "Late Arrival", { updated: Math.floor((AT + 86400000 + 1800000) / 1000) }));
+  const delta = await h.catalog.sync();
+  assert.deepEqual([delta.ok, delta.full, delta.resumed], [true, false, false]);
+  assert.equal((await h.catalog.getByKeys(["9"])).length, 1);
+  // the day after, the page answers again: the new shelves replace the old ones in one go
+  failAt = null; h.setClock(AT + 2 * 86400000);
+  assert.equal((await h.catalog.sync()).ok, true);
+  assert.deepEqual(await shelfNames(h), shelves.map((s) => s.name));
+  assert.deepEqual((await h.catalog.status()).shelves_skipped, []);
+});
+
+test("catfix review: paged shelves swap in when the section's last page lands - a sweep stopped part-way still shows the old shelves whole", async (t) => {
+  const h = await setup(t);
+  let shelves = shelfSet("Kept Shelf", 900), stopAt = null;
+  // the maintenance window starts while page `stopAt` is being answered: that page is stored, the next read is the window's
+  pagedShelves(h, () => shelves, (start) => { if (start === stopAt) { stopAt = null; h.setClock(Date.UTC(2026, 10, 6, 3, 45)); } return false; });
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  const before = await shelfNames(h);
+  h.setClock(Date.UTC(2026, 10, 6, 3, 30));
+  shelves = shelfSet("New Shelf", 950); stopAt = 5;
+  const r = await h.catalog.sync();
+  assert.deepEqual([r.ok, r.error], [false, "maintenance window"]);
+  assert.deepEqual(await shelfNames(h), before, "two of three pages read: the clerk still sees the old shelves, all of them");
+  assert.deepEqual((await h.catalog.getByKeys(["1"]))[0].shelves.sort(), before, "...and so does a title's shelf list");
+  assert.deepEqual(await h.catalog.search("New Shelf"), [], "the pages read so far are not searchable yet");
+  h.setClock(Date.UTC(2026, 10, 6, 4, 30)); h.calls.length = 0;
+  const again = await h.catalog.sync();
+  assert.deepEqual([again.ok, again.resumed], [true, true], JSON.stringify(again));
+  assert.equal(h.calls.find((c) => c.startsWith("/collections")), "/collections?section=1&start=5&size=5", "it carries on at the page before its cursor");
+  assert.deepEqual(await shelfNames(h), shelves.map((s) => s.name), "the last page landed: the new shelves, every page, and none of the old");
+  assert.deepEqual((await h.catalog.getByKeys(["1"]))[0].shelves.sort(), shelves.map((s) => s.name));
+});
+
+test("catfix review: a resumed sweep re-reads the page before its cursor - a title Plex removed meanwhile can't push another past it", async (t) => {
+  const h = await setup(t);
+  h.api.rows = [1, 2, 3, 4, 5, 6].map((k) => row(k, "Reel " + k));   // section 1, two a page: 0, 2, 4
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  h.setClock(Date.UTC(2026, 10, 6, 3, 30));
+  let stop = true;
+  h.api.hook = (route) => { if (stop && route.includes("section=1&type=1&start=2")) { stop = false; h.setClock(Date.UTC(2026, 10, 6, 3, 45)); } return undefined; };
+  const r = await h.catalog.sync();
+  assert.deepEqual([r.ok, r.error], [false, "maintenance window"]);   // pages 0 and 2 read, the cursor at 4
+  h.api.rows = h.api.rows.filter((x) => x.key !== "1");               // Plex drops title 1 while the sweep waits
+  h.setClock(Date.UTC(2026, 10, 6, 4, 30)); h.calls.length = 0;
+  const again = await h.catalog.sync();
+  assert.deepEqual([again.ok, again.resumed], [true, true]);
+  assert.equal(h.calls.find((c) => c.startsWith("/catalog")), "/catalog?section=1&type=1&start=2&size=500");
+  assert.deepEqual((await h.catalog.read("SELECT key FROM plex_catalog ORDER BY CAST(key AS INTEGER)")).map((x) => x.key), ["2", "3", "4", "5", "6"],
+    "title 5 moved from 4 to 3 - still read - and the dropped title 1 is gone");
+  assert.equal(again.received, 5, "the page read twice is counted once");
+});
+
+test("catfix review: a snapshot import ends an unfinished sweep - the next sync doesn't carry it on and keeps the imported rows", async (t) => {
+  const h = await setup(t);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  h.setClock(AT + 3600000);
+  h.api.hook = (route) => route.includes("section=2&type=4") ? { status: 503, json: { ok: false } } : undefined;
+  assert.equal((await h.catalog.sync({ full: true })).ok, false);
+  assert.notEqual((await h.catalog.status()).progress, null);
+  await h.catalog.importSnapshot(snapshot());
+  const st = await h.catalog.status();
+  assert.deepEqual([st.progress, st.error, st.error_at, st.shelves_skipped], [null, null, null, []]);
+  assert.deepEqual((await h.catalog.read("SELECT value FROM plex_catalog_state WHERE key='error_detail'")).map((x) => x.value), ["null"]);
+  h.api.hook = null;
+  const next = await h.catalog.sync();
+  assert.deepEqual([next.ok, next.resumed], [true, false], JSON.stringify(next));
+  assert.deepEqual((await h.catalog.read("SELECT key FROM plex_catalog ORDER BY CAST(key AS INTEGER)")).map((x) => x.key), ["1", "2", "3", "20", "21"]);
+  assert.equal((await h.catalog.status()).count, 5);
+});
+
+test("catfix review: across a resume the stored tables hold nothing of a section turned off or a blocked rating", async (t) => {
+  const h = await setup(t);
+  h.api.rows.push(row(22, "Second Shift", { type: "episode", section: "2", show: "Window Office", show_key: "20", season_key: "200", season: 1, episode: 2, content_rating: "X" }));
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  h.setClock(AT + 3600000);
+  let down = true;
+  h.api.hook = (route) => down && route.includes("section=2&type=4") ? { status: 503, json: { ok: false } } : undefined;
+  assert.equal((await h.catalog.sync({ full: true })).ok, false);      // section 1 done, section 2's shows read
+  h.api.sections[0].policy = "off";                                     // between the halves: section 1 is turned off
+  h.setClock(AT + 7200000);
+  assert.equal((await h.catalog.sync()).ok, false, "still failing at the episodes");
+  const mid = await h.catalog.status();
+  assert.deepEqual([mid.progress.done, mid.progress.total], [0, 1], "a section no longer allowed isn't counted as read");
+  assert.ok(h.logs.some((l) => /kept: 0 of 1 sections done/.test(l)), h.logs.join("\n"));
+  down = false;
+  h.setClock(AT + 3 * 3600000);
+  const done = await h.catalog.sync();
+  assert.deepEqual([done.ok, done.resumed], [true, true], JSON.stringify(done));
+  assert.equal(done.blocked["2:X"], 1, "the blocked episode on the resumed page is counted");
+  const keys = async (sql) => (await h.catalog.read(sql)).map((x) => String(x.k));
+  assert.deepEqual(await keys("SELECT key AS k FROM plex_catalog ORDER BY CAST(key AS INTEGER)"), ["20", "21"]);
+  assert.deepEqual(await keys("SELECT rowid AS k FROM plex_catalog_fts ORDER BY rowid"), ["20", "21"]);
+  assert.deepEqual(await keys("SELECT DISTINCT key AS k FROM plex_catalog_genres ORDER BY CAST(key AS INTEGER)"), ["20", "21"]);
+  assert.deepEqual(await keys("SELECT key AS k FROM plex_shelves"), []);
+  assert.deepEqual(await keys("SELECT key AS k FROM plex_shelf_members"), []);
+  assert.deepEqual(await keys("SELECT key AS k FROM plex_shelves_next UNION ALL SELECT key FROM plex_shelf_members_next"), [], "no staged shelves left");
+  assert.equal(JSON.stringify(await h.catalog.read("SELECT data FROM plex_catalog")).includes("Second Shift"), false);
 });

@@ -1408,6 +1408,32 @@ test("1.7.1: /collections?start=&size= answers one bounded page of shelves with 
   assertClerkNoDeniedMetadata(whole.json);
 });
 
+// 1.99?? catfix review: the fail-closed policy is checked on every page, not only on the whole (unpaged) answer
+test("1.7.1: every page of /collections keeps the fail-closed section policy, and the pages together are the whole answer", async t => {
+  for (const plex143 of [false, true]) {
+    const h = await clerkHarness(t);   // 72 adult, 73 off: their shelves (7250, 7350) and members (7201, 7301) never leave
+    h.fixture.plex143 = plex143;
+    // 7401 has no section id of its own: with ids on the rows it fails closed; in Plex 1.43's shape (no row ids, the container
+    // names the collection's section) it inherits section 71 like every row of that listing - the rule the 1.7.0 tests pin
+    const denied = plex143 ? ["7201", "7301"] : ["7201", "7301", "7401"];
+    const whole = await h.request("GET", "/collections?section=71");
+    assert.equal(whole.status, 200);
+    const pages = [];
+    for (let start = 0, guard = 0; start != null && guard < 10; guard++) {
+      const r = await h.request("GET", `/collections?section=71&start=${start}&size=1`);
+      assert.equal(r.status, 200, `plex143=${plex143} page ${start}`);
+      assertClerkNoDeniedMetadata(r.json);
+      assert.ok(!JSON.stringify(r.json).includes('"file"') && !JSON.stringify(r.json).includes(FILE));
+      assert.ok(r.json.collections.every(c => !c.members.some(k => denied.includes(k))), `plex143=${plex143}: no denied member: ` + JSON.stringify(r.json));
+      pages.push(...r.json.collections);
+      start = r.json.next;
+    }
+    assert.deepEqual(pages, whole.json.collections, `plex143=${plex143}: page by page = the whole answer`);
+    assert.deepEqual(pages.map(c => c.key), ["7150", "7450"]);
+    assert.ok(!h.fixture.seen.some(c => /\/(7250|7350)\/children$/.test(c.path)), "denied member lists are never fetched, page by page either");
+  }
+});
+
 test("1.7.1: a catalog walk stops when the site stops waiting, says so in the log, and leaves the shared budget to the next read", async t => {
   const h = await clerkHarness(t);
   h.fixture.collections = invent(40);
