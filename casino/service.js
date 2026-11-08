@@ -25,7 +25,7 @@ const PATAmount = require("../public/js/patamount");   // 1.99sk: a typed bet - 
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
-const themes = require("./themes");       // 1.99?? h20: the card tables' themes (presentation only; casino_themes switch)
+const themes = require("./themes");       // 1.99amf h20: the card tables' themes (presentation only; casino_themes switch)
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -145,7 +145,7 @@ async function loadSettings(force) {
     // engine flags and of each Camfrog room's `!casino backend on|off`.
     bj_front: FRONTS.includes(kv.bj_front) ? kv.bj_front : "auto",
     hm_front: FRONTS.includes(kv.hm_front) ? kv.hm_front : "auto",
-    // 1.99?? h20: the table themes switch - off (the default) | staff | everyone (casino/themes.js)
+    // 1.99amf h20: the table themes switch - off (the default) | staff | everyone (casino/themes.js)
     casino_themes: themes.MODES.includes(kv.casino_themes) ? kv.casino_themes : "off",
   };
   // 1.99ov: blackjack limits (normal tables, then High Roller tables) - a bad pair falls back to the defaults
@@ -265,7 +265,7 @@ function newTableObject(host, room, high, theme) {
     players: {}, escrowed: {}, autobet: [], lastbet: {}, pending: {}, missed: {}, afk: {},
     empty_windows: 0, dl: { bet: null, ins: null, turn: null }, turn: null, turn_token: 0,
     round: null, intent: null, opno: 0, multi: [], log: [], last_round: null, rev: 0, closed_at: null,
-    theme: themes.clean(theme, "bj"),          // 1.99?? h20: for the table's whole life (casino/themes.js; absent = classic)
+    theme: themes.clean(theme, "bj"),          // 1.99amf h20: for the table's whole life (casino/themes.js; absent = classic)
   };
 }
 
@@ -717,7 +717,7 @@ async function cmdStart(actor, room, game, blinds, words) {
                                              : "a blackjack table is already open — !bet to play.");
   }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
-  // 1.99?? h20: a theme word anywhere after start (casino/themes.js decide: off = dropped with a note; an unknown word refused)
+  // 1.99amf h20: a theme word anywhere after start (casino/themes.js decide: off = dropped with a note; an unknown word refused)
   const tp = themes.pick(words || (blinds ? [blinds] : []), (w) => /^\d/.test(w) || HR_WORDS.includes(w.toLowerCase()));
   const tm = themes.mode(st);
   const th = themes.decide(tp, tm, tm === "staff" && tp.theme && tp.theme !== themes.DEFAULT ? await isSiteAdmin(actor.uid) : false, game);
@@ -736,7 +736,7 @@ async function cmdStart(actor, room, game, blinds, words) {
   await emit(T, "opened", `🂠 ${actor.name} opened a ${high ? "💎 High Roller " : ""}Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
              `Bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} PAT${high ? " (High Rollers only; anyone can watch)" : ""}. Play here or on the web: ${link(T)}`,
              { client_seed: T.client_seed, url: link(T), high_stakes: high });
-  // 1.99?? h20: the saloon dealer's one line when the table opens (null on classic / the switch off)
+  // 1.99amf h20: the saloon dealer's one line when the table opens (null on classic / the switch off)
   const flav = themes.line(T, st, "bj_open", { min: fmt(T.eng.min_bet), max: fmt(T.eng.max_bet) });
   if (flav) await emit(T, "line", flav);
   await openRound(T, true);
@@ -1143,7 +1143,7 @@ function bjView(T) {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
     room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: V.hostName(T), round_no: e.round_no,
     min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, adverts: advertList(T), max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
-    theme: themes.themeOf(T, S.settings),     // 1.99?? h20: classic whenever the switch is off
+    theme: themes.themeOf(T, S.settings),     // 1.99amf h20: classic whenever the switch is off
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
     last_round: ["betting", "idle", "done"].includes(e.phase) || T.status === "closed" ? V.maskRound(T, T.last_round) : null,

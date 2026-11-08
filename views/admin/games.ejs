@@ -64,7 +64,7 @@
     <% [['hm_sitout_mins','Sit-out limit (minutes)'],['hm_timebank_secs','Initial time bank (seconds)'],['hm_timebank_max','Maximum time bank (seconds)'],['hm_timebank_per10','Bank refill per 10 hands (seconds)'],['hm_presets_pot','Pot presets (%)'],['hm_presets_bb','Preflop presets (BB)']].forEach(([key,label]) => { %>
     <label><%= label %><input name="<%= key %>" value="<%= locals.casino[key] %>" required></label>
     <% }) %>
-    <%# 1.99?? h20: the table themes switch (casino_themes: off | staff | everyone, default off; casino/themes.js) %>
+    <%# 1.99amf h20: the table themes switch (casino_themes: off | staff | everyone, default off; casino/themes.js) %>
     <label><%- t('casino.theme_switch') %><select name="casino_themes"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>"<%= (locals.casino.casino_themes || 'off') === v ? ' selected' : '' %>><%- t('casino.theme_switch_' + v) %></option><% }) %></select></label>
     <button type="submit">Save Hold'em controls</button><span id="hmQolStatus" role="status"></span>
   </form>

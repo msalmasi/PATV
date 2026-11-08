@@ -8,7 +8,7 @@
 // h22 (1.99alz): at a 🏁 Sit & Go (table.tourney) the header above the felt shows the level, the blinds, the time to the next level,
 // the players left and the prize table (while it registers: who's in, the countdown, Register / Unregister), the results card the end;
 // there is no buy-in, top-up, stand-up or deal button there (tournament chips aren't PAT).
-// 1.99?? h20: a themed table (t.theme) is dressed by CZ.theme (casino-ui.js) - the look only.
+// 1.99amf h20: a themed table (t.theme) is dressed by CZ.theme (casino-ui.js) - the look only.
 (function () {
   "use strict";
   const CZ = window.CZ;
@@ -65,7 +65,7 @@
     const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
     const hrLocked = !!t.high_stakes && !(me && me.high_roller);   // a High Roller table: everyone else watches
     $("cz-felt").classList.toggle("hr", !!t.high_stakes);
-    CZ.theme(t, { scene: $("cz-felt").parentNode, sign: $("cz-seats") });    // 1.99?? h20: the table's theme (casino-ui.js; the sign on the felt itself)
+    CZ.theme(t, { scene: $("cz-felt").parentNode, sign: $("cz-seats") });    // 1.99amf h20: the table's theme (casino-ui.js; the sign on the felt itself)
     for (let k = 0; k < SLOTS; k++) {
       const s = bySlot[k], el = els.seats[k], bet = els.bets[k];
       const mine = !!(s && me && me.seat && s.seat === me.seat);

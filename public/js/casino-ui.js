@@ -1,6 +1,6 @@
 // casino-ui.js — the casino tables' shared front end (D10 design pass, 2026-10-11): helpers for cards (deal / flip
 // animations by diffing what's on the felt), chips, avatars, countdown rings tied to the server's deadlines, the toast /
-// aria-live announcer, sheets (history, host tools), the table's theme (1.99?? h20: CZ.theme), and the casino LOBBY (both
+// aria-live announcer, sheets (history, host tools), the table's theme (1.99amf h20: CZ.theme), and the casino LOBBY (both
 // games; its theme picker). casinobj.js and casinohm.js draw their own tables on top of it. Strings: __t("js.casino.*",
 // English default) - the defaults equal locales/en.json.
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
@@ -363,7 +363,7 @@
     w.title = T("watching_n", "{n} watching", { n: n || 0 });
   }
 
-  // ── 1.99?? h20: the table's theme (casino/themes.js - presentation only). A themed table's page carries the theme's CSS
+  // ── 1.99amf h20: the table's theme (casino/themes.js - presentation only). A themed table's page carries the theme's CSS
   // (public/css/casino-themes.css, every rule under .cz-theme-<id> on #cz-table), its art (<template id="cz-theme-<id>">: the
   // scene behind the felt + the sign) and the sound cues (casino-sound.js); a classic page has none of it. Every render calls
   // theme(t, at) - at = {scene: where the scene goes (first child), sign: what the sign goes before}: the class and the art
@@ -464,7 +464,7 @@
     }
     const bb = Number(blinds.split("/")[1]);
     $("cz-buyrange").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(bb * 20), max: fmt(bb * 200) });
-    // 1.99?? h20: the table theme picker - only when the switch lets this viewer pick (the lobby's themes.pick); one choice for every
+    // 1.99amf h20: the table theme picker - only when the switch lets this viewer pick (the lobby's themes.pick); one choice for every
     // Open button below (a game the theme isn't drawn for opens classic)
     const tlist = j.themes && j.themes.pick ? j.themes.list || [] : [];
     const tpick = $("cz-themepick");
@@ -661,7 +661,7 @@
     const body = { game: g === "holdem" ? "holdem" : "bj", idem: idem() };
     if (g === "holdem") body.blinds = high ? hrBlinds : blinds;
     else if (high) body.hr = true;
-    // 1.99?? h20: the picked theme, for a game it's drawn for (the server checks the switch and the viewer again)
+    // 1.99amf h20: the picked theme, for a game it's drawn for (the server checks the switch and the viewer again)
     const th = lobbyData && lobbyData.themes && lobbyData.themes.pick ? (lobbyData.themes.list || []).find((x) => x.id === lobbyTheme) : null;
     if (th && !th.default && th.games.includes(g === "holdem" ? "holdem" : "bj")) body.theme = th.id;
     const j = await post("/api/casino/open", body);
