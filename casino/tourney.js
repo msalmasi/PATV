@@ -558,7 +558,10 @@ function install(core) {
   async function tick(T) {
     const t = T.tourney, now = clock();
     if (t.status === "registering") {
-      if (t.expires_at && now >= t.expires_at) { await refundAll(T, "expired", null); return "done"; }
+      if (t.expires_at && now >= t.expires_at) {
+        if (!(await refundAll(T, "expired", null))) T.tourney.expires_at = clock() + SNG.RETRY_MS;   // (tried again in a minute, not every tick)
+        return "done";
+      }
       if (t.countdown_at && now >= t.countdown_at) {
         t.countdown_at = null;
         if (t.start_at && t.entrants.length >= t.start_at) await start(T);
