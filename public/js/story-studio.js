@@ -774,7 +774,8 @@
     function apply() {
       var g = s.gesture; if (!g || !live(s)) return;
       if (s.busy) { end(); return; }                                   // Post froze it
-      if (g.target === 'wait') { if (!g.moved) return; select(s, null); g.target = canPan(s) ? 'base' : null; rebase(g); return; }
+      // one finger off the selected layer that moves: the layer is let go and the picture pans - from where the finger went down
+      if (g.target === 'wait') { if (!g.moved) return; select(s, null); g.target = canPan(s) ? 'base' : null; if (g.target) { g.rect = P.getBoundingClientRect(); g.w0 = Object.assign({}, s.d.crop); } }
       if (!g.target) return;
       var now = ids(g).map(function (id) { return g.pts[id]; }), m;
       if (g.turn) { var c = centre(g), v = { x: now[0].x - c.x, y: now[0].y - c.y }, l0 = Math.hypot(g.v0.x, g.v0.y);
@@ -816,19 +817,20 @@
     // WebKit's own pinch events: always kept from zooming the page; they move a layer (or the picture) only when the pointer
     // stream has lost the second finger (scale and rotation from gesturestart, in degrees)
     P.addEventListener('gesturestart', function (e) {
-      e.preventDefault(); var g = s.gesture; if (!live(s) || s.busy || !g || g.n >= 2) { s.wk = null; return; }
-      var t = g.target === 'wait' ? picked(s) : g.target; if (!t || (t !== 'base' && t.type === 'mention')) { s.wk = null; return; }
-      s.wk = { target: t, s0: t === 'base' ? null : snapshot(t), w0: t === 'base' ? Object.assign({}, s.d.crop) : null };
+      e.preventDefault(); var g = s.gesture; s.wk = null; if (!live(s) || s.busy || !s.d.decoded || (g && g.n >= 2)) return;
+      var t = g ? (g.target === 'wait' ? picked(s) : g.target) : picked(s) || (canPan(s) ? 'base' : null);
+      if (!t || (t !== 'base' && t.type === 'mention')) return;
+      s.wk = { target: t, s0: t === 'base' ? null : snapshot(t), w0: t === 'base' ? Object.assign({}, s.d.crop) : null, used: false };
     }, { passive: false });
     P.addEventListener('gesturechange', function (e) {
       e.preventDefault(); var g = s.gesture, w = s.wk; if (!w || !live(s) || s.busy || (g && g.n >= 2)) return;
       var k = Number(e.scale) > 0 ? Number(e.scale) : 1, turn = (Number(e.rotation) || 0) * Math.PI / 180;
-      if (g) { g.wk = true; if (g.target === 'wait') g.target = w.target; }
+      w.used = true; if (g) { g.wk = true; if (g.target === 'wait') g.target = w.target; }
       if (w.target === 'base') { s.d.crop = G.zoom(w.w0, own(), s.d.fit, k, { x: .5, y: .5 }, { x: .5, y: .5 }); placeMedia(s); dirty(s, true); return; }
       guides(s, G.moveItem(w.target, w.s0, { scale: k, turn: turn }, s.handles.getBoundingClientRect(), { snap: true })); paintLayer(s, w.target);
-      if (!g) changed(s, true);
     }, { passive: false });
-    P.addEventListener('gestureend', function (e) { e.preventDefault(); s.wk = null; }, { passive: false });
+    // no pointer gesture around it (an engine without pointer events): its end is the change
+    P.addEventListener('gestureend', function (e) { e.preventDefault(); var w = s.wk; s.wk = null; if (w && w.used && !s.gesture && live(s) && !s.busy) { guides(s, null); changed(s, true); } }, { passive: false });
     // a desktop: the wheel sizes the selected layer (ctrl+wheel = a trackpad pinch), Shift+wheel turns it; with nothing
     // selected it zooms the picture about the pointer
     P.addEventListener('wheel', function (e) {

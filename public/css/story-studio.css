@@ -135,7 +135,7 @@
   .sst .sst-picks .ds-btn.sst-round[data-picker="camera"] { order: 1; inline-size: 88px; min-inline-size: 88px; block-size: 88px; min-block-size: 88px; border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
   .sst .sst-filename { display: none; }
   .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-3), env(safe-area-inset-right, 0px)); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-3); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
-  .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; box-shadow: var(--ds-e-1); }
+  .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line); box-shadow: var(--ds-e-1); }
   .sst .sst-tools .ds-ic { font-size: 22px; }
   .sst .sst-head .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
   .sst .sst-head .ds-btn.sst-round .ds-ic { font-size: 20px; }

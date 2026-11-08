@@ -1215,6 +1215,24 @@ test('Studio storyux: iPhone - WebKit gesture events stand in when the pointers 
   ptr(sticker, 'pointerdown', 1, 150, 250); ptr(stage(P), 'pointerdown', 2, 250, 250); ptr(stage(P), 'pointerdown', 3, 50, 50);
   ptr(stage(P), 'pointermove', 3, 0, 0); await flush(); ptr(stage(P), 'pointercancel', 1, 150, 250); ptr(stage(P), 'pointercancel', 2, 250, 250); ptr(stage(P), 'pointercancel', 3, 0, 0); await flush(6);
   img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480]);
+  // an engine whose pointer stream never starts (no pointerdown at all): the gesture events alone size and turn the selected layer
+  const ge = (type, scale, rotation) => stage(P).dispatchEvent(new Ev(type, { bubbles: true, scale, rotation }));
+  ge('gesturestart', 1, 0); ge('gesturechange', .5, -90); ge('gestureend', .5, -90); await flush(6);
+  img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-120, -120, 240, 240], 'half the size');
+  assert.match(layerEl(P, 'sticker').style.transform, /rotate\(0rad\)/, 'back to upright (+90 then -90)');
+});
+
+test('Studio storyux: one finger off the selected layer lets it go and pans the picture from where it went down; a second finger there pinches the layer', async () => {
+  const P = studioPage({ width: 4000, height: 3000 }); await studioOpen(P); await studioPick(P); const sticker = await studioSticker(P);
+  const src = P.doc.querySelector('.sst-source'); assert.ok(!P.doc.querySelector('.sst-select').hidden);
+  ptr(stage(P), 'pointerdown', 1, 60, 60); await flush(); ptr(stage(P), 'pointermove', 1, 75, 60); await flush(); ptr(stage(P), 'pointermove', 1, 90, 60); await flush(); ptr(stage(P), 'pointerup', 1, 90, 60); await flush(6);
+  assert.ok(P.doc.querySelector('.sst-select').hidden, 'let go'); assert.ok(near(parseFloat(src.style.insetInlineStart), 10), 'panned the whole 30 px (10% of the frame)');
+  // a small selected sticker is pinched around it: the first finger beside it waits for the second
+  await tapAt(P, sticker, 150, 250); assert.ok(!P.doc.querySelector('.sst-select').hidden);
+  ptr(stage(P), 'pointerdown', 1, 100, 250); ptr(stage(P), 'pointerdown', 2, 200, 250, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointermove', 1, 50, 250); ptr(stage(P), 'pointermove', 2, 250, 250, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointerup', 1, 50, 250); ptr(stage(P), 'pointerup', 2, 250, 250, { isPrimary: false }); await flush(6);
+  assert.deepEqual(liveOps(P, 'image').at(-1).args.slice(1), [-240, -240, 480, 480], 'the sticker doubled'); assert.ok(near(parseFloat(src.style.insetInlineStart), 10), 'the picture stayed');
 });
 
 test('Studio storyux: desktop - the wheel sizes the selected layer, Shift+wheel turns it, the corner handle turns and sizes it; with nothing selected the wheel zooms the picture', async () => {
