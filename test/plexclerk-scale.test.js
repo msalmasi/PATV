@@ -161,6 +161,28 @@ test("lists: the membership read starts from the members, and adding a list matc
   assert.deepEqual((await lists.shelves()).map((r) => [r.name, r.count]), [["IMDb Top 250", 2]]);
 });
 
+test("a catalog that isn't ready (or whose state can't be read) refuses roots() - a rematch then keeps every list's last members", async (t) => {
+  // review: roots() answered empty arrays for a catalog that wasn't ready (status() also says not ready when its own read fails),
+  // so a rematch after a delta sync on a catalog whose last full sweep is older than 3 days stored 0 members for every list
+  let clock = AT;
+  const h = await setup(t, { now: () => clock });
+  const cfg = { ...SETTINGS, clerk_lists: true };
+  const lists = createLists({ catalog: h.catalog, settings: () => cfg, key: () => "fixture-only", now: () => clock, request: async () => { throw new Error("offline"); } });
+  t.after(() => lists.close());
+  assert.equal((await lists.importSnapshot({ configured: [{ id: "8001", name: "IMDb Top 250", ranked: true, items: [
+    { rank: 1, type: "movie", title: "Fixture Film 7", year: 1997 }, { rank: 2, type: "show", title: "The Simpsons", year: 1989 }] }] })).ok, true);
+  const members = async () => (await h.catalog.read("SELECT COUNT(*) AS n FROM plex_list_members"))[0].n;
+  assert.equal(await members(), 2);
+  clock = AT + 4 * 86400000;                                                // the last full sweep is now older than 3 days
+  assert.equal((await h.catalog.status()).ready, false);
+  await assert.rejects(h.catalog.roots(), (e) => e.code === "catalog_down", "never an empty library standing in for one that can't be read");
+  const again = await lists.rematch();
+  assert.equal(again.ok, false, "the rematch is refused");
+  assert.equal(await members(), 2, "the lists keep their last complete members");
+  clock = AT;
+  assert.equal((await h.catalog.roots()).movies.length, 401, "ready again: the films come back");
+});
+
 test("an outside list named like 'Oscar Best Picture Winners' answers 'an oscar winner'; IMDb Top 250 answers 'the imdb top 100'", async (t) => {
   const h = await setup(t);
   const cfg = { ...SETTINGS, clerk_lists: true };
@@ -189,6 +211,11 @@ test("the admin lists panel says why an action was refused (the maintenance wind
     assert.ok(typeof en["js.media.lists.err." + code] === "string" && en["js.media.lists.err." + code].length > 10, code);
   }
   assert.match(en["js.media.lists.err.quiet"], /03:40/); assert.match(en["js.media.lists.err.quiet"], /04:20/);
+  // review: 03:40-04:20 UTC is the SITE's own nightly window (plexlists/plexcatalog quiet(): no provider call), not MDBList's
+  for (const quietText of [en["js.media.lists.err.quiet"], (js.match(/quiet: "([^"]+)"/) || [])[1] || ""]) {
+    assert.match(quietText, /site's nightly maintenance/, quietText);
+    assert.doesNotMatch(quietText, /MDBList/, "the provider isn't the one pausing: " + quietText);
+  }
   assert.match(js, /"err\." \+ /, "the panel looks the refusal's code up");
   assert.match(js, /e\.code = j\.code/, "api() keeps the server's code on the error");
 });
