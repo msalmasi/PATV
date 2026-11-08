@@ -5,6 +5,9 @@
 // face down for everyone else), the showdown reveal and winner pops, an action bar with a bet slider + presets and a
 // countdown ring on the server's deadline, pre-moves, sizing grammar, sit-out and time-bank controls.
 // Buy-in / top-up and every move post with an idempotency key. My hands replays only your completed hands.
+// h22 (1.99??): at a 🏁 Sit & Go (table.tourney) the header above the felt shows the level, the blinds, the time to the next level,
+// the players left and the prize table (while it registers: who's in, the countdown, Register / Unregister), the results card the end;
+// there is no buy-in, top-up, stand-up or deal button there (tournament chips aren't PAT).
 (function () {
   "use strict";
   const CZ = window.CZ;
@@ -35,7 +38,9 @@
 
   function render(d) {
     const t = d.table, me = d.me;
+    const tn = t.tourney || null;                    // h22: a sit & go's table
     last = d;
+    sngHead(t, me);
     const open = t.status === "open";
     const inHand = t.phase !== "between" && t.phase !== "closed";
     const lr = !inHand ? t.last_round : null;
@@ -88,7 +93,7 @@
                (s.button ? `<span class="dbtn" title="${esc(T("dealer_btn", "Dealer button"))}">D</span>` : "") +
                (tags ? `<span class="st">${tags}</span>` : "") + (s.hand ? `<span class="hand">${esc(handName(s.hand))}</span>` : "");
       } else {
-        const can = CZ.signed && me && !me.seat && open && t.seats.length < t.max_seats && !hrLocked;
+        const can = !tn && CZ.signed && me && !me.seat && open && t.seats.length < t.max_seats && !hrLocked;
         html = can ? `<button type="button" class="sitbtn" data-sit="1"><span class="av" aria-hidden="true">+</span><span class="plate">${esc(T("sit", "Sit"))}</span></button>`
                    : `<span class="av" aria-hidden="true"></span><span class="plate">${esc(T("open_seat", "Open seat"))}</span>`;
       }
@@ -165,7 +170,12 @@
 
     // message + clock
     let msg = "", sub = "", dl = null, nom = 0;
-    if (!open) msg = T("closed", "That table has closed.");
+    if (!open) msg = tn ? (tn.status === "finished" ? T("sng_over", "Finished") : T("sng_off_h", "Called off")) : T("closed", "That table has closed.");
+    else if (tn && tn.status === "registering") {
+      msg = T("sng_waiting_n", "Waiting for players — {n} of {size}", { n: tn.registered, size: tn.size });
+      if (tn.countdown_at) { dl = tn.countdown_at; nom = 60; }
+    }
+    else if (tn && tn.status === "settling") msg = T("sng_paying", "Paying out…");
     else if (t.turn) {
       const mineTurn = me && me.my_turn;
       msg = mineTurn ? T("your_turn", "Your turn") : T("to_act", "{name} to act", { name: t.turn.name });
@@ -181,7 +191,7 @@
     const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Chat rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Chat room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
     const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
                   t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "",
-                  esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),
+                  tn ? `🏁 ${esc(T("sng_badge", "Sit & Go"))}` : esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),
                   t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
       .filter(Boolean).map((x, i) => `<span class="tag${i === 0 && t.high_stakes ? " hr" : ""}">${x}</span>`).join("");
     if ($("cz-meta").dataset.v !== meta) { $("cz-meta").dataset.v = meta; $("cz-meta").innerHTML = meta; }
@@ -189,6 +199,11 @@
     const wb = $("cz-watchbar");
     let wtxt = "";
     if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_hm", "You're watching. Hole cards stay hidden until a showdown."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    else if (open && tn && me && !me.seat) {
+      wtxt = me.tourney && me.tourney.place ? `🏁 ${esc(T("sng_out_note", "You're out — thanks for playing."))}`
+           : tn.status === "registering" ? (me.tourney && me.tourney.registered ? "" : `🏁 ${esc(T("sng_watch_reg", "Register in the Sit & Go above to play."))}`)
+           : `👁 ${esc(T("sng_watch_run", "You're watching a Sit & Go."))}`;
+    }
     else if (open && me && !me.seat && hrLocked) wtxt = `💎 ${esc(T("watching_hr_hm", "A High Roller table: you're watching. Only High Rollers can sit here."))} <a href="/shop">${esc(T("hr_get", "Get the role"))}</a>`;
     else if (open && me && !me.seat) wtxt = `👁 ${esc(t.seats.length >= t.max_seats ? T("watching_full", "You're watching: the table is full.") : T("watching_sit", "You're watching. Take an open seat to play."))}`;
     wb.hidden = !wtxt;
@@ -199,8 +214,60 @@
     // 1.99ajw casino2: your turn starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
     if (!!(me && me.my_turn) !== prevTurn) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn), act: !!(me && me.my_turn) } }));
     prevTurn = !!(me && me.my_turn);
-    if (wantSit && me && open) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats && !hrLocked) openBuy("sit"); }
+    if (wantSit && me && open && !tn) { wantSit = false; if (!me.seat && t.seats.length < t.max_seats && !hrLocked) openBuy("sit"); }
     first = false;
+  }
+
+  // ── h22 (1.99??): a 🏁 Sit & Go's header and its results card (table.tourney, casino/tourney.js) ──
+  function sngHead(t, me) {
+    const head = $("cz-snghead"), res = $("cz-sngres");
+    if (!head || !res) return;
+    const tn = t.tourney || null;
+    head.hidden = !tn;
+    if (!tn) { res.hidden = true; return; }
+    const sub = document.querySelector(".cz-brand small");          // (the top bar's cash-table line: chips = PAT, the rake - not here)
+    if (sub) sub.textContent = T("sng_sub", "Sit & Go · tournament chips (not PAT) · no rake");
+    const SG = CZ.sng, mt = (me && me.tourney) || {};
+    const stat = (label, val) => `<div class="sng-stat"><small>${esc(label)}</small><b>${val}</b></div>`;
+    const clock = (dl) => `<span data-sngdl="${Number(dl)}">${SG.mmss(Number(dl) - (Date.now() - CZ.skew()))}</span>`;
+    const reg = tn.status === "registering", live = tn.status === "running" || tn.status === "settling";
+    let html = `<div class="sng-top"><span class="sng-badge">🏁 ${esc(T("sng_badge", "Sit & Go"))}${tn.turbo ? " · " + esc(T("sng_turbo_tag", "Turbo")) : ""}</span>` +
+      `<span class="tag gold">${esc(T("sng_entry_n", "Entry {buyin} + {fee}", { buyin: fmt(tn.buyin), fee: fmt(tn.fee) }))}</span>` +
+      `<span class="tag">${esc(T("sng_chips_n", "{n} chips", { n: fmt(tn.stack) }))}</span></div>`;
+    if (reg) {
+      html += '<div class="sng-stats">' + stat(T("sng_registered", "Registered"), `${fmt(tn.registered)}/${fmt(tn.size)}`) +
+        stat(T("sng_starts", "Starts"), tn.countdown_at ? clock(tn.countdown_at) : esc(tn.start_at ? T("sng_at_n", "at {n} players", { n: tn.start_at }) : T("sng_when_full_s", "when full"))) +
+        stat(T("sng_levels", "Blinds up every"), esc(T("sng_mins_n", "{n} min", { n: tn.level_mins }))) +
+        stat(T("sng_pool", "Prize pool"), esc(fmt(tn.pool)) + " PAT") + "</div>" +
+        `<p class="sng-who">${esc(tn.entrants.length ? T("sng_entrants", "In: {names}", { names: tn.entrants.map((x) => x.name).join(", ") }) : T("sng_nobody", "Nobody's registered yet."))}</p>`;
+    } else if (live) {
+      html += '<div class="sng-stats">' + stat(T("sng_level", "Level"), esc(fmt(tn.level))) + stat(T("sng_blinds", "Blinds"), `${fmt(tn.sb)}/${fmt(tn.bb)}`) +
+        stat(T("sng_next_level", "Next level"), tn.level_ends_at ? clock(tn.level_ends_at) + ` <small>${esc(T("sng_next_n", "then {sb}/{bb}", { sb: fmt(tn.next_sb), bb: fmt(tn.next_bb) }))}</small>` : "—") +
+        stat(T("sng_left", "Players left"), `${fmt(tn.players_left || 0)}/${fmt(tn.field || tn.size)}`) + "</div>";
+      const out = tn.places.slice().sort((a, b) => b.place - a.place);
+      if (out.length) html += `<p class="sng-who">${esc(T("sng_out_list", "Out: {list}", { list: out.map((p) => "#" + p.place + " " + p.name).join(" · ") }))}</p>`;
+    }
+    if (reg || live) html += `<div class="sng-prizes"><small>${esc(reg ? T("sng_prizes_full", "Prizes if full") : T("sng_prizes", "Prizes"))}</small>${SG.prizeTags(tn.prizes)}</div>`;
+    const acts = [];
+    if (reg && CZ.signed && me) {
+      if (mt.registered) acts.push(`<button type="button" class="cz-btn ghost sm" data-sng="unregister">${esc(T("sng_unregister", "Unregister"))}</button>`);
+      else if (tn.registered < tn.size) acts.push(`<button type="button" class="cz-btn gold sm" data-sng="register">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(tn.entry) }))}</button>`);
+    }
+    if ((reg || live) && me && me.admin && tn.status !== "settling") acts.push(`<button type="button" class="cz-btn red sm" data-sng="cancel">${esc(T("sng_cancel", "Cancel (refund everyone)"))}</button>`);
+    if (acts.length) html += `<div class="sng-acts">${acts.join("")}</div>`;
+    if (head.dataset.v !== html) { head.dataset.v = html; head.innerHTML = html; }
+    let r = "";
+    if (tn.status === "finished") {
+      r = `<h2>🏆 ${esc(T("sng_results", "Results"))}</h2><ol>` + tn.places.map((p) => `<li${mt.place === p.place ? ' class="me"' : ""}><span>${SG.medal(p.place - 1)} ${esc(p.name)}` +
+          `${p.tied ? ` <small>${esc(T("sng_tied", "tied on chips"))}</small>` : ""}</span><b>${p.prize ? esc(fmt(p.prize)) + " PAT" : "—"}</b></li>`).join("") + "</ol>" +
+          (mt.place ? `<p>${esc(T("sng_you_place", "You finished in place {n}.", { n: mt.place }))}</p>` : "") +
+          `<p class="fine">${esc(T("sng_fee_line", "{n} PAT of entry fees went to the House.", { n: fmt(tn.fee_total) }))}</p>`;
+    } else if (tn.status === "cancelled") {
+      r = `<h2>🛑 ${esc(T("sng_off_h", "Called off"))}</h2><p>${esc(tn.cancelled === "expired" ? T("sng_expired", "This Sit & Go didn't start in time — every entry was refunded in full.")
+                                                                         : T("sng_cancelled", "This Sit & Go was called off — every entry was refunded in full."))}</p>`;
+    }
+    res.hidden = !r;
+    if (res.dataset.v !== r) { res.dataset.v = r; res.innerHTML = r; }
   }
 
   // ── the chip rack (1.99ov): tap a chip to add it to your bet / raise. Regular chips from half the small blind up; the 💎 ones
@@ -291,7 +358,9 @@
     else if (me.leaving) wait = T("leaving_note", "You'll be cashed out when this hand ends.");
     else if (me.seat && inHand && !myTurn) wait = me.in_hand ? (me.folded ? T("folded_note", "You folded. Next hand soon.") : t.turn ? T("waiting_for", "Waiting for {name}…", { name: t.turn.name }) : "")
                                                               : T("join_next", "You're in from the next hand.");
+    else if (me.seat && !inHand && t.tourney) wait = T("sng_chips_note", "Tournament chips (not PAT): {n}", { n: fmt(me.stack) });
     else if (me.seat && !inHand) wait = T("stack_n", "Your stack: {n}", { n: fmt(me.stack) }) + " · " + T("balance_n", "Balance {n}", { n: fmt(me.balance) });
+    else if (!me.seat && t.tourney) wait = "";
     else if (!me.seat && t.high_stakes && !me.high_roller) wait = T("hr_watch_note", "💎 High Rollers only: watch the table above.");
     else if (!me.seat) wait = T("buy_note", "Buy in for {min}–{max} chips (chips = PAT).", { min: fmt(t.min_buy), max: fmt(t.max_buy) });
     $("cz-wait").hidden = !wait;
@@ -304,6 +373,7 @@
     $("cz-sitout").hidden = !me.seat || me.sitting_out || me.waiting_bb;
     $("cz-sitin").hidden = !me.seat || !me.sitting_out;
     $("cz-postnow").hidden = !me.seat || !(me.sitting_out || me.waiting_bb);
+    if (t.tourney) for (const id of ["cz-sit", "cz-deal", "cz-topup", "cz-leave"]) $(id).hidden = true;   // (h22: a sit & go deals itself; no PAT in or out)
     $("cz-showlabel").hidden = !me.seat;
     $("cz-showhand").checked = !!me.show_hand;
     $("cz-pre").hidden = !(me.in_hand && !me.folded && !myTurn);
@@ -393,7 +463,7 @@
     const steps = hand.replay || [], step = steps[replayStep], end = !steps.length || replayStep === steps.length-1;
     const board = step ? step.board : hand.board;
     $("cz-replay").innerHTML = `<p><a href="${esc(hand.proof)}">🔐 ${esc(T("verify", "verify"))}</a> · ${esc(T("hand_n", "Hand #{n}", { n: hand.round }))}` +
-      (hand.net == null ? "" : ` · ${CZ.net(hand.net)} PAT`) + `</p><div>${CZ.staticCards(hand.cards || [])}</div><div>${CZ.staticCards(board || [])}</div>` +
+      (hand.net == null ? "" : ` · ${CZ.net(hand.net)} ${hand.tourney ? esc(T("sng_net_chips", "chips")) : "PAT"}`) + `</p><div>${CZ.staticCards(hand.cards || [])}</div><div>${CZ.staticCards(board || [])}</div>` +
       (step ? `<p>${esc(CZ.streetName(step.street))} · ${replayStep+1}/${steps.length} · ${esc(step.player ? step.player.name : "")} ${esc(step.action)} ${step.amount ? esc(fmt(step.amount)) : ""}</p><p>${esc(T("pot_n", "Pot {n}", {n:fmt(step.pot)}))}</p>` : `<p>${esc(T("old_hand", "Action replay is unavailable for this older hand."))}</p>`) +
       (step ? step.stacks : hand.players || []).map((p)=>`<div class="pl"><b>${esc(p.name)}</b> ${esc(fmt(p.stack))}</div>`).join("") +
       (end ? (hand.pots || []).map((p)=>`<div class="pl">🏆 ${esc(p.name)} +${esc(fmt(p.amount))} · ${esc(potName(p.pot))}</div>`).join("") : "") +
@@ -427,6 +497,18 @@
     if (j && j.ok && j.notice && j.notice.id === "hm_timeout") CZ.note(T("rule_timeout", j.notice.text, { count: j.notice.mins }));
   });
   $("cz-deal").addEventListener("click", () => act("deal"));
+  // h22: the Sit & Go header's Register / Unregister / an admin's Cancel (each with its own idempotency key)
+  $("cz-snghead").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-sng]");
+    if (!b || b.disabled) return;
+    const what = b.dataset.sng;
+    if (what === "cancel" && !confirm(T("sng_cancel_q", "Cancel this Sit & Go? Every entry is refunded in full."))) return;
+    b.disabled = true;
+    const j = await CZ.post(`/api/casino/sng/${encodeURIComponent(CZ.tableId)}/${what}`, { idem: CZ.idem() });
+    b.disabled = false;
+    CZ.toast(j.reply || j.error || (j.ok ? "" : T("act_fail", "That didn't work.")), !j.ok);
+    if (ref.fn) ref.fn();
+  });
   $("cz-leave").addEventListener("click", () => act("stand"));
   // keyboard on your turn: F fold, C check / call, R raise (not while typing)
   document.addEventListener("keydown", (e) => {

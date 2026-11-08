@@ -87,6 +87,71 @@
   <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>
 </section>
+<%# h22 (1.99??): 🏁 Sit & Go - the switch casino_sng (off | staff | everyone, default off; Hold'em on the site must be on too), its
+    settings (validated by casino/tourney.js checkSetting; a sit & go keeps the ones it opened with) and an admin's cancel with full refunds
+    (POST /api/casino/sng/:id/cancel, in the admin log as casino_sng_cancel). Audited like the other casino settings (casino_settings.actor). %>
+<section class="adm-card" id="casino-sng" aria-labelledby="casinoSngT">
+  <h2 id="casinoSngT">🏁 Sit &amp; Go <span class="adm-pill admin">admins</span></h2>
+  <% if (!_can('casino.admin') || !locals.casino) { %><p class="adm-help">Admins only.</p><% } else { const _c = locals.casino; %>
+  <p class="adm-help">One-table Hold'em tournaments: everyone pays the same entry (buy-in + the fee, held in escrow), plays tournament chips (not PAT), and the finish pays the prizes and the fee to the House in one move. Needs Hold'em on the site on (now <b><%= _c.hm_enabled ? 'on' : 'off' %></b>). Changes apply to sit &amp; gos opened after them.</p>
+  <form id="sngForm" class="adm-form">
+    <label>Who can play
+      <select name="casino_sng"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>"<%= _c.casino_sng === v ? ' selected' : '' %>><%= v %></option><% }) %></select>
+    </label>
+    <% [['sng_fee_pct', 'Fee (% of the buy-in, to the House)'], ['sng_buyins', 'Buy-ins (PAT, comma-separated)'], ['sng_payouts', 'Payouts % for 2-3 | 4-6 | 7-9 players'],
+        ['sng_levels', 'Blind levels (sb/bb, comma-separated; then x1.5)'], ['sng_level_mins', 'Level length (minutes)'], ['sng_turbo_mins', 'Turbo level length (minutes)']].forEach(([key, label]) => { %>
+    <label><%= label %><input name="<%= key %>" value="<%= _c[key] %>" required autocomplete="off" spellcheck="false"></label>
+    <% }) %>
+    <button type="submit">Save Sit &amp; Go settings</button><span id="sngStatus" role="status"></span>
+  </form>
+  <h3>Open sit &amp; gos</h3>
+  <div id="sngList" class="adm-help">Loading…</div>
+  <script>
+  (function () {
+    var form = document.getElementById('sngForm');
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var status = document.getElementById('sngStatus');
+      try {
+        for (var input of form.querySelectorAll('[name]')) {
+          var r = await fetch('/api/casino/admin/settings', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'}, body:JSON.stringify({key:input.name,value:input.value})});
+          var j = await r.json(); if (!j.ok) throw new Error(input.name + ': ' + (j.error || 'Save failed'));
+          if (j.settings && j.settings[input.name] !== undefined) input.value = j.settings[input.name];
+        }
+        status.textContent = 'Saved';
+      } catch (err) { status.textContent = err.message || 'Save failed'; }
+    });
+    var box = document.getElementById('sngList');
+    function esc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    async function load() {
+      try {
+        var j = await (await fetch('/api/casino/sng', {credentials:'same-origin', cache:'no-store'})).json();
+        var rows = (j.list || []).filter(function (r) { return r.status === 'registering' || r.status === 'running' || r.status === 'settling'; });
+        if (!rows.length) { box.textContent = 'None open.'; return; }
+        box.innerHTML = rows.map(function (r) {
+          return '<div class="adm-actions"><a href="/casino/holdem/t/' + esc(r.id) + '"><code>#' + esc(r.short) + '</code></a> ' + esc(r.size) + ' seats · ' +
+            esc(r.entry.toLocaleString()) + ' PAT entry · ' + esc(r.status) + ' · ' + esc(r.registered) + ' registered' +
+            (r.status === 'settling' ? '' : ' <button type="button" class="adm-btn ghost" data-cancel="' + esc(r.id) + '">Cancel (refund everyone)</button>') + '</div>';
+        }).join('');
+      } catch (err) { box.textContent = 'Couldn\'t load them.'; }
+    }
+    box.addEventListener('click', async function (e) {
+      var b = e.target.closest('button[data-cancel]');
+      if (!b) return;
+      var why = prompt('Cancel this sit & go? Every entry is refunded in full (buy-in and fee). Reason for the admin log:');
+      if (why === null) return;
+      b.disabled = true;
+      var idem = 'adm-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10);
+      var r = await fetch('/api/casino/sng/' + encodeURIComponent(b.dataset.cancel) + '/cancel', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'}, body:JSON.stringify({idem:idem, reason:why})});
+      var j = await r.json().catch(function () { return {}; });
+      alert(j.reply || j.error || (j.ok ? 'Cancelled.' : 'That did not work.'));
+      load();
+    });
+    load();
+  })();
+  </script>
+  <% } %>
+</section>
 <%- include('../partials/admin-heistmarket', { t, isAdmin: _can('games.config'), hm: locals.hm }) %>
 <%- include('../partials/admin-pvpcfg', { isAdmin: _can('games.config') }) %>
 <%- include('../partials/admin-spincfg', { isAdmin: _can('games.config') }) %>

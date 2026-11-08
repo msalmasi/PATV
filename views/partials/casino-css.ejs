@@ -328,6 +328,44 @@
     .cz-pill { padding: 0 10px; font-size: 12.5px; }
     .back { margin-bottom: 6px; }
   }
+  /* ── h22 (1.99??): 🏁 Sit & Go - the lobby's section + Create sheet (casino-ui.js), a sit & go table's header + results card (casinohm.js) ── */
+  .sng-note { max-width: 760px; margin: 0 0 var(--ds-sp-3); color: var(--mut); font-size: var(--ds-fs-sm); line-height: 1.5; }
+  .tcard.sng { border-color: rgba(255,255,255,.26); }
+  .tcard.sng.past { opacity: .78; }
+  .tcard.sng .tcard-h small b { color: var(--goldt); font-variant-numeric: tabular-nums; }
+  .tcard .sng-prz:empty { display: none; }
+  .sng-new { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .sng-chk { display: flex; align-items: center; gap: 10px; min-height: var(--ds-tap); margin: 12px 0 0; cursor: pointer; }
+  .sng-chk input { width: 20px; height: 20px; margin: 0; accent-color: var(--gold); }
+  .sheet .sng-sum { margin-top: 12px; color: #e6f2e8; }
+  .sng-head { display: grid; gap: 10px; margin: 0 0 12px; padding: 12px 14px; border-radius: var(--ds-r-xl); background: var(--panel); border: 1px solid rgba(255,255,255,.22); min-width: 0; }
+  .sng-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .sng-badge { margin-inline-end: auto; font: 700 16px/1.2 var(--ds-font); color: #fff; }
+  .sng-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .sng-stat { display: grid; gap: 2px; min-width: 0; padding: 8px 10px; border-radius: var(--ds-r-md); background: rgba(0,0,0,.32); }
+  .sng-stat small { color: var(--mut); font-size: var(--ds-fs-xs); letter-spacing: .06em; text-transform: uppercase; }
+  .sng-stat b { color: #fff; font: 700 17px/1.25 var(--ds-font); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .sng-stat b small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .sng-prizes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .sng-prizes > small { color: var(--mut); font-size: var(--ds-fs-xs); letter-spacing: .06em; text-transform: uppercase; margin-inline-end: 4px; }
+  .sng-who { margin: 0; color: #d6ead9; font-size: var(--ds-fs-sm); line-height: 1.5; }
+  .sng-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sng-res { margin: 0 0 12px; padding: 14px 16px; border-radius: var(--ds-r-xl); background: linear-gradient(180deg, rgba(40,32,8,.7), rgba(6,10,8,.88));
+             border: 1px solid rgba(255,215,64,.55); }
+  .sng-res h2 { margin: 0 0 10px; font: 700 18px/1.3 var(--ds-font); color: #ffe9a3; }
+  .sng-res ol { display: grid; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
+  .sng-res li { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px; border-radius: var(--ds-r-md); background: rgba(0,0,0,.35); }
+  .sng-res li > span { min-width: 0; overflow-wrap: anywhere; }
+  .sng-res li b { flex: none; color: var(--goldt); font-variant-numeric: tabular-nums; }
+  .sng-res li.me { box-shadow: inset 0 0 0 1px var(--good); }
+  .sng-res li small { color: var(--mut); }
+  .sng-res p { margin: 0 0 6px; }
+  @media (max-width: 600px) {
+    .sng-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sng-head { padding: 10px 12px; }
+    .sng-acts .cz-btn { flex: 1 1 auto; }
+  }
+  /* ── /h22 ── */
   @media (prefers-reduced-motion: reduce) {
     .cz *, .cz *::before, .cz *::after, dialog.sheet, dialog.sheet[open] { animation: none !important; transition: none !important; }
   }

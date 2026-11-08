@@ -2,6 +2,8 @@
 // animations by diffing what's on the felt), chips, avatars, countdown rings tied to the server's deadlines, the toast /
 // aria-live announcer, sheets (history, host tools), and the casino LOBBY (both games). casinobj.js and casinohm.js
 // draw their own tables on top of it. Strings: __t("js.casino.*", English default) - the defaults equal locales/en.json.
+// h22 (1.99??): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
+// ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
 (function () {
   "use strict";
   const root = document.getElementById("cb");
@@ -303,7 +305,7 @@
     }
     $("cz-adnone").hidden = adv.length > 0 || aopts.length > 0;
     const closeBtn = $("cz-close");
-    if (closeBtn) closeBtn.hidden = false;
+    if (closeBtn) closeBtn.hidden = !!t.tourney;          // (h22: a sit & go isn't closed - an admin cancels it, with full refunds)
   }
   function wireHost(refresh, closeVerb) {
     const side = async (url, body) => {
@@ -456,6 +458,139 @@
       const hbb = Number(hrBlinds.split("/")[1]);
       $("cz-hrbuy").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(hbb * 20), max: fmt(hbb * 200) });
     }
+    renderSng(j);
+  }
+
+  // ── h22 (1.99??): 🏁 Sit & Go - the lobby's section and its Create sheet (/api/casino/lobby -> sng, casino/tourney.js). A card: seats
+  // taken, the entry (buy-in + fee), the structure, the countdown or the level, the prizes; Register / Unregister (each with its own
+  // idempotency key: a double click never holds twice) and Watch. Hidden on the blackjack tab and while the switch is off (unless one
+  // is still open - leaving it always works).
+  const mmss = (ms) => { const n = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
+  function tickSng() { const now = Date.now() - skew; for (const el of document.querySelectorAll("[data-sngdl]")) el.textContent = mmss(Number(el.dataset.sngdl) - now); }
+  setInterval(tickSng, 1000);
+  const medal = (i) => ["🥇", "🥈", "🥉"][i] || "#" + (i + 1);
+  const prizeTags = (prizes) => (prizes || []).map((p, i) => `<span class="tag" aria-label="${esc(T("sng_place_prize", "Place {n}: {amount} PAT", { n: i + 1, amount: fmt(p) }))}">${medal(i)} ${fmt(p)}</span>`).join("");
+  const clockHTML = (dl) => `<b data-sngdl="${Number(dl)}">${mmss(Number(dl) - (Date.now() - skew))}</b>`;
+  function sngState(r) {
+    if (r.status === "registering") {
+      return r.countdown_at ? esc(T("sng_starts_in", "Starts in")) + " " + clockHTML(r.countdown_at)
+                            : esc(r.start_at ? T("sng_starts_at", "Starts at {n} players", { n: r.start_at }) : T("sng_starts_full", "Starts when full"));
+    }
+    if (r.status === "running") return esc(T("sng_running_n", "Level {n} · {sb}/{bb} · {left} left", { n: r.level, sb: fmt(r.sb), bb: fmt(r.bb), left: r.players_left }));
+    if (r.status === "settling") return esc(T("sng_paying", "Paying out…"));
+    if (r.status === "finished") return esc(r.winner ? T("sng_won_by", "🏆 {name} won", { name: r.winner }) : T("sng_over", "Finished"));
+    return esc(T("sng_called_off", "Called off — every entry refunded"));
+  }
+  function sngCard(r, sg) {
+    const url = "/casino/holdem/t/" + encodeURIComponent(r.id);
+    const reg = r.status === "registering";
+    const n = reg ? r.registered : r.field || r.registered;
+    const dots = Array.from({ length: r.size }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("");
+    let act = "";
+    if (reg && signed) {
+      act = r.me ? `<button type="button" class="cz-btn ghost sm" data-sngact="unregister" data-id="${esc(r.id)}">${esc(T("sng_unregister", "Unregister"))}</button>`
+        : r.registered >= r.size ? `<span class="tag">${esc(T("full", "Full"))}</span>`
+        : sg.on ? `<button type="button" class="cz-btn gold sm" data-sngact="register" data-id="${esc(r.id)}">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(r.entry) }))}</button>` : "";
+    }
+    const where = (r.rooms || []).map((x) => `<span class="tag blue">🐸 ${esc(x.name)}</span>`).join("");
+    const title = esc(T("sng_of", "{host}'s Sit & Go", { host: r.host }));
+    return `<article class="tcard sng${reg ? "" : " past"}" aria-label="${title}">` +
+      `<div class="tcard-h"><span class="ic" aria-hidden="true">🏁</span><div><b>${title}</b>` +
+      `<small>${esc(T("sng_seats_n", "{n} seats", { n: r.size }))}${r.turbo ? " · " + esc(T("sng_turbo_tag", "Turbo")) : ""} · ${sngState(r)}</small></div></div>` +
+      `<div class="seatdots" aria-label="${esc(T("sng_reg_n", "{n} of {size} registered", { n, size: r.size }))}">${dots}<span>${fmt(n)}/${fmt(r.size)}</span></div>` +
+      `<div class="meta"><span class="tag gold">${esc(T("sng_entry_n", "Entry {buyin} + {fee}", { buyin: fmt(r.buyin), fee: fmt(r.fee) }))}</span>` +
+      `<span class="tag">${esc(T("sng_chips_n", "{n} chips", { n: fmt(r.stack) }))}</span><span class="tag">${esc(T("sng_levels_n", "Blinds up every {n} min", { n: r.level_mins }))}</span>${where}` +
+      `${r.on_stream ? `<span class="tag red">📺 ${esc(T("on_stream", "On Pepe's stream"))}</span>` : ""}</div>` +
+      `<div class="meta sng-prz">${prizeTags(r.prizes)}</div>` +
+      `<div class="acts">${act || "<span></span>"}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
+  }
+  let sngData = null;
+  const sngPick = { buyin: null };
+  function renderSng(j) {
+    const sec = $("cz-sng");
+    if (!sec) return;
+    const sg = j.sng || null;
+    sngData = sg;
+    const list = sg ? sg.list || [] : [];
+    sec.hidden = !sg || (!sg.on && !list.length) || lobbyTab === "bj";
+    if (sec.hidden) return;
+    const html = list.length ? list.map((r) => sngCard(r, sg)).join("")
+      : `<div class="lob-empty">${esc(T("sng_none", "No Sit & Go is open right now. Create one and others can join you."))}</div>`;
+    if ($("cz-sngs").dataset.v !== html) { $("cz-sngs").dataset.v = html; $("cz-sngs").innerHTML = html; }
+    const note = $("cz-sng-note");
+    if (note.dataset.def === undefined) note.dataset.def = note.textContent;
+    note.textContent = sg.audience === "staff" ? T("sng_staff_only", "Sit & Gos are open to staff only for now.") : note.dataset.def;
+    $("cz-sng-open").hidden = !(signed && sg.can_create);
+    if ($("cz-sngnew").open) sngSheet();
+  }
+  function sngSheet() {
+    const sg = sngData;
+    if (!sg) return;
+    if (!sngPick.buyin || !sg.buyins.includes(sngPick.buyin)) sngPick.buyin = sg.buyins[0];
+    const box = $("cz-sng-buyins");
+    const sig = sg.buyins.join() + "|" + sngPick.buyin;
+    if (box.dataset.v !== sig) {
+      box.dataset.v = sig;
+      box.innerHTML = sg.buyins.map((b) => `<button type="button" data-b="${b}" aria-pressed="${b === sngPick.buyin}">${esc(fmt(b))}</button>`).join("");
+    }
+    const size = Number($("cz-sng-size").value) || 6;
+    const at = $("cz-sng-at");
+    const opts = Array.from({ length: Math.max(0, size - 2) }, (_, i) => i + 2);
+    const want = opts.join();
+    if (at.dataset.v !== want) {
+      const keep = at.value;
+      at.dataset.v = want;
+      at.innerHTML = `<option value="">${esc(T("sng_when_full", "When it's full"))}</option>` +
+        opts.map((k) => `<option value="${k}">${esc(T("sng_at_opt", "At {n} players (a {s} s countdown)", { n: k, s: sg.countdown_secs }))}</option>`).join("");
+      if (opts.map(String).includes(keep)) at.value = keep;
+    }
+    $("cz-sng-turbo-l").textContent = T("sng_turbo_lbl", "Turbo: blinds up every {n} min", { n: sg.turbo_mins });
+    const turbo = $("cz-sng-turbo").checked;
+    const fee = Math.floor((sngPick.buyin * sg.fee_pct) / 100);
+    const band = sg.payouts[size <= 3 ? 0 : size <= 6 ? 1 : 2] || [100];
+    const pool = sngPick.buyin * size;
+    const prizes = band.map((p) => Math.floor((pool * p) / 100));
+    prizes[0] += pool - prizes.reduce((a, b) => a + b, 0);
+    $("cz-sng-sum").textContent = T("sng_sum", "Entry {entry} PAT ({buyin} + a {fee} fee to the House) · {stack} tournament chips · blinds up every {mins} min · prizes if full: {prizes} PAT",
+      { entry: fmt(sngPick.buyin + fee), buyin: fmt(sngPick.buyin), fee: fmt(fee), stack: fmt(sg.stack), mins: turbo ? sg.turbo_mins : sg.level_mins,
+        prizes: prizes.map((p, i) => medal(i) + " " + fmt(p)).join(" · ") });
+    const bal = lobbyData && lobbyData.me ? lobbyData.me.balance : null;
+    const go = $("cz-sng-go");
+    go.disabled = bal != null && bal < sngPick.buyin + fee;
+    go.textContent = go.disabled ? T("not_enough", "not enough PAT") : T("sng_create_n", "Create and register · {n} PAT", { n: fmt(sngPick.buyin + fee) });
+  }
+  function wireSng() {
+    if (!$("cz-sng")) return;
+    const anchor = $("cz-open-wrap");                   // (the section sits after the lobby's tables, before "Open a table")
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore($("cz-sng"), anchor);
+    $("cz-sng-open").addEventListener("click", () => { sngSheet(); openSheet("cz-sngnew"); });
+    for (const id of ["cz-sng-size", "cz-sng-turbo", "cz-sng-at"]) $(id).addEventListener("change", sngSheet);
+    $("cz-sng-buyins").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-b]");
+      if (!b) return;
+      sngPick.buyin = Number(b.dataset.b);
+      sngSheet();
+    });
+    $("cz-sng-go").addEventListener("click", async () => {
+      const go = $("cz-sng-go");
+      if (go.disabled) return;
+      go.disabled = true;
+      const at = $("cz-sng-at").value;
+      const j = await post("/api/casino/sng/new", { size: Number($("cz-sng-size").value), buyin: sngPick.buyin, turbo: $("cz-sng-turbo").checked,
+                                                   start_at: at ? Number(at) : null, idem: idem() });
+      go.disabled = false;
+      if (j.ok && j.table) location.href = "/casino/holdem/t/" + encodeURIComponent(j.table);
+      else toast(j.reply || j.error || T("sng_create_fail", "Couldn't create the Sit & Go."), true);
+    });
+    $("cz-sngs").addEventListener("click", async (e) => {
+      const b = e.target.closest("button[data-sngact]");
+      if (!b || b.disabled) return;
+      b.disabled = true;
+      const j = await post(`/api/casino/sng/${encodeURIComponent(b.dataset.id)}/${b.dataset.sngact}`, { idem: idem() });
+      b.disabled = false;
+      toast(j.reply || j.error || (j.ok ? "" : T("act_fail", "That didn't work.")), !j.ok);
+      lobby();
+    });
   }
   async function lobby() {
     try {
@@ -495,6 +630,7 @@
     $("cz-open-hm-go").addEventListener("click", () => openTable("holdem"));
     $("cz-open-hrbj-go").addEventListener("click", () => openTable("bj", true));
     $("cz-open-hrhm-go").addEventListener("click", () => openTable("holdem", true));
+    wireSng();                                                // h22
     lobby();
     let tm = setInterval(lobby, 4000);
     document.addEventListener("visibilitychange", () => { clearInterval(tm); tm = setInterval(lobby, document.hidden ? 15000 : 4000); if (!document.hidden) lobby(); });
@@ -778,5 +914,6 @@
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew,
                 // 1.99ajw casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)
-                seatWho, personMenu, pepeMenu, people: () => ppl.d, loadPeople, view: () => lastView, me: meName };
+                seatWho, personMenu, pepeMenu, people: () => ppl.d, loadPeople, view: () => lastView, me: meName,
+                sng: { mmss, medal, prizeTags } };          // (h22: the table page's Sit & Go header - casinohm.js)
 })();
