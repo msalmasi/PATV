@@ -183,13 +183,18 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   const ptA = (await page("/admin/bridge", U.admin)).html, ptS = (await page("/admin/bridge", U.staff)).html;
   assert.match(ptA, /id="pttlimits"[\s\S]*id="ptForm"[\s\S]*\/api\/admin\/pttlimits/, "admins: the card, its form and its API");
   assert.match(ptA, /applies to everyone's 🎙 push-to-talk clips into Camfrog rooms/);
-  for (const [name, value, lo, hi] of [["gap_s", 30, 0, 600], ["burst", 3, 1, 30], ["max_secs", 30, 3, 120]]) {
+  // (relaymic: + the release tail, 0-1000 ms, 400 by default)
+  for (const [name, value, lo, hi] of [["gap_s", 30, 0, 600], ["burst", 3, 1, 30], ["max_secs", 30, 3, 120], ["tail_ms", 400, 0, 1000]]) {
     const m = ptA.match(new RegExp('<input[^>]*name="' + name + '"[^>]*>'));
     assert.ok(m, "the " + name + " field");
     assert.match(m[0], new RegExp('value="' + value + '"'), name + " shows its current value");
     assert.match(m[0], new RegExp('min="' + lo + '"'), name + " min");
     assert.match(m[0], new RegExp('max="' + hi + '"'), name + " max");
   }
+  // relaymic: the tail on iPhone / iPad is a switch, off by default (the release stays inside the gesture there until tested)
+  const ios = ptA.match(/<input[^>]*name="tail_ios"[^>]*>/);
+  assert.ok(ios && /type="checkbox"/.test(ios[0]) && !/checked/.test(ios[0]), "the iOS tail switch, off: " + (ios && ios[0]));
+  assert.match(ptA, /id="ptNow"[^>]*>[^<]*release tail 400 ms \(not on iPhone \/ iPad\)/, "the Now line says the tail");
   // pttlimits review fix 1: whether Pepe follows them - an older Pepe charges a clip over his own 30 s, so the card says the site keeps
   // clips to 30 s until he says he follows each job's limits (no Pepe in this test: not yet)
   assert.match(ptA, /id="ptPepe"[^>]*>[^<]*Pepe hasn't said he follows these yet[^<]*at most 30 s/, "admins: Pepe's part, not yet");

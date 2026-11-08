@@ -383,11 +383,11 @@ test("ptttoast review F1: the character counter sits in the input's row beside t
   assert.match(read("public", "js", "room-bridge.js"), /COUNT_FROM = 240/);
 });
 
-test("ptttoast: cache-busters - room-bridge.js v33 and pad-dock.js v13 wherever they load, pad-dock.css v12 (review F1); the hidden line rule is room-bridge.css's", () => {
+test("ptttoast: cache-busters - room-bridge.js v34 (relaymic; v33 ptttoast) and pad-dock.js v13 wherever they load, pad-dock.css v12 (review F1); the hidden line rule is room-bridge.css's", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = read("views", v);
-    assert.match(s, /room-bridge\.js\?v=33/, v);
-    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!33\b)\d+/, v + ": one version");
+    assert.match(s, /room-bridge\.js\?v=34/, v);   // (relaymic: v34 - the release tail)
+    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!34\b)\d+/, v + ": one version");
     assert.match(s, /<script src="\/public\/js\/pad-dock\.js\?v=13"><\/script>/, v);
   }
   assert.match(read("public", "css", "room-bridge.css"), /^\.rb-hide, [^{]*\{ display: none !important; \}/m);

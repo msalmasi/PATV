@@ -911,7 +911,7 @@ test("Story camera review: room-bridge.js hands its audio session to the camera 
   vm.runInContext(fs.readFileSync(path.join(repo, "public/js/room-bridge.js"), "utf8"), ctx);
   const S = ctx.PATVRoom.session; assert.ok(S && typeof S.before === "function" && typeof S.after === "function");
   S.before(); assert.equal(nav.audioSession.type, "play-and-record"); S.after(); assert.equal(nav.audioSession.type, "auto", "no room playing: 'auto'");
-  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=33/, v);   // v33: ptttoast (the Dock's lines are its notices); v32: pttlimits (the recorder stops at the admin max length)
+  for (const v of ["home.ejs", "room.ejs"]) assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=34/, v);   // v34: relaymic (the release tail); v33: ptttoast (the Dock's lines are its notices); v32: pttlimits (the recorder stops at the admin max length)
 });
 
 test("Story camera review: a webcam that names no facing (most desktop cameras) gets the mirrored selfie preview; a phone's camera doesn't", async () => {

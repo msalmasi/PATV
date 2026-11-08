@@ -93,9 +93,9 @@ async function pepeSays(flag = 1) {
 
 test("defaults are today's limits: 30 s cooldown, 3 per 10 min, 30 s long", () => {
   PT._reset();
-  assert.deepEqual(PT.DEFAULTS, { gap_s: 30, burst: 3, max_secs: 30 });
+  assert.deepEqual(PT.DEFAULTS, { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0 });   // (relaymic: + the release tail)
   assert.equal(PT.WINDOW_S, 600);
-  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, window_s: 600 }, "before the row is read: the defaults");
+  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0, window_s: 600 }, "before the row is read: the defaults");
 });
 
 test("admin API: site admins only (by the account's class in the database), a same-origin fetch for a change", async () => {
@@ -105,9 +105,9 @@ test("admin API: site admins only (by the account's class in the database), a sa
   assert.equal((await api("GET", "helper")).status, 403, "staff can't");
   const g = await api("GET", "boss");
   assert.equal(g.status, 200, JSON.stringify(g.d));
-  assert.deepEqual(g.d.cfg, { gap_s: 30, burst: 3, max_secs: 30 });
-  assert.deepEqual(g.d.defaults, { gap_s: 30, burst: 3, max_secs: 30 });
-  assert.deepEqual(g.d.limits, { gap_s: [0, 600], burst: [1, 30], max_secs: [3, 120] });
+  assert.deepEqual(g.d.cfg, { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0 });
+  assert.deepEqual(g.d.defaults, { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0 });
+  assert.deepEqual(g.d.limits, { gap_s: [0, 600], burst: [1, 30], max_secs: [3, 120], tail_ms: [0, 1000], tail_ios: [0, 1] });
   assert.equal(g.d.window_s, 600);
   // a change: no X-Requested-With -> refused; another site's Origin -> refused; staff / members -> refused
   assert.equal((await api("POST", "boss", { gap_s: 10 })).status, 403);
@@ -127,6 +127,8 @@ test("validation: whole numbers inside each range, else 400 naming the field - n
     [{ gap_s: -1 }, "gap_s"], [{ gap_s: 601 }, "gap_s"], [{ gap_s: 2.5 }, "gap_s"], [{ gap_s: "abc" }, "gap_s"],
     [{ burst: 0 }, "burst"], [{ burst: 31 }, "burst"], [{ burst: null }, "burst"],
     [{ max_secs: 2 }, "max_secs"], [{ max_secs: 121 }, "max_secs"], [{ max_secs: "" }, "max_secs"],
+    // relaymic: the release tail (0-1000 ms) and its iOS switch (0 / 1, or true / false)
+    [{ tail_ms: -1 }, "tail_ms"], [{ tail_ms: 1001 }, "tail_ms"], [{ tail_ms: 12.5 }, "tail_ms"], [{ tail_ios: 2 }, "tail_ios"], [{ tail_ios: "yes" }, "tail_ios"],
   ];
   for (const [body, field] of bad) {
     const r = await save(body);
@@ -134,26 +136,31 @@ test("validation: whole numbers inside each range, else 400 naming the field - n
     assert.equal(r.d.field, field, JSON.stringify(body));
     assert.ok(r.d.error && r.d.error.length > 5, "a reason the card can show");
   }
-  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, window_s: 600 }, "nothing changed");
+  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0, window_s: 600 }, "nothing changed");
   assert.equal((await save({})).status, 400, "nothing to save");
   // numbers typed into the form arrive as strings - "45" is fine
   const ok = await save({ gap_s: "45", burst: "4", max_secs: "60" });
   assert.equal(ok.status, 200, JSON.stringify(ok.d));
-  assert.deepEqual(PT.current(), { gap_s: 45, burst: 4, max_secs: 60, window_s: 600 });
+  assert.deepEqual(PT.current(), { gap_s: 45, burst: 4, max_secs: 60, tail_ms: 400, tail_ios: 0, window_s: 600 });
   // edges
   await setLimits({ gap_s: 0, burst: 1, max_secs: 3 });
-  assert.deepEqual(PT.current(), { gap_s: 0, burst: 1, max_secs: 3, window_s: 600 });
+  assert.deepEqual(PT.current(), { gap_s: 0, burst: 1, max_secs: 3, tail_ms: 400, tail_ios: 0, window_s: 600 });
   await setLimits({ gap_s: 600, burst: 30, max_secs: 120 });
-  assert.deepEqual(PT.current(), { gap_s: 600, burst: 30, max_secs: 120, window_s: 600 });
+  assert.deepEqual(PT.current(), { gap_s: 600, burst: 30, max_secs: 120, tail_ms: 400, tail_ios: 0, window_s: 600 });
+  // relaymic: the tail's edges - none, 1 s, on for iOS too (true / false from the card's checkbox)
+  await setLimits({ tail_ms: 0, tail_ios: true });
+  assert.deepEqual([PT.current().tail_ms, PT.current().tail_ios], [0, 1]);
+  await setLimits({ tail_ms: "1000", tail_ios: false });
+  assert.deepEqual([PT.current().tail_ms, PT.current().tail_ios], [1000, 0]);
   await setLimits({ reset: true });
-  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, window_s: 600 }, "reset = the defaults");
+  assert.deepEqual(PT.current(), { gap_s: 30, burst: 3, max_secs: 30, tail_ms: 400, tail_ios: 0, window_s: 600 }, "reset = the defaults");
 });
 
 test("a save persists (chatlog_meta 'ptt_limits'), is audited (admin_audit pttlimits.save), survives a restart; a bad row is clamped", async () => {
   const before = (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'pttlimits.save'"))[0].n;
   const r = await save({ gap_s: 12, burst: 5, max_secs: 45, reason: "louder rooms tonight" });
   assert.equal(r.status, 200, JSON.stringify(r.d));
-  assert.deepEqual(r.d.cfg, { gap_s: 12, burst: 5, max_secs: 45 });
+  assert.deepEqual(r.d.cfg, { gap_s: 12, burst: 5, max_secs: 45, tail_ms: 400, tail_ios: 0 });
   assert.deepEqual(r.d.changed, { gap_s: [30, 12], burst: [3, 5], max_secs: [30, 45] });
   const row = (await getQuery("SELECT value FROM chatlog_meta WHERE key = 'ptt_limits'"))[0];
   const v = JSON.parse(row.value);
@@ -162,7 +169,7 @@ test("a save persists (chatlog_meta 'ptt_limits'), is audited (admin_audit pttli
   assert.equal(a.length, before + 1);
   assert.equal(a[0].admin_name, "boss");
   assert.equal(a[0].reason, "louder rooms tonight");
-  assert.deepEqual(JSON.parse(a[0].detail).to, { gap_s: 12, burst: 5, max_secs: 45 });
+  assert.deepEqual(JSON.parse(a[0].detail).to, { gap_s: 12, burst: 5, max_secs: 45, tail_ms: 400, tail_ios: 0 });
   // the same values again: no write, no audit row
   const again = await save({ gap_s: 12, burst: 5, max_secs: 45 });
   assert.equal(again.status, 200);
@@ -170,19 +177,19 @@ test("a save persists (chatlog_meta 'ptt_limits'), is audited (admin_audit pttli
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'pttlimits.save'"))[0].n, before + 1);
   // the card's GET shows them, who changed them, and the recent changes
   const g = await api("GET", "boss");
-  assert.deepEqual(g.d.cfg, { gap_s: 12, burst: 5, max_secs: 45 });
+  assert.deepEqual(g.d.cfg, { gap_s: 12, burst: 5, max_secs: 45, tail_ms: 400, tail_ios: 0 });
   assert.equal(g.d.by, "boss");
   assert.ok(g.d.at > 0);
   assert.ok(Array.isArray(g.d.audit) && g.d.audit.length >= 1);
   // a restart reads them back
   PT._reset();
   await PT.init();
-  assert.deepEqual(PT.current(), { gap_s: 12, burst: 5, max_secs: 45, window_s: 600 });
+  assert.deepEqual(PT.current(), { gap_s: 12, burst: 5, max_secs: 45, tail_ms: 400, tail_ios: 0, window_s: 600 });
   // a row out of range (written by hand) can't break a clip: each value is clamped on the way out
-  await runQuery("UPDATE chatlog_meta SET value = ? WHERE key = 'ptt_limits'", [JSON.stringify({ gap_s: 99999, burst: -4, max_secs: "x" })]);
+  await runQuery("UPDATE chatlog_meta SET value = ? WHERE key = 'ptt_limits'", [JSON.stringify({ gap_s: 99999, burst: -4, max_secs: "x", tail_ms: 5000, tail_ios: "x" })]);
   PT._reset();
   await PT.init();
-  assert.deepEqual(PT.current(), { gap_s: 600, burst: 1, max_secs: 30, window_s: 600 });
+  assert.deepEqual(PT.current(), { gap_s: 600, burst: 1, max_secs: 30, tail_ms: 1000, tail_ios: 0, window_s: 600 });
   await setLimits({ reset: true });
 });
 
@@ -354,10 +361,15 @@ test("the live view carries the max length (room.pttMax) - changed at once", asy
   let v = await bridge.liveView(LR, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
   assert.equal(v.room.micRelay, true);
   assert.equal(v.room.pttMax, 30);
+  assert.equal(v.room.pttTail, 400, "relaymic: the release tail (400 ms by default)");
+  assert.equal(v.room.pttTailIos, false, "relaymic: ...not on iOS by default");
   await pepeSays();                     // (review fix 1: a 75 s max only while Pepe follows the job's limits)
   await setLimits({ gap_s: 30, burst: 3, max_secs: 75 });
   v = await bridge.liveView(LR, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
   assert.equal(v.room.pttMax, 75);
+  await setLimits({ tail_ms: 250, tail_ios: 1 });
+  v = await bridge.liveView(LR, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
+  assert.deepEqual([v.room.pttTail, v.room.pttTailIos], [250, true], "relaymic: the tail changes at once too");
   await setLimits({ reset: true });
 });
 
@@ -620,6 +632,6 @@ test("the wording: one string with {n} (js.pad.ptt.upto_n), the old fixed '20 s'
   assert.doesNotMatch(src, /setTimeout\(stop, 20000\)/, "no fixed 20 s stop");
   assert.doesNotMatch(src, /'js\.pad\.ptt\.upto'/);
   for (const v of ["room.ejs", "home.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=33/, v + " loads the new recorder");   // v32 (v31 = the story camera 1.99alu); v33: ptttoast (the same recorder - its lines are the Dock's notices)
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=34/, v + " loads the new recorder");   // v34 (relaymic: the release tail); v32 (v31 = the story camera 1.99alu); v33: ptttoast (the same recorder - its lines are the Dock's notices)
   }
 });
