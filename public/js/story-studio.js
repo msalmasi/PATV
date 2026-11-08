@@ -307,6 +307,9 @@
   // (framed like the video by render()) that stays wherever this browser can't show the recording at all
   function stillOf(s, m, poster) {
     var st = s.still = el('img', 'sst-source sst-still'); st.alt = ''; st.setAttribute('aria-hidden', 'true'); st.setAttribute('draggable', 'false'); st.style.objectFit = 'contain';
+    // storyprev verify: it takes no touch - a press goes through to the <video> and the preview (crop pan, pinch), never to
+    // iOS's long-press menu for an image (Save / Copy / Share, which cancels the gesture) or a text selection on it
+    st.style.pointerEvents = 'none'; st.style.setProperty('-webkit-touch-callout', 'none'); st.style.setProperty('-webkit-user-select', 'none'); st.style.setProperty('user-select', 'none');
     st.addEventListener('error', function () { st.bad = true; st.hidden = true; m.removeAttribute('poster'); });
     st.src = objectURL(s, poster); m.setAttribute('poster', st.src); s.preview.insertBefore(st, s.canvas); return st;
   }
@@ -368,7 +371,7 @@
     if (kind === 'video') { m.muted = true; m.defaultMuted = true; m.playsInline = true; ['playsinline', 'webkit-playsinline', 'muted'].forEach(function (a) { m.setAttribute(a, ''); }); m.preload = 'auto'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
     // storyprev: a camera clip's poster stands by (its size came with it); the read-out is there only with ?storydebug=1
     var st = kind === 'video' && captured && info.poster && info.poster.size && info.width > 0 && info.height > 0 ? stillOf(s, m, info.poster) : null;
-    var dbg = debugFor(s, file, m, info, st), url = objectURL(s, file), frag = kind === 'video', phase = 'loading', waiting = false, late = false, timer = 0;
+    var dbg = debugFor(s, file, m, info, st), url = objectURL(s, file), frag = kind === 'video', phase = 'loading', waiting = false, late = false, timer = 0, early = false;
     // storyprev: a <video> counts as open once it has a size. WebKit can have none yet at 'loadedmetadata' (a MediaRecorder MP4
     // is fragmented, its moov empty) and bring it with 'resize' once a frame decodes - so a missing size is waited for (WAIT_MS),
     // never refused at once, and a file that says nothing at all is given LOAD_MS (a camera clip with its poster: WAIT_MS)
@@ -376,10 +379,17 @@
     function arm(ms) { clearTimeout(timer); timer = setTimeout(function () { failed(waiting ? 'no size' : 'no metadata'); }, ms); }
     function meta() {
       if (!live(s) || id !== s.pickId) return;
-      // the poster stood in, and the video has a size after all: it takes over once it paints (playback in the editor)
-      if (phase === 'still' && !late && sized()) { late = true; cover(); firstFrame(s, m, id); return; }
+      // the poster stood in, and the video has a size after all: it takes over once it paints (playback in the editor).
+      // storyprev verify: a play already running is the user's (Trim's - WebKit may size a video only once it plays): it goes on,
+      // and the poster goes with it; a paused video gets the muted first-frame play
+      if (phase === 'still' && !late && sized()) { late = true; if (!m.paused && !m.priming) m.primed = true; cover(); if (m.paused) firstFrame(s, m, id); return; }
+      // storyprev verify: a gallery video (or a camera clip with no poster) whose metadata comes after the give-up opens after all,
+      // unless it was already chosen to go as it is
+      if (phase === 'failed' && sized() && !d.legacy && !s.busy) { phase = 'loading'; s.recovery.hidden = true; s.recovery.textContent = ''; say(s, ''); if (dbg) dbg.note('a size after all'); loaded(); return; }
       if (phase !== 'loading') return;
-      if (sized()) loaded(); else if (!waiting) { waiting = true; arm(WAIT_MS); }
+      // storyprev verify: WebKit loads only metadata until a video plays, so the size it is waited for may come only from a
+      // decoded frame: the muted first-frame play asks for one now (paused as soon as it starts, as below)
+      if (sized()) loaded(); else if (!waiting) { waiting = true; arm(WAIT_MS); early = true; firstFrame(s, m, id); }
     }
     function loaded() {
       if (!live(s) || id !== s.pickId || phase !== 'loading') return;
@@ -391,7 +401,7 @@
         // a fresh recording can report no length (Infinity, NaN, 0): the camera's measured hold stands in
         length(isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs);
         if (st) cover();      // before the first-frame play: that play is not the video showing itself
-        firstFrame(s, m, id);
+        if (!early) firstFrame(s, m, id);      // storyprev verify: the wait's own muted play put it up already
       }
       if (dbg) dbg.view(st ? 'video, under its poster until it paints a frame' : 'video');
       opened();
@@ -414,18 +424,21 @@
     // the muted play still puts the first frame up)
     function broke() {
       if (!live(s) || id !== s.pickId) return;
-      if (phase === 'loading' && frag) { frag = false; waiting = false; arm(st ? WAIT_MS : LOAD_MS); if (dbg) dbg.note('retry without the fragment #t=0.001'); m.src = url; return; }
+      if (phase === 'loading' && frag) { frag = false; waiting = false; early = false; arm(st ? WAIT_MS : LOAD_MS); if (dbg) dbg.note('retry without the fragment #t=0.001'); m.src = url; return; }
       failed('error');
     }
     // storyprev: when this browser can't show the video (an error, no size, nothing at all), a camera clip's poster is the preview
     // - its size frames it, so crop, text and stickers work and the clip posts with its edits; a gallery video (no poster)
     // keeps the old recovery, in kinder words. A video that had opened and fails later keeps its edits under its poster.
     function failed(why) {
-      if (!live(s) || id !== s.pickId || phase === 'still' || phase === 'failed') return;
+      if (!live(s) || id !== s.pickId || phase === 'failed') return;
+      // storyprev verify: the video took over from the poster (late) and fails after all - the poster comes back over it
+      if (phase === 'still') { if (late && st && !st.bad && st.hidden) { st.hidden = false; if (dbg) dbg.view('poster (a late ' + why + ')'); } return; }
       clearTimeout(timer); if (dbg) dbg.note('no preview from the element: ' + why);
       if (st && !st.bad && phase === 'ready') { st.hidden = false; if (dbg) dbg.view('poster (a late ' + why + ')'); return; }
       if (st && !st.bad) {
-        phase = 'still'; d.w = info.width; d.h = info.height; d.decoded = true; d.legacy = false; resetFrame(d);
+        // d.poster (storyprev verify): framed on the poster's size - post() offers "Post it as it is" if the server refuses the edit
+        phase = 'still'; d.w = info.width; d.h = info.height; d.decoded = true; d.legacy = false; d.poster = true; resetFrame(d);
         length(isFinite(m.duration) && m.duration > 0 ? m.duration : info.secs);
         if (dbg) dbg.view('poster (' + why + ')');
         return opened();
@@ -444,6 +457,7 @@
     function cover() {
       function off(why) { if (live(s) && id === s.pickId && (phase === 'ready' || phase === 'still') && !st.hidden) { st.hidden = true; if (dbg) dbg.view('video (' + why + ')'); } }
       if (typeof m.requestVideoFrameCallback === 'function') { try { m.requestVideoFrameCallback(function () { off('a frame painted'); }); return; } catch (e) { /* the event below */ } }
+      if (m.primed && !m.paused) return off('playing');      // storyprev verify: the user's play is running already (a late size)
       m.addEventListener('playing', function () { if (m.primed) off('playing'); });
     }
     if (st) st.addEventListener('error', function () { if (live(s) && id === s.pickId && phase === 'still') { phase = 'loading'; failed('poster'); } });
@@ -457,11 +471,13 @@
   // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
   // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play,
   // paused as soon as it starts, is the other. Where even that is refused (Low Power Mode), the fragment alone shows it.
-  // (storyprev: m.primed once that play is over - a later play is the user's)
+  // (storyprev: m.primed once that play is over - a later play is the user's; m.priming while it runs)
   function firstFrame(s, m, id) {
+    m.primed = false; m.priming = true;
+    function over() { m.priming = false; m.primed = true; }
     var played; try { played = m.play(); } catch (e) { played = null; }
-    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); m.primed = true; }, function () { m.primed = true; /* refused: the media fragment shows the frame */ });
-    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); m.primed = true; });
+    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); over(); }, function () { over(); /* refused: the media fragment shows the frame */ });
+    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); over(); });
   }
   function asIs(s) {
     var d = s.d;
@@ -687,7 +703,9 @@
       document.dispatchEvent(new CustomEvent('patv:story-posted', { detail: detail })); toast(story);
     }).catch(function (e) { if (!live(s) || a.cancelled || s.attempt !== a) return; s.busy = false; s.failed = true; s.progress.hidden = true;
       if (a.stage !== 'mine') { discard(a.ids); s.ready = null; } s.attempt = null; say(s, e.message || _t('js.feed.sc.failed', 'That didn\'t work.'), true);
-      if (e.message === "Animated pictures can't be edited yet - post it as it is.") { s.recovery.textContent = ''; s.recovery.hidden = false; add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); })); }
+      // storyprev verify: a camera clip framed on its poster (this browser couldn't show the recording) that the server refuses -
+      // its crop read against the file - can still go as it is, as it did before the poster
+      if (e.message === "Animated pictures can't be edited yet - post it as it is." || (s.d.poster && !s.d.legacy && a.stage !== 'mine')) { s.recovery.textContent = ''; s.recovery.hidden = false; add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); })); }
       paintControls(s);
     });
   }

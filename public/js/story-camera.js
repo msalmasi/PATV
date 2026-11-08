@@ -292,7 +292,9 @@
       try { canvas.toBlob(function (b) { clearTimeout(t); resolve(b && b.size ? b : null); }, 'image/jpeg', POSTER_Q); } catch (e) { clearTimeout(t); resolve(null); }
     });
   }
-  function thaw(c) { if (c.frozen) { c.frozen.remove(); c.frozen = null; } if (c.view) c.view.classList.remove('scam-snap'); }
+  // storyprev verify: a canvas done with gives its pixels back at once (iOS counts canvas memory until a GC frees the element)
+  function empty(canvas) { if (canvas) { try { canvas.width = 0; canvas.height = 0; } catch (e) { /* read-only */ } } }
+  function thaw(c) { if (c.frozen) { c.frozen.remove(); empty(c.frozen); c.frozen = null; } if (c.view) c.view.classList.remove('scam-snap'); }
   function away(c) {
     if (c.closed) return;
     if (c.press) { clearTimeout(c.press.timer); c.press = null; }
@@ -381,14 +383,17 @@
     var secs = Math.round(Math.max(0, (rec.ended || now()) - rec.began)) / 1000;
     var type = String(rec.r.mimeType || rec.type || (rec.chunks[0] && rec.chunks[0].type) || 'video/webm').split(';')[0].trim() || 'video/webm';
     c.live.textContent = ''; release(c);
-    if (c.closed || rec.discard) return;
-    if (rec.failed || !rec.chunks.length) { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); if (!c.paused) start(c); return; }
+    if (c.closed || rec.discard) { empty(rec.poster); rec.poster = null; return; }
+    if (rec.failed || !rec.chunks.length) { empty(rec.poster); rec.poster = null; thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); if (!c.paused) start(c); return; }
     var blob = new Blob(rec.chunks, { type: type });
     c.busy = true; paint(c);
     // storyprev: the poster grabbed as it started (else the last frame, still on screen) goes along as a JPEG
     var still = rec.poster || c.frozen || null, mime = String(rec.r.mimeType || rec.type || type);
     Promise.all([/webm/.test(type) ? webmDuration(blob, secs).catch(function () { return blob; }) : Promise.resolve(blob), jpeg(still)]).then(function (r) {
-      c.busy = false; hand(c, r[0], type, secs, { width: still ? still.width : rec.w, height: still ? still.height : rec.h, poster: r[1], mime: mime });
+      // storyprev verify: the size is read before the poster's canvas is emptied (the frozen one goes with the camera, in close)
+      var more = { width: still ? still.width : rec.w, height: still ? still.height : rec.h, poster: r[1], mime: mime };
+      empty(rec.poster); rec.poster = null;
+      c.busy = false; hand(c, r[0], type, secs, more);
     });
   }
   // more (storyprev): what the camera knows of the capture - its size, and a clip's poster (a JPEG Blob or null) and recorder type
@@ -404,11 +409,11 @@
   function close(c) {
     if (c.closed) return; c.closed = true;
     if (c.press) { clearTimeout(c.press.timer); c.press = null; }
-    if (c.rec) { var rec = c.rec; rec.discard = true; clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock); try { if (rec.r.state !== 'inactive') rec.r.stop(); } catch (e) { /* stopped */ } c.rec = null; }
+    if (c.rec) { var rec = c.rec; rec.discard = true; clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock); try { if (rec.r.state !== 'inactive') rec.r.stop(); } catch (e) { /* stopped */ } empty(rec.poster); rec.poster = null; c.rec = null; }
     release(c);
     c.on.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); c.on = [];
     var had = c.view.contains(document.activeElement);
-    c.view.remove(); c.host.classList.remove('scam-open'); if (current === c) current = null;
+    c.view.remove(); empty(c.frozen); c.frozen = null; c.host.classList.remove('scam-open'); if (current === c) current = null;
     if (had && c.host.focus) c.host.focus();
   }
   function cancel(c) { if (c.closed) return; var o = c.o; close(c); o.close(); }

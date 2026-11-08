@@ -1317,7 +1317,8 @@ test("Story camera preview fix: the poster stays over a <video> that has its siz
   const st3 = root3.querySelector("img.sst-still"); assert.ok(!st3.hidden); assert.ok(!root3.querySelector(".sst-post").disabled); assert.equal(paint2, null);
   root3.querySelector('[data-tool="text"]').click(); assert.equal(root3.getAttribute("data-sheet"), "text", "editing on the poster");
   node2.videoWidth = 1080; node2.videoHeight = 1920; node2.dispatchEvent(new Ev("resize")); await flush();
-  assert.equal(node2.plays, 1, "its first frame is put up"); assert.equal(typeof paint2, "function"); assert.ok(!st3.hidden, "not before it paints");
+  // storyprev verify: two muted plays - the wait's own (asking WebKit for a frame), then the hand-over's first frame
+  assert.equal(node2.plays, 2, "its first frame is put up"); assert.equal(node2.paused, true); assert.equal(typeof paint2, "function"); assert.ok(!st3.hidden, "not before it paints");
   paint2(1, {}); await flush(); assert.ok(st3.hidden, "painted: the video shows itself"); assert.equal(root3.getAttribute("data-sheet"), "text", "the edit goes on");
   // a camera clip whose media fragment alone is refused opens as a video (under its poster until it paints)
   const S = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; return false; } }), root4 = await openStudio(S);
@@ -1369,7 +1370,7 @@ test("Story camera preview verify: the poster takes no touch - a press on the pr
 
 test("Story camera preview verify: a <video> with no size is asked to decode while it is waited for - the muted play - and after the plain try too", async () => {
   for (const which of ["camera", "gallery"]) {
-    const P = camPage({ ...IPHONE, sourceVideo: (node) => { zeroMeta(node, 5); sizeOnPlay(node); return true; } }), root = await openStudio(P);
+    const P = camPage({ ...IPHONE, sourceVideo: (node) => { sizeOnPlay(node); zeroMeta(node, 5); return true; } }), root = await openStudio(P);
     if (which === "camera") await quickClip(P); else { pickFile(P, "video/mp4", "clip.mp4"); await flush(16); }
     await P.clock.tick(300); await flush(8);
     const v = root.querySelector("video.sst-source");
@@ -1381,7 +1382,7 @@ test("Story camera preview verify: a <video> with no size is asked to decode whi
   }
   // the fragment refused, the plain try has no size yet: it is asked too
   for (const which of ["camera", "gallery"]) {
-    const P = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; zeroMeta(node, 5); sizeOnPlay(node); return true; } });
+    const P = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; sizeOnPlay(node); zeroMeta(node, 5); return true; } });
     const root = await openStudio(P);
     if (which === "camera") await quickClip(P); else { pickFile(P, "video/mp4", "clip.mp4"); await flush(16); }
     await P.clock.tick(300); await flush(8);
