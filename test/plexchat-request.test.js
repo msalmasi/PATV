@@ -381,6 +381,9 @@ test("clerkreq review F10: the request server refusing at the yes (a quota) is '
   h.d.requestError = Object.assign(new Error("NEVER The request server refused it (quota). Nothing was charged."), { status: 409, refuse: true, upstream: true, refused: true });
   const out = await h.send();
   assert.equal(out.code, "refused"); assert.doesNotMatch(JSON.stringify(out), /NEVER/);
+  // (an older mediarequests' refusal has no marker: its own words say it)
+  await ask(h); h.d.requestError = Object.assign(new Error("The request server refused it (Movie Quota exceeded.). Nothing was charged."), { status: 409, refuse: true, upstream: true });
+  assert.equal((await h.send()).code, "refused");
   // an upstream "already requested" is still requested
   await ask(h); h.d.requestError = Object.assign(new Error("That's already been requested. Nothing was charged."), { status: 409, refuse: true, upstream: true });
   assert.equal((await h.send()).code, "requested");

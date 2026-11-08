@@ -833,3 +833,24 @@ test("clerkreq review F11: a title on the shelves as the other kind, or without 
   r = await run(f, { title: "Lost Lantern Road", kind: "movie" }, { raw: "the movie lost lantern road" }, externalContext);
   assert.equal(r.shelf_title, undefined);
 });
+
+test("clerkreq review follow-up: a kind word the bot cut off the END of a title ('Scary Movie', 'The Truman Show') - Seerr is asked for the words as said first", async () => {
+  const f = fixture();
+  f.external.search["scary movie"] = [{ type: "movie", tmdb: 4247, title: "Scary Movie", year: 2000, availability: "unknown", media_status: 1 }];
+  f.external.search["scary"] = [{ type: "movie", tmdb: 620000, title: "Scary", year: 2021, availability: "unknown", media_status: 1 }];
+  let r = await run(f, { title: "scary", kind: "movie" }, { raw: "scary movie" }, externalContext);
+  assert.equal(r.seerr && r.seerr.tmdb, 4247, "Scary Movie (2000), never Scary (2021)");
+  f.external.search["the truman show"] = [{ type: "movie", tmdb: 37165, title: "The Truman Show", year: 1998, availability: "unknown", media_status: 1 }];
+  r = await run(f, { title: "the truman", kind: "show" }, { raw: "the truman show" }, externalContext);
+  assert.equal(r.seerr && r.seerr.tmdb, 37165, "a film whose name ends in 'Show' (the kind word was the title's)");
+  // the words as said name nothing: the trimmed title as before (one more lookup)
+  f.calls.length = 0;
+  f.external.search["lost road"] = [{ type: "movie", tmdb: 9001, title: "Lost Road", year: 2010, availability: "unknown", media_status: 1 }];
+  r = await run(f, { title: "lost road", kind: "movie" }, { raw: "lost road movie" }, externalContext);
+  assert.equal(r.seerr && r.seerr.tmdb, 9001);
+  assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["lost road movie", "lost road"]);
+  // a kind word in FRONT ("the show X") is the line's kind, not the title's: one lookup, as before
+  f.calls.length = 0;
+  await run(f, { title: "lost road", kind: "movie" }, { raw: "the movie lost road" }, externalContext);
+  assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["lost road"]);
+});
