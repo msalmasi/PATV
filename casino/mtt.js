@@ -234,6 +234,7 @@ function install(core) {
     const mSnap = M ? JSON.stringify(M) : null;
     const snaps = new Map();
     const ctx = { touch: (T) => { if (T && !snaps.has(T)) snaps.set(T, JSON.stringify(T)); return T; }, created: [], kicks: new Set(), lines: [], after: [] };
+    if (S.hooks.txnStart) S.hooks.txnStart(label, M);       // (tests: the crash suite's OWN snapshot of M + every table, to check the restore against)
     let out;
     try {
       out = await dbTx(async () => {
@@ -250,6 +251,7 @@ function install(core) {
         if (M) replaceObj(M, mSnap);
         for (const [T, s] of snaps) replaceObj(T, s);
         if (e && e.crash && S.hooks.lastRestore) S.hooks.lastRestore.after = { m: M ? JSON.stringify(M) : null, t: Array.from(snaps.keys()).map((T) => JSON.stringify(T)) };
+        if (e && e.crash && S.hooks.onRestore) S.hooks.onRestore(label, M);      // (tests: compared the moment the restore is done)
       } catch (re) {
         console.error(`[mtt] ${M ? M.id : "-"}: the restore after a failed ${label} failed:`, re && re.message);
         e.restoreFailed = true;
@@ -1607,7 +1609,6 @@ function install(core) {
       const chips = at ? (at.T && at.T.eng.seats.includes(w.user_id) ? at.T.eng.chips[w.user_id] : at.transit ? at.transit.chips : 0) : 0;
       if (chips !== M.total_chips) why.push("E_CHIPS");
     }
-    if (S.hooks.crash === "mtt:finish:invariant") why.push("E_CHIPS");          // (tests: an injected chip mismatch)
     if (counted.length !== E) why.push("E_ENTRIES");
     if (counted.some((e) => e.state !== "playing" && (e.state !== "busted" || e.bust_seq == null))) why.push("E_BUSTS");
     const placed = PAY.places(counted.map((e) => ({ key: `${e.user_id}:${e.gen}`, bust_seq: e.bust_seq, bust_stack: e.bust_stack, bust_table_no: e.bust_table_no, bust_oc: e.bust_oc, winner: e.state === "playing" })));
