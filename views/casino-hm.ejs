@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><%# 1.99ajw casino2 rework: the 🚫 Block sheet (block-sheet.js) %>
 <link rel="stylesheet" href="/public/css/flair.css?v=5"><%# (the person menu header's pad flair chip) %>
 <%# 1.99?? h20: a themed table's look (casino/themes.js; routes.js page passes `theme` - classic pages load none of it) %>
-<% if (locals.theme && theme !== 'classic') { %><link rel="stylesheet" href="/public/css/casino-themes.css?v=2"><% } %>
+<% if (locals.theme && theme !== 'classic') { %><link rel="stylesheet" href="/public/css/casino-themes.css?v=3"><% } %>
 <style>
   .hm-wrap { position: relative; padding: 64px 64px 104px; }
   .felt.hm { position: relative; aspect-ratio: 2.15 / 1; border-radius: 999px; padding: 0; }
@@ -245,6 +245,6 @@
 </main>
 <% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99ajw casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
 <script src="/public/js/casino-ui.js?v=11"></script><%# h22: v10 (the Sit & Go lobby section + sheet); 1.99?? h20: v11 (CZ.theme, the lobby's theme picker - rebased on h22's v10) %>
-<% if (locals.theme && theme !== 'classic') { %><script src="/public/js/casino-sound.js?v=1"></script><% } %>
+<% if (locals.theme && theme !== 'classic') { %><script src="/public/js/casino-sound.js?v=2"></script><% } %>
 <script src="/api/casino/sizing.js?v=1"></script>
-<script src="/public/js/casinohm.js?v=12"></script><%# h22: v11 (the Sit & Go header + results); 1.99?? h20: v12 (the theme - rebased on h22's v11) %>
+<script src="/public/js/casinohm.js?v=13"></script><%# h22: v11 (the Sit & Go header + results); 1.99?? h20: v12 (the theme), verify: v13 (the sign on the felt, out of the board's column - rebased on h22's v11) %>

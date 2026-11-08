@@ -65,7 +65,7 @@
     const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
     const hrLocked = !!t.high_stakes && !(me && me.high_roller);   // a High Roller table: everyone else watches
     $("cz-felt").classList.toggle("hr", !!t.high_stakes);
-    CZ.theme(t, { scene: $("cz-felt").parentNode, sign: $("cz-board") });    // 1.99?? h20: the table's theme (casino-ui.js)
+    CZ.theme(t, { scene: $("cz-felt").parentNode, sign: $("cz-seats") });    // 1.99?? h20: the table's theme (casino-ui.js; the sign on the felt itself)
     for (let k = 0; k < SLOTS; k++) {
       const s = bySlot[k], el = els.seats[k], bet = els.bets[k];
       const mine = !!(s && me && me.seat && s.seat === me.seat);

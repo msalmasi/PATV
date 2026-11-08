@@ -507,12 +507,15 @@ test("review 1-3: the saloon adds no height and moves nothing - classic's wrap p
   assert.ok(sign.find((x) => x.sel === ".cz-theme-saloon .cz-sign" && !x.media && x.decl.position === "absolute"), "the sign: position absolute");
   for (const x of sign) assert.ok(!x.decl.position || x.decl.position === "absolute", `${x.media || ""} ${x.sel}: stays absolute`);
   assert.ok(!sign.some((x) => "flex" in x.decl), "not a flex item any more");
-  // phones: the wall sign hangs in the table's top row (beside "All tables") - absolute, above the wrap; the scene lets it out
-  const phone = R.filter((x) => x.media && /max-width:\s*760px/.test(x.media));
+  // phones (and, found while fixing, the narrow landscape felt to 960px - its board reaches the felt's top): the wall sign hangs in
+  // the table's top row (beside "All tables") - absolute, above the wrap; the scene lets it out
+  const phone = R.filter((x) => x.media && /max-width:\s*(760|960)px/.test(x.media));
   const wall = phone.find((x) => /\.cz-wallsign$/.test(x.sel) && x.decl.display === "block");
   assert.ok(wall && wall.decl.position === "absolute" && /^-\d/.test(wall.decl.top || ""), "the wall sign: absolute, above the wrap (top < 0): " + JSON.stringify(wall && wall.decl));
+  assert.ok(/max-width:\s*960px/.test(wall.media), "to 960px: " + wall.media);
   assert.ok(/inset-inline-end/.test(Object.keys(wall.decl).join()), "at the row's end (logical side: RTL too), clear of the link");
-  assert.ok(phone.some((x) => x.sel === ".cz-theme-saloon .cz-scene" && x.decl.overflow === "visible"), "phones: the scene doesn't clip it");
+  assert.ok(phone.some((x) => /\.cz-scene$/.test(x.sel) && x.decl.overflow === "visible"), "the scene doesn't clip it");
+  assert.ok(phone.some((x) => /\.cz-sign$/.test(x.sel) && x.decl.display === "none" && x.media === wall.media), "and the felt's sign gives way there");
   // blackjack: the wood rail is a border, so the padding gives it back - border + padding = classic's padding on every side
   const view = rd("views", "casino-bj.ejs");
   const cls = (re) => sides((re.exec(view) || [])[1]);

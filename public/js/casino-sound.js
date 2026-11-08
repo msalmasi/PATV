@@ -1,6 +1,7 @@
 // casino-sound.js — the themed tables' opt-in sound cues (hand-off 20, decision 5). Loaded by a table page only when its table
-// has a theme (views/casino-hm.ejs); casino-ui.js CZ.theme calls CZSound.update(themeId, tableView) on every render.
-//   * OFF by default, per viewer: a 🔇 / 🔊 toggle in the table's header, remembered in localStorage "cz-sound" (every access in
+// has a theme (views/casino-hm.ejs, casino-bj.ejs); casino-ui.js CZ.theme calls CZSound.update(themeId, tableView) on every render.
+//   * OFF by default, per viewer: a 🔇 / 🔊 toggle in the table's own top row (beside "All tables" - h20 verify: never another
+//     pill in the page header, which wrapped it and pushed the table down), remembered in localStorage "cz-sound" (every access in
 //     try/catch - a private window just keeps it for the page);
 //   * never before a click: the AudioContext is made (or resumed) only inside a click / key press on the page, and only while the
 //     toggle is on; no ambience loop;
@@ -97,22 +98,31 @@
     return null;
   }
 
-  // ── the toggle ──
+  // ── the toggle: in the table's own top row, right after "All tables" (h20 verify review: an extra pill in the page header
+  // wrapped it onto another row and pushed the table under the action bar); casino-themes.css floats it to the row's end ──
+  let icon = null, label = null;
   function paint() {
     if (!btn) return;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
     btn.title = on ? T("sound_on", "Table sounds on (chips, cards, a bell on a win)") : T("sound_off", "Table sounds off");
-    btn.textContent = (on ? "🔊 " : "🔇 ") + T("sound_btn", "Sound");
+    icon.textContent = on ? "🔊" : "🔇";
+    label.textContent = T("sound_btn", "Sound");
   }
   function button() {
     if (btn) return btn;
-    const bar = document.querySelector(".cz-bar");
-    if (!bar) return null;
+    const back = document.querySelector("#cz-table > .back");
+    if (!back || !back.parentNode) return null;
     btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "cz-pill";
+    btn.className = "cz-pill cz-snd";
     btn.id = "cz-soundbtn";
     btn.setAttribute("aria-label", T("sound_label", "Table sounds"));
+    icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    label = document.createElement("span");
+    label.className = "cz-snd-l";                     // (phones: hidden - the icon only)
+    btn.appendChild(icon);
+    btn.appendChild(label);
     btn.addEventListener("click", () => {
       gesture = true;
       on = !on;
@@ -120,8 +130,7 @@
       paint();
       if (on) wake();
     });
-    const ref = document.getElementById("cz-histbtn");
-    if (ref && ref.parentNode === bar) bar.insertBefore(btn, ref); else bar.appendChild(btn);
+    back.parentNode.insertBefore(btn, back.nextSibling);
     paint();
     return btn;
   }

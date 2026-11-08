@@ -5,10 +5,15 @@
    the felt, card backs, chip faces, the sign - never a rule, a timer or a number. Original art: CSS gradients and inline SVG (data:
    URIs below, nothing fetched, no font download). The 💎 High Roller marks stay (the 💎 chips and the watermark are never restyled).
    Contrast (WCAG AA): every label keeps its own dark plate / pill; the theme's colours were checked against the lightest wood and
-   felt tones they sit on (hand-off 20 DELIVERY.md, "Contrast"). Idle motion (the lamp, the doors) stops under prefers-reduced-motion. */
+   felt tones they sit on (hand-off 20 DELIVERY.md, "Contrast"). Idle motion (the lamp, the doors) stops under prefers-reduced-motion.
+   Layout (h20 verify review): the theme adds NO height and moves nothing - the wrap keeps classic's padding, the signs are out of the
+   flow (Hold'em: on the felt between the top seats; blackjack: over the top rail; phones: in the table's top row beside "All
+   tables"), the felt's lettering keeps its space, blackjack's wood rail sits inside classic's box, the sound toggle floats in that
+   top row (never another pill in the page header) - so the action bar is exactly where classic has it. */
 
 /* ── the western saloon ── */
 .cz-theme-saloon { --sl-brass: #c9a24a; --sl-cream: #efe3c4; --mut: #cbbd9c; --line: rgba(201,162,74,.32);
+                   --sl-wood: linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15);      /* the rail's wood (💎 tables: gilded, below) */
                    /* the art, once: the baize's cloth texture, the rail's grain, the card back (horseshoe + star) */
                    --sl-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23n%29'/%3E%3C/svg%3E");
                    --sl-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .35' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
@@ -45,21 +50,24 @@
     radial-gradient(circle at 73% calc(100% - 7.5px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
     var(--sl-grain) padding-box,
     linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) padding-box,
-    linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) padding-box;
+    var(--sl-wood) padding-box;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.65), 0 0 0 1px rgba(201,162,74,.22), 0 16px 44px rgba(0,0,0,.6);
 }
 .cz-theme-saloon .felt.hm::after { inset: 13px; border-radius: 999px; opacity: 1; background: none; border: 2px solid var(--sl-brass);
                                    box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.35), inset 0 0 46px 16px rgba(0,0,0,.3); }
-/* 💎 a saloon High Roller table: the saloon art with a deeper baize, a gold inlay, the 💎 watermark and chips as always */
-.cz-theme-saloon .felt.hr { --felt0: #051a0f; --felt1: #0b301c; --felt2: #124628; }
+/* 💎 a saloon High Roller table: the saloon art with a deeper baize, a gilded rail, a gold inlay, the 💎 watermark and chips as always */
+.cz-theme-saloon .felt.hr { --felt0: #051a0f; --felt1: #0b301c; --felt2: #124628;
+                             --sl-wood: linear-gradient(96deg, #5a3e10, #96701f 20%, #e8c45a 46%, #b88e2e 62%, #6b4e0f 82%, #a07a24); }
 .cz-theme-saloon .felt.hm.hr { box-shadow: inset 0 0 0 1px rgba(0,0,0,.65), 0 0 0 1px rgba(232,196,90,.6), 0 0 28px rgba(255,200,60,.22), 0 16px 44px rgba(0,0,0,.6); }
 .cz-theme-saloon .felt.hm.hr::after { border-color: #e8c45a; box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 10px rgba(255,200,60,.35), inset 0 0 46px 16px rgba(0,0,0,.34); }
 
-/* the sign in place of the felt's lettering (phones: the wall sign above the felt, below) */
-.cz-theme-saloon .hm-logo { display: none; }
+/* the sign in place of the felt's lettering - OUT of the flow (it moved the board and pushed the felt down): on the felt between
+   the top seats, above their bet pills (casinohm.js puts it before #cz-seats; the pills and seats paint over it); the lettering
+   keeps its space, so the board, pot and message sit exactly where classic has them (phones: the wall sign, below) */
+.cz-theme-saloon .hm-logo { visibility: hidden; }
 .cz-theme-saloon .cz-wallsign { display: none; }
-.cz-theme-saloon .cz-sign { display: block; flex: none; width: clamp(150px, 34%, 230px); height: auto; margin: -4px 0 0; pointer-events: none;
-                            filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
+.cz-theme-saloon .cz-sign { display: block; position: absolute; z-index: 0; left: 50%; top: 5.5%; width: clamp(120px, 22%, 230px); height: auto;
+                            margin: 0; transform: translateX(-50%); pointer-events: none; filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
 
 /* card backs: cream and oxblood, a horseshoe and a star, a thin frame (the faces stay the site's) */
 .cz-theme-saloon .pc-b { border: 2px solid var(--sl-cream); background: var(--sl-cream) var(--sl-back) center / 100% 100% no-repeat; }
@@ -72,7 +80,8 @@
 .cz-theme-saloon .chip.c500:not(.hrc) { --c: #a3302b; --e: #efe6d2; }
 .cz-theme-saloon .chip.c1k:not(.hrc) { --c: #2d4f8a; --e: #efe6d2; }
 .cz-theme-saloon .chip.c5k:not(.hrc) { --c: #2f6a3e; --e: #efe6d2; }
-.cz-theme-saloon .chip.c25k:not(.hrc), .cz-theme-saloon .chip.cmax:not(.hrc) { --c: #1e1a17; --e: #d9b45a; }
+.cz-theme-saloon .chip.c25k:not(.hrc) { --c: #1e1a17; --e: #d9b45a; }
+.cz-theme-saloon .chip.cmax:not(.hrc) { --c: #b8601f; --e: #efe6d2; }      /* Max: a colour of its own (it was 25K's black - the review) */
 
 /* seats, the dealer button, the pot: wood and brass around the same labels (each keeps its dark plate) */
 .cz-theme-saloon .plate { background: rgba(26,14,6,.9); border-color: rgba(201,162,74,.32); }
@@ -85,6 +94,10 @@
 .cz-theme-saloon .seat.empty .plate { color: #efe3c4; text-shadow: 0 1px 2px #000; }
 .cz-theme-saloon .felt-msg small { color: rgba(255,255,255,.9); }
 
+/* the sound toggle (casino-sound.js): in the table's own top row beside "All tables", at the row's end - floated, no height of its
+   own (an extra pill in the page header wrapped it onto another row and pushed the table down); phones: the icon only */
+.cz-theme-saloon .cz-snd { float: inline-end; margin: 0; }
+
 /* the action bar (hand-off 21's buttons, sizing, pre-moves, time bank): a dark wood panel with a brass edge; the buttons keep their fills */
 .cz-theme-saloon .dock { background: linear-gradient(180deg, rgba(50,29,14,.97), rgba(27,15,7,.97)); border-color: rgba(201,162,74,.42);
                          box-shadow: 0 -6px 24px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,220,160,.08); }
@@ -93,9 +106,9 @@
 .cz-theme-saloon .cz-btn.ghost { background: rgba(20,10,4,.5); }
 
 /* blackjack: the dealer's arc of .felt.bj - the rail as a wood border with a brass inlay and studs, the back bar dim behind the
-   dealer (fading into the baize), the sign over Pepe, the shoe in wood and brass */
+   dealer (fading into the baize), the sign hanging over the top rail, the shoe in wood and brass */
 .cz-theme-saloon .felt.bj {
-  border: 14px solid transparent;
+  border: 14px solid transparent; padding: 4px 2px 50px;          /* + the 14px rail = classic's 18px 16px 64px: not a pixel taller */
   background:
     var(--sl-noise) padding-box,
     radial-gradient(120% 90% at 50% 25%, var(--felt2) 0%, var(--felt1) 48%, var(--felt0) 100%) padding-box,
@@ -107,7 +120,7 @@
     radial-gradient(circle at 50% calc(100% - 7px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
     var(--sl-grain) border-box,
     linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) border-box,
-    linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) border-box;
+    var(--sl-wood) border-box;
   box-shadow: 0 0 0 1px rgba(201,162,74,.22), 0 16px 44px rgba(0,0,0,.6);
 }
 .cz-theme-saloon .felt.bj::after { inset: 0; border-radius: 14px 14px 50% 50% / 14px 14px 22% 22%; opacity: 1; background: none; border: 2px solid var(--sl-brass);
@@ -118,23 +131,17 @@
                                       -webkit-mask-image: linear-gradient(180deg, #000 35%, transparent); mask-image: linear-gradient(180deg, #000 35%, transparent); }
 .cz-theme-saloon .felt.bj .cz-scene::after { display: none; }
 .cz-theme-saloon .felt.bj .cz-scene-art { height: auto; aspect-ratio: 1200 / 560; }
-.cz-theme-saloon .felt.bj .cz-sign { width: clamp(150px, 24%, 220px); margin: -4px auto 8px; }
+/* the sign hangs over the top rail into the "All tables" row - out of the flow, Pepe stays where classic has him */
+.cz-theme-saloon .felt.bj .cz-sign { top: auto; bottom: calc(100% + 6px); width: clamp(150px, 24%, 220px); }
 .cz-theme-saloon .bj-shoe { background: linear-gradient(160deg, #5b351a, #24130a); box-shadow: inset 0 0 0 2px var(--sl-brass), 0 4px 10px rgba(0,0,0,.5); }
 .cz-theme-saloon .bj-shoe::after { border-color: var(--sl-cream); background: var(--sl-cream) var(--sl-back) center / 100% 100% no-repeat; }
 .cz-theme-saloon .bj-rules { color: #f8e8b8; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
 .cz-theme-saloon .felt-lbl { color: rgba(255,255,255,.9); }
 
-/* the felt narrowed by the docked chat (1100-1365px): a smaller sign */
-@media (min-width: 1100px) and (max-width: 1365px) {
-  .cz-theme-saloon .cz-sign { width: 140px; margin: -2px 0 0; }
-}
-/* phones: no scene (Hold'em: a wood-panel background and the wall sign above the felt; blackjack: no back bar); a thinner rail */
+/* phones: no scene (Hold'em: a wood-panel background; blackjack: no back bar); a thinner rail */
 @media (max-width: 760px) {
   .cz-theme-saloon .cz-scene-art, .cz-theme-saloon .cz-scene::after { display: none; }
-  .cz-theme-saloon .hm-center .cz-sign { display: none; }
-  .cz-theme-saloon .hm-wrap .cz-wallsign { display: block; position: absolute; top: 10px; left: 50%; width: 150px; height: auto; transform: translateX(-50%);
-                                  filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
-  .cz-theme-saloon .hm-wrap { padding-top: 100px; border-radius: 20px;
+  .cz-theme-saloon .hm-wrap { border-radius: 20px;
     background: linear-gradient(180deg, rgba(255,214,160,.05), rgba(0,0,0,.42)),
                 repeating-linear-gradient(90deg, #2a180c 0 30px, #1b0f07 30px 32px, #24150a 32px 62px, #1b0f07 62px 64px); }
   .cz-theme-saloon .felt.hm {
@@ -148,14 +155,26 @@
       radial-gradient(circle at calc(100% - 5.5px) 50%, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) padding-box,
       var(--sl-grain) padding-box,
       linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) padding-box,
-      linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) padding-box;
+      var(--sl-wood) padding-box;
   }
   .cz-theme-saloon .felt.bj .cz-scene { display: none; }
   .cz-theme-saloon .felt.hm::after { inset: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.35), inset 0 0 30px 10px rgba(0,0,0,.3); }
 }
+/* phones and the narrow landscape felt (to 960px): the board's column reaches the felt's top, no room for a sign between the top
+   seats - Hold'em's wall sign hangs in the table's top row instead (beside "All tables", at the row's end, left of the sound
+   toggle), above the wrap, which keeps classic's padding; the scene's art clips itself to the wrap's corners so the sign can hang
+   out of the scene; the toggle shows its icon only */
+@media (max-width: 960px) {
+  .cz-theme-saloon .hm-wrap > .cz-scene { overflow: visible; }
+  .cz-theme-saloon .hm-wrap .cz-scene-art, .cz-theme-saloon .hm-wrap > .cz-scene::after { border-radius: inherit; }
+  .cz-theme-saloon .felt.hm .cz-sign { display: none; }
+  .cz-theme-saloon .hm-wrap .cz-wallsign { display: block; position: absolute; top: -42px; left: auto; inset-inline-end: 48px; width: 150px; height: auto;
+                                           pointer-events: none; filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
+  .cz-theme-saloon .cz-snd-l { display: none; }
+}
 @media (max-width: 600px) {
   .cz-theme-saloon .felt.bj {
-    border-width: 10px;
+    border-width: 10px; padding: 4px 0 6px;                       /* + the 10px rail = classic's phone padding 14px 10px 16px */
     background:
       var(--sl-noise) padding-box,
       radial-gradient(120% 90% at 50% 25%, var(--felt2) 0%, var(--felt1) 48%, var(--felt0) 100%) padding-box,
@@ -165,10 +184,10 @@
       radial-gradient(circle at 50% calc(100% - 5px), #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) border-box,
       var(--sl-grain) border-box,
       linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) border-box,
-      linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) border-box;
+      var(--sl-wood) border-box;
   }
   .cz-theme-saloon .felt.bj::after { border-radius: 14px; }
-  .cz-theme-saloon .felt.bj .cz-sign { width: 150px; margin: 0 auto 6px; }
+  .cz-theme-saloon .felt.bj .cz-sign { left: auto; inset-inline-end: 48px; transform: none; width: 150px; bottom: calc(100% + 14px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .cz-theme-saloon .czs-flame, .cz-theme-saloon .czs-door { animation: none !important; }
