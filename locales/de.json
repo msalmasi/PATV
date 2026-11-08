@@ -365,6 +365,7 @@
   "settings.verify.instructions": "Gib das im Camfrog-Raum ein:",
   "settings.verify.copied": "Kopiert!",
   "settings.verify.copy": "Kopieren",
+  "settings.verify.copy_manual": "Markiert - jetzt kopieren",
   "settings.verify.expires": "Der Code läuft in 15 Minuten ab",
   "settings.verify.announce": "Dein Camfrog-Bestätigungscode lautet {code}. Gib !verify {code} innerhalb von 15 Minuten in einem Camfrog-Raum mit Pepe ein.",
   "settings.preview_aria": "Profilvorschau",

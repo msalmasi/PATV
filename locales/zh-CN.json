@@ -359,6 +359,7 @@
   "settings.verify.instructions": "在 Camfrog 房间里输入：",
   "settings.verify.copied": "已复制！",
   "settings.verify.copy": "复制",
+  "settings.verify.copy_manual": "已选中，现在复制它",
   "settings.verify.expires": "验证码 15 分钟后过期",
   "settings.verify.announce": "你的 Camfrog 验证码是 {code}。请在 15 分钟内，在与 Pepe 同在的 Camfrog 房间里输入 !verify {code}。",
   "settings.preview_aria": "主页预览",

@@ -371,6 +371,7 @@
   "settings.verify.instructions": "הקלידו את זה בחדר ה־Camfrog:",
   "settings.verify.copied": "הועתק!",
   "settings.verify.copy": "העתקה",
+  "settings.verify.copy_manual": "נבחר - כעת העתיקו אותו",
   "settings.verify.expires": "הקוד יפוג בעוד 15 דקות",
   "settings.verify.announce": "קוד האימות שלך ל-Camfrog הוא {code}. הקלידו !verify {code} בחדר Camfrog עם Pepe תוך 15 דקות.",
   "settings.preview_aria": "תצוגה מקדימה של הפרופיל",

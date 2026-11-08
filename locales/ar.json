@@ -389,6 +389,7 @@
   "settings.verify.instructions": "اكتب هذا في غرفة Camfrog:",
   "settings.verify.copied": "تم النسخ!",
   "settings.verify.copy": "نسخ",
+  "settings.verify.copy_manual": "تم التحديد - انسخه الآن",
   "settings.verify.expires": "ينتهي الرمز خلال 15 دقيقة",
   "settings.verify.announce": "رمز التوثيق الخاص بك على Camfrog هو {code}. اكتب !verify {code} في غرفة Camfrog مع Pepe خلال 15 دقيقة.",
   "settings.preview_aria": "معاينة الملف الشخصي",

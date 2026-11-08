@@ -370,6 +370,7 @@
   "settings.verify.instructions": "Escribe esto en la sala de Camfrog:",
   "settings.verify.copied": "¡Copiado!",
   "settings.verify.copy": "Copiar",
+  "settings.verify.copy_manual": "Seleccionado; ahora cópialo",
   "settings.verify.expires": "El código caduca en 15 minutos",
   "settings.verify.announce": "Tu código de verificación de Camfrog es {code}. Escribe !verify {code} en una sala de Camfrog con Pepe en los próximos 15 minutos.",
   "settings.preview_aria": "Vista previa del perfil",

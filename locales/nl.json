@@ -365,6 +365,7 @@
   "settings.verify.instructions": "Typ dit in de Camfrog-room:",
   "settings.verify.copied": "Gekopieerd!",
   "settings.verify.copy": "Kopiëren",
+  "settings.verify.copy_manual": "Geselecteerd - kopieer het nu",
   "settings.verify.expires": "Code verloopt over 15 minuten",
   "settings.verify.announce": "Je Camfrog-verificatiecode is {code}. Typ !verify {code} in een Camfrog-room met Pepe binnen 15 minuten.",
   "settings.preview_aria": "Profielvoorbeeld",

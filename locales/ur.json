@@ -365,6 +365,7 @@
   "settings.verify.instructions": "یہ Camfrog روم میں لکھیں:",
   "settings.verify.copied": "کاپی ہو گیا!",
   "settings.verify.copy": "کاپی",
+  "settings.verify.copy_manual": "منتخب ہو گیا - اب اسے کاپی کریں",
   "settings.verify.expires": "کوڈ 15 منٹ میں ختم ہو جائے گا",
   "settings.verify.announce": "آپ کا Camfrog تصدیقی کوڈ {code} ہے۔ 15 منٹ کے اندر Pepe والے Camfrog روم میں !verify {code} لکھیں۔",
   "settings.preview_aria": "پروفائل کا پیش منظر",

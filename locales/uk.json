@@ -377,6 +377,7 @@
   "settings.verify.instructions": "Введи це в кімнаті Camfrog:",
   "settings.verify.copied": "Скопійовано!",
   "settings.verify.copy": "Копіювати",
+  "settings.verify.copy_manual": "Виділено, тепер скопіюй",
   "settings.verify.expires": "Код діє 15 хвилин",
   "settings.verify.announce": "Твій код підтвердження Camfrog: {code}. Напиши !verify {code} у кімнаті Camfrog з Pepe протягом 15 хвилин.",
   "settings.preview_aria": "Попередній перегляд профілю",

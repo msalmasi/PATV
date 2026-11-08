@@ -359,6 +359,7 @@
   "settings.verify.instructions": "在 Camfrog 房間中輸入：",
   "settings.verify.copied": "已複製！",
   "settings.verify.copy": "複製",
+  "settings.verify.copy_manual": "已選取，現在請複製",
   "settings.verify.expires": "驗證碼 15 分鐘後失效",
   "settings.verify.announce": "你的 Camfrog 驗證碼是 {code}。請在 15 分鐘內，於與 Pepe 同在的 Camfrog 房間輸入 !verify {code}。",
   "settings.preview_aria": "個人檔案預覽",

@@ -359,6 +359,7 @@
   "settings.verify.instructions": "Ketik ini di room Camfrog:",
   "settings.verify.copied": "Disalin!",
   "settings.verify.copy": "Salin",
+  "settings.verify.copy_manual": "Sudah dipilih - sekarang salin",
   "settings.verify.expires": "Kode kedaluwarsa dalam 15 menit",
   "settings.verify.announce": "Kode verifikasi Camfrog-mu adalah {code}. Ketik !verify {code} di room Camfrog bersama Pepe dalam 15 menit.",
   "settings.preview_aria": "Pratinjau profil",

@@ -365,6 +365,7 @@
   "settings.verify.instructions": "این را در اتاق Camfrog تایپ کن:",
   "settings.verify.copied": "کپی شد!",
   "settings.verify.copy": "کپی",
+  "settings.verify.copy_manual": "انتخاب شد - حالا کپیش کن",
   "settings.verify.expires": "کد تا 15 دقیقه دیگر منقضی می‌شود",
   "settings.verify.announce": "کد تأیید Camfrog تو {code} است. ظرف ۱۵ دقیقه در یک اتاق Camfrog با Pepe این را تایپ کن: !verify {code}",
   "settings.preview_aria": "پیش‌نمایش پروفایل",

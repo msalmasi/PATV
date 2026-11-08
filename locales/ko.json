@@ -359,6 +359,7 @@
   "settings.verify.instructions": "Camfrog 방에서 이걸 입력하세요:",
   "settings.verify.copied": "복사됨!",
   "settings.verify.copy": "복사",
+  "settings.verify.copy_manual": "선택됨 - 이제 복사하세요",
   "settings.verify.expires": "코드는 15분 후 만료돼요",
   "settings.verify.announce": "Camfrog 인증 코드는 {code}예요. 15분 안에 Pepe가 있는 Camfrog 방에서 !verify {code}를 입력하세요.",
   "settings.preview_aria": "프로필 미리 보기",

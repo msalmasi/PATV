@@ -365,6 +365,7 @@
   "settings.verify.instructions": "Bunu Camfrog odasına yaz:",
   "settings.verify.copied": "Kopyalandı!",
   "settings.verify.copy": "Kopyala",
+  "settings.verify.copy_manual": "Seçildi - şimdi kopyala",
   "settings.verify.expires": "Kodun süresi 15 dakika içinde dolar",
   "settings.verify.announce": "Camfrog doğrulama kodun {code}. 15 dakika içinde Pepe'nin olduğu bir Camfrog odasında !verify {code} yaz.",
   "settings.preview_aria": "Profil önizlemesi",

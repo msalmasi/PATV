@@ -370,6 +370,7 @@
   "settings.verify.instructions": "Tape ceci dans le salon Camfrog :",
   "settings.verify.copied": "Copié !",
   "settings.verify.copy": "Copier",
+  "settings.verify.copy_manual": "Sélectionné - copie-le maintenant",
   "settings.verify.expires": "Le code expire dans 15 minutes",
   "settings.verify.announce": "Ton code de vérification Camfrog est {code}. Tape !verify {code} dans un salon Camfrog avec Pepe dans les 15 minutes.",
   "settings.preview_aria": "Aperçu du profil",

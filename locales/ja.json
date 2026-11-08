@@ -359,6 +359,7 @@
   "settings.verify.instructions": "Camfrogのルームでこれを入力してください：",
   "settings.verify.copied": "コピーしました！",
   "settings.verify.copy": "コピー",
+  "settings.verify.copy_manual": "選択済み - コピーしてください",
   "settings.verify.expires": "コードの有効期限は15分です",
   "settings.verify.announce": "Camfrogの確認コードは{code}です。15分以内にPepeがいるCamfrogのルームで !verify {code} と入力してください。",
   "settings.preview_aria": "プロフィールのプレビュー",

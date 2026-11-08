@@ -359,6 +359,7 @@
   "settings.verify.instructions": "พิมพ์ข้อความนี้ในห้อง Camfrog:",
   "settings.verify.copied": "คัดลอกแล้ว!",
   "settings.verify.copy": "คัดลอก",
+  "settings.verify.copy_manual": "เลือกแล้ว - คัดลอกเลย",
   "settings.verify.expires": "รหัสหมดอายุใน 15 นาที",
   "settings.verify.announce": "รหัสยืนยัน Camfrog ของคุณคือ {code} พิมพ์ !verify {code} ในห้อง Camfrog ที่มี Pepe ภายใน 15 นาที",
   "settings.preview_aria": "ตัวอย่างโปรไฟล์",

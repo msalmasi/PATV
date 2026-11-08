@@ -359,6 +359,7 @@
   "settings.verify.instructions": "Gõ dòng này trong phòng Camfrog:",
   "settings.verify.copied": "Đã sao chép!",
   "settings.verify.copy": "Sao chép",
+  "settings.verify.copy_manual": "Đã chọn - giờ hãy sao chép",
   "settings.verify.expires": "Mã hết hạn sau 15 phút",
   "settings.verify.announce": "Mã xác minh Camfrog của bạn là {code}. Gõ !verify {code} trong một phòng Camfrog có Pepe trong vòng 15 phút.",
   "settings.preview_aria": "Xem trước hồ sơ",
