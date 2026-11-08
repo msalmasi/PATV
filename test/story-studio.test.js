@@ -339,8 +339,8 @@ test("storyux verify: at the deepest zoom a photo still lands under the layers -
     const out = await compose.process(smallPng, sniff(smallPng), attachment("image", deepEdit(layout, win)), caps);
     const spot = await redSpot(media.filePath(out.file)), want = shown(G, win, SU, SV, 1080, 1920), size = SMALL.size / SMALL.W * want.w;
     assert.ok(Math.abs(spot.x - want.x) <= 2 && Math.abs(spot.y - want.y) <= 2, `${layout}: marker at ${spot.x.toFixed(1)},${spot.y.toFixed(1)} - shown at ${want.x.toFixed(1)},${want.y.toFixed(1)}`);
-    assert.ok(Math.abs(spot.w - size) <= 4, `${layout}: marker ${spot.w}px wide - shown ${size.toFixed(1)}px`);
-    assert.ok((await pixel(media.filePath(out.file), 1079, 1919)).every((c, i) => i === 1 ? c > 100 : c < 60), "the picture reaches the frame's far corner (no black edge)");
+    assert.ok(Math.abs(spot.w - size) <= Math.max(4, 0.06 * size), `${layout}: marker ${spot.w}px wide - shown ${size.toFixed(1)}px (its edge is a 33x-magnified blur the red threshold cuts into)`);
+    const corner = await pixel(media.filePath(out.file), 1079, 1919); assert.ok(corner[1] > 100 && corner[0] < 70 && corner[2] < 100, "the picture (green 35,125,66) reaches the frame's far corner, no black edge: " + corner.join());
     done(out);
   }
 });

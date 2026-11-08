@@ -31,7 +31,9 @@ function cleanEdit(raw, { kind } = {}) {
   if (raw.fit === "fill") {
     keys(raw.crop, ["x", "y", "w", "h"], "Choose a valid crop for the story.");
     const c = raw.crop;
-    if (![c.x, c.y, c.w, c.h].every(finite) || c.x < 0 || c.y < 0 || c.w < 0.05 || c.h < 0.05 || c.x + c.w > 1 + TOLERANCE || c.y + c.h > 1 + TOLERANCE)
+    // storyux verify: five percent with the float tolerance the frame has - the editor's deepest pinch on a tall picture computes
+    // a side of 0.049999999999999996
+    if (![c.x, c.y, c.w, c.h].every(finite) || c.x < 0 || c.y < 0 || c.w < 0.05 - TOLERANCE || c.h < 0.05 - TOLERANCE || c.x + c.w > 1 + TOLERANCE || c.y + c.h > 1 + TOLERANCE)
       throw new Refuse(400, "The crop must stay inside the picture and be at least five percent wide and tall.");
     edit.crop = { x: c.x, y: c.y, w: Math.min(c.w, 1 - c.x), h: Math.min(c.h, 1 - c.y) };
   } else if (Object.hasOwn(raw, "crop")) throw new Refuse(400, "Fit uses the whole picture, so it can't include a crop.");
@@ -109,17 +111,34 @@ function shape(edit, w, h) {
   if (win && Math.abs((w * win.w / (h * win.h)) / RATIO - 1) > 0.02)
     throw new media.MediaError(edit.fit === "fill" ? "The crop must have the story's 9:16 shape." : "The frame must have the story's 9:16 shape.");
 }
-// storyux (1.99??): a Fit frame drawn into an outW x outH story, the way the editor shows it (its RECT: the picture at
-// -x/w, -y/h of the frame, 1/w by 1/h of it): the part of the picture inside the frame (picture fractions) and where it
-// goes (output pixels, whole; even ones for a video's 4:2:0 chroma). The rest is black.
-function placement(f, outW, outH, even) {
+// storyux (1.99??): the picture's window (Fill's crop, or Fit's frame - picture fractions, 9:16) drawn into an outW x outH story
+// the way the editor shows it (its RECT: the picture at -x/w, -y/h of the frame, 1/w by 1/h of it); the rest is black.
+// storyux verify: exact at any zoom - cutting whole source pixels and stretching them to the ideal place blew a half-pixel
+// rounding up by the zoom (14 px at the deepest zoom of a 640 x 360 photo, 30 of a video), and the picture slid off the
+// layers. So: the part in view on whole source pixels, rounded outward with a pixel more each side (the scaler's edge) ->
+// src; scaled by the window's own scale -> size; the output's visible window cut from that on output pixels -> cut; put at
+// `at` (whole output pixels). Off by under a pixel, at any zoom. iw x ih: the picture's square pixels.
+function windowed(f, iw, ih, outW, outH) {
   const ix0 = Math.max(0, f.x), iy0 = Math.max(0, f.y), ix1 = Math.min(1, f.x + f.w), iy1 = Math.min(1, f.y + f.h);
-  const snap = v => (even ? 2 * Math.round(v / 2) : Math.round(v));
-  const ox = Math.min(outW - (even ? 2 : 1), Math.max(0, snap((ix0 - f.x) / f.w * outW))), oy = Math.min(outH - (even ? 2 : 1), Math.max(0, snap((iy0 - f.y) / f.h * outH)));
-  const ow = Math.max(even ? 2 : 1, Math.min(outW - ox, snap((ix1 - f.x) / f.w * outW) - ox)), oh = Math.max(even ? 2 : 1, Math.min(outH - oy, snap((iy1 - f.y) / f.h * outH) - oy));
-  return { src: { x: ix0, y: iy0, w: ix1 - ix0, h: iy1 - iy0 }, out: { x: ox, y: oy, w: ow, h: oh } };
+  const sx = outW / (f.w * iw), sy = outH / (f.h * ih);                                   // output pixels per source pixel
+  const L = Math.max(0, Math.floor(ix0 * iw + TOLERANCE) - 1), T = Math.max(0, Math.floor(iy0 * ih + TOLERANCE) - 1);
+  const R = Math.max(L + 1, Math.min(iw, Math.ceil(ix1 * iw - TOLERANCE) + 1)), B = Math.max(T + 1, Math.min(ih, Math.ceil(iy1 * ih - TOLERANCE) + 1));
+  const out = (v, n) => Math.min(n, Math.max(0, Math.round(v)));
+  const ox0 = Math.min(outW - 1, out((ix0 - f.x) / f.w * outW, outW)), oy0 = Math.min(outH - 1, out((iy0 - f.y) / f.h * outH, outH));
+  const ow = Math.max(1, out((ix1 - f.x) / f.w * outW, outW) - ox0), oh = Math.max(1, out((iy1 - f.y) / f.h * outH, outH) - oy0);
+  // where the piece's top-left lands in the output, and the output's window in the scaled piece
+  const qx = (L / iw - f.x) / f.w * outW, qy = (T / ih - f.y) / f.h * outH;
+  const cx = Math.max(0, Math.round(ox0 - qx)), cy = Math.max(0, Math.round(oy0 - qy));
+  // a pixel short at an edge the picture has no more of: stretched by under a pixel, never a black line
+  const pw = Math.max(1, Math.round((R - L) * sx), cx + ow), ph = Math.max(1, Math.round((B - T) * sy), cy + oh);
+  return { src: { x: L, y: T, w: R - L, h: B - T }, size: { w: pw, h: ph }, cut: { x: cx, y: cy, w: ow, h: oh }, at: { x: ox0, y: oy0 },
+    full: ox0 === 0 && oy0 === 0 && ow === outW && oh === outH };
 }
-const fx = v => Number(v).toFixed(6);
+// the same for ffmpeg (yuv444p throughout, so no cut is rounded to the 4:2:0 chroma; the encoder makes it 4:2:0 at the end)
+function windowFilter(p, outW, outH) {
+  return `format=yuv444p,crop=${p.src.w}:${p.src.h}:${p.src.x}:${p.src.y},scale=${p.size.w}:${p.size.h}:flags=bicubic,crop=${p.cut.w}:${p.cut.h}:${p.cut.x}:${p.cut.y}`
+    + (p.full ? "" : `,pad=${outW}:${outH}:${p.at.x}:${p.at.y}:color=black`) + ",setsar=1";
+}
 function outputNames(ext) {
   const base = crypto.randomBytes(16).toString("hex");
   const folder = path.join(media.dir(), base.slice(0, 2)); fs.mkdirSync(folder, { recursive: true });
@@ -140,7 +159,13 @@ async function displayedVideoSize(input, sn, pr) {
   const matrix = (stream.side_data_list || []).find(x => finite(x.rotation));
   const rotation = matrix ? matrix.rotation : Number(stream.tags && stream.tags.rotate) || 0;
   const quarterTurn = Math.abs(Math.round(rotation / 90)) % 2 === 1;
-  return quarterTurn ? { w: Number(pr.video.height), h: Number(pr.video.width) } : { w: Number(pr.video.width), h: Number(pr.video.height) };
+  // storyux verify: the pixels' own shape (sample aspect ratio) - a 1440 x 1080 file with 4:3 pixels is shown, and a browser
+  // reports it (videoWidth), as 1920 x 1080; the editor's fractions are of that. After ffmpeg's autorotate a quarter turn swaps
+  // the frame and inverts the pixels' shape. -> w x h shown, fw x fh the frame ffmpeg's filters get, sar its pixels' shape
+  const m = /^(\d+):(\d+)$/.exec(String(stream.sample_aspect_ratio || "")), raw = m && Number(m[2]) > 0 ? Number(m[1]) / Number(m[2]) : 1;
+  const sar0 = Number.isFinite(raw) && raw > 0 ? raw : 1, w = Number(pr.video.width), h = Number(pr.video.height);
+  const fw = quarterTurn ? h : w, fh = quarterTurn ? w : h, sar = quarterTurn ? 1 / sar0 : sar0;
+  return { w: fw * sar, h: fh, fw, fh, sar };
 }
 // story camera (1.99alu): a video's length from the end of its last packet, for a file whose header has none. Demuxing only (no
 // decoding), the first video stream, the demuxer forced and local files only, as everywhere here; the ffprobe 4.2 on the VPS knows
@@ -177,18 +202,16 @@ async function picture(input, sn, edit, overlay) {
     shape(edit, intermediate.w, intermediate.h);
     let image = sharp(fs.readFileSync(media.filePath(intermediate.file)));
     const layers = overlay ? [{ input: overlay, left: 0, top: 0 }] : [];
-    if (edit.fit === "fill") {
-      const c = edit.crop, left = Math.round(c.x * intermediate.w), top = Math.round(c.y * intermediate.h);
-      image = image.extract({ left, top, width: Math.min(Math.round(c.w * intermediate.w), intermediate.w - left), height: Math.min(Math.round(c.h * intermediate.h), intermediate.h - top) })
-        .resize(L.STORY_W, L.STORY_H);
-    } else if (edit.frame) {
-      // storyux: the part of the picture in the frame, scaled to where the editor showed it, on black
-      const p = placement(edit.frame, L.STORY_W, L.STORY_H, false), iw = intermediate.w, ih = intermediate.h;
-      const left = Math.min(iw - 1, Math.round(p.src.x * iw)), top = Math.min(ih - 1, Math.round(p.src.y * ih));
-      const piece = await image.extract({ left, top, width: Math.max(1, Math.min(iw - left, Math.round(p.src.w * iw))), height: Math.max(1, Math.min(ih - top, Math.round(p.src.h * ih))) })
-        .resize(p.out.w, p.out.h, { fit: "fill" }).png().toBuffer();
-      image = sharp({ create: { width: L.STORY_W, height: L.STORY_H, channels: 3, background: "#000" } });
-      layers.unshift({ input: piece, left: p.out.x, top: p.out.y });
+    const win = edit.fit === "fill" ? edit.crop : edit.frame;
+    if (win) {
+      // storyux verify: Fill's crop and Fit's frame alike - the part in view, scaled and cut to the output pixel (windowed), on
+      // black where the picture isn't
+      const p = windowed(win, intermediate.w, intermediate.h, L.STORY_W, L.STORY_H);
+      const { data, info } = await image.extract({ left: p.src.x, top: p.src.y, width: p.src.w, height: p.src.h }).resize(p.size.w, p.size.h, { fit: "fill" })
+        .extract({ left: p.cut.x, top: p.cut.y, width: p.cut.w, height: p.cut.h }).raw().toBuffer({ resolveWithObject: true });
+      const raw = { width: info.width, height: info.height, channels: info.channels };
+      if (p.full) image = sharp(data, { raw });
+      else { image = sharp({ create: { width: L.STORY_W, height: L.STORY_H, channels: 3, background: "#000" } }); layers.unshift({ input: data, raw, left: p.at.x, top: p.at.y }); }
     } else image = image.resize(L.STORY_W, L.STORY_H, { fit: "contain", background: "#000" });
     if (layers.length) image = image.composite(layers);
     const buffer = await image.webp({ quality: 82 }).toBuffer();
@@ -247,12 +270,13 @@ async function video(input, sn, edit, overlay, caps, work) {
   const out = outputNames(".mp4"), outPath = media.filePath(out.file);
   let png = null;
   if (overlay) { png = path.join(work, "overlay.png"); await sharp(overlay).resize(L.STORY_VIDEO_W, L.STORY_VIDEO_H).png().toFile(png); }
-  // storyux: a Fit frame - the part of the picture in it, scaled and padded with black to where the editor showed it
-  const fp = edit.frame ? placement(edit.frame, L.STORY_VIDEO_W, L.STORY_VIDEO_H, true) : null;
-  const vf = edit.fit === "fill"
-    ? `crop=iw*${edit.crop.w}:ih*${edit.crop.h}:iw*${edit.crop.x}:ih*${edit.crop.y},scale=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H},setsar=1`
-    : fp ? `crop=iw*${fx(fp.src.w)}:ih*${fx(fp.src.h)}:iw*${fx(fp.src.x)}:ih*${fx(fp.src.y)},scale=${fp.out.w}:${fp.out.h},setsar=1,pad=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:${fp.out.x}:${fp.out.y}:color=black`
-    : `scale=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:force_original_aspect_ratio=decrease,pad=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
+  // storyux verify: square pixels first where the file's aren't (then the frame is what the browser showed, and every cut
+  // below is in its pixels); Fill's crop and Fit's frame cut to the output pixel (windowed); plain Fit letterboxes as before
+  const anamorphic = Math.abs(size.sar - 1) > 1e-3, iw = anamorphic ? 2 * Math.max(1, Math.round(size.w / 2)) : size.fw, ih = size.fh;
+  const square = anamorphic ? `format=yuv444p,scale=${iw}:${ih}:flags=bicubic,setsar=1,` : "";
+  const win = edit.fit === "fill" ? edit.crop : edit.frame;
+  const vf = square + (win ? windowFilter(windowed(win, iw, ih, L.STORY_VIDEO_W, L.STORY_VIDEO_H), L.STORY_VIDEO_W, L.STORY_VIDEO_H)
+    : `scale=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:force_original_aspect_ratio=decrease,pad=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`);
   const args = ["-hide_banner", "-nostdin", "-v", "error", "-ss", String(start), "-t", String(duration),
     "-protocol_whitelist", "file", "-f", sn.ffmt, "-i", input];
   if (png) args.push("-protocol_whitelist", "file", "-f", "image2", "-i", png);
