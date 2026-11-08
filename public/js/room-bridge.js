@@ -1297,7 +1297,9 @@
   // ── push-to-talk clip: hold the button (or tap to start, tap again to send); up to the site's max length ──
   // pttlimits: the max length is the admin setting (/admin/bridge "Push-to-talk clips"), sent with every live view as room.pttMax -
   // the recorder stops there and the idle line says it (js.pad.ptt.upto_n). Before the first view (or from an older site): PTT_DEF.
-  var PTT_DEF = 30, PTT_LO = 3, PTT_HI = 120;
+  // Review fix 3: the recorder stops PTT_EARLY_MS before the max (a late timer / a slow onstop still lands inside Pepe's +0.5 s check),
+  // and a clip that ran past max + PTT_OVER_S anyway is kept here - Pepe would refuse it as too long AND count it (bad_clip).
+  var PTT_DEF = 30, PTT_LO = 3, PTT_HI = 120, PTT_EARLY_MS = 500, PTT_OVER_S = 0.5;
   function pttMaxOf(d) {
     var n = Number(d && d.room && d.room.pttMax);
     return isFinite(n) && n >= PTT_LO && n <= PTT_HI ? Math.floor(n) : PTT_DEF;
@@ -1410,13 +1412,16 @@
       if (stream) release();
     }
     var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
-    function send(chunks, mimeType, secs) {
+    function send(chunks, mimeType, secs, capS) {
       if (gone) return;
       if (secs < 0.7) { txt.textContent = _t('js.pad.ptt.too_short', 'too short — hold the button while you talk'); return; }
+      // pttlimits review fix 3: longer than the max it was recorded under allows (+0.5 s, Pepe's own check) - never sent
+      if (capS && secs > capS + PTT_OVER_S) { txt.textContent = _t('js.pad.ptt.too_long', 'too long — keep it under {n} s', { n: capS }); return; }
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
       txt.textContent = _t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) });
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
-        .then(function (r) { return r.json(); })
+        // pttlimits review fix 2: any 413 is "too big" - the site's JSON one, and nginx's own HTML page for a body over its 1 MB
+        .then(function (r) { return r.status === 413 ? { ok: false, error: _t('js.pad.ptt.too_big', 'that recording is too big — try a shorter one') } : r.json(); })
         .then(function (d) { txt.textContent = d.ok ? _t('js.pad.ptt.sent', 'sent — Pepe plays it when the mic is free') : (d.error || _t('js.pad.relay.not_sent', 'not sent')); })
         .catch(function () { txt.textContent = _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
     }
@@ -1443,7 +1448,7 @@
           return;
         }
         var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
-        var r, chunks = [], t0 = Date.now();
+        var r, chunks = [], t0 = Date.now(), capS = maxS;   // pttlimits: the max this recording started with
         try { r = new MediaRecorder(s, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined); }
         catch (e) { release(); txt.textContent = _t('js.pad.ptt.cant_record', 'this browser can\'t record a clip'); return; }
         rec = r; recAt = t0;
@@ -1451,14 +1456,14 @@
         r.onstop = function () {
           if (stream === s) release();           // stopped some other way (track ended, page hidden)
           idle();
-          send(chunks, r.mimeType, (Date.now() - t0) / 1000);
+          send(chunks, r.mimeType, (Date.now() - t0) / 1000, capS);
         };
         r.start(250); recordState(true);
         tapMode = !!upAt;                        // a quick tap started it: tap again to send
         btn.setAttribute('aria-pressed', 'true');
         btn.textContent = tapMode ? _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send') : _t('js.pad.ptt.rec_release', '⏺ Recording — release to send');
         txt.textContent = _t('js.pad.ptt.recording', 'recording…');
-        recTimer = setTimeout(stop, maxS * 1000);   // pttlimits: the site's max length (was a fixed 20 s)
+        recTimer = setTimeout(stop, Math.max(1000, capS * 1000 - PTT_EARLY_MS));   // pttlimits: the site's max length (was a fixed 20 s), 0.5 s early
       }).catch(function () { opening = false; release(); txt.textContent = _t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'); });
     }
     function up() {

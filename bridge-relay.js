@@ -79,7 +79,7 @@ async function padFull(userId, roomId) {
 const PAD_DENIED = { ok: false, code: "pad_access", error: "This pad's live room is for its approved members." };
 
 // pttlimits (the owner 2026-11-08): a push-to-talk clip's max length, its body cap and the play limit's cooldown / per-10-minute
-// number are the /admin/bridge "Push-to-talk clips" setting now (pttlimits.js current() / maxBytes(), read for every upload) - they
+// number are the /admin/bridge "Push-to-talk clips" setting now (pttlimits.js effective() / maxBytes(), read for every upload) - they
 // were CLIP_MAX_SECS = 30, CLIP_MAX_BYTES = 600 KB and CLIP_PLAY {gap 30 s, burst 3} here
 const PTT = require("./pttlimits");
 const CLIP_RAW_TYPES = ["audio/*", "application/octet-stream"];
@@ -228,12 +228,12 @@ function limitBack(key, t) {
 // failed by the sweep (Pepe never took it, or never answered - see CLIP_PENDING_TTL). Not bad_clip (the recording's own fault).
 // The flood guard stays: CLIP_UP uploads per account whatever became of them (Pepe's CLIP_TRY_LIMIT), never given back - an
 // upload refused by the play limit costs none of it.
-// pttlimits: the play limit's gap and burst are the admin setting (pttlimits.current(): gap_s / burst per window_s - 30 s / 3 per 10 min
+// pttlimits: the play limit's gap and burst are the admin setting (pttlimits.effective(): gap_s / burst per window_s - 30 s / 3 per 10 min
 // by default); the flood guard is never below that burst (12, or the setting when it is higher - else it would cap the clips first).
 const CLIP_UP = { burst: 12, window: 10 * 60 * 1000 };
 /** pttlimits: the limits for an upload now -> {gap, burst, window (ms), upBurst, maxSecs, job: the fields every clip job carries for Pepe}. */
 function clipLimits() {
-  const L = PTT.current();
+  const L = PTT.effective();        // review fix 1: the max length kept to an older Pepe's 30 s until Pepe says he follows the job's limits
   return { gap: L.gap_s * 1000, burst: L.burst, window: L.window_s * 1000, upBurst: Math.max(CLIP_UP.burst, L.burst), maxSecs: L.max_secs,
            job: { max_secs: L.max_secs, gap_s: L.gap_s, burst: L.burst, window_s: L.window_s } };
 }
@@ -256,12 +256,17 @@ function clipBody(req, res, next) {
 // his audio worker plays every room's clips in turn, each waiting up to 4 min for the mic, and HE gives up on a clip that hasn't
 // started 7 min after it reached him (pepe_relay RELAY_CLIP_GIVE_UP) - so his answer comes first and the site never gives back a
 // clip he may still play. One he said is playing gets CLIP_PLAYING_GRACE more to say how it went.
+// pttlimits review fix 4: Pepe says "played" when the clip has FINISHED, so a playing clip gets at least its own max length (the job's
+// limits.max_secs, up to 120 s) + CLIP_PLAYED_SLACK - a fixed 2 min failed a long clip that started late while it was still playing.
 const CLIP_PENDING_TTL = 75 * 1000;
 const CLIP_PLAYING_GRACE = 2 * 60 * 1000;
+const CLIP_PLAYED_SLACK = 90 * 1000;
 /** pttclip review: when an open clip job stops waiting for Pepe's answer (failed "unconfirmed" in the sweep). */
 function clipOpenUntil(j) {
   const base = (j.claimed || j.at) + CLIP_TTL;
-  return j.playingAt ? Math.max(base, j.playingAt + CLIP_PLAYING_GRACE) : base;
+  if (!j.playingAt) return base;
+  const ms = j.limits && Number.isFinite(Number(j.limits.max_secs)) ? Math.min(120, Math.max(0, Number(j.limits.max_secs))) * 1000 : 0;
+  return Math.max(base, j.playingAt + Math.max(CLIP_PLAYING_GRACE, ms + CLIP_PLAYED_SLACK));
 }
 /** pttclip: a clip job that didn't play gives its play-limit hit back - once (j.limBack). True when it did. */
 function clipGiveBack(j) {
@@ -867,6 +872,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     hookDrain();
+    PTT.notePepe(b);                 // pttlimits review fix 1: ptt_limits: 1 = he follows each clip job's limits (pttlimits.effective)
     applyAcks(b.acks);
     lastPull = Date.now();
     const ids = () => (liveIds ? liveIds() : new Set());

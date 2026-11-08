@@ -1891,7 +1891,8 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
-            pttMax: require("./pttlimits").current().max_secs,   // pttlimits: the 🎙 recorder stops here (/admin/bridge "Push-to-talk clips")
+            // pttlimits: the 🎙 recorder stops here (/admin/bridge "Push-to-talk clips"; review fix 1: at most 30 s until Pepe follows them)
+            pttMax: require("./pttlimits").effective().max_secs,
             stickers: R.stickers === true,
             cfstickerPicker, gifPicker,
             // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer
@@ -2079,6 +2080,8 @@ function register(app, { isBotToken, addUser }) {
     relay.applyAcks(body.acks);
     PW.noteTxCap(body.txbar_cap === 1);        // 1.99aht transcripts bar: does this Pepe send them as a bar? (the policy / help text)
     require("./actorcap").note(body);          // 1.99wv: relay lines / Pepe menu from accounts (actorcap.js)
+    // pttlimits review fix 1: ptt_limits: 1 = Pepe follows each clip job's limits (a Pepe syncing without the long-poll says it here)
+    try { require("./pttlimits").notePepe(body); } catch (e) { /* the setting only */ }
     try { require("./incogcams").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S5): Pepe applies incognito cams?
     try { require("./camreveal").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S4): Pepe opens cam reveals?
     try { require("./privacystate").noteBot(body); } catch (e) { /* none */ }   // 1.99aid (privacy controls S6): Pepe runs the switchboard v3?

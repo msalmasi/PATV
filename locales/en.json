@@ -5077,6 +5077,8 @@
   "js.pad.ptt.s_unconfirmed": "Pepe didn’t say whether it played — it didn’t count toward your limit",
   "js.pad.ptt.mic_label": "Microphone for push-to-talk",
   "js.pad.ptt.too_short": "too short — hold the button while you talk",
+  "js.pad.ptt.too_long": "too long — keep it under {n} s",
+  "js.pad.ptt.too_big": "that recording is too big — try a shorter one",
   "js.pad.ptt.sending": "sending {n}s…",
   "js.pad.ptt.sent": "sent — Pepe plays it when the mic is free",
   "js.pad.ptt.opening": "opening the microphone…",

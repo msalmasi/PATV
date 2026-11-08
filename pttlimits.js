@@ -12,11 +12,19 @@
 // /admin/bridge switches; cached here and clamped on the way in AND out (a hand-edited row can't break a clip).
 //
 // Effective at once, no restart:
-//   * bridge-relay.js reads current() for every upload: the play limit (gap / burst per WINDOW_S), the length check (+1 s for the
-//     recorder's stop), the body cap (maxBytes) and the flood guard (never below burst)
+//   * bridge-relay.js reads effective() (current() + Pepe's part, below) for every upload: the play limit (gap / burst per WINDOW_S),
+//     the length check (+1 s for the recorder's stop), the body cap (maxBytes) and the flood guard (never below burst)
 //   * every clip job carries the values it was accepted under - max_secs, gap_s, burst, window_s - and Pepe (a build that reads them)
 //     re-checks with those, inside his own hard ceilings; an older Pepe keeps his 30 s / 3 per 10 min / 30 s
 //   * the live view gives pages max_secs (room.pttMax): the recorder stops there and says "up to {n} s" (js.pad.ptt.upto_n)
+//
+// Review fix 1 - Pepe's part (effective()): an older Pepe cuts a clip to 31 s and refuses anything over 30.5 s as bad_clip, which
+// counts against the member on BOTH sides (the clip never plays). So a max length over his own 30 s (OLD_PEPE) applies only while
+// Pepe says he follows each clip job's limits - ptt_limits: 1 on his /api/bridge/relay/pull or /api/bridge/sync body (notePepe),
+// seen in the last PEPE_TTL (his long-poll comes every 10 s; a rollback to an older build, or no Pepe, goes back to 30 s within it).
+// Until then the length check, the body cap, the recorder (room.pttMax) and the job's max_secs use min(setting, 30). The cooldown and
+// clips per 10 minutes apply as set: an older Pepe refusing a clip by his own 30 s / 3 per 10 min counts nothing anywhere (the
+// site gives its hit back, his limiter counted none) - the card says his own numbers still apply until he follows.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -32,10 +40,17 @@ const FIELDS = Object.freeze(Object.keys(SPEC));
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((k) => [k, SPEC[k].def])));
 const LIMITS = Object.freeze(Object.fromEntries(FIELDS.map((k) => [k, [SPEC[k].lo, SPEC[k].hi]])));
 // The body cap: the recorder asks for 32 kbit/s Opus (4 KB a second); a browser that ignores the bitrate (Safari's AAC) runs well above
-// it. BYTES_PER_SEC = 160 kbit/s (5x) for max_secs + 1 s, never below the old 600 KB, never above BYTES_CEIL (120 s fits under it).
+// it. BYTES_PER_SEC = 160 kbit/s (5x) for max_secs + 1 s, never below the old 600 KB, never above BYTES_CEIL.
+// Review fix 2: BYTES_CEIL stays under nginx's client_max_body_size 1m in front of publicaccess.tv and staging (botupload.js) - nginx
+// answers a bigger body itself with an HTML 413, so a cap above it could never be reached. 960 KB = 64 kbit/s for a 120 s clip, 2x the
+// recorder's 32 kbit/s; past ~47 s a browser far above that bitrate (Safari AAC) can hit it - the page says "too big" for any 413.
 const BYTES_PER_SEC = 20 * 1024;
 const BYTES_FLOOR = 600 * 1024;
-const BYTES_CEIL = Math.ceil(2.5 * 1024 * 1024);
+const BYTES_CEIL = 960 * 1024;
+// Review fix 1: what an older Pepe enforces on his own (pepe_relay.py CLIP_MAX_SECS / CLIP_LIMIT), and how long his word lasts
+const OLD_PEPE = Object.freeze({ gap_s: 30, burst: 3, max_secs: 30 });
+const PEPE_TTL = 2 * 60 * 1000;
+let PEPE_AT = 0;
 
 let CFG = { ...DEFAULTS }, META = { at: null, by: null }, loaded = false, ready = null, saving = Promise.resolve();
 
@@ -85,14 +100,28 @@ function init() {
   return ready;
 }
 
-/** The limits in force now: {gap_s, burst, max_secs, window_s}. Synchronous (every upload asks); the defaults until the row is read. */
+/** The limits as set (the card's values): {gap_s, burst, max_secs, window_s}. Synchronous; the defaults until the row is read. */
 function current() {
   if (!loaded) init().catch(() => {});
   return { ...CFG, window_s: WINDOW_S };
 }
 
-/** The body cap for a clip up to `maxSecs` long (bytes). */
-function maxBytes(maxSecs = CFG.max_secs) {
+/** Review fix 1: Pepe's /api/bridge/relay/pull or /api/bridge/sync body - ptt_limits: 1 (or true) = he follows each clip job's limits.
+ *  The latest such call counts (`now` for the tests); a call without it changes nothing (PEPE_TTL lets it lapse). */
+function notePepe(body, now = Date.now()) {
+  if (body && typeof body === "object" && (body.ptt_limits === 1 || body.ptt_limits === true)) PEPE_AT = Number(now) || Date.now();
+}
+/** Review fix 1: Pepe said he follows the job's limits within PEPE_TTL. */
+function pepeFollows(now = Date.now()) { return PEPE_AT > 0 && now - PEPE_AT < PEPE_TTL; }
+/** The limits in force for an upload now (every upload, the live view and the job's fields ask): current(), with the max length kept
+ *  to an older Pepe's 30 s until Pepe says he follows the job's limits (review fix 1). + pepe: whether he does. */
+function effective(now = Date.now()) {
+  const L = current(), pepe = pepeFollows(now);
+  return { ...L, max_secs: pepe ? L.max_secs : Math.min(L.max_secs, OLD_PEPE.max_secs), pepe };
+}
+
+/** The body cap for a clip up to `maxSecs` long (bytes) - the length in force by default. */
+function maxBytes(maxSecs = effective().max_secs) {
   const s = Number.isFinite(Number(maxSecs)) ? Math.max(0, Number(maxSecs)) : DEFAULTS.max_secs;
   return Math.min(BYTES_CEIL, Math.max(BYTES_FLOOR, Math.ceil((s + 1) * BYTES_PER_SEC)));
 }
@@ -102,7 +131,10 @@ async function view() {
   await init();
   let audit = [];
   try { audit = await require("./adminaudit").recent(AUDIT, 8); } catch (e) { audit = []; }
+  const pepe = pepeFollows();
   return { cfg: { ...CFG }, defaults: { ...DEFAULTS }, limits: LIMITS, window_s: WINDOW_S, at: META.at, by: META.by,
+           // review fix 1: whether Pepe follows them (and since when he last said so) + what an older Pepe enforces on his own
+           pepe: { follows: pepe, at: PEPE_AT || null, old: { ...OLD_PEPE } }, max_secs_now: effective().max_secs,
            max_bytes: maxBytes(), audit: audit.map((a) => ({ at: a.at, admin: a.admin, reason: a.reason || null, to: a.detail && a.detail.to ? a.detail.to : null })) };
 }
 
@@ -170,6 +202,6 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, current, maxBytes, view, save, validate, clean, register, SPEC, FIELDS, DEFAULTS, LIMITS, WINDOW_S,
-                   BYTES_PER_SEC, BYTES_FLOOR, BYTES_CEIL, AUDIT, KEY,
-                   _reset: () => { CFG = { ...DEFAULTS }; META = { at: null, by: null }; loaded = false; ready = null; saving = Promise.resolve(); } };
+module.exports = { init, current, effective, notePepe, pepeFollows, maxBytes, view, save, validate, clean, register, SPEC, FIELDS, DEFAULTS,
+                   LIMITS, WINDOW_S, BYTES_PER_SEC, BYTES_FLOOR, BYTES_CEIL, OLD_PEPE, PEPE_TTL, AUDIT, KEY,
+                   _reset: () => { CFG = { ...DEFAULTS }; META = { at: null, by: null }; loaded = false; ready = null; saving = Promise.resolve(); PEPE_AT = 0; } };
