@@ -851,6 +851,6 @@ test("clerkreq review follow-up: a kind word the bot cut off the END of a title 
   assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["lost road movie", "lost road"]);
   // a kind word in FRONT ("the show X") is the line's kind, not the title's: one lookup, as before
   f.calls.length = 0;
-  await run(f, { title: "lost road", kind: "movie" }, { raw: "the movie lost road" }, externalContext);
-  assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["lost road"]);
+  await run(f, { title: "far road", kind: "movie" }, { raw: "the movie far road" }, externalContext);
+  assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["far road"]);
 });

@@ -700,8 +700,17 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       || filmSpecials.has(String(r.key));          // (review F6: the film kept as a special is that title)
     if (!recalled && (!offered.length || allNamed || titleLevel && !offered.some(isTitle)) && !shelfSelection.filters.length && a.title && !a.about && !a.like) {
       const k = episodeNamed ? askedKind : (filmSpecials.size ? askedKind : a.kind);
-      const found = await missingTitle({ kind: k === "show" || k === "episode" ? "show" : k, title: a.title, year: a.year,
-        ...(a.season != null && a.episode == null ? { season: a.season } : {}) }, context, Date.now() + SEERR_MS);
+      const seasonOf = a.season != null && a.episode == null ? { season: a.season } : {};
+      // review follow-up: a kind word the bot cut off the END of the title is often the title's own ("Scary Movie", "The Truman Show",
+      // "Bee Movie") - the line's words are looked up first, as said and with no kind; then the trimmed title as before
+      const tail = /^(.*\S)\s+(?:movie|film|show|series|tv show|tv series)$/i.exec(raw || "");
+      let found = null;
+      if (tail && norm(tail[1]) === norm(a.title) && norm(raw) !== norm(a.title)) {
+        const said = await missingTitle({ kind: null, title: raw, year: a.year, ...seasonOf }, context, Date.now() + SEERR_MS);
+        if (said && (said.tmdb || said.choices || said.requested || said.unavailable || said.miss === "down" || said.miss === "off")) found = said;
+      }
+      if (!found) found = await missingTitle({ kind: k === "show" || k === "episode" ? "show" : k, title: a.title, year: a.year, ...seasonOf },
+        context, Date.now() + SEERR_MS);
       // review F5: the episode already offered stays offered - a same-named title Seerr says is on Plex (in a section the clerk doesn't
       // serve) is no reason to refuse it ("that one isn't available here" for an episode on the shelves); nothing of it is said
       if (found && found.unavailable) { if (!allNamed) return { ...base, code: "unavailable" }; }

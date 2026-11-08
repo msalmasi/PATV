@@ -487,7 +487,8 @@ async function opRequest(user, b) {
       else if (e.status === 403) code = requestsOn() ? "level" : "request_off";
       else if (e.status === 429) code = "limit";
       // review F10: Overseerr refusing it (a quota) is "refused" - nothing was requested, nothing is on its way
-      else if (e.status === 409) code = e.refused === true ? "refused" : /already on Plex|already available/i.test(String(e.message || "")) ? "available" : "requested";
+      else if (e.status === 409) code = e.refused === true || e.upstream === true && /refused it/i.test(String(e.message || "")) ? "refused"
+        : /already on Plex|already available/i.test(String(e.message || "")) ? "available" : "requested";
       else if (e.status === 402) code = "pat";
     }
     throw new Fail(code, "The request could not be sent.", e && e.status || 502);
