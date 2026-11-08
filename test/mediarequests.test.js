@@ -328,3 +328,57 @@ test("removal requires spaced JSON 404s and an explicit title confirmation; reco
 
   } finally { global.fetch=realFetch; R._setClock(null); }
 });
+
+// 1.99?? clerkreq S6: a request made from chat ("pepe request X", typed in a pad's Camfrog room or its web chat) remembers the pad and
+// whether the speaker was veiled; when it lands on Plex, the pad's room hears "📼 <title> just landed - requested by <name>" (relay job
+// request_landed, behind the request_landed_relay switch - on by default) - once, never naming a veiled or incognito requester.
+test("clerkreq S6: a chat request remembers its pad; landing tells that pad's room once (veiled: unnamed); web requests and the switch off never", async () => {
+  const landed = [];
+  R._setLanded(async (o) => { landed.push(o); return { queued: true }; });
+  try {
+    const u = await mkUser({ bal: 5000 });
+    const r = await R.request(u, { type: "movie", tmdb: 11 }, { origin: "chat", pad: "Cedar.Pad", anon: false });
+    let row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [r.id]))[0];
+    assert.deepEqual([row.origin, row.pad_id, row.anon], ["chat", "Cedar.Pad", 0]);
+    O.requests.get(row.overseerr_id).media.status = 5;
+    assert.equal(await R.sync(row), "available");
+    assert.equal(await R.sync({ ...row, status: "approved" }), "available");
+    assert.deepEqual(landed, [{ roomId: "Cedar.Pad", userId: u.userId, title: "Star Wars", year: 1977, anon: false }], "said once");
+    // veiled: the job never carries a name
+    const v = await mkUser({ bal: 5000 });
+    const rv = await R.request(v, { type: "movie", tmdb: 11 }, { origin: "chat", pad: "Cedar.Pad", anon: true });
+    row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [rv.id]))[0];
+    O.requests.get(row.overseerr_id).media.status = 5;
+    await R.sync(row);
+    assert.equal(landed.length, 2); assert.equal(landed[1].anon, true);
+    // a request made on /requests (no origin) and the switch off: nothing said
+    const w = await mkUser({ bal: 5000 });
+    const rw = await R.request(w, { type: "movie", tmdb: 11 });
+    row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [rw.id]))[0];
+    assert.equal(row.origin, null);
+    O.requests.get(row.overseerr_id).media.status = 5;
+    await R.sync(row);
+    assert.equal(landed.length, 2);
+    await conf.set({ request_landed_relay: false });
+    assert.equal(conf.get().request_landed_relay, false);
+    const x = await mkUser({ bal: 5000 });
+    const rx = await R.request(x, { type: "movie", tmdb: 11 }, { origin: "chat", pad: "Cedar.Pad", anon: false });
+    row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [rx.id]))[0];
+    O.requests.get(row.overseerr_id).media.status = 5;
+    await R.sync(row);
+    assert.equal(landed.length, 2, "the switch is off");
+    await conf.set({ request_landed_relay: true });
+    // a bad origin / pad is never stored
+    const y = await mkUser({ bal: 5000 });
+    const ry = await R.request(y, { type: "movie", tmdb: 11 }, { origin: "elsewhere", pad: "x".repeat(300) });
+    row = (await getQuery("SELECT * FROM media_requests WHERE id = ?", [ry.id]))[0];
+    assert.deepEqual([row.origin, row.pad_id], [null, null]);
+  } finally { R._setLanded(null); }
+});
+
+test("clerkreq S6: the switch is on by default and lives in /admin/media", () => {
+  assert.equal(conf.DEFAULTS.request_landed_relay, true);
+  const view = fs.readFileSync(path.join(repo, "views", "mediaAdmin.ejs"), "utf8");
+  assert.match(view, /name="request_landed_relay"/);
+  assert.match(view, /_bools" value="[^"]*request_landed_relay/);
+});
