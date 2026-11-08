@@ -779,7 +779,7 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
   const render = (extra) => ejs.render(source, Object.assign({}, locals, extra), { filename: stripFile });
   const on = render({ storyStudioOn: () => true, storyCameraOn: () => true });
-  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=10/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3; storyplay verify: studio v=10
+  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=11/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3; storyplay verify: studio v=10; storywide: studio v=11 (camera unchanged)
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);

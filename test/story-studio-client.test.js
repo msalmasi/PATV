@@ -640,8 +640,9 @@ test('Studio ssfix: the empty state centres its camera icon over the words, and 
   // .ds-ic is a fixed 1.25em box: as a grid item it sat at the start of the column the words make (80 px left at 390 px)
   const empty = css.match(/\.sst \.sst-empty \{([^}]*)\}/)[1];
   assert.match(empty, /justify-items:\s*center/);
-  const phone = css.slice(css.indexOf('@media (max-width: 760px)'));
-  assert.match(phone, /\.sst \.sst-status\.sst-error \{[^}]*background:\s*var\(--ds-danger-bg\)/);
+  // (storywide: the editor's layout is the same on every screen - the plate rule comes after the dock's own background, so it wins)
+  const plate = css.search(/\.sst \.sst-status\.sst-error \{[^}]*background:\s*var\(--ds-danger-bg\)/), dock = css.search(/\.sst \.sst-status, \.sst \.sst-progress, \.sst \.sst-recovery \{[^}]*background:\s*var\(--ds-media-bg\)/);
+  assert.ok(plate > 0 && dock > 0 && plate > dock, 'an error keeps its plate over the dock\'s background');
 });
 
 // ── ssfix2 (review of ssfix): the picker can come back with no event at all; the note must live through the decode; a killed
@@ -954,8 +955,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=10/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself; storyplay verify (v=10): the review fixes
-  assert.match(html, /story-studio\.css\?v=6/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings; storyplay (v=6): the ▶ over the picture
+  assert.match(html, /story-studio\.js\?v=11/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself; storyplay verify (v=10): the review fixes; storywide (v=11): the stage's box (G.fitStage)
+  assert.match(html, /story-studio\.css\?v=7/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings; storyplay (v=6): the ▶ over the picture; storywide (v=7): edge to edge, every control inside the picture
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
@@ -1360,7 +1361,7 @@ test('Studio storyux verify: the grips sit off the selected layer\'s corners - t
   assert.ok(q.cy - q.h / 2 < 2, 'the text is at the top'); assert.ok(q.del.y - RD >= 0 && q.turn.y - RT >= 0, 'both grips inside the stage'); assert.equal(q.del.corner, 'bl');
   // the buttons over the picture: a sticker near the header's X gets its delete grip on the other side
   const Q = studioPage(); await studioOpen(Q); await studioPick(Q);
-  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
+  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);   // (storywide: the post row is one of them)
   const headButtons = Q.doc.querySelectorAll('.sst-head .ds-btn');
   Q.doc.querySelector('.sst-back').getBoundingClientRect = rectOf(8, 8, 44, 44); headButtons[headButtons.length - 1].getBoundingClientRect = rectOf(248, 8, 44, 44);
   Q.doc.querySelectorAll('.sst-tools .ds-btn').forEach((b, i) => { b.getBoundingClientRect = rectOf(252, 60 + 56 * i, 44, 44); });
@@ -1499,7 +1500,8 @@ test('Studio storyux verify: Escape and a click outside ask the same quiet quest
 
 test('Studio storyux verify: on a phone the header and the tools let touches through to the picture between their buttons; every round button shows a focus ring over its shadow', () => {
   const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
-  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'), css.indexOf('@keyframes sst-sheet-in'));
+  // (storywide: the editor lies over the picture on every screen, not only under 760 px)
+  const mobile = css.slice(0, css.indexOf('@keyframes sst-sheet-in'));
   assert.match(mobile, /\.sst \.sst-head, \.sst \.sst-tools \{[^}]*pointer-events:\s*none/);
   assert.match(mobile, /\.sst \.sst-head \.ds-btn, \.sst \.sst-tools \.ds-btn \{[^}]*pointer-events:\s*auto/);
   assert.match(css, /\.sst \.ds-btn\.sst-sel-del:focus-visible \{[^}]*box-shadow:\s*var\(--ds-focus-ring\)/);
@@ -1555,4 +1557,142 @@ test('Studio storyplay: the ▶ over the picture and the header\'s sound button 
   P.doc.querySelector('.sst-post').click(); await flush(24); assert.equal(P.uploaded.at(-1).body.edit.fit, 'fit'); assert.equal(P.uploaded.at(-1).body.edit.frame, undefined, 'the picture never moved (a pan in Fit would frame it)');
   const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8'), rule = /\.sst \.ds-btn\.sst-playbtn \{([^}]*)\}/.exec(css);
   assert.ok(rule, 'a rule for the ▶'); assert.match(rule[1], /pointer-events:\s*auto/); assert.match(rule[1], /inset-inline-start:\s*50%/); assert.match(rule[1], /z-index:\s*var\(--ds-z-/);
+});
+
+// ── storywide (1.99??): the owner (iPhone, Chrome = WebKit, 2026-11-08): "Story auto play is working! But can you widen the editor so
+//    the buttons aren't half in the margin (see how it looks in IG or Snapchat for ref)". The stage was fitted by height above the
+//    post row - 87% of the 430 px screen - and the X, the tools and ⚙️ sat half over its edges. Now it is the largest 9:16 in the
+//    screen (the post row lies over its foot where it can't go under it), and every control is inside it - or, beside a stage
+//    too narrow to hold them (a phone on its side), wholly in the margins. One layout on every screen; the script places it. ──
+const FOOT = 64;
+const screenOf = (P) => {
+  const card = P.doc.querySelector('.sst-card'), foot = P.doc.querySelector('.sst-foot'), safe = P.doc.querySelector('.sst-safe');
+  return (w, h, s = {}) => {
+    card.getBoundingClientRect = rectOf(0, 0, w, h); foot.getBoundingClientRect = rectOf(0, h - FOOT, w, FOOT);
+    if (safe) safe.getBoundingClientRect = rectOf(s.l || 0, s.t || 0, w - (s.l || 0) - (s.r || 0), h - (s.t || 0) - (s.b || 0));
+  };
+};
+const viewportResize = (P) => { for (const f of (P.win.visualViewport && P.win.visualViewport.ls) || []) f(new Ev('resize')); };
+const windowResize = (P) => { for (const l of P.winListeners.filter((x) => x.type === 'resize')) l.fn(new Ev('resize')); };
+
+test('Studio storywide: the stage is the largest 9:16 in the screen - edge to edge on a phone, the post row under it where it fits and over its foot where it doesn\'t; fitted by height (equal, smallest margins) only when even the whole height can\'t hold the width', () => {
+  const G = geometry(); assert.equal(typeof G.fitStage, 'function'); assert.ok(G.STAGE && G.STAGE.bleed >= 280 && G.STAGE.side >= 160);
+  const fit = (w, h, safe) => G.fitStage({ w, h, foot: FOOT, safe });
+  const r2 = (n) => Math.round(n * 100) / 100, box = (g) => [g.x, g.y, g.w, g.h].map(r2);
+  const check = (g, w, h, s = {}) => {
+    assert.ok(near(g.w / g.h, 9 / 16, 1e-9), 'exactly 9:16');
+    assert.ok(g.x >= (s.l || 0) - 1e-9 && g.y >= (s.t || 0) - 1e-9 && g.x + g.w <= w - (s.r || 0) + 1e-9 && g.y + g.h <= h - (s.b || 0) + 1e-9, 'inside the safe area');
+    assert.ok(near(g.right, w - g.x - g.w) && near(g.bottom, h - g.y - g.h));
+    assert.ok(near(g.x - (s.l || 0), g.right - (s.r || 0)), 'centred: equal margins');
+  };
+  // iPhone SE 375 x 667: width-fit takes the whole height, so the post row lies over the picture's foot
+  let g = fit(375, 667); check(g, 375, 667);
+  assert.deepEqual(box(g), [0, .17, 375, 666.67]); assert.equal(g.mode, 'bleed'); assert.equal(g.dock, 'over'); assert.equal(g.cover, FOOT); assert.ok(near(g.padB, g.bottom));
+  // iPhone 15 393 x 852 and Pro Max 430 x 932: the post row fits under the picture - it goes there; the picture is centred above it
+  g = fit(393, 852); check(g, 393, 852); assert.deepEqual(box(g), [0, 44.67, 393, 698.67]); assert.equal(g.dock, 'below'); assert.equal(g.cover, 0); assert.equal(g.padB, 0);
+  assert.ok(g.y + g.h <= 852 - FOOT, 'the post row is under the picture');
+  // a status, the progress or "Post it as it is" over the post row: lifted inside the stage's foot, never half over its edge
+  assert.ok(near(g.lift, 852 - FOOT - (g.y + g.h)), 'lifted by the gap between the stage and the post row: ' + g.lift);
+  assert.equal(fit(375, 667).lift, 0, 'over the foot: already inside'); assert.equal(fit(844, 390).lift, 0);
+  g = fit(430, 932); check(g, 430, 932); assert.deepEqual(box(g), [0, 51.78, 430, 764.44]); assert.equal(g.dock, 'below');
+  // the owner's Chrome on iOS (its bars at the bottom): 430 x 745 - even the whole height can't hold the width: 97.5% of it, the post row over the foot
+  g = fit(430, 745); check(g, 430, 745); assert.deepEqual(box(g), [5.47, 0, 419.06, 745]); assert.ok(g.w / 430 >= .96, 'at least 96% of the width (was 87%)');
+  assert.equal(g.mode, 'bleed'); assert.equal(g.dock, 'over'); assert.equal(g.cover, FOOT); assert.equal(g.padB, 0);
+  // the keyboard up (a 430 x 410 visual viewport): a smaller stage, its controls still inside it
+  g = fit(430, 410); check(g, 430, 410); assert.equal(g.mode, 'bleed'); assert.deepEqual(box(g), [99.69, 0, 230.63, 410]);
+  // a phone on its side: a stage too narrow for its controls, wide margins - they go there (framed); the post row is in the margins too
+  for (const [w, h] of [[844, 390], [667, 375], [932, 430]]) { g = fit(w, h); check(g, w, h); assert.equal(g.mode, 'framed', w + 'x' + h); assert.equal(g.h, h); assert.ok(g.x >= G.STAGE.side); assert.equal(g.cover, 0); }
+  // tablet and desktop: fitted by height, centred, controls inside
+  g = fit(768, 1024); check(g, 768, 1024); assert.deepEqual(box(g), [96, 0, 576, 1024]); assert.equal(g.mode, 'bleed'); assert.equal(g.dock, 'over');
+  g = fit(1280, 800); check(g, 1280, 800); assert.deepEqual(box(g), [415, 0, 450, 800]); assert.equal(g.mode, 'bleed');
+  // a small square window: too narrow a stage AND too narrow margins - the controls stay inside it (never half out)
+  g = fit(500, 500); assert.equal(g.mode, 'bleed');
+  // the safe area (a notch, the home indicator): the picture stays inside it; the post row ends above the indicator
+  let s = { t: 59, b: 34 }; g = fit(430, 932, s); check(g, 430, 932, s); assert.equal(g.dock, 'below'); assert.deepEqual(box(g), [0, 64.28, 430, 764.44]); assert.equal(g.padB, 34);
+  s = { l: 59, r: 59, b: 21 }; g = fit(932, 430, s); check(g, 932, 430, s); assert.equal(g.mode, 'framed'); assert.equal(g.h, 409); assert.equal(g.padB, 21);
+  // nothing measured yet (a hidden page): a zero box, never NaN
+  g = G.fitStage({ w: 0, h: 0, foot: 0 }); assert.deepEqual(box(g), [0, 0, 0, 0]);
+});
+
+test('Studio storywide: the editor writes the stage\'s box as CSS variables - on opening, a resize, the keyboard - and lays the selection out again; a scrolled visual viewport moves the editor with it', async () => {
+  const P = studioPage({ visualViewport: { height: 745, width: 430, scale: 1, offsetTop: 0 } }), root = await studioOpen(P); await studioPick(P);
+  const safe = P.doc.querySelector('.sst-safe'); assert.ok(safe, 'a probe of the safe area'); assert.equal(safe.getAttribute('aria-hidden'), 'true');
+  const screen = screenOf(P), v = (k) => root.style['--sst-' + k];
+  await studioSticker(P); const sel = P.doc.querySelector('.sst-select'), handles = P.doc.querySelector('.sst-handles');
+  screen(430, 745); handles.getBoundingClientRect = rectOf(5.47, 0, 419.06, 745); viewportResize(P);
+  assert.deepEqual(['sx', 'sy', 'sw', 'sh', 'sr', 'sb'].map(v), ['5.47px', '0px', '419.06px', '745px', '5.47px', '0px'], 'the owner\'s screen: 97.5% of its width');
+  assert.ok(root.classList.contains('sst-bleed') && !root.classList.contains('sst-framed'), 'the controls inside the picture');
+  assert.ok(root.classList.contains('sst-dock-over'), 'the post row over the picture\'s foot'); assert.equal(v('cover'), '64px'); assert.equal(v('pad-b'), '0px'); assert.equal(v('foot'), '64px');
+  assert.ok(near(parseFloat(sel.style.inlineSize), 240 / 1080 * 419.06, 1e-6), 'the selection laid out on the new stage: ' + sel.style.inlineSize);
+  screen(393, 852); handles.getBoundingClientRect = rectOf(0, 44.67, 393, 698.67); windowResize(P);
+  assert.deepEqual(['sx', 'sy', 'sw', 'sh'].map(v), ['0px', '44.67px', '393px', '698.67px']); assert.ok(!root.classList.contains('sst-dock-over'), 'the post row fits under it'); assert.equal(v('cover'), '0px');
+  assert.equal(v('lift'), '44.67px', 'a status over the post row is lifted into the stage');
+  assert.ok(near(parseFloat(sel.style.inlineSize), 240 / 1080 * 393, 1e-6));
+  screen(844, 390); windowResize(P); assert.ok(root.classList.contains('sst-framed') && !root.classList.contains('sst-bleed'), 'on its side: the controls in the margins');
+  // the keyboard: the visual viewport shrinks (the stage with it); the page scrolled to the text field moves the editor down with it
+  Object.assign(P.win.visualViewport, { height: 400, offsetTop: 120 }); screen(430, 400); viewportResize(P);
+  assert.equal(root.style['--sst-vh'], '400px'); assert.equal(root.style['--sst-vt'], '120px'); assert.equal(v('sh'), '400px'); assert.ok(root.classList.contains('sst-bleed'));
+  P.win.visualViewport.scale = 2; viewportResize(P); assert.equal(root.style['--sst-vt'], '0px', 'a pinch-zoomed page: its offset is the zoom\'s, not the keyboard\'s');
+  // a visual viewport that scrolls without resizing (iOS) is heard too
+  P.win.visualViewport.scale = 1; P.win.visualViewport.offsetTop = 0; viewportResize(P); assert.equal(root.style['--sst-vt'], '0px');
+});
+
+test('Studio storywide: a post row that changes size (a long pad name) is measured again; the observer goes with the editor', async () => {
+  const P = studioPage({ visualViewport: { height: 800, width: 393, scale: 1 } }), seen = [];
+  P.win.ResizeObserver = class { constructor(cb) { this.cb = cb; this.nodes = []; seen.push(this); } observe(n) { this.nodes.push(n); } disconnect() { this.gone = true; } };
+  const root = await studioOpen(P); await studioPick(P); const screen = screenOf(P);
+  const ro = seen.find((o) => o.nodes.some((n) => n.classList && n.classList.contains('sst-foot'))); assert.ok(ro, 'the post row is observed');
+  screen(393, 800); viewportResize(P); assert.ok(!root.classList.contains('sst-dock-over'), '698.67 + 64 fits in 800');
+  P.doc.querySelector('.sst-foot').getBoundingClientRect = rectOf(0, 690, 393, 110);       // a pad name over two lines: 698.67 + 110 > 800
+  ro.cb([]); await flush(4); assert.ok(root.classList.contains('sst-dock-over'), 'too tall to go under: over the picture\'s foot'); assert.equal(root.style['--sst-cover'], '110px');
+  key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null); assert.ok(ro.gone, 'disconnected on close');
+});
+
+test('Studio storywide: a resize moves nothing in the story - the layers are fractions of the stage; the posted edit and overlay are the same', async () => {
+  const run = async (sizes) => {
+    const P = studioPage({ visualViewport: { height: 745, width: 430, scale: 1 } }); await studioOpen(P); await studioPick(P);
+    const sticker = await studioSticker(P); await drag(P, sticker, [150, 250], [75, 375]);       // to 25% / 75% of the (fake) 300 x 500 stage
+    await studioText(P, 'Hello pond'); key(P.doc.activeElement, 'Escape');
+    const where = () => P.doc.querySelectorAll('.sst-layer').map((n) => [n.getAttribute('data-layer').split('-')[0], n.style.insetInlineStart, n.style.insetBlockStart, n.style.inlineSize, n.style.blockSize, n.style.transform]);
+    const before = where(), screen = screenOf(P);
+    assert.ok(near(parseFloat(sticker.style.insetInlineStart), 25, 1e-6) && near(parseFloat(sticker.style.insetBlockStart), 75, 1e-6), 'placed at 25% / 75%');
+    for (const [w, h] of sizes) { screen(w, h); viewportResize(P); windowResize(P); await flush(4); assert.deepEqual(where(), before, 'after ' + w + 'x' + h); }
+    P.doc.querySelector('.sst-post').click(); await flush(24);
+    const exported = P.draws.filter((r) => r.canvas.className !== 'sst-overlay').map((r) => [r.op, r.args.map((a) => (a && typeof a === 'object' ? 'an image' : a))]);
+    return { edit: P.uploaded.at(-1).body.edit, exported };
+  };
+  const still = await run([]), moved = await run([[393, 852], [844, 390], [430, 400], [1280, 800], [430, 745]]);
+  assert.deepEqual(moved.edit, still.edit); assert.ok(moved.exported.length > 0); assert.deepEqual(moved.exported, still.exported, 'the same overlay, pixel op for pixel op');
+});
+
+test('Studio storywide: the post row over the picture is no place for a grip either', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P);
+  for (const b of P.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
+  P.doc.querySelector('.sst-post').getBoundingClientRect = rectOf(170, 440, 120, 48);           // Post story, over the stage's foot (bottom right)
+  const sticker = await studioSticker(P); await drag(P, sticker, [150, 250], [200, 380]);
+  const q = gripsOf(P), R = geometry().GRIP.turn;
+  assert.notEqual(q.turn.corner, 'br', 'the turn grip is not put under Post story');
+  assert.ok(Math.hypot(Math.max(170 - q.turn.x, 0, q.turn.x - 290), Math.max(440 - q.turn.y, 0, q.turn.y - 488)) >= R, 'clear of Post story');
+});
+
+test('Studio storywide: every control is placed from the stage\'s box - the header across its top, the tools inside its right edge under the header, the post row over its foot - and beside a narrow stage wholly in the margins; one layout on every screen', () => {
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
+  const rule = (sel) => { const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' \\{([^}]*)\\}').exec(css); assert.ok(m, 'a rule for ' + sel); return m[1]; };
+  assert.doesNotMatch(css, /@media \(max-width: 760px\)/, 'no separate phone layout: the script fits the stage to every screen');
+  const preview = rule('.sst .sst-preview'); assert.match(preview, /position:\s*absolute/);
+  for (const k of ['sx', 'sy', 'sw', 'sh']) assert.match(preview, new RegExp('var\\(--sst-' + k + '\\b'), 'the stage: --sst-' + k);
+  const head = rule('.sst .sst-head');
+  assert.match(head, /inset-inline-start:\s*var\(--sst-sx/); assert.match(head, /inset-block-start:\s*var\(--sst-sy/); assert.match(head, /inline-size:\s*var\(--sst-sw/);
+  const tools = rule('.sst .sst-tools');
+  assert.match(tools, /inset-inline-end:\s*calc\(var\(--sst-sr[^;]*\+/); assert.match(tools, /inset-block-start:\s*calc\(var\(--sst-sy[^;]*\+/); assert.match(tools, /max-block-size:[^;]*var\(--sst-sh[^;]*var\(--sst-cover/);
+  const card = rule('.sst.ds-scrim.sheet .sst-card'); assert.match(card, /padding-inline:\s*var\(--sst-sx[^;]*var\(--sst-sr/); assert.match(card, /padding-block-end:\s*var\(--sst-pad-b/);
+  assert.match(rule('.sst .sst-picks'), /inset-block-end:\s*calc\(var\(--sst-sb[^;]*var\(--sst-cover/, 'the empty state\'s buttons above the post row, inside the stage');
+  assert.match(rule('.sst .sst-ask'), /inset-block-start:\s*calc\(var\(--sst-sy/, 'the quiet question under the header, inside the stage');
+  assert.match(rule('.sst.sst-dock-over .sst-foot'), /pointer-events:\s*none/); assert.match(rule('.sst.sst-dock-over .sst-foot .ds-btn'), /pointer-events:\s*auto/);
+  assert.match(rule('.sst .sst-foot'), /margin-block-start:\s*var\(--sst-lift/, 'the status / progress / recovery above the post row are lifted into the stage');
+  assert.match(rule('.sst.sst-framed .sst-head'), /inset-inline:\s*0/); assert.match(rule('.sst.sst-framed .sst-tools'), /inset-inline-end:\s*max\(/);
+  assert.match(rule('.sst.sst-framed .sst-destination'), /max-inline-size:[^;]*var\(--sst-sx/, 'beside a narrow stage the post row stays in the margins');
+  for (const side of ['top', 'right', 'bottom', 'left']) assert.match(rule('.sst .sst-safe'), new RegExp('env\\(safe-area-inset-' + side));
+  assert.match(rule('.sst.ds-scrim.sheet'), /inset-block-start:\s*var\(--sst-vt/);
+  assert.match(css, /\.sst \.sst-summary, \.sst \.sst-filename, \.sst \.sst-rules \{[^}]*display:\s*none/, 'the editor is the picture: no side panel');
 });
