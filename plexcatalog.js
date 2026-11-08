@@ -52,12 +52,26 @@ function describeRead(w) {
 function describeWhy(f) {
   if (f.unusable) return "media-control's answer wasn't usable";
   if (f.unconfigured) return "media-control isn't configured on the site";
+  if (f.pin) return "media-control's certificate doesn't match MEDIACTL_TLS_SHA256";
+  if (f.bad_url) return "MEDIACTL_URL isn't a usable address";
   if (f.timeout) return "no answer within " + Math.round((f.timeout_ms || 0) / 1000) + " s";
-  if (f.status == null) return "media-control can't be reached";
+  if (f.status == null) return "media-control can't be reached" + (f.reason ? " (" + f.reason + ")" : "");
   return "media-control answered " + f.status;
 }
-/** The admin card's "Last sync error": what was being read and why it failed, e.g. "catalog source unavailable: collections of
- *  section 7 (movies) - no answer within 60 s (4 tries)". */
+/** 1.99?? catfix review: what a failed call() says, as flags and a short reason - the error code only (never the message's
+ *  address). A pin that doesn't match, a URL that can't be used and "not configured" are `lasting`: asking again can't fix them. */
+function clientFailure(e) {
+  const msg = String((e && e.message) || ""), code = e && typeof e.code === "string" ? e.code : "";
+  const unconfigured = !!(e && e.extra && e.extra.code === "encoder_down");
+  const pin = /certificate doesn't match/i.test(msg), bad_url = code === "ERR_INVALID_URL" || /^Invalid URL\b/i.test(msg);
+  const timeout = !pin && (/\btime(?:d ?)?out\b/i.test(msg) || code === "ETIMEDOUT");
+  const net = /^E[A-Z]{3,}$/.test(code) ? code : (/\b(E[A-Z]{3,})\b/.exec(msg) || [])[1];
+  const reason = net || (/socket hang up|ended by the other party/i.test(msg) ? "connection closed" : null);
+  const lasting = unconfigured || pin || bad_url;
+  return { status: null, timeout, unconfigured, pin, bad_url, reason: timeout || lasting ? null : reason, lasting, transient: !lasting };
+}
+/** The admin card's "Last sync error": what was being read and why it failed, e.g. "catalog source unavailable: episode page
+ *  from 0 of section N (shows) - media-control answered 503 (4 tries)". */
 const sourceError = (d) => "catalog source unavailable" + (d ? ": " + describeRead(d) + " - " + describeWhy(d) + (d.attempts > 1 ? " (" + d.attempts + " tries)" : "") : "");
 /** Minutes to the timer's next look: the setting while in use, sooner after a run that failed for a passing reason. */
 function nextTickMin(cfg, on, last) {
@@ -442,17 +456,15 @@ function createCatalog(options = {}) {
       if (quiet(now())) throw coded("quiet", "catalog maintenance window");
       let r = null, failure;
       try { r = await mediactl("GET", route, null, { timeout }); }
-      catch (e) {
-        const unconfigured = !!(e && e.extra && e.extra.code === "encoder_down");
-        failure = { status: null, timeout: /\btime(?:d ?)?out\b/i.test(String((e && e.message) || "")), unconfigured, transient: !unconfigured };
-      }
+      catch (e) { failure = clientFailure(e); }
       if (r) {
         if (r.status === 404 && route === "/sections") throw coded("old", "needs media-control 1.7.0");
         if (r.status === 200 && r.json && r.json.ok !== false) return r.json;
         failure = { status: Number(r.status) || null, transient: TRANSIENT.has(Number(r.status)) };
       }
       const detail = { ...(where || { step: "sections" }), status: failure.status, timeout: !!failure.timeout, timeout_ms: timeout,
-        unconfigured: !!failure.unconfigured, attempts: attempt };
+        unconfigured: !!failure.unconfigured, pin: !!failure.pin, bad_url: !!failure.bad_url, reason: failure.reason || null,
+        lasting: !!failure.lasting, attempts: attempt };
       if (!failure.transient || attempt > waits.length) throw Object.assign(coded("upstream", "catalog source unavailable"), { detail });
       log.log("[plexcatalog] " + describeRead(detail) + ": " + describeWhy(detail) + " - trying again in " + Math.round(waits[attempt - 1] / 1000) + " s");
       await sleep(waits[attempt - 1]);
@@ -663,7 +675,8 @@ function createCatalog(options = {}) {
       const ids = sections.filter((r) => r.policy === "allowed").map((r) => r.id);
       const kept = keep && run.seen != null ? " - kept: " + run.done.filter((id) => ids.includes(id)).length + " of " + ids.length + " sections done, the next run carries on" : "";
       log.log("[plexcatalog] sync failed: " + error + kept);
-      return { ok: false, dry, error, received, dropped, retry: e.code !== "old" };
+      // 1.99?? catfix review: no sooner look for what asking again can't fix (an old mediactl, the site's own configuration)
+      return { ok: false, dry, error, received, dropped, retry: e.code !== "old" && !(e.detail && e.detail.lasting) };
     }
   }
   let outsideLists;
