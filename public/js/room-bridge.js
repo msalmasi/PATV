@@ -10,7 +10,8 @@
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
 //                              clips", 30 s by default) - the live view's room.pttMax (pttlimits)
 //   .useToast(fn)              (ptt and relay, ptttoast 1.99??) the Room Dock hands in its chat card's notices: every status
-//                              line under the composer goes there instead (fn(text, {id, ms, bad}); '' with the id = take it down)
+//                              line under the composer goes there instead (fn(text, {id, ms, bad, busy, sticky}); '' with the id =
+//                              take it down; busy = a step on the way, sticky = a state that lasts until '')
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
 //                              playing / played / couldn't get the mic) - also used by the tests
 // The player and push-to-talk share the page's audio session - see "the page's audio session" below
@@ -1035,15 +1036,18 @@
         .then(function (r) { return r.json().then(function (d) { return { s: r.status, d: d }; }, function () { return { s: r.status, d: null }; }); });
     }
     // ptttoast 1.99?? (owner 11-08: no status lines under the Dock's tool row): useToast(fn) - the Room Dock's chat notices (pad-dock.js
-    // chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then "Wait a moment…" is a notice for the 6 s the line stayed,
-    // the offline bar one notice per outage (8 s; each line still says "waiting for connection…"), taken down when a send gets through,
-    // and an older page's message line (no chat list: `mine`) one too. The character counter stays on the field.
+    // chatToast: fn(text, {id, ms, bad, busy, sticky}); '' with the id takes one down). Then "Wait a moment…" is a notice for the 6 s the
+    // line stayed, the offline bar one notice per outage, taken down when a send gets through, and an older page's message line (no chat
+    // list: `mine`) one too. The character counter stays on the field (in the Dock beside it - pad-dock.css, ptttoast review F1).
+    // (ptttoast review F3 1.99??: the outage is a state, not news - its notice is sticky: no timer, never pushed out by newer notices, up
+    // until the site answers again; it was an 8 s notice and then nothing said the page was offline)
     var toastFn = null, offOn = false, mineWords = null;
     var offText = _t('js.pad.relay.offline', 'You\'re offline — your messages will send when the connection is back.');
     function notice(id, text, kind, ms) {
       if (!toastFn) return false;
       var o = { id: id };
-      if (text) { o.ms = ms || (kind === 'busy' ? 30000 : kind === 'bad' ? 8000 : 3000); o.bad = kind === 'bad'; }
+      if (text && kind === 'state') { o.bad = true; o.sticky = true; }
+      else if (text) { o.ms = ms || (kind === 'busy' ? 30000 : kind === 'bad' ? 8000 : 3000); o.bad = kind === 'bad'; if (kind === 'busy') o.busy = true; }   // (review F2: busy - a step on the way)
       try { toastFn(text ? String(text) : '', o); } catch (e) { /* the Dock's own */ }
       return true;
     }
@@ -1055,7 +1059,7 @@
     }
     function setOffline(on) {
       var was = offOn; offOn = !!on;
-      if (toastFn) { if (offOn !== was) notice('rb-offline', offOn ? offText : '', 'bad', 8000); return; }
+      if (toastFn) { if (offOn !== was) notice('rb-offline', offOn ? offText : '', 'state'); return; }
       offBar.classList.toggle('hide', !on);
     }
     function waiting() { return outbox.filter(function (x) { return x.st === 'queue' || x.st === 'posting' || x.st === 'wait'; }).length; }
@@ -1303,7 +1307,7 @@
       useToast: function (fn) {
         toastFn = typeof fn === 'function' ? fn : null;
         [offBar, note, mine].forEach(function (n) { n.classList.toggle('rb-hide', !!toastFn); });
-        if (toastFn) { clearTimeout(noteTimer); note.textContent = ''; note.classList.add('hide'); mine.textContent = ''; if (offOn) notice('rb-offline', offText, 'bad', 8000); }
+        if (toastFn) { clearTimeout(noteTimer); note.textContent = ''; note.classList.add('hide'); mine.textContent = ''; if (offOn) notice('rb-offline', offText, 'state'); }
         else { offBar.classList.toggle('hide', !offOn); last = ''; }
       },
       // Dock tools use the same command path / input and counter as typing; no second network path.
@@ -1414,12 +1418,18 @@
     // upload's answer ties the clip's job to it - jobTid), with the command notices' timing: on its way 30 s, done 3 s, a refusal 8 s
     // (+ the refusal look). A clip from elsewhere (another tab, one on its way when the page opened) gets a notice of its own. Without a
     // Dock (the classic layout) the lines beside the button, as before.
+    // (ptttoast review F2 1.99??: a step on the way says so - busy - so a notice closed with its ✕ stays closed through the clip's later
+    // steps, only a refusal shows again - pad-dock.js chatToast)
+    // (ptttoast review F4 1.99??: a clip's own progress - waiting for Pepe / queued / waiting / playing - stays up until its next state,
+    // CLIP_OPEN_MS at most: Pepe can hold a clip minutes for the mic, and a 30 s notice left nothing on the screen while it waited; the
+    // site settles every clip well inside it - bridge-relay.js clipOpenUntil: 75 s unclaimed, 8 min from Pepe's claim, playing + its
+    // length + 90 s - so the next state, played or not, always replaces it)
     var toastFn = null, pressSeq = 0, pressTid = '', jobTid = {}, jobOrder = [], clipSeen = null;
-    var TOAST_MS = { busy: 30000, done: 3000, bad: 8000 };
+    var TOAST_MS = { busy: 30000, done: 3000, bad: 8000 }, CLIP_OPEN_MS = 10 * 60 * 1000;
     function notice(tid, text, kind, ms) {
       if (!toastFn) return false;
       var o = { id: tid };
-      if (text) { o.ms = ms || TOAST_MS[kind] || TOAST_MS.done; o.bad = kind === 'bad'; }
+      if (text) { o.ms = ms || TOAST_MS[kind] || TOAST_MS.done; o.bad = kind === 'bad'; if (kind === 'busy') o.busy = true; }
       try { toastFn(text ? String(text) : '', o); } catch (e) { /* the Dock's own */ }
       return true;
     }
@@ -1580,7 +1590,7 @@
           var key = String(c.id), words = _t('js.pad.ptt.your_clip', '🎙 your clip: {status}', { status: clipStatus(c) });
           seen[key] = words;
           if ((clipSeen && clipSeen[key] === words) || (first && !clipBusy(c))) return;
-          notice(jobTid[key] || 'ptt:j' + key, words, clipBusy(c) ? 'busy' : c.ok ? 'done' : 'bad');
+          notice(jobTid[key] || 'ptt:j' + key, words, clipBusy(c) ? 'busy' : c.ok ? 'done' : 'bad', clipBusy(c) ? CLIP_OPEN_MS : 0);   // (review F4)
         });
         clipSeen = seen;
       },

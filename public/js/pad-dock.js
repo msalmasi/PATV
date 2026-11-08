@@ -138,6 +138,8 @@
     // 3 s, a refusal with its reason after 8 s); a sticky one stays until ✕. Hover or focus holds the timer. Memory only: nothing beyond
     // what the command list under the composer showed. The reveal notice (item 2) and Copied (item 6) use it too.
     var toasts = [], toastSr = null, srTimer = null;
+    // (ptttoast review F2 1.99??: the ids closed with their ✕ - a push-to-talk clip's notice came back at each of its later states)
+    var closedToasts = {};
     // (the log's "New messages ↓" pill steps up over the stack - never under a notice)
     // (1.99ajq dockpol fix (review): and the log makes room for the stack - its end padding grows by the stack's height, so a log at its
     // newest line still shows that line above a notice (room.ejs's pin re-pins when the box changes); a reader who scrolled up isn't moved)
@@ -182,13 +184,16 @@
       opts = opts || {};
       // (ptttoast 1.99??: '' with an id takes that notice down - a push-to-talk press that came to nothing, the relay back online; never an
       // empty notice, here or in the fallback)
-      if (text == null || text === '') { var was = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null; if (was) dropToast(was); return null; }
+      if (text == null || text === '') { if (opts.id) delete closedToasts[opts.id]; var was = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null; if (was) dropToast(was); return null; }
+      // (ptttoast review F2 1.99??: a notice closed with its ✕ stays closed - its later progress (opts.busy), its finished step and a sticky
+      // one's repeat are quiet; only a refusal (opts.bad) shows again - something went wrong is still news. '' frees the id)
+      if (opts.id && closedToasts[opts.id]) { if (!opts.bad) return null; delete closedToasts[opts.id]; }
       var host = toastBox(); if (!host) { toast(text); return null; }
       var doc = host.ownerDocument, rec = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null;
       if (!rec) {
         rec = { id: opts.id || null, timer: null, held: false, node: el('div', 'rmd-ct', null, doc) };
         rec.words = el('span', 'rmd-ct-t', null, doc); rec.node.appendChild(rec.words);
-        rec.node.appendChild(iconBtn('✕', 'dismiss', 'Dismiss', function () { dropToast(rec); }, 'ds-btn ghost sm rmd-ct-x', doc));
+        rec.node.appendChild(iconBtn('✕', 'dismiss', 'Dismiss', function () { if (rec.id) closedToasts[rec.id] = true; dropToast(rec); }, 'ds-btn ghost sm rmd-ct-x', doc));
         var hold = function (yes) { return function () { rec.held = yes; if (yes) { clearTimeout(rec.timer); rec.timer = null; } else armToast(rec); }; };
         on(rec.node, 'pointerenter', hold(true)); on(rec.node, 'pointerleave', hold(false)); on(rec.node, 'focusin', hold(true)); on(rec.node, 'focusout', hold(false));
         host.appendChild(rec.node); toasts.push(rec);
@@ -212,10 +217,11 @@
       var rpmOn = root.classList.contains('rpm-on'), replies = Array.isArray(row.replies) ? row.replies.filter(Boolean) : [];
       var pending = row.ok == null && /…$/.test(String(row.st || ''));
       var st = row.st || (replies.length ? (rpmOn ? t('cmd_private', 'answered privately in the chat') : '') : t('cmd_done', 'done'));
-      chatToast('› ' + row.text + (st ? ' · ' + st : ''), { id: 'cmd:' + row.id, ms: row.ok === false ? 8000 : pending ? 30000 : 3000, bad: row.ok === false });
+      chatToast('› ' + row.text + (st ? ' · ' + st : ''), { id: 'cmd:' + row.id, ms: row.ok === false ? 8000 : pending ? 30000 : 3000, bad: row.ok === false, busy: pending });
       if (!rpmOn) replies.forEach(function (r, i) { chatToast('🔒 ' + r, { id: 'cmd:' + row.id + ':r' + i, sticky: true }); });
     }
-    // ptttoast 1.99??: a composer line (push-to-talk's / the relay's: room-bridge.js useToast) - {id, ms, bad} like a command's state
+    // ptttoast 1.99??: a composer line (push-to-talk's / the relay's: room-bridge.js useToast) - {id, ms, bad, busy, sticky} like a command's
+    // state (busy: a step on the way; sticky: the relay's offline notice - up until '' takes it down)
     function lineToast(text, opts) { return dead ? null : chatToast(text, opts); }
     function changed() {
       ['rmVideo', 'rmPtt', 'rmFeed'].forEach(function (id) {

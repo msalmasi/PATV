@@ -340,7 +340,8 @@ main.rm.rm-dock .rmd-holders .who.veil { display: inline-flex; align-items: cent
 main.rm.rm-dock .rmd-holders .who.veil > i { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 main.rm.rm-dock .rmd-holders .who.veil > .veil-tag { flex: none; }
 
-/* ── the composer box (owner point 10): row 1 [＋][Message…][🎙️][Send], row 2 the tool row; the status line under the box ── */
+/* ── the composer box (owner point 10): row 1 [＋][Message…][🎙️][Send], row 2 the tool row; nothing under it - push-to-talk's and the
+   relay's lines are the chat card's notices (ptttoast 1.99??), the character counter sits beside the field (ptttoast review F1) ── */
 main.rm.rm-dock .rmd-composer { position: relative; flex: none; min-inline-size: 0; display: grid; gap: var(--ds-sp-1); margin: 0; padding: 0; border: 0; }
 main.rm.rm-dock .rmd-composer > p.muted { margin: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-sunken); font-size: var(--ds-fs-meta); }
 main.rm.rm-dock .rmd-input-row { position: relative; isolation: isolate; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-rows: 48px auto; column-gap: var(--ds-sp-1h); align-items: center; min-inline-size: 0; }
@@ -355,8 +356,16 @@ main.rm.rm-dock .rmd-input-row .rb-say-in { grid-row: 1; grid-column: 2; positio
 main.rm.rm-dock .rmd-input-row .rb-talk { grid-row: 1; grid-column: 3; }
 main.rm.rm-dock .rmd-input-row .rb-send { grid-row: 1; grid-column: 4; margin-inline-end: var(--ds-sp-1); }
 main.rm.rm-dock .rmd-input-row .rmd-tools { grid-row: 2; grid-column: 1 / -1; }
-main.rm.rm-dock .rmd-input-row :is(.rb-count, .rb-ptt-txt, .rb-mine, .rb-note, .rb-offline, .rb-cmdfeed) { grid-column: 1 / -1; min-block-size: 18px; font-size: var(--ds-fs-xs); line-height: 18px; color: var(--ds-text-muted); }
-main.rm.rm-dock .rmd-input-row .rb-count { justify-self: end; }
+main.rm.rm-dock .rmd-input-row :is(.rb-ptt-txt, .rb-mine, .rb-note, .rb-offline, .rb-cmdfeed) { grid-column: 1 / -1; min-block-size: 18px; font-size: var(--ds-fs-xs); line-height: 18px; color: var(--ds-text-muted); }
+/* ptttoast review F1 1.99?? (owner 11-08: nothing under the tool row): the "N left" counter (from 240 characters - room-bridge.js
+   COUNT_FROM) was a row of its own under the tools that pushed the box up 18px; it is row 1's own column after the field while it shows -
+   the row gets a fifth column, 🎙 and Send move one along (the slim homepage row too: no ＋ there) - so the field gives up just its width */
+main.rm.rm-dock .rmd-input-row .rb-count { grid-row: 1; grid-column: 3; justify-self: end; font-size: var(--ds-fs-xs); line-height: 18px; color: var(--ds-text-muted); }
+main.rm.rm-dock .rmd-input-row .rb-count.full { color: var(--ds-danger); }
+main.rm.rm-dock .rmd-input-row:has(.rb-count:not(.hide)) { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+main.rm.rm-dock .rmd-input-row.rmd-input-slim:has(.rb-count:not(.hide)) { grid-template-columns: 0 minmax(0, 1fr) auto auto auto; }
+main.rm.rm-dock .rmd-input-row:has(.rb-count:not(.hide)) .rb-talk { grid-column: 4; }
+main.rm.rm-dock .rmd-input-row:has(.rb-count:not(.hide)) .rb-send { grid-column: 5; }
 main.rm.rm-dock .rmd-input-row :is(.rb-hint, .rb-ptt-idle, .rb-micsel, .rb-sr) { display: none; }
 main.rm.rm-dock .rmd-input-row :is(.rb-mine, .rb-cmdfeed, .rb-ptt-txt):empty { display: none; }
 main.rm.rm-dock .rmd-input-row .rb-cmdfeed { max-block-size: 96px; overflow-y: auto; margin: 0; }
