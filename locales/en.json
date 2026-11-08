@@ -10781,6 +10781,7 @@
   "js.media.catalog.last_error": "Last sync error: {error}",
   "js.media.catalog.last_error_at": "Last sync error ({at}): {error}",
   "js.media.catalog.progress": "Full sync in progress since {at}: {done} of {total} sections read, {n} titles so far. The next run carries on from there.",
+  "js.media.catalog.shelves_skipped": "Collections not refreshed by the last full sync, section {list}. Media-control 1.7.1 reads them a page at a time.",
   "js.media.catalog.id": "Section ID",
   "js.media.catalog.name": "Section",
   "js.media.catalog.type": "Type",

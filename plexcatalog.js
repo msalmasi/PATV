@@ -22,17 +22,18 @@ const strings = (v, n = 20, max = 80) => Array.isArray(v) ? [...new Set(v.filter
 const parsed = (v, d = []) => { try { return JSON.parse(v); } catch (_) { return d; } };
 const IDLE_CHECK_MIN = 5;      // 1.99alq train3 verify: minutes between looks while every clerk switch is off (start())
 // 1.99?? catfix (prod 2026-11-08, "Last sync: Never" / "catalog source unavailable"): every read had the client's 15 s, and
-// mediactl 1.7.0 answers a section's /collections only after walking every collection's members at its four Plex reads a
-// second - one section's shelves took longer than that, so each run read the whole section, gave up on its collections and
+// mediactl 1.7.0 answers a section's /collections only after walking every collection's members - the largest section has
+// 1381 collections at 2-3 s a member read (about an hour) - so each run read that whole section, gave up on its collections,
 // threw the run away (no "at", no "full_at"), and the next run started over. Now: a page gets PAGE_TIMEOUT_MS (the slowest
-// real page measured ~3.6 s); /collections is paged on mediactl 1.7.1+ (COLLECTIONS_PAGE shelves an answer) and 1.7.0's one
-// whole-section answer gets COLLECTIONS_WALK_TIMEOUT_MS; a read that fails for a passing reason (no answer, 429/5xx) is tried
-// again after RETRY_WAITS_MS; a full sweep that still stops keeps its place ("progress") and the next run carries on from
-// that page; the last error says which read failed and how; and the timer tries again after RETRY_MIN, not a whole interval.
+// real page measured ~3.6 s); shelves are read by the full sweep only; /collections is paged on mediactl 1.7.1+
+// (COLLECTIONS_PAGE shelves an answer) and 1.7.0's one whole-section answer gets COLLECTIONS_WALK_TIMEOUT_MS, after which
+// that section keeps the shelves it had; a read that fails for a passing reason (no answer, 429/5xx) is tried again after
+// RETRY_WAITS_MS; a full sweep that still stops keeps its place ("progress") and the next run carries on from that page; the
+// last error says which read failed and how; and the timer tries again after RETRY_MIN, not a whole interval.
 const PAGE_TIMEOUT_MS = 60000;
-const COLLECTIONS_PAGE = 10;
-const COLLECTIONS_PAGE_TIMEOUT_MS = 120000;
-const COLLECTIONS_WALK_TIMEOUT_MS = 20 * 60000;
+const COLLECTIONS_PAGE = 5;                      // a member read takes Plex 2-3 s: a page answers in ~15 s (up to 4 reads a shelf)
+const COLLECTIONS_PAGE_TIMEOUT_MS = 180000;
+const COLLECTIONS_WALK_TIMEOUT_MS = 120000;      // 1.7.0's one whole-section answer (a 51-shelf section took 48 s on prod)
 const RETRY_WAITS_MS = [2000, 10000, 30000];
 const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
 const PROGRESS_MAX_AGE_MS = 26 * 3600000;
@@ -162,15 +163,23 @@ function createCatalog(options = {}) {
         await run(writer, "DROP TABLE temp.plex_fts_probe");
         await run(writer, "CREATE VIRTUAL TABLE IF NOT EXISTS plex_catalog_fts USING fts5(key UNINDEXED,title,show,summary,genres,shelves,people,tokenize='unicode61 remove_diacritics 2')");
         fts = true;
-        const counts = (await all(writer, "SELECT (SELECT COUNT(*) FROM plex_catalog) AS rows,(SELECT COUNT(*) FROM plex_catalog_fts) AS indexed"))[0];
-        if (counts.rows !== counts.indexed) {
+        // 1.99?? catfix: an index row's rowid is its Plex key (ftsRow); one built before that (or without FTS) is rebuilt here
+        const counts = (await all(writer, "SELECT (SELECT COUNT(*) FROM plex_catalog) AS rows,(SELECT COUNT(*) FROM plex_catalog_fts) AS indexed," +
+          "(SELECT COUNT(*) FROM plex_catalog_fts WHERE rowid<>CAST(key AS INTEGER)) AS loose"))[0];
+        if (counts.rows !== counts.indexed || counts.loose) {
           // A cache built on SQLite without FTS is still usable when FTS becomes available later.
-          await run(writer, "DELETE FROM plex_catalog_fts");
-          for (const stored of await all(writer, "SELECT data FROM plex_catalog")) {
-            const r = crow(parsed(stored.data, {}));
-            if (r) await run(writer, "INSERT INTO plex_catalog_fts(key,title,show,summary,genres,shelves,people) VALUES (?,?,?,?,?,'',?)", [r.key, r.title, r.show, r.summary, r.genres.join(" "), [...r.directors, ...r.cast].join(" ")]);
-          }
-          await rebuildShelfFts({ run: (s, p) => run(writer, s, p), all: (s, p) => all(writer, s, p) });
+          const tx = { run: (sql, args) => run(writer, sql, args), all: (sql, args) => all(writer, sql, args) };
+          await run(writer, "BEGIN IMMEDIATE");
+          try {
+            await run(writer, "DELETE FROM plex_catalog_fts");
+            for (const stored of await all(writer, "SELECT key,data FROM plex_catalog")) {
+              const r = crow(parsed(stored.data, {}));
+              if (r && r.key === stored.key) await ftsRow(tx, r, "");
+            }
+            await rebuildShelfFts(tx);
+            await run(writer, "COMMIT");
+          } catch (e) { await run(writer, "ROLLBACK").catch(() => {}); throw e; }
+          if (counts.loose) log.log("[plexcatalog] search index rebuilt keyed by the Plex key (" + counts.rows + " rows)");
         }
       } catch (_) { fts = false; log.log("[plexcatalog] FTS unavailable; using LIKE"); }
       return true;
@@ -182,7 +191,8 @@ function createCatalog(options = {}) {
     const job = tail.catch(() => {}).then(async () => {
       await init();
       await run(writer, "BEGIN IMMEDIATE");
-      try { const out = await fn({ run: (s, p) => run(writer, s, p), all: (s, p) => all(writer, s, p) }); await run(writer, "COMMIT"); generation++; return out; }
+      const spy = (sql) => { if (options.onWrite) try { options.onWrite(sql); } catch (_) { /* a test's observer */ } };
+      try { const out = await fn({ run: (s, p) => { spy(s); return run(writer, s, p); }, all: (s, p) => { spy(s); return all(writer, s, p); } }); await run(writer, "COMMIT"); generation++; return out; }
       catch (e) { await run(writer, "ROLLBACK").catch(() => {}); throw e; }
     });
     tail = job.catch(() => {});
@@ -234,7 +244,8 @@ function createCatalog(options = {}) {
       return { ready: s.allow_list_set === true && !!s.full_at && now() - s.full_at <= 3 * DAY && s.supported === true,
         at: s.at || null, full_at: s.full_at || null, version: s.version || null, allow_list_set: s.allow_list_set === true,
         requires_1_7: s.supported === false, sections, count, blocked: s.blocked || {}, dropped: s.dropped || 0,
-        error: s.error || null, error_at: s.error ? number(s.error_at, null) : null, progress, fts, syncing: !!syncing, v: s.v || 0 };
+        error: s.error || null, error_at: s.error ? number(s.error_at, null) : null, progress,
+        shelves_skipped: Array.isArray(s.shelves_skipped) ? s.shelves_skipped : [], fts, syncing: !!syncing, v: s.v || 0 };
     } catch (_) { return { ready: false, at: null, full_at: null, version: null, sections: [], count: 0, error: "catalog unavailable", fts: false, v: 0 }; }
   }
   function condition({ kind, show_key, keys } = {}, args = [], blockSet = ratings(settings().clerk_block_ratings)) {
@@ -325,13 +336,13 @@ function createCatalog(options = {}) {
     for (let i = 0; i < clean.length; i += 400) {
       const part = clean.slice(i, i + 400), marks = part.map(() => "?").join(",");
       const where = "key IN (" + marks + ") OR show_key IN (" + marks + ")";
-      if (fts) await tx.run("DELETE FROM plex_catalog_fts WHERE key IN (SELECT key FROM plex_catalog WHERE " + where + ")", [...part, ...part]);
+      if (fts) await ftsDrop(tx, (await tx.all("SELECT key FROM plex_catalog WHERE " + where, [...part, ...part])).map((r) => r.key));
       await tx.run("DELETE FROM plex_catalog WHERE " + where, [...part, ...part]);
     }
   }
   async function purgeOrphans(tx) {
     const where = "type='episode' AND NOT EXISTS (SELECT 1 FROM plex_catalog parent WHERE parent.key=plex_catalog.show_key AND parent.type='show' AND parent.section=plex_catalog.section)";
-    if (fts) await tx.run("DELETE FROM plex_catalog_fts WHERE key IN (SELECT key FROM plex_catalog WHERE " + where + ")");
+    if (fts) await ftsDrop(tx, (await tx.all("SELECT key FROM plex_catalog WHERE " + where)).map((r) => r.key));
     return (await tx.run("DELETE FROM plex_catalog WHERE " + where)).changes;
   }
   async function removeUnsafe(tx, sections, block) {
@@ -356,11 +367,17 @@ function createCatalog(options = {}) {
     await tx.run("DELETE FROM plex_catalog_genres WHERE key=?", [r.key]);
     for (const genre of r.genres) await tx.run("INSERT INTO plex_catalog_genres(key,genre) VALUES (?,?)", [r.key, genre]);
     if (fts) {
-      await tx.run("DELETE FROM plex_catalog_fts WHERE key=?", [r.key]);
       const names = await tx.all("SELECT s.name FROM plex_shelves s JOIN plex_shelf_members m ON m.shelf=s.key WHERE m.key=?", [r.key]);
-      await tx.run("INSERT INTO plex_catalog_fts(key,title,show,summary,genres,shelves,people) VALUES (?,?,?,?,?,?,?)", [r.key, r.title, r.show, r.summary,
-        r.genres.join(" "), names.map((s) => s.name).join(" "), [...r.directors, ...r.cast].join(" ")]);
+      await ftsDrop(tx, [r.key]);
+      await ftsRow(tx, r, names.map((s) => s.name).join(" "));
     }
+  }
+  // 1.99?? catfix: the search index row's rowid IS the Plex key (keys are 1-12 digits, KEY), so a write finds its row directly.
+  // The key column is UNINDEXED: "WHERE key=?" read the whole index for every row written (85 ms each at 240k rows).
+  const ftsRow = (tx, r, shelves) => tx.run("INSERT INTO plex_catalog_fts(rowid,key,title,show,summary,genres,shelves,people) VALUES (?,?,?,?,?,?,?,?)",
+    [Number(r.key), r.key, r.title, r.show, r.summary, r.genres.join(" "), shelves, [...r.directors, ...r.cast].join(" ")]);
+  async function ftsDrop(tx, keys) {
+    for (const k of new Set(keys.map(String))) if (KEY.test(k)) await tx.run("DELETE FROM plex_catalog_fts WHERE rowid=?", [Number(k)]);
   }
   // 1.99?? catfix: paged collections (mediactl 1.7.1+) arrive a page at a time - the first page replaces the section's shelves,
   // later pages add to them, and a shelf a page repeats (Plex's list moved between two pages) is kept once
@@ -378,11 +395,19 @@ function createCatalog(options = {}) {
       for (const r of found) await tx.run("INSERT OR IGNORE INTO plex_shelf_members(shelf,key,rank) VALUES (?,?,NULL)", [key, r.key]);
     }
   }
+  // 1.99?? catfix: rewrites only the index rows whose shelf names changed (by rowid). It blanked every row and then found each
+  // member by the unindexed key column - a rewrite of the whole index and a scan per shelf member at the end of every sync.
   async function rebuildShelfFts(tx) {
     if (!fts) return;
-    const joined = await tx.all("SELECT m.key,group_concat(s.name,' ') AS names FROM plex_shelf_members m JOIN plex_shelves s ON s.key=m.shelf GROUP BY m.key");
-    await tx.run("UPDATE plex_catalog_fts SET shelves=''");
-    for (const r of joined) await tx.run("UPDATE plex_catalog_fts SET shelves=? WHERE key=?", [r.names, r.key]);
+    const want = new Map();
+    for (const r of await tx.all("SELECT m.key,group_concat(s.name,' ') AS names FROM plex_shelf_members m JOIN plex_shelves s ON s.key=m.shelf GROUP BY m.key"))
+      if (KEY.test(String(r.key))) want.set(String(r.key), String(r.names || ""));
+    for (const r of await tx.all("SELECT rowid AS id,key,shelves FROM plex_catalog_fts WHERE shelves<>''")) {
+      const names = want.get(String(r.key)) || "";
+      want.delete(String(r.key));
+      if (names !== r.shelves) await tx.run("UPDATE plex_catalog_fts SET shelves=? WHERE rowid=?", [names, r.id]);
+    }
+    for (const [key, names] of want) if (names) await tx.run("UPDATE plex_catalog_fts SET shelves=? WHERE rowid=?", [names, Number(key)]);
   }
   /** One read from media-control, tried again (RETRY_WAITS_MS) when it fails for a passing reason: no answer, the service
    *  unreachable, 408/425/429/5xx. Any other answer fails at once. A failure carries `detail` (which read, why, how many tries). */
@@ -416,7 +441,8 @@ function createCatalog(options = {}) {
     if (c != null && (typeof c !== "object" || !/^[A-Za-z0-9_-]{1,64}$/.test(String(c.section)) || ![2, 4, 1, "collections"].includes(c.type) ||
       !Number.isInteger(c.start) || c.start < 0)) return null;
     return { v: 1, at: p.at, seen: p.seen, fingerprint, done: p.done.map(String), cursor: c || null,
-      received: Math.max(0, number(p.received)), dropped: Math.max(0, number(p.dropped)), blocked: p.blocked && typeof p.blocked === "object" ? { ...p.blocked } : {} };
+      received: Math.max(0, number(p.received)), dropped: Math.max(0, number(p.dropped)), blocked: p.blocked && typeof p.blocked === "object" ? { ...p.blocked } : {},
+      skipped: Array.isArray(p.skipped) ? p.skipped.filter((x) => x && typeof x === "object").map((x) => ({ section: String(x.section), why: text(String(x.why || ""), 120) })) : [] };
   }
   async function counts(sections, dry) {
     if (dry) return;
@@ -456,15 +482,15 @@ function createCatalog(options = {}) {
     const resume = dry ? null : resumable(previous.progress, at, fingerprint);
     full = !!resume || !!full || !previous.full_at || new Date(previous.full_at).toISOString().slice(0, 10) !== new Date(at).toISOString().slice(0, 10) || previous.block_fingerprint !== fingerprint;
     const keep = full && !dry;   // only a full sweep keeps its place; a failed delta is simply read again from the last "at"
-    const run = resume || { v: 1, at, seen: null, fingerprint, done: [], cursor: null, received: 0, dropped: 0, blocked: {} };
+    const run = resume || { v: 1, at, seen: null, fingerprint, done: [], cursor: null, received: 0, dropped: 0, blocked: {}, skipped: [] };
     let received = run.received, dropped = run.dropped, sections = [];
-    const blocked = { ...run.blocked };
+    const blocked = { ...run.blocked }, skipped = [...(run.skipped || [])];
     const revokedInRun = new Set();
     const saveRun = (tx, cursor, doneSection) => {
       if (!keep) return null;
       run.cursor = cursor;
       if (doneSection != null && !run.done.includes(doneSection)) run.done.push(doneSection);
-      Object.assign(run, { received, dropped, blocked: { ...blocked } });
+      Object.assign(run, { received, dropped, blocked: { ...blocked }, skipped: skipped.map((x) => ({ ...x })) });
       return putState(tx, "progress", run);
     };
     try {
@@ -525,13 +551,29 @@ function createCatalog(options = {}) {
             start = next;
           }
         }
-        // mediactl 1.7.1+: a page of shelves per answer; 1.7.0 ignores start/size and answers the whole section at once
+        // Shelves (Plex collections) are the full sweep's only: a large section's are thousands of slow Plex reads (prod: 1381
+        // collections, 2-3 s a member read). mediactl 1.7.1+ answers a page of shelves at a time; 1.7.0 ignores start/size and
+        // answers the whole section at once - when that doesn't come in COLLECTIONS_WALK_TIMEOUT_MS the section keeps the
+        // shelves it had (one try: 1.7.0 goes on walking after the site leaves) and the sweep goes on.
         const paged = pagedCollections(version);
         let cstart = here && here.type === "collections" ? here.start : 0;
         for (;;) {
+          if (!full) break;
           const where = { step: "collections", section: s.id, kind: s.type, start: cstart };
-          const c = await provider("/collections?section=" + encodeURIComponent(s.id) + "&start=" + cstart + "&size=" + COLLECTIONS_PAGE,
-            paged ? { where, timeout: COLLECTIONS_PAGE_TIMEOUT_MS } : { where, timeout: COLLECTIONS_WALK_TIMEOUT_MS, waits: RETRY_WAITS_MS.slice(0, 1) });
+          const route = "/collections?section=" + encodeURIComponent(s.id) + "&start=" + cstart + "&size=" + COLLECTIONS_PAGE;
+          let c;
+          if (paged) c = await provider(route, { where, timeout: COLLECTIONS_PAGE_TIMEOUT_MS });
+          else {
+            try { c = await provider(route, { where, timeout: COLLECTIONS_WALK_TIMEOUT_MS, waits: [] }); }
+            catch (e) {
+              if (e.code !== "upstream" || !e.detail || e.detail.unusable) throw e;
+              const why = describeWhy(e.detail);
+              skipped.push({ section: s.id, why });
+              log.log("[plexcatalog] " + describeRead(where) + " not refreshed: " + why + " - media-control 1.7.1 reads them a page at a time");
+              if (!dry) await write((tx) => saveRun(tx, null, s.id));
+              break;
+            }
+          }
           if (!Array.isArray(c.collections)) throw unusable(where);
           const pagedAnswer = Object.prototype.hasOwnProperty.call(c, "next");
           const next = pagedAnswer && c.next != null ? Number(c.next) : null;
@@ -548,12 +590,13 @@ function createCatalog(options = {}) {
         await counts(sections, false);
         await write(async (tx) => {
           if (full) {
-            if (fts) await tx.run("DELETE FROM plex_catalog_fts WHERE key IN (SELECT key FROM plex_catalog WHERE seen_at<>?)", [seen]);
+            if (fts) await ftsDrop(tx, (await tx.all("SELECT key FROM plex_catalog WHERE seen_at<>?", [seen])).map((r) => r.key));
             await tx.run("DELETE FROM plex_catalog WHERE seen_at<>?", [seen]);
             await purgeOrphans(tx);
             await putState(tx, "full_at", run.at);
           }
           await rebuildShelfFts(tx);
+          if (full) await putState(tx, "shelves_skipped", skipped);
           for (const [key, value] of Object.entries({ at: run.at, version, block_fingerprint: fingerprint, blocked, dropped, error: null, error_at: null,
             error_detail: null, progress: null, v: (previous.v || 0) + 1 })) await putState(tx, key, value);
         });

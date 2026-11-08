@@ -52,6 +52,9 @@
       }));
       if (j.error) pcText(out, "p", j.error_at ? ct("last_error_at", "Last sync error ({at}): {error}", { at: pcDate(j.error_at), error: j.error })
         : ct("last_error", "Last sync error: {error}", { error: j.error }));
+      if (j.shelves_skipped && j.shelves_skipped.length) pcText(out, "p", ct("shelves_skipped", "Collections not refreshed by the last full sync, section {list}. Media-control 1.7.1 reads them a page at a time.", {
+        list: j.shelves_skipped.map(function (x) { return String(x.section) + " (" + String(x.why || "") + ")"; }).join(", ")
+      }));
     }
     var wrap = pcText(out, "div", ""); wrap.className = "tblwrap";
     var table = pcText(wrap, "table", ""), head = pcText(pcText(table, "thead", ""), "tr", "");
