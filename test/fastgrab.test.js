@@ -354,6 +354,12 @@ function card(viewData) {
   let view = viewData, tick = null;
   class El {
     constructor(tag) { this.tagName = String(tag).toUpperCase(); this.children = []; this.attrs = {}; this.listeners = {}; this.text = ""; this.className = ""; this.value = ""; this.checked = false; this.hidden = false; }
+    // a select takes only a value one of its options has (else "", like a browser's)
+    get value() { return this._value; }
+    set value(v) {
+      const s = String(v);
+      this._value = this.tagName === "SELECT" && this.children.length && !this.children.some((o) => o.value === s) ? "" : s;
+    }
     set textContent(v) { this.children = []; this.text = String(v); }
     get textContent() { return this.text + this.children.map((c) => c.textContent).join(""); }
     appendChild(c) { this.children.push(c); return c; }
@@ -362,11 +368,13 @@ function card(viewData) {
     addEventListener(k, fn) { (this.listeners[k] ||= []).push(fn); }
     fire(k) { (this.listeners[k] || []).forEach((fn) => fn({ target: this, preventDefault() {} })); }
     all() { return this.children.flatMap((c) => (c instanceof El ? [c, ...c.all()] : [])); }
+    contains(n) { return n === this || this.all().includes(n); }
     querySelectorAll(sel) { return this.all().filter((n) => n.tagName === sel.toUpperCase()); }
   }
-  for (const id of ["fastgrab", "fgWhere", "fgAll", "fgAllL", "fgRows", "fgContest", "fgSave", "fgUndo", "fgMsg", "fgLog", "fgOnline", "fgReason", "fgNow", "fgRoomsNow", "fgData"]) byId[id] = new El("div");
+  for (const id of ["fastgrab", "fgWhere", "fgAll", "fgAllL", "fgRows", "fgContest", "fgSave", "fgUndo", "fgMsg", "fgLog", "fgOnline", "fgReason", "fgNow", "fgRoomsNow", "fgData"]) byId[id] = new El(id === "fgWhere" ? "select" : "div");
   byId.fgData.text = JSON.stringify(viewData);
-  const document = { getElementById: (id) => byId[id] || null, createElement: (t) => new El(t), createTextNode: (t) => ({ textContent: String(t) }), hidden: false };
+  // activeElement: the box the admin is in (a test sets it, as focus would)
+  const document = { getElementById: (id) => byId[id] || null, createElement: (t) => new El(t), createTextNode: (t) => ({ textContent: String(t) }), hidden: false, activeElement: null };
   const window = {};
   const fetch = (url, opts) => {
     if (opts && opts.method === "POST") { posts.push(JSON.parse(opts.body)); return Promise.resolve({ json: async () => ({ ok: true, id: 4242 }) }); }
@@ -375,7 +383,7 @@ function card(viewData) {
   require("node:vm").runInNewContext(src, { window, document, fetch, setInterval: (fn) => { tick = fn; return 1; }, confirm: () => true, Date, JSON, Object, Array, String, Number, parseInt, Math });
   const rowOf = (label) => byId.fgRows.children.find((tr) => tr.children[0].textContent.startsWith(label));
   const inputs = (f) => byId.fgRows.all().filter((n) => n.getAttribute && n.getAttribute("data-fg") === f);
-  return { byId, posts, api: window.PatvFastGrab, rowOf, inputs, poll: async (v) => { if (v) view = v; tick(); for (let i = 0; i < 20; i++) await Promise.resolve(); } };
+  return { byId, posts, doc: document, api: window.PatvFastGrab, rowOf, inputs, poll: async (v) => { if (v) view = v; tick(); for (let i = 0; i < 20; i++) await Promise.resolve(); } };
 }
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 
@@ -383,17 +391,31 @@ test("card script, pure part: only the fields you changed are sent; contest on/o
   const C = card({ online: false, fg: null, actions: [] }).api;
   assert.deepEqual(j(C.FIELDS), FG.FIELDS.slice(), "the card's fields = the site's (= Pepe's: the contract test)");
   assert.deepEqual(j(C.ARITY), { ...FG.ARITY });
-  const cur = vals({ on: true });
-  assert.equal(C.change(cur, {}, {}), null, "nothing changed");
-  assert.deepEqual(j(C.change(cur, { rate: 10, shots: 20, breaker: [4, 10, 15], fair: false }, {})), { fair: false, shots: 20 }, "an edit back at Pepe's value isn't sent");
-  assert.deepEqual(j(C.change(cur, { rate: 30 }, { rate: true, claim: true })), { claim: "follow", rate: "follow" }, "follow wins over an edit");
-  assert.deepEqual(j(C.bundle({}, "contest", true)), { contest: true, on: true, fair: false, claim: "swallow" }, "contest on = fast grab on + fair off + claim swallow");
-  assert.deepEqual(j(C.bundle({}, "contest", false)), { contest: false, fair: true }, "contest off = fair on");
+  const fg = FG.cleanState(block());
+  const G = { scope: "global", room: "" }, ALL = { scope: "all", room: "" }, R = (id) => ({ scope: "room", room: id });
+  assert.equal(C.change(fg, G, {}, {}), null, "nothing changed");
+  assert.deepEqual(j(C.change(fg, G, { rate: 10, shots: 20, breaker: [4, 10, 15], fair: false }, {})), { fair: false, shots: 20 }, "an edit back at Pepe's value isn't sent");
+  assert.deepEqual(j(C.change(fg, R(YW), { rate: 30 }, { rate: true, claim: true })), { claim: "follow", rate: "follow" }, "follow wins over an edit");
+  assert.deepEqual(j(C.implied(true)), { on: true, fair: false, claim: "swallow" }, "contest on = fast grab on + fair off + claim swallow");
+  assert.deepEqual(j(C.implied(false)), { fair: true }, "contest off = fair on");
+  // (review) Pepe applies contest FIRST, then the change's own on / fair / claim: a bundle field set back to Pepe's value is still sent
+  assert.deepEqual(j(C.change(fg, R(PAD), { contest: true, fair: true }, {})), { contest: true, fair: true }, "Pad: contest on, fair kept on");
+  assert.deepEqual(j(C.change(fg, R(PAD), { contest: true, fair: false, claim: "swallow" }, {})), { contest: true }, "...what the bundle sets anyway isn't");
+  assert.equal(C.change(fg, R(PAD), { contest: false }, {}), null, "contest set back: nothing (no stray fast grab on)");
+  assert.equal(C.shown(vals({ fair: true }), { contest: true }, "fair"), false, "the card shows the bundle");
+  assert.equal(C.shown(vals({ fair: true }), { contest: true, fair: true }, "fair"), true, "...unless the admin set it");
+  // (review) every room (-all): the global's own value still clears the rooms that have their own - an edit, or the row's box
+  assert.deepEqual(j(C.change(fg, ALL, { rate: 10 }, {})), { rate: 10 }, "Players Lounge has its own rate: -all 10 clears it");
+  assert.equal(C.change(fg, ALL, { shots: 12 }, {}), null, "no room has its own shots: nothing to do");
+  assert.deepEqual(j(C.change(fg, ALL, {}, { rate: true, fair: true })), { fair: true, rate: 10 }, "every room to the value shown (the global's)");
+  assert.equal(C.change(fg, G, {}, { rate: true }), null, "(the global alone: no such box)");
+  assert.deepEqual(j(C.overriders(fg, "rate").map((r) => r.id)), [YW]);
+  assert.deepEqual(j(C.overriders(fg, "ceiling")), []);
+  assert.equal(C.ownList(fg, "breaker"), "Houseplants 6 / 10 / 15 (partly)");
   assert.deepEqual(j(C.whereOf("room:PepeFrog.Room", true)), { scope: "room", room: PAD }, "a room ignores every room");
   assert.deepEqual(j(C.whereOf("global", true)), { scope: "all", room: "" });
   assert.deepEqual(j(C.whereOf("global", false)), { scope: "global", room: "" });
   assert.equal(C.num("12"), 12); assert.equal(C.num("-3"), -3); assert.equal(C.num("1.5"), null); assert.equal(C.num(""), null);
-  const fg = FG.cleanState(block());
   assert.equal(C.sourceOf(fg, { scope: "room", room: YW }, "rate"), "room");
   assert.equal(C.sourceOf(fg, { scope: "room", room: PLANT }, "breaker"), "mixed");
   assert.equal(C.sourceOf(fg, { scope: "room", room: PAD }, "rate"), "global");
@@ -440,11 +462,12 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   assert.match(K.byId.fgMsg.textContent, /Clamped: rate 999 → 60\./);
   assert.equal(K.inputs("rate")[0].value, "60", "the card now shows what Pepe stored");
   assert.doesNotMatch(K.byId.fgContest.textContent, /not saved/);
-  // contest off in the card mirrors the command: fair goes back on, both sent
+  // contest off in the card mirrors the command: fair goes back on (shown; Pepe's contest off sets it - his answer names it)
   const sel = K.inputs("contest")[0]; sel.value = "off"; sel.fire("change");
   assert.equal(K.inputs("fair")[0].value, "on");
+  assert.match(K.byId.fgContest.textContent, /contest off also sets fair on/i);
   K.byId.fgSave.fire("click"); await flush();
-  assert.deepEqual(K.posts[1].set, { contest: false, fair: true });
+  assert.deepEqual(K.posts[1].set, { contest: false });
   // follow: the room's own rate dropped
   await K.poll(answered);
   const fol = K.rowOf("Rate").all().find((n) => n.getAttribute("data-follow") === "rate");
@@ -452,6 +475,134 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   K.byId.fgSave.fire("click"); await flush();
   assert.deepEqual(K.posts.at(-1).set.rate, "follow");
   assert.doesNotMatch(K.byId.fgRows.textContent, /undefined|NaN/);
+});
+
+// ── the card's script: the review's cases (grabcard review) ──
+
+const pick = (K, f, v) => { const s = K.inputs(f)[0]; s.value = v; s.fire("change"); return s; };
+const typeIn = (inp, v) => { inp.value = v; inp.fire("change"); };
+const goTo = (K, sel) => { K.byId.fgWhere.value = sel; K.byId.fgWhere.fire("change"); };
+
+test("card script (review): contest's bundle - an on / fair / claim set back after contest changed it is still sent (Pepe applies contest first); contest set back sends nothing", async () => {
+  await pepeSays();
+  const view = (await api("GET", "boss")).d;
+  // Pepe's Pad: fast grab on, fair on, contest off. Contest on shows fair off; the admin puts fair back on
+  let K = card(view); await flush();
+  goTo(K, "room:" + PAD);
+  pick(K, "contest", "on");
+  assert.equal(K.inputs("fair")[0].value, "off", "the card shows the bundle's fair off");
+  pick(K, "fair", "on");
+  assert.equal(K.inputs("fair")[0].value, "on");
+  assert.equal(K.rowOf("Fairness wait").className, "fg-edited", "fair is still an edit (it differs from what contest on would store)");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 1);
+  assert.deepEqual(K.posts[0].set, { contest: true, fair: true }, "fair on is sent: Pepe's contest on alone would store fair off");
+  // fast grab off in the room; contest on, then back off: nothing to send (no stray fast grab on)
+  const off = JSON.parse(JSON.stringify(view));
+  off.fg.rooms.find((r) => r.id === PAD).values.on = false;
+  K = card(off); await flush();
+  goTo(K, "room:" + PAD);
+  pick(K, "contest", "on");
+  assert.equal(K.inputs("on")[0].value, "on", "contest on shows fast grab on");
+  pick(K, "contest", "off");
+  assert.equal(K.inputs("on")[0].value, "off", "...and set back, Pepe's own off again");
+  assert.equal(K.rowOf("Fast grab").className, "");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 0, "nothing sent");
+  assert.match(K.byId.fgMsg.textContent, /Nothing changed/);
+});
+
+test("card script (review): every room (-all) - the rooms with their own value are named per row, and the global's own value can be pushed to them (the row's box, or typed)", async () => {
+  await pepeSays();
+  const view = (await api("GET", "boss")).d;
+  let K = card(view); await flush();
+  // Where = the global: each row names the rooms that keep their own (the page's snapshot is hidden by the table)
+  assert.match(K.rowOf("Rate").textContent, /Rooms with their own \(not changed by the global\): Players Lounge 15/);
+  assert.match(K.rowOf("Breaker").textContent, /Houseplants 6 \/ 10 \/ 15 \(partly\)/);
+  assert.doesNotMatch(K.rowOf("Shots").textContent, /their own/, "no room has its own shots");
+  assert.doesNotMatch(K.rowOf("Ceiling").textContent, /their own/, "the ceiling is every room's");
+  // every room: the box sets every room to the value shown - here the global's own 10 (Players Lounge's 15 cleared)
+  K.byId.fgAll.checked = true; K.byId.fgAll.fire("change");
+  const every = K.rowOf("Rate").all().find((n) => n.getAttribute("data-every") === "rate");
+  assert.ok(every, "the rate row offers it (Players Lounge has its own)");
+  assert.match(K.rowOf("Rate").textContent, /clears their own: Players Lounge 15/);
+  assert.equal(K.rowOf("Shots").all().find((n) => n.getAttribute("data-every")), undefined, "...shots doesn't (nobody has their own)");
+  every.checked = true; every.fire("change");
+  const fairEvery = K.rowOf("Fairness wait").all().find((n) => n.getAttribute("data-every") === "fair");
+  fairEvery.checked = true; fairEvery.fire("change");
+  assert.match(K.byId.fgContest.textContent, /2 change\(s\) not saved yet/);
+  K.byId.fgSave.fire("click"); await flush();
+  assert.deepEqual(K.posts.at(-1), { scope: "all", room: "", set: { fair: true, rate: 10 } }, "rate=10 + fair=on -all");
+  // typed: another value, then the global's again - still a change (it clears Players Lounge's own); shots back at 12 is none
+  K = card(view); await flush();
+  K.byId.fgAll.checked = true; K.byId.fgAll.fire("change");
+  typeIn(K.inputs("rate")[0], "11"); typeIn(K.inputs("rate")[0], "10");
+  typeIn(K.inputs("shots")[0], "13"); typeIn(K.inputs("shots")[0], "12");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.deepEqual(K.posts.at(-1).set, { rate: 10 });
+});
+
+test("card script (review): the picked room drops out of Pepe's list - the card says so and drops its edits; nothing goes to the global (or every room)", async () => {
+  await pepeSays();
+  const view = (await api("GET", "boss")).d;
+  const K = card(view); await flush();
+  K.byId.fgAll.checked = true;                     // ticked earlier (hidden while a room is picked)
+  goTo(K, "room:" + PAD);
+  typeIn(K.inputs("rate")[0], "20");
+  const gone = JSON.parse(JSON.stringify(view));
+  gone.fg.rooms = gone.fg.rooms.filter((r) => r.id !== PAD);   // Pepe restarted / left the Pad
+  await K.poll(gone);
+  assert.equal(K.byId.fgWhere.value, "global");
+  assert.match(K.byId.fgMsg.textContent, /no longer reports Pepe's Pad/);
+  assert.match(K.byId.fgMsg.textContent, /unsaved changes for it were dropped/);
+  assert.equal(K.byId.fgAll.checked, false, "every room unticked");
+  assert.equal(K.inputs("rate")[0].value, "10", "the rows show the global now");
+  assert.doesNotMatch(K.byId.fgContest.textContent, /not saved/);
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 0, "the Pad's rate 20 never reaches the global");
+});
+
+test("card script (review): an edit never rebuilds the rows (the box the admin moves to stays); Pepe's answer keeps the edits made after Save and waits for the admin to leave a box", async () => {
+  await pepeSays();
+  const view = (await api("GET", "boss")).d;
+  const K = card(view); await flush();
+  goTo(K, "room:" + YW);
+  // the 4 boxes of the contested pause: box 1 changed as the admin moves to box 2
+  const p = K.inputs("pause");
+  p[0].value = "3"; K.doc.activeElement = p[1]; p[0].fire("change");
+  assert.ok(K.inputs("pause")[1] === p[1], "box 2 is still the box the admin is in");
+  assert.equal(K.rowOf("Contested pause").className, "fg-edited");
+  assert.match(K.byId.fgContest.textContent, /1 change\(s\) not saved yet/);
+  const c = K.inputs("contest")[0]; K.doc.activeElement = c; c.value = "off"; c.fire("change");
+  assert.ok(K.inputs("contest")[0] === c, "a select keeps its node (and focus) too");
+  assert.equal(K.inputs("fair")[0].value, "on", "the bundle shows in place");
+  assert.equal(K.rowOf("Fairness wait").className, "fg-edited");
+  K.doc.activeElement = null;
+  K.byId.fgSave.fire("click"); await flush();
+  assert.deepEqual(K.posts.at(-1).set, { contest: false, pause: [3, 120, 90, 300] });
+  // while Pepe answers, the admin edits the shots and is still in the box
+  const shots = K.inputs("shots")[0];
+  typeIn(shots, "30"); K.doc.activeElement = shots;
+  const answered = JSON.parse(JSON.stringify(view));
+  const y = answered.fg.rooms.find((r) => r.id === YW).values;
+  Object.assign(y, { contest: false, contest_active: false, fair: true, pause: [3, 120, 90, 300] });
+  answered.actions = [{ id: 4242, status: "done", username: "boss", label: "Fast grab (Players Lounge): contest off, pause 3/120/90/300",
+                        message: "⚡ Fast grab saved for Players Lounge only: contest off (with it: fair on) · pause 3 lost in 120 s" }];
+  answered.fg.last = [{ id: "4242", set: { contest: false, fair: true, pause: [3, 120, 90, 300] }, clamped: {}, followed: [] }];
+  await K.poll(answered);
+  assert.match(K.byId.fgMsg.textContent, /^✅ .*with it: fair on/);
+  assert.ok(K.inputs("shots")[0] === shots, "no redraw under the box being typed in");
+  assert.equal(shots.value, "30");
+  assert.match(K.byId.fgContest.textContent, /1 change\(s\) not saved yet/, "the shots edit survived the answer; the saved ones are done");
+  // the admin leaves the box: the next poll redraws with what Pepe stored, the shots edit still there
+  K.doc.activeElement = null;
+  await K.poll(answered);
+  assert.ok(K.inputs("shots")[0] !== shots, "redrawn now");
+  assert.equal(K.inputs("shots")[0].value, "30");
+  assert.equal(K.inputs("contest")[0].value, "off");
+  assert.equal(K.rowOf("Contested pause").className, "");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.deepEqual(K.posts.at(-1).set, { shots: 30 }, "the edit made after the first Save");
 });
 
 // ── the contract with Pepe (PEPE_BOT_DIR = a camfrog-bot checkout) ──
