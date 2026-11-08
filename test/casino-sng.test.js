@@ -538,7 +538,10 @@ test("the web and Pepe: lobby block, create / register / unregister / cancel rou
   routes.register(app, { isBotToken: (t) => t === "bot", addUser: (req, res, next) => next() });
   const server = app.listen(0);
   const base = "http://127.0.0.1:" + server.address().port;
-  const hd = (uid) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, uid ? { "x-test-user": uid } : {});
+  // (each account from its own address, as in test/casino-ui.test.js - one address for two accounts is refused, like at a cash table)
+  const ips = { u1: "10.0.0.1", u2: "10.0.0.2", ad: "10.0.0.9" };
+  const hd = (uid) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch", "x-forwarded-for": ips[uid] || "10.0.0.99" },
+                                    uid ? { "x-test-user": uid } : {});
   const post = async (url, body, uid) => (await fetch(base + url, { method: "POST", headers: hd(uid), body: JSON.stringify(body) })).json();
   const get = async (url, uid) => (await fetch(base + url, { headers: hd(uid) })).json();
   try {

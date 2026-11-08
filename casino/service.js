@@ -12,6 +12,9 @@
 //     would take the House below its hard floor. A stake (bet / double / split / insurance) is journalled as an INTENT
 //     before it is charged; boot() refunds a charged intent that never made it into the table.
 //   * One mutex serialises every mutation (all tables). One 250 ms tick runs the deadlines.
+//   * h22 (1.99??): 🏁 Sit & Gos (casino/tourney.js, TN) are Hold'em tables with a `tourney` block, on the same core: run() sends
+//     game "sng" there, their settings live with the others (casino_sng off | staff | everyone + sng_*), their hands earn no casino
+//     rewards (hmRewards), they're kept out of the cash lobby / Pepe's open-table list, and a finished one lingers LINGER_MS for its results.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("../dbUtils");
@@ -21,6 +24,7 @@ const money = require("./money");
 const PATAmount = require("../public/js/patamount");   // 1.99sk: a typed bet - 1,000 / 25k / 1.5m (the page's custom-bet box, chat)
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
+const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -46,7 +50,7 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto",
+  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto", casino_sng: "off",
               bj_min_bet: C.MIN_BET, bj_max_bet: C.MAX_BET, bj_hr_min_bet: C.HR_MIN_BET, bj_hr_max_bet: C.HR_MAX_BET },
   stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
@@ -152,6 +156,8 @@ async function loadSettings(force) {
     S.settings[k] = kv[k] !== undefined && Number.isInteger(n) && n >= 0 && n <= 3600 ? n : d;
   }
   for (const [k, d] of Object.entries(HM_QOL_LISTS)) S.settings[k] = validPresetList(kv[k]) ? String(kv[k]) : d;
+  // h22: the Sit & Go switch (casino_sng: off | staff | everyone, default off) + its fee / buy-ins / payouts / levels (a bad row = its default)
+  Object.assign(S.settings, SNGCFG.readSettings(kv));
   S.settingsAt = clock();
   return S.settings;
 }
@@ -160,7 +166,8 @@ const HM_QOL_NUMBERS = { hm_sitout_mins: 10, hm_timebank_secs: 30, hm_timebank_m
 const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3,4" };
 const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS)).includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
+  const sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)
   const qolNumber = Object.hasOwn(HM_QOL_NUMBERS, key), qolList = Object.hasOwn(HM_QOL_LISTS, key);
   if (qolNumber && (!Number.isInteger(Number(value)) || Number(value) < (key === "hm_sitout_mins" ? 1 : 0) || Number(value) > 3600)) throw new Error("invalid Hold'em timer");
   if (qolList && !validPresetList(value)) throw new Error("use a short comma-separated list of positive numbers");
@@ -173,7 +180,7 @@ async function setSetting(key, value, actor) {
     const next = Object.assign({}, cur, { [key]: n });
     if (next.bj_min_bet > next.bj_max_bet || next.bj_hr_min_bet > next.bj_hr_max_bet) throw new Error("the minimum must not be above the maximum");
   }
-  const v = qolNumber || qolList ? String(value) : /_front$/.test(key) ? String(value)
+  const v = sngValue !== null ? sngValue : qolNumber || qolList ? String(value) : /_front$/.test(key) ? String(value)
           : LIMIT_KEYS.includes(key) ? String(Math.trunc(Number(String(value).replace(/,/g, ""))))
           : key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
                                  : String(Math.max(0, Math.trunc(Number(value)) || 0));
@@ -582,7 +589,7 @@ async function tickOnce() {
   const t = clock();
   for (const T of Array.from(S.tables.values())) {
     if (T.status !== "open") {
-      if (T.closed_at && t - T.closed_at > C.CLOSED_LINGER_MS) S.tables.delete(T.id);
+      if (T.closed_at && t - T.closed_at > (T.tourney ? TN.SNG.LINGER_MS : C.CLOSED_LINGER_MS)) S.tables.delete(T.id);   // (h22: a sit & go's results stay up a while)
       continue;
     }
     if (T.game === "holdem") {
@@ -927,6 +934,11 @@ async function advertCmd(T, actor, verb, args) {
 async function run(actor, verb, args, opts) {
   opts = opts || {};
   verb = String(verb || "").toLowerCase();
+  // h22: !sng - the Sit & Gos (casino/tourney.js). At a sit & go's own table the Hold'em verbs below apply (holdem.js asks TN first).
+  if (opts.game === "sng") {
+    if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
+    return TN.run(actor, verb, Array.isArray(args) ? args : [], opts);
+  }
   const alias = { open: "start", new: "start", go: "deal", wager: "bet", auto: "autobet", rebet: "autobet", close: "end", stop: "end",
                   quit: "leave", insure: "insurance", stay: "stand", dd: "double", table: "status", info: "status", show: "status",
                   rules: "help", how: "help", "": "status" };
@@ -1045,7 +1057,7 @@ async function push(tableId, room, actor, mode) {
       if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.id !== T.id && roomsOf(t).includes(room))) return R(false, "That room already has a casino table.");
       if (cur.length >= MAX_ROOMS) return R(false, `A table can play in up to ${MAX_ROOMS} rooms at once.`);
       setRooms(T, cur.concat([room]));
-      const how = T.game === "holdem"
+      const how = T.tourney ? TN.howText(T) : T.game === "holdem"
         ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
@@ -1146,7 +1158,7 @@ async function meView(T, uid) {
 }
 
 function lobby() {
-  return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
+  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney).map((T) => {    // (h22: sit & gos are TN.lobby's)
     const room = T.room ? S.rooms.get(T.room) : null;
     const base = { id: T.id, host: V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
@@ -1266,6 +1278,7 @@ const MAX_ADVERTS = 10;
 const advertsOf = (T) => (Array.isArray(T.adverts) ? T.adverts : []);
 const advertList = (T) => advertsOf(T).map((id) => ({ id, name: roomName(id) }));
 function advertText(T) {
+  if (T.tourney) return `📣 🏁 Sit & Go at ${T.host.name}'s table — ${TN.howText(T)}. Play on the web: ${link(T)}`;   // h22
   const hm = T.game === "holdem";
   const stakes = hm ? `blinds ${fmt(T.eng.sb)}/${fmt(T.eng.bb)}` : `bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}`;
   const free = Math.max(0, (hm ? HM.HC.MAX_SEATS : C.MAX_SEATS) - T.eng.seats.length);
@@ -1325,7 +1338,7 @@ async function advertRepeat(T) {
 
 /** 1.99pc: every open table, short (Pepe lists them as links when someone asks for a game in chat) */
 function openList() {
-  return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
+  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney).map((T) => {   // (h22: sit & gos: TN.openList)
     const hm = T.game === "holdem";
     return { id: T.id, game: hm ? "holdem" : "bj", host: T.host ? V.camName(T, T.host.uid, T.host.name) : null, high_stakes: !!T.high_stakes, url: link(T),
              players: T.eng.seats.length, max_seats: hm ? HM.HC.MAX_SEATS : C.MAX_SEATS,
@@ -1411,7 +1424,7 @@ async function fairRecord(tableId, round) {
 async function myHands(uid, limit) {
   await ensure();
   if (!uid) return [];
-  const rows = await getQuery(`SELECT r.*, a.replay FROM casino_rounds r
+  const rows = await getQuery(`SELECT r.*, a.replay, ((CASE WHEN json_valid(t.state) THEN json_extract(t.state, '$.tourney.id') END) IS NOT NULL) AS tny FROM casino_rounds r
     JOIN casino_tables t ON t.id = r.table_id AND t.game = 'holdem'
     LEFT JOIN casino_actions a ON a.key = 'hm-replay:' || r.table_id || ':' || r.round_no
     WHERE r.revealed IS NOT NULL AND json_valid(r.players) AND EXISTS
@@ -1434,7 +1447,7 @@ async function myHands(uid, limit) {
       player:s.uid ? labels[source.findIndex((p)=>p.uid===s.uid)] || null : null,
       stacks:source.map((p,i)=>({seat:labels[i].seat,name:labels[i].name,stack:s.stacks[p.uid]}))})) : [];
     const mine = source.find((p)=>p.uid===uid), final = replay && replay.steps[replay.steps.length-1];
-    out.push({table:r.table_id,round:r.round_no,revealed:r.revealed,proof:`/casino/fair/${r.table_id}/${r.round_no}`,
+    out.push({table:r.table_id,round:r.round_no,revealed:r.revealed,proof:`/casino/fair/${r.table_id}/${r.round_no}`,tourney:!!r.tny,   // (h22: a sit & go hand - chips, not PAT)
       cards:shoe.slice(index*2,index*2+2),board:result.board||[],pots:masked.winners,shown:masked.shown,players:labels,
       net:mine && final ? final.stacks[uid]-mine.stack : null,replay:steps});
   }
@@ -1447,10 +1460,19 @@ const persistVeil = (T) => locked(() => (S.tables.get(T.id) === T ? save(T) : nu
 const refreshVeil = (T) => V.refresh(T, persistVeil);
 
 // ── Hold'em (holdem.js) on the same core ──
+// h22: a sit & go hand earns no casino rewards (achievements pay PAT; win XP, gang rep and drops ride on the chips won) - tournament chips
+// aren't PAT and the prizes are the payout (casino/tourney.js); a cash table's hands are unchanged
+const noTourney = (fn) => (T, ...a) => (T && T.tourney ? null : fn(T, ...a));
+const hmRewards = Object.assign(Object.create(rewards), { holdemPot: noTourney(rewards.holdemPot), holdemHand: noTourney(rewards.holdemHand),
+                                                          holdemBoardRoyal: noTourney(rewards.holdemBoardRoyal), holdemShowdown: noTourney(rewards.holdemShowdown) });
 const HM = require("./holdem").install({
-  S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards, dropLine,
+  S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
+  tny: () => TN,
 });
+// ── h22: 🏁 Sit & Gos (casino/tourney.js) on Hold'em tables ──
+const TN = SNGCFG.install({ S, clock, save, emit, userRow, R, fmt, link, runQuery, streamGone, loadSettings, HM,
+                            roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T) });
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
@@ -1460,7 +1482,7 @@ function limits() {
 }
 
 module.exports = {
-  C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, TN, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
   refreshVeil, myHands,  // the routes re-read a table's veils before they answer

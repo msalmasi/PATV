@@ -17,12 +17,22 @@
 //   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
 //   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
+//                                            h22: + casino_sng (off | staff | everyone) / sng_fee_pct / sng_buyins / sng_payouts / sng_levels /
+//                                            sng_level_mins / sng_turbo_mins (validated: casino/tourney.js checkSetting)
+// h22 (1.99??) 🏁 Sit & Gos (casino/tourney.js; a sit & go's table is /casino/holdem/t/:id, its state GET /api/casino/t/:id -> table.tourney):
+//   GET  /api/casino/sng                    the lobby block (also GET /api/casino/lobby -> sng): {on, can_create, sizes, buyins, fee_pct, payouts,
+//                                            level_mins, turbo_mins, stack, countdown_secs, reg_mins, list: [rows]}
+//   POST /api/casino/sng/new                {size, buyin, turbo, start_at, idem}  open one (the creator is registered)
+//   POST /api/casino/sng/:id/register       {idem}   POST /api/casino/sng/:id/unregister {idem}  (a full refund before the start)
+//   POST /api/casino/sng/:id/cancel         {idem, reason}  an admin with casino.admin: every entry refunded in full
 // Pepe (bot token in the body):
 //   POST /api/casino/bot/poll               {after, wait, rooms}  events of tables in rooms (cursor) + their public state
 //                                            + `private` (room players' hole cards, by Camfrog name) + `stream`
 //                                            1.99mw: in {ach_base: [{camfrog, m}], rep_ack: [key]}, out {rep: [{key, camfrog, amount}],
 //                                            ach_want: [camfrog]} - the casino's gang rep for Pepe + his achievement counts (rewards.js)
 //   POST /api/casino/bot/act                {room|table, username, camfrog, name, game?, verb, args, idem, channel, admin}
+//                                            h22: game "sng" = !sng (verbs "" / list, new, join, leave, info, cancel, help; up to 5 args);
+//                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
 "use strict";
@@ -37,7 +47,8 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
                            "sit", "buyin", "buy", "join", "cashout", "next", "check", "call", "fold", "allin", "all-in", "raise", "cards",
-                           "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand"]);
+                           "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand",
+                           "list", "cancel", "register", "unregister"]);      // (h22: + the !sng verbs, game "sng")
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
 const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
@@ -202,7 +213,7 @@ function register(app, { isBotToken, addUser }) {
       return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
     });
     res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
-               stream: svc.S.stream.table, me, limits: svc.limits() });
+               stream: svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null) });   // (h22: the Sit & Go block)
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -303,6 +314,39 @@ function register(app, { isBotToken, addUser }) {
     res.status(out.ok ? 200 : 409).json(out);
   });
 
+  // ── h22: 🏁 Sit & Gos (casino/tourney.js) - every move through svc.act (idempotent by the caller's key, under the casino's mutex) ──
+  app.get("/api/casino/sng", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    await svc.boot();
+    for (const T of Array.from(svc.S.tables.values())) if (T.tourney && T.status === "open") await svc.refreshVeil(T);
+    res.json(Object.assign({ ok: true }, await svc.TN.lobby(req.user && req.user.userId ? String(req.user.userId) : null)));
+  });
+  app.post("/api/casino/sng/new", addUser, async (req, res) => {
+    if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
+    const actor = await webActor(req);
+    if (!actor) return res.status(401).json({ ok: false, error: "Sign in to play." });
+    const b = req.body || {};
+    const idem = String(b.idem || "");
+    const size = Math.trunc(Number(b.size)), buyin = Math.trunc(Number(b.buyin));
+    const at = b.start_at == null || b.start_at === "" ? null : Math.trunc(Number(b.start_at));
+    if (!IDEM.test(idem) || !Number.isFinite(size) || !Number.isFinite(buyin) || (at !== null && !Number.isFinite(at))) return res.status(400).json({ ok: false, error: "Bad request." });
+    const args = [String(size), String(buyin)].concat(b.turbo ? ["turbo"] : [], at ? ["at", String(at)] : []);
+    const out = await svc.act(actor, "new", args, { game: "sng", room: null }, `web-${actor.uid}-${idem}`);
+    res.status(out.ok ? 200 : 409).json(out);
+  });
+  for (const [seg, verb] of [["register", "join"], ["unregister", "leave"], ["cancel", "cancel"]]) {
+    app.post(`/api/casino/sng/:id/${seg}`, addUser, async (req, res) => {
+      if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
+      const actor = await webActor(req);
+      if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
+      const b = req.body || {};
+      const idem = String(b.idem || "");
+      if (!ID.test(req.params.id) || !IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
+      const args = [req.params.id].concat(verb === "cancel" && b.reason ? [String(b.reason).slice(0, 200)] : []);
+      res.json(await svc.act(actor, verb, args, { game: "sng", room: null }, `web-${actor.uid}-${idem}`));
+    });
+  }
+
   app.post(["/api/casino/t/:id/act", "/api/casino/bj/t/:id/act"], addUser, async (req, res) => {
     if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
     const actor = await webActor(req);
@@ -391,6 +435,7 @@ function register(app, { isBotToken, addUser }) {
       const base = svc.link({ id: "x", game: "bj" }).replace(/\/casino\/blackjack\/t\/x$/, "");
       out.open = svc.openList();
       out.lobby = { bj: base + svc.frontPath(st, "bj"), holdem: base + svc.frontPath(st, "holdem") };
+      out.sng = svc.TN.openList();           // h22: the open sit & gos (each one's table in `tables` carries its `tourney` block)
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {
       console.error("[casino] poll:", e);
@@ -413,13 +458,13 @@ function register(app, { isBotToken, addUser }) {
     if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;
     if (!table && room) { await svc.boot(); const T = svc.tableForRoom(room); table = T ? T.id : null; }
-    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : null;
+    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : null;     // (h22: "sng" = !sng)
     const actor = { uid: u.userId, name: String(b.name || u.displayname || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40),
                     username: u.username, camfrog: b.camfrog ? String(b.camfrog).slice(0, 40) : u.camfrogUsername || null, via: "room",
                     iph: null, admin: !!b.admin, room };
     // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
     const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : 24;
-    const args = Array.isArray(b.args) ? b.args.slice(0, 2).map((x) => String(x).slice(0, argMax)) : [];
+    const args = Array.isArray(b.args) ? b.args.slice(0, game === "sng" ? 5 : 2).map((x) => String(x).slice(0, argMax)) : [];   // (h22: !sng new <seats> <buy-in> [turbo] [at N])
     const out = await svc.act(actor, verb, args, { room, table, game }, `cf-${idem}`);
     res.json(out);
   });

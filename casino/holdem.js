@@ -15,6 +15,9 @@
 // 1.99ov: High Rollers no longer buy in over a table's maximum. Instead, 💎 High Roller TABLES: blinds from the HR_LADDER
 // (100K/200K up to 5M/10M; nothing between the normal cap and the ladder) - only High Rollers open them or sit, anyone
 // watches.
+// h22 (1.99??): a 🏁 SIT & GO is a table of this file with a `tourney` block (casino/tourney.js owns it - core.tny()): no rake, no
+// buy-in / cash-out / close / idle close / sit-out limit for its seats, the level's blinds set just before each hand, a sitting-out
+// seat dealt in and checking / folding at once (blinded away), and its bust-outs placed by tourney.js after each hand's proof.
 "use strict";
 const H = require("./hmengine");
 const fair = require("./fair");
@@ -44,6 +47,7 @@ const ladderText = () => HC.HR_LADDER.map(([a, b]) => `${short(a)}/${short(b)}`)
 
 function install(core) {
   const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine, roomsOf, roomList } = core;
+  const TN = () => core.tny();                   // h22: the sit & go service (casino/tourney.js) - only for tables with T.tourney
   const opKey = (T, uid, op) => `chm:${T.id}:${uid}:${op}:${++T.opno}`;
   const handSpin = (T, n) => `chm:${T.id}:h${n}`;
 
@@ -57,7 +61,7 @@ function install(core) {
     T.qol = T.qol || {};
     const q = T.qol[uid] || (T.qol[uid] = { bank: Math.min(setting("hm_timebank_secs", 30), setting("hm_timebank_max", 60)), hands: 0, timeouts: 0, out: false, since: null, back: null });
     T.dl.sitout = T.dl.sitout || {};
-    if (q.out && q.since != null) T.dl.sitout[uid] = q.since + setting("hm_sitout_mins", 10) * 60000;
+    if (q.out && q.since != null && !T.tourney) T.dl.sitout[uid] = q.since + setting("hm_sitout_mins", 10) * 60000;   // (h22: never a sit & go seat)
     else delete T.dl.sitout[uid];
     return q;
   }
@@ -70,14 +74,15 @@ function install(core) {
   // 1.99alq h21 integration: only a seat sitting out holds off the idle close (its own sit-out limit governs it); a returning
   // seat is dealt in whenever the table can deal, so one left alone has nobody to wait for and the 5-minute idle close runs
   const outHolds = (T) => T.eng.seats.some((k) => qos(T, k).out);
-  function playable(T) { return H.seatedWithChips(T.eng).filter((uid) => !qos(T, uid).out && qos(T, uid).back !== "wait"); }
+  // (h22: at a sit & go every seat with chips plays - sitting out there is being blinded away)
+  function playable(T) { return H.seatedWithChips(T.eng).filter((uid) => T.tourney || (!qos(T, uid).out && qos(T, uid).back !== "wait")); }
 
   async function sitout(T, actor, back, post) {
     if (!T.eng.seats.includes(actor.uid)) return R(false, "you're not seated at the table.");
     const q = qos(T, actor.uid);
     if (back) {
       if (!q.out && !q.back) return R(true, "you're already playing.");
-      q.out = false; q.since = null; q.back = post ? "post" : "wait"; q.timeouts = 0;
+      q.out = false; q.since = null; q.back = T.tourney ? null : post ? "post" : "wait"; q.timeouts = 0;   // (h22: a sit & go seat never left the blinds)
       if (!T.eng.hand_active) T.dl.idle = null;
       if (!T.eng.hand_active && !T.dl.next) T.dl.next = clock() + HC.NEXT_SECS * 1000;
     } else {
@@ -86,6 +91,7 @@ function install(core) {
     }
     qos(T, actor.uid);
     await save(T);
+    if (T.tourney) return R(true, back ? "you're back in." : "sitting out — you'll be blinded until you're back (!sitin).");
     return R(true, back ? (post ? "you'll post the big blind next hand." : "waiting for the big blind.") : "sitting out from the next hand.");
   }
 
@@ -143,11 +149,12 @@ function install(core) {
     return R(true, "pre-move set.");
   }
 
-  function newTable(host, room, sb, bb, highStakes) {
+  // (h22: opts.tourney - a sit & go's table: no rake, so no tournament chip ever leaves the table)
+  function newTable(host, room, sb, bb, highStakes, opts) {
     const id = require("crypto").randomBytes(5).toString("hex");
     return {
       id, game: "holdem", status: "open", room: room || null, host: { uid: host.uid, name: host.name }, created: clock(),
-      client_seed: fair.newClientSeed(), eng: H.newTable({ sb, bb, rake: HC.RAKE }), players: {},
+      client_seed: fair.newClientSeed(), eng: H.newTable({ sb, bb, rake: opts && opts.tourney ? 0 : HC.RAKE }), players: {},
       min_buy: bb * HC.MIN_BUY_BB, max_buy: bb * HC.MAX_BUY_BB, high_stakes: !!highStakes,
       dl: { turn: null, next: null, idle: null }, turn: null, turn_token: 0, next: null, intent: null, rake_due: null,
       opno: 0, multi: [], dump: {}, log: [], last_round: null, rev: 0, closed_at: null, last_activity: clock(),
@@ -192,19 +199,21 @@ function install(core) {
     return R(true, "table open.", { table: T.id, quiet: true });
   }
 
-  async function seatChecks(T, actor) {
+  // (h22: `occupied` / `max` - a sit & go checks its registrations with the same rule before anyone is seated)
+  async function seatChecks(T, actor, occupied, max) {
+    const seats = occupied || T.eng.seats, most = max || HC.MAX_SEATS;
     const u = await userRow(actor.uid);
     if (!u) return "no account found";
     if (u.casino_banned) return "🚫 you're banned from the casino.";
-    if (T.eng.seats.includes(actor.uid)) return null;
-    if (T.eng.seats.length >= HC.MAX_SEATS) return `the table's full (${HC.MAX_SEATS} seats).`;
+    if (seats.includes(actor.uid)) return null;
+    if (seats.length >= most) return `the table's full (${most} seats).`;
     const mine = await dupOf(actor.uid);
-    for (const k of T.eng.seats) {
+    for (const k of seats) {
       const theirs = await dupOf(k);
       if (k === mine || theirs === actor.uid || (mine && theirs === mine)) return "an account linked to yours is already at this table.";
     }
     // poker is player vs player: two accounts from one address can't sit at the same table
-    if (actor.iph && Object.entries(T.players).some(([k, p]) => k !== actor.uid && p.iph === actor.iph && T.eng.seats.includes(k))) {
+    if (actor.iph && Object.entries(T.players).some(([k, p]) => k !== actor.uid && p.iph === actor.iph && seats.includes(k))) {
       T.multi.push({ ts: clock(), a: actor.uid, kind: "same-address refused" });
       return "another account from your connection is already at this table.";
     }
@@ -263,6 +272,7 @@ function install(core) {
 
   /** Pay a seat's chips back as PAT and free the seat (intent first: a restart finishes it). */
   async function cashout(T, uid, busted) {
+    if (T.tourney) return;                 // h22: tournament chips are never PAT - a sit & go seat is never cashed out
     const e = T.eng;
     if (!e.seats.includes(uid)) return;
     const name = e.names[uid] || (T.players[uid] || {}).name || uid;
@@ -310,7 +320,8 @@ function install(core) {
     // Keep the complete seat ring. Only the active seat list is passed to startHand;
     // chips, names and escrow ownership are untouched. The engine remains unchanged.
     const seats = e.seats.slice();
-    const candidates = H.seatedWithChips(e).filter((uid) => !qos(T, uid).out);
+    if (T.tourney) TN().beforeHand(T);       // h22: the level's blinds (between hands only) + the start stacks the bust-outs are placed by
+    const candidates = H.seatedWithChips(e).filter((uid) => T.tourney || !qos(T, uid).out);
     if (candidates.length < 2) return false;
     // A returning waiter joins only when the clockwise big-blind position reaches them.
     const regular = candidates.filter((uid) => qos(T, uid).back !== "wait");
@@ -404,6 +415,10 @@ function install(core) {
           // Table-only log: no extra room line and no unmasked identity.
           T.log.push({ ts: clock(), text: "auto: " + ({ check: "checked", fold: "folded", call: "called" })[verb] });
           await action(T, { uid: ev.who }, verb, null);
+          continue;
+        }
+        if (T.tourney && qos(T, ev.who).out) {        // h22: a sitting-out sit & go seat is blinded away - it checks or folds at once
+          await action(T, { uid: ev.who }, ev.to_call ? "fold" : "check", null);
           continue;
         }
         const opts = [ev.can_check ? "!check" : `!call ${fmt(ev.to_call)}`, ev.current_bet > 0 ? `!raise <to ≥${fmt(ev.min_raise_to)}>` : `!bet <≥${fmt(ev.min_raise_to)}>`, "!allin", "!fold"];
@@ -502,6 +517,7 @@ function install(core) {
       T.replay = null;
     }
     await commitNext(T);
+    if (T.tourney) return TN().afterHand(T, ev);      // h22: bust-outs are placed (never a cash-out), then the next hand or the finish
     for (const k of e.leaving.slice()) await cashout(T, k, false);
     e.leaving = [];
     for (const k of ev.busted || []) if (e.seats.includes(k)) await cashout(T, k, true);
@@ -519,6 +535,7 @@ function install(core) {
   }
 
   async function closeTable(T, reason) {
+    if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
     for (const k of e.seats.slice()) await cashout(T, k, false);
     T.status = "closed";
@@ -590,6 +607,7 @@ function install(core) {
                "Losing hands are mucked unless show is selected; the fairness proof still reveals the deck.";
 
   async function run(T, actor, verb, args) {
+    if (T.tourney) { const r = await TN().tableVerb(T, actor, verb, args); if (r) return r; }   // h22: a sit & go's own verbs first
     switch (verb) {
       case "pre": return premove(T, actor, String(args[0] || "off").toLowerCase());
       case "sitout": return sitout(T, actor, false, false);
@@ -621,10 +639,11 @@ function install(core) {
 
   // ── deadlines ──
   async function tick(T) {
+    if (T.tourney && (await TN().tick(T)) === "done") return;     // h22: registration / countdown / the level clock / a payout retry
     const t = clock(), e = T.eng;
     for (const uid of e.seats.slice()) {
       const q = qos(T, uid);
-      if (q.out && q.since != null && t >= T.dl.sitout[uid] && !(e.hand_active && e.players.includes(uid))) {
+      if (!T.tourney && q.out && q.since != null && t >= T.dl.sitout[uid] && !(e.hand_active && e.players.includes(uid))) {
         await standCmd(T, { uid });
         if (T.status === "closed") return;
       }
@@ -652,7 +671,10 @@ function install(core) {
       await save(T);
     } else if (T.dl.next && T.dl.next <= t) {
       T.dl.next = null;
-      if (!(await beginHand(T))) T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
+      if (!(await beginHand(T))) {
+        if (T.tourney) T.dl.next = clock() + HC.NEXT_SECS * 1000;     // (h22: never idle-closed - the finish comes first)
+        else T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
+      }
       await save(T);
     } else if (T.dl.idle && T.dl.idle <= t) {
       T.dl.idle = null;
@@ -661,10 +683,11 @@ function install(core) {
       await closeTable(T, "idle — no action");
     }
   }
-  const due = (T) => { const t = clock(); return (T.dl.turn && T.dl.turn <= t) || (T.dl.next && T.dl.next <= t) || (T.dl.idle && T.dl.idle <= t) ||
+  const due = (T) => { const t = clock(); return (T.tourney && TN().due(T)) || (T.dl.turn && T.dl.turn <= t) || (T.dl.next && T.dl.next <= t) || (T.dl.idle && T.dl.idle <= t) ||
     T.eng.seats.some((uid) => { const q = qos(T, uid); return q.out && q.since != null && t >= T.dl.sitout[uid] && !(T.eng.hand_active && T.eng.players.includes(uid)); }); };
 
   async function recover(T) {
+    if (T.tourney && (await TN().recover(T)) === "done") return;   // h22: registering / paying out / over - else the hand resumes below
     const e = T.eng;
     for (const uid of e.seats) qos(T,uid);
     clearInvalidPre(T);
@@ -702,8 +725,11 @@ function install(core) {
         return;
       }
       if (T.dl.next && T.dl.next < t + 1000) T.dl.next = t + HC.NEXT_SECS * 1000;
-      if (T.dl.idle && T.dl.idle < t + 1000) T.dl.idle = t + HC.IDLE_SECS * 1000;
-      if (!T.dl.next && !T.dl.idle && !outHolds(T)) T.dl.idle = t + HC.IDLE_SECS * 1000;
+      if (T.tourney) { if (!T.dl.next) T.dl.next = t + HC.NEXT_SECS * 1000; T.dl.idle = null; }    // (h22: a running sit & go deals on)
+      else {
+        if (T.dl.idle && T.dl.idle < t + 1000) T.dl.idle = t + HC.IDLE_SECS * 1000;
+        if (!T.dl.next && !T.dl.idle && !outHolds(T)) T.dl.idle = t + HC.IDLE_SECS * 1000;
+      }
     }
     await save(T);
   }
@@ -746,12 +772,13 @@ function install(core) {
       sb: e.sb, bb: e.bb, min_buy: T.min_buy, max_buy: T.max_buy, high_stakes: T.high_stakes, max_seats: HC.MAX_SEATS, act_secs: HC.ACT_SECS,
       presets_pot: String(S.settings.hm_presets_pot || "33,50,75,100,150").split(",").map(Number),
       presets_bb: String(S.settings.hm_presets_bb || "2.5,3,4").split(",").map(Number),
-      adverts: core.advertList(T), rake_pct: HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
+      adverts: core.advertList(T), rake_pct: T.tourney ? 0 : HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
       next_at: T.dl.next, idle_at: T.dl.idle, client_seed: T.client_seed,
       commitment: e.hand_active && T.hand ? T.hand.commitment : T.next ? T.next.commitment : null,
       commit_round: e.hand_active && T.hand ? T.hand.no : T.next ? T.next.no : null,
       last_round: e.hand_active ? null : lr, last_revealed: T.last_hand_revealed || null, url: link(T),
       log: V.maskLog(T, T.log.slice(-20)),
+      ...(T.tourney ? { tourney: TN().view(T) } : {}),           // h22: the sit & go header / results card / Pepe's board
     };
   }
 
@@ -767,6 +794,7 @@ function install(core) {
       show_hand: !!(T.show || {})[uid],
       sitting_out: !!(T.qol && T.qol[uid] && T.qol[uid].out), waiting_bb: !!(T.qol && T.qol[uid] && T.qol[uid].back === "wait"), to_call: e.hand_active ? H.toCall(e, uid) : 0,
       host: T.host.uid === uid, high_roller: await isHighRoller(uid),
+      ...(T.tourney ? { tourney: TN().meView(T, uid) } : {}),
     };
   }
 
@@ -790,7 +818,8 @@ function install(core) {
                              high_stakes: T.high_stakes });
 
   return { HC, start, run, tick, due, recover, publicView, meView, privateFor, lobbyRow, closeTable, cardsFor, HELP,
-           midRound: (T) => T.eng.hand_active };
+           midRound: (T) => T.eng.hand_active,
+           newTable, seatChecks, forgetSeat };            // (h22: what casino/tourney.js builds a sit & go with)
 }
 
 module.exports = { install, HC, amt };
