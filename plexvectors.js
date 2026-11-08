@@ -6,7 +6,7 @@ const { performance } = require("node:perf_hooks");
 
 const KEY = /^\d{1,12}$/, HASH = /^[a-f0-9]{64}$/;
 const DAY = 86400000, BUDGET = 400, MAX_MOVIES = 20000, MAX_EPISODES = 3000, MAX_BODY = 16384;
-// plexvectors 1.99?? (prod 2026-11-08: every embed_todo refused "catalog_down", /admin/media "waiting for the bot's model
+// plexvectors 1.99amg (prod 2026-11-08: every embed_todo refused "catalog_down", /admin/media "waiting for the bot's model
 // configuration"; 255,835 rows, every doc dirty, 0 vectors, the bot's model already stored). prepare() read every dirty doc
 // joined with the catalog and sorted it (565-713 ms) and the card's count walked the whole catalog (1.2-1.4 s) - both on the
 // 400 ms chat search budget, so every call stopped (too_broad). The backfill (embed_todo / embed_put) and the card are
@@ -126,7 +126,7 @@ function createVectors(options = {}) {
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vector_docs_dirty ON plex_vector_docs(dirty,key)");
       await tx.run("CREATE TABLE IF NOT EXISTS plex_vector_meta (id INTEGER PRIMARY KEY CHECK(id=1),model TEXT NOT NULL DEFAULT '',dim INTEGER NOT NULL DEFAULT 0,catalog_rev INTEGER NOT NULL DEFAULT 0,vector_rev INTEGER NOT NULL DEFAULT 0,policy_rev INTEGER NOT NULL DEFAULT 0)");
       await tx.run("INSERT OR IGNORE INTO plex_vector_meta(id) VALUES(1)");
-      // plexvectors 1.99??: docs.vec = 1 when the doc's stored vector matches its current hash and the configured model, kept by the
+      // plexvectors 1.99amg: docs.vec = 1 when the doc's stored vector matches its current hash and the configured model, kept by the
       // triggers below (the only writers). The work left is then an index range - (dirty=0, vec=0) after the cursor - never a scan
       // past every finished doc, and "done" an index count. A cache from before the column gets it (and its value) once here.
       if (!(await tx.all("PRAGMA table_info(plex_vector_docs)")).some((col) => col.name === "vec")) {
@@ -182,7 +182,7 @@ function createVectors(options = {}) {
     m.ready = parse(m.allow_list_set) === true && parse(m.supported) === true && Number(parse(m.full_at)) > 0 && now() - Number(parse(m.full_at)) <= 3 * DAY;
     return m;
   }
-  // plexvectors 1.99??: a policy change re-checks the stored vectors once, however many calls arrive together (each used to queue
+  // plexvectors 1.99amg: a policy change re-checks the stored vectors once, however many calls arrive together (each used to queue
   // its own whole-catalog DELETE ... NOT IN on the writer), a page of vectors per write.
   async function purge() {
     let after = "";
@@ -237,7 +237,7 @@ function createVectors(options = {}) {
     return { ok: true, ...selected };
   }
 
-  // plexvectors 1.99??: the summaries changed since they were last hashed - from the bot's cursor on, then from the start (an
+  // plexvectors 1.99amg: the summaries changed since they were last hashed - from the bot's cursor on, then from the start (an
   // index range of plex_vector_docs_dirty: no policy join, no sort). Hashing a title the policy hides is harmless: no text leaves
   // here, and what the bot gets is read again through the catalog's own visibility check. Returns how many it hashed.
   async function prepare(after, deadline) {

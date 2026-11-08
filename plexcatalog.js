@@ -17,7 +17,7 @@ const SHELVES_BUDGET_MS = 2000;
 // 1,142 ms with no budget) and every show (4,257 in 446 ms) - both past 400 ms, so an add failed there too. About 3.5x that.
 const ADMIN_BUDGET_MS = 4000;
 const MAX_BUDGET_MS = Math.max(SHELVES_BUDGET_MS, ADMIN_BUDGET_MS);
-// plexvectors 1.99?? (prod 2026-11-08): the admin lane is background work - the card, a list's matching and now Pepe's
+// plexvectors 1.99amg (prod 2026-11-08): the admin lane is background work - the card, a list's matching and now Pepe's
 // summary-embedding backfill, which reads for hours (~255k docs at 20/s). Its reads wait behind any chat read already waiting
 // (one connection, chat first) and queue on their own (BACKGROUND_QUEUE), so a backfill never makes a chat search "busy".
 const BACKGROUND_QUEUE = 8;
@@ -796,7 +796,7 @@ function createCatalog(options = {}) {
     writer = searchDb = null;
   }
   let adminVectors;
-  // plexvectors 1.99??: the card's count on the admin lane (it had only the 400 ms read() - 1.2-1.4 s on prod, so it threw).
+  // plexvectors 1.99amg: the card's count on the admin lane (it had only the 400 ms read() - 1.2-1.4 s on prod, so it threw).
   // The site's own catalog shares the vectors module's instance with plexchat (one count, one policy re-check, not two).
   function vectorsCache() {
     if (!adminVectors) adminVectors = options.vectors || (options.sharedVectors ? require("./plexvectors")

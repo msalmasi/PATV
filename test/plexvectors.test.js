@@ -235,7 +235,7 @@ test("10k movie plus one 3k-episode search stays bounded and warm cosine searche
   assert.equal((await h.catalog.read("SELECT SUM(length(v)) AS bytes FROM plex_vectors"))[0].bytes, 13000 * 768);
 });
 
-// ── plexvectors 1.99?? (prod 2026-11-08): Pepe's summary-embedding backfill was refused on every call ("[plexchat] embed_todo:
+// ── plexvectors 1.99amg (prod 2026-11-08): Pepe's summary-embedding backfill was refused on every call ("[plexchat] embed_todo:
 // refused catalog_down", 61 times) and /admin/media said "Summary embeddings: waiting for the bot's model configuration." ──
 // Proven on prod (a read-only probe through the site's own plexcatalog / plexvectors, every write skipped): 255,835 catalog rows,
 // 255,835 docs all dirty, 0 vectors, plex_vector_meta already nomic-embed-text:v1.5 / 768 (the bot's configure had landed).

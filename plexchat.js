@@ -219,7 +219,7 @@ async function opShelves(user, b) {
   await clerkAccess(user, b);
   const out = typeof CF().shelves === "function" ? await CF().shelves() : await CAT().shelves();
   if ([true, "true", "1", 1].includes(conf().get().clerk_embed)) {
-    // plexvectors 1.99??: a person's ask takes the quick look - the stored model and the last numbers, never a catalog count
+    // plexvectors 1.99amg: a person's ask takes the quick look - the stored model and the last numbers, never a catalog count
     try { out.embed = await VEC().status({ quick: true }); }
     catch (_) { out.embed = { enabled: true, ready: false, model: null, dim: null, done: 0, left: 0 }; }
   }
@@ -248,7 +248,7 @@ async function opEmbed(b) {
     if (code === "embed_off") throw new Fail("embed_off", "Embeddings are switched off.", 403);
     if (["embed_model", "bad_embed_model"].includes(code)) throw new Fail("embed_model", "The embedding model needs refreshing.", 409);
     if (["bad_cursor", "bad_vector", "bad_vectors", "bad_batch", "too_large"].includes(code)) throw new Fail("bad", "Invalid embedding batch.", 400);
-    // plexvectors 1.99?? (prod 2026-11-08: every backfill call "refused catalog_down" while the catalog was ready and a read only
+    // plexvectors 1.99amg (prod 2026-11-08: every backfill call "refused catalog_down" while the catalog was ready and a read only
     // slow): busy - the bot backs off and asks again - or down. plexvectors logs the real reason once a streak (logged); anything it
     // didn't tell is said here once a streak, its code only (never its message). No per-call line either way.
     const out = EMBED_BUSY.has(code) ? "embed_busy" : "catalog_down";

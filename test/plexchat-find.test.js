@@ -112,7 +112,7 @@ test("embed switches and fixed refusal codes never echo metadata or provider err
   for (const op of ["embed_todo", "embed_put"]) assert.equal((await h.pc.handle({ op })).code, "embed_off");
   assert.equal(h.data.calls.length, 0);
   h.s.clerk_embed = true;
-  // plexvectors 1.99??: a read past its budget, a full read queue or a locked database is "busy" (the bot backs off and asks again),
+  // plexvectors 1.99amg: a read past its budget, a full read queue or a locked database is "busy" (the bot backs off and asks again),
   // not "catalog down" - prod answered every backfill call catalog_down while the catalog was ready and the read only slow
   for (const [code, expected] of [["bad_vectors", "bad"], ["bad_cursor", "bad"], ["bad_embed_model", "embed_model"], ["embed_model", "embed_model"], ["catalog_down", "catalog_down"],
     ["SQLITE_BUSY", "embed_busy"], ["too_broad", "embed_busy"], ["busy", "embed_busy"], ["slow", "embed_busy"], ["SQLITE_IOERR", "catalog_down"], ["embed_off", "embed_off"]]) {
@@ -122,7 +122,7 @@ test("embed switches and fixed refusal codes never echo metadata or provider err
   }
 });
 
-// plexvectors 1.99?? (prod 2026-11-08: "[plexchat] embed_todo: refused catalog_down" on every call, never why): plexvectors logs a
+// plexvectors 1.99amg (prod 2026-11-08: "[plexchat] embed_todo: refused catalog_down" on every call, never why): plexvectors logs a
 // refusal's real reason once a streak; plexchat answers its code and adds no line of its own. A crash it wasn't told about is said
 // once a streak too (its code, never its message).
 test("a refused embed call is answered with its code and logged once a streak, not on every call", async () => {
@@ -183,7 +183,7 @@ test("shelves exposes vector readiness only after clerk access and fails softly"
   assert.equal((await h.call("shelves")).embed, undefined);
   h.s.clerk_embed = true;
   assert.deepEqual((await h.call("shelves")).embed, { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 });
-  // plexvectors 1.99??: a person's ask takes the quick look (no count of the catalog on the chat path)
+  // plexvectors 1.99amg: a person's ask takes the quick look (no count of the catalog on the chat path)
   assert.deepEqual(h.data.calls.filter((row) => row[0] === "embed_status").map((row) => row[1]), [{ quick: true }]);
   h.data.embedError = new Error("Synthetic private error");
   const fallback = await h.call("shelves"); assert.equal(fallback.ok, true); assert.equal(fallback.embed.ready, false);
