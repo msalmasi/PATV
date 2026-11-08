@@ -277,6 +277,9 @@ test("micblock: block break + self-unblock switches and the unblock code - clean
     [{ unblockcode: "/unblockmic pepefrog" }], [{ unblockcode: "!sb ribbit" }], [{ unblockcode: "  /kick bob" }], [{ unblockcode: "x".repeat(21) }],
     [{ unblockcode: "1\n/kick bob" }], [{ unblockcode: "a\tb" }], [{ unblockcode: "\u200bx" }], [{ unblockcode: 1 }], [{ unblockcode: ["1"] }],
     [{ selfunblock: "maybe" }], [{ blockbreak: 0 }],
+    // micblock review F8: what Pepe's chat layer would change (the markdown strip: "*1*" goes out as "1"; a "-word" is a chat flag)
+    [{ unblockcode: "*1*" }], [{ unblockcode: "__1__" }], [{ unblockcode: "`1`" }], [{ unblockcode: "~~1~~" }], [{ unblockcode: "1 -global" }],
+    [{ unblockcode: "-all" }],
   ];
   for (const [set] of bad) {
     const r = await save({ scope: "room", room: YW, set });
@@ -301,6 +304,11 @@ test("micblock: block break + self-unblock switches and the unblock code - clean
   assert.equal(FG.codeClean("none").code, ""); assert.equal(FG.codeClean("none").err, null);
   assert.ok(FG.codeClean("!x").err && FG.codeClean("/x").err && FG.codeClean("x".repeat(21)).err && FG.codeClean("a\u0007").err);
   assert.equal(FG.codeClean("é😀1").code, "é😀1", "any printable character");
+  // micblock review F8: nothing the chat layer would change - no * or `, no __ or ~~, no word starting with - ("-" alone = none)
+  for (const c of ["*1*", "**1**", "__1__", "`1`", "~~1~~", "a*b", "-all", "1 -global", "-1", "ok -p"]) assert.ok(FG.codeClean(c).err, c);
+  for (const [c, want] of [["1", "1"], ["a_b", "a_b"], ["x-y", "x-y"], ["~1", "~1"], ["-", ""]]) {
+    assert.deepEqual(FG.codeClean(c), { code: want, err: null }, c);
+  }
 });
 
 test("audit: one admin_audit row pepe.fastgrab per change - scope, room, what it sets, what it replaces (Pepe's last values), the action id, the reason; no audit = no change", async () => {
@@ -384,7 +392,7 @@ test("the rooms page renders the card: Pepe's current values, the rooms (room vs
   assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20 · blockbreak on · selfunblock off · unblockcode none/);
   assert.match(html, /<b>Players Lounge<\/b> \(You_Were_Never_Here\): on on · contest on · fair off · claim swallow · rate 15 \(its own\)/);
   assert.match(html, /<b>Pepe&#39;s Pad<\/b> \(PepeFrog.Room\): follows the global/);
-  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=2" defer><\/script>/, "(1.99?? micblock: v2 - the new rows)");
+  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=3" defer><\/script>/, "(1.99?? micblock: v2 - the new rows; v3 - the code's chat-layer check)");
   assert.match(html, /Block break/, "micblock: the card explains the block break and the self-unblock");
   assert.match(html, /unblock code/i);
   const rawData = html.match(/<script type="application\/json" id="fgData">([\s\S]*?)<\/script>/)[1];
@@ -558,6 +566,14 @@ test("card script (micblock): the unblock code is a text box - a good code + the
   assert.match(K.byId.fgMsg.textContent, /can't start with \/ or !/);
   K.byId.fgSave.fire("click"); await flush();
   assert.equal(K.posts.length, 0, "a code that could be a command is never sent");
+  // micblock review F8: nor one Pepe's chat would change (markdown, a "-flag" word) - the row says what's refused
+  assert.match(K.rowOf("Unblock code").textContent, /no \* ` __ ~~/);
+  for (const c of ["*1*", "1 -global"]) {
+    box.value = c; box.fire("change");
+    assert.match(K.byId.fgMsg.textContent, /strip|chat flag/, c + ": said why");
+    K.byId.fgSave.fire("click"); await flush();
+    assert.equal(K.posts.length, 0, c + " is never sent");
+  }
   box.value = "  Ok 1 "; box.fire("change");
   K.inputs("selfunblock")[0].value = "on"; K.inputs("selfunblock")[0].fire("change");
   K.byId.fgSave.fire("click"); await flush();
@@ -722,7 +738,13 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
   ];
   const badArgs = [["room", YW, "volume=11"], ["room", YW, "rate=1.5"], ["global", "", "rate=follow"], ["room", YW, "breaker=1,2"],
                    ["room", YW, "unblockcode=/kick bob"], ["room", YW, "unblockcode=!sb x"], ["room", YW, "unblockcode=" + "x".repeat(21)],
-                   ["room", YW, "selfunblock=maybe"]];
+                   ["room", YW, "selfunblock=maybe"],
+                   // micblock review F8: what the chat layer would change - he refuses it too
+                   ["room", YW, "unblockcode=*1*"], ["room", YW, "unblockcode=1 -global"], ["room", YW, "unblockcode=__x__"]];
+  // ...and the two checks agree code by code (the site's codeClean = Pepe's unblock_code_clean)
+  const codes = ["1", " Ok 1 ", "none", "-", "/x", "!x", "x".repeat(20), "x".repeat(21), "a" + String.fromCharCode(9) + "b",
+                 String.fromCharCode(0x200b) + "x", "é😀1", "*1*", "a*b", "__1__", "a_b", "`1`", "~~1~~", "~1", "-all", "1 -global",
+                 "x-y", "ok -p"];
   const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fastgrab-contract-")), "contract.py");
   fs.writeFileSync(script, [
     "import json, os, sys",
@@ -751,11 +773,12 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
     "    out['bad'].append([ok, msg])",
     "ok, msg = bot._fgw_web({'id': 2, 'kind': 'mic.fastgrab', 'username': 'boss'}, cases['good'][0])",
     "out['nonadmin'] = [ok, msg]",
+    "out['codes'] = [list(FW.unblock_code_clean(c)) for c in cases.get('codes', [])]",
     "out['state'] = bot._fgw_state()",
     "sys.stdout.write('\\n' + json.dumps(out) + '\\n')",
   ].join("\n"));
   const input = script.replace(/contract\.py$/, "cases.json");
-  fs.writeFileSync(input, JSON.stringify({ good, bad: badArgs }));
+  fs.writeFileSync(input, JSON.stringify({ good, bad: badArgs, codes }));
   const raw = execFileSync(process.env.PYTHON || "python", [script, botDir, input], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, maxBuffer: 16 * 1024 * 1024 });
   const out = JSON.parse(raw.trim().split("\n").pop());
   assert.deepEqual(out.fields.slice().sort(), FG.FIELDS.slice().sort(), "the same fields");
@@ -765,6 +788,10 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
   assert.match(out.good[0][1], /Players Lounge only: .*rate 60\/min \(asked 999, clamped\)/);
   for (const [i, [ok, msg]] of out.bad.entries()) { assert.equal(ok, false, badArgs[i].join(" ")); assert.match(msg, /^bad /); }
   assert.equal(out.nonadmin[0], false);
+  for (const [i, c] of codes.entries()) {
+    const site = FG.codeClean(c), bot = out.codes[i] || [];
+    assert.deepEqual([site.code, !!site.err], [bot[0], !!bot[1]], `the code ${JSON.stringify(c)}: site ${JSON.stringify(site)} vs Pepe ${JSON.stringify(bot)}`);
+  }
   // his state, cleaned by the site: the stored values and the clamps of the first change
   const st = FG.cleanState(out.state);
   assert.ok(st, "his block passes the site's cleaner");
