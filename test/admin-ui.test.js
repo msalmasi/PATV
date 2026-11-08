@@ -178,6 +178,20 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
   // mic retention (micrec.js): the Mic recordings card - its switch for admins (chatlog.admin) only
   assert.match((await page("/admin/bridge", U.admin)).html, /id="mrSwitch"[\s\S]*\/api\/admin\/micrec\/switch/);
   assert.doesNotMatch((await page("/admin/bridge", U.staff)).html, /id="mrSwitch"/);
+  // pttlimits (the owner 2026-11-08): the Push-to-talk clips card - its current values and form for site admins (pads.config), staff
+  // see the card without the form; the help line says what it covers
+  const ptA = (await page("/admin/bridge", U.admin)).html, ptS = (await page("/admin/bridge", U.staff)).html;
+  assert.match(ptA, /id="pttlimits"[\s\S]*id="ptForm"[\s\S]*\/api\/admin\/pttlimits/, "admins: the card, its form and its API");
+  assert.match(ptA, /applies to everyone's 🎙 push-to-talk clips into Camfrog rooms/);
+  for (const [name, value, lo, hi] of [["gap_s", 30, 0, 600], ["burst", 3, 1, 30], ["max_secs", 30, 3, 120]]) {
+    const m = ptA.match(new RegExp('<input[^>]*name="' + name + '"[^>]*>'));
+    assert.ok(m, "the " + name + " field");
+    assert.match(m[0], new RegExp('value="' + value + '"'), name + " shows its current value");
+    assert.match(m[0], new RegExp('min="' + lo + '"'), name + " min");
+    assert.match(m[0], new RegExp('max="' + hi + '"'), name + " max");
+  }
+  assert.match(ptS, /id="pttlimits"/, "staff: the card");
+  assert.doesNotMatch(ptS, /id="ptForm"/, "...without the form");
   // CL6: chat takedowns (chatlog.read_all: Staff and up) - the per-login tool, holds, the staff audit; the reported chat lines queue
   for (const who of [U.staff, U.admin]) {
     const b = (await page("/admin/bridge", who)).html;

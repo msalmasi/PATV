@@ -155,7 +155,7 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=31/, "the player script loads for the 🎧 even without the room widget");   // v=31: story camera (PATVRoom.session - the audio session for the camera); v=28: 1.99ajw padppl rework (the clash tag's explanation for a linked login); v=27: 1.99ajq dockpol (opts.onCmd - the Dock's command toasts; the player's destroy); v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace); v=21: 1.99ajc dockfu (the sender's media preview is marked); v=23: 1.99ajf dockclean review (name completion); v=24: 1.99ajh dockpop (audio pause / resume)
+  assert.match(html, /room-bridge\.js\?v=32/, "the player script loads for the 🎧 even without the room widget");   // v=32: pttlimits (the recorder stops at the admin max length); v=31: story camera (PATVRoom.session - the audio session for the camera); v=28: 1.99ajw padppl rework (the clash tag's explanation for a linked login); v=27: 1.99ajq dockpol (opts.onCmd - the Dock's command toasts; the player's destroy); v=17: soundboard progress through the shared relay; v=19: lip sync review fix (stall grace); v=21: 1.99ajc dockfu (the sender's media preview is marked); v=23: 1.99ajf dockclean review (name completion); v=24: 1.99ajh dockpop (audio pause / resume)
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
@@ -181,7 +181,7 @@ test("player: 0.75 s cushion; catch-up to the live edge only on a real backlog (
   assert.match(js, /setInterval\(edge, 500\)/);
   assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
   for (const v of ["home.ejs", "room.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=31/, v + " loads the new player");   // (1.99ajn padppl: v25; v26 review: the clash tag in the @ list; v27 1.99ajq dockpol: onCmd, audio.destroy; v28 1.99ajw padppl rework: its explanation for a linked login)
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=32/, v + " loads the new player");   // (pttlimits: v32; story camera 1.99alu: v31; 1.99ajn padppl: v25; v26 review: the clash tag in the @ list; v27 1.99ajq dockpol: onCmd, audio.destroy; v28 1.99ajw padppl rework: its explanation for a linked login)
   }
 });
 
