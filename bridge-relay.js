@@ -78,7 +78,12 @@ async function padFull(userId, roomId) {
 }
 const PAD_DENIED = { ok: false, code: "pad_access", error: "This pad's live room is for its approved members." };
 
-const SAY_MAX = 300, CLIP_MAX_BYTES = 600 * 1024, CLIP_MAX_SECS = 30;
+// pttlimits (the owner 2026-11-08): a push-to-talk clip's max length, its body cap and the play limit's cooldown / per-10-minute
+// number are the /admin/bridge "Push-to-talk clips" setting now (pttlimits.js current() / maxBytes(), read for every upload) - they
+// were CLIP_MAX_SECS = 30, CLIP_MAX_BYTES = 600 KB and CLIP_PLAY {gap 30 s, burst 3} here
+const PTT = require("./pttlimits");
+const CLIP_RAW_TYPES = ["audio/*", "application/octet-stream"];
+const SAY_MAX = 300;
 const JOB_TTL = 3 * 60 * 1000, CLAIM_RETRY = 45 * 1000;
 // A clip can wait minutes for the room's mic (Pepe 1.99bk waits up to 4 min in a busy room), so an
 // unfinished clip job is kept CLIP_TTL; any finished job JOB_TTL after it finished.
@@ -223,8 +228,29 @@ function limitBack(key, t) {
 // failed by the sweep (Pepe never took it, or never answered - see CLIP_PENDING_TTL). Not bad_clip (the recording's own fault).
 // The flood guard stays: CLIP_UP uploads per account whatever became of them (Pepe's CLIP_TRY_LIMIT), never given back - an
 // upload refused by the play limit costs none of it.
-const CLIP_PLAY = { gap: 30 * 1000, burst: 3, window: 10 * 60 * 1000 };
+// pttlimits: the play limit's gap and burst are the admin setting (pttlimits.current(): gap_s / burst per window_s - 30 s / 3 per 10 min
+// by default); the flood guard is never below that burst (12, or the setting when it is higher - else it would cap the clips first).
 const CLIP_UP = { burst: 12, window: 10 * 60 * 1000 };
+/** pttlimits: the limits for an upload now -> {gap, burst, window (ms), upBurst, maxSecs, job: the fields every clip job carries for Pepe}. */
+function clipLimits() {
+  const L = PTT.current();
+  return { gap: L.gap_s * 1000, burst: L.burst, window: L.window_s * 1000, upBurst: Math.max(CLIP_UP.burst, L.burst), maxSecs: L.max_secs,
+           job: { max_secs: L.max_secs, gap_s: L.gap_s, burst: L.burst, window_s: L.window_s } };
+}
+/** pttlimits: the clip body parser for the max length in force (cached per cap) - over the cap is a JSON 413 the page can show. */
+const clipParsers = new Map();
+function clipBody(req, res, next) {
+  const cap = PTT.maxBytes();
+  let p = clipParsers.get(cap);
+  if (!p) { p = express.raw({ type: CLIP_RAW_TYPES, limit: cap }); clipParsers.set(cap, p); }
+  p(req, res, (err) => {
+    if (!err) return next();
+    if (err.type === "entity.too.large" || err.status === 413) {
+      return res.status(413).json({ ok: false, code: "too_big", error: "That recording is too big - try a shorter one." });
+    }
+    return next(err);
+  });
+}
 // pttclip review: a clip Pepe never takes (not pulling, not in the room) fails after CLIP_PENDING_TTL - given back, said so (it used
 // to sit "sent — waiting for Pepe…" for 8 minutes and vanish). One he took is timed from his CLAIM, not the upload (clipOpenUntil):
 // his audio worker plays every room's clips in turn, each waiting up to 4 min for the mic, and HE gives up on a clip that hasn't
@@ -476,7 +502,12 @@ function takeJobs(liveRoomIds, via = "sync") {
     // 1.99aid (privacy controls, round 3 - F2): ... on a frog-name cam - Pepe words what comes back by the frog name (never the login)
     if (j.kind === "cmd" && j.pepe && j.veil) base.veil = { alias: String(j.veil.alias || "someone").slice(0, 40) };
     if (j.kind === "modinfo") base.target = j.target || "";
-    if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
+    if (j.kind === "clip") {
+      base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0;
+      // pttlimits: the /admin/bridge limits this clip was accepted under - Pepe's length check and his per-sender clip limit use them
+      // (inside his own ceilings); an older Pepe ignores them and keeps his 30 s / 3 per 10 min / 30 s
+      Object.assign(base, j.limits || clipLimits().job);
+    }
     // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
     if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; if (j.mf) base.mf = true; }   // micfollow: a quiet mic-stage still (no viewer)
@@ -793,6 +824,7 @@ async function sayEligibility(req, room) {
 function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, liveIds = null }) {
   sayRooms = { bySlug, isLive, gated };
   require("./roompm").register(app, { addUser });       // 1.99ajd roompm: the switch (/api/admin/roompm) + reads it now
+  PTT.register(app, { addUser });                       // pttlimits: the push-to-talk clip limits (/api/admin/pttlimits) + reads them now
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
     return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
@@ -921,7 +953,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     res.json({ ok: true, rows });
   });
 
-  app.post("/api/rooms/:slug/clip", addUser, express.raw({ type: ["audio/*", "application/octet-stream"], limit: CLIP_MAX_BYTES }), async (req, res) => {
+  // pttlimits: the body cap, the length and the play limit are the admin setting in force for THIS upload (clipBody / clipLimits)
+  app.post("/api/rooms/:slug/clip", addUser, clipBody, async (req, res) => {
     const u = await me(req);
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "micRelay");
@@ -933,20 +966,25 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
     const secs = Number(req.get("x-clip-secs")) || 0;
     if (!buf || buf.length < 500) return res.status(400).json({ ok: false, error: "That recording is empty." });
-    if (secs > CLIP_MAX_SECS + 1) return res.status(400).json({ ok: false, error: `Keep it under ${CLIP_MAX_SECS} seconds.` });
+    const display = await webName(u);
+    // pttlimits: read once, after the last await - the check, the count and the job's fields for Pepe all use the same values
+    const L = clipLimits();
+    // (+1 s: the recorder's stop lands a little after its timer)
+    if (secs > L.maxSecs + 1) return res.status(400).json({ ok: false, code: "too_long", max: L.maxSecs, error: `Keep it under ${L.maxSecs} seconds.` });
     const mime = String(req.get("content-type") || "audio/webm").split(";")[0].slice(0, 40);
     // pttclip: the play limit (given back if the clip doesn't play) first - a refusal there costs no upload - then the flood guard
     // (every upload, never given back); both checked before either is counted
-    const pk = "clip|" + u.userId, uk = "clipup|" + u.userId, display = await webName(u);   // (no await between check and count)
-    const lim = limitWhy(pk, CLIP_PLAY.gap, CLIP_PLAY.burst, CLIP_PLAY.window);
+    const pk = "clip|" + u.userId, uk = "clipup|" + u.userId;   // (no await between check and count)
+    const lim = limitWhy(pk, L.gap, L.burst, L.window);
     if (lim) return res.status(429).json({ ok: false, code: "rate", error: lim });
-    if (limitWhy(uk, 0, CLIP_UP.burst, CLIP_UP.window)) {
-      return res.status(429).json({ ok: false, code: "rate", error: `slow down — ${CLIP_UP.burst} clips per ${Math.round(CLIP_UP.window / 60000)} min, played or not` });
+    if (limitWhy(uk, 0, L.upBurst, CLIP_UP.window)) {
+      return res.status(429).json({ ok: false, code: "rate", error: `slow down — ${L.upBurst} clips per ${Math.round(CLIP_UP.window / 60000)} min, played or not` });
     }
     limitMark(uk, CLIP_UP.window);
-    const lt = limitMark(pk, CLIP_PLAY.window);
+    const lt = limitMark(pk, L.window);
+    // pttlimits: the job keeps the limits it was accepted under - Pepe re-checks with them (takeJobs: max_secs, gap_s, burst, window_s)
     const j = newJob({ kind: "clip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display, data: buf, mime, secs,
-                       lim: { key: pk, t: lt } });
+                       lim: { key: pk, t: lt }, limits: L.job });
     console.log(`[bridge-relay] clip room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} bytes=${buf.length} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });

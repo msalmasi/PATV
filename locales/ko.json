@@ -4976,7 +4976,6 @@
   "js.pad.relay.unreachable": "사이트에 연결할 수 없었어요",
   "js.pad.relay.placeholder": "뭔가 말해 보세요 — Pepe가 ‘🌐 나 (web)’로 전달해요",
   "js.pad.ptt.hold": "🎙 눌러서 말하기",
-  "js.pad.ptt.upto": "최대 20초 · 마이크가 비면 Pepe가 틀어 줘요",
   "js.pad.ptt.rec_tap": "⏺ 녹음 중 — 탭해서 보내기",
   "js.pad.audio.volume": "볼륨",
   "js.pad.audio.jump": "라이브로 이동",

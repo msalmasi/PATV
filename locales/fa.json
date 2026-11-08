@@ -5045,7 +5045,6 @@
   "js.pad.relay.unreachable": "به سایت دسترسی نشد",
   "js.pad.relay.placeholder": "چیزی بگو — Pepe آن را به‌صورت «🌐 تو (وب)» منتقل می‌کند",
   "js.pad.ptt.hold": "🎙 برای حرف زدن نگه دار",
-  "js.pad.ptt.upto": "تا 20 ثانیه · Pepe وقتی میکروفون آزاد شد پخشش می‌کند",
   "js.pad.ptt.rec_tap": "⏺ در حال ضبط — برای ارسال بزن",
   "js.pad.audio.volume": "صدا",
   "js.pad.audio.jump": "پرش به زنده",

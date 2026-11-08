@@ -7,7 +7,7 @@
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
 //   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements
-//   /admin/bridge       the web command audit log (GET /api/bridge/cmdlog, admins only)
+//   /admin/bridge       the web command audit log (GET /api/bridge/cmdlog, admins only); the 🎙 Push-to-talk clips limits (pttlimits.js)
 //   /admin/pepe         the Pepe control panel (views/partials/pepe-control.ejs) + where his feed settings live
 //   /admin/system       site health: version, uptime, database, disk
 //   /feed/admin, /pads/admin, /stage/admin render in the same shell (their own routes and gates).
@@ -237,8 +237,10 @@ function register(app, { addUser }) {
   // wave 2 WP-5 review fix (WP5-ACC-1): the Evidence card's export form only while evidence clips can be made (evidence.effective();
   // evidenceexport.js refuses otherwise anyway)
   // 1.99aid (privacy controls, round 3 - F3): trOn = text reveal roles on (textreveal.js) - the transcripts-bar card names who can reveal
-  app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge", async () => ({ evExport: await safe(() => require("./evidence").effective(), false),
-    trOn: await safe(() => require("./textreveal").isOn() === true, false) })));
+  // pttlimits: ptt = the Push-to-talk clips card's values (pttlimits.view) - drawn into its form for site admins (pads.config)
+  app.get("/admin/bridge", addUser, gate, page("bridge", "Admin · Bridge", async (req, me) => ({ evExport: await safe(() => require("./evidence").effective(), false),
+    trOn: await safe(() => require("./textreveal").isOn() === true, false),
+    ptt: SP.can(me, "pads.config") ? await safe(() => require("./pttlimits").view(), null) : null })));
   // wave 3 (design §N.3): + 🧠 Pepe's memory - how many people opted out (never who), admins only
   app.get("/admin/pepe", addUser, gate, page("pepe", "Admin · Pepe", async (req, me) => ({
     mem: SP.can(me, "admin.sensitive_overview") ? await safe(() => require("./memoryoptout").adminSummary(), null) : null })));

@@ -10,6 +10,81 @@
 </div>
 
 <% const _dt = typeof t === 'function' ? t : function (key, fallback) { return fallback; }; %>
+<%# pttlimits (the owner 2026-11-08: "somewhere I can quickly change the cooldown for the push to talk (relayed mic) from bridge, and somewhere
+    I can set the max length"): pttlimits.js - GET / POST /api/admin/pttlimits, site admins (pads.config), audited pttlimits.save %>
+<section class="adm-card" id="pttlimits" aria-labelledby="ptT">
+  <h2 id="ptT"><span class="ds-ic" aria-hidden="true">🎙</span> Push-to-talk clips <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">This applies to everyone's 🎙 push-to-talk clips into Camfrog rooms (Hold to talk on a pad's page). A change applies to the next clip - no restart.</p>
+  <% const P = locals.ptt; if (!_can('pads.config') || !P || !P.cfg) { %><p class="adm-help">Site admins only.</p><% } else { %>
+  <form id="ptForm" class="adm-form" autocomplete="off">
+    <label>Cooldown between a person's clips (seconds; 0 = none)<input class="ds-in" type="number" inputmode="numeric" name="gap_s" min="<%= P.limits.gap_s[0] %>" max="<%= P.limits.gap_s[1] %>" step="1" required value="<%= P.cfg.gap_s %>"></label>
+    <label>Clips per 10 minutes per person<input class="ds-in" type="number" inputmode="numeric" name="burst" min="<%= P.limits.burst[0] %>" max="<%= P.limits.burst[1] %>" step="1" required value="<%= P.cfg.burst %>"></label>
+    <label>Max clip length (seconds)<input class="ds-in" type="number" inputmode="numeric" name="max_secs" min="<%= P.limits.max_secs[0] %>" max="<%= P.limits.max_secs[1] %>" step="1" required value="<%= P.cfg.max_secs %>"></label>
+    <label>Reason (optional)<input class="ds-in" name="reason" maxlength="200" autocomplete="off"></label>
+    <div class="adm-actions">
+      <button type="submit">Save</button>
+      <button type="button" id="ptReset" class="adm-btn ghost">Reset to defaults (<%= P.defaults.gap_s %> s · <%= P.defaults.burst %> per 10 min · <%= P.defaults.max_secs %> s)</button>
+      <span id="ptMsg" class="adm-msg" role="status"></span>
+    </div>
+  </form>
+  <p class="adm-help" id="ptNow" role="status">Now: one clip every <%= P.cfg.gap_s %> s, <%= P.cfg.burst %> per 10 minutes, up to <%= P.cfg.max_secs %> s long<%= P.at ? ' · last change ' + new Date(P.at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' + (P.by ? ' by ' + P.by : '') : ' · the defaults' %>.</p>
+  <p class="adm-help"><b>Cooldown</b>: how long after one of their clips a person waits for the next. <b>Clips per 10 minutes</b>: how many of one person's clips can play in any 10 minutes. A clip that doesn't play (Pepe couldn't get the mic, the audio failed, Pepe never took it) doesn't count toward either. <b>Max clip length</b>: the recorder stops there and the pad page says it; a longer upload is refused. Uploads per 10 minutes, played or not, stay capped at 12 (or at the clips-per-10-minutes number when that is higher).</p>
+  <p class="adm-help">Pepe re-checks every clip with these same numbers - each clip carries them - once he runs a build that reads them. Until then he keeps his own 30 s cooldown, 3 per 10 minutes and 30 s length, so a longer max length, a shorter cooldown or more clips only fully apply when the bot update ships too.</p>
+  <ul id="ptAudit" class="adm-help" aria-label="Recent changes"></ul>
+  <% } %>
+</section>
+<script>
+// pttlimits: the Push-to-talk clips card (pttlimits.js: GET / POST /api/admin/pttlimits {gap_s, burst, max_secs, reason} | {reset: true})
+(function () {
+  'use strict';
+  var form = document.getElementById('ptForm');
+  if (!form) return;
+  var msg = document.getElementById('ptMsg'), now = document.getElementById('ptNow'), list = document.getElementById('ptAudit');
+  var NAMES = ['gap_s', 'burst', 'max_secs'], busy = false;
+  function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''; }
+  function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
+  function req(data) {
+    return fetch('/api/admin/pttlimits', { method: data ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+      headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) { var e = new Error(d.error || ('HTTP ' + r.status)); e.field = d.field; throw e; } return d; }); });
+  }
+  function line(c) { return 'one clip every ' + c.gap_s + ' s, ' + c.burst + ' per 10 minutes, up to ' + c.max_secs + ' s long'; }
+  function render(v) {
+    if (!v || !v.cfg) return;
+    NAMES.forEach(function (k) { if (form.elements[k]) form.elements[k].value = String(v.cfg[k]); });
+    now.textContent = 'Now: ' + line(v.cfg) + (v.at ? ' · last change ' + when(v.at) + (v.by ? ' by ' + v.by : '') : ' · the defaults') + '.';
+    list.textContent = '';
+    (v.audit || []).forEach(function (a) {
+      var li = document.createElement('li');
+      li.textContent = when(a.at) + ' · ' + (a.admin || '?') + (a.to ? ' · ' + line(a.to) : '') + (a.reason ? ' · ' + a.reason : '');
+      list.appendChild(li);
+    });
+  }
+  function send(body) {
+    if (busy) return;
+    busy = true; say('Saving…', true);
+    req(body).then(function (d) {
+      render(d.view); form.elements.reason.value = '';
+      say(d.unchanged ? 'Nothing changed.' : 'Saved - applies to the next clip.', true);
+    }).catch(function (e) {
+      say(e.message, false);
+      if (e.field && form.elements[e.field]) { try { form.elements[e.field].focus(); } catch (x) { /* fine */ } }
+    }).then(function () { busy = false; });
+  }
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var body = { reason: form.elements.reason.value.trim() };
+    NAMES.forEach(function (k) { body[k] = form.elements[k].value.trim(); });
+    send(body);
+  });
+  document.getElementById('ptReset').addEventListener('click', function () {
+    if (!window.confirm('Put the push-to-talk clip limits back to the defaults?')) return;
+    send({ reset: true, reason: form.elements.reason.value.trim() });
+  });
+  req().then(render).catch(function (e) { say(e.message, false); });
+})();
+</script>
+
 <section class="adm-card" id="room-dock" aria-labelledby="paddockTitle">
   <h2 id="paddockTitle"><span class="ds-ic" aria-hidden="true">🧭</span> <%= _dt('js.pad.dock.admin.title', 'Room Dock') %></h2>
   <p class="adm-help"><%= _dt('js.pad.dock.admin.hint', 'A compact Live view for bridged pads. Off by default; reload open pads after changing the audience.') %></p>

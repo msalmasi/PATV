@@ -5047,7 +5047,6 @@
   "js.pad.relay.unreachable": "साइट तक नहीं पहुँच सके",
   "js.pad.relay.placeholder": "कुछ कहें — Pepe इसे “🌐 आप (web)” के रूप में आगे भेजता है",
   "js.pad.ptt.hold": "🎙 बोलने के लिए दबाकर रखें",
-  "js.pad.ptt.upto": "20 सेकंड तक · माइक खाली होने पर Pepe इसे माइक पर चलाता है",
   "js.pad.ptt.rec_tap": "⏺ रिकॉर्ड हो रहा है — भेजने के लिए टैप करें",
   "js.pad.audio.volume": "वॉल्यूम",
   "js.pad.audio.jump": "लाइव पर जाएँ",

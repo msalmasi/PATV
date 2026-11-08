@@ -4976,7 +4976,6 @@
   "js.pad.relay.unreachable": "サイトに接続できませんでした",
   "js.pad.relay.placeholder": "何か話そう — Pepeが「🌐 あなた (web)」として中継します",
   "js.pad.ptt.hold": "🎙 押して話す",
-  "js.pad.ptt.upto": "最大20秒 · マイクが空いたらPepeが流します",
   "js.pad.ptt.rec_tap": "⏺ 録音中 — タップで送信",
   "js.pad.audio.volume": "音量",
   "js.pad.audio.jump": "ライブに移動",

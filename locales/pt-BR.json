@@ -5081,7 +5081,6 @@
   "js.pad.relay.unreachable": "não foi possível conectar ao site",
   "js.pad.relay.placeholder": "Diga algo — o Pepe repassa como “🌐 você (web)”",
   "js.pad.ptt.hold": "🎙 Segure para falar",
-  "js.pad.ptt.upto": "até 20 s · o Pepe toca no microfone quando estiver livre",
   "js.pad.ptt.rec_tap": "⏺ Gravando — toque para enviar",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Ir para o ao vivo",

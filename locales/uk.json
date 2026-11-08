@@ -5189,7 +5189,6 @@
   "js.pad.relay.unreachable": "не вдалося з’єднатися із сайтом",
   "js.pad.relay.placeholder": "Напиши щось — Pepe передасть це як «🌐 ти (web)»",
   "js.pad.ptt.hold": "🎙 Утримуй, щоб говорити",
-  "js.pad.ptt.upto": "до 20 с · Pepe відтворить це на мікрофоні, коли він звільниться",
   "js.pad.ptt.rec_tap": "⏺ Запис — торкнися, щоб надіслати",
   "js.pad.audio.volume": "Гучність",
   "js.pad.audio.jump": "Перейти до прямого ефіру",

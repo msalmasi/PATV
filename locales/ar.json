@@ -5331,7 +5331,6 @@
   "js.pad.relay.unreachable": "تعذّر الوصول إلى الموقع",
   "js.pad.relay.placeholder": "قل شيئًا — ينقله Pepe باسم «🌐 أنت (ويب)»",
   "js.pad.ptt.hold": "🎙 اضغط مطولًا للتحدث",
-  "js.pad.ptt.upto": "حتى 20 ث · يشغّله Pepe على المايك عندما يكون متاحًا",
   "js.pad.ptt.rec_tap": "⏺ جارٍ التسجيل — اضغط للإرسال",
   "js.pad.audio.volume": "مستوى الصوت",
   "js.pad.audio.jump": "انتقل إلى المباشر",

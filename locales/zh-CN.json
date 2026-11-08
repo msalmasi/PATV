@@ -4976,7 +4976,6 @@
   "js.pad.relay.unreachable": "无法连接网站",
   "js.pad.relay.placeholder": "说点什么——Pepe 会以“🌐 你（网页）”转发",
   "js.pad.ptt.hold": "🎙 按住说话",
-  "js.pad.ptt.upto": "最长 20 秒 · 麦空闲时 Pepe 会在麦上播放",
   "js.pad.ptt.rec_tap": "⏺ 录音中——点按发送",
   "js.pad.audio.volume": "音量",
   "js.pad.audio.jump": "跳到实时",

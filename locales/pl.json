@@ -5189,7 +5189,6 @@
   "js.pad.relay.unreachable": "nie udało się połączyć z serwisem",
   "js.pad.relay.placeholder": "Napisz coś — Pepe przekaże to jako „🌐 ty (web)”",
   "js.pad.ptt.hold": "🎙 Przytrzymaj, by mówić",
-  "js.pad.ptt.upto": "do 20 s · Pepe puści to na mikrofonie, gdy będzie wolny",
   "js.pad.ptt.rec_tap": "⏺ Nagrywanie — dotknij, by wysłać",
   "js.pad.audio.volume": "Głośność",
   "js.pad.audio.jump": "Przejdź do na żywo",

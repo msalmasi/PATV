@@ -1891,6 +1891,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
+            pttMax: require("./pttlimits").current().max_secs,   // pttlimits: the 🎙 recorder stops here (/admin/bridge "Push-to-talk clips")
             stickers: R.stickers === true,
             cfstickerPicker, gifPicker,
             // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer

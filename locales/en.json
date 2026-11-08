@@ -4969,7 +4969,7 @@
   "js.pad.relay.unreachable": "couldn't reach the site",
   "js.pad.relay.placeholder": "Say something — Pepe relays it as “🌐 you (web)”",
   "js.pad.ptt.hold": "🎙 Hold to talk",
-  "js.pad.ptt.upto": "up to 20 s · Pepe plays it on the mic when it's free",
+  "js.pad.ptt.upto_n": "up to {n} s · Pepe plays it on the mic when it's free",
   "js.pad.ptt.rec_tap": "⏺ Recording — tap to send",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Jump to live",

@@ -4977,7 +4977,6 @@
   "js.pad.relay.unreachable": "ติดต่อเว็บไซต์ไม่ได้",
   "js.pad.relay.placeholder": "พูดอะไรสักอย่าง — Pepe จะส่งต่อเป็น “🌐 คุณ (เว็บ)”",
   "js.pad.ptt.hold": "🎙 กดค้างเพื่อพูด",
-  "js.pad.ptt.upto": "สูงสุด 20 วิ · Pepe จะเล่นบนไมค์เมื่อไมค์ว่าง",
   "js.pad.ptt.rec_tap": "⏺ กำลังบันทึก — แตะเพื่อส่ง",
   "js.pad.audio.volume": "ระดับเสียง",
   "js.pad.audio.jump": "ไปที่สด",

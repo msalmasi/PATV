@@ -5049,7 +5049,6 @@
   "js.pad.relay.unreachable": "siteye ulaşılamadı",
   "js.pad.relay.placeholder": "Bir şey yaz — Pepe bunu “🌐 sen (web)” olarak aktarır",
   "js.pad.ptt.hold": "🎙 Konuşmak için basılı tut",
-  "js.pad.ptt.upto": "en fazla 20 sn · mikrofon boşalınca Pepe çalar",
   "js.pad.ptt.rec_tap": "⏺ Kaydediliyor — göndermek için dokun",
   "js.pad.audio.volume": "Ses düzeyi",
   "js.pad.audio.jump": "Canlıya geç",

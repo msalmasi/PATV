@@ -5047,7 +5047,6 @@
   "js.pad.relay.unreachable": "Seite nicht erreichbar",
   "js.pad.relay.placeholder": "Sag etwas — Pepe leitet es als „🌐 du (web)“ weiter",
   "js.pad.ptt.hold": "🎙 Halten zum Sprechen",
-  "js.pad.ptt.upto": "bis zu 20 s · Pepe spielt es am Mikro ab, wenn es frei ist",
   "js.pad.ptt.rec_tap": "⏺ Aufnahme — tippen zum Senden",
   "js.pad.audio.volume": "Lautstärke",
   "js.pad.audio.jump": "Zu live springen",

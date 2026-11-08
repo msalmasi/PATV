@@ -4976,7 +4976,6 @@
   "js.pad.relay.unreachable": "無法連線到網站",
   "js.pad.relay.placeholder": "說點什麼——Pepe 會以「🌐 你（網頁）」轉發",
   "js.pad.ptt.hold": "🎙 按住說話",
-  "js.pad.ptt.upto": "最長 20 秒 · 麥空出來時 Pepe 會在麥上播放",
   "js.pad.ptt.rec_tap": "⏺ 錄音中——點一下傳送",
   "js.pad.audio.volume": "音量",
   "js.pad.audio.jump": "跳到即時",

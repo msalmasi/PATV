@@ -6,8 +6,9 @@
 //                              at a time across every player on the page.
 //   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)");
 //                              a "!" line is a command Pepe runs as your Camfrog name (autocomplete + your private answers)
-//   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip (20 s max) Pepe plays on the room's mic when
-//                              it's free; shown only while the room's bridge_mic switch is on
+//   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip Pepe plays on the room's mic when it's free; shown only while
+//                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
+//                              clips", 30 s by default) - the live view's room.pttMax (pttlimits)
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
 //                              playing / played / couldn't get the mic) - also used by the tests
 // The player and push-to-talk share the page's audio session - see "the page's audio session" below
@@ -1293,7 +1294,14 @@
     };
   }
 
-  // ── push-to-talk clip: hold the button (or tap to start, tap again to send); 20 s max ──
+  // ── push-to-talk clip: hold the button (or tap to start, tap again to send); up to the site's max length ──
+  // pttlimits: the max length is the admin setting (/admin/bridge "Push-to-talk clips"), sent with every live view as room.pttMax -
+  // the recorder stops there and the idle line says it (js.pad.ptt.upto_n). Before the first view (or from an older site): PTT_DEF.
+  var PTT_DEF = 30, PTT_LO = 3, PTT_HI = 120;
+  function pttMaxOf(d) {
+    var n = Number(d && d.room && d.room.pttMax);
+    return isFinite(n) && n >= PTT_LO && n <= PTT_HI ? Math.floor(n) : PTT_DEF;
+  }
   // What the clip line says for the user's latest clip job (mineFor). Pepe (1.99bk) acks the steps:
   // queued -> waiting (someone else holds the mic) -> playing -> done: "played", or not ok with
   // "couldn't get the mic ..." after a patient wait. Older Pepes ack once ("queued ...") then again
@@ -1330,7 +1338,9 @@
   function ptt(host, slug) {
     var box = el('div', 'rb-ptt hide');
     var btn = el('button', 'rb-btn rb-talk', _t('js.pad.ptt.hold', '🎙 Hold to talk')); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
-    var txt = el('span', 'rb-ptt-txt rb-ptt-idle', _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free'));
+    var maxS = PTT_DEF;                       // pttlimits: the site's max length (update() reads room.pttMax)
+    function uptoText() { return _t('js.pad.ptt.upto_n', 'up to {n} s · Pepe plays it on the mic when it\'s free', { n: maxS }); }
+    var txt = el('span', 'rb-ptt-txt rb-ptt-idle', uptoText());
     txt.setAttribute('aria-live', 'polite');
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
     // 1.99bx: which mic (shown once the browser has named them - after the first clip - and only
@@ -1429,7 +1439,7 @@
         if (myRequest !== requestGen || (upAt && upAt - pressAt > 400) || (host.ownerDocument || activeDoc || document).hidden || box.classList.contains('hide')) {
           release();
           txt.classList.toggle('rb-ptt-idle', !upAt);
-          txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free');
+          txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : uptoText();
           return;
         }
         var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
@@ -1448,7 +1458,7 @@
         btn.setAttribute('aria-pressed', 'true');
         btn.textContent = tapMode ? _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send') : _t('js.pad.ptt.rec_release', '⏺ Recording — release to send');
         txt.textContent = _t('js.pad.ptt.recording', 'recording…');
-        recTimer = setTimeout(stop, 20000);
+        recTimer = setTimeout(stop, maxS * 1000);   // pttlimits: the site's max length (was a fixed 20 s)
       }).catch(function () { opening = false; release(); txt.textContent = _t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'); });
     }
     function up() {
@@ -1477,6 +1487,11 @@
         var on = !!(d && d.room && d.room.micRelay) && can;
         box.classList.toggle('hide', !on);
         if (!on) stop();
+        // pttlimits: the max length the site says now - the idle line follows (a clip being recorded keeps the timer it started with)
+        if (d && d.room) {
+          var mx = pttMaxOf(d);
+          if (mx !== maxS) { maxS = mx; if (txt.classList.contains('rb-ptt-idle')) txt.textContent = uptoText(); }
+        }
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         if (k === last) return;
         last = k;
