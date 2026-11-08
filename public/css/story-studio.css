@@ -39,7 +39,16 @@
   padding: var(--ds-sp-3); border: 0; border-start-start-radius: var(--ds-r-lg); border-start-end-radius: var(--ds-r-lg); box-shadow: var(--ds-e-0) !important; background: linear-gradient(var(--ds-media-chip), transparent); }
 .sst .sst-head .ds-pixel-h { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.7; text-shadow: 0 1px 3px var(--ds-media-bg); }
 .sst .sst-head .ds-btn { background: var(--ds-media-chip); border-color: transparent; border-radius: var(--ds-r-pill); }
-.sst .sst-lifetime { flex: none; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 11px; white-space: nowrap; }
+.sst .sst-lifetime { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 11px; white-space: nowrap; }
+/* storywide verify: a stage the keyboard narrows (fit(): G.STAGE.tight / tiny) keeps a clip's whole header - X, 🔇, ⚙️ - inside it:
+   the 24 h pill goes first (⚙️ says it again: "Visible for 24 hours"), then the title's words, the gaps, the padding and (tiny)
+   the buttons tighten */
+.sst.sst-head-tight .sst-head { gap: var(--ds-sp-1); padding: var(--ds-sp-2); }
+.sst.sst-head-tight .sst-lifetime { display: none; }
+.sst.sst-head-tight .sst-head .ds-pixel-h { color: transparent; text-shadow: none; }   /* (still the space between the X and the rest, and still the heading for a screen reader - never a sliver of "Y…") */
+.sst.sst-head-tiny .sst-head { padding: var(--ds-sp-1h); }
+.sst.sst-head-tiny .sst-head .ds-btn.sst-round { inline-size: 36px; min-inline-size: 36px; block-size: 36px; min-block-size: 36px; }
+.sst.sst-head-tiny .sst-head .ds-btn.sst-round .ds-ic { font-size: 17px; }
 /* storyux: every icon button is a circle with its icon only (its words are its aria-label and tooltip) */
 .sst .ds-btn.sst-round { display: inline-grid; place-items: center; flex: none; inline-size: 40px; min-inline-size: 40px; block-size: 40px; min-block-size: 40px; padding: 0; border-radius: 50%; line-height: 1; }
 .sst .ds-btn.sst-round .ds-ic { font-size: 18px; line-height: 1; }
@@ -52,7 +61,7 @@
 .sst .ds-btn.sst-playbtn .ds-ic { font-size: 30px; }
 /* the tools: a column inside the stage's end edge, under the header (as in IG); it scrolls on a stage too short for all of them */
 .sst .sst-tools { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 64px); inset-inline-end: calc(var(--sst-sr, 0px) + var(--ds-sp-2)); z-index: var(--ds-z-sticky); display: flex; flex-direction: column; justify-content: flex-start;
-  gap: var(--ds-sp-3); padding: var(--ds-sp-1); border: 0; max-block-size: calc(var(--sst-sh, 100%) - 76px - var(--sst-cover, 0px)); overflow: auto; }
+  gap: var(--ds-sp-3); padding: var(--ds-sp-1); border: 0; max-block-size: calc(var(--sst-sh, 100%) - 76px - var(--sst-cover, 0px) - var(--sst-stack, 0px)); overflow: auto; }
 .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line); box-shadow: var(--ds-e-1); }
 .sst .sst-tools .ds-btn.sst-round:focus-visible { box-shadow: var(--ds-focus-ring), var(--ds-e-1); }
 .sst .sst-tools .ds-ic { font-size: 22px; }
@@ -64,9 +73,10 @@
 .sst:not(.sst-has-media) .sst-tools, .sst:not(.sst-video) [data-tool="trim"] { display: none; }
 /* beside a stage too narrow to hold them (a phone on its side): the header across the screen's top and the tools next to the
    stage, wholly in the margins */
+/* (storywide verify: the side insets as fit() measures them - --sst-is / --sst-ie follow the page's direction, env() doesn't) */
 .sst.sst-framed .sst-head { inset-block-start: 0; inset-inline: 0; inline-size: auto; padding-block: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)) var(--ds-sp-4);
-  padding-inline: max(var(--ds-sp-3), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); border-start-start-radius: 0; border-start-end-radius: 0; background: none; }
-.sst.sst-framed .sst-head .ds-pixel-h { flex: 0 1 auto; max-inline-size: calc(var(--sst-sx, 0px) - 76px); }
+  padding-inline: max(var(--ds-sp-3), var(--sst-is, 0px), var(--sst-ie, 0px)); border-start-start-radius: 0; border-start-end-radius: 0; background: none; }
+.sst.sst-framed .sst-head .ds-pixel-h { flex: 0 1 auto; max-inline-size: calc(var(--sst-sx, 0px) - max(var(--ds-sp-3), var(--sst-is, 0px), var(--sst-ie, 0px)) - 64px); }
 .sst.sst-framed .sst-lifetime { margin-inline-start: auto; }
 .sst.sst-framed .sst-tools { inset-block-start: calc(64px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-2), calc(var(--sst-sr, 0px) - 64px)); max-block-size: calc(100% - 76px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 /* storyux: the stage - a picture to drag and pinch (no page scroll, zoom, text selection or long-press callout under it) */
@@ -98,18 +108,29 @@
 /* the X's quiet question: discard the edits? (in the editor, never a browser dialog) - under the header, inside the stage */
 .sst .sst-ask { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 68px); inset-inline: calc(var(--sst-sx, 0px) + var(--ds-sp-3)) calc(var(--sst-sr, 0px) + var(--ds-sp-3)); z-index: var(--ds-z-pop);
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); padding: var(--ds-sp-2) var(--ds-sp-4); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); background: var(--ds-media-panel); box-shadow: var(--ds-e-3); }
+/* storywide verify: clear of the rail (8 px in from the stage's edge, 4 + 44 + 4 px wide) by 8 px more; its buttons wrap their words
+   (a long label stays inside a narrow stage) */
+.sst.sst-bleed.sst-has-media .sst-ask { inset-inline-end: calc(var(--sst-sr, 0px) + 68px); }
+.sst .sst-ask .ds-btn { white-space: normal; min-inline-size: 0; max-inline-size: 100%; overflow-wrap: break-word; text-align: center; }
 .sst .sst-ask p { flex: 1 1 140px; margin: 0; font-size: 14px; font-weight: 700; }
 .sst .sst-ask-go { background: var(--ds-danger-solid); border-color: transparent; color: var(--ds-text-strong); }
 .sst .sst-mention { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); inline-size: max-content; max-inline-size: 90%; padding: var(--ds-sp-1) var(--ds-sp-2); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4) var(--ds-sp-8); color: var(--ds-text-muted); font-size: 14px;
+/* (storywide verify: its words centred over Camera / Gallery - 24 px + 104 px, the Camera and its ring, + 8 px over the post row
+   and what stacks over it) */
+.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; color: var(--ds-text-muted); font-size: 14px;
+  padding: var(--ds-sp-4) var(--ds-sp-8) calc(var(--sst-cover, 0px) + var(--sst-stack, 0px) + 136px);
   background: radial-gradient(ellipse at 50% 35%, var(--ds-ac-bg), transparent 65%); }
 /* (ssfix: .ds-ic is a fixed 1.25em box - as a grid item it sat at the start of the column the words make, not over them) */
 .sst .sst-empty .ds-ic { font-size: 36px; }
 .sst .sst-empty > .ds-ic { font-size: 48px; }
 .sst .sst-empty p { font-size: 20px; color: var(--ds-text-strong); line-height: 1.4; max-inline-size: 220px; margin: 0 auto; }
-/* the empty stage's Camera and Gallery: inside it, above the post row */
-.sst .sst-picks { position: absolute; inset-inline: var(--sst-sx, 0px) var(--sst-sr, 0px); inset-block-end: calc(var(--sst-sb, 0px) + var(--sst-cover, 0px) + var(--ds-sp-6)); z-index: var(--ds-z-raised);
+/* the empty stage's Camera and Gallery: inside it, above the post row - storywide verify: and above what stacks over it (--sst-stack:
+   the camera's reason, Loading…), with the words centred over them; beside a narrow stage that stack is in the margin, and the post
+   row's band is empty there (its ends in the margins, no Post): only the stage's own foot */
+.sst .sst-picks { position: absolute; inset-inline: var(--sst-sx, 0px) var(--sst-sr, 0px); inset-block-end: calc(var(--sst-sb, 0px) + var(--sst-cover, 0px) + var(--sst-stack, 0px) + var(--ds-sp-6)); z-index: var(--ds-z-raised);
   display: flex; align-items: center; justify-content: center; gap: var(--ds-sp-6); }
+.sst.sst-framed .sst-picks { inset-block-end: calc(var(--sst-sb, 0px) + var(--ds-sp-6)); }
+.sst.sst-framed .sst-empty { padding-block-end: 136px; }
 .sst .sst-picks .ds-btn.sst-round { inline-size: 64px; min-inline-size: 64px; block-size: 64px; min-block-size: 64px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; }
 .sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 26px; }
 .sst .sst-picks .ds-btn.sst-round[data-picker="camera"] { order: 1; inline-size: 88px; min-inline-size: 88px; block-size: 88px; min-block-size: 88px; border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
@@ -119,8 +140,15 @@
 .sst .sst-status, .sst .sst-recovery, .sst .sst-progress, .sst .sst-foot { position: relative; z-index: var(--ds-z-raised); flex: none; }
 .sst.sst-dock-over .sst-foot { pointer-events: none; background: linear-gradient(transparent, var(--ds-media-chip)); border-end-start-radius: var(--ds-r-lg); border-end-end-radius: var(--ds-r-lg); }
 .sst.sst-dock-over .sst-foot .ds-btn { pointer-events: auto; }
-.sst.sst-framed.ds-scrim.sheet .sst-card { padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }   /* the post row across the screen: its two ends in the margins */
-.sst.sst-framed .sst-foot { border-end-start-radius: 0; border-end-end-radius: 0; }
+.sst.sst-framed.ds-scrim.sheet .sst-card { padding-inline: var(--sst-is, 0px) var(--sst-ie, 0px); }   /* the post row across the screen: its two ends in the margins */
+.sst.sst-framed .sst-foot { border-end-start-radius: 0; border-end-end-radius: 0; background: none; }   /* (storywide verify: its ends are over the dark margins - no scrim across the picture) */
+/* storywide verify: the status, the progress and the recovery are light plates over the picture's foot - inset, rounded, see-through
+   (the header's chips' tint, the picture blurred under it) - never a black bar across it; a touch on them, between their buttons,
+   still pans or pinches the picture. Beside a narrow stage they sit wholly in its start margin, over the post row's start */
+.sst .sst-status, .sst .sst-recovery, .sst .sst-progress { pointer-events: none; }
+.sst .sst-recovery .ds-btn, .sst .sst-progress .ds-btn { pointer-events: auto; }
+.sst .sst-status:not(:empty), .sst .sst-recovery, .sst .sst-progress { margin: 0 var(--ds-sp-3) var(--ds-sp-2); border-radius: var(--ds-r-lg); background: var(--ds-media-chip); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.sst.sst-framed .sst-status:not(:empty), .sst.sst-framed .sst-recovery, .sst.sst-framed .sst-progress { align-self: flex-start; inline-size: calc(var(--sst-sx, 0px) - var(--sst-is, 0px) - 2 * var(--ds-sp-3)); margin-inline: var(--ds-sp-3) 0; }
 .sst .sst-decision { display: flex; gap: var(--ds-sp-2); align-items: center; justify-content: space-between; }
 .sst .sst-destination { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; justify-content: flex-start; padding: var(--ds-sp-1) var(--ds-sp-3) var(--ds-sp-1) var(--ds-sp-1); text-align: start; min-inline-size: 0; max-inline-size: 60%; }
 .sst .sst-destination > span { display: grid; min-inline-size: 0; }
@@ -132,9 +160,11 @@
 .sst:not(.sst-has-media) .sst-post { display: none; }
 .sst:not(.sst-has-media) .sst-destination { max-inline-size: 100%; }
 .sst .sst-identity { margin: var(--ds-sp-1) 0 0; margin-inline-start: var(--ds-sp-2); color: var(--ds-text); text-align: start; font-size: 11px; overflow-wrap: anywhere; text-shadow: 0 1px 2px var(--ds-media-bg); }
-.sst.sst-framed .sst-destination { max-inline-size: calc(var(--sst-sx, 0px) - 2 * var(--ds-sp-3)); }
-.sst.sst-framed .sst-identity { max-inline-size: calc(var(--sst-sx, 0px) - 3 * var(--ds-sp-3)); }
-.sst.sst-framed .sst-post { max-inline-size: calc(var(--sst-sr, 0px) - 2 * var(--ds-sp-3)); }
+/* storywide verify: beside a narrow stage the post row's ends stay in the margins, clear of a side notch (--sst-is / --sst-ie) and
+   of the stage; Post story ends short of the rail (12-64 px past the stage's end edge), wrapping its words */
+.sst.sst-framed .sst-destination { max-inline-size: calc(var(--sst-sx, 0px) - var(--sst-is, 0px) - 2 * var(--ds-sp-3)); }
+.sst.sst-framed .sst-identity { max-inline-size: calc(var(--sst-sx, 0px) - var(--sst-is, 0px) - 3 * var(--ds-sp-3)); }
+.sst.sst-framed .sst-post { min-inline-size: min(110px, calc(var(--sst-sr, 0px) - var(--sst-ie, 0px) - 76px)); max-inline-size: calc(var(--sst-sr, 0px) - var(--sst-ie, 0px) - 76px); overflow-wrap: break-word; }
 .sst .sst-rules a, .sst .sst-sheet a { color: var(--ds-ac-2); }
 .sst .sst-status { font-size: 13px; padding-inline: var(--ds-sp-4); overflow-wrap: anywhere; }
 .sst .sst-status:not(:empty) { padding-block: var(--ds-sp-2); }
@@ -142,9 +172,6 @@
 .sst .sst-recovery, .sst .sst-progress { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-4); }
 .sst .sst-recovery .ds-btn { white-space: normal; }
 .sst .sst-progress progress { flex: 1; accent-color: var(--ds-ac); inline-size: 0; }
-.sst .sst-status, .sst .sst-progress, .sst .sst-recovery { background: var(--ds-media-bg); }
-/* (ssfix: an error keeps its plate on a phone too - a bare red line under the picture read as nothing having happened) */
-.sst .sst-status.sst-error { background: var(--ds-danger-bg); }
 .sst.sst-busy .sst-tools, .sst.sst-busy .sst-picks { display: none; }
 /* the sheets float over the picture from the bottom (as wide as the stage, at least 420 px), so opening a tool never changes the
    composition; the selection's handles stay usable above them */
@@ -166,7 +193,10 @@
 .sst.sst-has-sheet .sst-tools, .sst.sst-has-sheet .sst-picks { display: none; }
 /* a sheet over the picture: a status says itself under the header, inside the stage */
 .sst.sst-has-sheet .sst-status:not(:empty) { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 68px); inset-inline: calc(var(--sst-sx, 0px) + var(--ds-sp-3)) calc(var(--sst-sr, 0px) + var(--ds-sp-3)); z-index: var(--ds-z-pop);
-  border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
+  inline-size: auto; margin: 0; align-self: auto; border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
+/* (ssfix: an error keeps its plate on a phone too - a bare red line under the picture read as nothing having happened.
+   storywide verify: over the picture its red tint lies on the dark text plate - a 10% tint alone left it unreadable on a bright photo) */
+.sst .sst-status.sst-error:not(:empty) { background: linear-gradient(var(--ds-danger-bg), var(--ds-danger-bg)), var(--ds-media-panel); border: 1px solid var(--ds-danger-line); }
 .sst .sst-field { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 140px; min-inline-size: 0; }
 .sst .sst-field .ds-label { font-size: 11px; text-transform: none; letter-spacing: normal; }
 .sst .sst-field .ds-in { min-inline-size: 0; inline-size: 100%; }
