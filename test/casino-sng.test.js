@@ -1,4 +1,4 @@
-// h22 phase 1 (1.99??): Sit & Go tournaments for Hold'em (casino/tourney.js) on the real casino service + the real escrow ledger,
+// h22 phase 1 (1.99alz): Sit & Go tournaments for Hold'em (casino/tourney.js) on the real casino service + the real escrow ledger,
 // a fake clock and a temporary database:
 //   * the switch casino_sng (off by default / staff / everyone), Hold'em itself must be on; the settings validated
 //   * register / unregister / start when full / start at N with its 60 s countdown; the entry = ONE TNY escrow hold of buy-in + fee
@@ -671,7 +671,7 @@ test("a call-off whose refunds fail is tried again a minute later (not on every 
   assert.equal(await bal("u1"), 100000);
 });
 
-// ── h22 review (1.99??): what the review found, each pinned ──
+// ── h22 review (1.99alz): what the review found, each pinned ──
 const roomP = (p, r) => Object.assign({}, p, { via: "room", room: r || "Lab" });
 const eventsOf = async (tid) => (await getQuery("SELECT kind, data FROM casino_events WHERE table_id = ? ORDER BY seq", [tid]))
   .map((r) => Object.assign({ kind: r.kind }, JSON.parse(r.data)));

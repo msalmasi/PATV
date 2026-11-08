@@ -44,7 +44,7 @@ const GAMES = ["wagers", "bounties", "pools", "loans"];
 //   CRS creator subscription period, CRP pay-per-view unlock (CRT ticket, CRM paid message request: reserved for P2)
 //   1.99xk 🎫 PAT Raffles (raffles.js): RFT ticket purchase, RFP a creator's PAT prize, RFI a creator's Prize Shop item price
 //   1.99ajn padppl 🎁 VGF a gift to a frog name, held until its recipient accepts it (veilgift.js)
-//   1.99?? h22 🏁 TNY a Sit & Go entry (buy-in + fee), held until the finish's one settle or a full refund (casino/tourney.js)
+//   1.99alz h22 🏁 TNY a Sit & Go entry (buy-in + fee), held until the finish's one settle or a full refund (casino/tourney.js)
 const SERVICE_KINDS = Object.freeze(["CRS", "CRP", "CRT", "CRM", "RFT", "RFP", "RFI", "VGF", "TNY"]);
 const PEPE_SQL = `kind NOT IN (${SERVICE_KINDS.map((k) => `'${k}'`).join(",")})`;
 const isServiceKind = (k) => SERVICE_KINDS.includes(String(k || ""));

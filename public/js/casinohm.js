@@ -5,7 +5,7 @@
 // face down for everyone else), the showdown reveal and winner pops, an action bar with a bet slider + presets and a
 // countdown ring on the server's deadline, pre-moves, sizing grammar, sit-out and time-bank controls.
 // Buy-in / top-up and every move post with an idempotency key. My hands replays only your completed hands.
-// h22 (1.99??): at a 🏁 Sit & Go (table.tourney) the header above the felt shows the level, the blinds, the time to the next level,
+// h22 (1.99alz): at a 🏁 Sit & Go (table.tourney) the header above the felt shows the level, the blinds, the time to the next level,
 // the players left and the prize table (while it registers: who's in, the countdown, Register / Unregister), the results card the end;
 // there is no buy-in, top-up, stand-up or deal button there (tournament chips aren't PAT).
 (function () {
@@ -220,7 +220,7 @@
     first = false;
   }
 
-  // ── h22 (1.99??): a 🏁 Sit & Go's header and its results card (table.tourney, casino/tourney.js) ──
+  // ── h22 (1.99alz): a 🏁 Sit & Go's header and its results card (table.tourney, casino/tourney.js) ──
   function sngHead(t, me) {
     const head = $("cz-snghead"), res = $("cz-sngres");
     if (!head || !res) return;

@@ -15,7 +15,7 @@
 // 1.99ov: High Rollers no longer buy in over a table's maximum. Instead, 💎 High Roller TABLES: blinds from the HR_LADDER
 // (100K/200K up to 5M/10M; nothing between the normal cap and the ladder) - only High Rollers open them or sit, anyone
 // watches.
-// h22 (1.99??): a 🏁 SIT & GO is a table of this file with a `tourney` block (casino/tourney.js owns it - core.tny()): no rake, no
+// h22 (1.99alz): a 🏁 SIT & GO is a table of this file with a `tourney` block (casino/tourney.js owns it - core.tny()): no rake, no
 // buy-in / cash-out / close / idle close / sit-out limit for its seats, the level's blinds set just before each hand, a seat sitting
 // out when a hand is dealt checking / folding at once (blinded away; !sitout mid-hand starts with the next hand, and an out seat never
 // spends its time bank), its bust-outs placed by tourney.js after each hand's proof, and a wrap-up that threw part-way run again by the

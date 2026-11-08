@@ -12,7 +12,7 @@
 //     would take the House below its hard floor. A stake (bet / double / split / insurance) is journalled as an INTENT
 //     before it is charged; boot() refunds a charged intent that never made it into the table.
 //   * One mutex serialises every mutation (all tables). One 250 ms tick runs the deadlines.
-//   * h22 (1.99??): 🏁 Sit & Gos (casino/tourney.js, TN) are Hold'em tables with a `tourney` block, on the same core: run() sends
+//   * h22 (1.99alz): 🏁 Sit & Gos (casino/tourney.js, TN) are Hold'em tables with a `tourney` block, on the same core: run() sends
 //     game "sng" there, their settings live with the others (casino_sng off | staff | everyone + sng_*), their hands earn no casino
 //     rewards (hmRewards), they're kept out of the cash lobby / Pepe's open-table list, and a finished one lingers LINGER_MS for its results.
 "use strict";

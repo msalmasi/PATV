@@ -1,4 +1,4 @@
-// casino/tourney.js — 🏁 Sit & Go tournaments for Hold'em (hand-off 22, phase 1, 1.99??; docs/casino-backend.md "Sit & Go").
+// casino/tourney.js — 🏁 Sit & Go tournaments for Hold'em (hand-off 22, phase 1, 1.99alz; docs/casino-backend.md "Sit & Go").
 //
 // A sit & go IS one Hold'em table (casino/holdem.js, game "holdem") with a `tourney` block on it, so the table page, the action bar,
 // pre-moves, the time bank, the stream slot, Pepe's poll + OBS board, the veil masks and the fairness proofs work as at a cash table.

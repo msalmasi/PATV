@@ -41,7 +41,7 @@ async function casinoHeld() {
     try { T = JSON.parse(r.state); } catch (e) { T = null; }
     if (!T) continue;
     if (r.game === "holdem") {
-      if (T.tourney) continue;          // h22 (1.99??): a 🏁 Sit & Go's stacks are tournament chips - its PAT is the TNY escrow holds (escrow rows)
+      if (T.tourney) continue;          // h22 (1.99alz): a 🏁 Sit & Go's stacks are tournament chips - its PAT is the TNY escrow holds (escrow rows)
       const e = T.eng || {};
       for (const v of Object.values(e.chips || {})) n += Math.max(0, Math.floor(Number(v) || 0));
       for (const v of Object.values(e.contrib || {})) n += Math.max(0, Math.floor(Number(v) || 0));

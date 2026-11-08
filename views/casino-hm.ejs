@@ -5,7 +5,7 @@
     spelled out, your hole cards only to you (face down for everyone else), an action bar with a bet slider and presets and
     a countdown ring on the server's deadline, the buy-in / top-up sheet, the showdown reveal, history with the rake,
     spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinohm.js.
-    h22 (1.99??): 🏁 Sit & Go - the lobby's section + its Create sheet (casino-ui.js), a sit & go table's header + results card
+    h22 (1.99alz): 🏁 Sit & Go - the lobby's section + its Create sheet (casino-ui.js), a sit & go table's header + results card
     (casinohm.js); each in one marked block below. %>
 <%- include('partials/casino-css') %>
 <%# 1.99ajw casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
@@ -117,7 +117,7 @@
 <main class="ds-page flow cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>" data-user="<%= signedIn && user ? user : '' %>">
   <%- include('partials/casino-top', { t, game: 'holdem', tableId }) %>
   <% if (!tableId) { %><%- include('partials/casino-lobby', { t, game: 'holdem', bjOn: locals.bjOn, hmOn: locals.hmOn }) %>
-  <%# ── h22 (1.99??): 🏁 Sit & Go - the lobby's section (casino-ui.js moves it after the tables) and the Create sheet ── %>
+  <%# ── h22 (1.99alz): 🏁 Sit & Go - the lobby's section (casino-ui.js moves it after the tables) and the Create sheet ── %>
   <section class="sng-sec" id="cz-sng" hidden aria-labelledby="cz-sng-h">
     <h2 class="lob-h sng" id="cz-sng-h"><%- t('casino.sng_h') %></h2>
     <p class="sng-note" id="cz-sng-note"><%- t('casino.sng_note') %></p>
@@ -146,7 +146,7 @@
   <% } else { %>
   <section id="cz-table" hidden>
     <a class="back" href="/casino/holdem">← <%- t('casino.all_tables') %></a>
-    <%# h22 (1.99??): a 🏁 Sit & Go's header (level, blinds, next level, players left, prizes; while it registers: who's in, Register /
+    <%# h22 (1.99alz): a 🏁 Sit & Go's header (level, blinds, next level, players left, prizes; while it registers: who's in, Register /
         Unregister) and its results card - casinohm.js sngHead, hidden at a cash table %>
     <div class="sng-head" id="cz-snghead" hidden aria-live="off"></div>
     <div class="sng-res" id="cz-sngres" hidden></div>

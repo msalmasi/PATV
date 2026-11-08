@@ -2,7 +2,7 @@
 // animations by diffing what's on the felt), chips, avatars, countdown rings tied to the server's deadlines, the toast /
 // aria-live announcer, sheets (history, host tools), and the casino LOBBY (both games). casinobj.js and casinohm.js
 // draw their own tables on top of it. Strings: __t("js.casino.*", English default) - the defaults equal locales/en.json.
-// h22 (1.99??): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
+// h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
 (function () {
   "use strict";
@@ -461,7 +461,7 @@
     renderSng(j);
   }
 
-  // ── h22 (1.99??): 🏁 Sit & Go - the lobby's section and its Create sheet (/api/casino/lobby -> sng, casino/tourney.js). A card: seats
+  // ── h22 (1.99alz): 🏁 Sit & Go - the lobby's section and its Create sheet (/api/casino/lobby -> sng, casino/tourney.js). A card: seats
   // taken, the entry (buy-in + fee), the structure, the countdown or the level, the prizes; Register / Unregister (each with its own
   // idempotency key: a double click never holds twice) and Watch. Hidden on the blackjack tab and while the switch is off (unless one
   // is still open - leaving it always works).

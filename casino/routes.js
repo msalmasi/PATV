@@ -19,7 +19,7 @@
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables / bj_front / hm_front (site Admin, or the bot token)
 //                                            h22: + casino_sng (off | staff | everyone) / sng_fee_pct / sng_buyins / sng_payouts / sng_levels /
 //                                            sng_level_mins / sng_turbo_mins (validated: casino/tourney.js checkSetting)
-// h22 (1.99??) 🏁 Sit & Gos (casino/tourney.js; a sit & go's table is /casino/holdem/t/:id, its state GET /api/casino/t/:id -> table.tourney):
+// h22 (1.99alz) 🏁 Sit & Gos (casino/tourney.js; a sit & go's table is /casino/holdem/t/:id, its state GET /api/casino/t/:id -> table.tourney):
 //   GET  /api/casino/sng                    the lobby block (also GET /api/casino/lobby -> sng): {on, can_create, sizes, buyins, fee_pct, payouts,
 //                                            level_mins, turbo_mins, stack, countdown_secs, reg_mins, list: [rows]}
 //   POST /api/casino/sng/new                {size, buyin, turbo, start_at, idem}  open one (the creator is registered)

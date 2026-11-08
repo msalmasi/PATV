@@ -73,7 +73,7 @@ test("casino tables: stakes in a blackjack round and hold'em stacks + pot count;
   assert.equal(s.total, WANT + 1350);
 });
 
-// h22 review (1.99??): a 🏁 Sit & Go is a Hold'em table row too, but its stacks are TOURNAMENT CHIPS (casino/tourney.js) - the PAT
+// h22 review (1.99alz): a 🏁 Sit & Go is a Hold'em table row too, but its stacks are TOURNAMENT CHIPS (casino/tourney.js) - the PAT
 // behind them is the entries' TNY escrow holds, already counted with the escrow (escrow:holds / escrow:service). Counting the chips
 // as well would add a fake mint while it runs and a fake burn when it ends (supply history, issuance %, the econ page).
 test("casino tables: a sit & go's tournament chips are not PAT - never counted (its entries are escrow holds)", async () => {
