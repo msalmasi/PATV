@@ -3,10 +3,11 @@
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change,
    and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node).
    1.99amu micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
-   and Pepe check it: 1-20 characters, never starting with / or !, nothing his chat would change; empty = none). v3: that last check. */
+   and Pepe check it: 1-20 characters, never starting with / or !, nothing his chat would change; empty = none). v3: that last check.
+   1.99?? micreplies (v4): + -mic replies fast-grab (!mic fastgrab replies - his -mic command answers fast-grab too). */
 (function () {
   'use strict';
-  var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty', 'blockbreak', 'selfunblock'];
+  var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty', 'replies', 'blockbreak', 'selfunblock'];
   var TEXTS = ['unblockcode'], CODE_MAX = 20;
   var ARITY = { rate: 1, shots: 1, tries: 1, breaker: 3, pause: 4, fairwait: 2, ceiling: 1 };
   // [field, label, units (one per number), what it does]
@@ -17,6 +18,7 @@
     ['claim', 'Claim', null, "How a won grab meets Pepe's own Talk click: swallow (default), release, or plain (a staging drill)."],
     ['web', 'Push-to-talk web clips fast-grab', null, 'Web clips take the mic the instant it frees (no 2 s wait) and follow contest.'],
     ['chatty', 'Chatty mic-ups fast-grab', null, "Pepe's chatty lines fast-grab too."],
+    ['replies', '-mic replies fast-grab', null, '!ask / !roast / !look ... -mic answers fast-grab too (they already paid the -mic surcharge); a -mic !remind / !relay too.'],
     ['rate', 'Rate', ['grabs / min'], 'Grabs a minute Pepe may send in the room while contesting.'],
     ['shots', 'Shots', ['refused tries / clip'], 'Refused tries one clip may use in contest, then the normal grab.'],
     ['tries', 'Tries', ['a clip'], 'Fast-grab tries per clip the room can see (past 2: more lost races only).'],
@@ -30,7 +32,7 @@
   ];
   var FIELDS = ROWS.map(function (r) { return r[0]; });
   var LABELS = {}; ROWS.forEach(function (r) { LABELS[r[0]] = r[1]; });
-  var WORD = { on: 'fast grab', contest: 'contest', fair: 'fair', claim: 'claim', web: 'web clips', chatty: 'chatty',
+  var WORD = { on: 'fast grab', contest: 'contest', fair: 'fair', claim: 'claim', web: 'web clips', chatty: 'chatty', replies: '-mic replies',
                blockbreak: 'block break', selfunblock: 'self-unblock', unblockcode: 'unblock code' };
 
   function has(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }

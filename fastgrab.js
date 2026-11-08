@@ -16,7 +16,7 @@
 //          he stored + what he clamped, and pushes his state at once.
 //   admin  --GET  /api/admin/pepe/fastgrab-->  {online, at, fg, actions (the last mic.fastgrab actions + Pepe's answers), audit}
 //
-// Fields (the command's own words): on | contest | fair | web | chatty | blockbreak | selfunblock (on / off), claim (Pepe's modes),
+// Fields (the command's own words): on | contest | fair | web | chatty | replies | blockbreak | selfunblock (on / off), claim (Pepe's modes),
 // rate | shots | tries | ceiling (a whole number), breaker (3) | pause (4) | fairwait (2) (whole numbers), unblockcode (text), and -
 // for a room - follow (drop the room's own value; it follows the global again).
 // 1.99amu micblock (the owner, 11-08: "give me a toggle to remove this courtesy" / "I do want that in Players_Lounge (add this to the
@@ -40,7 +40,9 @@ const KIND = "mic.fastgrab";
 const AUDIT = "pepe.fastgrab";
 const TAG = "pepe-fastgrab";
 const SCOPES = ["room", "global", "all"];
-const TOGGLES = ["on", "contest", "fair", "web", "chatty", "blockbreak", "selfunblock"];
+// 1.99?? micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): + replies - Pepe's -mic command answers
+// (!ask / !roast / !look ... -mic, a -mic !remind / !relay) fast-grab too where it is on (!mic fastgrab replies on|off; off by default)
+const TOGGLES = ["on", "contest", "fair", "web", "chatty", "replies", "blockbreak", "selfunblock"];
 const CLAIMS = ["swallow", "release", "plain"];
 const ARITY = Object.freeze({ rate: 1, shots: 1, tries: 1, breaker: 3, pause: 4, fairwait: 2, ceiling: 1 });
 const CAPS = Object.keys(ARITY);
@@ -48,14 +50,14 @@ const TEXTS = ["unblockcode"];
 const CODE_MAX = 20;
 const CODE_MD = ["*", "`", "__", "~~"];                  // (review F8: Pepe's send_chat markdown strip)
 // (the card's order; Pepe applies contest first)
-const FIELDS = Object.freeze(["on", "contest", "fair", "claim", "web", "chatty", ...CAPS, "blockbreak", "selfunblock", "unblockcode"]);
+const FIELDS = Object.freeze(["on", "contest", "fair", "claim", "web", "chatty", "replies", ...CAPS, "blockbreak", "selfunblock", "unblockcode"]);
 const FOLLOW = "follow";
 const NUM_MAX = 1000000;
 const ROOMS_MAX = 20;
 const LAST_MAX = 8;
 const RATE = { max: 20, windowMs: 60 * 1000 };
 const hits = guard.limiter(RATE);
-const LABEL = { on: "fast grab", contest: "contest", fair: "fair", web: "web clips", chatty: "chatty", claim: "claim",
+const LABEL = { on: "fast grab", contest: "contest", fair: "fair", web: "web clips", chatty: "chatty", replies: "-mic replies", claim: "claim",
                 blockbreak: "block break", selfunblock: "self-unblock", unblockcode: "unblock code" };
 
 class Refuse extends Error {

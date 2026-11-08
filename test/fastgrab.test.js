@@ -14,6 +14,8 @@
 //     the admin page too, a toggle plus field for whatever the unblock code is ...)"): blockbreak (on by default) and selfunblock
 //     (off by default) switches + the unblockcode text field - 1-20 printable characters, trimmed, case kept, never a leading
 //     "/" or "!" (it can never be a Camfrog or a Pepe command); empty = none
+//   * 1.99?? micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): replies (off by default) - Pepe's -mic
+//     command answers (!ask / !roast / !look ... -mic, a -mic !remind / !relay) fast-grab too, like chatty mic-ups
 //   node --test test/fastgrab.test.js
 "use strict";
 const test = require("node:test");
@@ -44,18 +46,19 @@ const users = new Map([
 ]);
 
 // What Pepe's _fgw_state() sends (camfrog-bot pepe_fastgrabweb.py; the contract test below checks the real one)
-const vals = (o = {}) => ({ on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, rate: 10, shots: 12, tries: 2,
+const vals = (o = {}) => ({ on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, replies: false, rate: 10, shots: 12, tries: 2,
   breaker: [4, 10, 15], pause: [4, 120, 90, 300], fairwait: [500, 350], ceiling: 20, blockbreak: true, selfunblock: false, unblockcode: "", ...o });
 const roomVals = (o = {}) => vals({ contest_active: false, contest_why: null, resting_min: null, ...o });
 function block(o = {}) {
   return {
-    v: 1, fields: ["on", "contest", "fair", "web", "chatty", "blockbreak", "selfunblock", "claim", "rate", "shots", "tries", "breaker", "pause",
+    v: 1, fields: ["on", "contest", "fair", "web", "chatty", "replies", "blockbreak", "selfunblock", "claim", "rate", "shots", "tries", "breaker", "pause",
                    "fairwait", "ceiling", "unblockcode"],
     claims: ["swallow", "release", "plain"],
     ranges: { rate: [[1, 60]], shots: [[1, 100]], tries: [[1, 20]], breaker: [[1, 50], [1, 120], [0, 240]], pause: [[0, 50], [10, 1800], [0, 3600], [0, 3600]],
               fairwait: [[0, 2000], [0, 2000]], ceiling: [[1, 120]] },
     defaults: { rate: 10, shots: 12, tries: 2, breaker: [4, 10, 15], pause: [4, 120, 90, 300], fairwait: [500, 350], ceiling: 20,
-                on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, blockbreak: true, selfunblock: false, unblockcode: "" },
+                on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, replies: false, blockbreak: true, selfunblock: false,
+                unblockcode: "" },
     global: vals({ on: true }),
     rooms: [
       { id: YW, name: "Players Lounge", joined: true, values: roomVals({ on: true, contest: true, contest_active: true, fair: false, rate: 15 }),
@@ -221,13 +224,13 @@ test("payload: ONE action kind mic.fastgrab [scope, room, field=value...] in the
   await settle();
   const n0 = (await queued()).length;
   const r = await save({ scope: "room", room: "you_were_never_here", reason: "fights in Players",
-    set: { breaker: "6, 20, 30", rate: "20", claim: "RELEASE", on: "off", fair: true, pause: [3, 60, "45", 200], fairwait: "800,600", ceiling: 40, contest: false, web: "on", chatty: false, shots: 30, tries: "4" } });
+    set: { breaker: "6, 20, 30", rate: "20", claim: "RELEASE", on: "off", fair: true, pause: [3, 60, "45", 200], fairwait: "800,600", ceiling: 40, contest: false, web: "on", chatty: false, replies: "on", shots: 30, tries: "4" } });
   assert.equal(r.status, 200, JSON.stringify(r.d));
   const rows = await queued();
   assert.equal(rows.length, n0 + 1, "one change = one action");
   const a = rows.at(-1);
   assert.equal(a.id, r.d.id);
-  assert.deepEqual(JSON.parse(a.args), ["room", YW, "on=off", "contest=off", "fair=on", "claim=release", "web=on", "chatty=off", "rate=20", "shots=30",
+  assert.deepEqual(JSON.parse(a.args), ["room", YW, "on=off", "contest=off", "fair=on", "claim=release", "web=on", "chatty=off", "replies=on", "rate=20", "shots=30",
                                          "tries=4", "breaker=6,20,30", "pause=3,60,45,200", "fairwait=800,600", "ceiling=40"],
     "the room by Pepe's own id; the fields in the card's order; on/off; numbers comma-joined");
   assert.equal(a.site_admin, 1, "Pepe re-checks it: an Admin's");
@@ -389,10 +392,10 @@ test("the rooms page renders the card: Pepe's current values, the rooms (room vs
   assert.match(html, /<option value="room:You_Were_Never_Here">Players Lounge \(You_Were_Never_Here\)<\/option>/);
   assert.match(html, /<option value="room:PepeFrog.Room">Pepe&#39;s Pad \(PepeFrog.Room\)<\/option>/);
   assert.match(html, /<option value="global">Global default/);
-  assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20 · blockbreak on · selfunblock off · unblockcode none/);
+  assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · replies off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20 · blockbreak on · selfunblock off · unblockcode none/);
   assert.match(html, /<b>Players Lounge<\/b> \(You_Were_Never_Here\): on on · contest on · fair off · claim swallow · rate 15 \(its own\)/);
   assert.match(html, /<b>Pepe&#39;s Pad<\/b> \(PepeFrog.Room\): follows the global/);
-  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=3" defer><\/script>/, "(1.99amu micblock: v2 - the new rows; v3 - the code's chat-layer check)");
+  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=4" defer><\/script>/, "(1.99amu micblock: v2 - the new rows; v3 - the code's chat-layer check; 1.99?? micreplies: v4 - the -mic replies row)");
   assert.match(html, /Block break/, "micblock: the card explains the block break and the self-unblock");
   assert.match(html, /unblock code/i);
   const rawData = html.match(/<script type="application\/json" id="fgData">([\s\S]*?)<\/script>/)[1];
@@ -500,7 +503,7 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   const view = (await api("GET", "boss")).d;
   const K = card(view);
   await flush();
-  assert.equal(K.byId.fgRows.children.length, 16, "one row per setting (1.99amu micblock: + block break, self-unblock, unblock code)");
+  assert.equal(K.byId.fgRows.children.length, 17, "one row per setting (1.99amu micblock: + block break, self-unblock, unblock code; 1.99?? micreplies: + -mic replies)");
   assert.equal(K.byId.fgOnline.textContent, "live");
   assert.equal(K.byId.fgNow.hidden, true, "the page's snapshot gives way to the table");
   assert.equal(K.inputs("rate")[0].value, "10", "the global's rate (Where: global default)");
@@ -735,12 +738,15 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
     FG.validate({ scope: "all", set: { contest: true } }, FG.cleanState(block())).args,
     // 1.99amu micblock: the block break off + the self-unblock with its code (trimmed, case kept) in Pepe's Pad only
     FG.validate({ scope: "room", room: PAD, set: { blockbreak: false, selfunblock: true, unblockcode: " Ok 1 " } }, FG.cleanState(block())).args,
+    // 1.99?? micreplies: -mic replies fast-grab on in Houseplants only
+    FG.validate({ scope: "room", room: PLANT, set: { replies: true } }, FG.cleanState(block())).args,
   ];
   const badArgs = [["room", YW, "volume=11"], ["room", YW, "rate=1.5"], ["global", "", "rate=follow"], ["room", YW, "breaker=1,2"],
                    ["room", YW, "unblockcode=/kick bob"], ["room", YW, "unblockcode=!sb x"], ["room", YW, "unblockcode=" + "x".repeat(21)],
                    ["room", YW, "selfunblock=maybe"],
                    // micblock review F8: what the chat layer would change - he refuses it too
-                   ["room", YW, "unblockcode=*1*"], ["room", YW, "unblockcode=1 -global"], ["room", YW, "unblockcode=__x__"]];
+                   ["room", YW, "unblockcode=*1*"], ["room", YW, "unblockcode=1 -global"], ["room", YW, "unblockcode=__x__"],
+                   ["room", YW, "replies=maybe"], ["global", "", "replies=follow"]];
   // ...and the two checks agree code by code (the site's codeClean = Pepe's unblock_code_clean)
   const codes = ["1", " Ok 1 ", "none", "-", "/x", "!x", "x".repeat(20), "x".repeat(21), "a" + String.fromCharCode(9) + "b",
                  String.fromCharCode(0x200b) + "x", "é😀1", "*1*", "a*b", "__1__", "a_b", "`1`", "~~1~~", "~1", "-all", "1 -global",
@@ -814,7 +820,78 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
   assert.equal(y.values.blockbreak, true); assert.equal(y.values.selfunblock, false); assert.equal(y.values.unblockcode, "");
   assert.equal(st.defaults.blockbreak, true); assert.equal(st.defaults.selfunblock, false); assert.equal(st.defaults.unblockcode, "");
   assert.match(out.good[4][1], /Pepe's Pad only: .*block break off .*unblock code 'Ok 1' .*self-unblock on/);
+  // micreplies: Houseplants' own -mic replies on; the others (and the global, the default) off
+  const pl = st.rooms.find((r) => r.id === PLANT);
+  assert.equal(pl.values.replies, true); assert.equal(pl.own.replies, "room");
+  assert.equal(y.values.replies, false); assert.equal(pad.values.replies, false);
+  assert.equal(st.global.replies, false); assert.equal(st.defaults.replies, false);
+  assert.match(out.good[5][1], /Houseplants only: -mic replies on/);
   // and the whole block fits the rooms state push
   assert.equal(await roomctl.setState({ rooms: ROOMS, fastgrab: out.state }), true);
   assert.ok(JSON.stringify(roomctl.cleanState({ rooms: ROOMS, fastgrab: out.state })).length < 64 * 1024);
+});
+
+test("micreplies: the -mic replies fast-grab switch (replies) - cleaned from Pepe's push, validated (on / off / follow), sent in the card's order, labelled; the card draws its row", async () => {
+  // Pepe's push: replies is a switch like chatty - a boolean, else left out; own marks; the default; his last change
+  const c = FG.cleanState(block({ rooms: [
+    { id: YW, name: "Players Lounge", joined: true, values: roomVals({ replies: true }), own: { replies: "room" } },
+    { id: PAD, name: "Pepe's Pad", joined: true, values: roomVals({ replies: "yes" }), own: { replies: "sure" } },
+  ], last: [{ id: 11, ts: 1700000000, by: "boss", scope: "room", room: YW, set: { replies: true, chatty: "on" }, followed: ["replies"] }] }));
+  assert.ok(FG.FIELDS.includes("replies") && FG.TOGGLES.includes("replies"), "the card's fields");
+  assert.equal(FG.FIELDS.indexOf("replies"), FG.FIELDS.indexOf("chatty") + 1, "right after chatty (the card's order)");
+  assert.equal(c.defaults.replies, false, "off by default");
+  assert.equal(c.global.replies, false);
+  const y = c.rooms.find((r) => r.id === YW), pad = c.rooms.find((r) => r.id === PAD);
+  assert.equal(y.values.replies, true);
+  assert.deepEqual(y.own, { replies: "room" });
+  assert.equal(pad.values.replies, undefined, "a value that isn't a boolean is left out");
+  assert.deepEqual(pad.own, {});
+  assert.deepEqual(c.last[0].set, { replies: true });
+  assert.deepEqual(c.last[0].followed, ["replies"]);
+  // the admin's change
+  await pepeSays();
+  await settle();
+  const n0 = (await queued()).length;
+  for (const v of ["maybe", 1, 0, "yes", [true]]) {
+    const r = await save({ scope: "room", room: YW, set: { replies: v } });
+    assert.equal(r.status, 400, JSON.stringify(v) + " " + JSON.stringify(r.d));
+    assert.equal(r.d.field, "replies");
+    assert.match(r.d.error, /-mic replies: on or off/);
+  }
+  const fol = await save({ scope: "global", set: { replies: "follow" } });
+  assert.equal(fol.status, 400, "follow is a room's");
+  assert.equal(fol.d.field, "replies");
+  assert.equal((await queued()).length, n0, "nothing queued");
+  const r = await save({ scope: "room", room: YW, set: { replies: "on", chatty: false, web: true, rate: 12 } });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.deepEqual(r.d.args, ["room", YW, "web=on", "chatty=off", "replies=on", "rate=12"], "in the card's order, on / off");
+  assert.match((await queued()).at(-1).label, /web clips on, chatty off, -mic replies on, rate 12/);
+  await settle();
+  const g = await save({ scope: "all", set: { replies: false } });
+  assert.deepEqual(g.d.args, ["all", "", "replies=off"]);
+  await settle();
+  const f = await save({ scope: "room", room: YW, set: { replies: null } });
+  assert.deepEqual(f.d.args, ["room", YW, "replies=follow"]);
+  await settle();
+  // the card: its row (after chatty), drawn from Pepe's value, an edit posts only it
+  const fg = block();
+  fg.rooms[0].values.replies = true; fg.rooms[0].own.replies = "room";
+  await pepeSays(fg);
+  const K = card((await api("GET", "boss")).d);
+  await flush();
+  const labels = K.byId.fgRows.children.map((tr) => tr.children[0].textContent);
+  const iChatty = labels.findIndex((t) => t.startsWith("Chatty mic-ups fast-grab"));
+  assert.ok(iChatty >= 0 && labels[iChatty + 1].startsWith("-mic replies fast-grab"), "the row right after chatty's");
+  assert.match(K.rowOf("-mic replies fast-grab").textContent, /!ask \/ !roast \/ !look \.\.\. -mic answers fast-grab too/);
+  assert.match(K.rowOf("-mic replies fast-grab").textContent, /-mic surcharge/);
+  assert.equal(K.inputs("replies")[0].value, "off", "the global's (off)");
+  goTo(K, "room:" + YW);
+  assert.equal(K.inputs("replies")[0].value, "on", "Players Lounge's own");
+  assert.match(K.rowOf("-mic replies fast-grab").textContent, /this room's own/);
+  pick(K, "replies", "off");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 1);
+  assert.deepEqual(K.posts[0], { scope: "room", room: YW, set: { replies: false } });
+  assert.doesNotMatch(K.byId.fgRows.textContent, /undefined|NaN/);
+  await pepeSays();
 });

@@ -39,10 +39,11 @@
     website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py; the values are the ones Pepe reports with his rooms state). The card's
     script: public/js/admin-fastgrab.js. Admins only (pepe.rooms_commands_audio), each change audited (admin_audit pepe.fastgrab).
     1.99amu micblock: + Block break, Self-unblock and the Unblock code (the owner 11-08: "give me a toggle to remove this courtesy" / "a
-    toggle plus field for whatever the unblock code is"). %>
+    toggle plus field for whatever the unblock code is"). 1.99?? micreplies: + -mic replies fast-grab (the owner 11-08: "Yes, make it a toggle
+    like chatty fastmic." - !ask / !roast / !look ... -mic answers fast-grab too; the script v4). %>
 <% const FG = locals.fg || { online: !!v.online, at: v.at || null, fg: (v.state && v.state.fastgrab) || null, actions: [] };
    const _fgFmt = (x) => (typeof x === 'boolean' ? (x ? 'on' : 'off') : Array.isArray(x) ? x.join('/') : x == null ? '–' : x === '' ? 'none' : String(x));
-   const _fgKeys = ['on', 'contest', 'fair', 'claim', 'web', 'chatty', 'rate', 'shots', 'tries', 'breaker', 'pause', 'fairwait', 'ceiling',
+   const _fgKeys = ['on', 'contest', 'fair', 'claim', 'web', 'chatty', 'replies', 'rate', 'shots', 'tries', 'breaker', 'pause', 'fairwait', 'ceiling',
                     'blockbreak', 'selfunblock', 'unblockcode']; %>
 <style>
   #fastgrab .fg-num { width: 6.5em; display: inline-block; margin: 2px 4px 2px 0; }
@@ -50,7 +51,7 @@
   #fastgrab .fg-follow { display: block; margin-top: 4px; }
   #fastgrab .fg-unit { white-space: nowrap; }
   #fastgrab td .adm-help { margin: 2px 0 0; }
-  #fastgrab table.adm-tbl { max-height: none; }   /* (16 settings: the page scrolls, not a box inside it) */
+  #fastgrab table.adm-tbl { max-height: none; }   /* (17 settings: the page scrolls, not a box inside it) */
   #fastgrab input[data-fg="unblockcode"] { width: 10em; }
   /* narrow screens (and the side panel): each setting is a block - name and what it does, then its value, where it comes from */
   @media (max-width: 760px) {
@@ -91,7 +92,7 @@
   </ul>
 </section>
 <script type="application/json" id="fgData"><%- JSON.stringify(FG).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-fastgrab.js?v=3" defer></script>
+<script src="/public/js/admin-fastgrab.js?v=4" defer></script>
 
 <%# micspeed 1.99anb (the owner 2026-11-08: the mic timing pads - "Lets add this to the web panel as well"; "Give pepe a list of people he
     should yield the mic to when the yield command is active. (Admin page configurable)"; + the speed-ups, each one he can turn back): ⏱ Mic
