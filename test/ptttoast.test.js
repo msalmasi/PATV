@@ -13,6 +13,8 @@ const { harness, Event, Document } = require("./fixtures/pad-dock/dom.cjs");
 const repo = path.resolve(__dirname, "..");
 const read = (...p) => fs.readFileSync(path.join(repo, ...p), "utf8").replace(/\r\n/g, "\n");
 const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
+// (review F4) how long a clip's progress notice stays up at most: the site settles every clip well inside it (bridge-relay.js)
+const CLIP_OPEN_MS = 10 * 60 * 1000;
 
 // room-bridge.js in a deterministic page: a fake recorder, the mic, a clock the test moves, uploads answered from a queue
 function client(o = {}) {
@@ -148,7 +150,9 @@ test("ptttoast: a clip's progress updates the SAME notice - sent -> waiting for 
     [{ state: "playing", ok: true, msg: "playing" }, "🎙 your clip: playing on the mic now"],
   ]) {
     step(job); const t = r.toasts.at(-1); seen.push(t.text);
-    assert.equal(t.text, words); assert.equal(t.id, id, words + ": the press's notice"); assert.equal(t.ms, 30000); assert.ok(!t.bad);
+    assert.equal(t.text, words); assert.equal(t.id, id, words + ": the press's notice"); assert.ok(!t.bad);
+    // (review F4: a clip's progress stays up until its next state - the site settles every clip (bridge-relay.js clipOpenUntil) - not 30 s)
+    assert.equal(t.ms, CLIP_OPEN_MS, words + ": up until the next state"); assert.equal(t.busy, true, words + ": progress (review F2)");
   }
   const n = r.toasts.length;
   step({ state: "playing", ok: true, msg: "playing" });
@@ -223,7 +227,8 @@ test("ptttoast: the relay's notes in the Dock - 'wait a moment' and 'you're offl
   r.R._send("hello"); await flush();
   const offline = r.toasts.filter((t) => t.id === "rb-offline");
   assert.equal(offline.length, 1); assert.equal(offline[0].text, "You're offline — your messages will send when the connection is back.");
-  assert.equal(offline[0].bad, true); assert.equal(offline[0].ms, 8000);
+  // (review F3: the outage is a state - the notice stays until the site answers again, never pushed out; not an 8 s notice)
+  assert.equal(offline[0].bad, true); assert.equal(offline[0].sticky, true); assert.equal(offline[0].ms, undefined);
   await r.run();
   assert.equal(r.fetches.length, 3, "retried until it went");
   const off2 = r.toasts.filter((t) => t.id === "rb-offline");
@@ -259,7 +264,126 @@ test("ptttoast (pad-dock.js): the Dock hands its chat notices to push-to-talk an
   assert.equal(pttCalls.at(-1), null, "a Dock that's gone hands the lines back");
 });
 
-test("ptttoast: cache-busters - room-bridge.js v33 and pad-dock.js v13 wherever they load; the hidden line rule is room-bridge.css's", () => {
+// ── review fixes (F1-F4) ──
+test("ptttoast review F2 (room-bridge.js): progress carries busy - the Dock knows a step on the way from a finished one", async () => {
+  const r = pttRig({ answers: [{ status: 200, body: { ok: true, id: "j1" } }] });
+  await r.clip(4);
+  const by = (re) => r.toasts.filter((t) => re.test(t.text));
+  const steps = [...by(/opening the microphone/), ...by(/recording…/), ...by(/sending 4s/), ...by(/^🎙 sent — /)];
+  assert.equal(steps.length, 4, JSON.stringify(r.toasts));
+  for (const t of steps) assert.equal(t.busy, true, t.text);
+  const room = { micRelay: true, pttMax: 30 };
+  r.p.update({ room, mine: [{ kind: "clip", id: "j1", at: 5, state: "done", ok: true, msg: "played" }] });
+  assert.equal(r.toasts.at(-1).text, "🎙 your clip: played"); assert.equal(r.toasts.at(-1).busy, undefined, "a finished step is no progress");
+  const s = pttRig({ answers: [{ status: 429, body: { ok: false, code: "rate", error: "slow down — one every 15s" } }] });
+  await s.clip(4);
+  assert.equal(s.toasts.at(-1).bad, true); assert.equal(s.toasts.at(-1).busy, undefined, "a refusal is no progress");
+});
+
+test("ptttoast review F2 (pad-dock.js): a notice closed with its ✕ stays closed - its later progress and finished steps are quiet, only a refusal shows; '' frees the id", () => {
+  let pt = null, rt = null, D0 = null;
+  const ptt = { adopt() {}, onRecording() {}, useToast(f) { if (f) pt = f; } };
+  const relay = { getInput: () => D0.querySelector("#rmRelay input"), sendCmd() {}, insert: (t) => t, useToast(f) { if (f) rt = f; } };
+  const h = harness({ setup: (p) => { D0 = p.doc; }, opts: { ptt, relay } });
+  const notes = () => h.doc.querySelectorAll(".rmd-log > .rmd-toasts .rmd-ct");
+  const x = (n) => h.button("Dismiss", n).click();
+  pt("🎙 your clip: queued for the mic…", { id: "ptt:p1", ms: CLIP_OPEN_MS, busy: true });
+  assert.equal(notes().length, 1); x(notes()[0]); assert.equal(notes().length, 0);
+  pt("🎙 your clip: waiting for the mic…", { id: "ptt:p1", ms: CLIP_OPEN_MS, busy: true });
+  pt("🎙 your clip: playing on the mic now", { id: "ptt:p1", ms: CLIP_OPEN_MS, busy: true });
+  assert.equal(notes().length, 0, "closed with ✕: the clip's progress doesn't bring it back");
+  pt("🎙 your clip: played", { id: "ptt:p1", ms: 3000, bad: false });
+  assert.equal(notes().length, 0, "nor its finished step");
+  // the next clip: closed while it waited, then it didn't play - that refusal still shows
+  pt("🎙 your clip: waiting for the mic…", { id: "ptt:p2", ms: CLIP_OPEN_MS, busy: true }); x(notes()[0]);
+  pt("🎙 your clip: couldn’t get the mic, try again", { id: "ptt:p2", ms: 8000, bad: true });
+  assert.equal(notes().length, 1, "a refusal breaks through"); assert.ok(notes()[0].classList.contains("rmd-ct-bad"));
+  assert.match(notes()[0].textContent, /couldn’t get the mic/);
+  h.tick(); assert.equal(notes().length, 0);
+  // a notice that went by itself (or was pushed out) is not closed: its next state shows
+  pt("🎙 your clip: queued for the mic…", { id: "ptt:p3", ms: CLIP_OPEN_MS, busy: true }); h.tick();
+  pt("🎙 your clip: playing on the mic now", { id: "ptt:p3", ms: CLIP_OPEN_MS, busy: true });
+  assert.equal(notes().length, 1, "timed out, not closed: the next state is news"); h.tick();
+  // '' frees the id: the relay's offline notice closed in one outage is back in the next
+  rt("You're offline — your messages will send when the connection is back.", { id: "rb-offline", bad: true, sticky: true }); x(notes()[0]);
+  rt("", { id: "rb-offline" });
+  rt("You're offline — your messages will send when the connection is back.", { id: "rb-offline", bad: true, sticky: true });
+  assert.equal(notes().length, 1, "a new outage, a new notice"); x(notes()[0]);
+  // a command's notice closed while Pepe ran it: its "done" is quiet, a private answer closed with ✕ doesn't come back on the next update
+  h.controller.cmd({ id: "c1", text: "!spin", st: "waiting for Pepe…", ok: null, replies: [] }); x(notes()[0]);
+  h.controller.cmd({ id: "c1", text: "!spin", st: "done", ok: true, replies: [] });
+  assert.equal(notes().length, 0, "a command closed with ✕ stays closed");
+  h.controller.cmd({ id: "c2", text: "!bal", st: "", ok: true, replies: ["Your balance: 5 PAT"] });
+  const sticky = notes().filter((n) => n.classList.contains("rmd-ct-sticky")); assert.equal(sticky.length, 1); x(sticky[0]); h.tick();
+  h.controller.cmd({ id: "c2", text: "!bal", st: "", ok: true, replies: ["Your balance: 5 PAT"] });
+  assert.equal(notes().filter((n) => n.classList.contains("rmd-ct-sticky")).length, 0, "a private answer closed with ✕ stays closed");
+  h.tick();
+  h.controller.cmd({ id: "c3", text: "!heist", st: "waiting for Pepe…", ok: null, replies: [] }); x(notes()[0]);
+  h.controller.cmd({ id: "c3", text: "!heist", st: "not run — refused", ok: false, replies: [] });
+  assert.equal(notes().length, 1, "a command's refusal still shows"); assert.ok(notes()[0].classList.contains("rmd-ct-bad"));
+});
+
+test("ptttoast review F3: the offline notice stays for the whole outage (sticky, never pushed out) and goes when the site answers again", async () => {
+  // room-bridge.js: sticky, no timer - also when the Dock takes over during an outage
+  const r = relayRig({ answers: ["offline", "offline", { status: 200, body: { ok: true, id: "s1" } }] });
+  r.R._send("hello"); await flush();
+  assert.deepEqual(r.toasts.filter((t) => t.id === "rb-offline"), [{ text: "You're offline — your messages will send when the connection is back.", id: "rb-offline", bad: true, sticky: true }]);
+  const again = []; r.R.useToast((text, o) => again.push(Object.assign({ text }, o)));
+  assert.deepEqual(again, [{ text: "You're offline — your messages will send when the connection is back.", id: "rb-offline", bad: true, sticky: true }], "handed over mid-outage: still a state");
+  await r.run();
+  assert.deepEqual(again.at(-1), { text: "", id: "rb-offline" }, "back online: taken down");
+  // pad-dock.js: a sticky refusal stays through the timers and the passing notices, '' takes it down
+  let rt = null, D0 = null;
+  const relay = { getInput: () => D0.querySelector("#rmRelay input"), sendCmd() {}, insert: (t) => t, useToast(f) { if (f) rt = f; } };
+  const h = harness({ setup: (p) => { D0 = p.doc; }, opts: { relay } });
+  const notes = () => h.doc.querySelectorAll(".rmd-log > .rmd-toasts .rmd-ct");
+  rt("You're offline — your messages will send when the connection is back.", { id: "rb-offline", bad: true, sticky: true });
+  for (let i = 0; i < 4; i++) h.controller.cmd({ id: "q" + i, text: "!np", st: "waiting for Pepe…", ok: null, replies: [] });
+  h.tick(); h.tick();
+  const off = notes().filter((n) => /You're offline/.test(n.textContent));
+  assert.equal(off.length, 1, "still up after the timers and four newer notices"); assert.ok(off[0].classList.contains("rmd-ct-bad"));
+  rt("", { id: "rb-offline" });
+  assert.equal(notes().filter((n) => /You're offline/.test(n.textContent)).length, 0, "back online: gone");
+});
+
+test("ptttoast review F4: a clip's progress notice stays until its next state (the site settles every clip inside CLIP_OPEN_MS), not 30 s", async () => {
+  const relaySrc = read("bridge-relay.js");
+  const mins = (name) => { const m = relaySrc.match(new RegExp("const " + name + " = (\\d+) \\* (\\d+) \\* 1000;")); assert.ok(m, name); return m[1] * m[2] * 1000; };
+  const secs = (name) => { const m = relaySrc.match(new RegExp("const " + name + " = (\\d+) \\* 1000;")); assert.ok(m, name); return m[1] * 1000; };
+  assert.ok(CLIP_OPEN_MS > mins("CLIP_TTL") && CLIP_OPEN_MS > secs("CLIP_PENDING_TTL") && CLIP_OPEN_MS > Math.max(mins("CLIP_PLAYING_GRACE"), 120000 + secs("CLIP_PLAYED_SLACK")),
+    "longer than any wait the site allows before it settles the clip (pending, the 8 min from Pepe's claim, playing)");
+  const r = pttRig({ answers: [{ status: 200, body: { ok: true, id: "j9" } }] });
+  await r.clip(3);
+  const room = { micRelay: true, pttMax: 30 };
+  for (const state of ["pending", "queued", "waiting", "playing"]) {
+    r.p.update({ room, mine: [{ kind: "clip", id: "j9", at: 5, state, ok: true, msg: state }] });
+    assert.equal(r.toasts.at(-1).ms, CLIP_OPEN_MS, state); assert.equal(r.toasts.at(-1).busy, true, state);
+  }
+  // a clip from another tab too
+  r.p.update({ room, mine: [{ kind: "clip", id: "k1", at: 6, state: "waiting", ok: true }] });
+  assert.equal(r.toasts.at(-1).ms, CLIP_OPEN_MS); assert.notEqual(r.toasts.at(-1).id, r.toasts[0].id);
+  // the recorder's own steps keep their timing (30 s on its way)
+  assert.equal(r.toasts.find((t) => /sending/.test(t.text)).ms, 30000);
+});
+
+test("ptttoast review F1: the character counter sits in the input's row beside the field - nothing under the tool row past 240 characters either", () => {
+  const css = read("public", "css", "pad-dock.css");
+  const under = css.match(/main\.rm\.rm-dock \.rmd-input-row :is\(([^)]*)\) \{ grid-column: 1 \/ -1;/);
+  assert.ok(under, "the rule for what may sit under the tool row (the classic lines, hidden in the Dock)");
+  assert.doesNotMatch(under[1], /rb-count/, "the counter is not one of them");
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row \.rb-count \{ grid-row: 1; grid-column: 3; [^}]*\}/, "row 1, its own column after the field");
+  // while it shows, the row has a column for it; 🎙 and Send move one along (the slim homepage row too - no tool row there, the same idea)
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row:has\(\.rb-count:not\(\.hide\)\) \{ grid-template-columns: auto minmax\(0, 1fr\) auto auto auto; \}/);
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row\.rmd-input-slim:has\(\.rb-count:not\(\.hide\)\) \{ grid-template-columns: 0 minmax\(0, 1fr\) auto auto auto; \}/);
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row:has\(\.rb-count:not\(\.hide\)\) \.rb-talk \{ grid-column: 4; \}/);
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row:has\(\.rb-count:not\(\.hide\)\) \.rb-send \{ grid-column: 5; \}/);
+  // the composer box's background spans every column (1 / -1 = the last explicit line - the template names them all)
+  assert.match(css, /main\.rm\.rm-dock \.rmd-input-row::before \{ content: ""; grid-row: 1 \/ 3; grid-column: 1 \/ -1;/);
+  // hidden below 240 characters, as before (room-bridge.js COUNT_FROM)
+  assert.match(read("public", "js", "room-bridge.js"), /COUNT_FROM = 240/);
+});
+
+test("ptttoast: cache-busters - room-bridge.js v33 and pad-dock.js v13 wherever they load, pad-dock.css v12 (review F1); the hidden line rule is room-bridge.css's", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = read("views", v);
     assert.match(s, /room-bridge\.js\?v=33/, v);
@@ -269,4 +393,10 @@ test("ptttoast: cache-busters - room-bridge.js v33 and pad-dock.js v13 wherever 
   assert.match(read("public", "css", "room-bridge.css"), /^\.rb-hide, [^{]*\{ display: none !important; \}/m);
   const dock = read("public", "js", "pad-dock.js");
   assert.match(dock, /o\.ptt\.useToast\(/); assert.match(dock, /o\.relay\.useToast\(/);
+  // (review F1: pad-dock.css v12 - the counter beside the field - on the pad, the homepage and both casino tables)
+  for (const v of ["room.ejs", "home.ejs", "casino-bj.ejs", "casino-hm.ejs"]) {
+    const s = read("views", v);
+    assert.match(s, /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=12">/, v);
+    assert.doesNotMatch(s, /pad-dock\.css\?v=(?!12")\d+/, v + ": one css version");
+  }
 });
