@@ -92,6 +92,8 @@
 /* AA on the lightest wood / baize: the seats' plain tags get a dark plate, "Open seat" and the felt's sub-line a brighter ink */
 .cz-theme-saloon .seat .tag:not(.gold):not(.red):not(.blue):not(.green) { background: rgba(20,11,5,.8); color: #ece2c8; }
 .cz-theme-saloon .seat.empty .plate { color: #efe3c4; text-shadow: 0 1px 2px #000; }
+/* 💎: the gilded rail can sit behind an open seat's label at the oval's ends - it gets a dark plate there */
+.cz-theme-saloon .felt.hr .seat.empty .plate { background: rgba(20,11,5,.8); border-radius: 999px; padding: 1px 7px; }
 .cz-theme-saloon .felt-msg small { color: rgba(255,255,255,.9); }
 
 /* the sound toggle (casino-sound.js): in the table's own top row beside "All tables", at the row's end - floated, no height of its
