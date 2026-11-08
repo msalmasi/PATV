@@ -381,9 +381,13 @@ function camPage(options = {}) {
           if (!gesture && !node.unlocked) { if (P.carry > 0) P.carry--; else return no("NotAllowedError"); }
           if (node.error && node.error.code === 4) return no("NotSupportedError");
           if (gesture) { node.unlocked = true; P.carry = 1; }
+          // options.silentAbort: the silent clip ends before its play() settles - Chromium then rejects it with AbortError
+          if (options.silentAbort && entry.src.startsWith("data:")) return no("AbortError");
         }
         const was = node.paused !== false; node.paused = false; entry.out = "resolved";
         if (studio && was) queueMicrotask(() => { if (node.paused === false) node.dispatchEvent(new Ev("playing")); });
+        // a data: clip is the unlock's tenth of a second of nothing: it ends by itself
+        if (studio && entry.src.startsWith("data:")) setImmediate(() => { if (node.paused === false && String(node.getAttribute("src") || "") === entry.src) { node.paused = true; node.dispatchEvent(new Ev("ended")); } });
         return Promise.resolve();
       };
       node.pause = () => { const was = node.paused === false; node.paused = true; node.pauses = (node.pauses || 0) + 1; if (was && node.classList.contains("sst-source")) queueMicrotask(() => node.dispatchEvent(new Ev("pause"))); };
@@ -1396,9 +1400,11 @@ test("Story camera preview fix: the poster stays over a <video> that has its siz
   paint2(1, {}); await flush(); assert.ok(st3.hidden, "painted: the video shows itself"); assert.equal(root3.getAttribute("data-sheet"), "text", "the edit goes on");
   root3.querySelector(".sst-sheet-head button").click(); await flush(6); assert.equal(node2.paused, false, "the sheet closed: it plays again");
   // a camera clip whose media fragment alone is refused opens as a video (under its poster until it paints)
-  const S = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; return false; } }), root4 = await openStudio(S);
+  let paint4 = null;
+  const S = camPage({ ...IPHONE, sourceVideo: (node, src) => { node.requestVideoFrameCallback = (cb) => { paint4 = cb; return 1; }; if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; return false; } }), root4 = await openStudio(S);
   await quickClip(S); assert.equal(S.srcs.length, 2); assert.equal(status(S), ""); assert.ok(!root4.querySelector(".sst-post").disabled);
   assert.equal(clipPlays(S).length, 1); assert.ok(!root4.querySelector("img.sst-still").hidden);
+  paint4(1, {}); await flush(); assert.ok(root4.querySelector("img.sst-still").hidden, "painted: the video shows itself");
 });
 
 test("Story camera preview fix: ?storydebug=1 (or localStorage patv.storydebug=1) shows what the browser made of the file over the preview; off by default, no network", async () => {
@@ -1471,22 +1477,24 @@ test("Story camera preview verify: a play started on the poster (Trim's play) is
     const label = rvfc ? "requestVideoFrameCallback" : "no requestVideoFrameCallback";
     let node2 = null, paint = null;
     const P = camPage({ ...IPHONE, sourceVideo: (node, src, file, Pg) => {
-      node2 = node; zeroMeta(node, 5);
+      node2 = node;
       if (rvfc) node.requestVideoFrameCallback = (cb) => { paint = cb; return 1; };
       // Low Power Mode: no play without a touch (the muted first-frame play is refused); a play of a playing video just resolves;
-      // WebKit decodes - and sizes - only once it plays
+      // WebKit decodes - and sizes - only once it plays (storyplay: in place before the metadata, whose play is now one that goes on)
       node.play = () => {
         node.plays = (node.plays || 0) + 1; if (!node.paused) return Promise.resolve();
         if (!Pg.touch) return Promise.reject(Object.assign(new Error("not allowed"), { name: "NotAllowedError" }));
         node.paused = false; queueMicrotask(() => { if (!node.videoWidth) { node.videoWidth = 1080; node.videoHeight = 1920; node.readyState = 3; node.dispatchEvent(new Ev("resize")); } });
         return Promise.resolve();
       };
+      zeroMeta(node, 5);
       return true;
     } });
     const root = await openStudio(P); await quickClip(P); await P.clock.tick(4100);
     const still = root.querySelector("img.sst-still"); assert.ok(!still.hidden, label); assert.ok(!root.querySelector('[data-tool="trim"]').disabled, label + ": trim on the poster");
     root.querySelector('[data-tool="trim"]').click(); await flush();
     const play = root.querySelectorAll(".sst-sheet button").find((b) => /Play/.test(b.getAttribute("aria-label") || "")); assert.ok(play, label);
+    assert.ok(!root.querySelector(".sst-playbtn").hidden, label + ": refused - the ▶ over the poster");
     P.touch = true; play.click(); P.touch = false; await flush(8);
     assert.equal(node2.paused, false, label + ": the user's playback goes on");
     if (rvfc) { assert.equal(typeof paint, "function", label); paint(1, {}); await flush(); }
@@ -1667,7 +1675,7 @@ test("Story play: the fake of WebKit's rule is the owner's evidence - refused by
 
 test("Story play: a clip just recorded plays by itself and goes on playing - muted, inline - because the shutter's let-go unlocked the editor's <video>", async () => {
   const P = camPage(IPHONE), root = await openQuiet(P);
-  assert.equal(P.plays.length, 0, "nothing is played before a gesture");
+  assert.ok(P.plays.every((x) => x.out !== "resolved"), "nothing is allowed to play before a gesture");
   const s = shutter(P); fire(s, "pointerdown", { pointerType: "touch" }); await P.clock.tick(300);
   assert.ok(P.plays.every((x) => x.out !== "resolved"), "a finger going down is no gesture: nothing is unlocked by it");
   await P.clock.tick(1500); fire(s, "pointerup", { pointerType: "touch" }); await flush(16);
@@ -1870,8 +1878,8 @@ test("Story play: the unlock's silent clip is a real, tiny, soundless video (a d
 });
 
 test("Story play: the camera's Try again and the studio's own 📷 / 🖼️ unlock it inside their taps", async () => {
-  // the camera stopped (taken by another app, twice): its Try again is a tap - and an unlock
-  const P = camPage(IPHONE); await openQuiet(P);
+  // the camera stopped (taken by another app - twice, before it showed a frame again): its Try again is a tap - and an unlock
+  const P = camPage({ ...IPHONE, frame: [0, 0] }); await openQuiet(P);
   for (let i = 0; i < 2; i++) { const t = P.streams.at(-1).getVideoTracks()[0]; t.stop(); for (const l of t.ls.filter((x) => x.type === "ended")) l.fn(); await flush(10); }
   const retry = cam(P).querySelector(".scam-retry"); assert.ok(!retry.hidden, "Try again");
   const before = P.plays.length; retry.click(); await flush(10);
@@ -1883,4 +1891,11 @@ test("Story play: the camera's Try again and the studio's own 📷 / 🖼️ unl
   assert.equal(editorVideo(Q).paused, false, "the file chosen plays by itself");
   const R = camPage({ ...IPHONE, noMedia: true }), r = await openQuiet(R);
   r.querySelector('[data-picker="camera"]').click(); assert.equal(R.pickClicks.camera, 1); assert.ok(R.plays.some((x) => x.gesture && x.out === "resolved"), "📷");
+});
+
+test("Story play: a silent unlock whose play() settles with AbortError (it ended first, as in Chromium) was still allowed - it counts as the unlock", async () => {
+  const P = camPage({ ...IPHONE, search: "?storydebug=1", silentAbort: true }), root = await openQuiet(P); await quickClip(P);
+  const text = root.querySelector(".sst-debug").textContent;
+  assert.match(text, /play unlock shutter up \(silent\) \+\d+ ms → rejected AbortError \(allowed - ended or replaced\)/);
+  assert.match(text, /unlocked by shutter up/); assert.equal(editorVideo(P).paused, false, "the clip plays by itself");
 });

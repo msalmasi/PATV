@@ -30,6 +30,9 @@
 // storyprev (1.99amb): a capture tells the studio its size (info.width / height), and a clip brings a poster (info.poster, a
 // JPEG of the live preview's frame as the recording starts - else its last frame) and its recorder type (info.mime): an
 // iPhone may not show its own MediaRecorder MP4 in a <video> at all, and the editor shows the poster instead
+// storyplay (1.99??): o.gesture(why) - each of the camera's taps (the shutter's press, let-go, click or key; Try again) is told to
+// the studio while it is being handled, so the editor's <video> is played (unlocked) inside it: WebKit lets the clip the camera
+// hands over play by itself only on an element played inside a gesture before
 (function () {
   'use strict';
   if (window.patvStoryCamera) return;
@@ -99,7 +102,7 @@
     var ic = add(b, el('span', 'scam-ic', icon)); ic.setAttribute('aria-hidden', 'true'); b.addEventListener('click', fn); return b;
   }
 
-  // o: { wait, draft, secs(), file(file, info), gallery(), close(), unavailable(why) }. o.wait: the view only, until go().
+  // o: { wait, draft, secs(), file(file, info), gallery(), close(), unavailable(why), gesture(why) }. o.wait: the view only, until go().
   function open(host, o) {
     var why = unavailable(); if (why) { recheck(); o.unavailable(why); return null; }
     if (current) close(current);
@@ -129,7 +132,7 @@
     c.note = add(v, el('div', 'scam-note')); c.note.setAttribute('role', 'status'); c.note.setAttribute('aria-live', 'polite'); c.note.hidden = true;
     c.noteText = add(c.note, el('p'));
     c.retry = add(c.note, el('button', 'scam-retry', _t('js.feed.cam.retry', 'Try again'))); c.retry.type = 'button'; c.retry.hidden = true;
-    c.retry.addEventListener('click', function () { c.restarts = 0; start(c); });
+    c.retry.addEventListener('click', function () { gesture(c, 'try again'); c.restarts = 0; start(c); });
     var foot = add(v, el('div', 'scam-foot')), row = add(foot, el('div', 'scam-row'));
     c.gallery = add(row, button('scam-gallery', '🖼️', _t('js.feed.cam.gallery', 'Choose from your gallery'), function () { if (!c.rec && !c.busy) c.o.gallery(); }));
     var s = c.shutter = add(row, el('button', 'scam-shutter')); s.type = 'button';
@@ -147,18 +150,21 @@
   function bind(c) {
     var s = c.shutter;
     function on(target, type, fn, opt) { target.addEventListener(type, fn, opt); c.on.push([target, type, fn, opt]); }
-    on(s, 'pointerdown', function (e) { down(c, e); });
-    on(s, 'pointerup', function (e) { up(c, e, true); });
+    // (storyplay: each a gesture for the studio - a let-go after the capture's own work: the tracks stopped, the session handed back)
+    on(s, 'pointerdown', function (e) { down(c, e); gesture(c, 'shutter down'); });
+    on(s, 'pointerup', function (e) { up(c, e, true); gesture(c, 'shutter up'); });
     on(s, 'pointercancel', function (e) { up(c, e, false); });
     on(s, 'lostpointercapture', function (e) { up(c, e, false); });
     // keyboard: Space / Enter = a photo (the button's own click is held off); a click with no press before it = assistive tech
-    on(s, 'keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return; e.preventDefault(); if (e.repeat) return; c.handled = now(); photo(c); });
-    on(s, 'click', function (e) { e.preventDefault(); if (now() - c.handled < 800) return; c.handled = now(); photo(c); });
+    on(s, 'keydown', function (e) { if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return; e.preventDefault(); if (e.repeat) return; c.handled = now(); photo(c); gesture(c, 'shutter key'); });
+    on(s, 'click', function (e) { e.preventDefault(); gesture(c, 'shutter click'); if (now() - c.handled < 800) return; c.handled = now(); photo(c); });
     on(s, 'contextmenu', prevent); on(s, 'selectstart', prevent); on(s, 'dragstart', prevent);
     on(document, 'visibilitychange', function () { if (document.visibilityState === 'hidden' || document.hidden === true) away(c); else back(c); });
     on(window, 'pagehide', function () { away(c); });
     on(window, 'pageshow', function () { if (!document.hidden) back(c); });
   }
+  // storyplay: a tap the studio may unlock its <video> in (never in the way of the camera's own handling)
+  function gesture(c, why) { if (typeof c.o.gesture === 'function') { try { c.o.gesture(why); } catch (e) { /* the camera goes on */ } } }
   function paint(c) {
     if (!c.view) return;
     var rec = !!c.rec, v = c.view, can = recType(c.noMic) != null;

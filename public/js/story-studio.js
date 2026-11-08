@@ -21,6 +21,9 @@
 // of the stage; on a phone the header and the tools let touches through between their buttons; hit areas stack as drawn; a lost
 // pointerup ends with the next press; the picture moves by a transform mid-gesture; Escape / a click outside / the X share one
 // quiet question; focus lands on the picture after a pick; the page can still be zoomed from the sheets and the footer.
+// storyplay (1.99??): a clip plays by itself in the editor, like Instagram - muted, inline, looping inside its trim. ONE <video> carries
+// every clip for the studio's life, unlocked inside the user's own gestures (WebKit lets a script play() an element only once that
+// element was played inside a gesture); where a play is still refused, a round ▶ over the picture plays it on a tap. See player().
 (function () {
   'use strict';
   if (window.patvStoryStudio) return;
@@ -238,7 +241,8 @@
     if (!done) cancel(s);
     if (s.cam) { var cam = s.cam; s.cam = null; cam.close(); }
     s.closed = true; settle(s); clearTimeout(s.suggestTimer); clearTimeout(s.wheelTimer); revoke(s); s.gesture = null; if (s.raf && window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0;
-    if (s.media && s.media.pause) s.media.pause();
+    idle(s); s.dbgPaint = null;
+    document.removeEventListener('visibilitychange', s.plVis); window.removeEventListener('pagehide', s.plHide); window.removeEventListener('pageshow', s.plVis);
     document.removeEventListener('keydown', s.key, true); document.removeEventListener('focusin', s.focus);
     document.removeEventListener('visibilitychange', s.vis); document.removeEventListener('pointerdown', s.touch, true);
     window.removeEventListener('blur', s.away); window.removeEventListener('focus', s.back); window.removeEventListener('pageshow', s.back); window.removeEventListener('pagehide', s.leave);
@@ -263,6 +267,8 @@
   function open(pad, opener, resumed) {
     if (current) return;
     var s = { id: ++serial, opener: opener || document.activeElement, pad: String(pad || ''), urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
+    // storyplay: the editor's one <video> (player()) - its unlocks, holds and plays (see run())
+    s.pl = { n: 0, uses: 0, holds: { hidden: hiddenNow() }, user: false, blocked: false, pending: 0, played: false, unlocked: '', unlocks: 0, lastUnlock: '', log: [], t0: Date.now(), frameFns: [], rvfc: false, rvfcId: null, looping: false }; s.sound = false;
     current = s; s.root = el('div', 'sst ds-scrim sheet'); s.root.setAttribute('role', 'dialog'); s.root.setAttribute('aria-modal', 'true'); s.root.tabIndex = -1; s.root.setAttribute('aria-label', _t('js.feed.sc.title', 'Add your story'));
     s.root.addEventListener('click', function (e) { if (e.target === s.root) close(s); });
     s.oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; add(document.body, s.root);
@@ -276,6 +282,8 @@
     s.backButton = add(head, iconButton(_t('js.feed.ss.back_camera', '✕ Back to the camera'), function () { goBack(s); }, 'icon sm quiet sst-icon-only sst-back')); s.backButton.hidden = true;
     add(head, el('h2', 'ds-pixel-h', _t('js.feed.ss.title', 'Your story')));
     add(head, el('span', 'sst-lifetime', _t('js.feed.ss.hours_short', '24 h')));
+    // storyplay: a clip's sound - 🔇 (muted, the default) / 🔊, toggled inside the tap
+    s.soundButton = add(head, iconButton(_t('js.feed.ss.sound_on', '🔇 Turn sound on'), function () { sound(s); }, 'icon sm quiet sst-icon-only sst-sound')); s.soundButton.hidden = true;
     s.more = add(head, iconButton(_t('js.feed.ss.options', '⚙️ Story options'), function () { optionsSheet(s); }, 'icon sm quiet sst-icon-only'));
     s.body = add(s.card, el('div', 'sst-body')); var work = add(s.body, el('div', 'sst-work'));
     s.previewWrap = add(work, el('div', 'sst-preview-wrap')); s.preview = add(s.previewWrap, el('div', 'sst-preview')); s.preview.tabIndex = 0;
@@ -301,6 +309,8 @@
       if (picked(s) && !s.busy) removeLayer(s, s.selected);
     }, 'icon sm sst-sel-del'));
     s.selTurn = add(s.sel, el('span', 'sst-sel-turn')); s.selTurn.setAttribute('aria-hidden', 'true');
+    // storyplay: a clip this browser still won't play by itself gets a round ▶ over the picture (its tap plays it - and unlocks)
+    s.playButton = add(s.preview, iconButton(_t('js.feed.ss.play_video', '▶️ Play the video'), function () { tapPlay(s, '▶', true); }, 'icon sst-playbtn')); s.playButton.hidden = true;
     s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
       var f = add(s.picks, input('file')); f.accept = 'image/*,video/*'; f.hidden = true; f.setAttribute('data-pick', pair[0]); if (pair[0] === 'camera') f.setAttribute('capture', 'environment');
@@ -313,7 +323,8 @@
       });
       f.addEventListener('cancel', function () { settle(s); });
       // story camera: 📷 Camera opens the live camera when it can; otherwise the capture input (with its pick note, as ever)
-      var pickButton = add(s.picks, iconButton(pair[1], function () { if (pair[0] !== 'camera' || !camera(s)) choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
+      // storyplay: the tap unlocks the editor's <video> for what it brings
+      var pickButton = add(s.picks, iconButton(pair[1], function () { unlock(s, pair[0]); if (pair[0] !== 'camera' || !camera(s)) choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
     });
     // storyux: no Retake - once there is a picture the pickers go, and the X (backButton) is the one way back
     s.filename = add(work, el('span', 'sst-filename'));
@@ -346,10 +357,15 @@
     s.leave = function () { var p = s.pending; if (p && p.phase === 'open' && (p.back || !p.away)) settle(s); };   // left after coming back; not while the camera is in front
     document.addEventListener('visibilitychange', s.vis); document.addEventListener('pointerdown', s.touch, true);
     window.addEventListener('blur', s.away); window.addEventListener('focus', s.back); window.addEventListener('pageshow', s.back); window.addEventListener('pagehide', s.leave);
+    // storyplay: a clip waits while the page is hidden (or being left), and plays on when it is back
+    s.plVis = function () { hold(s, 'hidden', hiddenNow()); }; s.plHide = function () { hold(s, 'hidden', true); };
+    document.addEventListener('visibilitychange', s.plVis); window.addEventListener('pagehide', s.plHide); window.addEventListener('pageshow', s.plVis);
     // storyux verify: the keyboard shrinks the editor; a pinch-zoomed page (scale > 1) doesn't - its visual viewport is smaller
     // only because it is magnified
     if (window.visualViewport) { s.viewport = function () { var v = window.visualViewport; s.root.style.setProperty('--sst-vh', Math.floor(v.height * (v.scale > 0 ? v.scale : 1)) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
     stage(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
+    // storyplay: "+ Your story" is a tap - the first unlock of the editor's <video> (not a studio reopened by a reload: no tap)
+    player(s); if (!resumed) unlock(s, 'open');
     // story camera: a new studio opens on the live camera; one reopened after a reload (ssfix) shows its picker and says what happened
     if (!resumed) camera(s);
     var include = pad && !/^(?:user:|u\/|profile$)/i.test(String(pad)) ? '?pad=' + encodeURIComponent(pad) : '';
@@ -370,11 +386,14 @@
   // and the capture-input fallback are the studio's own pickers, note and all)
   function camera(s) {
     var C = window.patvStoryCamera; if (!C || !live(s) || s.busy || s.camFailed || s.noPost) return false;
-    if (s.cam) s.cam.close(); closeSheet(s); if (s.media && s.media.pause) s.media.pause(); s.camWhy = '';
+    if (s.cam) s.cam.close(); closeSheet(s); s.camWhy = '';
     s.cam = C.open(s.root, { wait: !s.canPost, draft: !!s.d.file, secs: function () { return s.caps.secs || 30; }, file: function (f, info) { s.cam = null; settle(s); pick(s, f, 0, info); },
-      gallery: function () { choose(s, 'gallery'); },
-      close: function () { s.cam = null; if (!s.d.file) close(s); else s.backButton.focus(); },
-      unavailable: function (why) { s.cam = null; s.camWhy = why; s.camFailed = true; if (live(s)) { say(s, why); paintControls(s); } } });
+      gallery: function () { unlock(s, 'gallery'); choose(s, 'gallery'); },
+      // storyplay: the camera's taps (the shutter's press, let-go, click or key; Try again) are gestures to unlock the editor's <video> in
+      gesture: function (why) { unlock(s, why); },
+      close: function () { s.cam = null; if (!s.d.file) close(s); else { s.backButton.focus(); run(s); } },
+      unavailable: function (why) { s.cam = null; s.camWhy = why; s.camFailed = true; if (live(s)) { say(s, why); paintControls(s); run(s); } } });
+    run(s);      // storyplay: a clip on the stage waits behind the camera
     return !!s.cam;
   }
   function paintTarget(s) {
@@ -407,11 +426,13 @@
       b.setAttribute('aria-pressed', String(k === 'layout' ? d.fit === 'fill' : s.sheetName === k));
     });
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
+    paintPlay(s);
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
-  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); layoutHandles(s); if (opener && opener.isConnected) opener.focus(); }
+  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; s.trimPlay = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); hold(s, 'sheet', false); paintControls(s); layoutHandles(s); if (opener && opener.isConnected) opener.focus(); }
   function sheet(s, name, title) {
     var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet'); s.root.setAttribute('data-sheet', name);
+    hold(s, 'sheet', name !== 'trim');       // storyplay: a sheet over the picture (text, stickers, ...) pauses a clip; Trim is the loop's own
     s.sheet = add(s.sheetSlot, el('section', 'sst-sheet')); s.sheet.setAttribute('aria-label', title);
     var h = add(s.sheet, el('div', 'sst-sheet-head')); add(h, el('h3', 'ds-eyebrow', title)); var done = add(h, button(_t('js.feed.ss.done', 'Done'), function () { closeSheet(s); })); done.focus();
     var body = add(s.sheet, el('div', 'sst-sheet-body')); paintControls(s); return body;
@@ -485,8 +506,9 @@
     try { return !!window.localStorage && window.localStorage.getItem('patv.storydebug') === '1'; } catch (e) { return false; }
   }
   function bytes(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(2) + ' MB' : n >= 10240 ? Math.round(n / 1024) + ' KB' : n + ' bytes'; }
-  function debugFor(s, file, m, info, st) {
-    if (s.debug) { s.debug.remove(); s.debug = null; }
+  // (storyplay: on = the pick's own listener registrar; the player's lines - the element, its clips, the unlock, every play())
+  function debugFor(s, file, m, info, st, on) {
+    if (s.debug) { s.debug.remove(); s.debug = null; } s.dbgPaint = null;
     if (!debugOn()) return null;
     var box = s.debug = el('pre', 'sst-debug'), t0 = Date.now(), log = [], counts = {}, last = null, view = 'loading', camera = !!(info && info.camera);
     var look = { position: 'absolute', insetBlockStart: '0', insetInlineStart: '0', insetInlineEnd: '0', maxBlockSize: '80%', overflow: 'hidden', margin: '0', padding: '4px 6px', zIndex: '5',
@@ -505,15 +527,21 @@
       if (e) last = e;
       lines.push('error ' + (last ? last.code + ' ' + (MEDIA_ERRORS[last.code] || '?') + (last.message ? ' · ' + last.message : '') + (e ? '' : ' (earlier)') : 'none'));
       lines.push('preview ' + view, 'events ' + (log.join(', ') || '-'));
+      if (video) {
+        var pl = s.pl, h = Object.keys(pl.holds).filter(function (k) { return pl.holds[k]; });
+        lines.push('player video #' + pl.n + ' · clip ' + pl.uses + ' on this element · ' + (pl.unlocked ? 'unlocked by ' + pl.unlocked + (pl.unlocks > 1 ? ' (' + pl.unlocks + ' gestures, the last ' + pl.lastUnlock + ')' : '') : 'not unlocked by a gesture yet')
+          + ' · ' + (m.muted ? 'muted' : 'sound on') + (m.loop ? ' · loop' : '') + (pl.blocked ? ' · ▶ shown' : '') + (pl.user ? ' · paused by the user' : '') + (h.length ? ' · held: ' + h.join(', ') : ''));
+        pl.log.slice(-8).forEach(function (e) { lines.push('play ' + e.what + ' (' + e.src + ') +' + e.at + ' ms → ' + e.out); });      // the newest (the box clips at its foot)
+      }
       if (nav.userAgent) lines.push('ua ' + nav.userAgent);
       box.textContent = lines.join('\n');
     }
     function note(what) { log.push(what + ' +' + (Date.now() - t0) + ' ms'); if (log.length > 40) log.splice(0, log.length - 40); paint(); }
     // a chatty event is listed three times; an error is read at once (a second try clears the element's own)
-    MEDIA_EVENTS.forEach(function (type) { m.addEventListener(type, function () { counts[type] = (counts[type] || 0) + 1; if (type === 'error') paint(); if (counts[type] <= 3) note(type); else paint(); }); });
-    m.addEventListener('timeupdate', function once() { m.removeEventListener('timeupdate', once); note('timeupdate ' + num(m.currentTime)); });
+    MEDIA_EVENTS.forEach(function (type) { on(type, function () { counts[type] = (counts[type] || 0) + 1; if (type === 'error') paint(); if (counts[type] <= 3) note(type); else paint(); }); });
+    var ticked = false; on('timeupdate', function () { if (ticked) return; ticked = true; note('timeupdate ' + num(m.currentTime)); });
     if (st) { st.addEventListener('load', function () { note('poster loaded'); }); st.addEventListener('error', function () { note('poster failed'); }); }
-    paint();
+    s.dbgPaint = paint; paint();
     return { note: note, view: function (what) { view = what; note('preview: ' + what); } };
   }
   function use(s, file, kind, gif, n, info) {
@@ -522,18 +550,22 @@
     if (file.size > limit * 1024 * 1024) { refuse(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), n); return; }
     if (s.cam) { s.cam.close(); s.cam = null; }
     var captured = !!(info && info.camera); s.camWhy = ''; unask(s);
-    if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
+    if (s.ready) discard([s.ready.id]); s.ready = null; drop(s); closeSheet(s); revoke(s);
     if (s.still) { s.still.remove(); s.still = null; }
     var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
     s.selected = null; s.gesture = null; s.mediaAt = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
-    var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
-    m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
-    m.setAttribute('draggable', 'false');     // storyux: a desktop drag pans the picture, never drags the image out
-    // storyfix2: muted + inline (attributes too, as iOS reads them) and preload auto, for the first frame below
-    if (kind === 'video') { m.muted = true; m.defaultMuted = true; m.playsInline = true; ['playsinline', 'webkit-playsinline', 'muted'].forEach(function (a) { m.setAttribute(a, ''); }); m.preload = 'auto'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
+    // storyplay: a clip goes into the studio's one <video> (player(): muted + inline, attributes too, preload auto - the first frame
+    // below; the loop inside the trim) - never a new element, as WebKit's unlock is the element's; a picture gets an <img> of its own
+    var m;
+    if (kind === 'video') { m = s.media = player(s); s.pl.uses++; s.pl.user = false; s.pl.blocked = false; m.muted = !s.sound; }
+    else { m = s.media = el('img', 'sst-source'); m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); m.alt = _t('js.feed.sc.pic_alt', 'Your story picture'); m.setAttribute('draggable', 'false'); }     // storyux: a desktop drag pans the picture, never drags the image out
+    s.preview.insertBefore(m, s.canvas);
+    // this pick's own listeners (taken off with it - the <video> lives on) hear only its own source: never the unlock's silent clip
+    function ours() { return kind !== 'video' || String(m.getAttribute('src') || '').split('#')[0] === url; }
+    function on(type, fn) { pickOn(s, m, type, function (e) { if (ours()) fn(e); }); }
     // storyprev: a camera clip's poster stands by (its size came with it); the read-out is there only with ?storydebug=1
     var st = kind === 'video' && captured && info.poster && info.poster.size && info.width > 0 && info.height > 0 ? stillOf(s, m, info.poster) : null;
-    var dbg = debugFor(s, file, m, info, st), url = objectURL(s, file), frag = kind === 'video', phase = 'loading', waiting = false, late = false, timer = 0, early = false;
+    var url = objectURL(s, file), dbg = debugFor(s, file, m, info, st, on), frag = kind === 'video', phase = 'loading', waiting = false, late = false, timer = 0;
     // storyprev: a <video> counts as open once it has a size. WebKit can have none yet at 'loadedmetadata' (a MediaRecorder MP4
     // is fragmented, its moov empty) and bring it with 'resize' once a frame decodes - so a missing size is waited for (WAIT_MS),
     // never refused at once, and a file that says nothing at all is given LOAD_MS (a camera clip with its poster: WAIT_MS)
@@ -542,16 +574,16 @@
     function meta() {
       if (!live(s) || id !== s.pickId) return;
       // the poster stood in, and the video has a size after all: it takes over once it paints (playback in the editor).
-      // storyprev verify: a play already running is the user's (Trim's - WebKit may size a video only once it plays): it goes on,
-      // and the poster goes with it; a paused video gets the muted first-frame play
-      if (phase === 'still' && !late && sized()) { late = true; if (!m.paused && !m.priming) m.primed = true; cover(); if (m.paused) firstFrame(s, m, id); return; }
+      // storyprev verify: a play already running (Trim's - WebKit may size a video only once it plays) goes on, and the poster goes
+      // with it; storyplay: a paused one plays by itself
+      if (phase === 'still' && !late && sized()) { late = true; d.playable = true; cover(); run(s, 'autoplay'); return; }
       // storyprev verify: a gallery video (or a camera clip with no poster) whose metadata comes after the give-up opens after all,
       // unless it was already chosen to go as it is
       if (phase === 'failed' && sized() && !d.legacy && !s.busy) { phase = 'loading'; s.recovery.hidden = true; s.recovery.textContent = ''; say(s, ''); if (dbg) dbg.note('a size after all'); loaded(); return; }
       if (phase !== 'loading') return;
       // storyprev verify: WebKit loads only metadata until a video plays, so the size it is waited for may come only from a
-      // decoded frame: the muted first-frame play asks for one now (paused as soon as it starts, as below)
-      if (sized()) loaded(); else if (!waiting) { waiting = true; arm(WAIT_MS); early = true; firstFrame(s, m, id); }
+      // decoded frame: the muted play asks for one now (storyplay: and goes on - the clip plays by itself)
+      if (sized()) loaded(); else if (!waiting) { waiting = true; arm(WAIT_MS); d.playable = true; run(s, 'decode'); }
     }
     function loaded() {
       if (!live(s) || id !== s.pickId || phase !== 'loading') return;
@@ -562,8 +594,8 @@
       if (kind === 'video') {
         // a fresh recording can report no length (Infinity, NaN, 0): the camera's measured hold stands in
         length(isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs);
-        if (st) cover();      // before the first-frame play: that play is not the video showing itself
-        if (!early) firstFrame(s, m, id);      // storyprev verify: the wait's own muted play put it up already
+        if (st) cover();      // the poster goes once the video paints a frame of its own
+        d.playable = true; run(s, 'autoplay');      // storyplay: it plays by itself (the wait's own play may be going already)
       }
       if (dbg) dbg.view(st ? 'video, under its poster until it paints a frame' : 'video');
       opened();
@@ -586,7 +618,7 @@
     // the muted play still puts the first frame up)
     function broke() {
       if (!live(s) || id !== s.pickId) return;
-      if (phase === 'loading' && frag) { frag = false; waiting = false; early = false; arm(st ? WAIT_MS : LOAD_MS); if (dbg) dbg.note('retry without the fragment #t=0.001'); m.src = url; return; }
+      if (phase === 'loading' && frag) { frag = false; waiting = false; arm(st ? WAIT_MS : LOAD_MS); if (dbg) dbg.note('retry without the fragment #t=0.001'); m.src = url; return; }
       failed('error');
     }
     // storyprev: when this browser can't show the video (an error, no size, nothing at all), a camera clip's poster is the preview
@@ -605,28 +637,28 @@
         if (dbg) dbg.view('poster (' + why + ')');
         return opened();
       }
-      phase = 'failed'; d.decoded = false; d.legacy = false; pickDone(s, n);
+      phase = 'failed'; d.decoded = false; d.legacy = false; d.playable = false; run(s); pickDone(s, n);
       say(s, kind !== 'video' ? _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.')
         : coarse() ? _t('js.feed.ss.no_preview_phone', 'Your phone can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 })
         : _t('js.feed.ss.no_preview', 'This browser can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 }), true);
       if (dbg) dbg.view('none: "Post it as it is"');
       s.recovery.textContent = ''; s.recovery.hidden = false;
       add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); }));
-      add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { choose(s, 'gallery'); })); paintControls(s);
+      add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { unlock(s, 'gallery'); choose(s, 'gallery'); })); paintControls(s);
     }
     // storyprev: the poster stays over the <video> until the video has painted a frame of its own (requestVideoFrameCallback) or,
-    // in an engine without that, until it plays after its first-frame pause (Trim's play): over a blank or broken video it stays
+    // in an engine without that, until it plays (storyplay: by itself, or from the ▶): over a blank, broken or refused video it stays
     function cover() {
       function off(why) { if (live(s) && id === s.pickId && (phase === 'ready' || phase === 'still') && !st.hidden) { st.hidden = true; if (dbg) dbg.view('video (' + why + ')'); } }
-      if (typeof m.requestVideoFrameCallback === 'function') { try { m.requestVideoFrameCallback(function () { off('a frame painted'); }); return; } catch (e) { /* the event below */ } }
-      if (m.primed && !m.paused) return off('playing');      // storyprev verify: the user's play is running already (a late size)
-      m.addEventListener('playing', function () { if (m.primed) off('playing'); });
+      if (onFrame(s, function () { off('a frame painted'); })) return;
+      if (!m.paused) return off('playing');      // storyprev verify: a play is running already (a late size)
+      on('playing', function () { off('playing'); });
     }
     if (st) st.addEventListener('error', function () { if (live(s) && id === s.pickId && phase === 'still') { phase = 'loading'; failed('poster'); } });
-    if (kind === 'video') { ['loadedmetadata', 'resize', 'loadeddata', 'canplay'].forEach(function (t) { m.addEventListener(t, meta); }); arm(st ? WAIT_MS : LOAD_MS); }
-    else m.addEventListener('load', loaded);
+    if (kind === 'video') { ['loadedmetadata', 'resize', 'loadeddata', 'canplay'].forEach(function (t) { on(t, meta); }); arm(st ? WAIT_MS : LOAD_MS); }
+    else on('load', loaded);
     // storyfix2: a video starts at 0.001 s (a media fragment): iOS then puts its first frame up without playing it
-    m.addEventListener('error', broke); m.src = url + (frag ? '#t=0.001' : '');
+    on('error', broke); m.src = url + (frag ? '#t=0.001' : '');
     say(s, ''); render(s); paintControls(s);
     // storyux verify: the pickers (and a camera that took it) are gone now - the focus goes to the picture, unless it is on
     // something still on screen
@@ -634,15 +666,168 @@
   }
   // storyfix2 (1.99aly): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
   // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
-  // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play,
-  // paused as soon as it starts, is the other. Where even that is refused (Low Power Mode), the fragment alone shows it.
-  // (storyprev: m.primed once that play is over - a later play is the user's; m.priming while it runs)
-  function firstFrame(s, m, id) {
-    m.primed = false; m.priming = true;
-    function over() { m.priming = false; m.primed = true; }
-    var played; try { played = m.play(); } catch (e) { played = null; }
-    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); over(); }, function () { over(); /* refused: the media fragment shows the frame */ });
-    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); over(); });
+  // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play is
+  // the other. Where even that is refused (Low Power Mode), the fragment alone shows it. storyplay: that play is no longer paused
+  // at once - the clip plays by itself (run()).
+  // ── storyplay (1.99??): the editor plays a clip by itself, like Instagram ──
+  // The owner's iPhone (iOS 26, Chrome = WebKit, 2026-11-08): "it DOES autoplay if I press 'play' from the trim menu, then discard
+  // the current story, then record a new story. At that point, it autoplays. Then if I discard again, it doesn't autoplay."
+  // WebKit lets a script play() a <video> only once that ELEMENT has been played inside a user's gesture (the gesture lifts the
+  // element's restrictions for good, Low Power Mode's too) - and every pick made a new element. Now:
+  //   * one <video> (s.video) for the life of the studio: each clip is swapped in (its src) and out (idle(): no src, off the
+  //     stage) - never a new element; a picture still gets an <img> of its own
+  //   * it is UNLOCKED inside the user's own gestures - the "+ Your story" tap, the shutter (press, let-go, click or key), 🖼️ /
+  //     📷, the camera's 🖼️ and Try again, the X back (and Discard), ▶, 🔊, Trim's ▶: a play() of what it holds, or of a tiny
+  //     silent clip (SILENT_*, made once) while it holds nothing - so the next clip's own play() is allowed
+  //   * a clip plays as soon as it may (its first play is asked for at its metadata, as the first frame was) and goes on: muted
+  //     (🔇 / 🔊 in the header, the choice kept in this studio), looping inside its trim - frame by frame where the browser says
+  //     a frame was shown (requestVideoFrameCallback), else on timeupdate; a clip kept whole loops by itself (loop)
+  //   * held (paused) while the page is hidden, a sheet other than Trim covers it, Trim is scrubbed or the camera is up; the
+  //     user's own pause (Trim's ▶) stays until they play it; it stops with the X, Discard and the studio's close
+  //   * a play still refused (no gesture yet - a file handed in, a studio reopened after a reload; Low Power Mode) shows a round
+  //     ▶ over the picture that plays it on a tap - and that tap unlocks the element for the clips after it
+  //   * ?storydebug=1 lists each play() and its outcome, the gesture that unlocked the element and how many clips it carried
+  var SILENT_MP4 = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAALobW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAGQAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAjd0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAGQAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAABkAAAAAAABAAAAAAGvbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAABABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABWm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAARpzdGJsAAAAtnN0c2QAAAAAAAAAAQAAAKZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABDExhdmMgbGlieDI2NAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALGF2Y0MBQsAe/+EAFGdCwB7d7ARAAAADAEAAAAUDxYvgAQAFaM4PLIAAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAAEsAAABLAAAAAYc3R0cwAAAAAAAAABAAAAAQAABAAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAADwAAAAEAAAAUc3RjbwAAAAAAAAABAAADGAAAAD11ZHRhAAAANW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAACGlsc3QAAAAIZnJlZQAAABdtZGF0AAAAC2WIhAS8mKAAOKOA',
+    SILENT_WEBM = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAGlEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHGTbuMU6uEElTDZ1OsggEMTbuMU6uEHFO7a1OsggGP7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmoCrXsYMPQkBNgIRMYXZmV0GETGF2ZkSJiEBZAAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYgAAAAAAAAAAZyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAX14QDgibCBELqBEJqBAhJUw2fRc3POY8CLY8WIAAAAAAAAAAFnyJhFo4dFTkNPREVSRIeLTGF2YyBsaWJ2cHhnyKJFo4hEVVJBVElPTkSHlDAwOjAwOjAwLjEwMDAwMDAwMAAAH0O2dajngQCjo4EAAIAQAgCdASoQABAAAEcIhYWIhYSIAgIADA1gAP7/q1CAHFO7a5G7j7OBALeK94EB8YIBYvCBAw==', players = 0;
+  function player(s) {
+    if (s.video) return s.video;
+    var m = s.video = el('video', 'sst-source'); s.pl.n = ++players;
+    m.muted = true; m.defaultMuted = true; m.playsInline = true; m.preload = 'auto';
+    try { m.disableRemotePlayback = true; } catch (e) { /* not in this engine */ } try { m.disablePictureInPicture = true; } catch (e) { /* not in this engine */ }
+    ['playsinline', 'webkit-playsinline', 'muted', 'disableremoteplayback', 'disablepictureinpicture'].forEach(function (a) { m.setAttribute(a, ''); });
+    m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); m.setAttribute('draggable', 'false');
+    m.addEventListener('timeupdate', function () { wrap(s); });
+    m.addEventListener('ended', function () { if (s.media === m && live(s)) { m.currentTime = span(s).start; run(s, 'loop'); } });
+    m.addEventListener('playing', function () { if (s.media !== m) return; s.pl.played = true; frames(s); paintPlay(s); });
+    m.addEventListener('pause', function () { paintPlay(s); });
+    m.addEventListener('volumechange', function () { paintPlay(s); });
+    return m;
+  }
+  function pickOn(s, n, type, fn) { n.addEventListener(type, fn); (s.pickOn || (s.pickOn = [])).push([n, type, fn]); }
+  function pickOff(s) { (s.pickOn || []).forEach(function (x) { x[0].removeEventListener(x[1], x[2]); }); s.pickOn = []; }
+  // the picture on the stage goes: a picture's <img> is removed, the <video> goes idle
+  function drop(s) { var m = s.media; pickOff(s); if (!m) return; if (m === s.video) idle(s); else { m.remove(); s.media = null; } }
+  // the <video> lets its clip go: stopped, no source (load() lets the old blob go), no poster, no framing, off the stage
+  function idle(s) {
+    var m = s.video, p = s.pl; if (!m) return;
+    pickOff(s);
+    if (!m.paused) try { m.pause(); } catch (e) { /* not playing */ }
+    if (p.rvfc && p.rvfcId != null && typeof m.cancelVideoFrameCallback === 'function') try { m.cancelVideoFrameCallback(p.rvfcId); } catch (e) { /* gone */ }
+    p.rvfc = false; p.rvfcId = null; p.frameFns = []; p.looping = false; p.pending = 0; p.blocked = false; p.user = false; p.played = false; p.holds.scrub = false;
+    m.removeAttribute('poster'); m.loop = false;
+    if (m.getAttribute('src') != null) { m.removeAttribute('src'); try { if (typeof m.load === 'function') m.load(); } catch (e) { /* nothing to load */ } }
+    ['transform', 'inlineSize', 'blockSize', 'insetInlineStart', 'insetBlockStart', 'objectFit'].forEach(function (k) { m.style[k] = ''; });
+    if (m.parentNode) m.parentNode.removeChild(m);
+    if (s.media === m) s.media = null;
+    paintPlay(s);
+  }
+  function srcKind(m) { var v = String(m.getAttribute('src') || ''); return !v ? 'nothing' : /^data:/.test(v) ? 'silent' : 'clip'; }
+  function silent(m) { var mp4 = 'maybe'; try { if (typeof m.canPlayType === 'function') mp4 = m.canPlayType('video/mp4; codecs="avc1.42E01E"'); } catch (e) { /* MP4, then */ } return mp4 ? SILENT_MP4 : SILENT_WEBM; }
+  // every play() of the <video>, kept for ?storydebug=1 (the last 12): what asked, what it held, when, and how it went
+  function attempt(s, what) {
+    var m = s.video, p = s.pl, e = { what: what, src: srcKind(m), at: Date.now() - p.t0, out: '…' }, pr;
+    p.log.push(e); if (p.log.length > 12) p.log.splice(0, p.log.length - 12);
+    function done(out, name) { e.out = out; if (s.dbgPaint) s.dbgPaint(); return name; }
+    try { pr = m.play(); } catch (err) { pr = Promise.reject(err); }
+    if (s.dbgPaint) s.dbgPaint();
+    if (!pr || typeof pr.then !== 'function') return Promise.resolve(done('no promise (an older engine)', null));
+    // (an AbortError comes only after the play was allowed: the clip ended - the silent one does at once - or was replaced first)
+    return pr.then(function () { return done('resolved', null); }, function (err) { var name = (err && err.name) || 'Error'; return done('rejected ' + name + (name === 'AbortError' ? ' (allowed - ended or replaced)' : ''), name); });
+  }
+  function allowed(err) { return !err || err === 'AbortError'; }
+  function mark(s, why) { var p = s.pl; p.blocked = false; p.unlocks++; if (!p.unlocked) p.unlocked = why; p.lastUnlock = why; }
+  // a user's gesture: the <video> plays inside it, so its later plays by themselves are allowed. What it holds plays (and is paused
+  // again if it shouldn't be playing); holding nothing - or a clip that can't play - the silent clip plays and ends by itself (a
+  // press, its let-go and its click in a row play it once)
+  function unlock(s, why) {
+    if (!live(s)) return;
+    var m = player(s), p = s.pl, pick = s.pickId;
+    if (s.media === m && s.d.playable && !m.error) {
+      if (!m.paused) { mark(s, why); return; }
+      p.blocked = false;
+      attempt(s, 'unlock ' + why).then(function (err) { if (allowed(err)) mark(s, why); if (s.pickId === pick && s.media === m) { if (!err && !wanted(s)) m.pause(); paintPlay(s); } });
+      return;
+    }
+    if (srcKind(m) === 'silent' && !m.paused && !m.error) return;
+    if (srcKind(m) !== 'silent' || m.error) m.src = silent(m);
+    attempt(s, 'unlock ' + why).then(function (err) { if (allowed(err)) mark(s, why); });
+  }
+  function held(s) { var h = s.pl.holds; for (var k in h) if (h[k]) return true; return false; }
+  function wanted(s) { var m = s.video, d = s.d; return !!m && live(s) && s.media === m && d.kind === 'video' && !!d.playable && !m.error && !s.pl.user && !held(s) && !s.cam; }
+  function hold(s, name, on) { s.pl.holds[name] = !!on; run(s, 'resume'); }
+  // the clip on the stage plays if it should and is paused if it shouldn't - a play by itself (no gesture): refused until the
+  // element is unlocked, and then the ▶ shows; a refusal with sound on tries once more muted
+  function run(s, why) {
+    var m = s.video, p = s.pl; if (!m || s.closed) return;
+    if (!wanted(s)) { if (s.media === m && !m.paused) m.pause(); paintPlay(s); return; }
+    if (!m.paused || p.pending === s.pickId || p.blocked) { paintPlay(s); return; }
+    var pick = p.pending = s.pickId; loopMode(s);
+    attempt(s, why || 'autoplay').then(function (err) {
+      if (p.pending === pick) p.pending = 0;
+      if (s.closed || s.pickId !== pick || s.media !== m) return;
+      if (err === 'NotAllowedError' && !m.muted) { m.muted = true; s.sound = false; run(s, 'muted'); return; }
+      if (err === 'NotAllowedError') p.blocked = true;
+      if (!err && !wanted(s)) m.pause();
+      paintPlay(s);
+    });
+    paintPlay(s);
+  }
+  // a play the user asked for (▶, Trim's ▶; user) or one that only lifts the rule for sound (🔊): inside their tap, so allowed - and
+  // the element is unlocked by it
+  function tapPlay(s, what, user) {
+    var m = s.video, p = s.pl, pick = s.pickId, r = span(s); if (!live(s) || !m || s.media !== m) return;
+    if (user) { p.user = false; p.holds.scrub = false; if (p.played && (m.currentTime < r.start || m.currentTime >= r.end)) m.currentTime = r.start; }
+    p.blocked = false; p.pending = pick; loopMode(s);
+    attempt(s, what).then(function (err) {
+      if (p.pending === pick) p.pending = 0;
+      if (s.closed || s.pickId !== pick || s.media !== m) return;
+      if (allowed(err)) mark(s, what); else if (err === 'NotAllowedError') p.blocked = true;
+      if (!err && !wanted(s)) m.pause();
+      paintPlay(s);
+    });
+    paintPlay(s);
+  }
+  // 🔇 / 🔊: muted is the default; sound on plays inside the tap (WebKit's rule for sound), and a user's pause stays a pause
+  function sound(s) {
+    var m = s.video; if (!live(s) || !m || s.media !== m) return;
+    s.sound = !!m.muted; m.muted = !s.sound;
+    if (s.sound) tapPlay(s, 'sound', false); else paintPlay(s);
+  }
+  // the loop: the trim's window (or the whole clip); a clip kept whole is looped by the element itself (seamless)
+  function span(s) { var t = s.d.trim; return t && t.end > t.start ? t : { start: 0, end: Infinity }; }
+  function loopMode(s) { var m = s.video, d = s.d, t = d.trim; if (m) m.loop = !t || (t.start <= 0 && !(t.end < d.duration)); }
+  function wrap(s) {
+    var m = s.video; if (!m || s.media !== m || m.paused || s.closed) return;
+    var r = span(s), t = Number(m.currentTime) || 0;
+    if (t >= r.end - .02 || t < r.start - .25) m.currentTime = r.start;
+  }
+  // one requestVideoFrameCallback at a time for all that waits for a shown frame (the poster's hand-over, the loop) -> false where
+  // the engine has none
+  function onFrame(s, fn) {
+    var m = s.video, p = s.pl; if (!m || typeof m.requestVideoFrameCallback !== 'function') return false;
+    p.frameFns.push(fn); if (p.rvfc) return true;
+    try {
+      p.rvfc = true;
+      p.rvfcId = m.requestVideoFrameCallback(function (now, meta) {
+        p.rvfc = false; p.rvfcId = null; var fns = p.frameFns; p.frameFns = [];
+        fns.forEach(function (f) { try { f(now, meta); } catch (e) { /* the others still run */ } });
+      });
+    } catch (e) { p.rvfc = false; p.frameFns = []; return false; }
+    return true;
+  }
+  function frames(s) {
+    var p = s.pl; if (p.looping) return;
+    p.looping = onFrame(s, function () { p.looping = false; var m = s.video; if (s.media !== m || m.paused || s.closed) return; wrap(s); frames(s); });
+  }
+  function paintPlay(s) {
+    var m = s.video, p = s.pl, d = s.d; if (!m || !s.playButton) return;
+    var mine = live(s) && s.media === m && d.kind === 'video' && !!d.playable && !m.error;
+    var show = mine && m.paused && p.pending !== s.pickId && !held(s) && !s.cam && (p.blocked || (p.user && s.sheetName !== 'trim'));
+    if (s.playButton.hidden === show) { s.playButton.hidden = !show; if (live(s) && s.stageBox) { measure(s); placeSelect(s); } }
+    s.soundButton.hidden = !mine;
+    relabel(s.soundButton, m.muted ? _t('js.feed.ss.sound_on', '🔇 Turn sound on') : _t('js.feed.ss.sound_off', '🔊 Turn sound off'));
+    if (s.trimPlay) s.trimPlay.setAttribute('aria-pressed', String(mine && !m.paused));
+    if (s.dbgPaint) s.dbgPaint();
   }
   function asIs(s) {
     var d = s.d;
@@ -738,7 +923,7 @@
   // sizes - read when the handles are laid out (a render, a resize, a sheet closing), never during a gesture
   function measure(s) {
     var hb = s.handles.getBoundingClientRect(); s.stageBox = { w: hb.width || 0, h: hb.height || 0 }; s.covers = []; s.chips = {};
-    Array.prototype.forEach.call(s.card.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-sheet'), function (n) {
+    Array.prototype.forEach.call(s.card.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-sheet, .sst-playbtn'), function (n) {
       if (n.hidden || !n.offsetParent) return; var r = n.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return;
       s.covers.push({ x0: r.left - hb.left, y0: r.top - hb.top, x1: r.left + r.width - hb.left, y1: r.top + r.height - hb.top });
     });
@@ -833,6 +1018,7 @@
       if (!live(s) || s.busy || !s.d.decoded || (e.button != null && e.button > 0)) return;
       // the delete grip's own press: its click may delete (the tap that only selected a layer can't)
       if (e.target && e.target.closest && e.target.closest('.sst-sel-del')) { s.delArm = picked(s); return; }
+      if (e.target && e.target.closest && e.target.closest('.sst-playbtn')) return;       // storyplay: the ▶'s press is its own
       s.delArm = null; unask(s);
       var g = s.gesture, turnCorner = !!(e.target && e.target.closest && e.target.closest('.sst-sel-turn'));
       // storyux verify: a gesture whose pointerup never came (a capture lost to Alt+Tab, a lift the page never heard) ends here -
@@ -1049,6 +1235,7 @@
   // the draft let go, back to the live camera (or the picker)
   function leave(s) {
     unask(s); fresh(s);
+    unlock(s, 'back');        // storyplay: the X (or Discard) is a tap: the next clip may play by itself
     if (!camera(s)) { paintControls(s); var first = s.picks.querySelector('button'); (first || s.root).focus(); say(s, s.camWhy || ''); }
   }
   function focusAsk(s) { var keep = s.ask && s.ask.querySelector('.sst-ask-keep'); if (keep) keep.focus(); }
@@ -1067,10 +1254,9 @@
   function unask(s, refocus) { if (!s.ask) return; s.ask.remove(); s.ask = null; if (refocus && s.backButton && !s.backButton.hidden) s.backButton.focus(); }
   // the draft let go: no picture, no layers, nothing uploaded (the NSFW choice and the destination stay)
   function fresh(s) {
-    if (s.ready) discard([s.ready.id]); s.ready = null; s.failed = false; closeSheet(s); revoke(s);
-    if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); s.media = null; }
+    if (s.ready) discard([s.ready.id]); s.ready = null; s.failed = false; drop(s); closeSheet(s); revoke(s);
     // storyprev + storyux: a camera clip's poster and the ?storydebug=1 read-out go with the picture they stood for
-    if (s.still) { s.still.remove(); s.still = null; } if (s.debug) { s.debug.remove(); s.debug = null; }
+    if (s.still) { s.still.remove(); s.still = null; } if (s.debug) { s.debug.remove(); s.debug = null; } s.dbgPaint = null;
     s.d = { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw }; s.pickId++; s.sniffId = (s.sniffId || 0) + 1;
     s.selected = null; s.gesture = null; s.lastTap = null; s.empty.hidden = false; s.filename.textContent = ''; s.recovery.hidden = true; s.recovery.textContent = '';
     say(s, ''); render(s); paintControls(s);
@@ -1079,18 +1265,29 @@
     var d = s.d; if (d.kind !== 'video' || !d.decoded || !d.trim || !(d.duration >= 1)) return;
     var box = sheet(s, 'trim', _t('js.feed.ss.trim', '✂️ Trim')), bar = add(box, el('div', 'sst-trim-bar')), fill = add(bar, el('span', 'sst-trim-fill'));
     var report = add(box, el('p', 'sst-trim-report')); report.setAttribute('aria-live', 'polite'); var inputs = {}, handles = {};
-    function update(which, raw) {
-      var max = Math.min(30, s.caps.secs || 30), v = Math.round(raw * 2) / 2;
+    // storyplay: scrubbing (a handle's input) holds the loop on the handle's frame - once the clip has played (a seek before that
+    // leaves WebKit black) - and its let-go (change) plays it again from the trim's start
+    function update(which, raw, done) {
+      var max = Math.min(30, s.caps.secs || 30), v = Math.round(raw * 2) / 2, m = s.media;
       if (which === 'start') d.trim.start = clamp(v, Math.max(0, d.trim.end - max), d.trim.end - 1);
       else d.trim.end = clamp(v, d.trim.start + 1, Math.min(d.duration, d.trim.start + max));
-      sync(); if (s.media.currentTime < d.trim.start || s.media.currentTime >= d.trim.end) s.media.currentTime = d.trim.start; changed(s, true);
+      sync(); loopMode(s);
+      if (done) { if (s.pl.holds.scrub || m.currentTime < d.trim.start || m.currentTime >= d.trim.end) m.currentTime = d.trim.start; changed(s, true); hold(s, 'scrub', false); return; }
+      hold(s, 'scrub', true);
+      if (s.pl.played && m === s.video) m.currentTime = which === 'start' ? d.trim.start : Math.max(d.trim.start, d.trim.end - .1);
+      else if (m.currentTime < d.trim.start || m.currentTime >= d.trim.end) m.currentTime = d.trim.start;
+      changed(s, true);
     }
     function sync() { ['start', 'end'].forEach(function (w) { inputs[w].value = d.trim[w]; handles[w].value = d.trim[w]; handles[w].setAttribute('aria-valuetext', time(d.trim[w])); }); fill.style.insetInlineStart = d.trim.start / d.duration * 100 + '%'; fill.style.inlineSize = (d.trim.end - d.trim.start) / d.duration * 100 + '%'; report.textContent = _t('js.feed.ss.trim_range', '{start} – {end} ({n} s)', { start: time(d.trim.start), end: time(d.trim.end), n: Math.round((d.trim.end - d.trim.start) * 10) / 10 }); }
     var numbers = add(box, el('div', 'sst-position'));
-    [['start', _t('js.feed.ss.trim_start', 'Start time')], ['end', _t('js.feed.ss.trim_end', 'End time')]].forEach(function (p) { var r = handles[p[0]] = add(bar, input('range', d.trim[p[0]])); r.classList.add('sst-trim-handle', 'sst-trim-' + p[0]); r.min = 0; r.max = d.duration; r.step = .5; r.setAttribute('aria-label', p[1]); r.addEventListener('input', function () { update(p[0], +r.value); }); var n = inputs[p[0]] = input('number', d.trim[p[0]]); n.min = 0; n.max = d.duration; n.step = .5; n.addEventListener('change', function () { if (isFinite(+n.value)) update(p[0], +n.value); }); add(numbers, field(p[1], n)); });
+    [['start', _t('js.feed.ss.trim_start', 'Start time')], ['end', _t('js.feed.ss.trim_end', 'End time')]].forEach(function (p) { var r = handles[p[0]] = add(bar, input('range', d.trim[p[0]])); r.classList.add('sst-trim-handle', 'sst-trim-' + p[0]); r.min = 0; r.max = d.duration; r.step = .5; r.setAttribute('aria-label', p[1]); r.addEventListener('input', function () { update(p[0], +r.value); }); r.addEventListener('change', function () { update(p[0], +r.value, true); }); var n = inputs[p[0]] = input('number', d.trim[p[0]]); n.min = 0; n.max = d.duration; n.step = .5; n.addEventListener('change', function () { if (isFinite(+n.value)) update(p[0], +n.value, true); }); add(numbers, field(p[1], n)); });
     var actions = add(box, el('div', 'sst-position'));
-    add(actions, iconButton(_t('js.feed.ss.play', '▶️ Play / pause'), function () { if (s.media.paused) { if (s.media.currentTime < d.trim.start || s.media.currentTime >= d.trim.end) s.media.currentTime = d.trim.start; s.media.play().catch(function () {}); } else s.media.pause(); }));
-    var mute = add(actions, iconButton(_t('js.feed.ss.mute', '🔇 Mute preview'), function () { s.media.muted = !s.media.muted; mute.setAttribute('aria-pressed', String(s.media.muted)); })); mute.setAttribute('aria-pressed', String(s.media.muted)); sync(); handles.start.focus();
+    // storyplay: ▶ is play / pause of the loop (a pause by the user stays until they play it again); the sound is the header's 🔇 / 🔊
+    s.trimPlay = add(actions, iconButton(_t('js.feed.ss.play', '▶️ Play / pause'), function () {
+      var m = s.media; if (!m || m !== s.video) return;
+      if (m.paused) tapPlay(s, 'trim ▶', true); else { s.pl.user = true; m.pause(); paintPlay(s); }
+    }));
+    paintPlay(s); sync(); handles.start.focus();
   }
   function time(n) { var whole = Math.floor(n); return Math.floor(whole / 60) + ':' + ('0' + whole % 60).slice(-2) + (n % 1 ? '.5' : ''); }
   // The only mapping from an in-memory draft to the v1 edit contract (reusable by v2).

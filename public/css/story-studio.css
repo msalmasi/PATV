@@ -20,6 +20,11 @@
 /* storyux: every icon button is a circle with its icon only (its words are its aria-label and tooltip) */
 .sst .ds-btn.sst-round { display: inline-grid; place-items: center; flex: none; inline-size: 40px; min-inline-size: 40px; block-size: 40px; min-block-size: 40px; padding: 0; border-radius: 50%; line-height: 1; }
 .sst .ds-btn.sst-round .ds-ic { font-size: 18px; line-height: 1; }
+/* storyplay: a clip plays by itself; where this browser still refuses, a round ▶ over the picture plays it on a tap (its press is
+   never the stage's: no pan, no pinch under it). The sound is the header's round 🔇 / 🔊, like its other icons */
+.sst .ds-btn.sst-playbtn { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%); z-index: var(--ds-z-raised); pointer-events: auto; touch-action: manipulation;
+  inline-size: 72px; min-inline-size: 72px; block-size: 72px; min-block-size: 72px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line-strong); box-shadow: var(--ds-e-2); }
+.sst .ds-btn.sst-playbtn .ds-ic { font-size: 30px; }
 .sst .sst-lifetime { color: var(--ds-text-muted); font-size: 12px; white-space: nowrap; }
 .sst .sst-body { flex: 1 1 0; min-block-size: 120px; display: grid; grid-template-columns: minmax(0, 1fr) 240px; }
 .sst .sst-work { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: var(--ds-sp-3) var(--ds-sp-4); gap: var(--ds-sp-2); }

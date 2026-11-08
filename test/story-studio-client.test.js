@@ -267,6 +267,8 @@ function studioPage(options = {}) {
         if (options.webkit && studio && gesture) node.unlocked = true;
         const was = node.paused !== false; node.paused = false;
         if (studio && was) queueMicrotask(() => { if (node.paused === false) node.dispatchEvent(new Ev('playing')); });
+        // a data: clip is the unlock's tenth of a second of nothing: it ends by itself
+        if (studio && entry.src.startsWith('data:')) setImmediate(() => { if (node.paused === false && String(node.getAttribute('src') || '') === entry.src) { node.paused = true; node.dispatchEvent(new Ev('ended')); } });
         return Promise.resolve();
       };
       node.pause = () => { node.paused = true; };
