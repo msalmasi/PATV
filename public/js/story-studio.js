@@ -212,7 +212,7 @@
         || pull(spot(d.at === 'br' ? 'tl' : 'br', CORNERS[d.at === 'br' ? 'tl' : 'br'], GRIP.turn));
       return out;
     }
-    // storywide (1.99??): where the stage goes in the editor, in the editor's own px - o: { w, h, safe: { t, r, b, l }, foot: the
+    // storywide (1.99ams): where the stage goes in the editor, in the editor's own px - o: { w, h, safe: { t, r, b, l }, foot: the
     // post row's height }. The largest 9:16 inside the safe area: as wide as the screen where that fits, with the post row under
     // it when there is room ('below') or else over its foot ('over', as in Snapchat); fitted by height - centred, equal margins -
     // only when even the whole height can't hold the width. Its controls go inside it ('bleed'), unless it is too narrow for them
@@ -988,7 +988,7 @@
     });
     measure(s); placeSelect(s);
   }
-  // storywide (1.99??): the stage's box (G.fitStage) from the editor's own box, its safe area (the .sst-safe probe) and its post row,
+  // storywide (1.99ams): the stage's box (G.fitStage) from the editor's own box, its safe area (the .sst-safe probe) and its post row,
   // written as CSS variables on the editor - story-studio.css places the stage, the header, the tools, the post row, the sheets
   // and the question from them, so no control is ever half over the stage's edge. Read on opening, on a resize (the keyboard
   // too) and when the post row changes size - never during a gesture. -> true when anything changed (lay the handles out again)

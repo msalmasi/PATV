@@ -14,7 +14,7 @@
 }
 .sst [hidden] { display: none !important; }
 .sst :is(button, input, textarea, select, a, [tabindex]):focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
-/* storywide (1.99??): one layout on every screen, as in IG / Snapchat. The editor fills the visible screen (--sst-vh / --sst-vt from
+/* storywide (1.99ams): one layout on every screen, as in IG / Snapchat. The editor fills the visible screen (--sst-vh / --sst-vt from
    the visual viewport: the keyboard, Chrome on iOS's bars) and the stage is the largest 9:16 in it - edge to edge on a phone. The
    script (fit(): G.fitStage) writes the stage's box as variables on the editor: --sst-sx / --sst-sy its inline-start / top offset
    (--sst-lx its left one), --sst-sw / --sst-sh its size, --sst-sr / --sst-sb the margins after and under it, --sst-pad-b where

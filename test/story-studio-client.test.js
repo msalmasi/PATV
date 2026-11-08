@@ -1560,7 +1560,7 @@ test('Studio storyplay: the ▶ over the picture and the header\'s sound button 
   assert.ok(rule, 'a rule for the ▶'); assert.match(rule[1], /pointer-events:\s*auto/); assert.match(rule[1], /inset-inline-start:\s*50%/); assert.match(rule[1], /z-index:\s*var\(--ds-z-/);
 });
 
-// ── storywide (1.99??): the owner (iPhone, Chrome = WebKit, 2026-11-08): "Story auto play is working! But can you widen the editor so
+// ── storywide (1.99ams): the owner (iPhone, Chrome = WebKit, 2026-11-08): "Story auto play is working! But can you widen the editor so
 //    the buttons aren't half in the margin (see how it looks in IG or Snapchat for ref)". The stage was fitted by height above the
 //    post row - 87% of the 430 px screen - and the X, the tools and ⚙️ sat half over its edges. Now it is the largest 9:16 in the
 //    screen (the post row lies over its foot where it can't go under it), and every control is inside it - or, beside a stage
@@ -1698,7 +1698,7 @@ test('Studio storywide: every control is placed from the stage\'s box - the head
   assert.match(css, /\.sst \.sst-summary, \.sst \.sst-filename, \.sst \.sst-rules \{[^}]*display:\s*none/, 'the editor is the picture: no side panel');
 });
 
-// ── storywide verify (1.99??): the review of storywide on the owner's screen sizes. A status (the camera refused, Loading…) sat over the
+// ── storywide verify (1.99ams): the review of storywide on the owner's screen sizes. A status (the camera refused, Loading…) sat over the
 //    empty screen's Camera / Gallery; an error's 10% red plate over a bright photo was unreadable and blocked pan / pinch; a clip's
 //    header (X, 24 h, 🔇, ⚙️) ran out of a stage the keyboard had narrowed; long labels ran into the rail and out of the stage; the
 //    posting plates crossed a landscape stage and were black bars; the question covered the rail; a grip went under the 24 h pill;
