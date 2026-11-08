@@ -10832,6 +10832,7 @@
   "js.media.catalog.embed_off": "Summary embeddings are off.",
   "js.media.catalog.embed_progress": "Summary embeddings: {done} ready · {left} left · {model} ({dim} dimensions).",
   "js.media.catalog.embed_waiting": "Summary embeddings: waiting for the bot’s model configuration.",
+  "js.media.catalog.embed_counting": "Summary embeddings: {model} ({dim} dimensions) · counting the catalog, check back in a minute.",
   "adm.media.lists.title": "Outside lists",
   "adm.media.lists.help": "Add a curated list to match its entries with the reviewed library. Only matched titles appear in chat.",
   "adm.media.lists.input": "MDBList ID or URL",

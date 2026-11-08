@@ -52,7 +52,7 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   "encoder_down", "too_long", "price", "estimate", "pat", "control_denied", "nothing_on", "last_title", "first_title", "queue_full", "not_starter",
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
   "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable",
-  "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream", "embed_off", "embed_model"];
+  "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream", "embed_off", "embed_model", "embed_busy"];
 const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
@@ -219,7 +219,8 @@ async function opShelves(user, b) {
   await clerkAccess(user, b);
   const out = typeof CF().shelves === "function" ? await CF().shelves() : await CAT().shelves();
   if ([true, "true", "1", 1].includes(conf().get().clerk_embed)) {
-    try { out.embed = await VEC().status(); }
+    // plexvectors 1.99??: a person's ask takes the quick look - the stored model and the last numbers, never a catalog count
+    try { out.embed = await VEC().status({ quick: true }); }
     catch (_) { out.embed = { enabled: true, ready: false, model: null, dim: null, done: 0, left: 0 }; }
   }
   return out;
@@ -239,16 +240,28 @@ async function opEmbed(b) {
   try {
     const result = b.op === "embed_todo" ? await VEC().todo({ model: b.model, dim: b.dim, limit: b.limit, after: b.after })
       : await VEC().put({ model: b.model, dim: b.dim, vecs: b.vecs });
-    if (!result || !result.ok) throw Object.assign(new Error("embed"), { code: result && result.code });
+    if (!result || !result.ok) throw Object.assign(new Error("embed"), { code: result && result.code, logged: !!(result && result.logged) });
+    embedTold.delete(b.op);
     return b.op === "embed_put" ? { ok: true, stored: result.stored, rejected: result.rejected, stale: result.rejected } : result;
   } catch (error) {
     const code = error && error.code;
     if (code === "embed_off") throw new Fail("embed_off", "Embeddings are switched off.", 403);
     if (["embed_model", "bad_embed_model"].includes(code)) throw new Fail("embed_model", "The embedding model needs refreshing.", 409);
     if (["bad_cursor", "bad_vector", "bad_vectors", "bad_batch", "too_large"].includes(code)) throw new Fail("bad", "Invalid embedding batch.", 400);
-    throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+    // plexvectors 1.99?? (prod 2026-11-08: every backfill call "refused catalog_down" while the catalog was ready and a read only
+    // slow): busy - the bot backs off and asks again - or down. plexvectors logs the real reason once a streak (logged); anything it
+    // didn't tell is said here once a streak, its code only (never its message). No per-call line either way.
+    const out = EMBED_BUSY.has(code) ? "embed_busy" : "catalog_down";
+    if (!(error && error.logged)) {
+      const line = "[plexchat] " + b.op + " refused (" + out + "): " + (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code) ? code : "error");
+      if (embedTold.get(b.op) !== line) { embedTold.set(b.op, line); console.log(line); }
+    }
+    throw Object.assign(out === "embed_busy" ? new Fail("embed_busy", "The library catalog is busy - the backfill tries again shortly.", 503)
+      : new Fail("catalog_down", "The library catalog isn't available right now.", 503), { quiet: true });
   }
 }
+const EMBED_BUSY = new Set(["embed_busy", "too_broad", "busy", "slow", "SQLITE_BUSY", "SQLITE_LOCKED"]);
+const embedTold = new Map();   // embed op -> the refusal line last said (once a streak)
 const offers = new Map(), OFFER_MS = 10 * 60000;
 function requestsOn() { return !!(conf().on && typeof conf().on.requests === "function" && conf().on.requests()); }
 function requestRollout(user) {
@@ -618,7 +631,7 @@ async function handle(b = {}) {
   } catch (e) {
     const body = failBody(e);
     if (body.code === "error") console.error("[plexchat]", op, e && e.stack ? e.stack : e);
-    else console.log(`[plexchat] ${op}: refused ${body.code}`);
+    else if (!(e && e.quiet)) console.log(`[plexchat] ${op}: refused ${body.code}`);   // quiet: its reason was logged once already
     return body;
   }
 }

@@ -17,6 +17,10 @@ const SHELVES_BUDGET_MS = 2000;
 // 1,142 ms with no budget) and every show (4,257 in 446 ms) - both past 400 ms, so an add failed there too. About 3.5x that.
 const ADMIN_BUDGET_MS = 4000;
 const MAX_BUDGET_MS = Math.max(SHELVES_BUDGET_MS, ADMIN_BUDGET_MS);
+// plexvectors 1.99?? (prod 2026-11-08): the admin lane is background work - the card, a list's matching and now Pepe's
+// summary-embedding backfill, which reads for hours (~255k docs at 20/s). Its reads wait behind any chat read already waiting
+// (one connection, chat first) and queue on their own (BACKGROUND_QUEUE), so a backfill never makes a chat search "busy".
+const BACKGROUND_QUEUE = 8;
 const DEFAULT_BLOCK = "X,XXX,AO,R18,R18+";
 const KEY = /^\d{1,12}$/;
 const text = (v, max = 200) => typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -131,7 +135,7 @@ function createCatalog(options = {}) {
   const log = options.log || console;
   let writer = null, initPromise = null, searchDb = null, tail = Promise.resolve(), fts = false, syncing = null, timer = null, closed = false;
   let running = false, generation = 0, shelvesKept = null;
-  const queue = [];
+  const queue = [], later = [];   // chat reads; background (admin lane) reads, served when no chat read waits
 
   async function connect(mode) {
     const db = await new Promise((resolve, reject) => {
@@ -226,15 +230,16 @@ function createCatalog(options = {}) {
   function read(sql, params = [], { budgetMs = SEARCH_BUDGET_MS } = {}) {
     return queued(sql, params, Math.max(1, Math.min(SEARCH_BUDGET_MS, number(budgetMs, SEARCH_BUDGET_MS))));
   }
-  function queued(sql, params, budgetMs) {
+  function queued(sql, params, budgetMs, background = false) {
     if (closed) return Promise.reject(coded("unavailable"));
-    if (running && queue.length >= SEARCH_QUEUE) return Promise.reject(coded("busy"));
-    return new Promise((resolve, reject) => { queue.push({ sql, params, budgetMs, resolve, reject }); pump(); });
+    const q = background ? later : queue;
+    if (running && q.length >= (background ? BACKGROUND_QUEUE : SEARCH_QUEUE)) return Promise.reject(coded("busy"));
+    return new Promise((resolve, reject) => { q.push({ sql, params, budgetMs, resolve, reject }); pump(); });
   }
   function pump() {
-    if (running || !queue.length) return;
+    if (running || !(queue.length || later.length)) return;
     running = true;
-    const job = queue.shift();
+    const job = queue.length ? queue.shift() : later.shift();
     (async () => {
       await init();
       if (!searchDb) searchDb = await connect(sqlite3.OPEN_READONLY);
@@ -330,7 +335,7 @@ function createCatalog(options = {}) {
   async function rows(filters = {}) { return rowsOn(read, filters); }
   async function getByKeys(keys) { return getByKeysOn(read, keys); }
   // plexlists 1.99amd: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
-  const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS);
+  const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS, true);
   const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys) };
   async function search(query, filters = {}) {
     const words = fold(query).split(" ").filter(Boolean).slice(0, 20);
@@ -783,7 +788,7 @@ function createCatalog(options = {}) {
     closed = true;
     clearTimeout(timer); timer = null;
     if (outsideLists) await outsideLists.close();
-    for (const q of queue.splice(0)) q.reject(coded("unavailable"));
+    for (const q of [...queue.splice(0), ...later.splice(0)]) q.reject(coded("unavailable"));
     await tail;
     if (syncing) await syncing.catch(() => {});
     while (running) await new Promise((resolve) => setImmediate(resolve));
@@ -791,8 +796,11 @@ function createCatalog(options = {}) {
     writer = searchDb = null;
   }
   let adminVectors;
+  // plexvectors 1.99??: the card's count on the admin lane (it had only the 400 ms read() - 1.2-1.4 s on prod, so it threw).
+  // The site's own catalog shares the vectors module's instance with plexchat (one count, one policy re-check, not two).
   function vectorsCache() {
-    if (!adminVectors) adminVectors = options.vectors || require("./plexvectors").createVectors({ catalog: { read, write }, settings, now });
+    if (!adminVectors) adminVectors = options.vectors || (options.sharedVectors ? require("./plexvectors")
+      : require("./plexvectors").createVectors({ catalog: { read, write, getByKeys, admin }, settings, now }));
     return adminVectors;
   }
   function register(app, { addUser, noTimers } = {}) {
@@ -829,12 +837,12 @@ function createCatalog(options = {}) {
 let singleton;
 const current = () => {
   if (!singleton) {
-    singleton = createCatalog();
+    singleton = createCatalog({ sharedVectors: true });
     try { require("./shutdown").onExit((done) => singleton.close().then(done, done)); } catch (_) { /* standalone tool */ }
   }
   return singleton;
 };
-module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE };
+module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE, BACKGROUND_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
 // plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
 module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args) };

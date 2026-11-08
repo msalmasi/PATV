@@ -43,6 +43,9 @@
       }));
       if (j.embed) pcText(out, "p", !j.embed.enabled ? ct("embed_off", "Summary embeddings are off.") :
         !j.embed.model ? ct("embed_waiting", "Summary embeddings: waiting for the bot’s model configuration.") :
+        // plexvectors 1.99??: the model is set but the catalog couldn't be counted just now - say so, never "0 ready · 0 left"
+        j.embed.counted === false ? ct("embed_counting", "Summary embeddings: {model} ({dim} dimensions) · counting the catalog, check back in a minute.", {
+          model: j.embed.model, dim: Number(j.embed.dim) || 0 }) :
         ct("embed_progress", "Summary embeddings: {done} ready · {left} left · {model} ({dim} dimensions).", {
           done: Number(j.embed.done) || 0, left: Number(j.embed.left) || 0, model: j.embed.model, dim: Number(j.embed.dim) || 0
         }));
