@@ -256,7 +256,7 @@ function bjLimits(high) {
   const st = S.settings;
   return high ? [st.bj_hr_min_bet || C.HR_MIN_BET, st.bj_hr_max_bet || C.HR_MAX_BET] : [st.bj_min_bet || C.MIN_BET, st.bj_max_bet || C.MAX_BET];
 }
-function newTableObject(host, room, high) {
+function newTableObject(host, room, high, theme) {
   const id = crypto.randomBytes(5).toString("hex");
   const [minBet, maxBet] = bjLimits(high);
   return {
@@ -265,6 +265,7 @@ function newTableObject(host, room, high) {
     players: {}, escrowed: {}, autobet: [], lastbet: {}, pending: {}, missed: {}, afk: {},
     empty_windows: 0, dl: { bet: null, ins: null, turn: null }, turn: null, turn_token: 0,
     round: null, intent: null, opno: 0, multi: [], log: [], last_round: null, rev: 0, closed_at: null,
+    theme: themes.clean(theme, "bj"),          // 1.99?? h20: for the table's whole life (casino/themes.js; absent = classic)
   };
 }
 
@@ -728,15 +729,18 @@ async function cmdStart(actor, room, game, blinds, words) {
   const high = HR_WORDS.includes(String(blinds || "").toLowerCase());
   if (blinds && !high) return R(false, "usage: !blackjack start  (or !blackjack start hr for a 💎 High Roller table)");
   if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
-  const T = newTableObject(actor, room, high);
+  const T = newTableObject(actor, room, high, th.theme);
   S.tables.set(T.id, T);
   V.enter(T, actor);                 // 1.99ajw casino2 rework: the opener's "opened" line and the host name follow their veil
   await save(T);
   await emit(T, "opened", `🂠 ${actor.name} opened a ${high ? "💎 High Roller " : ""}Blackjack table — Pepe deals! 6-deck shoe, blackjack pays 3:2, dealer hits soft 17. ` +
              `Bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)} PAT${high ? " (High Rollers only; anyone can watch)" : ""}. Play here or on the web: ${link(T)}`,
              { client_seed: T.client_seed, url: link(T), high_stakes: high });
+  // 1.99?? h20: the saloon dealer's one line when the table opens (null on classic / the switch off)
+  const flav = themes.line(T, st, "bj_open", { min: fmt(T.eng.min_bet), max: fmt(T.eng.max_bet) });
+  if (flav) await emit(T, "line", flav);
   await openRound(T, true);
-  return R(true, "table open.", { table: T.id, quiet: true });
+  return told(R(true, "table open.", { table: T.id, quiet: true }));
 }
 
 async function seatChecks(T, actor) {
@@ -1139,6 +1143,7 @@ function bjView(T) {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
     room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: V.hostName(T), round_no: e.round_no,
     min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, adverts: advertList(T), max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
+    theme: themes.themeOf(T, S.settings),     // 1.99?? h20: classic whenever the switch is off
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
     last_round: ["betting", "idle", "done"].includes(e.phase) || T.status === "closed" ? V.maskRound(T, T.last_round) : null,
@@ -1178,7 +1183,8 @@ function lobby() {
     const base = { id: T.id, host: V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
     return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
-                                 min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes });
+                                 min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes,
+                                 theme: themes.themeOf(T, S.settings) });
   });
 }
 

@@ -102,6 +102,7 @@
     const els = slots();
     const hrv = !!(t.high_stakes || (me && me.high_roller));      // 1.99ov: 💎 chips for High Rollers and at High Roller tables
     $("cz-felt").classList.toggle("hr", !!t.high_stakes);
+    CZ.theme(t, { scene: $("cz-felt"), sign: $("cz-felt").querySelector(".bj-dealer") });    // 1.99?? h20: the table's theme (casino-ui.js)
     // (1.99ajw casino2 rework: a result is matched to its seat by seat id - two masked seats can both read "someone" - an older round by name)
     const sameSeat = (s, p) => !!s && (p.seat ? s.seat === p.seat : s.name === p.name);
     const lrOf = (s) => ((lr && lr.players) || []).find((p) => sameSeat(s, p)) || null;

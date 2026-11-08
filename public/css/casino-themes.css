@@ -8,7 +8,11 @@
    felt tones they sit on (hand-off 20 DELIVERY.md, "Contrast"). Idle motion (the lamp, the doors) stops under prefers-reduced-motion. */
 
 /* ── the western saloon ── */
-.cz-theme-saloon { --sl-brass: #c9a24a; --sl-cream: #efe3c4; --mut: #cbbd9c; --line: rgba(201,162,74,.32); }
+.cz-theme-saloon { --sl-brass: #c9a24a; --sl-cream: #efe3c4; --mut: #cbbd9c; --line: rgba(201,162,74,.32);
+                   /* the art, once: the baize's cloth texture, the rail's grain, the card back (horseshoe + star) */
+                   --sl-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23n%29'/%3E%3C/svg%3E");
+                   --sl-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .35' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
+                   --sl-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 70' preserveAspectRatio='none'%3E%3Cdefs%3E%3Cpattern id='p' width='4.2' height='4.2' patternUnits='userSpaceOnUse' patternTransform='rotate%2845%29'%3E%3Cpath d='M0 0v4.2' stroke='%23862720' stroke-width='1.1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='50' height='70' fill='%23efe3c4'/%3E%3Crect x='2.4' y='2.4' width='45.2' height='65.2' rx='2.6' fill='%236a1919'/%3E%3Crect x='2.4' y='2.4' width='45.2' height='65.2' rx='2.6' fill='url%28%23p%29'/%3E%3Crect x='4.6' y='4.6' width='40.8' height='60.8' rx='1.6' fill='none' stroke='%23efe3c4' stroke-width='.75'/%3E%3Cellipse cx='25' cy='35' rx='13' ry='15.5' fill='%236a1919' stroke='%23d9b45a' stroke-width='.6'/%3E%3Cpath d='M17.6 24.5c-2.4 8.6-1.4 20 7.4 20s9.8-11.4 7.4-20' fill='none' stroke='%23d9b45a' stroke-width='3.6' stroke-linecap='round'/%3E%3Cpath d='M17.6 24.5c-2.4 8.6-1.4 20 7.4 20s9.8-11.4 7.4-20' fill='none' stroke='%23f6e6b0' stroke-width='.6' stroke-linecap='round' opacity='.6' transform='translate%28-.5 -.4%29'/%3E%3Cg fill='%236a1919'%3E%3Ccircle cx='17.2' cy='29' r='.55'/%3E%3Ccircle cx='17.3' cy='34' r='.55'/%3E%3Ccircle cx='18.6' cy='39' r='.55'/%3E%3Ccircle cx='32.8' cy='29' r='.55'/%3E%3Ccircle cx='32.7' cy='34' r='.55'/%3E%3Ccircle cx='31.4' cy='39' r='.55'/%3E%3C/g%3E%3Cpath d='M25.00 28.00L26.28 31.43L29.95 31.59L27.08 33.87L28.06 37.41L25.00 35.38L21.94 37.41L22.92 33.87L20.05 31.59L23.72 31.43Z' fill='%23efe3c4'/%3E%3Cpath d='M9.50 7.60L10.09 9.18L11.78 9.26L10.46 10.31L10.91 11.94L9.50 11.01L8.09 11.94L8.54 10.31L7.22 9.26L8.91 9.18ZM40.50 7.60L41.09 9.18L42.78 9.26L41.46 10.31L41.91 11.94L40.50 11.01L39.09 11.94L39.54 10.31L38.22 9.26L39.91 9.18ZM9.50 57.60L10.09 59.18L11.78 59.26L10.46 60.31L10.91 61.94L9.50 61.01L8.09 61.94L8.54 60.31L7.22 59.26L8.91 59.18ZM40.50 57.60L41.09 59.18L42.78 59.26L41.46 60.31L41.91 61.94L40.50 61.01L39.09 61.94L39.54 60.31L38.22 59.26L39.91 59.18Z' fill='%23d9b45a'/%3E%3C/svg%3E"); }
 
 /* the frame and the scene behind the felt: a dim saloon in silhouette, low contrast so the table stays the focus */
 .cz-theme-saloon .hm-wrap { isolation: isolate; border-radius: 26px; background: #150d07; box-shadow: inset 0 0 0 1px rgba(201,162,74,.16); }
@@ -29,7 +33,7 @@
 .cz-theme-saloon .felt.hm {
   padding: 15px;
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23n%29'/%3E%3C/svg%3E") content-box,
+    var(--sl-noise) content-box,
     radial-gradient(130% 100% at 50% 42%, var(--felt2) 0%, var(--felt1) 52%, var(--felt0) 100%) content-box,
     radial-gradient(circle at 50% 7.5px, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
     radial-gradient(circle at 50% calc(100% - 7.5px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
@@ -39,7 +43,7 @@
     radial-gradient(circle at 73% 7.5px, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
     radial-gradient(circle at 27% calc(100% - 7.5px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
     radial-gradient(circle at 73% calc(100% - 7.5px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) padding-box,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .35' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E") padding-box,
+    var(--sl-grain) padding-box,
     linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) padding-box,
     linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) padding-box;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.65), 0 0 0 1px rgba(201,162,74,.22), 0 16px 44px rgba(0,0,0,.6);
@@ -58,7 +62,7 @@
                             filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
 
 /* card backs: cream and oxblood, a horseshoe and a star, a thin frame (the faces stay the site's) */
-.cz-theme-saloon .pc-b { border: 2px solid var(--sl-cream); background: var(--sl-cream) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 70' preserveAspectRatio='none'%3E%3Cdefs%3E%3Cpattern id='p' width='4.2' height='4.2' patternUnits='userSpaceOnUse' patternTransform='rotate%2845%29'%3E%3Cpath d='M0 0v4.2' stroke='%23862720' stroke-width='1.1'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='50' height='70' fill='%23efe3c4'/%3E%3Crect x='2.4' y='2.4' width='45.2' height='65.2' rx='2.6' fill='%236a1919'/%3E%3Crect x='2.4' y='2.4' width='45.2' height='65.2' rx='2.6' fill='url%28%23p%29'/%3E%3Crect x='4.6' y='4.6' width='40.8' height='60.8' rx='1.6' fill='none' stroke='%23efe3c4' stroke-width='.75'/%3E%3Cellipse cx='25' cy='35' rx='13' ry='15.5' fill='%236a1919' stroke='%23d9b45a' stroke-width='.6'/%3E%3Cpath d='M17.6 24.5c-2.4 8.6-1.4 20 7.4 20s9.8-11.4 7.4-20' fill='none' stroke='%23d9b45a' stroke-width='3.6' stroke-linecap='round'/%3E%3Cpath d='M17.6 24.5c-2.4 8.6-1.4 20 7.4 20s9.8-11.4 7.4-20' fill='none' stroke='%23f6e6b0' stroke-width='.6' stroke-linecap='round' opacity='.6' transform='translate%28-.5 -.4%29'/%3E%3Cg fill='%236a1919'%3E%3Ccircle cx='17.2' cy='29' r='.55'/%3E%3Ccircle cx='17.3' cy='34' r='.55'/%3E%3Ccircle cx='18.6' cy='39' r='.55'/%3E%3Ccircle cx='32.8' cy='29' r='.55'/%3E%3Ccircle cx='32.7' cy='34' r='.55'/%3E%3Ccircle cx='31.4' cy='39' r='.55'/%3E%3C/g%3E%3Cpath d='M25.00 28.00L26.28 31.43L29.95 31.59L27.08 33.87L28.06 37.41L25.00 35.38L21.94 37.41L22.92 33.87L20.05 31.59L23.72 31.43Z' fill='%23efe3c4'/%3E%3Cpath d='M9.50 7.60L10.09 9.18L11.78 9.26L10.46 10.31L10.91 11.94L9.50 11.01L8.09 11.94L8.54 10.31L7.22 9.26L8.91 9.18ZM40.50 7.60L41.09 9.18L42.78 9.26L41.46 10.31L41.91 11.94L40.50 11.01L39.09 11.94L39.54 10.31L38.22 9.26L39.91 9.18ZM9.50 57.60L10.09 59.18L11.78 59.26L10.46 60.31L10.91 61.94L9.50 61.01L8.09 61.94L8.54 60.31L7.22 59.26L8.91 59.18ZM40.50 57.60L41.09 59.18L42.78 59.26L41.46 60.31L41.91 61.94L40.50 61.01L39.09 61.94L39.54 60.31L38.22 59.26L39.91 59.18Z' fill='%23d9b45a'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+.cz-theme-saloon .pc-b { border: 2px solid var(--sl-cream); background: var(--sl-cream) var(--sl-back) center / 100% 100% no-repeat; }
 
 /* chips: clay colours with the western edge spots (the 💎 chips keep theirs) */
 .cz-theme-saloon .chip:not(.hrc) { --c: #ece4d2; --e: #a2302a;
@@ -78,7 +82,7 @@
 .cz-theme-saloon .hm-res { background: rgba(20,11,5,.78); border-color: rgba(201,162,74,.6); }
 /* AA on the lightest wood / baize: the seats' plain tags get a dark plate, "Open seat" and the felt's sub-line a brighter ink */
 .cz-theme-saloon .seat .tag:not(.gold):not(.red):not(.blue):not(.green) { background: rgba(20,11,5,.8); color: #ece2c8; }
-.cz-theme-saloon .hm-seat.empty .plate { color: #efe3c4; text-shadow: 0 1px 2px #000; }
+.cz-theme-saloon .seat.empty .plate { color: #efe3c4; text-shadow: 0 1px 2px #000; }
 .cz-theme-saloon .felt-msg small { color: rgba(255,255,255,.9); }
 
 /* the action bar (hand-off 21's buttons, sizing, pre-moves, time bank): a dark wood panel with a brass edge; the buttons keep their fills */
@@ -88,15 +92,47 @@
 .cz-theme-saloon .raise input[type=text] { background: #160c05; }
 .cz-theme-saloon .cz-btn.ghost { background: rgba(20,10,4,.5); }
 
+/* blackjack: the dealer's arc of .felt.bj - the rail as a wood border with a brass inlay and studs, the back bar dim behind the
+   dealer (fading into the baize), the sign over Pepe, the shoe in wood and brass */
+.cz-theme-saloon .felt.bj {
+  border: 14px solid transparent;
+  background:
+    var(--sl-noise) padding-box,
+    radial-gradient(120% 90% at 50% 25%, var(--felt2) 0%, var(--felt1) 48%, var(--felt0) 100%) padding-box,
+    radial-gradient(circle at 50% 7px, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    radial-gradient(circle at 25% 7px, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    radial-gradient(circle at 75% 7px, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    radial-gradient(circle at 7px 34%, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    radial-gradient(circle at calc(100% - 7px) 34%, #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    radial-gradient(circle at 50% calc(100% - 7px), #f6dc94 0 1.5px, #b08a35 2.5px 3.3px, rgba(0,0,0,.55) 4.1px, transparent 5px) border-box,
+    var(--sl-grain) border-box,
+    linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) border-box,
+    linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) border-box;
+  box-shadow: 0 0 0 1px rgba(201,162,74,.22), 0 16px 44px rgba(0,0,0,.6);
+}
+.cz-theme-saloon .felt.bj::after { inset: 0; border-radius: 14px 14px 50% 50% / 14px 14px 22% 22%; opacity: 1; background: none; border: 2px solid var(--sl-brass);
+                                   box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), inset 0 0 50px 14px rgba(0,0,0,.28); }
+.cz-theme-saloon .felt.bj.hr { box-shadow: 0 0 0 1px rgba(232,196,90,.6), 0 0 28px rgba(255,200,60,.22), 0 16px 44px rgba(0,0,0,.6); }
+.cz-theme-saloon .felt.bj.hr::after { border-color: #e8c45a; }
+.cz-theme-saloon .felt.bj .cz-scene { inset: 0 0 auto 0; height: 48%; z-index: -1; border-radius: 14px 14px 0 0; opacity: .6;
+                                      -webkit-mask-image: linear-gradient(180deg, #000 35%, transparent); mask-image: linear-gradient(180deg, #000 35%, transparent); }
+.cz-theme-saloon .felt.bj .cz-scene::after { display: none; }
+.cz-theme-saloon .felt.bj .cz-scene-art { height: auto; aspect-ratio: 1200 / 560; }
+.cz-theme-saloon .felt.bj .cz-sign { width: clamp(150px, 24%, 220px); margin: -4px auto 8px; }
+.cz-theme-saloon .bj-shoe { background: linear-gradient(160deg, #5b351a, #24130a); box-shadow: inset 0 0 0 2px var(--sl-brass), 0 4px 10px rgba(0,0,0,.5); }
+.cz-theme-saloon .bj-shoe::after { border-color: var(--sl-cream); background: var(--sl-cream) var(--sl-back) center / 100% 100% no-repeat; }
+.cz-theme-saloon .bj-rules { color: #f8e8b8; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.cz-theme-saloon .felt-lbl { color: rgba(255,255,255,.9); }
+
 /* the felt narrowed by the docked chat (1100-1365px): a smaller sign */
 @media (min-width: 1100px) and (max-width: 1365px) {
   .cz-theme-saloon .cz-sign { width: 140px; margin: -2px 0 0; }
 }
-/* phones: no scene, a wood-panel background; a thinner rail with four studs */
+/* phones: no scene (Hold'em: a wood-panel background and the wall sign above the felt; blackjack: no back bar); a thinner rail */
 @media (max-width: 760px) {
   .cz-theme-saloon .cz-scene-art, .cz-theme-saloon .cz-scene::after { display: none; }
   .cz-theme-saloon .hm-center .cz-sign { display: none; }
-  .cz-theme-saloon .cz-wallsign { display: block; position: absolute; top: 10px; left: 50%; width: 150px; height: auto; transform: translateX(-50%);
+  .cz-theme-saloon .hm-wrap .cz-wallsign { display: block; position: absolute; top: 10px; left: 50%; width: 150px; height: auto; transform: translateX(-50%);
                                   filter: drop-shadow(0 3px 3px rgba(0,0,0,.6)); }
   .cz-theme-saloon .hm-wrap { padding-top: 100px; border-radius: 20px;
     background: linear-gradient(180deg, rgba(255,214,160,.05), rgba(0,0,0,.42)),
@@ -104,17 +140,35 @@
   .cz-theme-saloon .felt.hm {
     padding: 11px;
     background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23n%29'/%3E%3C/svg%3E") content-box,
+      var(--sl-noise) content-box,
       radial-gradient(130% 100% at 50% 42%, var(--felt2) 0%, var(--felt1) 52%, var(--felt0) 100%) content-box,
       radial-gradient(circle at 50% 5.5px, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) padding-box,
       radial-gradient(circle at 50% calc(100% - 5.5px), #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) padding-box,
       radial-gradient(circle at 5.5px 50%, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) padding-box,
       radial-gradient(circle at calc(100% - 5.5px) 50%, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) padding-box,
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .35' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E") padding-box,
+      var(--sl-grain) padding-box,
       linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) padding-box,
       linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) padding-box;
   }
+  .cz-theme-saloon .felt.bj .cz-scene { display: none; }
   .cz-theme-saloon .felt.hm::after { inset: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.35), inset 0 0 30px 10px rgba(0,0,0,.3); }
+}
+@media (max-width: 600px) {
+  .cz-theme-saloon .felt.bj {
+    border-width: 10px;
+    background:
+      var(--sl-noise) padding-box,
+      radial-gradient(120% 90% at 50% 25%, var(--felt2) 0%, var(--felt1) 48%, var(--felt0) 100%) padding-box,
+      radial-gradient(circle at 50% 5px, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) border-box,
+      radial-gradient(circle at 5px 50%, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) border-box,
+      radial-gradient(circle at calc(100% - 5px) 50%, #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) border-box,
+      radial-gradient(circle at 50% calc(100% - 5px), #f6dc94 0 1.2px, #b08a35 2px 2.7px, rgba(0,0,0,.55) 3.4px, transparent 4px) border-box,
+      var(--sl-grain) border-box,
+      linear-gradient(180deg, rgba(255,228,184,.2), rgba(255,228,184,0) 26%, rgba(0,0,0,0) 70%, rgba(0,0,0,.4)) border-box,
+      linear-gradient(96deg, #4b2a14, #39200f 22%, #5b351a 48%, #351e0e 74%, #4d2c15) border-box;
+  }
+  .cz-theme-saloon .felt.bj::after { border-radius: 14px; }
+  .cz-theme-saloon .felt.bj .cz-sign { width: 150px; margin: 0 auto 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cz-theme-saloon .czs-flame, .cz-theme-saloon .czs-door { animation: none !important; }

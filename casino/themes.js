@@ -8,8 +8,9 @@
 //     table SHOWS as classic - even one opened while it was on), "staff" (only a casino admin picks; everyone sees a
 //     staff-opened saloon table as saloon), "everyone";
 //   * free for now: `unlock` is reserved for a later PAT price / Season Pass item (Question 1);
-//   * the dealer's flavour lines (locales/en.json keys in `lines`) at two moments only: when the table opens, and on a
-//     showdown pot of BIG_POT_BB big blinds or more (casino/holdem.js) - at most one extra line per hand, never on classic;
+//   * the dealer's flavour lines (locales/en.json keys in `lines`) at two moments only: when the table opens (open / bj_open),
+//     and on a Hold'em showdown pot of BIG_POT_BB big blinds or more (casino/holdem.js) - at most one extra line per hand,
+//     never on classic;
 //     a per-table counter (T.flav, seeded from the table id) rotates the variants;
 //   * the look: public/css/casino-themes.css (scoped under .cz-theme-<id> on the table wrap) + the art in
 //     views/partials/casino-theme-<id>.ejs, loaded by the table page only when the table has a theme; the sound cues
@@ -22,9 +23,10 @@ const en = () => { if (!EN) { try { EN = require("../locales/en.json"); } catch 
 const THEMES = Object.freeze({
   classic: Object.freeze({ id: "classic", name: "js.casino.theme_classic", games: ["holdem", "bj"], unlock: null, default: true,
                            lines: {}, sound: [] }),
-  saloon: Object.freeze({ id: "saloon", name: "js.casino.theme_saloon", games: ["holdem"], unlock: null,
+  saloon: Object.freeze({ id: "saloon", name: "js.casino.theme_saloon", games: ["holdem", "bj"], unlock: null,
                           lines: { open: ["casino.theme_saloon_open1", "casino.theme_saloon_open2", "casino.theme_saloon_open3", "casino.theme_saloon_open4"],
-                                   pot: ["casino.theme_saloon_pot1", "casino.theme_saloon_pot2", "casino.theme_saloon_pot3", "casino.theme_saloon_pot4"] },
+                                   pot: ["casino.theme_saloon_pot1", "casino.theme_saloon_pot2", "casino.theme_saloon_pot3", "casino.theme_saloon_pot4"],
+                                   bj_open: ["casino.theme_saloon_bjopen1", "casino.theme_saloon_bjopen2", "casino.theme_saloon_bjopen3", "casino.theme_saloon_bjopen4"] },
                           sound: ["chip", "card", "bell"] }),
 });
 const DEFAULT = "classic";
