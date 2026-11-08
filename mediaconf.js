@@ -27,6 +27,9 @@ const DEFAULTS = {
   // Library clerk: the index is a rebuildable cache; selection remains off until an admin enables it.
   clerk_enabled: "off",          // off | staff | everyone
   clerk_requests: "off",         // real requests require their own confirmation
+  // 1.99?? clerkreq S6: a request made from chat ("pepe request X") that lands on Plex is said in its pad's Camfrog room ("📼 X just
+  // landed - requested by <name>"; a veiled / incognito requester unnamed) - relay job request_landed
+  request_landed_relay: true,
   clerk_block_ratings: "X,XXX,AO,R18,R18+",
   clerk_warn_ratings: "NR,Not Rated,Unrated",
   catalog_sync_min: 60,
@@ -128,6 +131,7 @@ function itemMap(v, shape) {
 const CLEAN = {
   clerk_enabled: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
   clerk_requests: (v) => (["off", "staff", "everyone"].includes(v) ? v : "off"),
+  request_landed_relay: bool,                                                   // 1.99?? clerkreq S6
   // 1.99alq train3 verify: Plex writes many certifications with a country prefix ("gb/R18", "au/R18+", "de/18"); the catalog keeps
   // the rating without it (plexcatalog.crow), so a typed prefix is taken off here too - it was dropped (the "/" didn't match), and
   // "R18" never matched a "gb/R18" title. Duplicates go.

@@ -11238,6 +11238,7 @@
   "adm.media.catalog.mode_everyone": "Tout le monde",
   "adm.media.catalog.requests": "Qui peut demander des titres manquants depuis le chat",
   "adm.media.catalog.request_help": "Les titres manquants doivent être confirmés par le service de demandes. Chaque demande a besoin de son propre oui ; les demandes payantes ou en crédit exigent un oui explicite. Les demandes depuis le chat sont indisponibles sur les pads 18+ et dans les messages privés.",
+  "adm.media.catalog.landed": "📼 L'annoncer dans le salon Camfrog du pad quand un titre demandé depuis le chat arrive sur Plex (un demandeur incognito ou masqué n'est jamais nommé)",
   "adm.media.catalog.sync_minutes": "Intervalle de synchronisation du catalogue (minutes)",
   "adm.media.catalog.blocked": "Classifications de contenu bloquées (séparées par des virgules)",
   "adm.media.catalog.warned": "Classifications à marquer comme non classées (séparées par des virgules)",

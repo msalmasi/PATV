@@ -11238,6 +11238,7 @@
   "adm.media.catalog.mode_everyone": "Todos",
   "adm.media.catalog.requests": "Quién puede pedir títulos que faltan desde el chat",
   "adm.media.catalog.request_help": "Los títulos que faltan deben ser confirmados por el servicio de solicitudes. Cada solicitud necesita su propio sí; las solicitudes pagadas o con créditos necesitan un sí explícito. Las solicitudes desde el chat no están disponibles en pads +18 ni en mensajes privados.",
+  "adm.media.catalog.landed": "📼 Anunciarlo en la sala de Camfrog del pad cuando un título pedido desde el chat llegue a Plex (nunca se nombra a quien lo pidió en incógnito u oculto)",
   "adm.media.catalog.sync_minutes": "Intervalo de sincronización del catálogo (minutos)",
   "adm.media.catalog.blocked": "Clasificaciones de contenido bloqueadas (separadas por comas)",
   "adm.media.catalog.warned": "Clasificaciones para marcar como sin clasificar (separadas por comas)",

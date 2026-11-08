@@ -1742,6 +1742,40 @@ async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
   }
 }
 
+// ── 1.99?? clerkreq S6: 📼 a request made from chat ("pepe request X" in this pad's Camfrog room / web chat) landed on Plex - Pepe says it in
+// the pad's Camfrog room (relay job "request_landed", camfrog-bot pepe_plexchat._relay_request_landed): "📼 X (2017) just landed - requested
+// by <name> - say "pepe play X"". Only for a live (bridged) room; offered once (bridge-relay takeJobs). A veiled requester (anon: the bot said
+// they were incognito / hidden when they asked) or one on Pepe's hidden list now is never named: no login, no name, no account on the job.
+/** {roomId, userId, title, year, anon} -> {queued: true} | {queued: false, why}. Never throws (mediarequests.notifyChange). */
+async function requestLanded({ roomId, userId, title, year, anon } = {}) {
+  try {
+    await load();
+    const R = rooms.get(String(roomId || ""));
+    if (!R || !isLive(R)) return { queued: false, why: "room offline" };
+    const name = str(title, 90);
+    if (!name) return { queued: false, why: "title" };
+    const y = Number.isInteger(year) && year >= 1880 && year <= 2200 ? year : null;
+    const what = str(`${name}${y ? ` (${y})` : ""}`, 100);
+    let camfrog = "", display = "", uid = "";
+    if (anon !== true) {
+      const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [String(userId || "")]))[0];
+      const cf = u && u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
+      const hidden = !!(cf && require("./quotes").isHidden(cf));
+      if (u && !hidden) {
+        uid = String(u.userId);
+        camfrog = LOGIN_RE.test(cf) ? cf : "";
+        try { display = await relay.webName(u); } catch (e) { display = ""; }
+        display = str(display || u.username, 40);
+      }
+    }
+    relay.newJob({ kind: "request_landed", roomId: R.id, userId: uid, username: "", camfrog, display, what, title: name, pad: str(R.title || R.name || R.id, 60) });
+    return { queued: true };
+  } catch (e) {
+    console.error("[bridge] request landed:", e.message);
+    return { queued: false, why: "error" };
+  }
+}
+
 /**
  * The live view of room R for one viewer. opts (CL3): {viewer: req.user-like | null, jc: the page's signed join cursor,
  * nonExempt: the homepage panel (never the owner / staff / mod floors)}. Only what this viewer may see is serialised: the
@@ -2836,7 +2870,7 @@ async function forgetVeiled(logins) {
 
 module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === "function" ? fn : () => Date.now(); }, _eligReset: () => ELIG.clear(),   // 1.99ajc dockfu (D4)
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, _audioTick: audioTick, _audioListeners: (id) => (audio.get(String(id)) ? audio.get(String(id)).listeners.size : 0), _audioRecheckOn: () => !!audioRecheckT, _audioRecheckStart: startAudioRecheck, _audioRecheckStop: stopAudioRecheck, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
+  liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits, requestLanded,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)
   embedClosed,                                          // tablechat review: padaccess.js answers it for an Approved pad's embed

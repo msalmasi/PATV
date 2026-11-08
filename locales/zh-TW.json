@@ -11017,6 +11017,7 @@
   "adm.media.catalog.mode_everyone": "所有人",
   "adm.media.catalog.requests": "誰可以從聊天室請求缺少的片名",
   "adm.media.catalog.request_help": "缺少的片名必須經由請求服務確認。每筆請求都需要各自的同意；付費或點數請求需要明確同意。在 18+ 小站和私訊中無法從聊天室發出請求。",
+  "adm.media.catalog.landed": "📼 聊天中請求的作品上架 Plex 後，在該 pad 的 Camfrog 房間裡說一聲（隱身或隱藏的請求者絕不點名）",
   "adm.media.catalog.sync_minutes": "目錄同步間隔（分鐘）",
   "adm.media.catalog.blocked": "封鎖的內容分級（以逗號分隔）",
   "adm.media.catalog.warned": "要標示為未分級的分級（以逗號分隔）",

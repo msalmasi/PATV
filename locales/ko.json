@@ -11017,6 +11017,7 @@
   "adm.media.catalog.mode_everyone": "모두",
   "adm.media.catalog.requests": "채팅에서 없는 제목을 요청할 수 있는 대상",
   "adm.media.catalog.request_help": "확인되지 않은 제목은 요청 서비스에서 확인해야 해요. 요청마다 각각 승인이 필요하며, 유료 또는 크레딧 요청에는 명시적인 승인이 필요해요. 채팅에서의 요청은 18+ 패드와 개인 메시지에서는 사용할 수 없어요.",
+  "adm.media.catalog.landed": "📼 채팅에서 요청한 작품이 Plex에 들어오면 패드의 Camfrog 방에 알리기 (시크릿·숨김 요청자의 이름은 절대 밝히지 않음)",
   "adm.media.catalog.sync_minutes": "카탈로그 동기화 간격 (분)",
   "adm.media.catalog.blocked": "차단할 콘텐츠 등급 (쉼표로 구분)",
   "adm.media.catalog.warned": "미등급으로 표시할 등급 (쉼표로 구분)",

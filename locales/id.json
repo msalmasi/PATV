@@ -11019,6 +11019,7 @@
   "adm.media.catalog.mode_everyone": "Semua orang",
   "adm.media.catalog.requests": "Siapa yang boleh meminta judul yang belum ada dari chat",
   "adm.media.catalog.request_help": "Judul yang hilang harus dikonfirmasi oleh layanan permintaan. Setiap permintaan butuh ya sendiri-sendiri; permintaan berbayar atau pakai kredit butuh ya yang eksplisit. Permintaan dari chat tidak tersedia di pad 18+ dan di pesan pribadi.",
+  "adm.media.catalog.landed": "📼 Umumkan di room Camfrog milik pad saat judul yang diminta dari chat tiba di Plex (peminta yang incognito atau tersembunyi tidak pernah disebut)",
   "adm.media.catalog.sync_minutes": "Interval sinkronisasi katalog (menit)",
   "adm.media.catalog.blocked": "Rating konten yang diblokir (dipisah koma)",
   "adm.media.catalog.warned": "Rating yang diberi label belum dinilai (dipisah koma)",

@@ -11150,6 +11150,7 @@
   "adm.media.catalog.mode_everyone": "Alle",
   "adm.media.catalog.requests": "Wer fehlende Titel aus dem Chat anfragen darf",
   "adm.media.catalog.request_help": "Fehlende Titel müssen vom Anfrage-Service bestätigt werden. Jede Anfrage braucht ihr eigenes Ja; bezahlte oder Credit-Anfragen brauchen ein ausdrückliches Ja. Anfragen aus dem Chat sind auf 18+-Pads und in privaten Nachrichten nicht verfügbar.",
+  "adm.media.catalog.landed": "📼 Im Camfrog-Raum des Pads ansagen, wenn ein im Chat angefragter Titel auf Plex ankommt (inkognito oder versteckte Anfragende werden nie genannt)",
   "adm.media.catalog.sync_minutes": "Katalog-Sync-Intervall (Minuten)",
   "adm.media.catalog.blocked": "Gesperrte Inhaltsbewertungen (durch Kommas getrennt)",
   "adm.media.catalog.warned": "Bewertungen, die als nicht bewertet markiert werden (durch Kommas getrennt)",

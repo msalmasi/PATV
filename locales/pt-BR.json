@@ -11238,6 +11238,7 @@
   "adm.media.catalog.mode_everyone": "Todos",
   "adm.media.catalog.requests": "Quem pode pedir títulos ausentes pelo chat",
   "adm.media.catalog.request_help": "Títulos ausentes precisam ser confirmados pelo serviço de pedidos. Cada pedido precisa de um sim próprio; pedidos pagos ou com créditos precisam de um sim explícito. Pedidos feitos pelo chat não estão disponíveis em pads +18 nem em mensagens privadas.",
+  "adm.media.catalog.landed": "📼 Avisar na sala do Camfrog do pad quando um título pedido pelo chat chegar ao Plex (quem pediu em modo anônimo ou oculto nunca é citado)",
   "adm.media.catalog.sync_minutes": "Intervalo de sincronização do catálogo (minutos)",
   "adm.media.catalog.blocked": "Classificações de conteúdo bloqueadas (separadas por vírgula)",
   "adm.media.catalog.warned": "Classificações a marcar como sem classificação (separadas por vírgula)",

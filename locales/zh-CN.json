@@ -11017,6 +11017,7 @@
   "adm.media.catalog.mode_everyone": "所有人",
   "adm.media.catalog.requests": "谁可以在聊天中请求缺失的标题",
   "adm.media.catalog.request_help": "缺失的标题必须由请求服务确认。每个请求都需要单独确认;付费或积分请求需要明确确认。聊天中的请求在 18+ 小站和私信中不可用。",
+  "adm.media.catalog.landed": "📼 聊天里请求的作品上架 Plex 后，在该 pad 的 Camfrog 房间里说一声（隐身或隐藏的请求者绝不点名）",
   "adm.media.catalog.sync_minutes": "目录同步间隔(分钟)",
   "adm.media.catalog.blocked": "禁止的内容分级(以逗号分隔)",
   "adm.media.catalog.warned": "需标记为未分级的分级(以逗号分隔)",

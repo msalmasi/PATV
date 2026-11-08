@@ -11152,6 +11152,7 @@
   "adm.media.catalog.mode_everyone": "Herkes",
   "adm.media.catalog.requests": "Sohbetten eksik başlıkları kimler isteyebilir",
   "adm.media.catalog.request_help": "Eksik başlıklar istek servisi tarafından onaylanmalı. Her istek kendi onayını gerektirir; ücretli veya kredili istekler açık onay ister. Sohbetteki istekler 18+ pad'lerde ve özel mesajlarda kullanılamaz.",
+  "adm.media.catalog.landed": "📼 Sohbetten istenen bir başlık Plex'e geldiğinde pad'in Camfrog odasında duyur (gizli ya da saklı isteyenin adı asla söylenmez)",
   "adm.media.catalog.sync_minutes": "Katalog eşitleme aralığı (dakika)",
   "adm.media.catalog.blocked": "Engellenen içerik derecelendirmeleri (virgülle ayrılmış)",
   "adm.media.catalog.warned": "Derecelendirilmemiş olarak etiketlenecek derecelendirmeler (virgülle ayrılmış)",

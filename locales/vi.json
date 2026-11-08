@@ -11017,6 +11017,7 @@
   "adm.media.catalog.mode_everyone": "Mọi người",
   "adm.media.catalog.requests": "Ai được yêu cầu tên còn thiếu từ chat",
   "adm.media.catalog.request_help": "Các tiêu đề còn thiếu phải được dịch vụ yêu cầu xác nhận. Mỗi yêu cầu cần một lần đồng ý riêng; yêu cầu trả phí hoặc dùng credit cần xác nhận rõ ràng. Yêu cầu từ chat không khả dụng trên pad 18+ và trong tin nhắn riêng.",
+  "adm.media.catalog.landed": "📼 Báo trong phòng Camfrog của pad khi một tựa được yêu cầu từ chat đã có trên Plex (người yêu cầu ẩn danh hoặc bị ẩn không bao giờ được nêu tên)",
   "adm.media.catalog.sync_minutes": "Khoảng thời gian đồng bộ danh mục (phút)",
   "adm.media.catalog.blocked": "Xếp hạng nội dung bị chặn (ngăn cách bằng dấu phẩy)",
   "adm.media.catalog.warned": "Xếp hạng cần gắn nhãn chưa xếp hạng (ngăn cách bằng dấu phẩy)",

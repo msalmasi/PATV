@@ -11150,6 +11150,7 @@
   "adm.media.catalog.mode_everyone": "Iedereen",
   "adm.media.catalog.requests": "Wie ontbrekende titels vanuit de chat mag aanvragen",
   "adm.media.catalog.request_help": "Ontbrekende titels moeten worden bevestigd door de aanvraagservice. Elke aanvraag heeft een eigen ja nodig; betaalde of credit-aanvragen hebben een expliciete ja nodig. Aanvragen vanuit de chat zijn niet beschikbaar op 18+ pads en in privéberichten.",
+  "adm.media.catalog.landed": "📼 In de Camfrog-room van de pad melden wanneer een titel die in de chat is aangevraagd op Plex staat (incognito of verborgen aanvragers worden nooit genoemd)",
   "adm.media.catalog.sync_minutes": "Synchronisatie-interval van de catalogus (minuten)",
   "adm.media.catalog.blocked": "Geblokkeerde inhoudsclassificaties (door komma's gescheiden)",
   "adm.media.catalog.warned": "Classificaties die als niet-beoordeeld worden gelabeld (door komma's gescheiden)",

@@ -11416,6 +11416,7 @@
   "adm.media.catalog.mode_everyone": "Wszyscy",
   "adm.media.catalog.requests": "Kto może zgłaszać brakujące tytuły z czatu",
   "adm.media.catalog.request_help": "Brakujące tytuły muszą zostać potwierdzone przez usługę próśb. Każda prośba wymaga osobnej zgody; prośby płatne lub za kredyty wymagają wyraźnej zgody. Prośby z czatu są niedostępne w padach 18+ i w wiadomościach prywatnych.",
+  "adm.media.catalog.landed": "📼 Ogłoś w pokoju Camfrog padu, gdy tytuł zamówiony z czatu trafi na Plex (osoba incognito lub ukryta nigdy nie jest wymieniana z nazwy)",
   "adm.media.catalog.sync_minutes": "Interwał synchronizacji katalogu (minuty)",
   "adm.media.catalog.blocked": "Zablokowane oceny treści (oddzielone przecinkami)",
   "adm.media.catalog.warned": "Oceny do oznaczenia jako bez oceny (oddzielone przecinkami)",

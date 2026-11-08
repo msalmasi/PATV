@@ -11017,6 +11017,7 @@
   "adm.media.catalog.mode_everyone": "全員",
   "adm.media.catalog.requests": "チャットから不足しているタイトルをリクエストできるユーザー",
   "adm.media.catalog.request_help": "不足しているタイトルは、リクエストサービスで確認する必要があります。リクエストごとに個別の承認が必要で、有料またはクレジットによるリクエストには明示的な承認が必要です。チャットからのリクエストは18+のパッドおよびプライベートメッセージでは利用できません。",
+  "adm.media.catalog.landed": "📼 チャットからリクエストされた作品がPlexに入ったら、パッドのCamfrogルームで知らせる（シークレットや非表示のリクエスト者の名前は出しません）",
   "adm.media.catalog.sync_minutes": "カタログの同期間隔（分）",
   "adm.media.catalog.blocked": "ブロックするコンテンツレーティング（カンマ区切り）",
   "adm.media.catalog.warned": "未評価としてラベルを付けるレーティング（カンマ区切り）",
