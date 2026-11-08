@@ -155,7 +155,7 @@ function install(core) {
   const SP = () => require("../siteperms");
   const dbTx = (fn) => require("../dbUtils").tx(fn);
   const NEXT_SECS = HM.HC.NEXT_SECS;
-  const isSng = (T) => !!(T && T.game === "holdem" && T.tourney);
+  const isSng = (T) => !!(T && T.game === "holdem" && T.tourney && (T.tourney.kind || "sng") === "sng");   // (h22 phase 2: never a scheduled tournament's table)
   const open = () => Array.from(S.tables.values()).filter((T) => isSng(T) && T.status === "open");
   const short = (T) => T.id.slice(0, 6);
   const refOf = (T) => `TNY-${T.id}`;

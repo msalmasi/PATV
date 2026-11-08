@@ -50,7 +50,9 @@ const ladderText = () => HC.HR_LADDER.map(([a, b]) => `${short(a)}/${short(b)}`)
 
 function install(core) {
   const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine, roomsOf, roomList } = core;
-  const TN = () => core.tny();                   // h22: the sit & go service (casino/tourney.js) - only for tables with T.tourney
+  // h22: the tournament ROUTER (service.js ROUTE) - only for tables with T.tourney: kind "sng" (or none: a row from before phase 2) goes to
+  // casino/tourney.js, kind "mtt" to casino/mtt.js (phase 2: scheduled multi-table tournaments)
+  const TN = () => core.tny();
   const opKey = (T, uid, op) => `chm:${T.id}:${uid}:${op}:${++T.opno}`;
   const handSpin = (T, n) => `chm:${T.id}:h${n}`;
 
@@ -327,7 +329,11 @@ function install(core) {
 
   async function beginHand(T) {
     const e = T.eng;
-    if (e.hand_active || !H.canStart(e)) return false;
+    if (e.hand_active) return false;
+    // h22 phase 2 (1.99??): a scheduled tournament's table runs its boundary first (the clock's blinds, arrivals, balancing, breaking,
+    // the final table, hand-for-hand) - also with 0-1 players seated; a sit & go answers {deal: true} here
+    if (T.tourney) { const r = await TN().beforeDeal(T); if (!r || !r.deal) return false; }
+    if (!H.canStart(e)) return false;
     // Keep the complete seat ring. Only the active seat list is passed to startHand;
     // chips, names and escrow ownership are untouched. The engine remains unchanged.
     const seats = e.seats.slice();
@@ -360,6 +366,7 @@ function install(core) {
     let events;
     e.seats = active;
     try { events = H.startHand(e, deck); } finally { e.seats = seats; }
+    if (T.tourney) TN().dealt(T, events);        // h22 phase 2: the hand's start record (button, blinds, order) - sync, saved with the hand
     for (const uid of active) {
       const q = qos(T, uid);
       if (q.back === "post" && uid !== e.bb_key && e.hand_active) {
@@ -707,7 +714,7 @@ function install(core) {
     } else if (T.dl.next && T.dl.next <= t) {
       T.dl.next = null;
       if (!(await beginHand(T))) {
-        if (T.tourney) T.dl.next = clock() + HC.NEXT_SECS * 1000;     // (h22: never idle-closed - the finish comes first)
+        if (T.tourney) T.dl.next = TN().noDealNext(T);     // (h22: never idle-closed - the finish comes first; a sit & go: NEXT_SECS)
         else T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
       }
       await save(T);
@@ -855,7 +862,8 @@ function install(core) {
 
   return { HC, start, run, tick, due, recover, publicView, meView, privateFor, lobbyRow, closeTable, cardsFor, HELP,
            midRound: (T) => T.eng.hand_active,
-           newTable, seatChecks, forgetSeat };            // (h22: what casino/tourney.js builds a sit & go with)
+           newTable, seatChecks, forgetSeat,               // (h22: what casino/tourney.js builds a sit & go with)
+           qos, commitNext };                              // (h22 phase 2: a moved seat's QoL travels; a new tournament table's first seed)
 }
 
 module.exports = { install, HC, amt };

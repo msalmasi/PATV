@@ -1486,14 +1486,36 @@ const refreshVeil = (T) => V.refresh(T, persistVeil);
 const noTourney = (fn) => (T, ...a) => (T && T.tourney ? null : fn(T, ...a));
 const hmRewards = Object.assign(Object.create(rewards), { holdemPot: noTourney(rewards.holdemPot), holdemHand: noTourney(rewards.holdemHand),
                                                           holdemBoardRoyal: noTourney(rewards.holdemBoardRoyal), holdemShowdown: noTourney(rewards.holdemShowdown) });
+// h22 phase 2 (1.99??): the tournament ROUTER - holdem.js calls ROUTE for every table with a tourney block. kindOf(T): "sng" (or no kind:
+// a row written before phase 2) -> casino/tourney.js (TN), "mtt" -> casino/mtt.js (MT). beforeDeal / dealt / noDealNext are phase 2's
+// hooks: a sit & go deals as before (beforeDeal {deal: true}, dealt nothing, NEXT_SECS after a failed deal).
+const tourneyKind = (T) => (T && T.tourney ? T.tourney.kind || "sng" : null);
+const KINDS = {};
+const routeOf = (T) => KINDS[tourneyKind(T)] || null;
+const ROUTE = {
+  beforeDeal: async (T) => { const k = routeOf(T); return k && k.beforeDeal ? k.beforeDeal(T) : { deal: true }; },
+  dealt: (T, events) => { const k = routeOf(T); return k && k.dealt ? k.dealt(T, events) : null; },
+  noDealNext: (T) => { const k = routeOf(T); return k && k.noDealNext ? k.noDealNext(T) : clock() + HM.HC.NEXT_SECS * 1000; },
+  beforeHand: (T) => { const k = routeOf(T); return k && k.beforeHand ? k.beforeHand(T) : null; },
+  afterHand: (T, ev) => { const k = routeOf(T); return k ? k.afterHand(T, ev) : save(T); },
+  tick: (T) => { const k = routeOf(T); return k ? k.tick(T) : "done"; },
+  due: (T) => { const k = routeOf(T); return !!(k && k.due(T)); },
+  recover: (T) => { const k = routeOf(T); return k ? k.recover(T) : "done"; },
+  tableVerb: (T, actor, verb, args) => { const k = routeOf(T); return k ? k.tableVerb(T, actor, verb, args) : null; },
+  view: (T) => { const k = routeOf(T); return k ? k.view(T) : null; },
+  meView: (T, uid, u) => { const k = routeOf(T); return k ? k.meView(T, uid, u) : null; },
+  outAtDeal: (T, uid) => { const k = routeOf(T); return !!(k && k.outAtDeal && k.outAtDeal(T, uid)); },
+  outNow: (T, uid) => { const k = routeOf(T); return k && k.outNow ? k.outNow(T, uid) : null; },
+};
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
-  tny: () => TN,
+  tny: () => ROUTE,
 });
 // ── h22: 🏁 Sit & Gos (casino/tourney.js) on Hold'em tables ──
 const TN = SNGCFG.install({ S, clock, save, emit, userRow, R, fmt, link, runQuery, streamGone, loadSettings, HM,
                             roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T) });
+KINDS.sng = TN;
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
