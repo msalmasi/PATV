@@ -332,7 +332,6 @@ test("lobby Open: body.theme only for a picked theme drawn for that game; classi
   assert.ok(!("theme" in (await open(P, "cz-open-bj-go"))), "not drawn for blackjack: none");
   // the flag gone (the switch went off between polls): nothing sent even though the saloon was picked
   let data = LOBBY(true, LIST);
-  P = lobbyPage(null);
   P = page(`<main class="ds-page flow cz" id="cb" data-game="holdem" data-table="" data-signed="1">${partial("casino-top", { game: "holdem", tableId: null })}${partial("casino-lobby", { game: "holdem", bjOn: true, hmOn: true })}</main>`,
            { "/api/casino/lobby": () => data, post: () => ({ ok: true, table: "t9" }) });
   P.CZ.startLobby();
