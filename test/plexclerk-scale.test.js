@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? plexclerk (owner report 2026-11-08 "pepe says he is still shelving the library, also its unable to get external lists"):
+// 1.99amh plexclerk (owner report 2026-11-08 "pepe says he is still shelving the library, also its unable to get external lists"):
 // at the real library's size (30,682 films, 4,257 shows, 220,894 episodes) every clerk find read ALL films and ALL shows with
 // no index on the kind - each read past the 400 ms read budget -> too_broad -> the route's catalog_down -> the bot's "still
 // shelving"; the exact-episode-title check was an OR word search over every episode (1.8 s on prod); the lists' add path read
@@ -158,7 +158,7 @@ test("lists: the membership read starts from the members, and adding a list matc
   const final = h.reads.find((sql) => /json_valid\(c\.data\)/.test(sql));
   const finalPlan = await h.plan(final);
   assert.match(finalPlan, /^SCAN m\b/, "members first, then each member's catalog row by key (" + finalPlan + ")");
-  // 1.99?? rebase onto site 1.99amd (its card fix started every membership read from the lists): ONE order for both reads, the
+  // 1.99amh rebase onto site 1.99amd (its card fix started every membership read from the lists): ONE order for both reads, the
   // members first - offline at the real library's size a full read costs the same either order (0 lists 0.1 ms, 20 x 20,000
   // ~3.1-3.4 s), and a key lookup (the clerk's candidates) goes straight to plex_list_member_key
   const membership = [...new Set(h.reads.filter((sql) => /^SELECT m\.key,m\.rank,m\.item_no\b/.test(sql)))];
@@ -176,7 +176,7 @@ test("lists: the membership read starts from the members, and adding a list matc
 });
 
 test("lists: a list's add / import / rematch match through the kept roots on the admin lane - one indexed read of the films and shows for all the lists, on the admin budget", async (t) => {
-  // 1.99?? rebase onto site 1.99amd: amd moved a list's matching to the admin lane (two whole-kind reads, ADMIN_BUDGET_MS);
+  // 1.99amh rebase onto site 1.99amd: amd moved a list's matching to the admin lane (two whole-kind reads, ADMIN_BUDGET_MS);
   // plexclerk moved it to roots() (one read through plex_catalog_roots, kept). Both: catalog.admin.roots() - the same kept
   // answer the clerk reads, read on the admin lane when it has to be read (offline at the real library's size: 355 ms vs 540 ms
   // for the two whole-kind reads, and a rematch of every list reads it once instead of twice per list)
@@ -255,7 +255,7 @@ test("an outside list named like 'Oscar Best Picture Winners' answers 'an oscar 
 test("the admin lists panel says why an action was refused (the maintenance window, the key, the input, the limits)", () => {
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "js", "media-admin.js"), "utf8");
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "locales", "en.json"), "utf8"));
-  // 1.99?? rebase onto site 1.99amd: amd's card reasons (js.media.lists.busy / why_*, live and translated) are the one set - one
+  // 1.99amh rebase onto site 1.99amd: amd's card reasons (js.media.lists.busy / why_*, live and translated) are the one set - one
   // line per code, no second js.media.lists.err.* set; the key's own refusal (needs_key) joins them. Every code here has its line.
   const reasons = { quiet: "why_quiet", needs_key: "why_needs_key", invalid_list: "why_invalid_list", not_found: "why_not_found", list_limit: "why_list_limit",
     rate_limited: "why_rate_limited", daily_budget: "why_rate_limited", provider_auth: "why_provider_auth", list_too_large: "why_list_too_large", lists_busy: "busy" };

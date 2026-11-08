@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? plexclerk review (owner report 2026-11-08 "still shelving" / "unable to get external lists"): the fix gave the catalog
+// 1.99amh plexclerk review (owner report 2026-11-08 "still shelving" / "unable to get external lists"): the fix gave the catalog
 // roots() / byTitle(), but production never builds a finder or a lists cache with a createCatalog() instance - plexchat's finder
 // is require("./plexfind")'s singleton (catalog = the plexcatalog MODULE), plexfind reads lists through require("./plexlists")'s
 // singleton (the same module), and the catalog's own lists cache (the /admin/media routes, the rematch after every sync and
@@ -69,7 +69,7 @@ test.after(async () => {
 test("the plexcatalog module (what plexfind and plexlists use in production) has roots() and byTitle()", () => {
   assert.equal(typeof CAT.roots, "function");
   assert.equal(typeof CAT.byTitle, "function");
-  // 1.99?? rebase onto site 1.99amd: a list's matching reads the kept roots on the admin lane - the module forwards that too
+  // 1.99amh rebase onto site 1.99amd: a list's matching reads the kept roots on the admin lane - the module forwards that too
   assert.equal(typeof CAT.admin.roots, "function");
 });
 

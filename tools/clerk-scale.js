@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 1.99?? plexclerk: offline scale check for the clerk's catalog reads. Builds a SYNTHETIC library the size of the real one
+// 1.99amh plexclerk: offline scale check for the clerk's catalog reads. Builds a SYNTHETIC library the size of the real one
 // (default 30,682 films / 4,257 shows / 220,894 episodes - the 2026-11-08 sync) in a temp dir and times what a clerk ask and
 // the outside lists do. Never reads a live library or the site's database. Usage: node tools/clerk-scale.js [films shows episodes]
 "use strict";

@@ -21,7 +21,7 @@ const MAX_BUDGET_MS = Math.max(SHELVES_BUDGET_MS, ADMIN_BUDGET_MS);
 // summary-embedding backfill, which reads for hours (~255k docs at 20/s). Its reads wait behind any chat read already waiting
 // (one connection, chat first) and queue on their own (BACKGROUND_QUEUE), so a backfill never makes a chat search "busy".
 const BACKGROUND_QUEUE = 8;
-// 1.99?? plexclerk (prod 2026-11-08, "pepe says he is still shelving the library"): every clerk find read ALL films and ALL
+// 1.99amh plexclerk (prod 2026-11-08, "pepe says he is still shelving the library"): every clerk find read ALL films and ALL
 // shows - two reads with no index on the kind (a scan of all 255k rows), 1.1 s and 0.46 s at 30,682 films / 4,257 shows /
 // 220,894 episodes, each past the 400 ms read budget -> too_broad -> the route's catalog_down. roots() reads both kinds in ONE
 // read through plex_catalog_roots (a partial index only that read can use - the per-show / title / word reads keep their
@@ -189,7 +189,7 @@ function createCatalog(options = {}) {
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_section ON plex_catalog(section)");
       // Covers visibility/parent joins without loading the large JSON metadata payload for every episode.
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_visibility ON plex_catalog(key,section,content_rating,type,show_key)");
-      // 1.99?? plexclerk: roots() only (its WHERE carries this exact term) - films and shows without scanning the episodes
+      // 1.99amh plexclerk: roots() only (its WHERE carries this exact term) - films and shows without scanning the episodes
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_roots ON plex_catalog(type,section) WHERE type IN ('movie','show')");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_catalog_genres (key TEXT,genre TEXT,PRIMARY KEY(key,genre),FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_genre_name ON plex_catalog_genres(genre,key)");
@@ -289,7 +289,7 @@ function createCatalog(options = {}) {
   }
   const putState = (tx, key, value) => tx.run("INSERT INTO plex_catalog_state(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [key, JSON.stringify(value)]);
   async function status() { return statusOn(read); }
-  // 1.99?? plexclerk (rebase onto 1.99amd): status on a lane - admin.roots() reads it on the admin lane
+  // 1.99amh plexclerk (rebase onto 1.99amd): status on a lane - admin.roots() reads it on the admin lane
   async function statusOn(rd) {
     try {
       const s = await state(rd), sections = await rd("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
@@ -363,7 +363,7 @@ function createCatalog(options = {}) {
   async function getByKeys(keys) { return getByKeysOn(read, keys); }
   // plexlists 1.99amd: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
   const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS, true);
-  // 1.99?? plexclerk (rebase onto 1.99amd): + roots - a list's matching reads the clerk's kept films and shows, on this lane when
+  // 1.99amh plexclerk (rebase onto 1.99amd): + roots - a list's matching reads the clerk's kept films and shows, on this lane when
   // they have to be read (one indexed read for every list, not two whole-kind reads per list)
   const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys),
     roots: () => rootsOn(adminRead, adminRead) };
@@ -383,7 +383,7 @@ function createCatalog(options = {}) {
     args.push(limit);
     return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where + " AND (" + like + ") LIMIT ?", args, filters));
   }
-  /** 1.99?? plexclerk: the visible rows whose WHOLE title is `title` (a leading the/a/an either way) - the title index, never a
+  /** 1.99amh plexclerk: the visible rows whose WHOLE title is `title` (a leading the/a/an either way) - the title index, never a
    *  word search (the finder's "is this line a title?" check was an OR search over every episode). */
   async function byTitle(title, filters = {}) {
     const bare = fold(title).replace(/^(the|a|an) /, "");
@@ -394,14 +394,14 @@ function createCatalog(options = {}) {
     return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
       " AND c.title_fold IN (" + names.map(() => "?").join(",") + ") LIMIT 500", args, filters));
   }
-  /** 1.99?? plexclerk: every visible film and show, read once per catalog version (see ROOTS_BUDGET_MS) and shared: the rows
+  /** 1.99amh plexclerk: every visible film and show, read once per catalog version (see ROOTS_BUDGET_MS) and shared: the rows
    *  are frozen, each caller gets its own arrays. A failed read is not kept (the next caller tries again). */
   async function roots() { return rootsOn(read, (sql, args) => queued(sql, args, ROOTS_BUDGET_MS)); }
-  // 1.99?? plexclerk (rebase onto 1.99amd): roots on a lane - rd for the status and shelf reads, rootsRead for the one big read.
+  // 1.99amh plexclerk (rebase onto 1.99amd): roots on a lane - rd for the status and shelf reads, rootsRead for the one big read.
   // The clerk's lane (read + the shelves' budget) and the admin lane (admin.roots) share one kept answer.
   async function rootsOn(rd, rootsRead) {
     const s = await statusOn(rd);
-    // 1.99?? plexclerk review: never an empty library standing in for one that isn't ready or can't be read (status() says
+    // 1.99amh plexclerk review: never an empty library standing in for one that isn't ready or can't be read (status() says
     // ready:false when its own read fails) - a list rematch would store 0 members for every list
     if (!s.ready) throw coded("catalog_down", "catalog is not ready");
     const block = ratings(settings().clerk_block_ratings);
@@ -768,7 +768,7 @@ function createCatalog(options = {}) {
   let outsideLists;
   function listsCache() {
     if (!outsideLists) outsideLists = options.lists || require("./plexlists").createLists({
-      catalog: { write, read, rows, roots, byTitle, getByKeys, admin }, settings, now,   // 1.99?? plexclerk review: + roots (match())
+      catalog: { write, read, rows, roots, byTitle, getByKeys, admin }, settings, now,   // 1.99amh plexclerk review: + roots (match())
       permissions: options.permissions, guard: options.guard
     });
     return outsideLists;
@@ -911,8 +911,8 @@ const current = () => {
   return singleton;
 };
 module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE, BACKGROUND_QUEUE };
-// 1.99?? plexclerk review: roots / byTitle too - production's finder and lists use this module, not an instance
+// 1.99amh plexclerk review: roots / byTitle too - production's finder and lists use this module, not an instance
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "roots", "byTitle", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
 // plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
 module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args),
-  roots: (...args) => current().admin.roots(...args) };   // 1.99?? plexclerk (rebase onto 1.99amd): a list's matching
+  roots: (...args) => current().admin.roots(...args) };   // 1.99amh plexclerk (rebase onto 1.99amd): a list's matching

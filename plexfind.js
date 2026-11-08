@@ -9,7 +9,7 @@ const normOf = (text) => {
     .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim().replace(/^(the|a|an) /, "");
   return /[\p{L}\p{N}]/u.test(value) ? value : "";
 };
-// 1.99?? plexclerk: a find compares the line with every film's and show's title (35k at the real library's size) several times;
+// 1.99amh plexclerk: a find compares the line with every film's and show's title (35k at the real library's size) several times;
 // the normalising was most of a find's CPU on the site's event loop. A pure function of the string: remembered (bounded).
 const normKept = new Map(), NORM_KEEP = 200000;
 const norm = (s) => {
@@ -26,7 +26,7 @@ const sameName = (left, right) => { const value = norm(left); return !!value && 
 const clean = (s, n = 100) => typeof s === "string" ? s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
 const integer = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
 const names = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => clean(x)).filter(Boolean).slice(0, 3) : [];
-const ratingSets = new Map();   // 1.99?? plexclerk: allowed() asked for the block list's Set once per row; one per setting text
+const ratingSets = new Map();   // 1.99amh plexclerk: allowed() asked for the block list's Set once per row; one per setting text
 const ratingNames = (s) => {
   const text = String(s == null ? "" : s);
   let set = ratingSets.get(text);
@@ -76,7 +76,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     if (settings().clerk_lists !== true) outside = [];
     return { ...base, shelves: [...local, ...outside.filter((r) => r && r.source === "mdblist" && r.count > 0)] };
   }
-  // 1.99?? plexclerk: an Oscars list keeps its provider's name ("Oscar Best Picture Winners", "Academy Award Winners") - every
+  // 1.99amh plexclerk: an Oscars list keeps its provider's name ("Oscar Best Picture Winners", "Academy Award Winners") - every
   // such name is the one "oscars" shelf, so "an oscar winner" finds whichever the admin added
   const OSCARS = /^(?:(?:oscars?|academy awards?)(?: best picture)?(?: winners?| winning(?: films?| movies?| pictures?)?)?|best picture(?: oscar| academy award)?(?: winners?)?)$/;
   function shelfName(value) {
@@ -315,7 +315,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     const exclude = new Set((Array.isArray(request.exclude) ? request.exclude : []).slice(0, 40).map(String));
     const seen = new Set((context.seenKeys || []).map(String));
     const sections = new Set((state.sections || []).filter((x) => x.policy === "allowed").map((x) => String(x.id)));
-    // 1.99?? plexclerk: the films and shows come from the catalog's kept roots (one indexed read per catalog version) - two
+    // 1.99amh plexclerk: the films and shows come from the catalog's kept roots (one indexed read per catalog version) - two
     // whole-kind reads per find were each past the read budget at the real library's size (too_broad -> catalog_down)
     const [movies, shows] = typeof catalog.roots === "function" ? await catalog.roots().then((r) => [r.movies, r.shows])
       : await Promise.all([catalog.rows({ kind: "movie" }), catalog.rows({ kind: "show" })]);
@@ -423,7 +423,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     if (literal) films = films.filter((r) => exactRows.some((x) => x.key === r.key));
     else if (exact && exactRows.some((r) => r.type === "movie")) films = films.filter((r) => exactRows.some((x) => x.key === r.key));
     const filmsWanted = a.kind !== "show" && a.kind !== "episode" && (!a.title || !wantedShows.length || a.kind === "movie" || exactRows.some((r) => r.type === "movie"));
-    // 1.99?? plexclerk: the films' word search only when films can be offered (a verified recall, an episode or a show ask
+    // 1.99amh plexclerk: the films' word search only when films can be offered (a verified recall, an episode or a show ask
     // never uses them - it was a whole-library search the answer threw away)
     if (a.about && filmsWanted && films.length) {
       const hits = new Set((await catalog.search(a.about, { kind: "movie", limit: 500, budgetMs: 400 })).map((r) => String(r.key)));
