@@ -1,7 +1,7 @@
 /* Story Studio: a documented full-screen editor variant of ds-scrim.sheet > ds-modal.
    The page remains underneath for no-reload posting. Crop, layer and trim handles are new
    controls built from ds tokens. All artwork stays in the local preview; mentions are DOM chips. */
-.sst { font-family: var(--ds-font); color: var(--ds-text); padding: var(--ds-sp-6); z-index: var(--ds-z-modal); }
+.sst { font-family: var(--ds-font); color: var(--ds-text); padding: var(--ds-sp-6); z-index: var(--ds-z-modal); touch-action: pan-x pan-y; }   /* storyux: no page pinch or double-tap zoom over the editor */
 .sst.pad-acc {
   --ds-ac: var(--pad-accent);
   --ds-ac-2: var(--pad-accent);
@@ -17,29 +17,55 @@
 .sst .sst-card { inline-size: min(1100px, calc(100vw - 48px)); block-size: min(920px, calc(var(--sst-vh, 100dvh) - 48px)); max-block-size: none; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; background: var(--ds-surface); }
 .sst .sst-head { flex: none; display: flex; align-items: center; gap: var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border-block-end: 1px solid var(--ds-line); }
 .sst .sst-head .ds-pixel-h { font-size: 12px; line-height: 1.7; flex: 1; }
-.sst .sst-icon-only .sst-button-label { display: none; }
-.sst .ds-btn.icon:not(.sst-icon-only) { inline-size: auto; padding-inline: var(--ds-sp-2); }
+/* storyux: every icon button is a circle with its icon only (its words are its aria-label and tooltip) */
+.sst .ds-btn.sst-round { display: inline-grid; place-items: center; flex: none; inline-size: 40px; min-inline-size: 40px; block-size: 40px; min-block-size: 40px; padding: 0; border-radius: 50%; line-height: 1; }
+.sst .ds-btn.sst-round .ds-ic { font-size: 18px; line-height: 1; }
 .sst .sst-lifetime { color: var(--ds-text-muted); font-size: 12px; white-space: nowrap; }
 .sst .sst-body { flex: 1 1 0; min-block-size: 120px; display: grid; grid-template-columns: minmax(0, 1fr) 240px; }
 .sst .sst-work { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: var(--ds-sp-3) var(--ds-sp-4); gap: var(--ds-sp-2); }
 .sst .sst-preview-wrap { display: flex; flex: 1 1 0; min-block-size: 80px; align-items: center; justify-content: center; container-type: size; }
-.sst .sst-preview { position: relative; block-size: min(100%, 70vh, 640px); max-inline-size: 100%; aspect-ratio: 9 / 16; overflow: hidden; background: var(--ds-media-bg); border-radius: var(--ds-r-sm); isolation: isolate; direction: ltr; touch-action: none; }
+.sst .sst-preview { position: relative; block-size: min(100%, 70vh, 640px); max-inline-size: 100%; aspect-ratio: 9 / 16; overflow: hidden; background: var(--ds-media-bg); border-radius: var(--ds-r-sm); isolation: isolate; direction: ltr; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+/* storyux: the stage - a picture to drag and pinch (no page scroll, zoom, text selection or long-press callout under it) */
+.sst.sst-has-media .sst-preview { cursor: grab; }
+.sst.sst-has-media .sst-preview:active { cursor: grabbing; }
+.sst .sst-source { -webkit-user-drag: none; pointer-events: none; max-inline-size: none; max-block-size: none; }
 .sst .sst-source, .sst .sst-overlay, .sst .sst-handles { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
 .sst .sst-overlay { pointer-events: none; }
 .sst .sst-handles { pointer-events: none; }
-.sst .sst-layer { pointer-events: auto; position: absolute; transform: translate(-50%, -50%); min-inline-size: 36px; min-block-size: 36px; border: 1px solid transparent; border-radius: var(--ds-r-xs); background: transparent; color: var(--ds-text-strong); padding: 0; touch-action: none; }
-.sst .sst-layer.selected { border-color: var(--ds-ac); }
+.sst .sst-layer { pointer-events: auto; position: absolute; transform: translate(-50%, -50%); min-inline-size: 36px; min-block-size: 36px; border: 1px solid transparent; border-radius: var(--ds-r-xs); background: transparent; color: var(--ds-text-strong); padding: 0; touch-action: none; cursor: grab; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.sst .sst-layer:active { cursor: grabbing; }
+.sst .sst-mention.selected { border-color: var(--ds-ac); }
+/* the selection: a thin double line (light on dark, dark on light) on the layer's own turned box; its handles stay upright */
+.sst .sst-select { position: absolute; pointer-events: none; border: 1px solid var(--ds-text-strong); border-radius: var(--ds-r-xs); box-shadow: 0 0 0 1px var(--ds-media-bg), inset 0 0 0 1px var(--ds-media-bg); }
+.sst .sst-select.sst-select-chip { border: 0; box-shadow: none; }
+.sst .ds-btn.sst-sel-del { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform: translate(-50%, -50%) rotate(calc(-1 * var(--sst-rot, 0rad))); pointer-events: auto;
+  --b-bg: var(--ds-media-panel); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line-strong); inline-size: 28px; min-inline-size: 28px; block-size: 28px; min-block-size: 28px; box-shadow: var(--ds-e-2); filter: none; }
+.sst .ds-btn.sst-sel-del .ds-ic { font-size: 13px; }
+.sst .sst-select-chip .ds-btn.sst-sel-del { transform: translate(-50%, calc(-100% - 18px)); }
+.sst .sst-sel-turn { position: absolute; inset-inline-end: 0; inset-block-end: 0; transform: translate(50%, 50%); pointer-events: auto; touch-action: none; cursor: nwse-resize;
+  inline-size: 18px; block-size: 18px; border-radius: 50%; background: var(--ds-text-strong); border: 2px solid var(--ds-media-bg); box-shadow: var(--ds-e-2); }
+.sst .sst-sel-turn::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; }   /* a finger-sized hit area */
+/* the centre guides a dragged layer snaps to */
+.sst .sst-guide { position: absolute; pointer-events: none; background: var(--ds-ac); opacity: .9; }
+.sst .sst-guide[data-guide="v"] { inset-block: 0; inset-inline-start: 50%; inline-size: 1px; transform: translateX(-50%); }
+.sst .sst-guide[data-guide="h"] { inset-inline: 0; inset-block-start: 50%; block-size: 1px; transform: translateY(-50%); }
+/* the X's quiet question: discard the edits? (in the editor, never a browser dialog) */
+.sst .sst-ask { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); flex: none; padding: var(--ds-sp-2) var(--ds-sp-4); background: var(--ds-surface-3); border-block: 1px solid var(--ds-line-menu); }
+.sst .sst-ask p { flex: 1 1 140px; margin: 0; font-size: 14px; font-weight: 700; }
+.sst .sst-ask-go { background: var(--ds-danger-solid); border-color: transparent; color: var(--ds-text-strong); }
 .sst .sst-mention { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); inline-size: max-content; max-inline-size: 90%; padding: var(--ds-sp-1) var(--ds-sp-2); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4); color: var(--ds-text-muted); font-size: 14px; }
 /* (ssfix: .ds-ic is a fixed 1.25em box - as a grid item it sat at the start of the column the words make, not over them) */
 .sst .sst-empty .ds-ic { font-size: 36px; }
 .sst .sst-picks { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; }
-.sst .sst-picks .ds-btn { min-block-size: 36px; inline-size: auto; padding-inline: var(--ds-sp-2); flex: none; }
-.sst .sst-filename { margin-inline-start: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-inline-size: 0; font-size: 11px; color: var(--ds-text-muted); }
+.sst .sst-picks { justify-content: center; }
+.sst .sst-picks .ds-btn.sst-round { inline-size: 48px; min-inline-size: 48px; block-size: 48px; min-block-size: 48px; }
+.sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 22px; }
+.sst .sst-filename { flex: none; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-inline-size: 0; font-size: 11px; color: var(--ds-text-muted); }
 .sst .sst-summary { border-inline-start: 1px solid var(--ds-line); padding: var(--ds-sp-6); font-size: 14px; overflow: auto; }
 .sst .sst-summary p { margin: var(--ds-sp-5) 0; padding-block-end: var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); overflow-wrap: anywhere; }
 .sst .sst-tools { display: flex; justify-content: center; gap: var(--ds-sp-3); flex: none; padding: var(--ds-sp-2) var(--ds-sp-4); border-block: 1px solid var(--ds-line); }
-.sst .sst-tools .ds-btn { flex-direction: column; inline-size: auto; min-inline-size: 56px; min-block-size: 48px; gap: var(--ds-sp-1); padding: var(--ds-sp-1) var(--ds-sp-2); font-size: 11px; background: transparent; border-color: transparent; }
+.sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-sunken); --b-line: var(--ds-line); }
 .sst .sst-tools .ds-ic { font-size: 20px; }
 .sst .sst-tools [aria-pressed="true"], .sst .ds-seg [aria-pressed="true"] { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
 .sst .sst-foot { flex: none; padding: var(--ds-sp-3) var(--ds-sp-4); border-block-start: 1px solid var(--ds-line); }
@@ -104,17 +130,16 @@
   .sst .sst-empty p { font-size: 20px; color: var(--ds-text-strong); line-height: 1.4; max-inline-size: 220px; margin: 0 auto; }
   .sst .sst-empty > .ds-ic { font-size: 48px; }
   .sst .sst-picks { position: absolute; inset-inline: var(--ds-sp-4); inset-block-end: var(--ds-sp-6); justify-content: center; gap: var(--ds-sp-6); z-index: var(--ds-z-raised); }
-  .sst .sst-picks .ds-btn { flex-direction: column; gap: var(--ds-sp-1); inline-size: 80px; min-block-size: 80px; padding: var(--ds-sp-2); border-radius: var(--ds-r-xl); background: var(--ds-media-chip); font-size: 11px; }
-  .sst .sst-picks .ds-ic { font-size: 24px; }
-  .sst:not(.sst-has-media) .sst-picks [data-picker="camera"] { order: 1; min-block-size: 88px; inline-size: 88px; border-radius: var(--ds-r-pill); border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
+  .sst .sst-picks .ds-btn.sst-round { inline-size: 64px; min-inline-size: 64px; block-size: 64px; min-block-size: 64px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; }
+  .sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 26px; }
+  .sst .sst-picks .ds-btn.sst-round[data-picker="camera"] { order: 1; inline-size: 88px; min-inline-size: 88px; block-size: 88px; min-block-size: 88px; border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
   .sst .sst-filename { display: none; }
-  .sst.sst-has-media .sst-picks { inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-block-end: auto; inset-inline-end: auto; inset-inline-start: var(--ds-sp-3); gap: var(--ds-sp-2); }
-  .sst.sst-has-media .sst-picks .ds-btn { inline-size: 44px; min-block-size: 44px; padding: var(--ds-sp-1); border-radius: var(--ds-r-pill); }
-  .sst.sst-has-media .sst-picks .sst-button-label { display: none; }
-  .sst.sst-has-media .sst-picks .ds-ic { font-size: 20px; }
-  .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: var(--ds-sp-2); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-2); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
-  .sst .sst-tools .ds-btn { flex: none; inline-size: 60px; min-inline-size: 44px; min-block-size: 56px; padding: var(--ds-sp-1); border-radius: var(--ds-r-lg); background: var(--ds-media-chip); color: var(--ds-text-strong); overflow-wrap: anywhere; line-height: 1.2; }
+  .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-3), env(safe-area-inset-right, 0px)); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-3); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
+  .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; box-shadow: var(--ds-e-1); }
   .sst .sst-tools .ds-ic { font-size: 22px; }
+  .sst .sst-head .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
+  .sst .sst-head .ds-btn.sst-round .ds-ic { font-size: 20px; }
+  .sst .sst-ask { position: absolute; inset-block-start: calc(68px + env(safe-area-inset-top, 0px)); inset-inline: var(--ds-sp-3); z-index: var(--ds-z-pop); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); background: var(--ds-media-panel); box-shadow: var(--ds-e-3); }
   .sst:not(.sst-has-media) .sst-tools, .sst:not(.sst-video) [data-tool="trim"] { display: none; }
   .sst .sst-foot { padding: var(--ds-sp-2) var(--ds-sp-3) calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)); border: 0; background: var(--ds-media-bg); }
   .sst .sst-decision { gap: var(--ds-sp-2); }
@@ -136,6 +161,7 @@
   /* Keep the footer's space to prevent canvas jumps, while removing covered controls from focus. */
   .sst.sst-has-sheet .sst-foot { visibility: hidden; }
   .sst.sst-has-sheet .sst-tools, .sst.sst-has-sheet .sst-picks { display: none; }
+  /* a sheet over the picture: the selection's handles stay usable above it, the picture keeps its place */
   .sst.sst-has-sheet .sst-status:not(:empty) { position: absolute; inset-block-start: calc(68px + env(safe-area-inset-top, 0px)); inset-inline: var(--ds-sp-3); z-index: var(--ds-z-pop); border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
   .sst .sst-progress, .sst .sst-recovery { flex-wrap: wrap; }
   .sst .sst-recovery .ds-btn { white-space: normal; }
@@ -146,12 +172,13 @@
   .sst .sst-colors { flex-wrap: nowrap; inline-size: 100%; overflow-x: auto; padding: var(--ds-sp-1); }
   .sst .sst-colors button { flex: none; border-radius: var(--ds-r-pill); }
   .sst .ds-in { font-size: 16px; }
-  .sst .sst-button-label { white-space: normal; }
 }
 @keyframes sst-sheet-in { from { transform: translateY(var(--ds-sp-6)); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (pointer: coarse) {
-  .sst .ds-btn, .sst .sst-picks .ds-btn, .sst .sst-layer, .sst .sst-colors button { min-block-size: 44px; }
-  .sst .sst-icon-only, .sst .sst-colors button { min-inline-size: 44px; }
+  .sst .ds-btn:not(.sst-sel-del), .sst .sst-layer, .sst .sst-colors button { min-block-size: 44px; }
+  .sst .ds-btn.sst-round:not(.sst-sel-del), .sst .sst-colors button { min-inline-size: 44px; }
+  .sst .ds-btn.sst-sel-del { inline-size: 32px; min-inline-size: 32px; block-size: 32px; min-block-size: 32px; }
+  .sst .ds-btn.sst-sel-del::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }   /* a 48 px hit area */
   .sst .sst-trim-handle::-webkit-slider-thumb { inline-size: 44px; block-size: 44px; }
   .sst .sst-trim-handle::-moz-range-thumb { inline-size: 44px; block-size: 44px; }
 }

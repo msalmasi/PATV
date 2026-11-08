@@ -1,5 +1,21 @@
 // Story Studio (1.99alq): local drafts, one shared overlay renderer, and a versioned server edit.
 // No media leaves the device before Post. Mentions remain removable data, never overlay pixels.
+// storyux (1.99??): direct manipulation, no sliders (the owner, iPhone, 2026-11-08). On the picture (the stage):
+//   a layer (text / sticker / mention)   tap = select it (an outline, a delete handle and - on a pointer - a turn/size corner);
+//                                        one finger drags it; two fingers pinch it and twist it at once; a double tap on a
+//                                        text edits its words. It stays in the frame (its turned box) and snaps to the centre
+//                                        lines (a guide shows) and to square turns.
+//   nothing selected                    the picture itself: one finger pans, two zoom about the fingers; a double tap puts
+//                                        it back. Fill never shows empty space; Fit may (black), within its limits.
+//   desktop                              drag; the wheel (or ctrl+wheel - a trackpad pinch) sizes the selected layer or zooms
+//                                        the picture, Shift+wheel turns; the corner handle turns and sizes
+//   keyboard                             a focused layer: arrows move, + − size, [ ] turn, Delete removes, Enter edits words;
+//                                        the focused picture: arrows pan, + − zoom, 0 resets
+// Gestures are pointer events on the stage (touch-action: none) batched per animation frame; WebKit's own gesture events
+// stand in when a second finger never reaches the pointer stream. After a pick or a capture only an X stays (back to the
+// camera, or the picker; a quiet question first when there are edits), and every icon button is a round icon whose words
+// are its aria-label and tooltip. The posted story matches the preview: the overlay is the same canvas, and the picture's
+// window goes as Fill's crop or Fit's frame (storycompose.js renders both from the same window).
 (function () {
   'use strict';
   if (window.patvStoryStudio) return;
@@ -71,16 +87,95 @@
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
   function chars(s) { return Array.from(String(s)); }
   function button(label, fn, cls) { var b = el('button', 'ds-btn ' + (cls || 'quiet sm'), label); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; }
+  // storyux: a round icon with no visible words - the label's first character is the icon, the rest its name (aria-label + tooltip)
   function iconButton(label, fn, cls) {
-    var b = button(null, fn, cls || 'icon sm quiet'), bits = chars(label), first = bits.shift();
-    if (bits[0] === '\ufe0f') first += bits.shift();
-    b.setAttribute('aria-label', label); b.title = label;
-    var ic = add(b, el('span', 'ds-ic', first)); ic.setAttribute('aria-hidden', 'true');
-    add(b, el('span', 'sst-button-label', bits.join('').trim())); return b;
+    var b = button(null, fn, (cls || 'icon sm quiet') + ' sst-round'), ic = add(b, el('span', 'ds-ic')); ic.setAttribute('aria-hidden', 'true');
+    relabel(b, label); return b;
+  }
+  function relabel(b, label) {
+    var bits = chars(label), first = bits.shift() || ''; if (bits[0] === '\ufe0f') first += bits.shift();
+    var words = bits.join('').trim() || String(label); b.setAttribute('aria-label', words); b.title = words; b.querySelector('.ds-ic').textContent = first;
   }
   function field(label, input) { var l = el('label', 'sst-field'); add(l, el('span', 'ds-label', label)); add(l, input); return l; }
   function input(type, value) { var i = el('input', 'ds-in'); i.type = type; if (value != null) i.value = value; return i; }
   function live(s) { return current === s && !s.closed; }
+  // ── storyux: the geometry - pure, shared by the gestures, the keyboard and the tests (patvStoryStudio.geometry) ──
+  // Frame fractions: 0..1 of the 9:16 story frame (x of its width, y of its height); canvas px: the 1080 × 1920 overlay.
+  // The picture's WINDOW (d.crop) is what the frame shows of it, in picture fractions and always the 9:16 shape; its RECT is
+  // the inverse - where the picture sits in the frame (the preview's CSS; storycompose.js renders from the same window).
+  // Fill: the window stays inside the picture (no empty space). Fit: it may run past the picture (black there), with the
+  // picture's centre kept in the frame, down to half the whole picture. Both zoom in to 8x the frame-filling size, never to a
+  // window under 5% of the picture (the server checks the same).
+  var G = (function () {
+    var RATIO = W / H, MIN = .05, DEEP = 8, SMALL = .5, SNAP = .02, SQUARE = 4 * Math.PI / 180, TEXT = [24, 288], STICKER = [48, 960];
+    function cover(own) { var w = own > RATIO ? RATIO / own : 1, h = own > RATIO ? 1 : own / RATIO; return { x: (1 - w) / 2, y: (1 - h) / 2, w: w, h: h }; }
+    function contain(own) { var w = own > RATIO ? 1 : RATIO / own, h = own > RATIO ? own / RATIO : 1; return { x: (1 - w) / 2, y: (1 - h) / 2, w: w, h: h }; }
+    function rect(win) { return { x: -win.x / win.w, y: -win.y / win.h, w: 1 / win.w, h: 1 / win.h }; }
+    // the window widths a layout allows: [the deepest zoom, the widest]
+    function widths(own, fit) { var c = cover(own), k = contain(own), min = Math.max(c.w / DEEP, MIN, MIN * c.w / c.h); return [min, Math.max(min, fit === 'fill' ? c.w : k.w / SMALL)]; }
+    function canFill(own) { var c = cover(own); return Math.min(c.w, c.h) >= MIN; }
+    function place(win, own, fit) {
+      var x = fit === 'fill' ? clamp(win.x, 0, Math.max(0, 1 - win.w)) : clamp(win.x, .5 - win.w, .5);
+      var y = fit === 'fill' ? clamp(win.y, 0, Math.max(0, 1 - win.h)) : clamp(win.y, .5 - win.h, .5);
+      return { x: x, y: y, w: win.w, h: win.h };
+    }
+    // a pinch: k times the size, the picture point under f0 (frame fractions, the fingers at the start) brought under f1
+    function zoom(win, own, fit, k, f0, f1) {
+      var lim = widths(own, fit), w = clamp(win.w / (k > 0 ? k : 1), lim[0], lim[1]), h = win.h * w / win.w;
+      var u = win.x + f0.x * win.w, v = win.y + f0.y * win.h;
+      return place({ x: u - f1.x * w, y: v - f1.y * h, w: w, h: h }, own, fit);
+    }
+    // a drag: the picture moved by dx, dy of the frame
+    function pan(win, own, fit, dx, dy) { return place({ x: win.x - dx * win.w, y: win.y - dy * win.h, w: win.w, h: win.h }, own, fit); }
+    // the window a layout starts with: the whole picture (fit), or filling the frame around the same centre (fill)
+    function layout(win, own, fit) {
+      if (fit !== 'fill') return contain(own);
+      var c = cover(own), cx = win ? win.x + win.w / 2 : .5, cy = win ? win.y + win.h / 2 : .5;
+      return place({ x: cx - c.w / 2, y: cy - c.h / 2, w: c.w, h: c.h }, own, 'fill');
+    }
+    function same(a, b) { return !!a && !!b && ['x', 'y', 'w', 'h'].every(function (k) { return Math.abs(a[k] - b[k]) < 1e-6; }); }
+    // layers: centre (x, y) in frame fractions, size in canvas px (a text's font size; a sticker's side), rot in radians
+    function stickerPx(size) { return clamp(Math.round(size / 24) * 24, STICKER[0], STICKER[1]); }
+    function box(t) {
+      if (t.type === 'sticker') { var p = stickerPx(t.size); return { w: p, h: p }; }
+      var b = t.bounds, k = b && b.size ? t.size / b.size : 1; return b ? { w: b.w * k, h: b.h * k } : { w: t.size, h: t.size };
+    }
+    function spread(b, rot) { var c = Math.abs(Math.cos(rot || 0)), s = Math.abs(Math.sin(rot || 0)); return { w: b.w * c + b.h * s, h: b.w * s + b.h * c }; }
+    // in the frame: the turned box inside it where it fits, else centred; a mention chip 5% in from the edges
+    function keepIn(t) {
+      if (t.type === 'mention') { t.x = clamp(t.x, .05, .95); t.y = clamp(t.y, .05, .95); return t; }
+      var a = spread(box(t), t.rot);
+      t.x = clamp(t.x, Math.min(.5, a.w / W / 2), Math.max(.5, 1 - a.w / W / 2)); t.y = clamp(t.y, Math.min(.5, a.h / H / 2), Math.max(.5, 1 - a.h / H / 2));
+      return t;
+    }
+    function turnOf(r) { r %= 2 * Math.PI; if (r > Math.PI) r -= 2 * Math.PI; if (r <= -Math.PI) r += 2 * Math.PI; return r; }
+    function angle(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
+    // two fingers from (a0, b0) to (a1, b1), client px: how much bigger, how far turned, how far the midpoint moved
+    function twoFinger(a0, b0, a1, b1) {
+      var d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y), d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+      return { scale: d0 > 0 ? d1 / d0 : 1, turn: turnOf(angle(a1, b1) - angle(a0, b0)), dx: (a1.x + b1.x - a0.x - b0.x) / 2, dy: (a1.y + b1.y - a0.y - b0.y) / 2 };
+    }
+    // a layer moved from its gesture-start state: m.dx / m.dy (client px over a frame of frame.width × frame.height) move it,
+    // m.scale sizes it, m.turn turns it - each only when given (a drag never sizes; a WebKit gesture event never moves). With
+    // o.snap: the centre lines and square turns pull it in. -> the guides to show { v, h, turn }
+    function moveItem(t, start, m, frame, o) {
+      var g = { v: false, h: false, turn: false }, snap = !!(o && o.snap), moved = m.dx != null || m.dy != null;
+      if (moved) { t.x = start.x + (m.dx || 0) / frame.width; t.y = start.y + (m.dy || 0) / frame.height; }
+      if (t.type !== 'mention') {
+        var lim = t.type === 'text' ? TEXT : STICKER;
+        if (m.scale != null) t.size = clamp(start.size * m.scale, lim[0], lim[1]);
+        if (m.turn != null) {
+          t.rot = turnOf((start.rot || 0) + m.turn);
+          var q = Math.round(t.rot / (Math.PI / 2)) * (Math.PI / 2); if (snap && Math.abs(t.rot - q) < SQUARE) { t.rot = turnOf(q); g.turn = true; }
+        }
+      }
+      if (snap && moved) { if (Math.abs(t.x - .5) < SNAP) { t.x = .5; g.v = true; } if (Math.abs(t.y - .5) < SNAP * W / H) { t.y = .5; g.h = true; } }
+      keepIn(t); return g;
+    }
+    return { RATIO: RATIO, LIMITS: { text: TEXT, sticker: STICKER, deep: DEEP, small: SMALL, min: MIN, snap: SNAP },
+      cover: cover, contain: contain, rect: rect, widths: widths, canFill: canFill, place: place, zoom: zoom, pan: pan, layout: layout, same: same,
+      stickerPx: stickerPx, box: box, spread: spread, keepIn: keepIn, turnOf: turnOf, angle: angle, twoFinger: twoFinger, moveItem: moveItem };
+  })();
   function req(url, body, method) {
     var o = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };
     if (body != null) { o.method = method || 'POST'; o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body); }
@@ -107,7 +202,7 @@
     if (!done && (s.d.file || s.busy) && !window.confirm(_t('js.feed.ss.discard', 'Discard this story?'))) return;
     if (!done) cancel(s);
     if (s.cam) { var cam = s.cam; s.cam = null; cam.close(); }
-    s.closed = true; settle(s); clearTimeout(s.suggestTimer); revoke(s);
+    s.closed = true; settle(s); clearTimeout(s.suggestTimer); clearTimeout(s.wheelTimer); revoke(s); s.gesture = null; if (s.raf && window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0;
     if (s.media && s.media.pause) s.media.pause();
     document.removeEventListener('keydown', s.key, true); document.removeEventListener('focusin', s.focus);
     document.removeEventListener('visibilitychange', s.vis); document.removeEventListener('pointerdown', s.touch, true);
@@ -121,9 +216,10 @@
   function key(s, e) {
     if (!live(s)) return;
     s.touch();
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.cam) s.cam.cancel(); else if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else close(s); return; }
+    // storyux: the quiet question first (Escape = keep editing), and a selected layer is let go before the editor closes
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (s.cam) s.cam.cancel(); else if (s.ask) unask(s, true); else if (s.suggestions && !s.suggestions.hidden) { s.suggestions.hidden = true; if (s.mentionInput) s.mentionInput.setAttribute('aria-expanded', 'false'); } else if (s.sheet) closeSheet(s); else if (picked(s)) select(s, null); else close(s); return; }
     if (e.key === 'Tab') {
-      var list = focusables(s.sheet || s.root); if (s.sheetName === 'crop') list.unshift(s.preview); var i = list.indexOf(document.activeElement);
+      var list = focusables(s.sheet || s.root), i = list.indexOf(document.activeElement);
       if (!list.length) { e.preventDefault(); s.root.focus(); }
       else if (e.shiftKey && i <= 0) { e.preventDefault(); list[list.length - 1].focus(); }
       else if (!e.shiftKey && (i < 0 || i === list.length - 1)) { e.preventDefault(); list[0].focus(); }
@@ -131,22 +227,34 @@
   }
   function open(pad, opener, resumed) {
     if (current) return;
-    var s = { id: ++serial, opener: opener || document.activeElement, pad: String(pad || ''), urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
+    var s = { id: ++serial, opener: opener || document.activeElement, pad: String(pad || ''), urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
     current = s; s.root = el('div', 'sst ds-scrim sheet'); s.root.setAttribute('role', 'dialog'); s.root.setAttribute('aria-modal', 'true'); s.root.tabIndex = -1; s.root.setAttribute('aria-label', _t('js.feed.sc.title', 'Add your story'));
     s.root.addEventListener('click', function (e) { if (e.target === s.root) close(s); });
+    // storyux: iOS - a pinch anywhere in the editor never zooms the page (Safari ignores user-scalable=no; its own gesture events can be stopped)
+    s.root.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
     s.oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; add(document.body, s.root);
     s.card = add(s.root, el('section', 'ds-modal sst-card'));
     var head = add(s.card, el('header', 'sst-head'));
-    s.closeButton = add(head, iconButton(_t('js.feed.ss.close', '⬅️ Close story editor'), function () { close(s); }, 'icon sm quiet sst-icon-only'));
+    // storyux: one X at the top left - with no picture it closes the editor; with one it goes back to the camera (or the picker)
+    s.closeButton = add(head, iconButton(_t('js.feed.ss.close_x', '✕ Close story editor'), function () { close(s); }, 'icon sm quiet sst-icon-only sst-close'));
+    s.backButton = add(head, iconButton(_t('js.feed.ss.back_camera', '✕ Back to the camera'), function () { goBack(s); }, 'icon sm quiet sst-icon-only sst-back')); s.backButton.hidden = true;
     add(head, el('h2', 'ds-pixel-h', _t('js.feed.ss.title', 'Your story')));
     add(head, el('span', 'sst-lifetime', _t('js.feed.ss.hours_short', '24 h')));
     s.more = add(head, iconButton(_t('js.feed.ss.options', '⚙️ Story options'), function () { optionsSheet(s); }, 'icon sm quiet sst-icon-only'));
     s.body = add(s.card, el('div', 'sst-body')); var work = add(s.body, el('div', 'sst-work'));
     s.previewWrap = add(work, el('div', 'sst-preview-wrap')); s.preview = add(s.previewWrap, el('div', 'sst-preview')); s.preview.tabIndex = 0;
     s.preview.setAttribute('aria-label', _t('js.feed.ss.preview', 'Story preview. Use the editing tools to make it yours.'));
+    s.help = add(s.preview, el('span', 'ds-sr-only', _t('js.feed.ss.gesture_help', 'Drag to move. Pinch to resize, twist to turn. Keyboard: arrows move, + and − resize, [ and ] turn, Delete removes.')));
+    s.help.id = 'sst-help-' + s.id; s.preview.setAttribute('aria-describedby', s.help.id);
     s.empty = add(s.preview, el('div', 'sst-empty')); var emptyIcon = add(s.empty, el('span', 'ds-ic', _t('js.feed.ss.camera_icon', '📷'))); emptyIcon.setAttribute('aria-hidden', 'true'); add(s.empty, el('p', null, _t('js.feed.ss.choose', 'Choose a picture or video')));
     s.canvas = add(s.preview, el('canvas', 'sst-overlay')); s.canvas.width = W; s.canvas.height = H; s.canvas.setAttribute('aria-hidden', 'true');
-    s.handles = add(s.preview, el('div', 'sst-handles')); s.picks = add(work, el('div', 'sst-picks'));
+    // storyux: the centre guides a layer snaps to, the layers' hit areas, and the selection (outline, delete, turn/size corner)
+    s.guides = {}; ['v', 'h'].forEach(function (k) { var g = s.guides[k] = add(s.preview, el('span', 'sst-guide')); g.setAttribute('data-guide', k); g.setAttribute('aria-hidden', 'true'); g.hidden = true; });
+    s.handles = add(s.preview, el('div', 'sst-handles')); s.layers = {};
+    s.sel = add(s.handles, el('div', 'sst-select')); s.sel.hidden = true;
+    s.selDel = add(s.sel, iconButton(_t('js.feed.ss.delete_x', '✕ Delete layer'), function (e) { if (e) e.stopPropagation(); if (picked(s) && !s.busy) removeLayer(s, s.selected); }, 'icon sm sst-sel-del'));
+    s.selTurn = add(s.sel, el('span', 'sst-sel-turn')); s.selTurn.setAttribute('aria-hidden', 'true');
+    s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
       var f = add(s.picks, input('file')); f.accept = 'image/*,video/*'; f.hidden = true; f.setAttribute('data-pick', pair[0]); if (pair[0] === 'camera') f.setAttribute('capture', 'environment');
       // ssfix: a hand-off with no file says so (it was a silent no-op). ssfix2: a file keeps the note ('arrived') until it has opened
@@ -160,13 +268,14 @@
       // story camera: 📷 Camera opens the live camera when it can; otherwise the capture input (with its pick note, as ever)
       var pickButton = add(s.picks, iconButton(pair[1], function () { if (pair[0] !== 'camera' || !camera(s)) choose(s, pair[0]); })); pickButton.setAttribute('data-picker', pair[0]);
     });
-    s.retake = add(s.picks, iconButton(_t('js.feed.ss.retake', '📸 Retake'), function () { if (!camera(s)) choose(s, 'camera'); })); s.retake.setAttribute('data-picker', 'retake'); s.retake.hidden = true;
-    s.filename = add(s.picks, el('span', 'sst-filename'));
+    // storyux: no Retake - once there is a picture the pickers go, and the X (backButton) is the one way back
+    s.filename = add(work, el('span', 'sst-filename'));
     s.summary = add(s.body, el('aside', 'sst-summary')); add(s.summary, el('h3', 'ds-eyebrow', _t('js.feed.ss.summary', 'Story details')));
     add(s.summary, el('p', null, _t('js.feed.ss.canvas', 'Canvas 9:16'))); add(s.summary, el('p', null, _t('js.feed.ss.lifetime', 'Appears for 24 hours')));
     s.summaryPad = add(s.summary, el('p')); s.summaryAs = add(s.summary, el('p'));
     s.tools = add(s.card, el('div', 'sst-tools')); s.toolButtons = {};
-    [['crop', _t('js.feed.ss.crop', '📐 Crop')], ['text', _t('js.feed.ss.text', '🔤 Text')], ['sticker', _t('js.feed.ss.sticker', '🧸 Sticker')], ['mention', _t('js.feed.ss.mention', '👤 Mention')], ['trim', _t('js.feed.ss.trim', '✂️ Trim')]].forEach(function (p) {
+    // storyux: 📐 is the layout toggle (pressed = Fill) - the picture itself is placed and sized by touch, not in a sheet
+    [['layout', _t('js.feed.ss.layout', '📐 Fill the screen')], ['text', _t('js.feed.ss.text', '🔤 Text')], ['sticker', _t('js.feed.ss.sticker', '🧸 Sticker')], ['mention', _t('js.feed.ss.mention', '👤 Mention')], ['trim', _t('js.feed.ss.trim', '✂️ Trim')]].forEach(function (p) {
       s.toolButtons[p[0]] = add(s.tools, iconButton(p[1], function () { tool(s, p[0]); })); s.toolButtons[p[0]].setAttribute('data-tool', p[0]);
     });
     s.sheetSlot = add(s.card, el('div', 'sst-sheet-slot')); s.status = add(s.card, el('div', 'sst-status')); s.status.setAttribute('aria-live', 'polite'); s.status.setAttribute('role', 'status');
@@ -191,7 +300,7 @@
     document.addEventListener('visibilitychange', s.vis); document.addEventListener('pointerdown', s.touch, true);
     window.addEventListener('blur', s.away); window.addEventListener('focus', s.back); window.addEventListener('pageshow', s.back); window.addEventListener('pagehide', s.leave);
     if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
-    cropGestures(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
+    stage(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
     // story camera: a new studio opens on the live camera; one reopened after a reload (ssfix) shows its picker and says what happened
     if (!resumed) camera(s);
     var include = pad && !/^(?:user:|u\/|profile$)/i.test(String(pad)) ? '?pad=' + encodeURIComponent(pad) : '';
@@ -215,8 +324,8 @@
     if (s.cam) s.cam.close(); closeSheet(s); if (s.media && s.media.pause) s.media.pause(); s.camWhy = '';
     s.cam = C.open(s.root, { wait: !s.canPost, draft: !!s.d.file, secs: function () { return s.caps.secs || 30; }, file: function (f, info) { s.cam = null; settle(s); pick(s, f, 0, info); },
       gallery: function () { choose(s, 'gallery'); },
-      close: function () { s.cam = null; if (!s.d.file) close(s); else (s.retake.hidden ? s.picks.querySelector('[data-picker="camera"]') : s.retake).focus(); },
-      unavailable: function (why) { s.cam = null; s.camWhy = why; s.camFailed = true; if (live(s)) say(s, why); } });
+      close: function () { s.cam = null; if (!s.d.file) close(s); else s.backButton.focus(); },
+      unavailable: function (why) { s.cam = null; s.camWhy = why; s.camFailed = true; if (live(s)) { say(s, why); paintControls(s); } } });
     return !!s.cam;
   }
   function paintTarget(s) {
@@ -238,14 +347,20 @@
     var d = s.d; s.post.disabled = s.busy || !!s.pendingStickers || !s.target || !d.file || !d.valid || (!d.decoded && !d.legacy);
     s.root.classList.toggle('sst-has-media', !!d.file); s.root.classList.toggle('sst-video', d.kind === 'video'); s.root.classList.toggle('sst-busy', !!s.busy);
     s.closeButton.disabled = !!(s.attempt && s.attempt.stage === 'mine'); s.cancelButton.disabled = s.closeButton.disabled;
+    // storyux: with a picture, no Gallery / Camera - one X back (to the live camera when there is one, else the picker)
+    s.picks.hidden = !!d.file; s.closeButton.hidden = !!d.file; s.backButton.hidden = !d.file; s.backButton.disabled = s.busy;
+    relabel(s.backButton, cameraOK(s) ? _t('js.feed.ss.back_camera', '✕ Back to the camera') : _t('js.feed.ss.back_pick', '✕ Choose another picture or video'));
     s.destination.disabled = s.busy || !s.targets.length; s.more.disabled = s.busy;
     Array.prototype.forEach.call(s.picks.querySelectorAll('button'), function (b) { b.disabled = s.busy; });
-    // storyfix2: a video under a second has no 1 s window to trim
-    Object.keys(s.toolButtons).forEach(function (k) { var b = s.toolButtons[k]; b.disabled = s.busy || !d.file || !d.valid || (k !== 'mention' && (!d.decoded || d.legacy || d.gif)) || (k === 'trim' && (d.kind !== 'video' || !(d.duration >= 1))); b.setAttribute('aria-pressed', String(s.sheetName === k)); });
+    // storyfix2: a video under a second has no 1 s window to trim; storyux: Fill only where the picture can fill the frame
+    Object.keys(s.toolButtons).forEach(function (k) {
+      var b = s.toolButtons[k]; b.disabled = s.busy || !d.file || !d.valid || (k !== 'mention' && (!d.decoded || d.legacy || d.gif)) || (k === 'trim' && (d.kind !== 'video' || !(d.duration >= 1))) || (k === 'layout' && !(d.w && G.canFill(d.w / d.h)));
+      b.setAttribute('aria-pressed', String(k === 'layout' ? d.fit === 'fill' : s.sheetName === k));
+    });
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
-  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); if (opener && opener.isConnected) opener.focus(); }
+  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); if (opener && opener.isConnected) opener.focus(); }
   function sheet(s, name, title) {
     var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet'); s.root.setAttribute('data-sheet', name);
     s.sheet = add(s.sheetSlot, el('section', 'sst-sheet')); s.sheet.setAttribute('aria-label', title);
@@ -263,14 +378,12 @@
     if (s.target && !s.target.profile && s.target.href) { var rules = add(box, el('a', 'ds-btn quiet sm', _t('js.feed.ss.rules', 'Pad rules'))); rules.href = s.target.href + '#rules'; rules.target = '_blank'; rules.rel = 'noopener'; }
     check.focus();
   }
-  function framing(d) {
-    var ratio = W / H, own = d.w / d.h;
-    var w = own > ratio ? ratio / own : 1, h = own > ratio ? 1 : own / ratio;
-    w /= d.zoom; h /= d.zoom; var x = d.crop ? d.crop.x + d.crop.w / 2 : .5, y = d.crop ? d.crop.y + d.crop.h / 2 : .5;
-    d.crop = { x: clamp(x - w / 2, 0, 1 - w), y: clamp(y - h / 2, 0, 1 - h), w: w, h: h };
+  // storyux: d.crop is the picture's window in either layout (G above); a picture near 9:16 starts filling the frame, any
+  // other starts whole. d.start remembers that, so the X knows whether the draft has edits.
+  function resetFrame(d, fit) {
+    var own = d.w / d.h; d.fit = fit || (Math.abs(own / (W / H) - 1) <= .2 && G.canFill(own) ? 'fill' : 'fit');
+    d.crop = G.layout(null, own, d.fit); if (!fit) d.start = { fit: d.fit, crop: Object.assign({}, d.crop) };
   }
-  function canFill(d) { var r = d.w / d.h / (W / H); return Math.min(r, 1 / r) >= .05; }
-  function resetFrame(d) { d.zoom = 1; d.crop = null; framing(d); d.fit = Math.abs(d.w / d.h / (W / H) - 1) <= .2 ? 'fill' : 'fit'; }
   function choose(s, which) {
     if (s.pending) clearTimeout(s.pending.timer);
     s.pending = { n: ++serial, picker: which, phase: 'open', away: false, back: false, timer: null };
@@ -359,14 +472,14 @@
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
     if (file.size > limit * 1024 * 1024) { refuse(s, _t('js.feed.ss.too_big', 'That file is too big. Choose one up to {n} MB.', { n: limit }), n); return; }
     if (s.cam) { s.cam.close(); s.cam = null; }
-    // after a capture Retake takes 📷 Camera's place (one way back to the camera, not two)
-    var captured = !!(info && info.camera); s.retake.hidden = !captured; s.picks.querySelector('[data-picker="camera"]').hidden = captured; s.camWhy = '';
+    var captured = !!(info && info.camera); s.camWhy = ''; unask(s);
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
     if (s.still) { s.still.remove(); s.still = null; }
-    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
-    s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
+    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
+    s.selected = null; s.gesture = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
     m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
+    m.setAttribute('draggable', 'false');     // storyux: a desktop drag pans the picture, never drags the image out
     // storyfix2: muted + inline (attributes too, as iOS reads them) and preload auto, for the first frame below
     if (kind === 'video') { m.muted = true; m.defaultMuted = true; m.playsInline = true; ['playsinline', 'webkit-playsinline', 'muted'].forEach(function (a) { m.setAttribute(a, ''); }); m.preload = 'auto'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
     // storyprev: a camera clip's poster stands by (its size came with it); the read-out is there only with ?storydebug=1
@@ -412,7 +525,7 @@
       // iPhone recording can hold less than the hold; a quick clip from the phone's capture input is short too); only a trim
       // needs a second (the Trim tool is off under one)
       if (!isFinite(d.duration) || !(d.duration > 0) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
-      else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
+      else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; d.trim0 = { start: d.trim.start, end: d.trim.end }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
     }
     function opened() {
       render(s); paintControls(s);
@@ -487,18 +600,26 @@
     say(s, _t('js.feed.ss.legacy', 'Ready to post without edits.')); render(s); paintControls(s);
   }
   function render(s) {
-    if (!live(s)) return; var d = s.d, m = s.media;
-    if (m && d.decoded) {
-      m.style.transform = ''; m.style.inlineSize = '100%'; m.style.blockSize = '100%'; m.style.insetInlineStart = '0'; m.style.insetBlockStart = '0';
-      if (d.fit === 'fill' && !d.legacy) { m.style.objectFit = 'fill'; m.style.inlineSize = 100 / d.crop.w + '%'; m.style.blockSize = 100 / d.crop.h + '%'; m.style.insetInlineStart = -d.crop.x / d.crop.w * 100 + '%'; m.style.insetBlockStart = -d.crop.y / d.crop.h * 100 + '%'; }
-      else m.style.objectFit = 'contain';
-    }
-    if (m && d.decoded && s.still) ['objectFit', 'inlineSize', 'blockSize', 'insetInlineStart', 'insetBlockStart', 'transform'].forEach(function (k) { s.still.style[k] = m.style[k]; });   // storyprev: the poster frames like its video
+    if (!live(s)) return; var d = s.d; placeMedia(s);
     var n = ++s.drawId;
     fonts(d).then(function () { if (!live(s) || n !== s.drawId) return; draw(s.canvas, d); layoutHandles(s); }).catch(function () { if (live(s)) say(s, _t('js.feed.ss.font_failed', 'The text font could not load. Try again before posting.'), true); });
   }
+  // storyux: the picture where its window puts it - in Fit too (it may be smaller than the frame, or zoomed past it)
+  // (storyprev: a camera clip's poster - s.still - is framed exactly like its video, whichever of the two shows)
+  function placeMedia(s) {
+    var d = s.d, m = s.media; if (!m || !d.decoded) return;
+    m.style.transform = ''; m.style.inlineSize = '100%'; m.style.blockSize = '100%'; m.style.insetInlineStart = '0'; m.style.insetBlockStart = '0';
+    if (d.legacy || !d.crop) { m.style.objectFit = 'contain'; return frameStill(s); }
+    var r = G.rect(d.crop); m.style.objectFit = 'fill';
+    m.style.inlineSize = r.w * 100 + '%'; m.style.blockSize = r.h * 100 + '%'; m.style.insetInlineStart = r.x * 100 + '%'; m.style.insetBlockStart = r.y * 100 + '%';
+    frameStill(s);
+  }
+  function frameStill(s) { var m = s.media, st = s.still; if (m && st) ['objectFit', 'inlineSize', 'blockSize', 'insetInlineStart', 'insetBlockStart', 'transform'].forEach(function (k) { st.style[k] = m.style[k]; }); }
   function fonts(d) { if (!document.fonts || !document.fonts.load) return Promise.resolve(); return Promise.all(d.texts.map(function (t) { return document.fonts.load(font(t), t.text); })); }
   function font(t) { return '700 ' + t.size + 'px ' + (t.style === 'pixel' ? '"Press Start 2P", monospace' : 'Ubuntu, system-ui, sans-serif'); }
+  // storyux: a text scales as a whole - its lines break where they did at 72 px (the wrap width grows with it) until it would
+  // be wider than the frame; its box's padding grows with it too
+  function wrapWidth(t) { return Math.min(W * .86 * t.size / 72, W * .92); }
   function textLines(ctx, text, max) {
     // Word wrapping, then grapheme wrapping for a single unbroken word. Emoji clusters stay together where supported.
     var out = [], segments = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
@@ -513,83 +634,267 @@
       }); out.push(line.trim());
     }); return out;
   }
+  // storyux: every layer is drawn about its centre, turned by its rot - the handle on the preview sits on the same box
   function draw(canvas, d) {
     var ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, W, H);
     d.texts.forEach(function (t) {
       ctx.save(); ctx.font = font(t); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = /[\u0590-\u08ff]/.test(t.text) ? 'rtl' : 'ltr';
-      var lines = textLines(ctx, t.text, W * .86), height = lines.length * t.size * 1.3, width = Math.max.apply(Math, lines.map(function (x) { return ctx.measureText(x).width; }).concat([t.size]));
-      t.bounds = { w: width + 32, h: height + 20 }; t.x = clamp(t.x, Math.min(.5, t.bounds.w / W / 2), Math.max(.5, 1 - t.bounds.w / W / 2)); t.y = clamp(t.y, Math.min(.5, t.bounds.h / H / 2), Math.max(.5, 1 - t.bounds.h / H / 2));
-      var x = t.x * W, y = t.y * H;
-      if (t.style === 'box') { ctx.fillStyle = t.color === '#000000' ? '#ffffff' : '#000000'; ctx.fillRect(x - width / 2 - 16, y - height / 2 - 10, width + 32, height + 20); }
-      if (t.style === 'plain') { ctx.shadowColor = '#000000'; ctx.shadowBlur = 7; ctx.shadowOffsetY = 3; }
+      var lines = textLines(ctx, t.text, wrapWidth(t)), lh = t.size * 1.3, height = lines.length * lh, width = Math.max.apply(Math, lines.map(function (x) { return ctx.measureText(x).width; }).concat([t.size]));
+      var px = t.size * 16 / 72, py = t.size * 10 / 72;
+      t.bounds = { w: width + 2 * px, h: height + 2 * py, size: t.size }; G.keepIn(t);
+      ctx.translate(t.x * W, t.y * H); if (t.rot) ctx.rotate(t.rot);
+      if (t.style === 'box') { ctx.fillStyle = t.color === '#000000' ? '#ffffff' : '#000000'; ctx.fillRect(-width / 2 - px, -height / 2 - py, width + 2 * px, height + 2 * py); }
+      if (t.style === 'plain') { ctx.shadowColor = '#000000'; ctx.shadowBlur = 7 * t.size / 72; ctx.shadowOffsetY = 3 * t.size / 72; }
       ctx.fillStyle = t.color; ctx.strokeStyle = t.color === '#000000' ? '#ffffff' : '#000000'; ctx.lineWidth = Math.max(4, t.size / 9); ctx.lineJoin = 'round';
-      lines.forEach(function (line, i) { var ly = y + (i - (lines.length - 1) / 2) * t.size * 1.3; if (t.style === 'outline') ctx.strokeText(line, x, ly); ctx.fillText(line, x, ly); }); ctx.restore();
+      lines.forEach(function (line, i) { var ly = (i - (lines.length - 1) / 2) * lh; if (t.style === 'outline') ctx.strokeText(line, 0, ly); ctx.fillText(line, 0, ly); }); ctx.restore();
     });
-    d.stickers.forEach(function (t) { if (t.img) { ctx.imageSmoothingEnabled = false; ctx.drawImage(t.img, Math.round(t.x * W - t.size / 2), Math.round(t.y * H - t.size / 2), t.size, t.size); } });
+    // a sticker's side is a multiple of 24 (whole pixels of its 24 px art) and its centre a whole pixel: crisp when upright
+    d.stickers.forEach(function (t) {
+      if (!t.img) return; var p = G.stickerPx(t.size); G.keepIn(t);
+      ctx.save(); ctx.imageSmoothingEnabled = false; ctx.translate(Math.round(t.x * W), Math.round(t.y * H)); if (t.rot) ctx.rotate(t.rot);
+      ctx.drawImage(t.img, -p / 2, -p / 2, p, p); ctx.restore();
+    });
   }
   function layerName(t) { return t.type === 'text' ? t.text : t.type === 'mention' ? '@' + t.username : t.name; }
+  function layersOf(d) { return d.texts.concat(d.stickers, d.mentions); }
+  // the selected layer, while it is one of the draft's (a text being typed for the first time isn't, until it has words)
+  function picked(s) { var t = s.selected; return t && layersOf(s.d).indexOf(t) >= 0 ? t : null; }
+  // storyux: the layers' hit areas are kept (one per layer, by id) and only moved - a gesture never loses its element
   function layoutHandles(s) {
-    if (!live(s)) return; var d = s.d, active = document.activeElement, focusId = active && active.getAttribute && active.getAttribute('data-layer');
+    if (!live(s)) return; var d = s.d, keep = {};
     // Unedited media keeps its original aspect ratio. Its mention fractions refer to the
     // contained picture, matching the viewer; edited media always fills the 9:16 output.
     var mw = W, mh = H;
     if (d.legacy && d.decoded) { var scale = Math.min(W / d.w, H / d.h); mw = d.w * scale; mh = d.h * scale; }
     s.handles.style.insetInlineStart = (W - mw) / W * 50 + '%'; s.handles.style.insetBlockStart = (H - mh) / H * 50 + '%';
     s.handles.style.inlineSize = mw / W * 100 + '%'; s.handles.style.blockSize = mh / H * 100 + '%'; s.handles.hidden = !d.decoded;
-    s.handles.textContent = '';
-    d.texts.concat(d.stickers, d.mentions).forEach(function (t) {
-      var b = add(s.handles, button(t.type === 'mention' ? '@' + t.username : '', function () { selectLayer(s, t); }, 'sst-layer' + (t.type === 'mention' ? ' sst-mention' : '') + (s.selected === t ? ' selected' : '')));
-      b.setAttribute('data-layer', t.id); b.setAttribute('aria-label', _t('js.feed.ss.layer', 'Edit {name}', { name: layerName(t) })); b.style.insetInlineStart = t.x * 100 + '%'; b.style.insetBlockStart = t.y * 100 + '%';
-      if (t.type !== 'mention') { b.style.inlineSize = ((t.bounds ? t.bounds.w : t.size) / W * 100) + '%'; b.style.blockSize = ((t.bounds ? t.bounds.h : t.size) / H * 100) + '%'; }
-      b.addEventListener('keydown', function (e) { if (s.busy) return; var step = e.shiftKey ? .1 : .01, used = true; if (e.key === 'ArrowLeft') t.x -= step; else if (e.key === 'ArrowRight') t.x += step; else if (e.key === 'ArrowUp') t.y -= step; else if (e.key === 'ArrowDown') t.y += step; else used = false; if (used) { e.preventDefault(); t.x = clamp(t.x, .05, .95); t.y = clamp(t.y, .05, .95); changed(s, t.type !== 'mention'); } });
-      drag(b, function () { return !s.busy; }, function (dx, dy) { var r = s.handles.getBoundingClientRect(); t.x = clamp(t.x + dx / r.width, .05, .95); t.y = clamp(t.y + dy / r.height, .05, .95); b.style.insetInlineStart = t.x * 100 + '%'; b.style.insetBlockStart = t.y * 100 + '%'; if (t.type !== 'mention') { if (s.ready) { discard([s.ready.id]); s.ready = null; } draw(s.canvas, d); } }, function () { layoutHandles(s); });
-      if (focusId === t.id) b.focus();
+    layersOf(d).forEach(function (t) {
+      var b = s.layers[t.id] || (s.layers[t.id] = makeLayer(s, t)); keep[t.id] = true;
+      if (b.parentNode !== s.handles) s.handles.insertBefore(b, s.sel);
+      placeLayer(s, b, t);
+    });
+    Object.keys(s.layers).forEach(function (id) { if (!keep[id]) { s.layers[id].remove(); delete s.layers[id]; } });
+    placeSelect(s);
+  }
+  function makeLayer(s, t) {
+    var b = button(t.type === 'mention' ? '@' + t.username : '', null, 'sst-layer' + (t.type === 'mention' ? ' sst-mention' : ''));
+    b.setAttribute('data-layer', t.id); b.setAttribute('aria-label', _t('js.feed.ss.layer', 'Edit {name}', { name: layerName(t) }));
+    // a pointer's tap is the stage's (detail > 0); Enter / Space / assistive tech select it - and open a text's words
+    b.addEventListener('click', function (e) { if ((e.detail || 0) > 0 || s.busy) return; e.preventDefault(); select(s, t); if (t.type === 'text') textSheet(s, t); });
+    b.addEventListener('keydown', function (e) { layerKey(s, t, e); });
+    return b;
+  }
+  function placeLayer(s, b, t) {
+    b.style.insetInlineStart = t.x * 100 + '%'; b.style.insetBlockStart = t.y * 100 + '%';
+    if (t.type !== 'mention') { var bx = G.box(t); b.style.inlineSize = bx.w / W * 100 + '%'; b.style.blockSize = bx.h / H * 100 + '%'; b.style.transform = 'translate(-50%, -50%) rotate(' + (t.rot || 0) + 'rad)'; }
+    b.classList.toggle('selected', s.selected === t);
+    if (t.type === 'text' || t.type === 'sticker') b.setAttribute('aria-label', _t('js.feed.ss.layer', 'Edit {name}', { name: layerName(t) }));
+  }
+  // the outline, its delete handle and (text / sticker) its turn-and-size corner, on the selected layer's box
+  function placeSelect(s) {
+    var t = picked(s), x = s.sel; if (s.handles.lastChild !== x) s.handles.appendChild(x);
+    x.hidden = !t || !s.d.decoded; if (x.hidden) return;
+    var b = s.layers[t.id];
+    x.style.insetInlineStart = b.style.insetInlineStart; x.style.insetBlockStart = b.style.insetBlockStart;
+    x.style.inlineSize = t.type === 'mention' ? 'auto' : b.style.inlineSize; x.style.blockSize = t.type === 'mention' ? 'auto' : b.style.blockSize;
+    x.style.transform = t.type === 'mention' ? 'translate(-50%, -50%)' : b.style.transform;
+    x.classList.toggle('sst-select-chip', t.type === 'mention'); s.selTurn.hidden = t.type === 'mention';
+    x.style.setProperty('--sst-rot', (t.type === 'mention' ? 0 : t.rot || 0) + 'rad');      // the handles stay upright on a turned layer
+  }
+  function select(s, t) {
+    if (s.selected === t) { layoutHandles(s); return; }
+    s.selected = t; layoutHandles(s);
+  }
+  function removeLayer(s, t) {
+    var list = t.type === 'text' ? s.d.texts : t.type === 'sticker' ? s.d.stickers : s.d.mentions, index = list.indexOf(t);
+    if (index >= 0) list.splice(index, 1);
+    if (s.selected === t) s.selected = null;
+    if (s.sheet && s.sheetLayer === t) closeSheet(s);
+    s.preview.focus(); changed(s, t.type !== 'mention');
+  }
+  // the keyboard on a focused layer: arrows move (Shift: 10%), + − size, [ ] turn (Shift: 15°), Delete / Backspace remove
+  function layerKey(s, t, e) {
+    if (s.busy) return; var k = e.key, step = e.shiftKey ? .1 : .01, turn = (e.shiftKey ? 15 : 5) * Math.PI / 180, art = t.type !== 'mention', used = true;
+    var lim = t.type === 'text' ? G.LIMITS.text : G.LIMITS.sticker;
+    if (k === 'ArrowLeft') t.x -= step; else if (k === 'ArrowRight') t.x += step; else if (k === 'ArrowUp') t.y -= step; else if (k === 'ArrowDown') t.y += step;
+    else if (art && (k === '+' || k === '=')) t.size = clamp(t.size * 1.1, lim[0], lim[1]);
+    else if (art && (k === '-' || k === '_' || k === '−')) t.size = clamp(t.size / 1.1, lim[0], lim[1]);
+    else if (art && (k === ']' || k === '[')) t.rot = G.turnOf((t.rot || 0) + (k === ']' ? turn : -turn));
+    else if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); removeLayer(s, t); return; }
+    else used = false;
+    if (!used) return;
+    e.preventDefault(); if (s.selected !== t) s.selected = t;
+    G.keepIn(t); placeLayer(s, s.layers[t.id], t); placeSelect(s); changed(s, art);
+  }
+
+  // ── storyux: the stage - pointers (touch, pen, mouse) on the preview, batched per animation frame ──
+  // A gesture's target is the layer the first finger lands on (selected at once), or the picture when nothing is selected.
+  // A first finger off the selected layer waits: a second finger then pinches that layer (a small one is easier pinched
+  // around), the first one moving alone lets it go and pans the picture, and lifted it is a tap (deselects).
+  // Each phase (the fingers down) starts from a snapshot, so nothing drifts; a third finger is ignored.
+  var SLOP = 6, TAP_MS = 400;
+  function frameNow() { return window.requestAnimationFrame ? function (f) { return window.requestAnimationFrame(f); } : function (f) { return setTimeout(f, 16); }; }
+  function snapshot(t) { return { x: t.x, y: t.y, size: t.size, rot: t.rot || 0 }; }
+  function canPan(s) { var d = s.d; return !!(d.decoded && !d.legacy && !d.gif && d.crop); }
+  function stage(s) {
+    var P = s.preview, raf = frameNow();
+    function own() { return s.d.w / s.d.h; }
+    function layerAt(target) { var b = target && target.closest ? target.closest('.sst-layer') : null, id = b && b.getAttribute('data-layer'); return id ? layersOf(s.d).filter(function (t) { return t.id === id; })[0] || null : null; }
+    function ids(g) { return Object.keys(g.pts).slice(0, 2); }
+    function rebase(g) {
+      g.start = ids(g).map(function (id) { return { x: g.pts[id].x, y: g.pts[id].y }; }); g.acc = 0; g.prev = g.start.length === 2 ? G.angle(g.start[0], g.start[1]) : 0;
+      g.rect = (g.target === 'base' ? P : s.handles).getBoundingClientRect();
+      if (g.target && g.target !== 'base' && g.target !== 'wait') { g.s0 = snapshot(g.target); if (g.turn) { var c = centre(g); g.v0 = { x: g.start[0].x - c.x, y: g.start[0].y - c.y }; } }
+      if (g.target === 'base') g.w0 = Object.assign({}, s.d.crop);
+    }
+    function centre(g) { return { x: g.rect.left + g.target.x * g.rect.width, y: g.rect.top + g.target.y * g.rect.height }; }
+    function down(e) {
+      if (!live(s) || s.busy || !s.d.decoded || (e.button != null && e.button > 0)) return;
+      if (e.target && e.target.closest && e.target.closest('.sst-sel-del')) return;          // its own click
+      unask(s);
+      var g = s.gesture, turnCorner = !!(e.target && e.target.closest && e.target.closest('.sst-sel-turn'));
+      if (!g) {
+        var hit = turnCorner ? picked(s) : layerAt(e.target);
+        if (!hit && !picked(s) && !canPan(s)) return;
+        g = s.gesture = { pts: {}, n: 0, moved: false, two: false, turn: turnCorner && !!hit, hit: hit, target: hit || (picked(s) ? 'wait' : 'base') };
+        if (hit && hit !== s.selected) select(s, hit);
+      } else if (g.n >= 2 || g.turn) return;
+      g.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; g.n++;
+      if (g.n === 2) { g.two = true; if (g.target === 'wait') g.target = picked(s); if (g.target && g.target !== 'base' && g.target.type === 'mention') g.target = null; }
+      try { if (P.setPointerCapture) P.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+      if (e.pointerType === 'mouse' && e.preventDefault) e.preventDefault();       // no text selection or image drag
+      rebase(g);
+    }
+    function move(e) {
+      var g = s.gesture, p = g && g.pts[e.pointerId]; if (!p) return;
+      p.x = e.clientX; p.y = e.clientY;
+      if (!g.moved) { var i = ids(g).indexOf(String(e.pointerId)), q = g.start[i]; if (q && Math.hypot(p.x - q.x, p.y - q.y) > SLOP) g.moved = true; }
+      if (!s.raf) s.raf = raf(function () { s.raf = 0; apply(); });
+    }
+    function apply() {
+      var g = s.gesture; if (!g || !live(s)) return;
+      if (s.busy) { end(); return; }                                   // Post froze it
+      if (g.target === 'wait') { if (!g.moved) return; select(s, null); g.target = canPan(s) ? 'base' : null; rebase(g); return; }
+      if (!g.target) return;
+      var now = ids(g).map(function (id) { return g.pts[id]; }), m;
+      if (g.turn) { var c = centre(g), v = { x: now[0].x - c.x, y: now[0].y - c.y }, l0 = Math.hypot(g.v0.x, g.v0.y);
+        m = { scale: l0 > 0 ? Math.hypot(v.x, v.y) / l0 : 1, turn: G.turnOf(Math.atan2(v.y, v.x) - Math.atan2(g.v0.y, g.v0.x)) }; }
+      else if (now.length === 2) {
+        var a = G.angle(now[0], now[1]); g.acc += G.turnOf(a - g.prev); g.prev = a;           // more than half a turn adds up
+        m = G.twoFinger(g.start[0], g.start[1], now[0], now[1]); m.turn = g.acc;
+      } else m = { dx: now[0].x - g.start[0].x, dy: now[0].y - g.start[0].y };
+      if (g.target === 'base') {
+        var r = g.rect, f = function (pt) { return { x: (pt.x - r.left) / r.width, y: (pt.y - r.top) / r.height }; };
+        if (now.length === 2) { var m0 = { x: (g.start[0].x + g.start[1].x) / 2, y: (g.start[0].y + g.start[1].y) / 2 }, m1 = { x: (now[0].x + now[1].x) / 2, y: (now[0].y + now[1].y) / 2 };
+          s.d.crop = G.zoom(g.w0, own(), s.d.fit, m.scale, f(m0), f(m1)); }
+        else s.d.crop = G.pan(g.w0, own(), s.d.fit, m.dx / r.width, m.dy / r.height);
+        placeMedia(s); dirty(s, true); return;
+      }
+      guides(s, G.moveItem(g.target, g.s0, m, g.rect, { snap: true })); paintLayer(s, g.target);
+    }
+    function up(e) {
+      var g = s.gesture; if (!g || !g.pts[e.pointerId]) return;
+      if (s.raf) { if (window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0; apply(); }   // its last move still counts
+      if (s.gesture !== g) return;
+      delete g.pts[e.pointerId]; g.n--;
+      if (g.n > 0) { rebase(g); return; }                             // the other finger carries on, from here
+      var tap = !g.moved && !g.two && !g.wk && e.type === 'pointerup' && !s.busy; end();
+      if (tap) tapped(s, g.hit, g.target);
+    }
+    function end() {
+      var g = s.gesture; s.gesture = null; guides(s, null); if (!g || !live(s)) return;
+      if (s.busy) { layoutHandles(s); return; }                      // posting: the draft is frozen as it was sent
+      if (g.moved || g.two || g.wk) { var t = g.target; changed(s, !t || t === 'base' || t.type !== 'mention'); }
+    }
+    P.addEventListener('pointerdown', down);
+    P.addEventListener('pointermove', move);
+    P.addEventListener('pointerup', up);
+    P.addEventListener('pointercancel', up);
+    // the page never scrolls, zooms, selects or calls out under the stage (touch-action: none in the CSS does most of it)
+    P.addEventListener('touchmove', function (e) { if (live(s) && s.d.file) e.preventDefault(); }, { passive: false });
+    ['contextmenu', 'dragstart', 'selectstart'].forEach(function (type) { P.addEventListener(type, function (e) { e.preventDefault(); }); });
+    // WebKit's own pinch events: always kept from zooming the page; they move a layer (or the picture) only when the pointer
+    // stream has lost the second finger (scale and rotation from gesturestart, in degrees)
+    P.addEventListener('gesturestart', function (e) {
+      e.preventDefault(); var g = s.gesture; if (!live(s) || s.busy || !g || g.n >= 2) { s.wk = null; return; }
+      var t = g.target === 'wait' ? picked(s) : g.target; if (!t || (t !== 'base' && t.type === 'mention')) { s.wk = null; return; }
+      s.wk = { target: t, s0: t === 'base' ? null : snapshot(t), w0: t === 'base' ? Object.assign({}, s.d.crop) : null };
+    }, { passive: false });
+    P.addEventListener('gesturechange', function (e) {
+      e.preventDefault(); var g = s.gesture, w = s.wk; if (!w || !live(s) || s.busy || (g && g.n >= 2)) return;
+      var k = Number(e.scale) > 0 ? Number(e.scale) : 1, turn = (Number(e.rotation) || 0) * Math.PI / 180;
+      if (g) { g.wk = true; if (g.target === 'wait') g.target = w.target; }
+      if (w.target === 'base') { s.d.crop = G.zoom(w.w0, own(), s.d.fit, k, { x: .5, y: .5 }, { x: .5, y: .5 }); placeMedia(s); dirty(s, true); return; }
+      guides(s, G.moveItem(w.target, w.s0, { scale: k, turn: turn }, s.handles.getBoundingClientRect(), { snap: true })); paintLayer(s, w.target);
+      if (!g) changed(s, true);
+    }, { passive: false });
+    P.addEventListener('gestureend', function (e) { e.preventDefault(); s.wk = null; }, { passive: false });
+    // a desktop: the wheel sizes the selected layer (ctrl+wheel = a trackpad pinch), Shift+wheel turns it; with nothing
+    // selected it zooms the picture about the pointer
+    P.addEventListener('wheel', function (e) {
+      if (!live(s) || s.busy || s.gesture || !s.d.decoded) return;
+      var t = picked(s); if (t && t.type === 'mention') t = null; if (!t && !canPan(s)) return;
+      e.preventDefault(); var dv = Number(e.deltaY) || Number(e.deltaX) || 0; if (e.deltaMode === 1) dv *= 16; else if (e.deltaMode === 2) dv *= 400;
+      var k = Math.exp(-dv * (e.ctrlKey ? .01 : .0015));
+      if (t) { G.moveItem(t, snapshot(t), e.shiftKey ? { turn: dv * .0025 } : { scale: k }, s.handles.getBoundingClientRect()); paintLayer(s, t); dirty(s, true); wheelDone(s); return; }
+      var r = P.getBoundingClientRect(), f = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+      if (!(f.x >= 0 && f.x <= 1)) f.x = .5; if (!(f.y >= 0 && f.y <= 1)) f.y = .5;
+      s.d.crop = G.zoom(s.d.crop, own(), s.d.fit, k, f, f); placeMedia(s); dirty(s, true); wheelDone(s);
+    }, { passive: false });
+    // the focused picture: arrows pan (Shift: 10%), + − zoom, 0 puts it back
+    P.addEventListener('keydown', function (e) {
+      if (e.target !== P || s.busy || !canPan(s)) return; var q = e.shiftKey ? .1 : .01, used = true, d = s.d;
+      if (e.key === 'ArrowLeft') d.crop = G.pan(d.crop, own(), d.fit, -q, 0); else if (e.key === 'ArrowRight') d.crop = G.pan(d.crop, own(), d.fit, q, 0);
+      else if (e.key === 'ArrowUp') d.crop = G.pan(d.crop, own(), d.fit, 0, -q); else if (e.key === 'ArrowDown') d.crop = G.pan(d.crop, own(), d.fit, 0, q);
+      else if (e.key === '+' || e.key === '=') d.crop = G.zoom(d.crop, own(), d.fit, 1.1, { x: .5, y: .5 }, { x: .5, y: .5 });
+      else if (e.key === '-' || e.key === '_' || e.key === '−') d.crop = G.zoom(d.crop, own(), d.fit, 1 / 1.1, { x: .5, y: .5 }, { x: .5, y: .5 });
+      else if (e.key === '0') resetFrame(d, d.fit);
+      else used = false;
+      if (used) { e.preventDefault(); changed(s, true); }
     });
   }
-  function drag(node, allowed, move, end) { var point = null;
-    node.addEventListener('pointerdown', function (e) { if (!allowed() || (e.button != null && e.button !== 0)) return; point = { x: e.clientX, y: e.clientY, id: e.pointerId }; if (node.setPointerCapture) node.setPointerCapture(e.pointerId); e.stopPropagation(); });
-    node.addEventListener('pointermove', function (e) { if (!point || point.id !== e.pointerId) return; if (!allowed()) { point = null; return; } var dx = e.clientX - point.x, dy = e.clientY - point.y; point.x = e.clientX; point.y = e.clientY; move(dx, dy); });
-    ['pointerup', 'pointercancel'].forEach(function (event) { node.addEventListener(event, function () { if (!point) return; point = null; if (end) end(); }); });
+  // a wheel turn ends a moment later: then the full render and the controls
+  function wheelDone(s) { clearTimeout(s.wheelTimer); s.wheelTimer = setTimeout(function () { if (live(s) && !s.gesture) changed(s, true); }, 120); }
+  // pixels changed under a gesture: a finished upload no longer matches (discarded once, at once)
+  function dirty(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } }
+  // one layer moved: redraw the overlay and move its handle and the outline - nothing else is laid out
+  function paintLayer(s, t) { if (t.type !== 'mention') { dirty(s, true); draw(s.canvas, s.d); } var b = s.layers[t.id]; if (b) placeLayer(s, b, t); placeSelect(s); }
+  function guides(s, g) { s.guides.v.hidden = !(g && g.v); s.guides.h.hidden = !(g && g.h); }
+  // a tap: on a layer, select it (a second tap on a text within TAP_MS opens its words); elsewhere, let the selection go - and a
+  // double tap on the picture puts it back the way its layout starts
+  function tapped(s, hit, target) {
+    var now = Date.now(), last = s.lastTap; s.lastTap = { on: hit || 'base', at: now };
+    if (hit) {
+      select(s, hit); var b = s.layers[hit.id]; if (b && b.focus) b.focus();
+      if (hit.type === 'text' && last && last.on === hit && now - last.at < TAP_MS) { s.lastTap = null; textSheet(s, hit); }
+      return;
+    }
+    if (target === 'wait' || picked(s)) { select(s, null); return; }
+    if (last && last.on === 'base' && now - last.at < TAP_MS && canPan(s)) { s.lastTap = null; resetFrame(s.d, s.d.fit); changed(s, true); }
   }
-  function cropGestures(s) {
-    var points = {}, distance = 0;
-    s.preview.addEventListener('pointerdown', function (e) { if (s.sheetName !== 'crop' || s.d.fit !== 'fill' || s.busy || e.target.closest('.sst-layer')) return; points[e.pointerId] = { x: e.clientX, y: e.clientY }; s.preview.setPointerCapture(e.pointerId); distance = pinch(); });
-    function pinch() { var a = Object.keys(points); return a.length === 2 ? Math.hypot(points[a[0]].x - points[a[1]].x, points[a[0]].y - points[a[1]].y) : 0; }
-    s.preview.addEventListener('pointermove', function (e) { var p = points[e.pointerId]; if (!p || s.busy) return; var dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; var next = pinch(); if (next && distance) zoom(s, s.d.zoom * next / distance); else moveCrop(s, dx / s.preview.getBoundingClientRect().width * s.d.crop.w, dy / s.preview.getBoundingClientRect().height * s.d.crop.h); distance = next; });
-    ['pointerup', 'pointercancel'].forEach(function (t) { s.preview.addEventListener(t, function (e) { delete points[e.pointerId]; distance = pinch(); }); });
-    s.preview.addEventListener('keydown', function (e) { if (e.target !== s.preview || s.sheetName !== 'crop' || s.busy) return; var q = e.shiftKey ? .1 : .01, used = true; if (e.key === 'ArrowLeft') moveCrop(s, -q, 0); else if (e.key === 'ArrowRight') moveCrop(s, q, 0); else if (e.key === 'ArrowUp') moveCrop(s, 0, -q); else if (e.key === 'ArrowDown') moveCrop(s, 0, q); else if (e.key === '+' || e.key === '=') zoom(s, s.d.zoom + .1); else if (e.key === '-') zoom(s, s.d.zoom - .1); else used = false; if (used) e.preventDefault(); });
-  }
-  function moveCrop(s, dx, dy) { var c = s.d.crop; c.x = clamp(c.x - dx, 0, 1 - c.w); c.y = clamp(c.y - dy, 0, 1 - c.h); changed(s, true); }
-  function zoom(s, value) { var d = s.d; if (!canFill(d)) return; var own = d.w / d.h, base = own > W / H ? (W / H) / own : own / (W / H); d.zoom = clamp(value, 1, Math.min(8, base / .05)); framing(d); d.fit = 'fill'; if (s.zoomInput) s.zoomInput.value = d.zoom; changed(s, true); }
-  function tool(s, name) { if (s.busy || !s.d.file || !s.d.valid) return; if (name === 'crop') cropSheet(s); else if (name === 'text') textSheet(s); else if (name === 'sticker') stickerSheet(s); else if (name === 'mention') mentionSheet(s); else if (name === 'trim') trimSheet(s); }
-  function cropSheet(s) {
-    if (!s.d.decoded || s.d.legacy) return; var box = sheet(s, 'crop', _t('js.feed.ss.crop', '📐 Crop')), seg = add(box, el('div', 'ds-seg'));
-    [[ 'fit', _t('js.feed.ss.fit', 'Fit') ], [ 'fill', _t('js.feed.ss.fill', 'Fill') ]].forEach(function (p) { var b = add(seg, button(p[1], function () { if (p[0] === 'fill' && !canFill(s.d)) return; s.d.fit = p[0]; changed(s, true); cropSheet(s); })); b.setAttribute('aria-pressed', String(s.d.fit === p[0])); b.disabled = p[0] === 'fill' && !canFill(s.d); });
-    var z = s.zoomInput = input('range', s.d.zoom); z.min = 1; z.max = 8; z.step = .05; z.disabled = !canFill(s.d); z.addEventListener('input', function () { zoom(s, +z.value); }); add(box, field(_t('js.feed.ss.zoom', 'Zoom'), z));
-    add(box, el('p', 'sst-help', _t('js.feed.ss.crop_help', 'Drag or pinch the picture. Focus it and use arrows to move, + or − to zoom.')));
-    add(box, button(_t('js.feed.ss.reset', 'Reset'), function () { resetFrame(s.d); changed(s, true); cropSheet(s); })); s.preview.focus();
-  }
-  function selectLayer(s, t) { if (s.busy) return; s.selected = t; if (t.type === 'text') textSheet(s, t); else if (t.type === 'sticker') stickerSheet(s, t); else mentionSheet(s, t); render(s); }
-  function positionControls(s, box, t) {
-    var group = add(box, el('div', 'sst-position'));
-    if (t.type === 'mention' && !s.d.decoded) add(group, el('p', 'sst-help', _t('js.feed.ss.mention_unpreviewed', 'Mentions will appear in the centre after this file is converted.')));
-    else [[ 'x', _t('js.feed.ss.horizontal', 'Horizontal position') ], [ 'y', _t('js.feed.ss.vertical', 'Vertical position') ]].forEach(function (p) { var r = input('range', Math.round(t[p[0]] * 100)); r.min = 5; r.max = 95; r.step = 1; r.addEventListener('input', function () { t[p[0]] = +r.value / 100; changed(s, t.type !== 'mention'); }); add(group, field(p[1], r)); });
-    add(box, button(_t('js.feed.ss.delete_layer', 'Delete layer'), function () { var list = t.type === 'text' ? s.d.texts : t.type === 'sticker' ? s.d.stickers : s.d.mentions, index = list.indexOf(t); if (index >= 0) list.splice(index, 1); s.selected = null; closeSheet(s); changed(s, t.type !== 'mention'); }, 'quiet sm sst-delete'));
+  function tool(s, name) { if (s.busy || !s.d.file || !s.d.valid) return; if (name === 'layout') toggleLayout(s); else if (name === 'text') textSheet(s); else if (name === 'sticker') stickerSheet(s); else if (name === 'mention') mentionSheet(s); else if (name === 'trim') trimSheet(s); }
+  // 📐: Fill (the picture covers the frame, around the same centre) or Fit (the whole picture)
+  function toggleLayout(s) {
+    var d = s.d; if (!d.decoded || d.legacy || !G.canFill(d.w / d.h)) return;
+    d.fit = d.fit === 'fill' ? 'fit' : 'fill'; d.crop = G.layout(d.crop, d.w / d.h, d.fit); changed(s, true);
   }
   function textSheet(s, t) {
     if (!s.d.decoded || s.d.legacy) return; var box = sheet(s, 'text', _t('js.feed.ss.text', '🔤 Text'));
     if (!t) {
-      s.d.texts.forEach(function (layer) { add(box, button(layer.text || _t('js.feed.ss.empty_text', 'Empty text'), function () { selectLayer(s, layer); })); });
+      s.d.texts.forEach(function (layer) { add(box, button(layer.text || _t('js.feed.ss.empty_text', 'Empty text'), function () { select(s, layer); textSheet(s, layer); })); });
       if (s.d.texts.length >= (s.caps.textsMax || 3)) { add(box, el('p', null, _t('js.feed.ss.text_limit', 'You can add up to {n} text layers.', { n: s.caps.textsMax || 3 }))); return; }
-      t = { id: 'text-' + (++serial), type: 'text', text: '', size: 72, x: .5, y: .3, color: COLORS[0], style: 'plain' };
+      t = { id: 'text-' + (++serial), type: 'text', text: '', size: 72, rot: 0, x: .5, y: .3, color: COLORS[0], style: 'plain' };
     }
-    s.selected = t; var ta = add(box, el('textarea', 'ds-in sst-text-input')); ta.rows = 2; ta.value = t.text; ta.setAttribute('aria-label', _t('js.feed.ss.words', 'Story text')); var count = add(box, el('span', 'sst-help'));
+    s.selected = t; s.sheetLayer = t; var ta = add(box, el('textarea', 'ds-in sst-text-input')); ta.rows = 2; ta.value = t.text; ta.setAttribute('aria-label', _t('js.feed.ss.words', 'Story text')); var count = add(box, el('span', 'sst-help'));
     function update() { ta.value = chars(ta.value.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ')).slice(0, s.caps.textLen || 120).join(''); t.text = ta.value; count.textContent = _t('js.feed.ss.characters', '{used}/{max} characters', { used: chars(t.text).length, max: s.caps.textLen || 120 }); if (t.text.trim() && s.d.texts.indexOf(t) < 0) s.d.texts.push(t); if (!t.text.trim() && s.d.texts.indexOf(t) >= 0) s.d.texts.splice(s.d.texts.indexOf(t), 1); changed(s, true); }
     ta.addEventListener('input', update); count.textContent = _t('js.feed.ss.characters', '{used}/{max} characters', { used: chars(t.text).length, max: s.caps.textLen || 120 });
     var styles = add(box, el('div', 'ds-seg'));
     [['plain', _t('js.feed.ss.plain', 'Plain')], ['box', _t('js.feed.ss.box', 'Box')], ['pixel', _t('js.feed.ss.pixel', 'Pixel')], ['outline', _t('js.feed.ss.outline', 'Outline')]].forEach(function (p) { var b = add(styles, button(p[1], function () { t.style = p[0]; Array.prototype.forEach.call(styles.children, function (n) { n.setAttribute('aria-pressed', String(n === b)); }); changed(s, true); })); b.setAttribute('aria-pressed', String(t.style === p[0])); });
     var palette = add(box, el('div', 'sst-colors')); COLORS.forEach(function (c, index) { var b = add(palette, button(null, function () { t.color = c; changed(s, true); })); b.style.setProperty('--sst-ink', c); b.setAttribute('aria-label', _t('js.feed.ss.color', 'Text colour {n}', { n: index + 1 })); });
-    var size = input('range', t.size); size.min = 36; size.max = 144; size.step = 6; size.addEventListener('input', function () { t.size = +size.value; changed(s, true); }); add(box, field(_t('js.feed.ss.size', 'Size'), size)); positionControls(s, box, t); ta.focus(); render(s);
+    // storyux: no size or position sliders - the text is placed, sized and turned on the picture
+    add(box, el('p', 'sst-help', _t('js.feed.ss.place_help', 'Drag it on the picture to move it; pinch to resize and twist to turn.')));
+    if (s.d.texts.indexOf(t) >= 0) add(box, button(_t('js.feed.ss.delete_layer', 'Delete layer'), function () { removeLayer(s, t); }, 'quiet sm sst-delete'));
+    ta.focus(); render(s);
   }
   function stickerImage(s, st) {
     if (!/^\/public\/stickers\/[a-z0-9]+\/[a-z0-9]+\.svg$/.test(st.url)) return Promise.reject(new Error(_t('js.feed.ss.sticker_failed', 'That sticker could not load.')));
@@ -602,9 +907,9 @@
       return new Promise(function (resolve, reject) { var image = new Image(); image.onload = function () { resolve(image); }; image.onerror = function () { reject(new Error(_t('js.feed.ss.sticker_failed', 'That sticker could not load.'))); }; image.src = url; });
     });
   }
-  function stickerSheet(s, layer) {
+  // the sticker picker; a chosen sticker lands in the middle, selected, ready to be dragged, pinched and twisted
+  function stickerSheet(s) {
     if (!s.d.decoded || s.d.legacy) return; var box = sheet(s, 'sticker', _t('js.feed.ss.sticker', '🧸 Sticker'));
-    if (layer) { var size = input('range', layer.size / 24); size.min = 2; size.max = 24; size.step = 1; size.addEventListener('input', function () { layer.size = Math.round(+size.value) * 24; changed(s, true); }); add(box, field(_t('js.feed.ss.size', 'Size'), size)); positionControls(s, box, layer); return; }
     var note = add(box, el('p', 'sst-help', _t('js.feed.sc.loading', 'Loading…')));
     var catalog = s.catalog ? Promise.resolve(s.catalog) : req('/api/stickers').then(function (data) { s.catalog = data; return data; });
     catalog.then(function (data) {
@@ -614,16 +919,15 @@
         var b = add(grid, button(null, function () {
           if (s.d.stickers.length + (s.pendingStickers || 0) >= (s.caps.stickersMax || 10)) { say(s, _t('js.feed.ss.sticker_limit', 'You can add up to {n} stickers.', { n: s.caps.stickersMax || 10 }), true); return; }
           b.disabled = true; var draft = s.d; s.pendingStickers = (s.pendingStickers || 0) + 1; paintControls(s);
-          stickerImage(s, st).then(function (img) { if (!live(s) || s.d !== draft || s.busy || s.d.stickers.length >= (s.caps.stickersMax || 10)) return; var t = { type: 'sticker', id: 'sticker-' + (++serial), pack: p.id, sticker: st.id, name: st.name, img: img, size: 240, x: .5, y: .5 }; s.d.stickers.push(t); changed(s, true); selectLayer(s, t); }).catch(function (e) { if (live(s)) say(s, e.message, true); }).finally(function () { b.disabled = false; s.pendingStickers--; if (live(s)) paintControls(s); });
+          stickerImage(s, st).then(function (img) { if (!live(s) || s.d !== draft || s.busy || s.d.stickers.length >= (s.caps.stickersMax || 10)) return; var t = { type: 'sticker', id: 'sticker-' + (++serial), pack: p.id, sticker: st.id, name: st.name, img: img, size: 240, rot: 0, x: .5, y: .5 }; s.d.stickers.push(t); if (s.sheetName === 'sticker') closeSheet(s); s.selected = t; changed(s, true); }).catch(function (e) { if (live(s)) say(s, e.message, true); }).finally(function () { b.disabled = false; s.pendingStickers--; if (live(s)) paintControls(s); });
         }, 'quiet sst-sticker')); var im = add(b, el('img')); im.src = st.url; im.alt = ''; add(b, el('span', null, st.name));
       }); });
       var more = add(box, el('a', 'ds-btn link', _t('js.feed.ss.more_stickers', 'Get more stickers'))); more.href = '/cosmetics?tab=stickers'; more.target = '_blank'; more.rel = 'noopener';
     }).catch(function (e) { if (live(s) && box.isConnected) note.textContent = e.message; });
   }
-  function mentionSheet(s, layer) {
+  function mentionSheet(s) {
     var box = sheet(s, 'mention', _t('js.feed.ss.mention', '👤 Mention'));
-    if (layer) { add(box, el('p', null, '@' + layer.username)); positionControls(s, box, layer); return; }
-    s.d.mentions.forEach(function (m) { add(box, button('@' + m.username, function () { selectLayer(s, m); })); });
+    s.d.mentions.forEach(function (m) { add(box, button('@' + m.username, function () { closeSheet(s); select(s, m); var b = s.layers[m.id]; if (b) b.focus(); })); });
     if (s.d.mentions.length >= (s.caps.mentionsMax || 5)) { add(box, el('p', null, _t('js.feed.ss.mention_limit', 'You can mention up to {n} people.', { n: s.caps.mentionsMax || 5 }))); return; }
     var f = s.mentionInput = input('text'); f.autocomplete = 'off'; f.setAttribute('role', 'combobox'); f.setAttribute('aria-expanded', 'false'); f.setAttribute('aria-autocomplete', 'list'); add(box, field(_t('js.feed.ss.find_person', 'Find a person'), f));
     var list = s.suggestions = add(box, el('div', 'ds-pop sst-suggestions')); list.id = 'sst-suggest-' + s.id; list.setAttribute('role', 'listbox'); f.setAttribute('aria-controls', list.id); list.hidden = true; var people = [], at = -1, queryId = 0;
@@ -633,6 +937,37 @@
       s.suggestTimer = setTimeout(function () { req('/api/mentions/suggest?q=' + encodeURIComponent(q)).then(function (data) { if (!live(s) || !box.isConnected || n !== queryId) return; people = data.people || []; at = -1; list.textContent = ''; people.forEach(function (p, i) { var b = add(list, button('@' + p.username + (p.display && p.display !== p.username ? ' · ' + p.display : ''), function () { choose(p); }, 'quiet sst-suggestion')); b.id = list.id + '-' + i; b.setAttribute('role', 'option'); b.setAttribute('aria-selected', 'false'); }); list.hidden = !people.length; f.setAttribute('aria-expanded', String(!!people.length)); }).catch(function (e) { if (live(s) && box.isConnected && n === queryId) say(s, e.message, true); }); }, 250);
     });
     f.addEventListener('keydown', function (e) { if (list.hidden) return; if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); at = (at + (e.key === 'ArrowDown' ? 1 : -1) + people.length) % people.length; highlight(); } else if ((e.key === 'Enter' || e.key === 'Tab') && at >= 0) { e.preventDefault(); choose(people[at]); } }); f.focus();
+  }
+  // ── storyux: the X after a pick or a capture - back to the live camera (or the picker), the draft let go; with edits, a quiet
+  // question in the editor first (no browser dialog) ──
+  function cameraOK(s) { return !!window.patvStoryCamera && !s.camFailed && !s.noPost && (!window.patvStoryCamera.available || window.patvStoryCamera.available()); }
+  function edited(s) {
+    var d = s.d; if (!d.file) return false;
+    if (d.texts.length || d.stickers.length || d.mentions.length) return true;
+    if (d.decoded && d.start && (d.fit !== d.start.fit || !G.same(d.crop, d.start.crop))) return true;
+    return !!(d.trim && d.trim0 && (d.trim.start !== d.trim0.start || d.trim.end !== d.trim0.end));
+  }
+  function goBack(s) {
+    if (!live(s) || s.busy || !s.d.file) return;
+    if (edited(s) && !s.ask) { ask(s); return; }
+    unask(s); fresh(s);
+    if (!camera(s)) { paintControls(s); var first = s.picks.querySelector('button'); (first || s.root).focus(); say(s, s.camWhy || ''); }
+  }
+  function ask(s) {
+    var bar = s.ask = add(s.card, el('div', 'sst-ask')); bar.setAttribute('role', 'group');
+    var q = _t('js.feed.ss.discard_edits', 'Discard your edits?'); bar.setAttribute('aria-label', q); add(bar, el('p', null, q));
+    var keep = add(bar, button(_t('js.feed.ss.keep_editing', 'Keep editing'), function () { unask(s, true); }, 'quiet sm sst-ask-keep'));
+    add(bar, button(_t('js.feed.ss.discard_go', 'Discard'), function () { goBack(s); }, 'sm sst-ask-go'));
+    keep.focus();
+  }
+  function unask(s, refocus) { if (!s.ask) return; s.ask.remove(); s.ask = null; if (refocus && s.backButton && !s.backButton.hidden) s.backButton.focus(); }
+  // the draft let go: no picture, no layers, nothing uploaded (the NSFW choice and the destination stay)
+  function fresh(s) {
+    if (s.ready) discard([s.ready.id]); s.ready = null; s.failed = false; closeSheet(s); revoke(s);
+    if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); s.media = null; }
+    s.d = { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw }; s.pickId++; s.sniffId = (s.sniffId || 0) + 1;
+    s.selected = null; s.gesture = null; s.lastTap = null; s.empty.hidden = false; s.filename.textContent = ''; s.recovery.hidden = true; s.recovery.textContent = '';
+    say(s, ''); render(s); paintControls(s);
   }
   function trimSheet(s) {
     var d = s.d; if (d.kind !== 'video' || !d.decoded || !d.trim || !(d.duration >= 1)) return;
@@ -656,7 +991,10 @@
   function editFor(s, overlay) {
     var d = s.d; if (d.legacy || d.gif) return null;
     var edit = { v: 1, pad: s.target.id, fit: d.fit, text: d.texts.map(function (t) { return t.text.trim(); }).filter(Boolean), stickers: d.stickers.map(function (t) { return { pack: t.pack, sticker: t.sticker }; }) };
+    // storyux: Fill's crop (inside the picture), or Fit's frame - only once the picture was pinched or dragged off the whole
+    // picture (the whole picture goes with no frame, as before)
     if (d.fit === 'fill') edit.crop = { x: d.crop.x, y: d.crop.y, w: d.crop.w, h: d.crop.h };
+    else if (d.crop && !G.same(d.crop, G.contain(d.w / d.h))) edit.frame = { x: d.crop.x, y: d.crop.y, w: d.crop.w, h: d.crop.h };
     // storyfix2: a camera clip says so, and any video kept whole (inside the story's length) goes with no trim - the length a
     // browser shows can run past what the file holds (an iPhone recording, chosen or just taken), so the server encodes all of
     // it (a camera clip's own trim is clamped to the file there)
@@ -717,7 +1055,7 @@
     setTimeout(function () { node.remove(); }, 9000);
   }
   document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-story-compose]'); if (!b || (e.button != null && e.button !== 0)) return; e.preventDefault(); open(b.getAttribute('data-pad') || '', b); });
-  window.patvStoryStudio = { open: function (pad, opener) { return open(pad, opener); } };
+  window.patvStoryStudio = { open: function (pad, opener) { return open(pad, opener); }, geometry: G };
   // ssfix: back from a picker as a reloaded page (WebKit: a 'back_forward' load) - reopen where the story was, and say the picture didn't arrive
   function resume() { var note = takeNote(); if (note && !current) open(note.pad, document.querySelector('[data-story-compose]'), note); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', resume); else resume();

@@ -1195,7 +1195,7 @@ test('Studio storyux: tool buttons are circles with no visible words, named by a
   for (const b of Q.doc.querySelectorAll('.sst-sheet .sst-position button')) { named(b); iconOnly(b); }
   const js = SRC('story-studio.js'); assert.equal((js.match(/input\('range'/g) || []).length, 1, 'one range input is made: the trim handle'); assert.match(js, /input\('range', d\.trim/);
   const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
-  assert.match(css, /\.sst \.sst-round \{[^}]*border-radius:\s*50%/); assert.match(css, /\.sst \.sst-preview \{[^}]*touch-action:\s*none/);
+  assert.match(css, /\.sst \.ds-btn\.sst-round \{[^}]*border-radius:\s*50%/); assert.match(css, /\.sst \.sst-preview \{[^}]*touch-action:\s*none/);
   assert.match(css, /\.sst \.sst-preview \{[^}]*-webkit-touch-callout:\s*none/); assert.match(css, /\.sst \.sst-preview \{[^}]*user-select:\s*none/);
 });
 

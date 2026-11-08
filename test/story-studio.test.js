@@ -288,13 +288,14 @@ test("a video pinched and dragged in Fit lands where the editor showed it (ffmpe
   assert.ok((await pixel(frame, 4, 4)).every(c => c < 12), "black where the picture isn't");
   done(out);
   // zoomed in past the frame-filling size inside Fit: the picture runs off the frame's edges (no black), still where shown
-  let deep = G.zoom(G.contain(own), own, "fit", 4, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 });
-  deep = G.pan(deep, own, "fit", -0.45, -0.1);
+  // (3.5x the whole picture: its height just covers the frame; the marker kept wholly inside the frame, so its centre is a fair measure)
+  let deep = G.zoom(G.contain(own), own, "fit", 3.5, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 });
+  deep = G.pan(deep, own, "fit", -0.43, 0);
   const rd = G.rect(deep); assert.ok(rd.x < 0 && rd.y < 0 && rd.x + rd.w > 1 && rd.y + rd.h > 1, "the picture covers the frame");
   const out2 = await compose.process(markedVideo, sniff(markedVideo), attachment("video", framed(deep)), caps);
   const frame2 = path.join(tmp, "framed2.png"); ffmpeg(["-ss", "0.5", "-i", media.filePath(out2.file), "-frames:v", "1", "-y", frame2]);
   const spot2 = await redSpot(frame2), want2 = shown(G, deep, MU, MV, 720, 1280);
-  assert.ok(spot2.n > 0, "the marker is in the story");
+  assert.ok(Math.abs(spot2.n - (MARK.size * want2.w / MARK.W) ** 2) < 0.1 * (MARK.size * want2.w / MARK.W) ** 2, "the whole marker is in the story");
   assert.ok(Math.abs(spot2.x - want2.x) <= 4 && Math.abs(spot2.y - want2.y) <= 4, `marker at ${spot2.x.toFixed(1)},${spot2.y.toFixed(1)} - shown at ${want2.x.toFixed(1)},${want2.y.toFixed(1)}`);
   done(out2);
 });

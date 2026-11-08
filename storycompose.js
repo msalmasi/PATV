@@ -21,7 +21,7 @@ function keys(value, allowed, message) {
 }
 function cleanEdit(raw, { kind } = {}) {
   const L = limits();
-  keys(raw, ["v", "pad", "fit", "crop", "trim", "overlay", "text", "stickers", "camera"], "That story edit has unsupported fields.");
+  keys(raw, ["v", "pad", "fit", "crop", "frame", "trim", "overlay", "text", "stickers", "camera"], "That story edit has unsupported fields.");
   if (raw.v !== 1) throw new Refuse(400, "That story edit version isn't supported.");
   if (kind !== "image" && kind !== "video") throw new Refuse(400, "Only pictures and videos can be edited as stories.");
   if (typeof raw.pad !== "string" || !raw.pad.trim() || raw.pad.length > 160 || /[\x00-\x1f\x7f-\x9f]/.test(raw.pad))
@@ -35,6 +35,23 @@ function cleanEdit(raw, { kind } = {}) {
       throw new Refuse(400, "The crop must stay inside the picture and be at least five percent wide and tall.");
     edit.crop = { x: c.x, y: c.y, w: Math.min(c.w, 1 - c.x), h: Math.min(c.h, 1 - c.y) };
   } else if (Object.hasOwn(raw, "crop")) throw new Refuse(400, "Fit uses the whole picture, so it can't include a crop.");
+  // storyux (1.99??): frame = the picture pinched or dragged inside Fit (story-studio.js): the frame's 9:16 window over the
+  // picture, in picture fractions, which can run past the picture's edges (black there). The editor's own limits: the
+  // picture's centre stays in the frame, never smaller than half the whole picture (the window's shorter side at most 2
+  // pictures), never past 8x the frame-filling zoom (its longer side at least 1/8) or a window under 5% of the picture.
+  // No frame: the whole picture, as before. The 9:16 shape is checked against the picture itself (shape()).
+  if (Object.hasOwn(raw, "frame")) {
+    if (raw.fit !== "fit") throw new Refuse(400, "Fill uses a crop, so it can't include a frame.");
+    keys(raw.frame, ["x", "y", "w", "h"], "Choose a valid frame for the story.");
+    const f = raw.frame;
+    if (![f.x, f.y, f.w, f.h].every(finite) || f.w < 0.05 - TOLERANCE || f.h < 0.05 - TOLERANCE || f.w > 1000 || f.h > 1000)
+      throw new Refuse(400, "The picture can be zoomed in only so far - at least five percent of it stays in the story.");
+    if (Math.min(f.w, f.h) > 2 + TOLERANCE || Math.max(f.w, f.h) < 0.125 - TOLERANCE)
+      throw new Refuse(400, "The picture can be zoomed between half its whole size and eight times the size that fills the story.");
+    if (f.x > 0.5 + TOLERANCE || f.x + f.w < 0.5 - TOLERANCE || f.y > 0.5 + TOLERANCE || f.y + f.h < 0.5 - TOLERANCE)
+      throw new Refuse(400, "Keep the middle of the picture inside the story.");
+    edit.frame = { x: f.x, y: f.y, w: f.w, h: f.h };
+  }
   if (Object.hasOwn(raw, "trim")) {
     if (kind !== "video") throw new Refuse(400, "Only videos can be trimmed.");
     keys(raw.trim, ["start", "end"], "Choose a valid video trim.");
@@ -88,9 +105,21 @@ async function overlayCheck(ownerId, id) {
 }
 function shape(edit, w, h) {
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) throw new media.MediaError("That picture's size couldn't be read.");
-  if (edit.fit === "fill" && Math.abs((w * edit.crop.w / (h * edit.crop.h)) / RATIO - 1) > 0.02)
-    throw new media.MediaError("The crop must have the story's 9:16 shape.");
+  const win = edit.fit === "fill" ? edit.crop : edit.frame;
+  if (win && Math.abs((w * win.w / (h * win.h)) / RATIO - 1) > 0.02)
+    throw new media.MediaError(edit.fit === "fill" ? "The crop must have the story's 9:16 shape." : "The frame must have the story's 9:16 shape.");
 }
+// storyux (1.99??): a Fit frame drawn into an outW x outH story, the way the editor shows it (its RECT: the picture at
+// -x/w, -y/h of the frame, 1/w by 1/h of it): the part of the picture inside the frame (picture fractions) and where it
+// goes (output pixels, whole; even ones for a video's 4:2:0 chroma). The rest is black.
+function placement(f, outW, outH, even) {
+  const ix0 = Math.max(0, f.x), iy0 = Math.max(0, f.y), ix1 = Math.min(1, f.x + f.w), iy1 = Math.min(1, f.y + f.h);
+  const snap = v => (even ? 2 * Math.round(v / 2) : Math.round(v));
+  const ox = Math.min(outW - (even ? 2 : 1), Math.max(0, snap((ix0 - f.x) / f.w * outW))), oy = Math.min(outH - (even ? 2 : 1), Math.max(0, snap((iy0 - f.y) / f.h * outH)));
+  const ow = Math.max(even ? 2 : 1, Math.min(outW - ox, snap((ix1 - f.x) / f.w * outW) - ox)), oh = Math.max(even ? 2 : 1, Math.min(outH - oy, snap((iy1 - f.y) / f.h * outH) - oy));
+  return { src: { x: ix0, y: iy0, w: ix1 - ix0, h: iy1 - iy0 }, out: { x: ox, y: oy, w: ow, h: oh } };
+}
+const fx = v => Number(v).toFixed(6);
 function outputNames(ext) {
   const base = crypto.randomBytes(16).toString("hex");
   const folder = path.join(media.dir(), base.slice(0, 2)); fs.mkdirSync(folder, { recursive: true });
@@ -147,12 +176,21 @@ async function picture(input, sn, edit, overlay) {
     if (intermediate.animated) throw new media.MediaError("Animated pictures can't be edited yet - post it as it is.");
     shape(edit, intermediate.w, intermediate.h);
     let image = sharp(fs.readFileSync(media.filePath(intermediate.file)));
+    const layers = overlay ? [{ input: overlay, left: 0, top: 0 }] : [];
     if (edit.fit === "fill") {
       const c = edit.crop, left = Math.round(c.x * intermediate.w), top = Math.round(c.y * intermediate.h);
       image = image.extract({ left, top, width: Math.min(Math.round(c.w * intermediate.w), intermediate.w - left), height: Math.min(Math.round(c.h * intermediate.h), intermediate.h - top) })
         .resize(L.STORY_W, L.STORY_H);
+    } else if (edit.frame) {
+      // storyux: the part of the picture in the frame, scaled to where the editor showed it, on black
+      const p = placement(edit.frame, L.STORY_W, L.STORY_H, false), iw = intermediate.w, ih = intermediate.h;
+      const left = Math.min(iw - 1, Math.round(p.src.x * iw)), top = Math.min(ih - 1, Math.round(p.src.y * ih));
+      const piece = await image.extract({ left, top, width: Math.max(1, Math.min(iw - left, Math.round(p.src.w * iw))), height: Math.max(1, Math.min(ih - top, Math.round(p.src.h * ih))) })
+        .resize(p.out.w, p.out.h, { fit: "fill" }).png().toBuffer();
+      image = sharp({ create: { width: L.STORY_W, height: L.STORY_H, channels: 3, background: "#000" } });
+      layers.unshift({ input: piece, left: p.out.x, top: p.out.y });
     } else image = image.resize(L.STORY_W, L.STORY_H, { fit: "contain", background: "#000" });
-    if (overlay) image = image.composite([{ input: overlay, left: 0, top: 0 }]);
+    if (layers.length) image = image.composite(layers);
     const buffer = await image.webp({ quality: 82 }).toBuffer();
     out = outputNames(".webp");
     await fs.promises.writeFile(media.filePath(out.file), buffer, { flag: "wx" });
@@ -209,8 +247,11 @@ async function video(input, sn, edit, overlay, caps, work) {
   const out = outputNames(".mp4"), outPath = media.filePath(out.file);
   let png = null;
   if (overlay) { png = path.join(work, "overlay.png"); await sharp(overlay).resize(L.STORY_VIDEO_W, L.STORY_VIDEO_H).png().toFile(png); }
+  // storyux: a Fit frame - the part of the picture in it, scaled and padded with black to where the editor showed it
+  const fp = edit.frame ? placement(edit.frame, L.STORY_VIDEO_W, L.STORY_VIDEO_H, true) : null;
   const vf = edit.fit === "fill"
     ? `crop=iw*${edit.crop.w}:ih*${edit.crop.h}:iw*${edit.crop.x}:ih*${edit.crop.y},scale=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H},setsar=1`
+    : fp ? `crop=iw*${fx(fp.src.w)}:ih*${fx(fp.src.h)}:iw*${fx(fp.src.x)}:ih*${fx(fp.src.y)},scale=${fp.out.w}:${fp.out.h},setsar=1,pad=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:${fp.out.x}:${fp.out.y}:color=black`
     : `scale=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:force_original_aspect_ratio=decrease,pad=${L.STORY_VIDEO_W}:${L.STORY_VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
   const args = ["-hide_banner", "-nostdin", "-v", "error", "-ss", String(start), "-t", String(duration),
     "-protocol_whitelist", "file", "-f", sn.ffmt, "-i", input];
