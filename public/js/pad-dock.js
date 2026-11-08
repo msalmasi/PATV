@@ -180,6 +180,9 @@
     }
     function chatToast(text, opts) {
       opts = opts || {};
+      // (ptttoast 1.99??: '' with an id takes that notice down - a push-to-talk press that came to nothing, the relay back online; never an
+      // empty notice, here or in the fallback)
+      if (text == null || text === '') { var was = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null; if (was) dropToast(was); return null; }
       var host = toastBox(); if (!host) { toast(text); return null; }
       var doc = host.ownerDocument, rec = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null;
       if (!rec) {
@@ -212,6 +215,8 @@
       chatToast('› ' + row.text + (st ? ' · ' + st : ''), { id: 'cmd:' + row.id, ms: row.ok === false ? 8000 : pending ? 30000 : 3000, bad: row.ok === false });
       if (!rpmOn) replies.forEach(function (r, i) { chatToast('🔒 ' + r, { id: 'cmd:' + row.id + ':r' + i, sticky: true }); });
     }
+    // ptttoast 1.99??: a composer line (push-to-talk's / the relay's: room-bridge.js useToast) - {id, ms, bad} like a command's state
+    function lineToast(text, opts) { return dead ? null : chatToast(text, opts); }
     function changed() {
       ['rmVideo', 'rmPtt', 'rmFeed'].forEach(function (id) {
         var n = node(id); if (!n) return;
@@ -1695,7 +1700,8 @@
         var on = row.classList.contains('on'); if (on !== wasOn) { wasOn = on; if (holderBox) fitSoon(holderBox); }
         paintNow(); if (layer && layer.box && layer.box.classList.contains('rmd-audio-pop')) { var st = layer.box.querySelector('.rmd-audio-st'); if (st) st.textContent = audioStatus(); } }, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     }
-    // ── the composer box (owner point 10): row 1 [＋][input][🎙️][Send], row 2 the tool row; the status line under the box ──
+    // ── the composer box (owner point 10): row 1 [＋][input][🎙️][Send], row 2 the tool row; nothing under it - push-to-talk's and the relay's
+    // status lines are the chat card's notices (ptttoast 1.99??: start() hands them lineToast), only the character counter stays on the field ──
     function decorateComposer() {
       if (!chat) return;
       decorateAudio();
@@ -2853,6 +2859,11 @@
       decoratePeople();
       if (strip && mode === 'pad') { observe(strip, decorateCams); decorateCams(); }
       decorateComposer(); attachDoc(D);
+      // ptttoast 1.99?? (owner 11-08: "slow down — one every 15s" and "🎙 your clip: played" under the tool row "should show up the same way
+      // the other stuff does as the modal that auto-dismisses"): push-to-talk's and the relay's lines are this card's notices (room-bridge.js
+      // useToast) - nothing is written under the composer
+      if (o.ptt && o.ptt.useToast) o.ptt.useToast(lineToast);
+      if (o.relay && o.relay.useToast) o.relay.useToast(lineToast);
       // (1.99ajq dockpol fix: the flairs' fit - when the people list, the audio bar or the log change width, and for each new line)
       fitOnResize(node('rmPeople')); fitOnResize(node('rmAudioBox')); fitOnResize(node('rmScroll'));
       [node('rmFeed'), node('rmOlder')].forEach(function (box) { observe(box, function (ms) { ms.forEach(function (m) { each(m.addedNodes, function (x) { if (x.nodeType === 1) fitSoon(x); }); }); }, { childList: true }); });
@@ -2933,6 +2944,7 @@
       // 1.99ajq dockpol: the chat card's notices, a composer command's state (room-bridge.js onCmd), who the mic stage says is talking
       toast: function (text, opts) { return chatToast(text, opts); }, cmd: cmdToast, talking: talking,
       destroy: function () { dead = true; stopLink(); redock(); returnCam(); closeLayer(false); observers.forEach(function (m) { m.disconnect(); });
+        if (o.ptt && o.ptt.useToast) o.ptt.useToast(null); if (o.relay && o.relay.useToast) o.relay.useToast(null);   // (ptttoast: the lines go back to the composer)
         // (1.99ajy dockmedia: the booth back before .rm-live, the 📼 player back into #rmGoLive - where the page drew them)
         if (np) { if (sayMark && sayMark.parentNode) { sayMark.parentNode.insertBefore(node('rdjSay'), sayMark); sayMark.remove(); } sayMark = null; np.moves.slice().reverse().forEach(restore); np.card.remove(); if (np.bar) np.bar.remove(); np = null; } clearTimeout(autoTimer); clearTimeout(toastTimer); listeners.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); D.body.classList.remove('pad-dock-live', 'rmd-afloat', 'rmd-dock-pad', 'rmd-nav-auto', 'rmd-nav-off'); if (W.PATVPadSwitch && mode === 'pad') W.PATVPadSwitch = null; }
     };

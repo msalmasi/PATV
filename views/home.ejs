@@ -974,7 +974,7 @@
 <% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=16">
 <link rel="stylesheet" href="/public/css/veil.css?v=3">
-<script src="/public/js/room-bridge.js?v=32"></script><%# v32 (pttlimits): the recorder stops at the /admin/bridge max length; v31 (story camera 1.99alu): PATVRoom.session - the audio session for the story camera; v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99akf): no clash tag, the mic bars without a real level; v30 (micvad 1.99akk): real mic bars without an analyser (Pepe's levels on the MP3 relay, ⚡ getStats) %>
+<script src="/public/js/room-bridge.js?v=33"></script><%# v33 (ptttoast 1.99??): useToast - in the Dock push-to-talk's / the relay's status lines are its chat notices; v32 (pttlimits): the recorder stops at the /admin/bridge max length; v31 (story camera 1.99alu): PATVRoom.session - the audio session for the story camera; v28 (1.99ajw padppl rework): the clash tag's explanation for a linked login; v29 (dock3 1.99akf): no clash tag, the mic bars without a real level; v30 (micvad 1.99akk): real mic bars without an analyser (Pepe's levels on the MP3 relay, ⚡ getStats) %>
 <% } %>
 <% if ((me || roomLive) && room && roomGate_ === 'ok' && !hubChat_ && !homeDock_) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
@@ -1229,7 +1229,7 @@
 <%_ if (homeDock_) { _%>
 <script src="/public/js/chatlog-core.js?v=16"></script>
 <script src="/public/js/dock-link.js?v=2"></script>
-<script src="/public/js/pad-dock.js?v=12"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11 (the holder fit again on play / pause); plexreplace: v12 (the stage asks at once after a 📼 start) %>
+<script src="/public/js/pad-dock.js?v=13"></script><%# 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11 (the holder fit again on play / pause); plexreplace: v12 (the stage asks at once after a 📼 start); ptttoast 1.99??: v13 (the composer's status lines are the chat card's notices) %>
 <script id="hmdInit" type="application/json"><%- JSON.stringify(hmdInit_).replace(/</g, '\\u003c') %></script>
 <link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3"></script><%# 1.99ajn padppl review fix: folded lines (and their Show), lines that @mention you, mention chips %>
 <script src="/public/js/home-dock.js?v=7"></script><%# upnext2: v7 - the stage asks at once when the long-poll's stage version moves; v2 (1.99ajn padppl): @ inserts the PATV name + carries who; the viewer's blocks / mentions in the lines; v3 (1.99ajq dockpol): boot / teardown, the front pad swap, the mic stage; v4 (dock3 1.99akf): no clash tag in the @ list; v5 (upnext): the stage's posters flag; v6 (newstream): the off-air bar's Next up follows the stage's poll %>

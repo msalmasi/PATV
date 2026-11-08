@@ -9,6 +9,8 @@
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip Pepe plays on the room's mic when it's free; shown only while
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
 //                              clips", 30 s by default) - the live view's room.pttMax (pttlimits)
+//   .useToast(fn)              (ptt and relay, ptttoast 1.99??) the Room Dock hands in its chat card's notices: every status
+//                              line under the composer goes there instead (fn(text, {id, ms, bad}); '' with the id = take it down)
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
 //                              playing / played / couldn't get the mic) - also used by the tests
 // The player and push-to-talk share the page's audio session - see "the page's audio session" below
@@ -1032,11 +1034,30 @@
         headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().then(function (d) { return { s: r.status, d: d }; }, function () { return { s: r.status, d: null }; }); });
     }
+    // ptttoast 1.99?? (owner 11-08: no status lines under the Dock's tool row): useToast(fn) - the Room Dock's chat notices (pad-dock.js
+    // chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then "Wait a moment…" is a notice for the 6 s the line stayed,
+    // the offline bar one notice per outage (8 s; each line still says "waiting for connection…"), taken down when a send gets through,
+    // and an older page's message line (no chat list: `mine`) one too. The character counter stays on the field.
+    var toastFn = null, offOn = false, mineWords = null;
+    var offText = _t('js.pad.relay.offline', 'You\'re offline — your messages will send when the connection is back.');
+    function notice(id, text, kind, ms) {
+      if (!toastFn) return false;
+      var o = { id: id };
+      if (text) { o.ms = ms || (kind === 'busy' ? 30000 : kind === 'bad' ? 8000 : 3000); o.bad = kind === 'bad'; }
+      try { toastFn(text ? String(text) : '', o); } catch (e) { /* the Dock's own */ }
+      return true;
+    }
+    function mineLine(text, kind) { if (!notice('rb-mine', text, kind)) mine.textContent = text; }
     function showNote(t) {
+      if (toastFn) { if (t) notice('rb-note', t, 'bad', 6000); return; }
       note.textContent = t; note.classList.toggle('hide', !t);
       clearTimeout(noteTimer); if (t) noteTimer = setTimeout(function () { note.classList.add('hide'); }, 6000);
     }
-    function setOffline(on) { offBar.classList.toggle('hide', !on); }
+    function setOffline(on) {
+      var was = offOn; offOn = !!on;
+      if (toastFn) { if (offOn !== was) notice('rb-offline', offOn ? offText : '', 'bad', 8000); return; }
+      offBar.classList.toggle('hide', !on);
+    }
     function waiting() { return outbox.filter(function (x) { return x.st === 'queue' || x.st === 'posting' || x.st === 'wait'; }).length; }
     // CL8: opts.scroller = what scrolls (the pad's chat log sits inside a scroller with scrollback's older lines)
     var scrollEl = opts.scroller || feedEl;
@@ -1185,9 +1206,9 @@
       else {
         // no chat list to show it in (an older page): the status line, as before
         inp.value = '';
-        mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
-        post({ text: text, cid: newCid() }).then(function (x) { if (!x.d || !x.d.ok) mine.textContent = '💬 ' + ((x.d && x.d.error) || _t('js.pad.relay.not_sent', 'not sent')); },
-          function () { mine.textContent = '💬 ' + _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
+        mineLine(_t('js.pad.relay.your_msg', '💬 your message: {status}', { status: _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') }), 'busy');
+        post({ text: text, cid: newCid() }).then(function (x) { if (!x.d || !x.d.ok) mineLine('💬 ' + ((x.d && x.d.error) || _t('js.pad.relay.not_sent', 'not sent')), 'bad'); },
+          function () { mineLine('💬 ' + _t('js.pad.relay.unreachable', 'couldn\'t reach the site'), 'bad'); });
       }
       paintCount();
       inp.focus();
@@ -1249,8 +1270,12 @@
         if (k === last) return;
         last = k;
         if (!optimistic) {
-          var j = js.filter(function (x) { return x.kind === 'say'; }).pop();
-          if (j) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: j.state === 'done' ? (j.ok ? (j.msg || _t('js.pad.relay.sent', 'sent')) : _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') })) : _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
+          var j = js.filter(function (x) { return x.kind === 'say'; }).pop(), words = '';
+          if (j) words = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: j.state === 'done' ? (j.ok ? (j.msg || _t('js.pad.relay.sent', 'sent')) : _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') })) : _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
+          // (ptttoast: in the Dock a notice when the words change - one done before this page's first view is not news)
+          if (j && !toastFn) mine.textContent = words;
+          else if (j && words !== mineWords && !(mineWords === null && j.state === 'done')) notice('rb-mine', words, j.state !== 'done' ? 'busy' : j.ok ? 'done' : 'bad');
+          mineWords = words;
         }
         renderFeed(js);
       },
@@ -1273,6 +1298,13 @@
       destroy: function () {
         dead = true; clearTimeout(retryTimer); clearTimeout(noteTimer); retryTimer = null;
         outbox.slice().forEach(drop); outbox.length = 0; local = []; inp.value = ''; inp.disabled = true; btn.disabled = true; closeAc();
+      },
+      // ptttoast 1.99??: the Room Dock's chat notices (pad-dock.js) for the notes under the composer - null = the lines again
+      useToast: function (fn) {
+        toastFn = typeof fn === 'function' ? fn : null;
+        [offBar, note, mine].forEach(function (n) { n.classList.toggle('rb-hide', !!toastFn); });
+        if (toastFn) { clearTimeout(noteTimer); note.textContent = ''; note.classList.add('hide'); mine.textContent = ''; if (offOn) notice('rb-offline', offText, 'bad', 8000); }
+        else { offBar.classList.toggle('hide', !offOn); last = ''; }
       },
       // Dock tools use the same command path / input and counter as typing; no second network path.
       sendCmd: sendCmd,
@@ -1375,6 +1407,25 @@
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
     var opening = false, pressAt = 0, upAt = 0, tapMode = false, requestGen = 0;
     var recording = false, recordListeners = [], activeDoc = null, activeWin = null;
+    // ptttoast 1.99?? (owner 11-08, Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" sat under the Dock's tool row - "they
+    // should show up the same way the other stuff does as the modal that auto-dismisses"): useToast(fn) - the Room Dock hands in its chat
+    // card's notices (pad-dock.js chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then nothing is written under the
+    // composer (both lines rb-hide): ONE notice per press, updated in place from "opening the microphone…" to the clip's "played" (the
+    // upload's answer ties the clip's job to it - jobTid), with the command notices' timing: on its way 30 s, done 3 s, a refusal 8 s
+    // (+ the refusal look). A clip from elsewhere (another tab, one on its way when the page opened) gets a notice of its own. Without a
+    // Dock (the classic layout) the lines beside the button, as before.
+    var toastFn = null, pressSeq = 0, pressTid = '', jobTid = {}, jobOrder = [], clipSeen = null;
+    var TOAST_MS = { busy: 30000, done: 3000, bad: 8000 };
+    function notice(tid, text, kind, ms) {
+      if (!toastFn) return false;
+      var o = { id: tid };
+      if (text) { o.ms = ms || TOAST_MS[kind] || TOAST_MS.done; o.bad = kind === 'bad'; }
+      try { toastFn(text ? String(text) : '', o); } catch (e) { /* the Dock's own */ }
+      return true;
+    }
+    // a recorder / upload line for the press `tid`: the Dock's notice (🎙 in front - it isn't beside the button there), else the line
+    function sayFor(tid) { return function (text, kind, ms) { if (!notice(tid, text ? '🎙 ' + text : '', kind, ms)) txt.textContent = text; }; }
+    function clipBusy(j) { var s = j && j.state; return s === 'pending' || s === 'claimed' || s === 'queued' || s === 'waiting' || s === 'playing'; }
     function recordState(on) {
       if (recording === on) return;
       recording = on;
@@ -1412,28 +1463,37 @@
       if (stream) release();
     }
     var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
-    function send(chunks, mimeType, secs, capS) {
+    function send(chunks, mimeType, secs, capS, tid) {
       if (gone) return;
-      if (secs < 0.7) { txt.textContent = _t('js.pad.ptt.too_short', 'too short — hold the button while you talk'); return; }
+      var say = sayFor(tid);          // (ptttoast: the press's own notice in the Dock)
+      if (secs < 0.7) { say(_t('js.pad.ptt.too_short', 'too short — hold the button while you talk'), 'bad'); return; }
       // pttlimits review fix 3: longer than the max it was recorded under allows (+0.5 s, Pepe's own check) - never sent
-      if (capS && secs > capS + PTT_OVER_S) { txt.textContent = _t('js.pad.ptt.too_long', 'too long — keep it under {n} s', { n: capS }); return; }
+      if (capS && secs > capS + PTT_OVER_S) { say(_t('js.pad.ptt.too_long', 'too long — keep it under {n} s', { n: capS }), 'bad'); return; }
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
-      txt.textContent = _t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) });
+      say(_t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) }), 'busy');
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
         // pttlimits review fix 2: any 413 is "too big" - the site's JSON one, and nginx's own HTML page for a body over its limit (4 MB on the clip upload since 11-08)
         .then(function (r) { return r.status === 413 ? { ok: false, error: _t('js.pad.ptt.too_big', 'that recording is too big — try a shorter one') } : r.json(); })
-        .then(function (d) { txt.textContent = d.ok ? _t('js.pad.ptt.sent', 'sent — Pepe plays it when the mic is free') : (d.error || _t('js.pad.relay.not_sent', 'not sent')); })
-        .catch(function () { txt.textContent = _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
+        .then(function (d) {
+          // (ptttoast: the clip's progress goes on in this press's notice - unless the live view already gave the clip one of its own)
+          if (d.ok && d.id != null) {
+            var key = String(d.id);
+            if (toastFn && clipSeen && clipSeen[key] != null) { notice(tid, ''); return; }
+            jobTid[key] = tid; jobOrder.push(key); if (jobOrder.length > 12) delete jobTid[jobOrder.shift()];
+          }
+          say(d.ok ? _t('js.pad.ptt.sent', 'sent — Pepe plays it when the mic is free') : (d.error || _t('js.pad.relay.not_sent', 'not sent')), d.ok ? 'busy' : 'bad');
+        })
+        .catch(function () { say(_t('js.pad.relay.unreachable', 'couldn\'t reach the site'), 'bad'); });
     }
     function start() {
       if (gone) return;
       if (rec && rec.state === 'recording') return stop();
       if (opening) return;                       // a second press while the browser is still opening the mic
       opening = true; pressAt = Date.now();
-      var myRequest = ++requestGen;
+      var myRequest = ++requestGen, tid = pressTid = 'ptt:p' + (++pressSeq), say = sayFor(tid);   // (ptttoast: this press's notice)
       recSession.before();
-      txt.classList.remove('rb-ptt-idle');
-      txt.textContent = _t('js.pad.ptt.opening', 'opening the microphone…');
+      if (!toastFn) txt.classList.remove('rb-ptt-idle');
+      say(_t('js.pad.ptt.opening', 'opening the microphone…'), 'busy');
       navigator.mediaDevices.getUserMedia({ audio: micCons() }).then(function (s) {
         opening = false;
         stream = s;
@@ -1443,28 +1503,32 @@
         // 1.99bk this recorded on for 20 s with the room ducked; the next press "fixed" it.)
         if (myRequest !== requestGen || (upAt && upAt - pressAt > 400) || (host.ownerDocument || activeDoc || document).hidden || box.classList.contains('hide')) {
           release();
-          txt.classList.toggle('rb-ptt-idle', !upAt);
-          txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : uptoText();
+          // (ptttoast: in the Dock "keep holding" is the press's notice; a press that came to nothing takes its notice down)
+          if (toastFn) say(upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : '', 'bad');
+          else {
+            txt.classList.toggle('rb-ptt-idle', !upAt);
+            txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : uptoText();
+          }
           return;
         }
         var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
         var r, chunks = [], t0 = Date.now(), capS = maxS;   // pttlimits: the max this recording started with
         try { r = new MediaRecorder(s, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined); }
-        catch (e) { release(); txt.textContent = _t('js.pad.ptt.cant_record', 'this browser can\'t record a clip'); return; }
+        catch (e) { release(); say(_t('js.pad.ptt.cant_record', 'this browser can\'t record a clip'), 'bad'); return; }
         rec = r; recAt = t0;
         r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
         r.onstop = function () {
           if (stream === s) release();           // stopped some other way (track ended, page hidden)
           idle();
-          send(chunks, r.mimeType, (Date.now() - t0) / 1000, capS);
+          send(chunks, r.mimeType, (Date.now() - t0) / 1000, capS, tid);
         };
         r.start(250); recordState(true);
         tapMode = !!upAt;                        // a quick tap started it: tap again to send
         btn.setAttribute('aria-pressed', 'true');
         btn.textContent = tapMode ? _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send') : _t('js.pad.ptt.rec_release', '⏺ Recording — release to send');
-        txt.textContent = _t('js.pad.ptt.recording', 'recording…');
+        say(_t('js.pad.ptt.recording', 'recording…'), 'busy', Math.max(TOAST_MS.busy, capS * 1000 + 5000));   // (ptttoast: it stays while the clip can last)
         recTimer = setTimeout(stop, Math.max(1000, capS * 1000 - PTT_EARLY_MS));   // pttlimits: the site's max length (was a fixed 20 s), 0.5 s early
-      }).catch(function () { opening = false; release(); txt.textContent = _t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'); });
+      }).catch(function () { opening = false; release(); say(_t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'), 'bad'); });
     }
     function up() {
       if (!held) return;
@@ -1481,8 +1545,15 @@
     btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
     return {
       adopt: adopt,
-      destroy: function () { gone = true; stop(); box.classList.add('hide'); },
+      destroy: function () { gone = true; stop(); box.classList.add('hide'); if (pressTid) notice(pressTid, ''); },   // (ptttoast: and the press's notice)
       listMics: listMics,      // 1.99ajf dockclean: Audio settings re-reads the device names after it asked for them
+      // ptttoast 1.99??: the Room Dock's chat notices (pad-dock.js) - fn(text, {id, ms, bad}), null = the lines beside the button again
+      useToast: function (fn) {
+        toastFn = typeof fn === 'function' ? fn : null;
+        txt.classList.toggle('rb-hide', !!toastFn); mine.classList.toggle('rb-hide', !!toastFn);
+        if (toastFn) { txt.classList.add('rb-ptt-idle'); txt.textContent = uptoText(); mine.textContent = ''; }
+        else last = '';                // (the line draws the latest clip again on the next view)
+      },
       onRecording: function (fn) {
         if (typeof fn !== 'function') return function () {};
         recordListeners.push(fn); fn(recording);
@@ -1500,8 +1571,18 @@
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         if (k === last) return;
         last = k;
-        var j = js.filter(function (x) { return x.kind === 'clip'; }).pop();
-        mine.textContent = j ? _t('js.pad.ptt.your_clip', '🎙 your clip: {status}', { status: clipStatus(j) }) : '';
+        var clips = js.filter(function (x) { return x.kind === 'clip'; }), j = clips[clips.length - 1];
+        if (!toastFn) mine.textContent = j ? _t('js.pad.ptt.your_clip', '🎙 your clip: {status}', { status: clipStatus(j) }) : '';
+        // ptttoast: each clip's words - in the Dock a notice when they change (the press's own once its upload answered, else one per
+        // clip); a clip done before this page's first view (or shown on the line before the Dock took over) is not news, one on its way is
+        var first = clipSeen === null, seen = {};
+        clips.forEach(function (c) {
+          var key = String(c.id), words = _t('js.pad.ptt.your_clip', '🎙 your clip: {status}', { status: clipStatus(c) });
+          seen[key] = words;
+          if ((clipSeen && clipSeen[key] === words) || (first && !clipBusy(c))) return;
+          notice(jobTid[key] || 'ptt:j' + key, words, clipBusy(c) ? 'busy' : c.ok ? 'done' : 'bad');
+        });
+        clipSeen = seen;
       },
     };
   }
