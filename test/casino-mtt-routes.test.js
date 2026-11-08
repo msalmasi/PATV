@@ -142,7 +142,7 @@ test("Pepe: !mtt verbs (game mtt, two args) - list, info, join, remind, me, top,
   assert.ok(r.j.ok);
 });
 
-test("a room player's bare Hold'em verb: the table where it's their turn first; their room's table; the only tournament table; two turns at once = use the web", async () => {
+test("a room player's bare Hold'em verb: the tournament table where it's their turn first; their room's table; the only tournament table", async () => {
   await h.fresh();
   const M = await h.schedule({ max_entries: 20, min_entries: 2 });
   const pl = h.players;
@@ -164,10 +164,11 @@ test("a room player's bare Hold'em verb: the table where it's their turn first; 
   // it's nobody's turn of theirs: the room's table (they sit there)
   const f = svc.tourneyTableFor(a, "PepeLab");
   if (!T.eng.hand_active || H.currentActor(T.eng) !== a) assert.equal(f.T.id, C.id, "their room's table");
-  // their turn at both: ambiguous
+  // their turn at both (review): only a TOURNAMENT table is looked at turn-first - the MTT table, never an error
   C.eng.hand_active = true; C.eng.actor = a;
   T.eng.hand_active = true; const keep = T.eng.actor; T.eng.actor = a;
-  assert.match(svc.tourneyTableFor(a, "PepeLab").err, /more than one table/);
+  const both = svc.tourneyTableFor(a, "PepeLab");
+  assert.ok(!both.err && both.T.id === T.id, "the MTT table where it's their turn");
   C.eng.hand_active = false; C.eng.actor = null; T.eng.actor = keep;
 });
 

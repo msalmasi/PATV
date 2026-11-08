@@ -1643,20 +1643,21 @@ async function streamTake(T, mode, by, M) {
 }
 
 /**
- * h22 phase 2: the table a room player's bare Hold'em verb (!call, !fold, ...) is for - TURN FIRST: (1) the open table where it is their turn
- * right now; (2) the room's table if they sit there; (3) the only tournament table they sit at; else, seated at more than one: ask them to
- * use the web. -> {T} | {T: null} (nothing better than the room's table: today's behaviour) | {err}
+ * h22 phase 2: the table a room player's bare Hold'em verb (!call, !fold, ...) is for - TURN FIRST: (1) the TOURNAMENT table where it is
+ * their turn right now (at two at once: the one whose turn clock runs out first); (2) the room's table if they sit there; (3) the only
+ * tournament table they sit at; else, seated at more than one: ask them to use the web. -> {T} | {T: null} (nothing better than the room's
+ * table: today's behaviour) | {err}. (review) Only MTT tables are looked at - a cash table (or a sit & go) elsewhere never takes a room's
+ * bare verb: a game-less "!bet 5000" meant for the room's blackjack table never lands in a Hold'em pot.
  */
 function tourneyTableFor(uid, room, opts) {
   uid = String(uid);
-  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && t.game === "holdem");
+  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && t.game === "holdem" && isMttTable(t));
   const turn = open.filter((t) => t.eng.hand_active && HMENG.currentActor(t.eng) === uid);
-  if (turn.length === 1) return { T: turn[0] };
-  if (turn.length > 1) return { err: "You're at more than one table - use the web, or !mtt me." };
+  if (turn.length) return { T: turn.slice().sort((a, b) => (a.dl.turn || Infinity) - (b.dl.turn || Infinity))[0] };
   if (opts && opts.turnOnly) return { T: null };
   const here = room ? tableForRoom(room) : null;
   if (here && here.game === "holdem" && here.eng.seats.includes(uid)) return { T: here };
-  const tn = open.filter((t) => t.tourney && t.eng.seats.includes(uid));
+  const tn = open.filter((t) => t.eng.seats.includes(uid));
   if (tn.length === 1) return { T: tn[0] };
   if (tn.length > 1) return { err: "You're at more than one table - use the web, or !mtt me." };
   return { T: here || null };

@@ -68,6 +68,9 @@ const ID = /^[0-9a-f]{10}$/;
 const MID = /^m[0-9a-f]{9}$/;            // h22 phase 2: a scheduled tournament ("m" + 9 hex - never a table's 10 hex)
 // h22 phase 2: the verbs a room player's bare command resolves turn-first for (never !sit / !holdem start: those are the room's table's)
 const TURN_VERBS = new Set(["check", "call", "fold", "raise", "bet", "allin", "all-in", "pre", "cards", "hand", "hole", "sitout", "sitin", "showhand"]);
+// (review) of those, the actions: quiet on success at an MTT table (the next turn PM is the feedback) - the rest (!cards, !sitout, !sitin,
+// !pre, !showhand) answer with what the player asked for, as a PM
+const QUIET_VERBS = new Set(["check", "call", "fold", "raise", "bet", "allin", "all-in"]);
 const IDEM = /^[\w:.\-]{8,100}$/;
 const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
 
@@ -409,6 +412,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     res.set("Cache-Control", "private, no-store");
     await svc.boot();
     const uid = uidOf(req);
+    // (review) the switch hides it like its page (/casino/holdem/leaderboard): off / staff only = 403 for everyone else
+    if (!(await MT.canSee({ id: "-" }, uid))) return res.status(403).json({ ok: false, error: "Tournaments aren't open yet.", code: "E_SWITCH" });
     const out = await MT.leaderboard(req.query.period, req.query.page);
     if (uid) out.my_veiled_points = await MT.veiledPoints(uid);
     res.json(Object.assign({ ok: true }, out));
@@ -599,6 +604,12 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (Array.isArray(b.ach_base) && b.ach_base.length) await rewards.setBases(b.ach_base, tables);
       if (Array.isArray(b.rep_ack) && b.rep_ack.length) await rewards.repAck(b.rep_ack);
       const out = await svc.poll(b.after, wait);
+      // (review) a Pepe that doesn't know tournaments (an older build: no `scene` in his poll) gets neither their lines (he'd post them
+      // ungated by the room's poker toggle) nor a tournament table on his board (he'd draw it as a Sit & Go)
+      if (!b.scene || typeof b.scene !== "object") {
+        out.events = (out.events || []).filter((e) => e.kind !== "mtt");
+        for (const [id, t] of Object.entries(out.tables || {})) if (t && t.tourney && t.tourney.kind === "mtt") delete out.tables[id];
+      }
       out.rep = await rewards.repPending(50);
       out.ach_want = await rewards.wantBases(Array.from(svc.S.tables.values()));
       res.set("Cache-Control", "no-store");
@@ -651,7 +662,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const args = Array.isArray(b.args) ? b.args.slice(0, game === "sng" ? 5 : 2).map((x) => String(x).slice(0, argMax)) : [];   // (h22: !sng new <seats> <buy-in> [turbo] [at N])
     const out = await svc.act(actor, verb, args, { room, table, game: mttBare ? "holdem" : game }, `cf-${idem}`);
     // (h22 phase 2) a bare verb at an MTT table: quiet on success (the next PM is the feedback), an error comes back as a PM
-    if (mttBare) { if (out.ok) out.quiet = true; else out.pm = true; }
+    if (mttBare) { if (out.ok && QUIET_VERBS.has(verb)) out.quiet = true; else out.pm = true; }
     res.json(out);
   });
 }

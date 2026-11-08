@@ -631,6 +631,8 @@ function install(core) {
     if (kind === "removed") return { title: `🏆 #${M.no}: you were removed`, body: "You were removed - casino ban. Your entry is back in your wallet." };
     if (kind === "delayed") return { title: `🏆 #${M.no} ${M.title} was moved`, body: `It now starts ${etText(M.start_at)}.` };
     if (kind === "pm_start") return { title: "", body: data.text || "" };
+    if (kind === "start_out") return { title: `🏆 #${M.no} ${M.title} has started - you're sitting out`, body:
+      `You're at table ${data.table || "?"}. Press Sit in at your table (or type !sitin) to play - until then your hands are checked or folded and you're blinded.` };
     return { title: `🏆 #${M.no}`, body: "" };
   }
   async function processReminders() {
@@ -704,6 +706,7 @@ function install(core) {
     if (mine.some((r) => r.dq)) return R(false, "You were disqualified from this tournament.");          // (review: never a re-entry after a DQ)
     const used = mine.filter((r) => r.entry_no != null).length;
     if (late && used > 0 && used - 1 >= M.structure.reentry_max) return R(false, M.structure.reentry_max ? "No re-entries left." : "This one has no re-entries.");
+    if (actor.via !== "room") S.mttSeen.set(uid, now);                    // (review) registering on the web is start presence too
     if (late ? M.entries_n >= M.structure.max_entries : M.reg_n >= M.structure.max_entries) return R(false, "It's full.");
     if (actor.via === "room") {
       const n = (await getQuery("SELECT COUNT(*) AS n FROM casino_mtt_entries WHERE tid = ? AND via = 'room' AND state IN ('held','playing')", [M.id]))[0].n;
@@ -1004,11 +1007,13 @@ function install(core) {
     if (st.mtt_presence === "on" && S.mttBoot) {
       for (const e of ok) {
         const p = M.people[e.user_id] || {};
-        const seenAt = p.via === "room" ? S.mttSeenRoom.get(e.user_id) : S.mttSeen.get(e.user_id);
-        const win = p.via === "room" ? MTT.SEEN_ROOM_MS : MTT.SEEN_WEB_MS;
-        // after a restart the map is empty: everyone counts as present (fail open) until the window has passed since the boot
-        if (now - S.mttBoot < win) continue;
-        if (!seenAt || now - seenAt > win) absent.add(e.user_id);
+        // (review) present = seen on the web (the lobby block, the tournament page, the table, registering there) within 5 min OR a casino
+        // command through Pepe within 30 min - whichever way they registered (a room registrant watching on the web is present)
+        const web = S.mttSeen.get(e.user_id), room = S.mttSeenRoom.get(e.user_id);
+        const fresh = (web && now - web <= MTT.SEEN_WEB_MS) || (room && now - room <= MTT.SEEN_ROOM_MS);
+        // after a restart the maps are empty: everyone counts as present (fail open) until their window has passed since the boot
+        if (now - S.mttBoot < (p.via === "room" ? MTT.SEEN_ROOM_MS : MTT.SEEN_WEB_MS)) continue;
+        if (!fresh) absent.add(e.user_id);
       }
     }
     const veils = {};
@@ -1049,6 +1054,8 @@ function install(core) {
       for (const T of ctx.created) {
         for (const uid of seatedOf(T)) {
           const p = M.people[uid] || {};
+          // (review) a web entrant who starts sitting out is told (the inbox; room entrants get Pepe's start PM below)
+          if (p.via !== "room" && ctx.absent.has(uid)) { await notice(M, uid, "start_out", { table: T.tourney.no }); continue; }
           if (p.via !== "room") continue;
           const text = `🏆 Tournament #${M.no} has started - you're at table ${T.tourney.no}${ctx.absent.has(uid) ? " (sitting out until you type !sitin)" : ""}. ${tableUrl(T)}`;
           await queueReminder(M, uid, "pm_start", "pepe", now, { text, table: T.id });
@@ -2240,6 +2247,7 @@ function install(core) {
   }
   async function lobby(uid) {
     await ensure();
+    if (uid) seen(uid);                     // (review) the Hold'em lobby's Tournaments block polls this every 10 s: start presence
     const st = await loadSettings();
     const aud = await audienceFor(uid ? { uid } : null);
     const now = clock();
