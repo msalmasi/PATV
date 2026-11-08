@@ -353,6 +353,7 @@
   "settings.verify.instructions": "Type this in the Camfrog room:",
   "settings.verify.copied": "Copied!",
   "settings.verify.copy": "Copy",
+  "settings.verify.copy_manual": "Selected - now copy it",
   "settings.verify.expires": "Code expires in 15 minutes",
   "settings.verify.announce": "Your Camfrog verification code is {code}. Type !verify {code} in a Camfrog room with Pepe within 15 minutes.",
   "settings.preview_aria": "Profile preview",

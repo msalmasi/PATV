@@ -255,6 +255,8 @@ const RULES = {
   "welcome_activity.userId": M({ key: ["day"] }),
   "stale_notice.userId": M({ key: [] }), "stale_notice.login": { deny: NAME },
   "pending_camfrog_links.userId": M(), "displayname_log.userId": M(), "displayname_log.actor": M(),
+  // verifyfix (user.controller completeCamfrogLink): a Camfrog link's job - one still to run follows the account it links to
+  "camfrog_link_jobs.user_id": M(),
   "displayname_log.by_admin": { deny: FLAG },
   // feed
   "feed_posts.author_id": M(), "feed_posts.deleted_by": M(), "feed_posts.locked_by": M(), "feed_posts.nsfw_admin": { deny: FLAG },

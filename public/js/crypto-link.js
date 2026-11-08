@@ -48,11 +48,14 @@
       .then(function (r) { var s = (r && r.signature) || r; return post('/api/crypto/link/finish', { nonce: nonce, signature: hex(new Uint8Array(s)) }); });
   }
 
+  // verifyfix: only this file's own buttons - its copy buttons are data-crypto-copy (/support's wallet addresses). It used to
+  // take every data-copy element on the page: Settings -> Account's !verify Copy button had data-copy="Copy" (its label), so the
+  // word "Copy" landed on the clipboard over the command (help-page.js / stage-book.js / onair-bar.js handle their own)
   document.addEventListener('click', function (ev) {
-    var b = ev.target.closest && ev.target.closest('[data-crypto-link], [data-crypto-unlink], [data-copy]');
+    var b = ev.target.closest && ev.target.closest('[data-crypto-link], [data-crypto-unlink], [data-crypto-copy]');
     if (!b) return;
-    if (b.hasAttribute('data-copy')) {
-      var v = b.getAttribute('data-copy');
+    if (b.hasAttribute('data-crypto-copy')) {
+      var v = b.getAttribute('data-crypto-copy');
       var done = function () { var o = b.textContent; b.textContent = _t('js.crypto.copied', 'Copied'); setTimeout(function () { b.textContent = o; }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(done, function () { window.prompt('', v); });
       else window.prompt('', v);

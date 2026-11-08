@@ -319,6 +319,8 @@ test("an unlink or a moved login takes the class that login gave (the unlink tri
     let out = null;
     const res = { status() { return this; }, json(d) { out = d; return this; } };
     await UC.verifyCamfrogLink({ body: { code, camfrogUsername: login, password: "bot-token" } }, res);
+    // verifyfix: the answer waits for the merge at most CF_LINK_WAIT_MS - the rest finishes in the background; wait for it here
+    await UC.settleCamfrogLinks();
     assert.equal(out && out.success, true, JSON.stringify(out));
     return out;
   };

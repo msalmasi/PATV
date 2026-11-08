@@ -353,7 +353,7 @@
             <div class="addrbox">
               <p class="send"><%- t('support.send_line', { amount: '<b data-send-amt>10</b>', token: '<b data-send-tok>USDC</b>', chain: c.name }) %></p>
               <code class="addr"><%= c.address %></code>
-              <div class="row" style="margin-block-start:var(--ds-sp-2)"><button type="button" class="ds-btn sm quiet" data-copy="<%= c.address %>"><span class="ds-ic" aria-hidden="true">📋</span> <%- t('support.copy') %></button></div>
+              <div class="row" style="margin-block-start:var(--ds-sp-2)"><button type="button" class="ds-btn sm quiet" data-crypto-copy="<%= c.address %>"><span class="ds-ic" aria-hidden="true">📋</span> <%- t('support.copy') %></button></div>
               <% c.tokens.forEach((tk, j) => { %><p class="contract" data-token="<%= tk.symbol %>"<%= j ? ' hidden' : '' %>><%- t('support.contract_line', { token: tk.symbol, chain: c.name }) %> <code><%= tk.address %></code></p><% }) %>
             </div>
           </div>
@@ -463,5 +463,5 @@
     <a class="ds-btn lg big" href="#give"><span class="ds-ic" aria-hidden="true">💖</span> <%- t('support.hero_cta') %></a>
   </section>
 </main>
-<script src="/public/js/crypto-link.js?v=2" defer></script>
+<script src="/public/js/crypto-link.js?v=3" defer></script>
 <script src="/public/js/support.js?v=4" defer></script>

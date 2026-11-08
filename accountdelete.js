@@ -502,6 +502,7 @@ const DELETE_ROWS = [
   ["shop_prefs", "user_id", "uid"], ["support_prefs", "user_id", "uid"], ["tipjar_seen", "userId", "uid"], ["likeness_prefs", "user_id", "uid"],
   ["media_user_links", "user_id", "uid"], ["username_history", "userId", "uid"], ["displayname_log", "userId", "uid"], ["welcome_activity", "userId", "uid"],
   ["stale_notice", "userId", "uid"], ["pending_camfrog_links", "userId", "uid"], ["auto_escrow_notices", "user_id", "uid"],
+  ["camfrog_link_jobs", "user_id", "uid"],                    // verifyfix: the account's Camfrog link jobs (user.controller)
   ["user_cosmetics", "user_id", "uid"], ["user_cosmetic_equips", "user_id", "uid"], ["user_sticker_packs", "user_id", "uid"], ["sb_owned", "user_id", "uid"],
   ["voice_owned", "user_id", "uid"], ["user_badges", "userId", "uid"], ["achievement_feed", "userId", "uid"], ["ach_marks", "userId", "uid"],
   ["activity_days", "userId", "uid"],

@@ -2574,6 +2574,8 @@ app.post(
 
 // Verify a pending Camfrog link — called by the bot when a user types !verify CODE
 app.post("/api/users/camfrog/verify", verifyCamfrogLink);
+// verifyfix: the link answers at once; its auto-account merge is a job (camfrog_link_jobs) - this tick retries one that failed
+require("./user.controller").startCamfrogLinkJobs();
 
 // 1.99jw: POST /api/users/zero-balance is gone - Pepe's auto-account merge moves the whole balance atomically with
 // POST /api/users/merge-balance (botcredits.js), so nothing is zeroed after a separate credit any more.

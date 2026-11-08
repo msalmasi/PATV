@@ -115,6 +115,8 @@ test("an unlinked Camfrog name waits as pending and attaches on !verify", async 
   let out = null;
   const res = { status() { return this; }, json(d) { out = d; return this; } };
   await uc.verifyCamfrogLink({ body: { code: "ABC123", camfrogUsername: "newbie", password: "bot-token" } }, res);
+  // verifyfix: the answer waits for the merge at most CF_LINK_WAIT_MS - the rest finishes in the background; wait for it here
+  await uc.settleCamfrogLinks();
   assert.equal(out && out.success, true, JSON.stringify(out));
   const c = await rows("u3");
   assert.equal(c.length, 1);

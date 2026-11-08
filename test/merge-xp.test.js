@@ -152,6 +152,8 @@ test("the Camfrog !verify merge (completeCamfrogLink) uses the same rule: Lv3 + 
   let out = null;
   const res = { status() { return this; }, json(d) { out = d; return this; } };
   await uc.verifyCamfrogLink({ body: { code: "XPX123", camfrogUsername: "frankcf", password: "bot-token" } }, res);
+  // verifyfix: the answer waits for the merge at most CF_LINK_WAIT_MS - the rest finishes in the background; wait for it here
+  await uc.settleCamfrogLinks();
   assert.equal(out && out.success, true, JSON.stringify(out));
   assert.equal(out.merged, true);
   assert.equal(out.addedXp, 1200, "the auto account's cumulative XP");
@@ -169,6 +171,8 @@ test("1.99tc: the Hfddhh incident end to end - !verify of a NEW Camfrog name (au
   let out = null;
   const res = { status() { return this; }, json(d) { out = d; return this; } };
   await uc.verifyCamfrogLink({ body: { code: "HFD123", camfrogUsername: "wutup2", password: "bot-token" } }, res);
+  // verifyfix: the answer waits for the merge at most CF_LINK_WAIT_MS - the rest finishes in the background; wait for it here
+  await uc.settleCamfrogLinks();
   assert.equal(out && out.success && out.merged, true, JSON.stringify(out));
   // then the account is renamed (the bot route / Edit profile both record it)
   await runQuery("UPDATE users SET username = 'WutUp2' WHERE userId = 'h-me'");

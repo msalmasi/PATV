@@ -526,135 +526,279 @@ async function updateTwitchId(req, res) {
 //   2. Another non-CF account already claims this camfrog username → unlink it (no merge, it's a different user's account)
 //   3. No existing account → just set the link
 // Assumes ownership has been verified (via chat code).
-// 1.99gi: runs holding the level lock of this account AND of every account on that Camfrog name (sorted -
-// withLevelLocks), through the merge and its afterMerge settle, so a game XP award can't interleave with
-// the xp/level write. The set is re-read under the locks; if it changed meanwhile, the locks are re-taken.
-async function completeCamfrogLink(userId, camfrogUsername) {
-  const cfLower = camfrogUsername.toLowerCase().trim();
-  const idsOnName = async () => (await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId]))
-    .map((r) => String(r.userId)).sort();
-  for (let attempt = 0; ; attempt++) {
-    const ids = await idsOnName();
-    const RETRY = {};
-    const out = await withLevelLocks([userId, ...ids], async () => {
-      if (attempt < 5 && (await idsOnName()).join("\n") !== ids.join("\n")) return RETRY;
-      return _completeCamfrogLinkLocked(userId, camfrogUsername);
-    });
-    if (out !== RETRY) {
-      // 1.99ajn padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
-      try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
-      try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
-      try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }
-      return out;
-    }
+//
+// verifyfix (prod 2026-11-08 00:24Z, the owner: "connecting camfrog gives error message even though it worked"): Pepe's
+// POST /api/users/camfrog/verify gave up after 10 s ("couldn't reach the website") while the site took 32 s to finish a merge
+// that moved 6 rows - and his retry was told "Invalid or expired" (the code was spent by then). The merge ran OUTSIDE any
+// transaction, so each of its few hundred writes (accountMerge.moveUserRows: every user column of all 584 tables) waited at
+// dbUtils' write gate for whatever other transaction was open, one after another (~12-18 s on the real schema with other
+// transactions back to back; 0.4 s idle). Nothing in it waits on Pepe. Now it is two steps, recorded in camfrog_link_jobs:
+//   1. _linkNow - ONE transaction, committed before anything slow: the code is spent, the login leaves the auto / other
+//      account (the other account's records re-keyed, its Camfrog badges copied) and lands on this one, and the job row
+//      holds the answer (the auto account's PAT and cumulative XP, read here).
+//   2. runCamfrogLinkJob - the auto account's merge in ONE transaction of its own (1.99gi: under both accounts' level locks,
+//      through its afterMerge settle): it moves exactly once or not at all - a failure rolls ALL of it back (the old path
+//      could add the PAT and then fail, leaving it on both accounts) and the job tick retries it. Then the after-steps,
+//      in the old order: this account's login re-key (once per change - it ran twice: login_changes #45 + #46), notices
+//      waiting for the login, blocks / bans / frog-name gifts on it, the site class (staffroles.reconcile). Each is
+//      idempotent, so a retry after a crash repeats nothing.
+// The !verify answer waits for step 2 at most CF_LINK_WAIT_MS (600 ms); a repeat !verify of the code that login just used
+// gets the same answer again (verifyCamfrogLink). completeCamfrogLink (the !signup claim page) still waits for all of it.
+const LINK_WAIT_MS = (() => { const n = Number(process.env.CF_LINK_WAIT_MS); return Number.isFinite(n) && n >= 0 ? n : 600; })();
+const LINK_REPLAY_MS = 15 * 60 * 1000;        // a repeat !verify of a used code: "already linked" for this long (the code's own life)
+const LINK_RETRY_MAX_MS = 60 * 60 * 1000;     // a failed merge is retried after 1, 2, 4 ... minutes, at most hourly
+const LINK_KEEP_MS = 30 * 24 * 3600 * 1000;   // done jobs are kept a month (what each link answered), then pruned
+let _linkReadyP = null;
+function _linkReady() {
+  if (!_linkReadyP) {
+    _linkReadyP = (async () => {
+      // state: 'merge' (the auto account still to merge) -> 'after' (the after-steps) -> 'done'
+      await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_link_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, user_id TEXT NOT NULL, login TEXT NOT NULL, before_login TEXT,
+        auto_ids TEXT NOT NULL DEFAULT '[]', state TEXT NOT NULL, result TEXT, tries INTEGER NOT NULL DEFAULT 0, error TEXT,
+        next_at INTEGER, created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS camfrog_link_jobs_code ON camfrog_link_jobs (code)");
+      await runQuery("CREATE INDEX IF NOT EXISTS camfrog_link_jobs_due ON camfrog_link_jobs (state, next_at)");
+      // the one-time setups the link's transactions use run BEFORE them (a first CREATE inside one would roll back with it)
+      await require('./usernames').ensure();
+      await require('./loginrekey').ensure();
+      await require('./staleaccounts').ensure();
+      await require('./ledger').ensure();
+      await require('./accountMerge').ensureLog();
+      return true;
+    })().catch((e) => { _linkReadyP = null; throw e; });
   }
+  return _linkReadyP;
 }
-async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
-  const cfLower = camfrogUsername.toLowerCase().trim();
-  // 1.99bm: an archived account on this name gets its balance back first, so the merge below carries it
-  for (const r of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
-    await require("./staleaccounts").touch(r.userId, "camfrog link");
-  }
+const _jsonOr = (s, d) => { try { const v = JSON.parse(s); return v == null ? d : v; } catch (e) { return d; } };
+const _linkJob = async (id) => (await getQuery('SELECT * FROM camfrog_link_jobs WHERE id = ?', [id]))[0] || null;
+const _jobAnswer = (job) => Object.assign(_jsonOr(job.result, {}), job.state === 'merge' ? { pending: true } : {});
 
-  // Case 1: existing CF auto-account
-  const autoAccounts = await getQuery(
-    "SELECT userId, points_balance, xp, level, twitchBonus, twitchBonus_at, discordBonus, discordBonus_at, liked FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username LIKE 'CF%'",
-    [cfLower, userId]
-  );
-
-  // Case 2: existing non-CF account that has this camfrog username linked
-  const otherAccounts = await getQuery(
-    "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username NOT LIKE 'CF%'",
-    [cfLower, userId]
-  );
-
-  // 1.99tc: the login this account had before (a !verify of a different Camfrog name replaces it) - kept in the login
-  // history so Pepe's records under the old login (gangs, stashes, loans...) still resolve to this account
+/** Step 1 (one transaction). -> {jobId, result} | {spent: true} (a !verify of the same code was there first) */
+async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
+  const cfLower = String(camfrogUsername).toLowerCase().trim();
+  await _linkReady();
   const usernames = require('./usernames');
-  await usernames.ensure();
-  const before = ((await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]))[0] || {}).camfrogUsername;
-  if (before && before.toLowerCase().trim() !== cfLower) await usernames.recordLogin(userId, before, cfLower, 'camfrog:relink');
+  const LR = require('./loginrekey');
+  const stale = require('./staleaccounts');
+  return require('./dbUtils').tx(async () => {
+    if (code) {
+      const d = await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code]);
+      if (!d || !d.changes) return { spent: true };
+    }
+    // 1.99bm: an archived account on this name gets its balance back first, so the merge carries it
+    for (const r of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
+      await stale.touch(r.userId, "camfrog link");
+    }
+    const autoAccounts = await getQuery(
+      "SELECT userId, points_balance, xp, level FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username LIKE 'CF%'",
+      [cfLower, userId]);
+    const otherAccounts = await getQuery(
+      "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username NOT LIKE 'CF%'",
+      [cfLower, userId]);
+    const me = (await getQuery('SELECT username, camfrogUsername, points_balance, xp, level FROM users WHERE userId = ?', [userId]))[0];
+    if (!me) throw new Error(`camfrog link: no account ${userId}`);
+    // 1.99tc: the login this account had before (a !verify of a different Camfrog name replaces it) - kept in the login
+    // history so Pepe's records under the old login (gangs, stashes, loans...) still resolve to this account
+    const before = me.camfrogUsername || null;
+    if (before && before.toLowerCase().trim() !== cfLower) await usernames.recordLogin(userId, before, cfLower, 'camfrog:relink');
 
-  let unlinkedFrom = null;
-  if (otherAccounts.length > 0) {
-    const other = otherAccounts[0];
-    console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
-    await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
-    await usernames.recordLogin(other.userId, cfLower, null, 'camfrog:taken');
-    // 1.99tj: the other account's records keyed by this login stay ITS records (re-keyed to u:<its id>) - loginrekey.js
-    await require('./loginrekey').changedSafe(other.userId, cfLower, null, 'camfrog:taken');
-    // 1.99tj: the other account's records keyed by this login stay ITS records (re-keyed to u:<its id>) - loginrekey.js
-    await require('./loginrekey').changedSafe(other.userId, cfLower, null, 'camfrog:taken');
-    // the Camfrog achievements go with the Camfrog name (quietly: no second XP/PAT)
-    const copied = await copyCamfrogBadges(other.userId, userId);
-    if (copied) console.log(`[CF-RELINK] copied ${copied} Camfrog achievement(s) to ${userId}`);
-    unlinkedFrom = other.username;
-  }
-
-  if (autoAccounts.length > 0) {
-    const auto = autoAccounts[0];
-    const me = await getQuery('SELECT points_balance, xp, level FROM users WHERE userId = ?', [userId]);
-    const mergedBalance = (me[0]?.points_balance || 0) + (auto.points_balance || 0);
-    // 1.99gg: the cumulative XP of both (mergeXpOf); new levels are paid by afterMerge below
-    const mx = mergeXpOf(me[0], auto);
-    const mergedXp = mx.store.xp;
-    const mergedLevel = mx.store.level;
-
-    console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${mx.otherTotal} (Lv ${auto.level || 0})`);
+    let unlinkedFrom = null;
+    if (otherAccounts.length > 0) {
+      const other = otherAccounts[0];
+      console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
+      await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
+      await usernames.recordLogin(other.userId, cfLower, null, 'camfrog:taken');
+      // 1.99tj: the other account's records keyed by this login stay ITS records (re-keyed to u:<its id>) - loginrekey.js
+      // (verifyfix: once - it ran twice; a savepoint of this transaction)
+      await LR.changedSafe(other.userId, cfLower, null, 'camfrog:taken');
+      // the Camfrog achievements go with the Camfrog name (quietly: no second XP/PAT)
+      const copied = await copyCamfrogBadges(other.userId, userId);
+      if (copied) console.log(`[CF-RELINK] copied ${copied} Camfrog achievement(s) to ${userId}`);
+      unlinkedFrom = other.username;
+    }
     // 1.99bs: the login is unique (users_camfrog_login) - free it on the auto account first
     for (const a of autoAccounts) await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [a.userId]);
-
-    await runQuery(
-      `UPDATE users SET
-        camfrogUsername = ?,
-        points_balance = ?,
-        xp = ?,
-        level = ?,
-        liked = COALESCE(liked, 0) + ?,
-        twitchBonus = CASE WHEN twitchBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
-        twitchBonus_at = COALESCE(twitchBonus_at, ?),
-        discordBonus = CASE WHEN discordBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
-        discordBonus_at = COALESCE(discordBonus_at, ?)
-      WHERE userId = ?`,
-      [cfLower, mergedBalance, mergedXp, mergedLevel, auto.liked || 0,
-       auto.twitchBonus, auto.twitchBonus_at, auto.discordBonus, auto.discordBonus_at, userId]
-    );
-
-    await runQuery('UPDATE transactions SET userId = ? WHERE userId = ?', [userId, auto.userId]);
-    // Everything else the auto account owned (badges, cosmetics, roles, spins, orders…) moves too.
-    // Badges left behind used to be awarded AGAIN, with full XP + PAT, once the merged account was
-    // active (the auto account had them from the quiet backfill).
-    const autoRow = (await getQuery('SELECT * FROM users WHERE userId = ?', [auto.userId]))[0];
-    const meRow = (await getQuery('SELECT userId, username FROM users WHERE userId = ?', [userId]))[0];
-    // adultgate site: an age confirmation the auto account had carries over (the earliest one is kept)
-    if (autoRow && Number(autoRow.age_confirmed_at) > 0) {
-      const vcol = 'age_confirmed_v' in autoRow;      // the wording's version moves with it (adultgate.js)
-      await runQuery(`UPDATE users SET age_confirmed_at = ?${vcol ? ', age_confirmed_v = ?' : ''} WHERE userId = ? AND (age_confirmed_at IS NULL OR age_confirmed_at > ?)`,
-                     vcol ? [Number(autoRow.age_confirmed_at), autoRow.age_confirmed_v || null, userId, Number(autoRow.age_confirmed_at)]
-                          : [Number(autoRow.age_confirmed_at), userId, Number(autoRow.age_confirmed_at)]);
-    }
-    const report = await moveUserRows(auto.userId, userId);
-    console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(report.moved)}${Object.keys(report.left).length ? ` LEFT ${JSON.stringify(report.left)}` : ""}`);
-    try {
-      await archiveMerged(autoRow, meRow, { via: "camfrog link", balance: auto.points_balance || 0 });
-      await logMerge({ via: "camfrog link", from: autoRow || { userId: auto.userId }, to: meRow || { userId }, pat: auto.points_balance || 0, xp: mx.otherTotal, report });
-    } catch (e) { console.error("[CF-MERGE] merge record:", e.message); }
-    await ledger.recordMerge(auto.userId, userId, 'camfrog link');   // 1.99ga: late credits follow it here
-    await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
-    await afterMerge(userId, report);
-
-    // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js)
-    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');
-    // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js)
-    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');
-    await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
-    return { merged: true, addedBalance: auto.points_balance || 0, addedXp: mx.otherTotal, unlinkedFrom };
-  } else {
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
-    await require('./loginrekey').changedSafe(userId, before || null, cfLower, 'camfrog:relink');   // 1.99tj
-    await inbox.attachPendingSafe(userId, cfLower);
-    return { merged: false, unlinkedFrom };
+
+    const auto = autoAccounts[0] || null;
+    const result = { websiteUsername: me.username, camfrogUsername: cfLower, merged: !!auto,
+                     addedBalance: auto ? Number(auto.points_balance) || 0 : 0,
+                     addedXp: auto ? mergeXpOf(me, auto).otherTotal : 0,          // 1.99gg: the cumulative XP
+                     unlinkedFrom };
+    const now = Date.now();
+    const ins = await runQuery(`INSERT INTO camfrog_link_jobs (code, user_id, login, before_login, auto_ids, state, result, created, updated)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               [code, String(userId), cfLower, before, JSON.stringify(autoAccounts.map((a) => String(a.userId))),
+                                auto ? 'merge' : 'after', JSON.stringify(result), now, now]);
+    return { jobId: ins && ins.id, result };
+  });
+}
+
+/** Step 2's merge: the auto account into the linked one, in ONE transaction (+ the afterMerge settle under the level locks). */
+async function _mergeLinkJob(job) {
+  const userId = String(job.user_id);
+  const autoId = _jsonOr(job.auto_ids, [])[0] || null;
+  const T = require('./dbUtils').tx;
+  if (!autoId) {
+    await runQuery("UPDATE camfrog_link_jobs SET state = 'after', updated = ? WHERE id = ? AND state = 'merge'", [Date.now(), job.id]);
+    return;
   }
+  // 1.99gi: both accounts' level locks (sorted) through the merge and its afterMerge settle, so a game XP award can't
+  // interleave with the xp/level write
+  await withLevelLocks([userId, String(autoId)], async () => {
+    const report = await T(async () => {
+      const j = (await getQuery('SELECT state, result FROM camfrog_link_jobs WHERE id = ?', [job.id]))[0];
+      if (!j || j.state !== 'merge') return null;                // merged meanwhile
+      const answer = _jsonOr(j.result, {});
+      const auto = (await getQuery(
+        'SELECT userId, points_balance, xp, level, twitchBonus, twitchBonus_at, discordBonus, discordBonus_at, liked FROM users WHERE userId = ?',
+        [autoId]))[0];
+      if (!auto) {
+        console.log(`[CF-MERGE] job #${job.id}: the auto account ${autoId} is gone - nothing to merge`);
+        await runQuery("UPDATE camfrog_link_jobs SET state = 'after', result = ?, updated = ? WHERE id = ?",
+                       [JSON.stringify(Object.assign(answer, { merged: false, addedBalance: 0, addedXp: 0 })), Date.now(), job.id]);
+        return null;
+      }
+      const me = (await getQuery('SELECT points_balance, xp, level FROM users WHERE userId = ?', [userId]))[0];
+      if (!me) throw new Error(`camfrog link: the account ${userId} is gone`);
+      // 1.99gg: the cumulative XP of both (mergeXpOf); new levels are paid by afterMerge below
+      const mx = mergeXpOf(me, auto);
+      const pat = Number(auto.points_balance) || 0;
+      console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${mx.otherTotal} (Lv ${auto.level || 0})`);
+      await runQuery(
+        `UPDATE users SET
+          points_balance = COALESCE(points_balance, 0) + ?,
+          xp = ?,
+          level = ?,
+          liked = COALESCE(liked, 0) + ?,
+          twitchBonus = CASE WHEN twitchBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
+          twitchBonus_at = COALESCE(twitchBonus_at, ?),
+          discordBonus = CASE WHEN discordBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
+          discordBonus_at = COALESCE(discordBonus_at, ?)
+        WHERE userId = ?`,
+        [pat, mx.store.xp, mx.store.level, auto.liked || 0,
+         auto.twitchBonus, auto.twitchBonus_at, auto.discordBonus, auto.discordBonus_at, userId]
+      );
+      await runQuery('UPDATE transactions SET userId = ? WHERE userId = ?', [userId, auto.userId]);
+      // Everything else the auto account owned (badges, cosmetics, roles, spins, orders…) moves too.
+      // Badges left behind used to be awarded AGAIN, with full XP + PAT, once the merged account was
+      // active (the auto account had them from the quiet backfill).
+      const autoRow = (await getQuery('SELECT * FROM users WHERE userId = ?', [auto.userId]))[0];
+      const meRow = (await getQuery('SELECT userId, username FROM users WHERE userId = ?', [userId]))[0];
+      // adultgate site: an age confirmation the auto account had carries over (the earliest one is kept)
+      if (autoRow && Number(autoRow.age_confirmed_at) > 0) {
+        const vcol = 'age_confirmed_v' in autoRow;      // the wording's version moves with it (adultgate.js)
+        await runQuery(`UPDATE users SET age_confirmed_at = ?${vcol ? ', age_confirmed_v = ?' : ''} WHERE userId = ? AND (age_confirmed_at IS NULL OR age_confirmed_at > ?)`,
+                       vcol ? [Number(autoRow.age_confirmed_at), autoRow.age_confirmed_v || null, userId, Number(autoRow.age_confirmed_at)]
+                            : [Number(autoRow.age_confirmed_at), userId, Number(autoRow.age_confirmed_at)]);
+      }
+      const rep = await moveUserRows(auto.userId, userId);
+      console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(rep.moved)}${Object.keys(rep.left).length ? ` LEFT ${JSON.stringify(rep.left)}` : ""}`);
+      try {
+        await archiveMerged(autoRow, meRow, { via: "camfrog link", balance: pat });
+        await logMerge({ via: "camfrog link", from: autoRow || { userId: auto.userId }, to: meRow || { userId }, pat, xp: mx.otherTotal, report: rep });
+      } catch (e) { console.error("[CF-MERGE] merge record:", e.message); }
+      await ledger.recordMerge(auto.userId, userId, 'camfrog link');   // 1.99ga: late credits follow it here
+      await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
+      await runQuery("UPDATE camfrog_link_jobs SET state = 'after', result = ?, error = NULL, next_at = NULL, updated = ? WHERE id = ?",
+                     [JSON.stringify(Object.assign(answer, { merged: true, addedBalance: pat, addedXp: mx.otherTotal })), Date.now(), job.id]);
+      return rep;
+    });
+    if (report) await afterMerge(userId, report);   // caches, the level-up settle, the auto escrow - after the commit
+  });
+}
+
+/** Step 2's after-steps (each idempotent, each never throws), in the order the old path ran them. */
+async function _afterLinkJob(job) {
+  const userId = String(job.user_id), cfLower = String(job.login);
+  const LR = require('./loginrekey');
+  // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js) - once per change
+  // (verifyfix: it ran twice; a retried job doesn't record it again)
+  const oldKey = LR.keyOf(job.before_login, userId), newKey = LR.keyOf(cfLower, userId);
+  if (oldKey !== newKey) {
+    const had = (await getQuery('SELECT 1 FROM login_changes WHERE userId = ? AND old_key = ? AND new_key = ? AND at >= ? LIMIT 1',
+                                [userId, oldKey, newKey, Number(job.created) || 0]))[0];
+    if (!had) await LR.changedSafe(userId, job.before_login || null, cfLower, 'camfrog:relink');
+  }
+  await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
+  // 1.99ajn padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
+  try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
+  try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
+  try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }
+  // D11-site-roles: the site class follows this login's role now (staffroles.reconcile - not 5 minutes later): a relink
+  // from a login with a role dropped the class it gave (staffroles' unlink trigger), and this one gives its own back
+  await require('./staffroles').reconcile([cfLower]).catch((e) => console.error('[CF-VERIFY] roles:', e.message));
+}
+
+const _linkRuns = new Map();       // job id -> its run (one at a time per job; the site runs in one process)
+/** Step 2 for one job. -> the answer ({websiteUsername, camfrogUsername, merged, addedBalance, addedXp, unlinkedFrom}).
+ *  Throws when the merge failed (the job keeps the error and its next try; the tick retries it). */
+function runCamfrogLinkJob(id) {
+  const k = Number(id);
+  if (_linkRuns.has(k)) return _linkRuns.get(k);
+  const p = _runLinkJob(k).finally(() => { _linkRuns.delete(k); });
+  _linkRuns.set(k, p);
+  return p;
+}
+async function _runLinkJob(id) {
+  await _linkReady();
+  let job = await _linkJob(id);
+  if (!job) return null;
+  const t0 = Date.now();
+  if (job.state === 'merge') {
+    try { await _mergeLinkJob(job); } catch (e) {
+      const tries = (Number(job.tries) || 0) + 1;
+      const wait = Math.min(LINK_RETRY_MAX_MS, 60000 * Math.pow(2, Math.min(tries - 1, 10)));
+      const msg = String((e && e.message) || e).slice(0, 500);
+      await runQuery("UPDATE camfrog_link_jobs SET tries = ?, error = ?, next_at = ?, updated = ? WHERE id = ? AND state = 'merge'",
+                     [tries, msg, Date.now() + wait, Date.now(), id]).catch(() => {});
+      console.error(`[CF-LINK] job #${id}: the merge failed (try ${tries}; again in ${Math.round(wait / 1000)} s): ${msg}`);
+      throw e;
+    }
+    job = await _linkJob(id);
+  }
+  if (job && job.state === 'after') {
+    await _afterLinkJob(job);
+    await runQuery("UPDATE camfrog_link_jobs SET state = 'done', error = NULL, next_at = NULL, updated = ? WHERE id = ? AND state = 'after'", [Date.now(), id]);
+    job = await _linkJob(id);
+    console.log(`[CF-LINK] job #${id} done in ${Date.now() - t0} ms`);
+  }
+  return job ? _jobAnswer(job) : null;
+}
+/** The tick: jobs that aren't done and are due (a failed merge, a run a restart cut short). -> how many finished */
+async function runCamfrogLinkJobs({ now = Date.now(), limit = 10 } = {}) {
+  await _linkReady();
+  const due = await getQuery("SELECT id FROM camfrog_link_jobs WHERE state != 'done' AND (next_at IS NULL OR next_at <= ?) ORDER BY id LIMIT ?",
+                             [now, limit]);
+  let n = 0;
+  for (const { id } of due) {
+    try { await runCamfrogLinkJob(id); n++; } catch (e) { /* logged by the run; tried again when due */ }
+  }
+  await runQuery("DELETE FROM camfrog_link_jobs WHERE state = 'done' AND updated < ?", [now - LINK_KEEP_MS]).catch(() => {});
+  return n;
+}
+/** Every job run that is under way has finished (tests). */
+async function settleCamfrogLinks() {
+  while (_linkRuns.size) await Promise.allSettled([..._linkRuns.values()]);
+}
+let _linkTimer = null;
+/** index.js: the retry tick (a minute; the first 15 s after start, for a run a restart cut short). */
+function startCamfrogLinkJobs({ everyMs = 60000 } = {}) {
+  if (_linkTimer) return;
+  const tick = () => { runCamfrogLinkJobs().catch((e) => console.error('[CF-LINK] tick:', e.message)); };
+  const first = setTimeout(tick, 15000);
+  if (first.unref) first.unref();
+  _linkTimer = setInterval(tick, everyMs);
+  if (_linkTimer.unref) _linkTimer.unref();
+}
+
+/** Link `camfrogUsername` to `userId` and merge its auto account - all of it before this returns (the !signup claim page,
+ *  autoescrow.redeemClaim). Throws when the merge failed (the link stands; the job tick retries the merge). */
+async function completeCamfrogLink(userId, camfrogUsername) {
+  const a = await _linkNow(userId, camfrogUsername);
+  const r = (await runCamfrogLinkJob(a.jobId)) || a.result;
+  return { merged: !!r.merged, addedBalance: r.addedBalance || 0, addedXp: r.addedXp || 0, unlinkedFrom: r.unlinkedFrom || null };
 }
 
 // Step 1: Initiate camfrog link — generates a verification code the user must type in chat.
@@ -721,7 +865,36 @@ async function updateCamfrogUsername(req, res) {
 // Step 2: Bot calls this when a user types !verify CODE in Camfrog chat.
 // Body: { code, camfrogUsername (from chat author), password (bot token) }
 // Verifies the chat author's username matches the pending link, then completes it.
+// verifyfix: the answer is the link's (committed first) and comes at once - the auto account's merge is waited for at most
+// CF_LINK_WAIT_MS (see completeCamfrogLink above); a repeat !verify of the code that login just used (Pepe's retry after
+// his 10 s timeout) answers 200 again with the same payload + already: true (frida-bot.py handle_verify reads success,
+// websiteUsername, unlinkedFrom, merged, addedBalance, addedXp).
+function _verifyPayload(r, extra = {}) {
+  return Object.assign({
+    success: true,
+    websiteUsername: r.websiteUsername,
+    camfrogUsername: r.camfrogUsername,
+    merged: !!r.merged,
+    addedBalance: r.addedBalance || 0,
+    addedXp: r.addedXp || 0,
+    unlinkedFrom: r.unlinkedFrom || null,
+  }, r.pending ? { pending: true } : {}, extra);
+}
+/** The answer again for the login that used `code` within LINK_REPLAY_MS and is still linked to that account; else null. */
+async function _linkReplay(code, login) {
+  await _linkReady();
+  const j = (await getQuery('SELECT * FROM camfrog_link_jobs WHERE code = ? ORDER BY id DESC LIMIT 1', [code]))[0];
+  if (!j || String(j.login) !== login || Date.now() - Number(j.created) > LINK_REPLAY_MS) return null;
+  const u = (await getQuery('SELECT username, camfrogUsername FROM users WHERE userId = ?', [j.user_id]))[0];
+  if (!u || String(u.camfrogUsername || '').toLowerCase().trim() !== login) return null;     // unlinked / moved on since
+  return _verifyPayload(Object.assign(_jobAnswer(j), { websiteUsername: u.username }), { already: true });
+}
+const _within = (p, ms) => {
+  let t = null;
+  return Promise.race([p, new Promise((r) => { t = setTimeout(() => r(null), ms); })]).finally(() => clearTimeout(t));
+};
 async function verifyCamfrogLink(req, res) {
+  const t0 = Date.now();
   const { code, camfrogUsername, password } = req.body;
   if (!require('./botkeys').isBotToken(password)) {   // 1.99acf: botkeys.js (a key caller, or the shared token - counted)
     return res.status(403).json({ error: 'Invalid bot token' });
@@ -731,48 +904,51 @@ async function verifyCamfrogLink(req, res) {
   }
 
   try {
+    const C = String(code).toUpperCase().trim();
+    const who = String(camfrogUsername).toLowerCase().trim();
     const pending = await getQuery(
       'SELECT userId, camfrogUsername, expires_at FROM pending_camfrog_links WHERE code = ?',
-      [code.toUpperCase()]
+      [C]
     );
     if (pending.length === 0) {
+      const again = await _linkReplay(C, who);
+      if (again) {
+        console.log(`[CF-VERIFY] a repeat of a code just used - already linked (answered in ${Date.now() - t0} ms)`);
+        return res.json(again);
+      }
       return res.status(404).json({ error: 'Invalid or expired verification code' });
     }
 
     const entry = pending[0];
     if (new Date(entry.expires_at) < new Date()) {
-      await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code.toUpperCase()]);
+      await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [C]);
       return res.status(410).json({ error: 'Verification code expired' });
     }
 
     // Critical: confirm the chat author's username matches the username they claimed
-    if (entry.camfrogUsername.toLowerCase() !== camfrogUsername.toLowerCase()) {
+    if (entry.camfrogUsername.toLowerCase() !== who) {
       return res.status(403).json({
         error: `Code belongs to camfrog user "${entry.camfrogUsername}", not "${camfrogUsername}". Each user must verify their own link.`
       });
     }
 
-    // Complete the link with merge logic
-    const result = await completeCamfrogLink(entry.userId, entry.camfrogUsername);
-    // D11-site-roles: the site class follows this login's role now (staffroles.reconcile - not 5 minutes later): a relink
-    // from a login with a role dropped the class it gave (staffroles' unlink trigger), and this one gives its own back
-    await require('./staffroles').reconcile([entry.camfrogUsername]).catch((e) => console.error('[CF-VERIFY] roles:', e.message));
-
-    // Clear the pending entry
-    await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code.toUpperCase()]);
-
-    // Get the website username for the response
-    const userRow = await getQuery('SELECT username FROM users WHERE userId = ?', [entry.userId]);
-
-    res.json({
-      success: true,
-      websiteUsername: userRow[0]?.username,
-      camfrogUsername: entry.camfrogUsername,
-      merged: result.merged,
-      addedBalance: result.addedBalance || 0,
-      addedXp: result.addedXp || 0,
-      unlinkedFrom: result.unlinkedFrom || null,
-    });
+    // the link itself, committed (the code is spent in the same transaction)
+    const a = await _linkNow(entry.userId, entry.camfrogUsername, { code: C });
+    if (a.spent) {                                   // a !verify of the same code got there first
+      const again = await _linkReplay(C, who);
+      if (again) {
+        console.log(`[CF-VERIFY] the same code twice at once - already linked (answered in ${Date.now() - t0} ms)`);
+        return res.json(again);
+      }
+      return res.status(404).json({ error: 'Invalid or expired verification code' });
+    }
+    const tLink = Date.now() - t0;
+    const run = runCamfrogLinkJob(a.jobId);
+    run.catch(() => {});                             // a failed merge is logged and kept for the job tick
+    const done = await _within(run.then((r) => r, () => null), LINK_WAIT_MS);
+    const r = done || Object.assign({}, a.result, a.result.merged ? { pending: true } : {});
+    console.log(`[CF-VERIFY] job #${a.jobId} answered in ${Date.now() - t0} ms (link ${tLink} ms; ${done ? 'merge + after-steps done' : 'the rest continues in the background'})`);
+    res.json(_verifyPayload(r));
   } catch (err) {
     console.error('[CF-VERIFY] Error:', err);
     res.status(500).json({ error: 'Verification failed' });
@@ -1127,6 +1303,10 @@ module.exports = {
   updateCamfrogUsername,
   verifyCamfrogLink,
   completeCamfrogLink,  // 1.99afx: the !signup claim page (autoescrow.redeemClaim) links through it - it was never exported
+  runCamfrogLinkJob,    // verifyfix: a link's merge + after-steps (camfrog_link_jobs)
+  runCamfrogLinkJobs,   // verifyfix: the retry tick's pass
+  settleCamfrogLinks,   // verifyfix: (tests) the runs under way have finished
+  startCamfrogLinkJobs, // verifyfix: index.js starts the retry tick
   awardBadge,
   xpForNextLevel,
   updateLevel,
