@@ -8,8 +8,11 @@ and is installed on the same core as Hold'em (`casino/service.js` `TN`). The tab
 at a cash table. Phase 2 (scheduled multi-table tournaments, late registration, guarantees after H2b) is not built.
 
 **Switch.** `casino_settings.casino_sng` = `off` (default) | `staff` (class Staff and up, or `casino.admin`) | `everyone`.
-Hold'em on the site (`hm_enabled`) must be on too. The switch gates creating and registering only: leaving a registering
-sit & go (a full refund), playing one that started and an admin's cancel always work.
+Hold'em on the site (`hm_enabled`) must be on too. The switch gates creating and registering, and while it's off (or `staff`,
+for a member) `!sng` / `!sng help` / `!sng info` answer "switched off" / "staff only" - an entrant still sees the ones they're in.
+Leaving a registering sit & go (a full refund), playing one that started and an admin's cancel always work. The web lobby
+(`/casino/holdem`) follows the Hold'em front end: while `hm_front` is `pepe` it redirects to Pepe's tables, so the Sit & Go
+section and its Create sheet aren't reachable there (the admin card says so); a sit & go's own table page always opens.
 
 **Settings** (`/admin/games` "Sit & Go", `POST /api/casino/admin/settings`, validated by `tourney.js checkSetting`, a bad stored
 row reads as its default; a sit & go keeps the values it opened with):
@@ -24,8 +27,11 @@ row reads as its default; a sit & go keeps the values it opened with):
 | `sng_turbo_mins` | `3` | 1-60 |
 
 Constants (`tourney.js SNG`): 1,500 starting chips, 2-9 seats, a 60 s countdown for "start at N", a registering sit & go
-is called off (full refunds) 60 minutes after it opened, at most 3 not-started sit & gos per account, a finished one's
-results stay in the lobby / on its page for 15 minutes.
+is called off (full refunds) 60 minutes after it opened - unless a "start at N" countdown is running then (N are in): that
+countdown runs out and it starts - at most 3 not-started sit & gos per account, a finished one's results stay in the lobby /
+on its page for 15 minutes. A create by the same account for the same sit & go (seats, buy-in, turbo, start at) within 2
+minutes of opening one (`DUP_MS`: its reply lost to a restart, a double click under a new key) answers with that one - never a
+second sit & go or a second hold.
 
 **Shape.** The creator picks the seats, a buy-in from the list, turbo, and optionally "start at N" (2 <= N < seats); the
 creator is registered. Registration uses the cash tables' entry rule (`holdem.js seatChecks` over everyone registered):
@@ -33,9 +39,18 @@ an account, no casino ban, no dup-linked account, no second account from the sam
 the countdown runs out with N or more in (the countdown stops when a leave takes it below N). Seats follow registration
 order; the first seat has the first button. No late registration, rebuys, add-ons or antes.
 
+At its table the bare Hold'em verbs mean the sit & go's: `!sit` / `!buyin` / `!join` register (an amount that isn't the buy-in
+or the whole entry - `!sit 2000` out of cash-table habit - is refused with the entry), `!stand` / `!leave` unregister until it
+starts, `!holdem status` / `help` are its info / help, `!holdem start` in its room points at it. A registration's reply is
+never quiet (the room's line doesn't say what was held).
+
 **Play.** Rake 0 (the engine's `rake` is 0 at a tournament table). The level's blinds are set just before each hand
-(`beforeHand`), never mid-hand; the level clock is absolute while the site runs. Sitting out = blinded away: the seat is dealt
-in and checks / folds at once (no 60 s wait). No sit-out limit, no idle close, no stand / cash-out / host close: the cash
+(`beforeHand`), never mid-hand; the level clock is absolute while the site runs. Sitting out = blinded away: a seat sitting out
+when a hand is dealt (`tourney.hand_start.out`) is dealt in and checks / folds at once (no 60 s wait). `!sitout` during a hand
+starts with the next one (that hand is still the player's, as the button says); two timeouts in a row sit a seat out at once
+for the rest of the hand too; a seat that is out never spends its time bank (its 60 s run out, then a check / fold). When the
+button busts, the button goes back to the nearest seat still in before it, so the next hand moves it on clockwise (the
+engine would give a stood-up button to the first seat). No sit-out limit, no idle close, no stand / cash-out / host close: the cash
 paths (`cashout`, `closeTable`) return at once for a tournament table. A sit & go hand earns no casino rewards (achievements,
 drops, win XP, gang rep - `service.js hmRewards`); the prizes are the payout.
 
@@ -51,7 +66,8 @@ leaves (< one PAT per paid place) goes to 1st. So prizes always sum to the pool 
 
 ### Money
 
-Every PAT move is ONE `dbUtils.tx`: the escrow leg (`escrow/ledger.js` in-transaction primitives), its `escrow_moves` journal
+The PAT supply (`supply.js casinoHeld`) never counts a sit & go's tournament chips: its PAT is the entries' `TNY` holds, counted
+with the escrow. Every PAT move is ONE `dbUtils.tx`: the escrow leg (`escrow/ledger.js` in-transaction primitives), its `escrow_moves` journal
 row (`seen` / `record` under the key below) and the table's saved state (`service.save` -> `casino_tables`) commit or roll back
 together. A refused move changes nothing (the in-memory table is restored from a snapshot). Hold kind `TNY` (ref
 `TNY-<table>`) is in `SERVICE_KINDS`: never in Pepe's mirror, never handed back by a rollback, his keyed calls can't move it.
@@ -61,7 +77,7 @@ together. A refused move changes nothing (the in-memory table is restored from a
 | register | `tny:<table>:<user>:enter:<n>` (n = that account's nth registration here) | wallet -> hold (buy-in + fee, `requireCover`: refused with nothing held when the wallet can't cover it; refused for a casino ban) | the entrant and the hold commit together: either both are there or neither; a retry of the same request is answered from `casino_actions`; registering again after leaving is a new n |
 | unregister (before the start) | `tny:<table>:<user>:refund:<n>` | hold -> wallet, in full (fee too) | `seen` = already refunded: the state is fixed up, nothing moves twice |
 | start | - | none (tournament chips only) | a full field saved as registering is started by `recover`; a countdown / the registration hour keep the time they had left at the last save |
-| a hand | - | none | mid-hand: the hand resumes (fresh clock for the actor); the running level keeps the time it had left at the last save (the clock pauses while the site is down); a hand that ended before its bust-outs were placed is placed again from the saved start stacks (places are idempotent) |
+| a hand | - | none | mid-hand: the hand resumes (fresh clock for the actor); the running level keeps the time it had left at the last save (the clock pauses while the site is down); a hand that ended before its bust-outs were placed is placed again from the saved start stacks (places are idempotent). A hand whose wrap-up threw part-way (a failed write after its proof: running, between hands, nothing scheduled or one stack left) is wrapped up again by the tick (`holdem.js wrapUp`, once a minute while it keeps failing) - with or without a restart |
 | finish | `tny:<table>:finish` | ONE `settleInTx`: every entry hold spent; payouts to the placed accounts; fee leg `["jackpot", fee x entrants]` = a `jackpot_rakes` row `esc-tny:<table>:finish-0` (spinId `escrow:TNY-<table>`) | the places + `status: "settling"` + the plan are saved first; `recover` / the tick re-run the settle; `seen` = paid: only marked finished. The settle runs only if prizes + fee == held (it never leaves a "kept" rest) |
 | cancel (admin) / the hour's call-off | per entrant `tny:<table>:<user>:refund:<n>`, then `tny:<table>:cancel` | each hold -> wallet in full (fee too) | refused once `tny:<table>:finish` is seen (paid out); per-hold keys skip what's done |
 
@@ -73,19 +89,21 @@ Conservation (test/casino-sng.test.js, 6 players at 1K): wallets + House + held 
 - `GET /api/casino/t/:id` -> `table.tourney` (names only, masked by the table's veil; no account or hold ids): `{id, short, status:
   registering|running|settling|finished|cancelled, size, field, start_at, turbo, buyin, fee, entry, stack, level_mins, registered,
   entrants: [{name}], countdown_at, expires_at, level (1-based), sb, bb, next_sb, next_bb, level_ends_at (ms), level_secs_left,
-  players_left, pool, fee_total, prizes: [PAT by place], places: [{place, name, prize, tied}], cancelled: null|cancelled|expired|empty}`;
-  `me.tourney` = `{registered, place, prize}`.
+  countdown_secs_left (the countdown in seconds on the site's clock, or null), players_left, pool, fee_total, prizes: [PAT by place],
+  places: [{place, name, prize, tied}], cancelled: null|cancelled|expired|empty}`; `me.tourney` = `{registered, can_register, place,
+  prize}` (`can_register`: the page offers Register only then - the switch, staff only, a casino ban; the entry rule decides at the click).
 - `GET /api/casino/sng` and `GET /api/casino/lobby` -> `sng`: `{on, audience, can_create, sizes, buyins, fee_pct, payouts, level_mins,
   turbo_mins, stack, countdown_secs, reg_mins, list: [row]}`; a row = `{id, short, url, host, status, size, field, registered, start_at,
   turbo, buyin, fee, entry, stack, level_mins, countdown_at, expires_at, level, sb, bb, players_left, prizes, winner, me, rooms, on_stream}`.
-  Sit & gos are not in the cash lobby's `tables` nor in the poll's `open`.
+  Sit & gos are not in the cash lobby's `tables` nor in the poll's `open`. The lobby's Register / Create follow `can_create`.
 - `POST /api/casino/sng/new {size, buyin, turbo, start_at, idem}`, `POST /api/casino/sng/:id/register|unregister {idem}`,
   `POST /api/casino/sng/:id/cancel {idem, reason}` (casino.admin, in the admin log as `casino_sng_cancel`) - JSON + `X-Requested-With: fetch`.
 - Pepe: `POST /api/casino/bot/act` with `game: "sng"` and `verb` `""`/`list` | `new` (args `[seats, buy-in, "turbo"?, "at", N]`, up to 5) |
   `join` / `leave` / `info` (`[id-or-prefix?]`; no id = the room's sit & go, else the only one that fits) | `cancel` (`[id, reason?]`,
   the PATV account needs `casino.admin` - Pepe's `admin` flag is not enough) | `help`. `BOT_VERBS` has them. At a sit & go's table the
   bare Hold'em verbs work as at a cash table; `!sit` / `!join` register and `!stand` / `!leave` unregister while it registers, and are
-  refused once it runs. The poll adds `sng` (the open rows) and each sit & go table in `tables` carries `tourney`. Events: `opened`,
+  refused once it runs. The poll adds `sng` (the open rows), `sng_on` (the switch: `off` | `staff` | `everyone`; `off` while Hold'em is
+  off - Pepe sends `!sng` only to a site whose poll has `sng`) and each sit & go table in `tables` carries `tourney`. Events: `opened`,
   `line` (registrations, countdown, "Blinds up"), `sng` (`data.sng`: start / bust / won / finished / cancelled), `closed`.
 
 ## Own hands and show / muck (handoff 21, phase 2)

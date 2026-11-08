@@ -8765,6 +8765,7 @@
   "js.casino.sng_register_n": "Register · {n} PAT",
   "js.casino.sng_unregister": "Unregister",
   "js.casino.sng_none": "No Sit & Go is open right now. Create one and others can join you.",
+  "js.casino.sng_none_view": "No Sit & Go is open right now.",
   "js.casino.sng_staff_only": "Sit & Gos are open to staff only for now.",
   "js.casino.sng_when_full": "When it's full",
   "js.casino.sng_at_opt": "At {n} players (a {s} s countdown)",

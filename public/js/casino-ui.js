@@ -490,7 +490,7 @@
     if (reg && signed) {
       act = r.me ? `<button type="button" class="cz-btn ghost sm" data-sngact="unregister" data-id="${esc(r.id)}">${esc(T("sng_unregister", "Unregister"))}</button>`
         : r.registered >= r.size ? `<span class="tag">${esc(T("full", "Full"))}</span>`
-        : sg.on ? `<button type="button" class="cz-btn gold sm" data-sngact="register" data-id="${esc(r.id)}">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(r.entry) }))}</button>` : "";
+        : sg.can_create ? `<button type="button" class="cz-btn gold sm" data-sngact="register" data-id="${esc(r.id)}">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(r.entry) }))}</button>` : "";
     }
     const where = (r.rooms || []).map((x) => `<span class="tag blue">🐸 ${esc(x.name)}</span>`).join("");
     const title = esc(T("sng_of", "{host}'s Sit & Go", { host: r.host }));
@@ -506,6 +506,7 @@
   }
   let sngData = null;
   const sngPick = { buyin: null };
+  let sngBusy = false;          // (review) the Create request is out: the lobby poll's sngSheet() keeps the button off (no second sit & go)
   function renderSng(j) {
     const sec = $("cz-sng");
     if (!sec) return;
@@ -514,8 +515,10 @@
     const list = sg ? sg.list || [] : [];
     sec.hidden = !sg || (!sg.on && !list.length) || lobbyTab === "bj";
     if (sec.hidden) return;
+    // (review: Register / Create / "Create one" only for who may enter - can_create; staff only: a member watches)
     const html = list.length ? list.map((r) => sngCard(r, sg)).join("")
-      : `<div class="lob-empty">${esc(T("sng_none", "No Sit & Go is open right now. Create one and others can join you."))}</div>`;
+      : `<div class="lob-empty">${esc(sg.can_create ? T("sng_none", "No Sit & Go is open right now. Create one and others can join you.")
+                                                      : T("sng_none_view", "No Sit & Go is open right now."))}</div>`;
     if ($("cz-sngs").dataset.v !== html) { $("cz-sngs").dataset.v = html; $("cz-sngs").innerHTML = html; tickSng(); }
     const note = $("cz-sng-note");
     if (note.dataset.def === undefined) note.dataset.def = note.textContent;
@@ -556,8 +559,9 @@
         prizes: prizes.map((p, i) => medal(i) + " " + fmt(p)).join(" · ") });
     const bal = lobbyData && lobbyData.me ? lobbyData.me.balance : null;
     const go = $("cz-sng-go");
-    go.disabled = bal != null && bal < sngPick.buyin + fee;
-    go.textContent = go.disabled ? T("not_enough", "not enough PAT") : T("sng_create_n", "Create and register · {n} PAT", { n: fmt(sngPick.buyin + fee) });
+    const poor = bal != null && bal < sngPick.buyin + fee;
+    go.disabled = sngBusy || poor;
+    go.textContent = poor ? T("not_enough", "not enough PAT") : T("sng_create_n", "Create and register · {n} PAT", { n: fmt(sngPick.buyin + fee) });
   }
   function wireSng() {
     if (!$("cz-sng")) return;
@@ -573,12 +577,16 @@
     });
     $("cz-sng-go").addEventListener("click", async () => {
       const go = $("cz-sng-go");
-      if (go.disabled) return;
+      if (go.disabled || sngBusy) return;
+      sngBusy = true;
       go.disabled = true;
       const at = $("cz-sng-at").value;
-      const j = await post("/api/casino/sng/new", { size: Number($("cz-sng-size").value), buyin: sngPick.buyin, turbo: $("cz-sng-turbo").checked,
-                                                   start_at: at ? Number(at) : null, idem: idem() });
-      go.disabled = false;
+      let j = {};
+      try {
+        j = await post("/api/casino/sng/new", { size: Number($("cz-sng-size").value), buyin: sngPick.buyin, turbo: $("cz-sng-turbo").checked,
+                                               start_at: at ? Number(at) : null, idem: idem() });
+      } catch (e) { j = {}; } finally { sngBusy = false; }
+      sngSheet();
       if (j.ok && j.table) location.href = "/casino/holdem/t/" + encodeURIComponent(j.table);
       else toast(j.reply || j.error || T("sng_create_fail", "Couldn't create the Sit & Go."), true);
     });

@@ -201,7 +201,9 @@
     if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_hm", "You're watching. Hole cards stay hidden until a showdown."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
     else if (open && tn && me && !me.seat) {
       wtxt = me.tourney && me.tourney.place ? `🏁 ${esc(T("sng_out_note", "You're out — thanks for playing."))}`
-           : tn.status === "registering" ? (me.tourney && me.tourney.registered ? "" : `🏁 ${esc(T("sng_watch_reg", "Register in the Sit & Go above to play."))}`)
+           : tn.status === "registering" ? (me.tourney && me.tourney.registered ? ""     // (review: the invitation only for who may enter)
+                                            : me.tourney && me.tourney.can_register ? `🏁 ${esc(T("sng_watch_reg", "Register in the Sit & Go above to play."))}`
+                                            : `👁 ${esc(T("sng_watch_run", "You're watching a Sit & Go."))}`)
            : `👁 ${esc(T("sng_watch_run", "You're watching a Sit & Go."))}`;
     }
     else if (open && me && !me.seat && hrLocked) wtxt = `💎 ${esc(T("watching_hr_hm", "A High Roller table: you're watching. Only High Rollers can sit here."))} <a href="/shop">${esc(T("hr_get", "Get the role"))}</a>`;
@@ -251,7 +253,7 @@
     const acts = [];
     if (reg && CZ.signed && me) {
       if (mt.registered) acts.push(`<button type="button" class="cz-btn ghost sm" data-sng="unregister">${esc(T("sng_unregister", "Unregister"))}</button>`);
-      else if (tn.registered < tn.size) acts.push(`<button type="button" class="cz-btn gold sm" data-sng="register">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(tn.entry) }))}</button>`);
+      else if (mt.can_register) acts.push(`<button type="button" class="cz-btn gold sm" data-sng="register">${esc(T("sng_register_n", "Register · {n} PAT", { n: fmt(tn.entry) }))}</button>`);
     }
     if ((reg || live) && me && me.admin && tn.status !== "settling") acts.push(`<button type="button" class="cz-btn red sm" data-sng="cancel">${esc(T("sng_cancel", "Cancel (refund everyone)"))}</button>`);
     if (acts.length) html += `<div class="sng-acts">${acts.join("")}</div>`;
@@ -373,7 +375,8 @@
     $("cz-sitout").hidden = !me.seat || me.sitting_out || me.waiting_bb;
     $("cz-sitin").hidden = !me.seat || !me.sitting_out;
     $("cz-postnow").hidden = !me.seat || !(me.sitting_out || me.waiting_bb);
-    if (t.tourney) for (const id of ["cz-sit", "cz-deal", "cz-topup", "cz-leave"]) $(id).hidden = true;   // (h22: a sit & go deals itself; no PAT in or out)
+    // (h22: a sit & go deals itself; no PAT in or out; review: and every seat posts its blinds - no "post the big blind now")
+    if (t.tourney) for (const id of ["cz-sit", "cz-deal", "cz-topup", "cz-leave", "cz-postnow"]) $(id).hidden = true;
     $("cz-showlabel").hidden = !me.seat;
     $("cz-showhand").checked = !!me.show_hand;
     $("cz-pre").hidden = !(me.in_hand && !me.folded && !myTurn);

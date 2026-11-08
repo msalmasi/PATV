@@ -94,6 +94,8 @@
   <h2 id="casinoSngT">🏁 Sit &amp; Go <span class="adm-pill admin">admins</span></h2>
   <% if (!_can('casino.admin') || !locals.casino) { %><p class="adm-help">Admins only.</p><% } else { const _c = locals.casino; %>
   <p class="adm-help">One-table Hold'em tournaments: everyone pays the same entry (buy-in + the fee, held in escrow), plays tournament chips (not PAT), and the finish pays the prizes and the fee to the House in one move. Needs Hold'em on the site on (now <b><%= _c.hm_enabled ? 'on' : 'off' %></b>). Changes apply to sit &amp; gos opened after them.</p>
+  <%# h22 review: /casino/holdem (the web lobby with the Sit & Go section + its Create sheet) redirects to Pepe's tables while the Hold'em front is "pepe" %>
+  <% if (_c.hm_front === 'pepe') { %><p class="adm-help" id="sngFront"><b>Heads-up:</b> the Hold'em front end is set to <b>pepe</b> (Casino front end, above), so the web lobby /casino/holdem, where the Sit &amp; Go section and its Create sheet are, sends people to Pepe's tables instead. Set the Hold'em front to <b>auto</b> or <b>patv</b> for it; a sit &amp; go's own table page works either way.</p><% } %>
   <form id="sngForm" class="adm-form">
     <label>Who can play
       <select name="casino_sng"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>"<%= _c.casino_sng === v ? ' selected' : '' %>><%= v %></option><% }) %></select>
