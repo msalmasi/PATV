@@ -746,23 +746,28 @@ async function _runLinkJob(id) {
   let job = await _linkJob(id);
   if (!job) return null;
   const t0 = Date.now();
-  if (job.state === 'merge') {
-    try { await _mergeLinkJob(job); } catch (e) {
-      const tries = (Number(job.tries) || 0) + 1;
-      const wait = Math.min(LINK_RETRY_MAX_MS, 60000 * Math.pow(2, Math.min(tries - 1, 10)));
-      const msg = String((e && e.message) || e).slice(0, 500);
-      await runQuery("UPDATE camfrog_link_jobs SET tries = ?, error = ?, next_at = ?, updated = ? WHERE id = ? AND state = 'merge'",
-                     [tries, msg, Date.now() + wait, Date.now(), id]).catch(() => {});
-      console.error(`[CF-LINK] job #${id}: the merge failed (try ${tries}; again in ${Math.round(wait / 1000)} s): ${msg}`);
-      throw e;
+  let step = 'merge';
+  try {
+    if (job.state === 'merge') {
+      await _mergeLinkJob(job);
+      job = await _linkJob(id);
     }
-    job = await _linkJob(id);
-  }
-  if (job && job.state === 'after') {
-    await _afterLinkJob(job);
-    await runQuery("UPDATE camfrog_link_jobs SET state = 'done', error = NULL, next_at = NULL, updated = ? WHERE id = ? AND state = 'after'", [Date.now(), id]);
-    job = await _linkJob(id);
-    console.log(`[CF-LINK] job #${id} done in ${Date.now() - t0} ms`);
+    if (job && job.state === 'after') {
+      step = 'after-steps';
+      await _afterLinkJob(job);
+      await runQuery("UPDATE camfrog_link_jobs SET state = 'done', error = NULL, next_at = NULL, updated = ? WHERE id = ? AND state = 'after'", [Date.now(), id]);
+      job = await _linkJob(id);
+      console.log(`[CF-LINK] job #${id} done in ${Date.now() - t0} ms`);
+    }
+  } catch (e) {
+    // kept for the tick: tried again after 1, 2, 4 ... minutes (at most hourly); the merge's own transaction rolled back whole
+    const tries = (Number(job && job.tries) || 0) + 1;
+    const wait = Math.min(LINK_RETRY_MAX_MS, 60000 * Math.pow(2, Math.min(tries - 1, 10)));
+    const msg = String((e && e.message) || e).slice(0, 500);
+    await runQuery("UPDATE camfrog_link_jobs SET tries = ?, error = ?, next_at = ?, updated = ? WHERE id = ? AND state != 'done'",
+                   [tries, msg, Date.now() + wait, Date.now(), id]).catch(() => {});
+    console.error(`[CF-LINK] job #${id}: the ${step} failed (try ${tries}; again in ${Math.round(wait / 1000)} s): ${msg}`);
+    throw e;
   }
   return job ? _jobAnswer(job) : null;
 }
