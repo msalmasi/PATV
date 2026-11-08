@@ -779,7 +779,7 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
   const render = (extra) => ejs.render(source, Object.assign({}, locals, extra), { filename: stripFile });
   const on = render({ storyStudioOn: () => true, storyCameraOn: () => true });
-  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=9/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3
+  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=10/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3; storyplay verify: studio v=10
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);
@@ -1530,7 +1530,9 @@ test("Story camera preview verify: an error after the video took over from the p
 });
 
 test("Story camera preview verify: a gallery video whose metadata comes after the give-up opens after all - unless 'Post it as it is' was chosen", async () => {
-  const late = (node, w = 1080, h = 1920) => { node.videoWidth = w; node.videoHeight = h; node.duration = 8; node.readyState = 1; node.paused = true; node.dispatchEvent(new Ev("loadedmetadata")); };
+  // (storyplay verify: a video that said nothing at all has its play tried at the give-up - it is playing when the late metadata
+  // comes, and a metadata event pauses nothing: so no paused = true here, and that one play goes on)
+  const late = (node, w = 1080, h = 1920) => { node.videoWidth = w; node.videoHeight = h; node.duration = 8; node.readyState = 1; node.dispatchEvent(new Ev("loadedmetadata")); };
   let gv = null;
   const P = camPage({ sourceVideo: (node) => { gv = node; return true; } }), root = await openStudio(P);
   pickFile(P, "video/mp4", "big.mp4"); await flush(16); await P.clock.tick(10100);
@@ -1987,8 +1989,9 @@ test("Story play verify: a Trim handle dragged away and back (no 'change' comes)
   start = await openTrim(); scrub(start, 3); assert.equal(v.paused, true);
   fire(P.doc.activeElement, "keydown", { key: "Escape" }); await flush(6);
   assert.equal(root.getAttribute("data-sheet"), null); assert.equal(v.paused, false, "Escape mid-drag: it plays again");
-  // Trim open: the finger's lift lets it go (from the trim's start), with no 'change' - pointerup, touchend, or the handle losing focus
-  for (const lift of ["pointerup", "touchend", "blur"]) {
+  // Trim open: the finger's lift lets it go (from the trim's start), with no 'change' - pointerup or touchend (not a blur: a desktop
+  // click on Trim's ▶ moves the focus first, and the ▶ would then pause the play the blur just started)
+  for (const lift of ["pointerup", "touchend"]) {
     start = await openTrim(); const at = Number(start.value); scrub(start, at + 2, at); assert.equal(v.paused, true, lift + ": scrubbing");
     v.seeks.length = 0; fire(start, lift, { pointerType: "touch" }); await flush(6);
     assert.equal(v.paused, false, lift + ": let go, it plays again"); assert.deepEqual(v.seeks, [at], lift + ": from the trim's start");

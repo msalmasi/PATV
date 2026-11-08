@@ -954,7 +954,7 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=9/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself
+  assert.match(html, /story-studio\.js\?v=10/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself; storyplay verify (v=10): the review fixes
   assert.match(html, /story-studio\.css\?v=6/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings; storyplay (v=6): the ▶ over the picture
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);

@@ -429,7 +429,8 @@
     paintPlay(s);
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
-  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; s.trimPlay = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); hold(s, 'sheet', false); paintControls(s); layoutHandles(s); if (opener && opener.isConnected) opener.focus(); }
+  // (storyplay verify: Trim closed mid-drag - Done, Escape - lets a scrub go too: its handle is gone before any 'change')
+  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; s.trimPlay = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); s.pl.holds.scrub = false; hold(s, 'sheet', false); paintControls(s); layoutHandles(s); if (opener && opener.isConnected) opener.focus(); }
   function sheet(s, name, title) {
     var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet'); s.root.setAttribute('data-sheet', name);
     hold(s, 'sheet', name !== 'trim');       // storyplay: a sheet over the picture (text, stickers, ...) pauses a clip; Trim is the loop's own
@@ -635,9 +636,15 @@
         phase = 'still'; d.w = info.width; d.h = info.height; d.decoded = true; d.legacy = false; d.poster = true; resetFrame(d);
         length(isFinite(m.duration) && m.duration > 0 ? m.duration : info.secs);
         if (dbg) dbg.view('poster (' + why + ')');
+        // storyplay verify: a clip that said nothing at all (WebKit may hold the load of an element no tap has unlocked) had no play()
+        // tried, so no ▶ either - only Trim's ▶ could start it. It is tried now: allowed, it plays (and takes over once it has a size,
+        // meta()); refused, the ▶ shows over the poster, and its tap - a play inside a gesture - lets the load go
+        if (!m.error) { d.playable = true; run(s, 'autoplay'); }
         return opened();
       }
-      phase = 'failed'; d.decoded = false; d.legacy = false; d.playable = false; run(s); pickDone(s, n);
+      // (storyplay verify: a video that said nothing at all - no metadata, no error - is tried too: refused, the ▶ shows beside the
+      // recovery, and its tap may still open it - meta()'s size after all)
+      phase = 'failed'; d.decoded = false; d.legacy = false; d.playable = kind === 'video' && why === 'no metadata' && !m.error; run(s, 'autoplay'); pickDone(s, n);
       say(s, kind !== 'video' ? _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.')
         : coarse() ? _t('js.feed.ss.no_preview_phone', 'Your phone can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 })
         : _t('js.feed.ss.no_preview', 'This browser can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 }), true);
@@ -739,13 +746,20 @@
   // a user's gesture: the <video> plays inside it, so its later plays by themselves are allowed. What it holds plays (and is paused
   // again if it shouldn't be playing); holding nothing - or a clip that can't play - the silent clip plays and ends by itself (a
   // press, its let-go and its click in a row play it once)
+  // storyplay verify: the draft's own clip on the stage (playable or not - 'Pick another' on a video that can't preview yet) is what
+  // plays inside the tap, never swapped for the silent clip: that threw away its late metadata (ours() hears only its own source)
+  // and put the silent clip's black frame on the stage. One with an error can't play - there is nothing to unlock with.
   function unlock(s, why) {
     if (!live(s)) return;
     var m = player(s), p = s.pl, pick = s.pickId;
-    if (s.media === m && s.d.playable && !m.error) {
+    if (s.media === m) {
+      if (m.error) return;
       if (!m.paused) { mark(s, why); return; }
       p.blocked = false;
-      attempt(s, 'unlock ' + why).then(function (err) { if (allowed(err)) mark(s, why); if (s.pickId === pick && s.media === m) { if (!err && !wanted(s)) m.pause(); paintPlay(s); } });
+      attempt(s, 'unlock ' + why).then(function (err) {
+        if (allowed(err)) mark(s, why);
+        if (s.pickId === pick && s.media === m) { if (!err && !wanted(s)) m.pause(); if (err === 'NotAllowedError' && wanted(s)) p.blocked = true; paintPlay(s); }
+      });
       return;
     }
     if (srcKind(m) === 'silent' && !m.paused && !m.error) return;
@@ -1280,7 +1294,11 @@
     }
     function sync() { ['start', 'end'].forEach(function (w) { inputs[w].value = d.trim[w]; handles[w].value = d.trim[w]; handles[w].setAttribute('aria-valuetext', time(d.trim[w])); }); fill.style.insetInlineStart = d.trim.start / d.duration * 100 + '%'; fill.style.inlineSize = (d.trim.end - d.trim.start) / d.duration * 100 + '%'; report.textContent = _t('js.feed.ss.trim_range', '{start} – {end} ({n} s)', { start: time(d.trim.start), end: time(d.trim.end), n: Math.round((d.trim.end - d.trim.start) * 10) / 10 }); }
     var numbers = add(box, el('div', 'sst-position'));
-    [['start', _t('js.feed.ss.trim_start', 'Start time')], ['end', _t('js.feed.ss.trim_end', 'End time')]].forEach(function (p) { var r = handles[p[0]] = add(bar, input('range', d.trim[p[0]])); r.classList.add('sst-trim-handle', 'sst-trim-' + p[0]); r.min = 0; r.max = d.duration; r.step = .5; r.setAttribute('aria-label', p[1]); r.addEventListener('input', function () { update(p[0], +r.value); }); r.addEventListener('change', function () { update(p[0], +r.value, true); }); var n = inputs[p[0]] = input('number', d.trim[p[0]]); n.min = 0; n.max = d.duration; n.step = .5; n.addEventListener('change', function () { if (isFinite(+n.value)) update(p[0], +n.value, true); }); add(numbers, field(p[1], n)); });
+    [['start', _t('js.feed.ss.trim_start', 'Start time')], ['end', _t('js.feed.ss.trim_end', 'End time')]].forEach(function (p) { var r = handles[p[0]] = add(bar, input('range', d.trim[p[0]])); r.classList.add('sst-trim-handle', 'sst-trim-' + p[0]); r.min = 0; r.max = d.duration; r.step = .5; r.setAttribute('aria-label', p[1]); r.addEventListener('input', function () { update(p[0], +r.value); }); r.addEventListener('change', function () { update(p[0], +r.value, true); });
+      // storyplay verify: a handle dragged away and back fires no 'change' (Blink and WebKit fire it only for a new value) - the lift lets
+      // the scrub go as well, from the trim's start; a 'change' after it changes nothing
+      ['pointerup', 'touchend'].forEach(function (t) { r.addEventListener(t, function () { if (live(s) && s.pl.holds.scrub && s.sheetName === 'trim') update(p[0], +r.value, true); }); });
+      var n = inputs[p[0]] = input('number', d.trim[p[0]]); n.min = 0; n.max = d.duration; n.step = .5; n.addEventListener('change', function () { if (isFinite(+n.value)) update(p[0], +n.value, true); }); add(numbers, field(p[1], n)); });
     var actions = add(box, el('div', 'sst-position'));
     // storyplay: ▶ is play / pause of the loop (a pause by the user stays until they play it again); the sound is the header's 🔇 / 🔊
     s.trimPlay = add(actions, iconButton(_t('js.feed.ss.play', '▶️ Play / pause'), function () {
