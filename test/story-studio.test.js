@@ -299,3 +299,81 @@ test("a video pinched and dragged in Fit lands where the editor showed it (ffmpe
   assert.ok(Math.abs(spot2.x - want2.x) <= 4 && Math.abs(spot2.y - want2.y) <= 4, `marker at ${spot2.x.toFixed(1)},${spot2.y.toFixed(1)} - shown at ${want2.x.toFixed(1)},${want2.y.toFixed(1)}`);
   done(out2);
 });
+
+// ── storyux verify (the review of 2026-11-08): Fill's 5% check had no float tolerance (the editor's deepest pinch on a tall
+//    picture was refused); at deep zoom whole-source-pixel cuts were blown up by the zoom (the picture slid off the layers); a
+//    video with non-square pixels was refused in Fit (and squashed in plain Fit) ──
+test("storyux verify: Fill's crop at the editor's deepest pinch on a tall picture is accepted - five percent with the frame's float tolerance", () => {
+  const G = clientGeometry();
+  assert.ok(compose.cleanEdit(fill({ x: 0.4, y: 0.3, w: 0.21, h: 0.049999999999999996 }), { kind: "image" }).crop, "a hair under 5% by float");
+  assert.throws(() => compose.cleanEdit(fill({ x: 0.4, y: 0.3, w: 0.21, h: 0.0499 }), { kind: "image" }), /five percent/, "really under 5% still is not");
+  let tried = 0;
+  for (const w of [720, 750, 1080, 1170, 1284, 1440]) for (const h of [3205, 3215, 3227, 3500, 4000, 6000, 9000]) {
+    const own = w / h; if (!G.canFill(own)) continue;
+    // the deepest pinch, as the page posts it (a JSON round trip)
+    const crop = JSON.parse(JSON.stringify(G.zoom(G.cover(own), own, "fill", 1000, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 })));
+    assert.doesNotThrow(() => compose.cleanEdit(fill(crop), { kind: "image" }), `${w}x${h}: ${JSON.stringify(crop)}`); tried++;
+  }
+  assert.ok(tried >= 30);
+});
+
+// a 640 x 360 picture (the deep end: the deepest zoom shows 32 of its pixels across) with a 10 x 10 red marker at (326, 186) - next
+// to the middle, as Fit keeps the picture's middle in the frame (at 8x a window 5% wide holds it)
+const SMALL = { x: 326, y: 186, size: 10, W: 640, H: 360 }, SU = (SMALL.x + SMALL.size / 2) / SMALL.W, SV = (SMALL.y + SMALL.size / 2) / SMALL.H;
+const smallPng = path.join(tmp, "small.png"), smallVideo = path.join(tmp, "small.mp4");
+/** the deepest pinch about the marker (the fingers on it), then a small drag - in Fit or in Fill */
+function deepest(G, own, layout) {
+  const start = layout === "fit" ? G.contain(own) : G.cover(own), r0 = G.rect(start), f0 = { x: r0.x + SU * r0.w, y: r0.y + SV * r0.h };
+  const win = G.pan(G.zoom(start, own, layout, 1000, f0, f0), own, layout, 0.031, -0.017);
+  assert.ok(Math.abs(win.w - G.widths(own, layout)[0]) < 1e-9, "the deepest zoom");
+  return win;
+}
+const deepEdit = (layout, win) => (layout === "fit" ? framed(win) : fill(win));
+
+test("storyux verify: at the deepest zoom a photo still lands under the layers - Fit's frame and Fill's crop cut where the editor shows, to the output pixel", async () => {
+  const G = clientGeometry(), own = SMALL.W / SMALL.H;
+  const square = await sharp({ create: { width: SMALL.size, height: SMALL.size, channels: 3, background: "#ff0000" } }).png().toBuffer();
+  await sharp({ create: { width: SMALL.W, height: SMALL.H, channels: 3, background: "#237d42" } }).composite([{ input: square, left: SMALL.x, top: SMALL.y }]).png().toFile(smallPng);
+  for (const layout of ["fit", "fill"]) {
+    const win = deepest(G, own, layout);
+    const out = await compose.process(smallPng, sniff(smallPng), attachment("image", deepEdit(layout, win)), caps);
+    const spot = await redSpot(media.filePath(out.file)), want = shown(G, win, SU, SV, 1080, 1920), size = SMALL.size / SMALL.W * want.w;
+    assert.ok(Math.abs(spot.x - want.x) <= 2 && Math.abs(spot.y - want.y) <= 2, `${layout}: marker at ${spot.x.toFixed(1)},${spot.y.toFixed(1)} - shown at ${want.x.toFixed(1)},${want.y.toFixed(1)}`);
+    assert.ok(Math.abs(spot.w - size) <= 4, `${layout}: marker ${spot.w}px wide - shown ${size.toFixed(1)}px`);
+    assert.ok((await pixel(media.filePath(out.file), 1079, 1919)).every((c, i) => i === 1 ? c > 100 : c < 60), "the picture reaches the frame's far corner (no black edge)");
+    done(out);
+  }
+});
+
+test("storyux verify: at the deepest zoom a video still lands under the layers - Fit's frame and Fill's crop cut where the editor shows", videoOptions, async () => {
+  ffmpeg(["-f", "lavfi", "-i", `color=c=0x237d42:s=${SMALL.W}x${SMALL.H}:r=5:d=2`, "-vf", `drawbox=x=${SMALL.x}:y=${SMALL.y}:w=${SMALL.size}:h=${SMALL.size}:color=red:t=fill`,
+    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", smallVideo]);
+  const G = clientGeometry(), own = SMALL.W / SMALL.H;
+  for (const layout of ["fit", "fill"]) {
+    const win = deepest(G, own, layout);
+    const out = await compose.process(smallVideo, sniff(smallVideo), attachment("video", deepEdit(layout, win)), caps);
+    assert.equal(out.w, 720); assert.equal(out.h, 1280);
+    const frame = path.join(tmp, `deep-${layout}.png`); ffmpeg(["-ss", "0.5", "-i", media.filePath(out.file), "-frames:v", "1", "-y", frame]);
+    const spot = await redSpot(frame), want = shown(G, win, SU, SV, 720, 1280);
+    assert.ok(Math.abs(spot.x - want.x) <= 3 && Math.abs(spot.y - want.y) <= 3, `${layout}: marker at ${spot.x.toFixed(1)},${spot.y.toFixed(1)} - shown at ${want.x.toFixed(1)},${want.y.toFixed(1)}`);
+    const edge = await pixel(frame, 719, 1279); assert.ok(edge[1] > 90 && edge[0] < 80, "the picture reaches the frame's far corner: " + edge.join());
+    done(out);
+  }
+});
+
+test("storyux verify: a video with non-square pixels (1440 x 1080 stored, shown 16:9) is framed by what the browser shows - plain Fit, a Fit frame and Fill all land where shown", videoOptions, async () => {
+  const file = path.join(tmp, "anamorphic.mp4");
+  ffmpeg(["-f", "lavfi", "-i", "color=c=0x237d42:s=1440x1080:r=5:d=2", "-vf", "drawbox=x=824:y=600:w=76:h=100:color=red:t=fill,setsar=4/3",
+    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", file]);
+  const G = clientGeometry(), own = 1920 / 1080, U = (824 + 38) / 1440, V = (600 + 50) / 1080;   // the browser's videoWidth x videoHeight: 1920 x 1080
+  let frameWin = G.zoom(G.contain(own), own, "fit", 0.8, { x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }); frameWin = G.pan(frameWin, own, "fit", 0.05, 0.03);
+  const fillWin = G.pan(G.cover(own), own, "fill", -0.1, 0);
+  for (const [name, edit, win] of [["plain Fit", fit(), G.contain(own)], ["a Fit frame", framed(frameWin), frameWin], ["Fill", fill(fillWin), fillWin]]) {
+    const out = await compose.process(file, sniff(file), attachment("video", edit), caps);
+    const frame = path.join(tmp, "anamorphic-out.png"); ffmpeg(["-ss", "0.5", "-i", media.filePath(out.file), "-frames:v", "1", "-y", frame]);
+    const spot = await redSpot(frame), want = shown(G, win, U, V, 720, 1280);
+    assert.ok(Math.abs(spot.x - want.x) <= 3 && Math.abs(spot.y - want.y) <= 3, `${name}: marker at ${spot.x.toFixed(1)},${spot.y.toFixed(1)} - shown at ${want.x.toFixed(1)},${want.y.toFixed(1)}`);
+    assert.ok(Math.abs(spot.w - 76 / 1440 * G.rect(win).w * 720) <= 3, `${name}: marker ${spot.w}px wide (not squashed)`);
+    done(out);
+  }
+});

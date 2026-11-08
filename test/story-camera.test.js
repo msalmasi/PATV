@@ -1504,3 +1504,8 @@ test("Story camera preview verify: the camera empties its poster and frozen canv
   cam(Q).querySelector(".scam-close").click(); await flush();
   const p2 = Q.draws.find((d) => d.canvas.classList.contains("scam-poster")).canvas; assert.equal(p2.width, 0); assert.equal(p2.height, 0);
 });
+
+test("Story camera storyux verify: after a capture the focus goes to the picture in the editor - not lost with the camera that closed", async () => {
+  const P = camPage(), root = await openStudio(P); assert.ok(P.doc.activeElement === shutter(P), "the shutter has the focus");
+  await tap(P); assert.ok(cam(P) === null, "the camera closed"); assert.ok(P.doc.activeElement === root.querySelector(".sst-preview"), "the preview has the focus");
+});

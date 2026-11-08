@@ -281,6 +281,9 @@ function studioPage(options = {}) {
       return response(404, { ok: false, error: 'missing test route' });
     }
   };
+  // storyux verify: a phone's coarse pointer (finger-sized hit boxes), and a visual viewport (pinch-zoomed: scale > 1)
+  if (options.coarse != null) win.matchMedia = (q) => ({ matches: /pointer:\s*coarse/.test(q) ? !!options.coarse : false, media: q });
+  if (options.visualViewport) win.visualViewport = Object.assign({ ls: [], addEventListener(t, f) { this.ls.push(f); }, removeEventListener(t, f) { this.ls = this.ls.filter((x) => x !== f); } }, options.visualViewport);
   win.window = win; context = vm.createContext(win); vm.runInContext(SRC('story-studio.js'), context);
   const opener = doc.body.appendChild(doc.createElement('button')); opener.setAttribute('data-story-compose', ''); opener.setAttribute('data-pad', options.pad || 'aurora.pad'); opener.focus();
   return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response, held, winListeners };
@@ -297,8 +300,13 @@ test('Studio: one listener, pad preselection, nested Escape, draft confirmation 
   assert.equal(root.style['--pad-accent'], '#26c6da'); assert.match(P.doc.querySelector('.sst-destination').textContent, /Aurora Workshop/);
   await studioPick(P); P.doc.querySelector('[data-tool="mention"]').click();
   const e = new Ev('keydown', { key: 'Escape', bubbles: true }); P.doc.activeElement.dispatchEvent(e); assert.ok(e.defaultPrevented); assert.ok(P.doc.querySelector('.sst')); assert.equal(P.doc.querySelector('.sst-sheet'), null);
-  let confirms = 0; P.win.confirm = () => { confirms++; return false; }; key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst')); assert.equal(confirms, 1);
-  P.win.confirm = () => true; key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null); assert.equal(P.doc.activeElement, P.opener); assert.equal(P.revoked.length, 1);
+  // storyux verify: a draft with edits asks quietly in the editor (never a browser dialog); Escape there keeps editing
+  let confirms = 0; P.win.confirm = () => { confirms++; return false; };
+  await studioText(P, 'Keep?'); key(P.doc.activeElement, 'Escape'); key(P.doc.activeElement, 'Escape');      // the sheet, then the selection
+  key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst')); assert.ok(P.doc.querySelector('.sst-ask'), 'asked');
+  key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst-ask') === null, 'kept'); assert.ok(P.doc.querySelector('.sst'));
+  key(P.doc.activeElement, 'Escape'); P.doc.querySelector('.sst-ask .sst-ask-go').click(); await flush();
+  assert.equal(P.doc.querySelector('.sst'), null); assert.equal(P.doc.activeElement, P.opener); assert.equal(P.revoked.length, 1); assert.equal(confirms, 0);
 });
 
 test('Studio: overlay sheets focus a visible control and return to their tool after Done or Escape', async () => {
@@ -1252,4 +1260,222 @@ test('Studio storyux: desktop - the wheel sizes the selected layer, Shift+wheel 
   const R = studioPage(); await studioOpen(R); await studioPick(R); const src = R.doc.querySelector('.sst-source');
   const z = new Ev('wheel', { bubbles: true, clientX: 150, clientY: 250, deltaY: -300, deltaMode: 0 }); stage(R).dispatchEvent(z); assert.ok(z.defaultPrevented); await flush(4);
   assert.ok(parseFloat(src.style.inlineSize) > 100, 'zoomed in');
+});
+
+// ── storyux verify (the review of 2026-11-08): a tap that deleted what it meant to select, grips covering small layers, the
+//    header and the tools taking touches meant for the picture, hit areas stacked unlike the drawing, a lost pointerup that broke
+//    every later gesture, a deselecting tap that counted towards a reset, layout per frame, the corner grip running away at an
+//    edge, the X pressed twice, focus lost after a pick, and the rest ──
+const clickAt = (node) => node.dispatchEvent(new Ev('click', { bubbles: true, detail: 1, button: 0 }));   // a pointer's click (detail 1)
+const rectOf = (left, top, width, height) => () => ({ left, top, width, height, right: left + width, bottom: top + height });
+/** the selected layer's grips in the stage's px (the fake stage is 300 x 500): its outline's box, and each grip's centre */
+function gripsOf(P) {
+  const sel = P.doc.querySelector('.sst-select'), w = parseFloat(sel.style.inlineSize), h = parseFloat(sel.style.blockSize);
+  const cx = parseFloat(sel.style.insetInlineStart) * 3, cy = parseFloat(sel.style.insetBlockStart) * 5;
+  const at = (n) => ({ lx: parseFloat(n.style.insetInlineStart), ly: parseFloat(n.style.insetBlockStart), x: cx - w / 2 + parseFloat(n.style.insetInlineStart), y: cy - h / 2 + parseFloat(n.style.insetBlockStart), corner: n.getAttribute('data-at') });
+  return { w, h, cx, cy, del: at(sel.querySelector('.sst-sel-del')), turn: at(sel.querySelector('.sst-sel-turn')) };
+}
+const clearOfBox = (p, w, h) => Math.hypot(Math.max(0 - p.lx, 0, p.lx - w), Math.max(0 - p.ly, 0, p.ly - h));
+
+test('Studio storyux verify: a tap on a layer only selects it - the click a phone then sends to the delete grip that appeared under the finger deletes nothing; a press that starts on the grip does', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); await studioText(P, 'Hi'); key(P.doc.activeElement, 'Escape');
+  const text = layerEl(P, 'text'); await tapAt(P, stage(P), 20, 480); assert.ok(P.doc.querySelector('.sst-select').hidden, 'let go');
+  // the tap's down selects the text and shows its grips; the browser sends the tap's click to whatever is under the finger then
+  ptr(text, 'pointerdown', 1, 150, 150); ptr(stage(P), 'pointerup', 1, 150, 150); await flush(6);
+  clickAt(P.doc.querySelector('.sst-sel-del')); await flush(4);
+  assert.ok(layerEl(P, 'text'), 'the text is still there'); assert.ok(!P.doc.querySelector('.sst-select').hidden, 'and selected');
+  const sticker = await studioSticker(P); await tapAt(P, stage(P), 20, 480);
+  ptr(sticker, 'pointerdown', 1, 140, 240); ptr(stage(P), 'pointerup', 1, 140, 240); await flush(6);
+  clickAt(P.doc.querySelector('.sst-sel-del')); await flush(4); assert.ok(layerEl(P, 'sticker'), 'the sticker is still there');
+  // a drag that starts on the layer and ends on the grip is no delete either
+  ptr(sticker, 'pointerdown', 1, 140, 240); ptr(stage(P), 'pointermove', 1, 100, 200); await flush(); ptr(stage(P), 'pointerup', 1, 100, 200); await flush(6);
+  clickAt(P.doc.querySelector('.sst-sel-del')); await flush(4); assert.ok(layerEl(P, 'sticker'));
+  // a press on the grip of the selected layer removes it - and Enter / Space (a click with no pointer) do too
+  const del = P.doc.querySelector('.sst-sel-del'); ptr(del, 'pointerdown', 4, 100, 100); ptr(del, 'pointerup', 4, 100, 100); clickAt(del); await flush(4);
+  assert.ok(layerEl(P, 'sticker') === null, 'deleted by its own press');
+  await tapAt(P, text, 150, 150); P.doc.querySelector('.sst-sel-del').click(); await flush(4); assert.ok(layerEl(P, 'text') === null, 'deleted from the keyboard');
+});
+
+test('Studio storyux verify: the grips sit off the selected layer\'s corners - their finger-sized circles never cover even a small layer - inside the stage and clear of the buttons over the picture', async () => {
+  const G = geometry(), stageBox = { w: 300, h: 500 }, RD = G.GRIP.del, RT = G.GRIP.turn;
+  assert.ok(RD >= 24 && RT >= 21, 'finger-sized');
+  const clear = (g, c, hw, hh, rot, k, r) => { const dx = g[k].x - c.x, dy = g[k].y - c.y, lx = dx * Math.cos(rot) + dy * Math.sin(rot), ly = -dx * Math.sin(rot) + dy * Math.cos(rot); return Math.hypot(Math.max(Math.abs(lx) - hw, 0), Math.max(Math.abs(ly) - hh, 0)) >= r; };
+  // which of the box's corners a grip is off, on screen: the delete takes the top-left-most, the turn the bottom-right-most
+  const cornerOf = (p, c, rot) => { const dx = p.x - c.x, dy = p.y - c.y; return [Math.sign(dx * Math.cos(rot) + dy * Math.sin(rot)), Math.sign(-dx * Math.sin(rot) + dy * Math.cos(rot))]; };
+  const score = (k, c, hw, hh, rot) => c.x + k[0] * hw * Math.cos(rot) - k[1] * hh * Math.sin(rot) + c.y + k[0] * hw * Math.sin(rot) + k[1] * hh * Math.cos(rot);
+  const ALL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+  for (const [hw, hh, rot] of [[18, 22, 0], [18, 22, .7], [60, 30, -2.5], [10, 10, Math.PI / 4], [40, 18, Math.PI]]) {
+    const c = { x: 150, y: 250 }, g = G.grips(c, hw, hh, rot, stageBox, [], true);
+    assert.ok(clear(g, c, hw, hh, rot, 'del', RD), 'delete clear of the box at ' + rot); assert.ok(clear(g, c, hw, hh, rot, 'turn', RT), 'turn clear of the box at ' + rot);
+    assert.notEqual(g.del.at, g.turn.at);
+    const scores = ALL.map((k) => score(k, c, hw, hh, rot));
+    assert.ok(score(cornerOf(g.del, c, rot), c, hw, hh, rot) <= Math.min(...scores) + 1e-6, 'delete at the top-left-most corner, turned or not: ' + rot);
+    assert.ok(score(cornerOf(g.turn, c, rot), c, hw, hh, rot) >= Math.max(...scores) - 1e-6, 'turn at the bottom-right-most corner: ' + rot);
+    assert.ok(Math.hypot(g.del.x - g.turn.x, g.del.y - g.turn.y) >= RD + RT, 'the two never overlap');
+  }
+  // at the top edge, the top corners would leave the stage: the grips go below; in the top-left corner, wherever there is room
+  let g = G.grips({ x: 150, y: 22 }, 40, 22, 0, stageBox, [], true);
+  assert.equal(g.del.at, 'bl'); assert.equal(g.turn.at, 'br'); assert.ok(g.del.y - RD >= 0 && g.turn.y - RT >= 0);
+  g = G.grips({ x: 40, y: 30 }, 40, 30, 0, stageBox, [], true);
+  for (const k of ['del', 'turn']) { const r = G.GRIP[k], p = g[k]; assert.ok(p.x - r >= 0 && p.y - r >= 0 && p.x + r <= 300 && p.y + r <= 500, k + ' in the stage'); assert.ok(clear(g, { x: 40, y: 30 }, 40, 30, 0, k, r), k + ' clear'); }
+  // a button over the picture (the header's X) is no place for a grip
+  g = G.grips({ x: 100, y: 110 }, 33, 33, 0, stageBox, [{ x0: 8, y0: 8, x1: 52, y1: 52 }], true);
+  assert.equal(g.del.at, 'tr', 'not under the X'); assert.equal(g.turn.at, 'br');
+  // a mention chip has only the delete grip
+  assert.equal(G.grips({ x: 150, y: 250 }, 40, 22, 0, stageBox, [], false).turn, undefined);
+
+  // in the editor: a small selected text ("Hi", a phone's 36 x 44 hit box) - the outline is its whole hit box and the grips are off it
+  const P = studioPage({ coarse: true }); await studioOpen(P); await studioPick(P); await studioText(P, 'Hi'); key(P.doc.activeElement, 'Escape');
+  let q = gripsOf(P); assert.ok(q.w >= 36 && q.h >= 44, `the outline is the hit box (${q.w} x ${q.h})`);
+  assert.ok(clearOfBox(q.del, q.w, q.h) >= RD, 'delete grip off the box'); assert.ok(clearOfBox(q.turn, q.w, q.h) >= RT, 'turn grip off the box');
+  // dragged to the very top: the grips stay in the stage (below it)
+  await drag(P, layerEl(P, 'text'), [150, 150], [150, -200]); q = gripsOf(P);
+  assert.ok(q.cy - q.h / 2 < 2, 'the text is at the top'); assert.ok(q.del.y - RD >= 0 && q.turn.y - RT >= 0, 'both grips inside the stage'); assert.equal(q.del.corner, 'bl');
+  // the buttons over the picture: a sticker near the header's X gets its delete grip on the other side
+  const Q = studioPage(); await studioOpen(Q); await studioPick(Q);
+  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
+  const headButtons = Q.doc.querySelectorAll('.sst-head .ds-btn');
+  Q.doc.querySelector('.sst-back').getBoundingClientRect = rectOf(8, 8, 44, 44); headButtons[headButtons.length - 1].getBoundingClientRect = rectOf(248, 8, 44, 44);
+  Q.doc.querySelectorAll('.sst-tools .ds-btn').forEach((b, i) => { b.getBoundingClientRect = rectOf(252, 60 + 56 * i, 44, 44); });
+  const sticker = await studioSticker(Q); await drag(Q, sticker, [150, 250], [100, 110]);
+  q = gripsOf(Q); assert.equal(q.del.corner, 'tr', 'the delete grip is not put under the X');
+  assert.ok(Math.hypot(Math.max(8 - q.del.x, 0, q.del.x - 52), Math.max(8 - q.del.y, 0, q.del.y - 52)) >= RD, 'clear of the X');
+});
+
+test('Studio storyux verify: the hit areas stack as the layers are drawn - texts under stickers - whatever order they were added in', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); await studioSticker(P); await studioText(P, 'Hello pond'); key(P.doc.activeElement, 'Escape');
+  const order = () => P.doc.querySelector('.sst-handles').children.filter((n) => n.classList.contains('sst-layer')).map((n) => n.getAttribute('data-layer').split('-')[0]);
+  assert.deepEqual(order(), ['text', 'sticker']);
+  await studioSticker(P); await studioText(P, 'Second'); key(P.doc.activeElement, 'Escape');
+  assert.deepEqual(order(), ['text', 'text', 'sticker', 'sticker']);
+  const kids = P.doc.querySelector('.sst-handles').children; assert.ok(kids[kids.length - 1].classList.contains('sst-select'), 'the selection over them all');
+});
+
+test('Studio storyux verify: a pointerup that never came ends with the next press - no ghost finger, no drag with no button held, a lost capture lets go', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); const sticker = await studioSticker(P); await studioText(P, 'Hello pond'); key(P.doc.activeElement, 'Escape');
+  await tapAt(P, stage(P), 20, 480); assert.ok(P.doc.querySelector('.sst-select').hidden);
+  const where = (n) => [n.style.insetInlineStart, n.style.insetBlockStart], mouse = { pointerType: 'mouse' }, s0 = where(sticker);
+  ptr(sticker, 'pointerdown', 1, 150, 250, mouse); await flush();                       // its pointerup never comes (Alt+Tab mid-drag)
+  ptr(stage(P), 'pointermove', 1, 90, 190, { pointerType: 'mouse', buttons: 0 }); await flush(6);
+  assert.deepEqual(where(sticker), s0, 'a mouse moving with no button held drags nothing');
+  ptr(stage(P), 'pointerdown', 1, 20, 480, mouse); ptr(stage(P), 'pointerup', 1, 20, 480, mouse); await flush(6);
+  assert.ok(P.doc.querySelector('.sst-select').hidden, 'the next click on the picture lets go, as ever');
+  // a finger whose up never came, then a new first finger: its own one-finger drag, not a pinch about a ghost
+  const text = layerEl(P, 'text'), t0 = where(text);
+  ptr(sticker, 'pointerdown', 7, 150, 250, { isPrimary: true }); await flush();
+  await drag(P, text, [150, 150], [150, 200], 8, { isPrimary: true });
+  assert.notDeepEqual(where(text), t0, 'the text moved'); assert.deepEqual(where(sticker), s0, 'the sticker did not');
+  // the same pointer id pressed again (its up was lost): a new gesture
+  const t1 = parseFloat(text.style.insetBlockStart);
+  ptr(sticker, 'pointerdown', 5, 150, 250, { isPrimary: false }); await flush();
+  await drag(P, text, [150, 200], [150, 230], 5, { isPrimary: false });
+  assert.deepEqual(where(sticker), s0); assert.ok(near(parseFloat(text.style.insetBlockStart), t1 + 6, 1e-6), 'the text moved again (30 px of 500)');
+  // a capture lost on the stage ends that pointer (one lost on the layer's own button, as a capture moves to the stage, does not)
+  ptr(sticker, 'pointerdown', 9, 150, 250, { isPrimary: true }); sticker.dispatchEvent(new Ev('lostpointercapture', { bubbles: true, pointerId: 9 }));
+  ptr(stage(P), 'pointermove', 9, 160, 250, { isPrimary: true }); await flush(); ptr(stage(P), 'pointermove', 9, 170, 250, { isPrimary: true }); await flush();
+  assert.ok(near(parseFloat(sticker.style.insetInlineStart), 50 + 20 / 3, 1e-6), 'still dragging after the button lost the capture to the stage');
+  stage(P).dispatchEvent(new Ev('lostpointercapture', { bubbles: true, pointerId: 9 })); await flush(4);
+  const before = liveOps(P, 'image').at(-1).args[3];
+  const e = new Ev('wheel', { bubbles: true, clientX: 150, clientY: 250, deltaY: -200, deltaMode: 0 }); stage(P).dispatchEvent(e); await flush(4);
+  assert.ok(e.defaultPrevented && liveOps(P, 'image').at(-1).args[3] > before, 'nothing is held: the wheel sizes the selected sticker');
+});
+
+test('Studio storyux verify: the tap that lets a layer go is no half of a double tap - the picture keeps its framing; a real double tap still puts it back', async () => {
+  const P = studioPage({ width: 4000, height: 3000 }); await studioOpen(P); await studioPick(P); const src = P.doc.querySelector('.sst-source');
+  stage(P).dispatchEvent(new Ev('wheel', { bubbles: true, clientX: 150, clientY: 250, deltaY: -300, deltaMode: 0 })); await flush(4);
+  const zoomed = src.style.inlineSize; assert.ok(parseFloat(zoomed) > 100);
+  await studioSticker(P); assert.ok(!P.doc.querySelector('.sst-select').hidden);
+  await tapAt(P, stage(P), 20, 480); await tapAt(P, stage(P), 20, 480);
+  assert.ok(P.doc.querySelector('.sst-select').hidden); assert.equal(src.style.inlineSize, zoomed, 'not reset');
+  await tapAt(P, stage(P), 20, 480); await tapAt(P, stage(P), 20, 480); assert.equal(src.style.inlineSize, '100%', 'a double tap with nothing selected puts it back');
+});
+
+test('Studio storyux verify: while fingers pinch the picture it moves by a transform (no layout per frame); its size and place are written once, at the end', async () => {
+  const P = studioPage({ width: 4000, height: 3000 }); await studioOpen(P); await studioPick(P); const src = P.doc.querySelector('.sst-source');
+  ptr(stage(P), 'pointerdown', 1, 100, 250); ptr(stage(P), 'pointerdown', 2, 200, 250, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointermove', 1, 50, 250); ptr(stage(P), 'pointermove', 2, 250, 250, { isPrimary: false }); await flush();
+  assert.equal(src.style.inlineSize, '100%', 'no new size while the fingers move'); assert.equal(src.style.insetInlineStart, '0%');
+  assert.match(src.style.transform, /^translate\(-50%, [-\d.e]+%\) scale\(2, 2\)$/, 'a transform: ' + src.style.transform);
+  ptr(stage(P), 'pointerup', 1, 50, 250); ptr(stage(P), 'pointerup', 2, 250, 250, { isPrimary: false }); await flush(6);
+  assert.ok(near(parseFloat(src.style.inlineSize), 200)); assert.ok(near(parseFloat(src.style.insetInlineStart), -50)); assert.equal(src.style.transform, '');
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8'); assert.match(css, /\.sst \.sst-source \{[^}]*transform-origin:\s*0 0/);
+});
+
+test('Studio storyux verify: the corner grip sizes and turns from where the layer\'s centre was when it was pressed - pushed in from an edge, it never runs ahead of the finger', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); const sticker = await studioSticker(P);
+  await drag(P, sticker, [150, 250], [400, 250]); assert.ok(near(parseFloat(sticker.style.insetInlineStart), (1 - 120 / 1080) * 100, 1e-6), 'against the right edge');
+  const c = { x: (1 - 120 / 1080) * 300, y: 250 }, turn = P.doc.querySelector('.sst-select .sst-sel-turn'), mouse = { pointerType: 'mouse' };
+  ptr(turn, 'pointerdown', 1, c.x + 40, c.y + 40, mouse); await flush();
+  for (let i = 0; i < 4; i++) { ptr(stage(P), 'pointermove', 1, c.x + 80, c.y + 80, mouse); await flush(); }
+  ptr(stage(P), 'pointerup', 1, c.x + 80, c.y + 80, mouse); await flush(6);
+  assert.deepEqual(liveOps(P, 'image').at(-1).args.slice(1), [-240, -240, 480, 480], 'twice as far from the centre: twice the size, frame after frame');
+  const turns = liveOps(P, 'rotate'); assert.ok(!turns.length || near(turns.at(-1).args[0], 0, 1e-9), 'and not turned');
+});
+
+test('Studio storyux verify: the X pressed again while it asks keeps the question (only Discard discards); the question closes any sheet and sits under the header', async () => {
+  const P = studioPage(), root = await studioOpen(P); await studioPick(P);
+  P.doc.querySelector('[data-tool="text"]').click(); const ta = P.doc.querySelector('.sst-text-input'); ta.value = 'Hi'; ta.dispatchEvent(new Ev('input')); await flush();
+  const x = P.doc.querySelector('.sst-back'); x.click(); await flush();
+  assert.ok(P.doc.querySelector('.sst-ask'), 'asked'); assert.ok(P.doc.querySelector('.sst-sheet') === null, 'the text sheet closed for the question');
+  const card = P.doc.querySelector('.sst-card'); assert.ok(card.children[1].classList.contains('sst-ask'), 'right under the header (next to the X), on a desktop too');
+  x.click(); await flush(6);
+  assert.ok(P.doc.querySelector('.sst-ask'), 'still asking'); assert.ok(root.classList.contains('sst-has-media')); assert.ok(layerEl(P, 'text'), 'nothing discarded');
+  assert.ok(P.doc.activeElement === P.doc.querySelector('.sst-ask-keep'), 'the X points at the question');
+  P.doc.querySelector('.sst-ask-go').click(); await flush(6); assert.ok(!root.classList.contains('sst-has-media'), 'Discard discards');
+});
+
+test('Studio storyux verify: after a pick the focus goes to the picture - not lost with the Gallery button that hid', async () => {
+  const P = studioPage(); await studioOpen(P); const gallery = P.doc.querySelector('[data-picker="gallery"]'); gallery.focus();
+  await studioPick(P); assert.ok(P.doc.activeElement === stage(P), 'the preview has the focus');
+  const Q = studioPage(); await studioOpen(Q); const more = Q.doc.querySelectorAll('.sst-head .ds-btn'); more[more.length - 1].focus(); await studioPick(Q);
+  assert.ok(Q.doc.activeElement === more[more.length - 1], 'a focus that is still on screen stays where it was');
+});
+
+test('Studio storyux verify: the screen-reader help says what works where - the picture\'s keys on the picture, the layer\'s on each layer - and the selected layer says so', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); await studioText(P, 'Hello pond'); key(P.doc.activeElement, 'Escape');
+  const help = P.doc.getElementById(stage(P).getAttribute('aria-describedby')).textContent;
+  assert.match(help, /zoom/i); assert.match(help, /\b0\b/); assert.doesNotMatch(help, /\[ and \] turn|Delete removes/, 'no layer keys on the picture');
+  const text = layerEl(P, 'text'), lh = P.doc.getElementById(text.getAttribute('aria-describedby'));
+  assert.ok(lh, 'each layer is described'); assert.match(lh.textContent, /\[ and \] turn/); assert.match(lh.textContent, /Delete removes/); assert.match(lh.textContent, /Enter/);
+  assert.equal(text.getAttribute('aria-current'), 'true', 'the selected layer says so');
+  await tapAt(P, stage(P), 20, 480); assert.equal(text.getAttribute('aria-current'), null);
+});
+
+test('Studio storyux verify: the page can still be zoomed from the sheets and the footer (their small print) - never from the picture or the buttons over it', async () => {
+  const P = studioPage({ visualViewport: { height: 406, scale: 2 } }), root = await studioOpen(P); await studioPick(P);
+  assert.equal(root.style['--sst-vh'], '812px', 'a pinch-zoomed page keeps the editor its own height (the keyboard still shrinks it)');
+  const g = (n) => { const e = new Ev('gesturestart', { bubbles: true, scale: 1, rotation: 0 }); n.dispatchEvent(e); return e.defaultPrevented; };
+  assert.ok(g(stage(P)), 'the picture'); assert.ok(g(P.doc.querySelector('[data-tool="text"]')), 'a tool over the picture'); assert.ok(g(P.doc.querySelector('.sst-back')), 'the header over the picture');
+  assert.ok(!g(P.doc.querySelector('.sst-post')), 'the footer zooms the page'); assert.ok(!g(P.doc.querySelector('.sst-rules')));
+  P.doc.querySelector('[data-tool="text"]').click(); assert.ok(!g(P.doc.querySelector('.sst-sheet')), 'a sheet zooms the page');
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8'), sst = /\.sst \{[^}]*\}/.exec(css)[0];
+  assert.doesNotMatch(sst, /pan-x|pan-y/, 'no pinch block on the whole editor'); assert.match(sst, /touch-action:\s*manipulation/, 'no double-tap zoom on its buttons');
+  assert.match(css, /\.sst \.sst-head, \.sst \.sst-tools \{[^}]*touch-action:\s*pan-x pan-y/);
+});
+
+test('Studio storyux verify: Escape and a click outside ask the same quiet question as the X, only when there are edits - never a browser dialog; 0 resets the picture; Escape lets a layer go first', async () => {
+  let confirms = 0;
+  const P = studioPage(); await studioOpen(P); await studioPick(P); P.win.confirm = () => { confirms++; return true; };
+  key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null, 'no edits: closed at once'); assert.equal(confirms, 0);
+  const Q = studioPage(), root = await studioOpen(Q); await studioPick(Q); Q.win.confirm = () => { confirms++; return true; };
+  await studioText(Q, 'Mine'); key(Q.doc.activeElement, 'Escape');
+  root.dispatchEvent(new Ev('click', { bubbles: true, button: 0 })); await flush();
+  const ask = Q.doc.querySelector('.sst-ask'); assert.ok(ask, 'a click outside asks'); assert.match(ask.textContent, /Discard this story\?/);
+  ask.querySelector('.sst-ask-keep').click(); assert.ok(Q.doc.querySelector('.sst')); assert.ok(layerEl(Q, 'text'));
+  key(Q.doc.activeElement, 'Escape'); assert.ok(Q.doc.querySelector('.sst-select').hidden, 'Escape lets the selected layer go first'); assert.ok(Q.doc.querySelector('.sst-ask') === null);
+  key(Q.doc.activeElement, 'Escape'); assert.ok(Q.doc.querySelector('.sst-ask'), 'then asks');
+  Q.doc.querySelector('.sst-ask-go').click(); await flush(); assert.equal(Q.doc.querySelector('.sst'), null, 'Discard closes the editor'); assert.equal(confirms, 0);
+  // the focused picture: 0 puts it back the way its layout starts
+  const S = studioPage({ width: 4000, height: 3000 }); await studioOpen(S); await studioPick(S); const src = S.doc.querySelector('.sst-source');
+  key(stage(S), '+'); key(stage(S), '+'); assert.ok(parseFloat(src.style.inlineSize) > 100); key(stage(S), '0'); assert.equal(src.style.inlineSize, '100%');
+});
+
+test('Studio storyux verify: on a phone the header and the tools let touches through to the picture between their buttons; every round button shows a focus ring over its shadow', () => {
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width: 760px)'), css.indexOf('@keyframes sst-sheet-in'));
+  assert.match(mobile, /\.sst \.sst-head, \.sst \.sst-tools \{[^}]*pointer-events:\s*none/);
+  assert.match(mobile, /\.sst \.sst-head \.ds-btn, \.sst \.sst-tools \.ds-btn \{[^}]*pointer-events:\s*auto/);
+  assert.match(css, /\.sst \.ds-btn\.sst-sel-del:focus-visible \{[^}]*box-shadow:\s*var\(--ds-focus-ring\)/);
+  assert.match(mobile, /\.sst \.sst-tools \.ds-btn\.sst-round:focus-visible \{[^}]*box-shadow:\s*var\(--ds-focus-ring\)/);
+  assert.doesNotMatch(css, /\.sst-sel-turn \{[^}]*inset-inline-end/, 'the script places the grips (off the corner with room, not a fixed corner)');
 });
