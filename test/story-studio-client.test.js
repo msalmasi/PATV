@@ -139,7 +139,16 @@ class El {
 }
 for (const [p, a] of Object.entries(BOOL)) Object.defineProperty(El.prototype, p, { get() { return this.hasAttribute(a); }, set(v) { if (v) this.setAttribute(a, ""); else this.removeAttribute(a); } });
 for (const [p, a] of Object.entries(STR)) Object.defineProperty(El.prototype, p, { get() { return this.getAttribute(a) || ""; }, set(v) { this.setAttribute(a, v); } });
+// storyplay (1.99??): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch and a
+// mouse press; a finger going down is none. GESTURE.on > 0 while such an event is dispatched (studioPage's options.webkit reads it).
+const GESTURE = { on: 0 };
+const activates = (ev) => ev.type === "click" || ev.type === "pointerup" || ev.type === "touchend" || (ev.type === "keydown" && ev.key !== "Escape")
+  || ((ev.type === "pointerdown" || ev.type === "mousedown") && ev.pointerType === "mouse");
 function dispatch(target, ev) {
+  const g = activates(ev); if (g) GESTURE.on++;
+  try { return dispatchNow(target, ev); } finally { if (g) GESTURE.on--; }
+}
+function dispatchNow(target, ev) {
   ev.target = target;
   const pathUp = []; for (let n = target; n; n = n.parentNode) pathUp.push(n);
   const doc = target.ownerDocument;
@@ -216,7 +225,7 @@ const TARGETS = { ok: true, pads: [
   { id: 'plain.pad', title: 'Plain Pond', href: '/p/plain-pond', label: 'p/plain-pond', look: null }
 ], caps: { secs: 30, imageMb: 10, videoMb: 60, srcSecs: 180, srcVideoMb: 100, overlayMb: 2, textsMax: 3, textLen: 120, stickersMax: 10, mentionsMax: 5, studio: true }, as: 'Pixel Otter' };
 function studioPage(options = {}) {
-  const doc = makeDoc('pixelotter'), calls = [], draws = [], blobs = new Map(), revoked = [], uploaded = [], events = [];
+  const doc = makeDoc('pixelotter'), calls = [], draws = [], blobs = new Map(), revoked = [], uploaded = [], events = [], plays = [];
   // ssfix2: timers the test lets run itself (options.hold: their delays), and the window's own listeners (blur/focus/pageshow/pagehide)
   const held = [], winListeners = [];
   let urlN = 0, uploadN = 0, context;
@@ -236,7 +245,10 @@ function studioPage(options = {}) {
     }
     if (tag === 'img' || tag === 'video') {
       Object.defineProperty(node, 'src', { configurable: true, get: () => node.getAttribute('src'), set: (v) => {
-        node.setAttribute('src', v); if (!String(v).startsWith('blob:')) return;
+        node.setAttribute('src', v);
+        // storyplay: a new source is a new load, at once (the media element load algorithm): paused, no error
+        if (tag === 'video') { node.paused = true; node.error = null; }
+        if (!String(v).startsWith('blob:')) return;
         const blob = blobs.get(v), isSource = node.classList.contains('sst-source');
         queueMicrotask(() => { if (isSource && options.decode === false) { node.dispatchEvent(new Ev('error')); return; }
           // storyprev: options.sourceVideo(node, src) loads the editor's <video> the way a test says (true = it did)
@@ -245,7 +257,19 @@ function studioPage(options = {}) {
           node.duration = options.duration || 42; node.currentTime = 0; node.paused = true;
           if (node.onload) node.onload(); node.dispatchEvent(new Ev(tag === 'video' ? 'loadedmetadata' : 'load')); void blob;
         });
-      } }); node.play = () => { node.paused = false; return Promise.resolve(); }; node.pause = () => { node.paused = true; };
+      } });
+      // storyplay: options.webkit - WebKit's rule for a script's play() of the editor's <video>: refused (NotAllowedError) unless the
+      // element was played inside a user's gesture before (then allowed for good). Every play of it is kept in plays.
+      node.play = () => {
+        const studio = node.classList.contains('sst-source'), gesture = GESTURE.on > 0, entry = { node, src: String(node.getAttribute('src') || ''), gesture, out: 'resolved' };
+        if (studio) plays.push(entry);
+        if (options.webkit && studio && !gesture && !node.unlocked) { entry.out = 'NotAllowedError'; return Promise.reject(Object.assign(new Error('not allowed'), { name: 'NotAllowedError' })); }
+        if (options.webkit && studio && gesture) node.unlocked = true;
+        const was = node.paused !== false; node.paused = false;
+        if (studio && was) queueMicrotask(() => { if (node.paused === false) node.dispatchEvent(new Ev('playing')); });
+        return Promise.resolve();
+      };
+      node.pause = () => { node.paused = true; };
     }
     return node;
   };
@@ -286,7 +310,7 @@ function studioPage(options = {}) {
   if (options.visualViewport) win.visualViewport = Object.assign({ ls: [], addEventListener(t, f) { this.ls.push(f); }, removeEventListener(t, f) { this.ls = this.ls.filter((x) => x !== f); } }, options.visualViewport);
   win.window = win; context = vm.createContext(win); vm.runInContext(SRC('story-studio.js'), context);
   const opener = doc.body.appendChild(doc.createElement('button')); opener.setAttribute('data-story-compose', ''); opener.setAttribute('data-pad', options.pad || 'aurora.pad'); opener.focus();
-  return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response, held, winListeners };
+  return { win, doc, calls, draws, blobs, revoked, uploaded, events, opener, context, response, held, winListeners, plays };
 }
 async function studioOpen(P) { P.opener.click(); await flush(); assert.ok(P.doc.querySelector('.sst')); return P.doc.querySelector('.sst'); }
 async function studioPick(P, type = 'image/jpeg', size = 8) { const f = new Blob([new Uint8Array(size)], { type }); f.name = type.startsWith('video') ? 'workshop.mp4' : type === 'image/gif' ? 'workshop.gif' : 'workshop.jpg'; const n = P.doc.querySelector('[data-pick="gallery"]'); n.files = [f]; n.dispatchEvent(new Ev('change')); await flush(); return f; }
@@ -928,8 +952,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=8/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes
-  assert.match(html, /story-studio\.css\?v=5/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings
+  assert.match(html, /story-studio\.js\?v=9/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself
+  assert.match(html, /story-studio\.css\?v=6/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings; storyplay (v=6): the ▶ over the picture
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
@@ -1479,4 +1503,54 @@ test('Studio storyux verify: on a phone the header and the tools let touches thr
   assert.match(css, /\.sst \.ds-btn\.sst-sel-del:focus-visible \{[^}]*box-shadow:\s*var\(--ds-focus-ring\)/);
   assert.match(mobile, /\.sst \.sst-tools \.ds-btn\.sst-round:focus-visible \{[^}]*box-shadow:\s*var\(--ds-focus-ring\)/);
   assert.doesNotMatch(css, /\.sst-sel-turn \{[^}]*inset-inline-end/, 'the script places the grips (off the corner with room, not a fixed corner)');
+});
+
+// ── storyplay (1.99??): a video plays by itself in the editor, like Instagram (the owner, iPhone, 2026-11-08). ONE <video> carries
+//    every clip for the life of the studio, unlocked inside the user's own taps (WebKit lets a script play() an element only once
+//    it was played inside a gesture); a play still refused gets a round ▶ over the picture. story-camera.test.js has the camera's
+//    side (the shutter, Try again) and the fake's evidence; these are the studio on its own. ──
+async function quietStudio(P) { P.win.patvStoryStudio.open('aurora.pad', P.opener); await flush(); const root = P.doc.querySelector('.sst'); assert.ok(root); return root; }
+async function galleryPick(P, type, name) {
+  P.doc.querySelector('[data-picker="gallery"]').click();
+  const f = new Blob([new Uint8Array(8)], { type }); f.name = name; const n = P.doc.querySelector('[data-pick="gallery"]'); n.files = [f]; n.dispatchEvent(new Ev('change')); await flush(); return f;
+}
+const clipsPlayed = (P) => P.plays.filter((x) => x.src.startsWith('blob:'));
+
+test('Studio storyplay: a video chosen with 🖼️ Gallery plays by itself (the tap unlocked the one <video>) - muted, inline, on and on; the next video reuses it; a picture in between takes it off the stage', async () => {
+  const P = studioPage({ webkit: true, duration: 12 }), root = await quietStudio(P);
+  await galleryPick(P, 'video/mp4', 'pond.mp4'); const v = P.doc.querySelector('video.sst-source');
+  assert.ok(v); assert.equal(v.paused, false, 'plays by itself'); assert.equal(v.muted, true); assert.ok(v.hasAttribute('playsinline') && v.hasAttribute('webkit-playsinline'));
+  const own = clipsPlayed(P); assert.equal(own.length, 1); assert.equal(own[0].gesture, false, 'not inside the tap - after it'); assert.equal(own[0].out, 'resolved');
+  assert.ok(P.plays.some((x) => x.gesture && x.node === v && x.src.startsWith('data:video/')), 'the Gallery tap played the editor\'s <video> (a silent clip)');
+  assert.ok(root.querySelector('.sst-playbtn').hidden); assert.ok(!root.querySelector('.sst-sound').hidden);
+  // the X back to the picker, a picture: the <video> leaves the stage, stopped
+  root.querySelector('.sst-back').click(); await flush(6); assert.equal(v.paused, true); assert.ok(!root.contains(v));
+  await galleryPick(P, 'image/jpeg', 'pond.jpg'); assert.ok(root.querySelector('img.sst-source')); assert.ok(P.doc.querySelector('video.sst-source') === null);
+  assert.ok(root.querySelector('.sst-sound').hidden, 'a picture: no sound button'); assert.ok(root.querySelector('.sst-playbtn').hidden);
+  // and another video: the same element, playing by itself
+  root.querySelector('.sst-back').click(); await flush(6); await galleryPick(P, 'video/mp4', 'pond2.mp4');
+  assert.ok(P.doc.querySelector('video.sst-source') === v, 'the same element'); assert.equal(v.paused, false); assert.equal(clipsPlayed(P).length, 2);
+});
+
+test('Studio storyplay: with no tap to unlock it (a file handed in, a restored studio) the round ▶ shows over the picture; one tap plays it; Fill, text and posting work while it plays', async () => {
+  const P = studioPage({ webkit: true, duration: 12 }), root = await quietStudio(P);
+  await studioPick(P, 'video/mp4'); const v = P.doc.querySelector('video.sst-source'), b = root.querySelector('.sst-playbtn');
+  assert.equal(v.paused, true); assert.equal(clipsPlayed(P)[0].out, 'NotAllowedError'); assert.ok(!b.hidden, 'the ▶'); assert.equal(b.getAttribute('aria-label'), 'Play the video');
+  b.click(); await flush(4); assert.equal(v.paused, false); assert.ok(b.hidden);
+  P.doc.querySelector('[data-tool="layout"]').click(); await flush(); assert.equal(v.paused, false, 'Fill / Fit: still playing');
+  await studioText(P, 'Pond'); assert.equal(v.paused, true, 'the text sheet covers it'); key(P.doc.activeElement, 'Escape'); await flush(4); assert.equal(v.paused, false, 'closed: it plays again');
+  P.doc.querySelector('.sst-post').click(); await flush(24); assert.equal(P.uploaded.at(-1).body.kind, 'video'); assert.deepEqual(P.uploaded.at(-1).body.edit.text, ['Pond']);
+  assert.equal(P.doc.querySelector('.sst'), null, 'posted'); assert.equal(v.paused, true, 'and stopped with the studio');
+});
+
+test('Studio storyplay: the ▶ over the picture and the header\'s sound button are round icon buttons with words for their names; the ▶ takes no part in the stage\'s gestures; CSS from ds tokens', async () => {
+  const P = studioPage({ webkit: true, duration: 12, width: 1920, height: 1080 }), root = await quietStudio(P); await studioPick(P, 'video/mp4');
+  const b = root.querySelector('.sst-playbtn'), snd = root.querySelector('.sst-sound');
+  for (const x of [b, snd]) { assert.ok(x.classList.contains('sst-round')); assert.equal(x.title, x.getAttribute('aria-label')); assert.equal(x.querySelector('.ds-ic').getAttribute('aria-hidden'), 'true'); }
+  assert.equal(snd.getAttribute('aria-label'), 'Turn sound on');
+  // a press on the ▶ starts no pan of the picture under it
+  ptr(b, 'pointerdown', 1, 150, 250); ptr(stage(P), 'pointermove', 1, 220, 250); ptr(stage(P), 'pointerup', 1, 220, 250); await flush(6);
+  P.doc.querySelector('.sst-post').click(); await flush(24); assert.equal(P.uploaded.at(-1).body.edit.fit, 'fit'); assert.equal(P.uploaded.at(-1).body.edit.frame, undefined, 'the picture never moved (a pan in Fit would frame it)');
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8'), rule = /\.sst \.ds-btn\.sst-playbtn \{([^}]*)\}/.exec(css);
+  assert.ok(rule, 'a rule for the ▶'); assert.match(rule[1], /pointer-events:\s*auto/); assert.match(rule[1], /inset-inline-start:\s*50%/); assert.match(rule[1], /z-index:\s*var\(--ds-z-/);
 });

@@ -153,7 +153,17 @@ class El {
 }
 for (const [p, a] of Object.entries(BOOL)) Object.defineProperty(El.prototype, p, { get() { return this.hasAttribute(a); }, set(v) { if (v) this.setAttribute(a, ""); else this.removeAttribute(a); } });
 for (const [p, a] of Object.entries(STR)) Object.defineProperty(El.prototype, p, { get() { return this.getAttribute(a) || ""; }, set(v) { this.setAttribute(a, v); } });
+// storyplay (1.99??): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch
+// (pointerup / touchend) and a mouse press. A finger going down (a touch's pointerdown, from touchstart) is none (iOS 9+).
+// GESTURE.on > 0 while such an event is being dispatched (the fake WebKit rule below reads it).
+const GESTURE = { on: 0 };
+const activates = (ev) => ev.type === "click" || ev.type === "pointerup" || ev.type === "touchend" || (ev.type === "keydown" && ev.key !== "Escape")
+  || ((ev.type === "pointerdown" || ev.type === "mousedown") && ev.pointerType === "mouse");
 function dispatch(target, ev) {
+  const g = activates(ev); if (g) GESTURE.on++;
+  try { return dispatchNow(target, ev); } finally { if (g) GESTURE.on--; }
+}
+function dispatchNow(target, ev) {
   ev.target = target;
   const pathUp = []; for (let n = target; n; n = n.parentNode) pathUp.push(n);
   const doc = target.ownerDocument;
@@ -303,7 +313,9 @@ const TARGETS = { ok: true, pads: [
 function camPage(options = {}) {
   const doc = makeDoc("pixelotter"), clock = makeClock();
   const P = { doc, clock, calls: [], uploaded: [], puts: [], gum: [], streams: [], recorders: [], snaps: [], draws: [], blobs: new Map(), events: [],
-    winListeners: [], session: Object.assign({}, options.session), pickClicks: { camera: 0, gallery: 0 }, sessAtGum: [], rs: [], md: [], perm: {}, srcs: [] };
+    winListeners: [], session: Object.assign({}, options.session), pickClicks: { camera: 0, gallery: 0 }, sessAtGum: [], rs: [], md: [], perm: {}, srcs: [],
+    // storyplay: every play() of the editor's <video> ({ node, src, gesture, out }) and the owner's one carry-over (see node.play)
+    plays: [], carry: 0 };
   doc.visibilityState = "visible"; doc.hidden = false;
   doc.dispatchEvent = (ev) => { for (const l of doc.listeners.filter((x) => x.type === ev.type)) l.fn(ev); P.events.push(ev); return !ev.defaultPrevented; };
   doc.fonts = { load: async () => {} };
@@ -332,8 +344,14 @@ function camPage(options = {}) {
       // every seek is kept (node.seeks): on iOS a seek before the first frame is painted leaves the preview black (WebKit bug 225963)
       let at = 0; node.seeks = [];
       Object.defineProperty(node, "currentTime", { configurable: true, get: () => at, set: (v) => { at = Number(v); node.seeks.push(at); } });
+      // storyplay: the playback moving on by itself (no seek)
+      node.advance = (t) => { at = Number(t); };
+      if (options.canPlay && tag === "video") node.canPlayType = options.canPlay;
       Object.defineProperty(node, "src", { configurable: true, get: () => node.getAttribute("src"), set: (v) => {
-        node.setAttribute("src", v); if (!String(v).startsWith("blob:")) return;
+        node.setAttribute("src", v);
+        // storyplay: a new source is a new load, at once (the media element load algorithm): paused, no error, back to 0
+        if (tag === "video") { node.paused = true; node.error = null; at = 0; node.seeks = []; }
+        if (!String(v).startsWith("blob:")) return;
         const file = P.blobs.get(String(v).split("#")[0]);          // a media fragment (#t=...) names the same blob
         const source = tag === "video" && node.classList.contains("sst-source");
         if (source) P.srcs.push(String(v));
@@ -347,8 +365,29 @@ function camPage(options = {}) {
         });
       } });
       // options.playRefused: the studio's preview may not play by itself (iOS Low Power Mode refuses even a muted inline play)
-      node.play = () => { node.plays = (node.plays || 0) + 1; if (options.playRefused && node.classList.contains("sst-source")) return Promise.reject(Object.assign(new Error("not allowed"), { name: "NotAllowedError" })); node.paused = false; return Promise.resolve(); };
-      node.pause = () => { node.paused = true; node.pauses = (node.pauses || 0) + 1; };
+      // storyplay: options.webkit - WebKit's rule for a script's play() of the editor's <video> (iOS: every iPhone browser).
+      // Refused (NotAllowedError) unless that element was played inside a user's gesture before; from then on it stays allowed
+      // (WebKit lifts the element's restrictions for good). The owner's evidence (2026-11-08) shows one carry-over too: a play
+      // inside a gesture let ONE later play of another element through ("works once after a discard"). A source that failed
+      // (MEDIA_ERR_SRC_NOT_SUPPORTED) refuses with NotSupportedError, and a play refused so unlocks nothing.
+      node.play = () => {
+        node.plays = (node.plays || 0) + 1;
+        const studio = node.classList.contains("sst-source"), gesture = GESTURE.on > 0;
+        const entry = { node, src: String(node.getAttribute("src") || ""), gesture, out: "pending" };
+        if (studio) P.plays.push(entry);
+        const no = (name) => { entry.out = name; return Promise.reject(Object.assign(new Error(name), { name })); };
+        if (options.playRefused && studio) return no("NotAllowedError");
+        if (options.webkit && studio) {
+          if (!gesture && !node.unlocked) { if (P.carry > 0) P.carry--; else return no("NotAllowedError"); }
+          if (node.error && node.error.code === 4) return no("NotSupportedError");
+          if (gesture) { node.unlocked = true; P.carry = 1; }
+        }
+        const was = node.paused !== false; node.paused = false; entry.out = "resolved";
+        if (studio && was) queueMicrotask(() => { if (node.paused === false) node.dispatchEvent(new Ev("playing")); });
+        return Promise.resolve();
+      };
+      node.pause = () => { const was = node.paused === false; node.paused = true; node.pauses = (node.pauses || 0) + 1; if (was && node.classList.contains("sst-source")) queueMicrotask(() => node.dispatchEvent(new Ev("pause"))); };
+      node.load = () => { node.paused = true; node.error = null; at = 0; };
     }
     if (tag === "input") node.addEventListener("click", () => { const k = node.getAttribute("data-pick"); if (k) P.pickClicks[k]++; });
     return node;
@@ -725,7 +764,7 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
   const render = (extra) => ejs.render(source, Object.assign({}, locals, extra), { filename: stripFile });
   const on = render({ storyStudioOn: () => true, storyCameraOn: () => true });
-  assert.match(on, /story-camera\.js\?v=2/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=8/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8
+  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=9/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);
@@ -972,7 +1011,11 @@ async function composeClip(file, extra, fit = "fill", caps = { max_video_secs: 1
   const out = await C.process(file, M.sniff(fs.readFileSync(file).subarray(0, 4096)), { owner_id: "u_camera", kind: "video", edit: JSON.stringify(edit) }, caps);
   M.removeFiles([out.file, out.thumb, out.poster]); return out;
 }
-const IPHONE = { vendor: "Apple Computer, Inc.", types: ["video/mp4"], ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0 Mobile/15E148 Safari/604.1" };
+// storyplay: the editor's <video> plays - of a clip (a blob: source) or of the unlock's silent clip (a data: source)
+const clipPlays = (P) => P.plays.filter((x) => x.src.startsWith("blob:"));
+const unlockPlays = (P) => P.plays.filter((x) => x.src.startsWith("data:"));
+// storyplay: webkit - the editor's <video> follows WebKit's play() rule (camPage, node.play)
+const IPHONE = { webkit: true, vendor: "Apple Computer, Inc.", types: ["video/mp4"], ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0 Mobile/15E148 Safari/604.1" };
 /** A quick hold on the shutter: the camera keeps going to the shortest clip (1.2 s), then the clip opens in the editor. */
 async function quickClip(P) { const s = shutter(P); fire(s, "pointerdown"); await P.clock.tick(300); fire(s, "pointerup"); await P.clock.tick(1200); await flush(16); }
 
@@ -1073,24 +1116,28 @@ test("Story camera fix: an iPhone recording under a second, or one whose length 
   assert.equal(R.uploaded[0].body.edit.camera, undefined); assert.equal(R.uploaded[0].body.edit.trim, undefined);
 });
 
-test("Story camera fix: the editor puts a video's first frame on screen - #t=0.001, preload auto, a muted inline play paused at once, and never a seek", async () => {
+test("Story camera fix: the editor puts a video's first frame on screen - #t=0.001, preload auto, a muted inline play that goes on (storyplay), and never a seek", async () => {
   // iOS paints nothing for a <video> that has never played (preload is only ever 'metadata' there) and a seek on loadedmetadata
-  // leaves it black (WebKit bug 225963): the media fragment and a play paused at once each put the first frame up
+  // leaves it black (WebKit bug 225963): the media fragment and the muted play each put the first frame up. storyplay (1.99??):
+  // the play is no longer paused at once - the clip plays by itself, as on Instagram
   const P = camPage(IPHONE), root = await openStudio(P);
   await quickClip(P);
   const m = root.querySelector("video.sst-source"); assert.ok(m, "the clip's preview");
   assert.match(m.getAttribute("src"), /^blob:[^#]+#t=0\.001$/); assert.equal(m.preload, "auto");
   assert.equal(m.muted, true); assert.ok(m.hasAttribute("playsinline")); assert.ok(m.hasAttribute("muted"));
-  assert.equal(m.plays, 1, "played once, by itself"); assert.equal(m.paused, true, "and paused at once: a still preview"); assert.deepEqual(m.seeks, [], "no seek");
-  // Low Power Mode: no play by itself - the media fragment alone shows the frame; nothing else is tried
+  assert.equal(clipPlays(P).length, 1, "played once, by itself"); assert.equal(clipPlays(P)[0].gesture, false);
+  assert.equal(m.paused, false, "and it goes on playing"); assert.deepEqual(m.seeks, [], "no seek");
+  // Low Power Mode: no play by itself - the media fragment alone shows the frame, and the round ▶ plays it on a tap
   const Q = camPage({ ...IPHONE, playRefused: true }), root2 = await openStudio(Q);
   await quickClip(Q); await flush(8);
   const n = root2.querySelector("video.sst-source");
-  assert.match(n.getAttribute("src"), /#t=0\.001$/); assert.equal(n.plays, 1); assert.equal(n.paused, true); assert.deepEqual(n.seeks, []);
+  assert.match(n.getAttribute("src"), /#t=0\.001$/); assert.equal(clipPlays(Q).length, 1); assert.equal(n.paused, true); assert.deepEqual(n.seeks, []);
+  assert.ok(!root2.querySelector(".sst-playbtn").hidden, "the ▶ over the picture");
   assert.ok(!root2.querySelector(".sst-post").disabled, "a refused play is not a broken file");
-  // a chosen video gets the same first frame
+  // a chosen video gets the same first frame - on the same <video> (storyplay: one element for every clip)
   pickFile(Q, "video/mp4", "clip.mp4"); await flush(16);
-  const g = root2.querySelector("video.sst-source"); assert.ok(g !== n); assert.match(g.getAttribute("src"), /#t=0\.001$/); assert.equal(g.plays, 1);
+  const g = root2.querySelector("video.sst-source"); assert.ok(g === n, "the same element"); assert.match(g.getAttribute("src"), /#t=0\.001$/); assert.equal(clipPlays(Q).length, 2);
+  assert.equal(root2.querySelectorAll("video.sst-source").length, 1);
   // a picture is no video: no fragment
   const R = camPage(), root3 = await openStudio(R); await tap(R);
   assert.doesNotMatch(root3.querySelector("img.sst-source").getAttribute("src"), /#/);
@@ -1220,7 +1267,8 @@ test("Story camera preview fix: a <video> with no size yet at loadedmetadata is 
     await P.clock.tick(800);
     assert.equal(status(P), "", which); assert.ok(root.querySelector(".sst-recovery").hidden, which);
     assert.ok(!root.querySelector(".sst-post").disabled, which + ": can post"); assert.ok(!root.querySelector('[data-tool="text"]').disabled, which + ": can edit");
-    const v = root.querySelector("video.sst-source"); assert.equal(v.plays, 1, which + ": its first frame is put up"); assert.equal(v.paused, true);
+    // storyplay: the one muted play - asked for while the size was waited for - goes on: the clip plays by itself
+    const v = root.querySelector("video.sst-source"); assert.equal(clipPlays(P).length, 1, which + ": its first frame is put up"); assert.equal(v.paused, false, which + ": and it plays");
     root.querySelector(".sst-post").click(); await flush(24);
     assert.equal(P.uploaded[0].body.kind, "video"); assert.equal(P.uploaded[0].body.edit.camera, which === "camera" ? true : undefined, which);
   }
@@ -1293,7 +1341,7 @@ test("Story camera preview fix: a MediaError 4 is tried once more without the me
   const Q = camPage({ sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } return false; } }), root2 = await openStudio(Q);
   pickFile(Q, "video/mp4", "clip.mp4"); await flush(16);
   assert.equal(Q.srcs.length, 2); assert.equal(status(Q), ""); assert.ok(!root2.querySelector(".sst-post").disabled); assert.ok(root2.querySelector(".sst-recovery").hidden);
-  assert.equal(root2.querySelector("video.sst-source").plays, 1, "the first frame without the fragment: the muted play");
+  assert.equal(clipPlays(Q).length, 1, "the first frame without the fragment: the muted play"); assert.equal(root2.querySelector("video.sst-source").paused, false, "playing by itself");
   // refused both times: the recovery, in its new words
   const R = camPage({ sourceVideo: (node) => { mediaError(node, 4); return true; } }), root3 = await openStudio(R);
   pickFile(R, "video/mp4", "clip.mp4"); await flush(16);
@@ -1328,25 +1376,29 @@ test("Story camera preview fix: the poster stays over a <video> that has its siz
   assert.ok(!still.hidden, "no frame painted yet: the poster covers the blank video"); assert.ok(!root.querySelector(".sst-post").disabled);
   assert.equal(typeof paint, "function"); paint(1000, { presentedFrames: 1 }); await flush();
   assert.ok(still.hidden, "a frame of its own: the poster goes");
-  // no requestVideoFrameCallback: it goes when the video plays after its first-frame pause (Trim's play), not with that first play
+  // no requestVideoFrameCallback: it goes once the clip plays ('playing') - storyplay: by itself, with no first-frame pause any more
   const Q = camPage(IPHONE), root2 = await openStudio(Q); await quickClip(Q);
   const st = root2.querySelector("img.sst-still"), v = root2.querySelector("video.sst-source");
-  assert.ok(!st.hidden, "the first-frame play alone leaves it");
-  v.dispatchEvent(new Ev("playing")); assert.ok(st.hidden, "playing after the first frame was put up");
+  assert.equal(v.paused, false, "it plays by itself"); assert.ok(st.hidden, "playing: the video shows itself");
+  // a play refused (Low Power Mode): no 'playing', so the poster stays - under the ▶
+  const Q2 = camPage({ ...IPHONE, playRefused: true }), root2b = await openStudio(Q2); await quickClip(Q2);
+  assert.ok(!root2b.querySelector("img.sst-still").hidden, "refused: the poster stays"); assert.ok(!root2b.querySelector(".sst-playbtn").hidden);
   // the poster stood in (no size in the wait) and the video gets one after all: it takes over once it paints a frame
   let paint2 = null, node2 = null;
   const R = camPage({ ...IPHONE, sourceVideo: (node) => { node2 = node; node.requestVideoFrameCallback = (cb) => { paint2 = cb; return 1; }; zeroMeta(node); return true; } }), root3 = await openStudio(R);
   await quickClip(R); await R.clock.tick(4100);
-  const st3 = root3.querySelector("img.sst-still"); assert.ok(!st3.hidden); assert.ok(!root3.querySelector(".sst-post").disabled); assert.equal(paint2, null);
+  const st3 = root3.querySelector("img.sst-still"); assert.ok(!st3.hidden); assert.ok(!root3.querySelector(".sst-post").disabled);
   root3.querySelector('[data-tool="text"]').click(); assert.equal(root3.getAttribute("data-sheet"), "text", "editing on the poster");
   node2.videoWidth = 1080; node2.videoHeight = 1920; node2.dispatchEvent(new Ev("resize")); await flush();
-  // storyprev verify: two muted plays - the wait's own (asking WebKit for a frame), then the hand-over's first frame
-  assert.equal(node2.plays, 2, "its first frame is put up"); assert.equal(node2.paused, true); assert.equal(typeof paint2, "function"); assert.ok(!st3.hidden, "not before it paints");
+  // storyprev verify: the wait's own muted play (asking WebKit for a frame); storyplay: it goes on, so the hand-over needs no second
+  // (and it waits while the text sheet covers the picture)
+  assert.equal(clipPlays(R).length, 1, "its first frame is asked for once"); assert.equal(node2.paused, true, "paused under the text sheet"); assert.equal(typeof paint2, "function"); assert.ok(!st3.hidden, "not before it paints");
   paint2(1, {}); await flush(); assert.ok(st3.hidden, "painted: the video shows itself"); assert.equal(root3.getAttribute("data-sheet"), "text", "the edit goes on");
+  root3.querySelector(".sst-sheet-head button").click(); await flush(6); assert.equal(node2.paused, false, "the sheet closed: it plays again");
   // a camera clip whose media fragment alone is refused opens as a video (under its poster until it paints)
   const S = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; return false; } }), root4 = await openStudio(S);
   await quickClip(S); assert.equal(S.srcs.length, 2); assert.equal(status(S), ""); assert.ok(!root4.querySelector(".sst-post").disabled);
-  assert.equal(root4.querySelector("video.sst-source").plays, 1); assert.ok(!root4.querySelector("img.sst-still").hidden);
+  assert.equal(clipPlays(S).length, 1); assert.ok(!root4.querySelector("img.sst-still").hidden);
 });
 
 test("Story camera preview fix: ?storydebug=1 (or localStorage patv.storydebug=1) shows what the browser made of the file over the preview; off by default, no network", async () => {
@@ -1399,7 +1451,7 @@ test("Story camera preview verify: a <video> with no size is asked to decode whi
     const v = root.querySelector("video.sst-source");
     assert.equal(status(P), "", which); assert.ok(root.querySelector(".sst-recovery").hidden, which);
     assert.ok(!root.querySelector(".sst-post").disabled, which + ": open well inside the wait"); assert.ok(!root.querySelector('[data-tool="layout"]').disabled, which);
-    assert.equal(v.plays, 1, which + ": one muted play (the first frame), not two"); assert.equal(v.paused, true, which + ": paused on its first frame");
+    assert.equal(clipPlays(P).length, 1, which + ": one muted play (the first frame), not two"); assert.equal(v.paused, false, which + ": and it goes on (storyplay)");
     root.querySelector(".sst-post").click(); await flush(24);
     assert.equal(P.uploaded[0].body.kind, "video"); assert.ok(P.uploaded[0].body.edit, which + ": with its edit");
   }
@@ -1410,7 +1462,7 @@ test("Story camera preview verify: a <video> with no size is asked to decode whi
     if (which === "camera") await quickClip(P); else { pickFile(P, "video/mp4", "clip.mp4"); await flush(16); }
     await P.clock.tick(300); await flush(8);
     assert.equal(P.srcs.length, 2, which); assert.equal(status(P), "", which); assert.ok(!root.querySelector(".sst-post").disabled, which + ": open after the plain try");
-    const v = root.querySelector("video.sst-source"); assert.equal(v.plays, 1, which); assert.equal(v.paused, true, which);
+    const v = root.querySelector("video.sst-source"); assert.equal(clipPlays(P).length, 1, which); assert.equal(v.paused, false, which);
   }
 });
 
@@ -1467,7 +1519,7 @@ test("Story camera preview verify: a gallery video whose metadata comes after th
   late(gv); await flush(8);
   assert.equal(status(P), "", "the recovery's words go"); assert.ok(root.querySelector(".sst-recovery").hidden, "and its buttons");
   assert.ok(!root.querySelector('[data-tool="layout"]').disabled, "editable"); assert.ok(!root.querySelector(".sst-post").disabled);
-  assert.equal(gv.plays, 1, "its first frame is put up");
+  assert.equal(clipPlays(P).length, 1, "its first frame is put up - and it plays"); assert.equal(gv.paused, false);
   root.querySelector(".sst-post").click(); await flush(24); assert.ok(P.uploaded[0].body.edit, "posted with its edit");
   // a size that comes after the 4 s wait (no size at loadedmetadata) opens it too
   let hv = null;
@@ -1579,4 +1631,256 @@ test("Story camera storycombo: the X back to the camera lets a clip's poster and
   assert.ok(cam(P)); assert.ok(root.querySelector("img.sst-still") === null); assert.ok(root.querySelector(".sst-debug") === null);
   // a photo after that: no poster, no stale read-out of the clip
   await tap(P); assert.ok(root.querySelector("img.sst-still") === null); assert.equal(root.querySelectorAll(".sst-debug").length, 1); assert.match(root.querySelector(".sst-debug").textContent, /image\/jpeg/);
+});
+
+// ── storyplay (1.99??): the editor plays a clip by itself, like Instagram - muted, inline, looping inside its trim. The owner's
+//    iPhone (iOS 26, Chrome = WebKit, 2026-11-08): "it can play the recording back because when i manually start it from the trim
+//    menu it works"; "It seems like it DOES autoplay if I press 'play' from the trim menu, then discard the current story, then
+//    record a new story. At that point, it autoplays. Then if I discard again, it doesn't autoplay." WebKit lets a script play() a
+//    <video> only once that element has been played inside a user's gesture - and every pick made a new element. Now ONE element
+//    carries every clip, unlocked inside the user's own gestures (the shutter's let-go, 🖼️, 📷, the X, ▶, Try again, the
+//    "+ Your story" tap itself); where play() is still refused, a round ▶ over the picture. camPage's options.webkit (in IPHONE)
+//    is the fake of WebKit's rule; GESTURE says which events are gestures. ──
+const editorVideo = (P) => P.doc.querySelector("video.sst-source");
+const playBtn = (root) => root.querySelector(".sst-playbtn");
+const soundBtn = (root) => root.querySelector(".sst-sound");
+/** Opens the studio with no gesture the page saw (patvStoryStudio.open from a script): nothing is unlocked by the open. */
+async function openQuiet(P) { P.win.patvStoryStudio.open("aurora.pad", P.opener); await flush(10); const root = P.doc.querySelector(".sst"); assert.ok(root, "the studio opened"); return root; }
+const outcome = (p) => p.then(() => "resolved", (e) => e.name);
+const trimPlay = (root) => root.querySelectorAll(".sst-sheet button").find((x) => /Play/.test(x.getAttribute("aria-label") || ""));
+
+test("Story play: the fake of WebKit's rule is the owner's evidence - refused by itself, played from a tap, once more on a new element after it, then refused", async () => {
+  const P = camPage(IPHONE), make = () => { const v = P.doc.createElement("video"); v.className = "sst-source"; return v; };
+  const tapPlay = (v) => { const b = P.doc.body.appendChild(P.doc.createElement("button")); let r = null; b.addEventListener("click", () => { r = v.play(); }); b.click(); b.remove(); return r; };
+  const first = make(); assert.equal(await outcome(first.play()), "NotAllowedError", "a clip that should play by itself: refused");
+  assert.equal(await outcome(tapPlay(first)), "resolved", "Trim's ▶ (a tap): it plays");
+  const second = make(); assert.equal(await outcome(second.play()), "resolved", "discard, record again: the new clip plays by itself - once");
+  const third = make(); assert.equal(await outcome(third.play()), "NotAllowedError", "discard, record again: refused");
+  assert.equal(await outcome(first.play()), "resolved", "the element played from a tap stays allowed");
+  // a finger going down is no gesture; its lift is
+  const down = make(), up = make(); let pd = null, pu = null;
+  const b = P.doc.body.appendChild(P.doc.createElement("button"));
+  b.addEventListener("pointerdown", () => { pd = down.play(); }); b.addEventListener("pointerup", () => { pu = up.play(); });
+  P.carry = 0; fire(b, "pointerdown", { pointerType: "touch" }); fire(b, "pointerup", { pointerType: "touch" });
+  assert.equal(await outcome(pd), "NotAllowedError"); assert.equal(await outcome(pu), "resolved");
+});
+
+test("Story play: a clip just recorded plays by itself and goes on playing - muted, inline - because the shutter's let-go unlocked the editor's <video>", async () => {
+  const P = camPage(IPHONE), root = await openQuiet(P);
+  assert.equal(P.plays.length, 0, "nothing is played before a gesture");
+  const s = shutter(P); fire(s, "pointerdown", { pointerType: "touch" }); await P.clock.tick(300);
+  assert.ok(P.plays.every((x) => x.out !== "resolved"), "a finger going down is no gesture: nothing is unlocked by it");
+  await P.clock.tick(1500); fire(s, "pointerup", { pointerType: "touch" }); await flush(16);
+  const v = editorVideo(P); assert.ok(v, "the clip's preview"); assert.ok(cam(P) === null);
+  const unlock = P.plays.find((x) => x.gesture && x.out === "resolved"); assert.ok(unlock, "a play inside the let-go");
+  assert.ok(unlock.node === v, "of the editor's own <video> - the one the clip then went into"); assert.match(unlock.src, /^data:video\//, "a tiny silent clip while it held nothing");
+  const own = clipPlays(P); assert.equal(own.length, 1, "one play of the clip"); assert.equal(own[0].gesture, false, "by itself"); assert.equal(own[0].out, "resolved");
+  assert.equal(v.paused, false, "playing"); await P.clock.tick(5000); assert.equal(v.paused, false, "and it goes on"); assert.ok(!v.pauses, "never paused (no first-frame pause)");
+  assert.equal(v.muted, true); assert.equal(v.defaultMuted, true); for (const a of ["playsinline", "webkit-playsinline", "muted"]) assert.ok(v.hasAttribute(a), a);
+  assert.equal(v.preload, "auto"); assert.equal(v.disableRemotePlayback, true); assert.match(v.getAttribute("src"), /^blob:[^#]+#t=0\.001$/); assert.deepEqual(v.seeks, [], "no seek");
+  assert.ok(playBtn(root).hidden, "no ▶ needed");
+  root.querySelector(".sst-post").click(); await flush(24); assert.equal(P.uploaded[0].body.kind, "video"); assert.equal(P.uploaded[0].body.edit.camera, true, "posts as before");
+});
+
+test("Story play: the second and third clips play by themselves on the same <video> - the X back and each let-go unlock it again", async () => {
+  const P = camPage(IPHONE), root = await openQuiet(P);
+  await quickClip(P); const v = editorVideo(P); assert.equal(v.paused, false, "the first plays");
+  for (const n of [2, 3]) {
+    const before = P.plays.length;
+    root.querySelector(".sst-back").click(); await flush(10);
+    assert.ok(cam(P), "back at the camera"); assert.ok(editorVideo(P) === null, "nothing left on the stage"); assert.equal(v.paused, true, "the clip let go is stopped");
+    assert.ok(P.plays.slice(before).some((x) => x.node === v && x.gesture && x.src.startsWith("data:")), "the X unlocked it again");
+    await quickClip(P);
+    assert.ok(editorVideo(P) === v, "clip " + n + ": the same element"); assert.equal(v.paused, false, "clip " + n + " plays by itself");
+    const own = clipPlays(P); assert.equal(own.length, n); assert.ok(own.every((x) => x.node === v && x.out === "resolved" && !x.gesture), "each by itself");
+  }
+  assert.equal(new Set(clipPlays(P).map((x) => x.src.split("#")[0])).size, 3, "three different clips"); assert.equal(root.querySelectorAll("video.sst-source").length, 1);
+  // 🖼️ on the camera unlocks it too: a gallery video after that plays by itself
+  root.querySelector(".sst-back").click(); await flush(10); cam(P).querySelector(".scam-gallery").click(); pickFile(P, "video/mp4", "garden.mp4"); await flush(16);
+  assert.ok(editorVideo(P) === v); assert.equal(v.paused, false); assert.equal(clipPlays(P).at(-1).out, "resolved");
+});
+
+test("Story play: with no gesture to unlock it (opened and handed a file without a tap - a restored draft) a round ▶ shows over the picture; one tap plays it, and the next clip plays by itself", async () => {
+  const P = camPage(IPHONE), root = await openQuiet(P);
+  pickFile(P, "video/mp4", "clip.mp4"); await flush(16);
+  const v = editorVideo(P), b = playBtn(root); assert.equal(v.paused, true); assert.equal(clipPlays(P).at(-1).out, "NotAllowedError", "refused: never unlocked");
+  assert.ok(b && !b.hidden, "the ▶"); assert.ok(b.parentNode === root.querySelector(".sst-preview"), "over the picture"); assert.ok(b.classList.contains("sst-round"));
+  assert.equal(b.getAttribute("aria-label"), "Play the video"); assert.equal(b.title, "Play the video"); assert.equal(b.querySelector(".ds-ic").textContent, "▶️");
+  assert.ok(!root.querySelector(".sst-post").disabled, "a refused play is no broken file");
+  // its press is its own - the stage under it doesn't take the finger for a pan
+  const stageEl = root.querySelector(".sst-preview"); fire(b, "pointerdown", { pointerType: "touch" }); assert.ok(stageEl.captured == null, "the stage left the finger alone");
+  fire(b, "pointerup", { pointerType: "touch" }); b.click(); await flush(8);
+  assert.equal(v.paused, false, "one tap plays it"); assert.ok(b.hidden, "and the ▶ goes"); const tapped = clipPlays(P).at(-1); assert.equal(tapped.gesture, true); assert.equal(tapped.out, "resolved");
+  // unlocked for good: back to the camera, a new clip - it plays by itself, no ▶
+  root.querySelector(".sst-back").click(); await flush(10); await quickClip(P);
+  assert.ok(editorVideo(P) === v); assert.equal(v.paused, false); assert.ok(playBtn(root).hidden); assert.equal(clipPlays(P).at(-1).gesture, false);
+  // a gallery file handed in with no tap at all (the element is unlocked now): it plays by itself too
+  pickFile(P, "video/mp4", "clip2.mp4"); await flush(16); assert.equal(v.paused, false); assert.ok(playBtn(root).hidden);
+});
+
+test("Story play: it loops inside the trim - frame by frame where the browser says a frame was shown, on timeupdate elsewhere; scrubbing pauses; a clip kept whole loops whole", async () => {
+  let frame = null;
+  const P = camPage({ ...IPHONE, duration: 42, sourceVideo: (node) => { node.requestVideoFrameCallback = (cb) => { frame = cb; return 7; }; return false; } }), root = await openStudio(P);
+  pickFile(P, "video/mp4", "long.mp4"); await flush(16);
+  const v = editorVideo(P); assert.equal(root.getAttribute("data-sheet"), "trim", "over the story's length: Trim opens"); assert.equal(v.paused, false, "and it plays inside it");
+  assert.equal(v.loop, false, "a trimmed clip is looped here, not by the element");
+  const start = root.querySelector(".sst-trim-start"), end = root.querySelector(".sst-trim-end");
+  start.value = 4; start.dispatchEvent(new Ev("input")); assert.equal(v.paused, true, "scrubbing pauses"); assert.equal(v.currentTime, 4, "on the handle's frame");
+  start.dispatchEvent(new Ev("change")); await flush(6); assert.equal(v.paused, false, "let go: it plays again"); assert.equal(v.currentTime, 4, "from the start of the trim");
+  end.value = 9; end.dispatchEvent(new Ev("input")); assert.equal(v.paused, true); end.dispatchEvent(new Ev("change")); await flush(6); assert.equal(v.paused, false);
+  // frame by frame: past the end it goes back to the start
+  v.seeks.length = 0; v.advance(8.5); assert.equal(typeof frame, "function"); frame(1, { mediaTime: 8.5 }); assert.deepEqual(v.seeks, [], "inside: no seek");
+  v.advance(9.01); frame(2, { mediaTime: 9.01 }); assert.deepEqual(v.seeks, [4], "at the end: back to the start");
+  v.advance(9.3); v.dispatchEvent(new Ev("timeupdate")); assert.deepEqual(v.seeks, [4, 4], "timeupdate does it too");
+  v.advance(1); v.dispatchEvent(new Ev("timeupdate")); assert.deepEqual(v.seeks, [4, 4, 4], "before the start: to the start");
+  // Trim's ▶ pauses the loop (no wrapping while paused) and plays it again from the start of the trim
+  const tp = trimPlay(root); assert.ok(tp);
+  tp.click(); await flush(4); assert.equal(v.paused, true); v.advance(9.5); v.dispatchEvent(new Ev("timeupdate")); assert.deepEqual(v.seeks, [4, 4, 4], "paused: left where it is");
+  tp.click(); await flush(6); assert.equal(v.paused, false); assert.deepEqual(v.seeks, [4, 4, 4, 4], "played again: from the start of the trim");
+  // a 12 s clip kept whole loops whole (the element's own loop; after an 'ended' it goes on from 0 too)
+  const Q = camPage({ ...IPHONE, duration: 12 }); await openStudio(Q); pickFile(Q, "video/mp4", "clip.mp4"); await flush(16);
+  const w = editorVideo(Q); assert.equal(w.paused, false); assert.equal(w.loop, true, "kept whole: the element loops it");
+  w.advance(12); w.paused = true; w.dispatchEvent(new Ev("ended")); await flush(6); assert.deepEqual(w.seeks, [0]); assert.equal(w.paused, false, "plays on");
+});
+
+test("Story play: a clip's poster goes on the first frame the playing clip paints - not before; a refused play keeps it under the ▶", async () => {
+  let paint = null;
+  const P = camPage({ ...IPHONE, sourceVideo: (node) => { node.requestVideoFrameCallback = (cb) => { paint = cb; return 1; }; return false; } }), root = await openStudio(P);
+  await quickClip(P);
+  const v = editorVideo(P), still = root.querySelector("img.sst-still");
+  assert.equal(v.paused, false, "playing by itself"); assert.ok(still && !still.hidden, "no frame painted yet: the poster stays");
+  assert.equal(typeof paint, "function"); paint(1, { mediaTime: 0.04 }); await flush();
+  assert.ok(still.hidden, "the first painted frame: the poster goes"); assert.equal(v.paused, false, "still playing");
+  const Q = camPage({ ...IPHONE, playRefused: true }), q = await openStudio(Q); await quickClip(Q);
+  assert.ok(!q.querySelector("img.sst-still").hidden, "refused: the poster stays"); assert.ok(!playBtn(q).hidden, "with the ▶ over it");
+});
+
+test("Story play: sound is a round 🔇 in the header - muted by default; a tap turns it on inside the tap (a play in the gesture), 🔊 turns it off; the next clip keeps the choice", async () => {
+  const P = camPage(IPHONE), root = await openStudio(P);
+  assert.ok(soundBtn(root).hidden, "no clip: no sound button");
+  await quickClip(P); const v = editorVideo(P), b = soundBtn(root);
+  assert.ok(!b.hidden); assert.ok(b.classList.contains("sst-round")); assert.ok(b.parentNode === root.querySelector(".sst-head"), "in the header");
+  assert.equal(v.muted, true, "muted by default"); assert.equal(b.getAttribute("aria-label"), "Turn sound on"); assert.equal(b.title, "Turn sound on"); assert.equal(b.querySelector(".ds-ic").textContent, "🔇");
+  const before = P.plays.length; b.click(); await flush(6);
+  assert.equal(v.muted, false, "sound on"); assert.equal(b.getAttribute("aria-label"), "Turn sound off"); assert.equal(b.title, "Turn sound off"); assert.equal(b.querySelector(".ds-ic").textContent, "🔊");
+  const inTap = P.plays.slice(before); assert.ok(inTap.length >= 1, "a play"); assert.ok(inTap.every((x) => x.gesture && x.node === v && x.out === "resolved"), "inside the tap");
+  assert.equal(v.paused, false, "still playing");
+  b.click(); await flush(6); assert.equal(v.muted, true, "off again"); assert.equal(b.getAttribute("aria-label"), "Turn sound on"); assert.equal(v.paused, false);
+  b.click(); await flush(4); root.querySelector(".sst-back").click(); await flush(10); await quickClip(P);
+  assert.ok(editorVideo(P) === v); assert.equal(v.muted, false, "the next clip keeps the sound on"); assert.equal(v.paused, false); assert.equal(soundBtn(root).getAttribute("aria-label"), "Turn sound off");
+  // paused by the user (Trim's ▶): turning the sound on unlocks the speaker but leaves it paused
+  b.click(); await flush(4); assert.equal(v.muted, true); root.querySelector('[data-tool="trim"]').click(); await flush(4);
+  trimPlay(root).click(); await flush(4); assert.equal(v.paused, true);
+  b.click(); await flush(6); assert.equal(v.muted, false); assert.equal(v.paused, true, "still paused - the user paused it");
+  // a photo has none
+  root.querySelector(".sst-sheet-head button").click(); root.querySelector(".sst-back").click(); await flush(10); await tap(P); assert.ok(soundBtn(root).hidden, "a photo: no sound button");
+});
+
+test("Story play: it pauses while the page is hidden or a sheet covers it (text, stickers, mentions, options - not Trim), and plays again after; the X and closing the studio stop it", async () => {
+  const P = camPage(IPHONE), root = await openStudio(P); await quickClip(P); const v = editorVideo(P);
+  visibility(P, "hidden"); await flush(); assert.equal(v.paused, true, "a hidden page");
+  visibility(P, "visible"); await flush(6); assert.equal(v.paused, false, "shown again");
+  pageEvent(P, "pagehide"); await flush(); assert.equal(v.paused, true, "pagehide");
+  pageEvent(P, "pageshow"); await flush(6); assert.equal(v.paused, false, "pageshow");
+  for (const t of ["text", "sticker", "mention"]) {
+    root.querySelector(`[data-tool="${t}"]`).click(); await flush(4); assert.equal(v.paused, true, t + ": its sheet covers it");
+    P.doc.querySelector(".sst-sheet-head button").click(); await flush(6); assert.equal(v.paused, false, t + ": closed, it plays again");
+  }
+  const heads = root.querySelectorAll(".sst-head .ds-btn"); heads[heads.length - 1].click(); await flush(4); assert.equal(root.getAttribute("data-sheet"), "options"); assert.equal(v.paused, true, "options");
+  P.doc.querySelector(".sst-sheet-head button").click(); await flush(6); assert.equal(v.paused, false);
+  root.querySelector('[data-tool="trim"]').click(); await flush(4); assert.equal(v.paused, false, "Trim: it plays on - it is the loop's own sheet");
+  const tp = trimPlay(root);
+  assert.equal(tp.getAttribute("aria-pressed"), "true", "playing");
+  tp.click(); await flush(4); assert.equal(v.paused, true, "Trim's ▶ pauses it"); assert.ok(playBtn(root).hidden, "Trim has its own ▶"); assert.equal(tp.getAttribute("aria-pressed"), "false");
+  tp.click(); await flush(6); assert.equal(v.paused, false, "and plays it"); assert.equal(tp.getAttribute("aria-pressed"), "true");
+  tp.click(); await flush(4); P.doc.querySelector(".sst-sheet-head button").click(); await flush(6);
+  assert.equal(v.paused, true, "paused by the user stays paused"); assert.ok(!playBtn(root).hidden, "with the ▶ over the picture");
+  visibility(P, "hidden"); await flush(); assert.ok(playBtn(root).hidden); visibility(P, "visible"); await flush(6); assert.equal(v.paused, true, "a page shown again leaves the user's pause");
+  playBtn(root).click(); await flush(6); assert.equal(v.paused, false, "the ▶ plays it");
+  // text added (its sheet paused it and its Done let it go on); with edits the X asks first - it plays on while asked
+  await addText(P, "frog"); assert.equal(v.paused, false);
+  root.querySelector(".sst-back").click(); await flush(); assert.ok(root.querySelector(".sst-ask"), "edits: asked first"); assert.equal(v.paused, false, "still playing while asked");
+  root.querySelector(".sst-ask-go").click(); await flush(10); assert.equal(v.paused, true, "Discard: stopped"); assert.ok(editorVideo(P) === null);
+  await quickClip(P); assert.equal(v.paused, false);
+  fire(P.doc.activeElement, "keydown", { key: "Escape" }); await flush(); assert.ok(P.doc.querySelector(".sst") === null, "closed"); assert.equal(v.paused, true, "closed: stopped");
+});
+
+test("Story play: the picture can be pinched and dragged and its layers placed while the clip plays - playback goes on, and it posts as shown", async () => {
+  const P = camPage(IPHONE), root = await openStudio(P); await quickClip(P); const v = editorVideo(P), pauses = v.pauses || 0;
+  const mid = await pinchStage(P, root); assert.match(mid.video, /scale\(2, 2\)/, "the pinch moves the playing video"); assert.equal(v.style.inlineSize, "200%");
+  assert.equal(v.paused, false); assert.equal(v.pauses || 0, pauses, "never paused for it");
+  const stage = root.querySelector(".sst-preview");
+  finger(stage, "pointerdown", 1, 150, 250); await flush(); finger(stage, "pointermove", 1, 600, 250); await flush(); finger(stage, "pointerup", 1, 600, 250); await flush(6);
+  assert.equal(v.paused, false, "a drag: still playing");
+  await addText(P, "pond"); const before = v.pauses || 0, layer = root.querySelector('.sst-layer[data-layer^="text-"]');
+  finger(layer, "pointerdown", 1, 150, 150); await flush(); finger(stage, "pointermove", 1, 160, 200); await flush(); finger(stage, "pointerup", 1, 160, 200); await flush(6);
+  assert.equal(v.paused, false, "a layer dragged: still playing"); assert.equal(v.pauses || 0, before);
+  root.querySelector(".sst-post").click(); await flush(30);
+  const up = P.uploaded.at(-1).body; assert.equal(up.kind, "video"); assert.equal(up.edit.fit, "fill"); assert.equal(up.edit.crop.w, 0.5); assert.equal(up.edit.crop.x, 0); assert.deepEqual(up.edit.text, ["pond"]);
+});
+
+test("Story play: photos and gallery pictures are as they were - an <img>, no ▶, no sound button; the clip's <video> leaves the stage and stops", async () => {
+  const P = camPage(IPHONE), root = await openStudio(P); await tap(P);
+  assert.ok(root.querySelector("img.sst-source")); assert.equal(root.querySelectorAll(".sst-source").length, 1); assert.ok(editorVideo(P) === null);
+  assert.ok(soundBtn(root).hidden); assert.ok(playBtn(root).hidden); assert.equal(clipPlays(P).length, 0);
+  root.querySelector(".sst-post").click(); await flush(24); assert.equal(P.uploaded[0].body.kind, "image"); assert.ok(P.uploaded[0].body.edit);
+  const Q = camPage(IPHONE), q = await openStudio(Q); cam(Q).querySelector(".scam-gallery").click(); pickFile(Q, "image/jpeg", "garden.jpg"); await flush(10);
+  assert.ok(q.querySelector("img.sst-source")); assert.ok(editorVideo(Q) === null); assert.ok(soundBtn(q).hidden); assert.ok(playBtn(q).hidden);
+  // a clip, then (the X) a photo: the <video> is off the stage and stopped
+  const R = camPage(IPHONE), r = await openStudio(R); await quickClip(R); const v = editorVideo(R); assert.equal(v.paused, false);
+  r.querySelector(".sst-back").click(); await flush(10); await tap(R);
+  assert.equal(v.paused, true); assert.ok(!r.contains(v), "off the stage"); assert.ok(r.querySelector("img.sst-source")); assert.equal(r.querySelectorAll(".sst-source").length, 1);
+  assert.ok(soundBtn(r).hidden); assert.ok(playBtn(r).hidden);
+});
+
+test("Story play: ?storydebug=1 logs every play() and its outcome, which gesture unlocked the <video>, and how many clips the one element has carried", async () => {
+  const P = camPage({ ...IPHONE, search: "?storydebug=1" }), root = await openQuiet(P);
+  await quickClip(P);
+  let text = root.querySelector(".sst-debug").textContent;
+  assert.match(text, /player video #\d+ · clip 1 on this element/); assert.match(text, /unlocked by shutter up/); assert.match(text, /muted/);
+  assert.match(text, /play unlock shutter down \(silent\) \+\d+ ms → rejected NotAllowedError/, "the press: refused (no gesture)");
+  assert.match(text, /play unlock shutter up \(silent\) \+\d+ ms → resolved/, "the let-go: allowed");
+  assert.match(text, /play autoplay \(clip\) \+\d+ ms → resolved/);
+  const id = /player video #(\d+)/.exec(text)[1];
+  root.querySelector(".sst-back").click(); await flush(10); await quickClip(P);
+  text = root.querySelector(".sst-debug").textContent; assert.match(text, /clip 2 on this element/); assert.match(text, /play unlock back \(silent\)/);
+  assert.equal(/player video #(\d+)/.exec(text)[1], id, "the same element");
+  // a studio opened with no gesture and handed a file: the refusal, then the ▶
+  const Q = camPage({ ...IPHONE, search: "?storydebug=1" }), q = await openQuiet(Q); pickFile(Q, "video/mp4", "clip.mp4"); await flush(16);
+  text = q.querySelector(".sst-debug").textContent; assert.match(text, /not unlocked by a gesture yet/); assert.match(text, /play autoplay \(clip\) \+\d+ ms → rejected NotAllowedError/);
+  playBtn(q).click(); await flush(8); text = q.querySelector(".sst-debug").textContent;
+  assert.match(text, /play ▶ \(clip\) \+\d+ ms → resolved/); assert.match(text, /unlocked by ▶/);
+});
+
+test("Story play: the unlock's silent clip is a real, tiny, soundless video (a data: URI made once) on the editor's own <video> - MP4, or WebM where MP4 can't play", async () => {
+  const P = camPage(IPHONE); await openQuiet(P); await quickClip(P);
+  const u = unlockPlays(P); assert.ok(u.length >= 1); assert.ok(u.every((x) => x.node === editorVideo(P)), "never the camera's own <video>");
+  const mp4 = u[0].src; assert.match(mp4, /^data:video\/mp4;base64,[A-Za-z0-9+/]+=*$/); assert.equal(new Set(u.map((x) => x.src)).size, 1, "the same clip each time");
+  const Q = camPage({ ...IPHONE, canPlay: (t) => (/webm/.test(t) ? "probably" : "") }); await openQuiet(Q); await quickClip(Q);
+  const webm = unlockPlays(Q)[0].src; assert.match(webm, /^data:video\/webm;base64,[A-Za-z0-9+/]+=*$/);
+  for (const [uri, kind] of [[mp4, "mp4"], [webm, "webm"]]) {
+    const buf = Buffer.from(uri.split(",")[1], "base64"); assert.ok(buf.length > 0 && buf.length < 2048, kind + ": " + buf.length + " bytes");
+    if (kind === "mp4") assert.equal(buf.subarray(4, 8).toString(), "ftyp"); else assert.deepEqual([...buf.subarray(0, 4)], [0x1a, 0x45, 0xdf, 0xa3]);
+    if (!HAVE_FFMPEG) continue;
+    const file = path.join(tmp, "silent." + kind); fs.writeFileSync(file, buf);
+    const probe = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height", "-of", "json", file]).toString());
+    assert.deepEqual(probe.streams.map((x) => x.codec_type), ["video"], kind + ": a picture, no sound"); assert.ok(Number(probe.format.duration) <= 0.25, kind + ": " + probe.format.duration + " s");
+    execFileSync("ffmpeg", ["-v", "error", "-i", file, "-f", "null", "-"], { windowsHide: true });      // it decodes cleanly
+  }
+});
+
+test("Story play: the camera's Try again and the studio's own 📷 / 🖼️ unlock it inside their taps", async () => {
+  // the camera stopped (taken by another app, twice): its Try again is a tap - and an unlock
+  const P = camPage(IPHONE); await openQuiet(P);
+  for (let i = 0; i < 2; i++) { const t = P.streams.at(-1).getVideoTracks()[0]; t.stop(); for (const l of t.ls.filter((x) => x.type === "ended")) l.fn(); await flush(10); }
+  const retry = cam(P).querySelector(".scam-retry"); assert.ok(!retry.hidden, "Try again");
+  const before = P.plays.length; retry.click(); await flush(10);
+  assert.ok(P.plays.slice(before).some((x) => x.gesture && x.out === "resolved" && x.src.startsWith("data:")), "unlocked inside Try again");
+  // no live camera here: the studio's 🖼️ Gallery and 📷 Camera (the phone's capture input) unlock it
+  const Q = camPage({ ...IPHONE, noMedia: true }), q = await openQuiet(Q);
+  q.querySelector('[data-picker="gallery"]').click(); assert.ok(Q.plays.some((x) => x.gesture && x.out === "resolved"), "🖼️");
+  const f = new Blob([new Uint8Array(16)], { type: "video/mp4" }); f.name = "clip.mp4"; const g = Q.doc.querySelector('[data-pick="gallery"]'); g.files = [f]; g.dispatchEvent(new Ev("change")); await flush(16);
+  assert.equal(editorVideo(Q).paused, false, "the file chosen plays by itself");
+  const R = camPage({ ...IPHONE, noMedia: true }), r = await openQuiet(R);
+  r.querySelector('[data-picker="camera"]').click(); assert.equal(R.pickClicks.camera, 1); assert.ok(R.plays.some((x) => x.gesture && x.out === "resolved"), "📷");
 });
