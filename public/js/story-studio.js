@@ -204,7 +204,7 @@
       if (resumed) { s.d.nsfw = !!resumed.nsfw; say(s, resumed.phase === 'arrived' ? _t('js.feed.ss.reloaded_loading', 'The page reloaded while your file was opening, so it isn\'t here. Try again, or choose it from Gallery.') : resumed.picker === 'camera' ? _t('js.feed.ss.reloaded_camera', 'The page reloaded while the camera was open, so the picture didn\'t arrive. Try again - or take it with your camera app and choose it from Gallery.') : _t('js.feed.ss.reloaded_gallery', 'The page reloaded while you were choosing a file, so nothing arrived. Try again.'), true); }
     }).catch(function (e) { s.noPost = true; if (s.cam) { s.cam.close(); s.cam = null; } if (live(s)) say(s, e.message || _t('js.feed.sc.unreachable', 'Couldn\'t reach the site.'), true); });
   }
-  // Story camera (1.99??, story-camera.js): the studio opens on the live camera when this browser can show one. A capture
+  // Story camera (1.99alu, story-camera.js): the studio opens on the live camera when this browser can show one. A capture
   // comes back through pick() exactly like a chosen file; without a camera the picker stays, with the reason. The camera
   // and mic are asked for only once the targets say this person can post (go()); after a refusal there, or once the live
   // camera failed in this studio, 📷 Camera and Retake open the phone's own capture input instead.

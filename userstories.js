@@ -74,7 +74,7 @@ class Refuse extends Error { constructor(status, msg) { super(msg); this.status 
 const store = () => require("./feedstore");
 const fm = () => require("./feedmedia");
 const studioOn = () => !!store().config().story_studio;
-// story camera (1.99??): the studio opens on a live camera while this is on too (public/js/story-camera.js; never without the studio)
+// story camera (1.99alu): the studio opens on a live camera while this is on too (public/js/story-camera.js; never without the studio)
 const cameraOn = () => studioOn() && store().config().story_camera !== false;
 const exempt = (u) => SP.can(u, "feed.limits_exempt");   // 1.99ack (siteperms.js; was isStaff)
 const lc = (s) => String(s || "").trim().toLowerCase();

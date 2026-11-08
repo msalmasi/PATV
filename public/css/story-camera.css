@@ -1,4 +1,4 @@
-/* Story camera (1.99??, story-camera.js): the live camera Story Studio opens on - full screen over the studio, like IG /
+/* Story camera (1.99alu, story-camera.js): the live camera Story Studio opens on - full screen over the studio, like IG /
    Snapchat. It is a camera, so it stays dark (ds media tokens) whatever the page; the safe areas stay clear; touch
    targets are at least 44px; the shutter never selects text or opens the long-press callout / context menu. */
 .sst.scam-open > .sst-card { visibility: hidden; }

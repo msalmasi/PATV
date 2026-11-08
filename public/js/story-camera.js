@@ -1,4 +1,4 @@
-// Story camera (1.99??): Story Studio opens on a live camera, like IG / Snapchat (story-studio.js calls open()).
+// Story camera (1.99alu): Story Studio opens on a live camera, like IG / Snapchat (story-studio.js calls open()).
 //   tap the shutter     a photo: the current frame at the stream's own resolution, as a JPEG
 //   press and hold      a video while held (with sound when the mic is allowed), stopped by itself just inside the
 //                       story limit the server sends (caps.secs); let go to stop. A clip is at least MIN_MS long.
@@ -15,7 +15,7 @@
 // Recordings: Chrome / Android / Firefox write WebM (VP8 + Opus) with no length in its header - written in here before
 // the hand-off (webmDuration), so the editor and ffprobe can read it; WebKit (every iPhone browser) writes MP4 (H.264 +
 // AAC). The server re-encodes either (storycompose.js) and measures a header with no length from its packets.
-// Review fixes (1.99??):
+// Review fixes (1.99alu):
 //   * o.wait: the view is up at once, but the camera and mic are asked for only on go() - once the studio knows this person
 //     can post (no prompt for a camera that could never post)
 //   * a refusal is remembered only when it is the CAMERA's: a combined request refused while the mic is blocked and the

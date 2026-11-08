@@ -105,7 +105,7 @@ async function displayedVideoSize(input, sn, pr) {
   const quarterTurn = Math.abs(Math.round(rotation / 90)) % 2 === 1;
   return quarterTurn ? { w: Number(pr.video.height), h: Number(pr.video.width) } : { w: Number(pr.video.width), h: Number(pr.video.height) };
 }
-// story camera (1.99??): a video's length from the end of its last packet, for a file whose header has none. Demuxing only (no
+// story camera (1.99alu): a video's length from the end of its last packet, for a file whose header has none. Demuxing only (no
 // decoding), the first video stream, the demuxer forced and local files only, as everywhere here; the ffprobe 4.2 on the VPS knows
 // every option used. -> seconds (ms precision), 0 when no packet has a time.
 async function packetSecs(input, ffmt) {
@@ -146,7 +146,7 @@ async function video(input, sn, edit, overlay, caps, work) {
   if (!sn.ffmt) throw new media.MediaError("That video type isn't supported.");
   const pr = await media.probe(input, sn.ffmt).catch(() => null);
   if (!pr || !pr.video) throw new media.MediaError("A story needs a video track, not audio alone.");
-  // story camera (1.99??): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header
+  // story camera (1.99alu): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) pr.secs = await packetSecs(input, sn.ffmt).catch(() => 0);
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) throw new media.MediaError("That video's length couldn't be read.");
   const sourceCap = Math.min(L.STORY_SRC_MAX_SECS, Number(caps.max_video_secs) || L.STORY_SRC_MAX_SECS);

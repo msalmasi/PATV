@@ -1,4 +1,4 @@
-// Story camera (1.99??): Story Studio opens on a live camera, like IG / Snapchat (public/js/story-camera.js). The real page
+// Story camera (1.99alu): Story Studio opens on a live camera, like IG / Snapchat (public/js/story-camera.js). The real page
 // scripts (story-camera.js + story-studio.js) run in a VM with fakes for getUserMedia, MediaRecorder, the <video> element,
 // canvas.toBlob, pointer events, page visibility and a clock the tests move by hand. The fake DOM is copied from
 // story-studio-client.test.js. The WebM length fix and the server's packet-length read also run against real ffmpeg output
@@ -749,7 +749,7 @@ test("Story camera: CSS uses ds tokens, keeps the safe areas and stops the long-
   const js = SRC("story-camera.js"); assert.doesNotMatch(js, /localStorage|innerHTML|location\.reload|eval\(/);
 });
 
-// ── review fixes (1.99??): every finding of the camera review gets its case here ──
+// ── review fixes (1.99alu): every finding of the camera review gets its case here ──
 test("Story camera review: after an error the live camera can't get past, 📷 Camera and Retake open the phone's capture input - never the same error again", async () => {
   const P = camPage({ gum: () => ({ name: "TypeError", message: "bad constraints" }) }), root = await openStudio(P);
   assert.ok(cam(P) === null, "cam(P) should be null"); assert.match(status(P), /couldn't start/i);
