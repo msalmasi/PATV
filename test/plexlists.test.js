@@ -554,7 +554,7 @@ test("the card names the reason: busy (try again) or unavailable on load, and wh
   for (const [code, key] of [["invalid_list", "why_invalid_list"], ["not_found", "why_not_found"], ["ambiguous_list", "why_ambiguous_list"],
     ["list_limit", "why_list_limit"], ["quiet", "why_quiet"], ["rate_limited", "why_rate_limited"], ["daily_budget", "why_rate_limited"],
     ["provider_auth", "why_provider_auth"], ["provider_unavailable", "why_provider"], ["provider_timeout", "why_provider"], ["provider_invalid", "why_provider"],
-    ["list_too_large", "why_list_too_large"], ["lists_busy", "busy"], ["lists_unavailable", "failed"], ["something_new", "failed"]]) {
+    ["list_too_large", "why_list_too_large"], ["lists_busy", "busy"], ["needs_key", "why_needs_key"], ["lists_unavailable", "failed"], ["something_new", "failed"]]) {
     answer = { "/api/media/admin/lists": ready, "/api/media/admin/lists/add": { ok: false, code } };
     vm.runInNewContext(source, context); await flush();
     nodes.get("clInput").value = "x"; nodes.get("clAdd").handlers.click(); await flush();

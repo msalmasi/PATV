@@ -158,7 +158,54 @@ test("lists: the membership read starts from the members, and adding a list matc
   const final = h.reads.find((sql) => /json_valid\(c\.data\)/.test(sql));
   const finalPlan = await h.plan(final);
   assert.match(finalPlan, /^SCAN m\b/, "members first, then each member's catalog row by key (" + finalPlan + ")");
+  // 1.99?? rebase onto site 1.99amd (its card fix started every membership read from the lists): ONE order for both reads, the
+  // members first - offline at the real library's size a full read costs the same either order (0 lists 0.1 ms, 20 x 20,000
+  // ~3.1-3.4 s), and a key lookup (the clerk's candidates) goes straight to plex_list_member_key
+  const membership = [...new Set(h.reads.filter((sql) => /^SELECT m\.key,m\.rank,m\.item_no\b/.test(sql)))];
+  assert.equal(membership.length, 2, "the membership read and its final re-check");
+  for (const sql of membership) {
+    const p = await h.plan(sql); assert.match(p, /^SCAN m\b/, "members first (" + p + ")");
+    assert.match(sql, / FROM plex_list_members m CROSS JOIN plex_lists l ON l\.id=m\.list_id\b/, "pinned (a CROSS JOIN), never the planner's pick");
+  }
+  h.reads.length = 0;
+  assert.deepEqual((await lists.membership(["7"])).map((r) => r.key), ["7"]);
+  const byKey = [...new Set(h.reads.filter((sql) => /^SELECT m\.key,m\.rank,m\.item_no\b/.test(sql)))];
+  assert.equal(byKey.length, 2);
+  for (const sql of byKey) { const p = await h.plan(sql); assert.match(p, /^SEARCH m USING (COVERING )?INDEX plex_list_member_key \(key=\?\)/, "a key lookup (" + p + ")"); }
   assert.deepEqual((await lists.shelves()).map((r) => [r.name, r.count]), [["IMDb Top 250", 2]]);
+});
+
+test("lists: a list's add / import / rematch match through the kept roots on the admin lane - one indexed read of the films and shows for all the lists, on the admin budget", async (t) => {
+  // 1.99?? rebase onto site 1.99amd: amd moved a list's matching to the admin lane (two whole-kind reads, ADMIN_BUDGET_MS);
+  // plexclerk moved it to roots() (one read through plex_catalog_roots, kept). Both: catalog.admin.roots() - the same kept
+  // answer the clerk reads, read on the admin lane when it has to be read (offline at the real library's size: 355 ms vs 540 ms
+  // for the two whole-kind reads, and a rematch of every list reads it once instead of twice per list)
+  const { ADMIN_BUDGET_MS } = require("../plexcatalog");
+  const seen = [];
+  const h = await setup(t, { onRead: (r) => seen.push(r) });
+  const cfg = { ...SETTINGS, clerk_lists: true };
+  const lists = createLists({ catalog: h.catalog, settings: () => cfg, key: () => "fixture-only", now: () => AT, request: async () => { throw new Error("offline"); } });
+  t.after(() => lists.close());
+  assert.equal(typeof h.catalog.admin.roots, "function");
+  const rootReads = () => seen.filter((r) => /^SELECT c\.\* FROM plex_catalog c/.test(r.sql) && ROOTS(r.sql));
+  seen.length = 0;
+  assert.equal((await lists.importSnapshot({ configured: [
+    { id: "8201", name: "List A", ranked: true, items: [{ rank: 1, type: "movie", title: "Fixture Film 7", year: 1997 }] },
+    { id: "8202", name: "List B", ranked: false, items: [{ type: "show", title: "The Simpsons", year: 1989 }] },
+    { id: "8203", name: "List C", ranked: false, items: [{ type: "movie", title: "Fixture Film 9", year: 1999 }] }] })).ok, true);
+  assert.equal(rootReads().length, 1, "three lists matched: the films and shows read once");
+  assert.equal(seen.filter((r) => KIND_READ(r.sql)).length, 0, "no whole-kind read");
+  assert.deepEqual([...new Set(seen.map((r) => r.budgetMs))], [ADMIN_BUDGET_MS], "every read the matching made is on the admin lane");
+  const p = await h.plan(rootReads()[0].sql);
+  assert.match(p, /INDEX plex_catalog_roots/, p); assert.doesNotMatch(p, /SCAN c\b/, p);
+  seen.length = 0;
+  assert.equal((await lists.rematch()).ok, true);
+  assert.equal(rootReads().length, 0, "nothing changed: the rematch reuses the kept roots");
+  assert.deepEqual((await lists.shelves()).map((r) => [r.name, r.count]), [["List A", 1], ["List B", 1], ["List C", 1]]);
+  // the clerk's roots() and the admin lane's are one kept answer
+  seen.length = 0;
+  const kept = await h.catalog.roots();
+  assert.equal(kept.movies.length + kept.shows.length, 404); assert.equal(rootReads().length, 0, "the clerk gets the answer the lists read");
 });
 
 test("a catalog that isn't ready (or whose state can't be read) refuses roots() - a rematch then keeps every list's last members", async (t) => {
@@ -176,6 +223,7 @@ test("a catalog that isn't ready (or whose state can't be read) refuses roots() 
   clock = AT + 4 * 86400000;                                                // the last full sweep is now older than 3 days
   assert.equal((await h.catalog.status()).ready, false);
   await assert.rejects(h.catalog.roots(), (e) => e.code === "catalog_down", "never an empty library standing in for one that can't be read");
+  await assert.rejects(h.catalog.admin.roots(), (e) => e.code === "catalog_down", "the admin lane's roots too (1.99amd rebase)");
   const again = await lists.rematch();
   assert.equal(again.ok, false, "the rematch is refused");
   assert.equal(await members(), 2, "the lists keep their last complete members");
@@ -207,15 +255,19 @@ test("an outside list named like 'Oscar Best Picture Winners' answers 'an oscar 
 test("the admin lists panel says why an action was refused (the maintenance window, the key, the input, the limits)", () => {
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "js", "media-admin.js"), "utf8");
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "locales", "en.json"), "utf8"));
-  for (const code of ["quiet", "needs_key", "invalid_list", "not_found", "list_limit", "rate_limited", "daily_budget", "provider_auth", "list_too_large", "lists_unavailable"]) {
-    assert.ok(typeof en["js.media.lists.err." + code] === "string" && en["js.media.lists.err." + code].length > 10, code);
+  // 1.99?? rebase onto site 1.99amd: amd's card reasons (js.media.lists.busy / why_*, live and translated) are the one set - one
+  // line per code, no second js.media.lists.err.* set; the key's own refusal (needs_key) joins them. Every code here has its line.
+  const reasons = { quiet: "why_quiet", needs_key: "why_needs_key", invalid_list: "why_invalid_list", not_found: "why_not_found", list_limit: "why_list_limit",
+    rate_limited: "why_rate_limited", daily_budget: "why_rate_limited", provider_auth: "why_provider_auth", list_too_large: "why_list_too_large", lists_busy: "busy" };
+  for (const [code, key] of Object.entries(reasons)) {
+    assert.ok(typeof en["js.media.lists." + key] === "string" && en["js.media.lists." + key].length > 10, code + " -> " + key);
+    assert.match(js, new RegExp("case \"" + code + "\":[^\\n]*lt\\(\"" + key + "\""), "the panel says " + key + " for " + code);
   }
-  assert.match(en["js.media.lists.err.quiet"], /03:40/); assert.match(en["js.media.lists.err.quiet"], /04:20/);
+  assert.deepEqual(Object.keys(en).filter((k) => k.startsWith("js.media.lists.err.")), [], "no second set of the same reasons");
+  assert.match(en["js.media.lists.why_needs_key"], /MDBLIST_API_KEY/);
+  assert.match(en["js.media.lists.why_quiet"], /03:40/); assert.match(en["js.media.lists.why_quiet"], /04:20/);
   // review: 03:40-04:20 UTC is the SITE's own nightly window (plexlists/plexcatalog quiet(): no provider call), not MDBList's
-  for (const quietText of [en["js.media.lists.err.quiet"], (js.match(/quiet: "([^"]+)"/) || [])[1] || ""]) {
-    assert.match(quietText, /site's nightly maintenance/, quietText);
-    assert.doesNotMatch(quietText, /MDBList/, "the provider isn't the one pausing: " + quietText);
-  }
-  assert.match(js, /"err\." \+ /, "the panel looks the refusal's code up");
-  assert.match(js, /e\.code = j\.code/, "api() keeps the server's code on the error");
+  assert.match(en["js.media.lists.why_quiet"], /nightly maintenance/);
+  assert.doesNotMatch(en["js.media.lists.why_quiet"], /MDBList/, "the provider isn't the one pausing");
+  assert.match(js, /\.code = j\.code/, "api() keeps the server's code on the error");
 });

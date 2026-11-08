@@ -69,6 +69,8 @@ test.after(async () => {
 test("the plexcatalog module (what plexfind and plexlists use in production) has roots() and byTitle()", () => {
   assert.equal(typeof CAT.roots, "function");
   assert.equal(typeof CAT.byTitle, "function");
+  // 1.99?? rebase onto site 1.99amd: a list's matching reads the kept roots on the admin lane - the module forwards that too
+  assert.equal(typeof CAT.admin.roots, "function");
 });
 
 test("production finder: the owner's probe and the recall that follows answer at the real library's size", async () => {
