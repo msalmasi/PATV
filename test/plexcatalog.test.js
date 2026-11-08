@@ -559,11 +559,12 @@ test("catfix: a read that fails for a passing reason is tried again after a wait
 
 test("catfix: the last sync error says which read failed, how, after how many tries - and when", async (t) => {
   const h = await setup(t);
-  h.api.version = "1.7.1";   // a paged shelves read that never answers: tried again, then the sweep stops there (and carries on later)
-  h.api.hook = (route) => route.startsWith("/collections") ? Promise.reject(timeoutError()) : undefined;
+  // a catalog page that never answers: tried again, then the sweep stops there (and carries on later). (1.99?? catfix review:
+  // a shelves page no longer stops the sweep - its section keeps the shelves it had - so this reads a catalog page.)
+  h.api.hook = (route) => route.includes("section=2&type=4") ? Promise.reject(timeoutError()) : undefined;
   const r = await h.catalog.sync({ full: true });
   assert.equal(r.ok, false);
-  assert.match(r.error, /^catalog source unavailable: collections of section 1 \(movies\) - no answer within \d+ s \(4 tries\)$/);
+  assert.match(r.error, /^catalog source unavailable: episode page from 0 of section 2 \(shows\) - no answer within \d+ s \(4 tries\)$/);
   const st = await h.catalog.status();
   assert.equal(st.error, r.error);
   assert.equal(st.error_at, AT);
