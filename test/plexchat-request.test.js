@@ -331,5 +331,63 @@ test("request_offer: already requested, already available elsewhere and nothing 
   out = await ask(h);
   assert.equal(out.answer, "miss"); assert.equal(out.seerr_state, "down"); assert.doesNotMatch(JSON.stringify(out), /NEVER/);
   h = harness();
-  assert.equal((await h.call("request_offer", { title: "x" })).code, "bad", "a title is needed");
+  assert.equal((await h.call("request_offer", { title: "" })).code, "bad_title", "a title is needed (review F13: bad_title - 'bad' is an older site's unknown op)");
+});
+
+// ── 1.99?? clerkreq review (2026-11-08) ──
+test("clerkreq review F1: request_offer tries the line's own words (raw) first - a title is never cut down to a word of it", async () => {
+  let h = harness();
+  h.d.searchRows = [{ type: "movie", tmdb: 910, title: "Before You", year: 2019, media_status: 1, availability: "unknown" },
+    { type: "movie", tmdb: 911, title: "Me Before You", year: 2016, media_status: 1, availability: "unknown" }];
+  let out = await ask(h, { title: "before you", kind: null, raw: "Me Before You" });
+  assert.equal(out.answer, "seerr"); assert.equal(out.seerr.tmdb, 911); assert.equal(out.title, "Me Before You");
+  // a kind word that is the title's own ("Scary Movie"): the raw words with no kind, before the trimmed title as a film
+  h.d.searchRows = [{ type: "movie", tmdb: 912, title: "Scary", year: 2021, media_status: 1, availability: "unknown" },
+    { type: "movie", tmdb: 913, title: "Scary Movie", year: 2000, media_status: 1, availability: "unknown" }];
+  out = await ask(h, { title: "scary", kind: "movie", raw: "Scary Movie" });
+  assert.equal(out.seerr.tmdb, 913);
+  // on the shelves by its full name: no outside lookup
+  h = harness();
+  out = await ask(h, { title: "home", kind: "show", raw: "Home Lantern" });
+  assert.equal(out.answer, "on_shelves"); assert.deepEqual(out.rows.map((r) => r.key), ["101"]); assert.equal(searches(h), 0);
+  // the line's words name nothing: the title the bot trimmed ("the movie <title>")
+  h = harness();
+  out = await ask(h, { raw: "the movie Distant Lantern" });
+  assert.equal(out.answer, "seerr"); assert.equal(out.seerr.tmdb, 901); assert.equal(out.title, "Distant Lantern");
+  // the same words: one find, one lookup
+  h = harness();
+  out = await ask(h, { raw: "distant lantern" });
+  assert.equal(out.answer, "seerr"); assert.equal(searches(h), 1);
+  // Seerr not answering for the line's words: the trimmed title's shelves are still read, Seerr not asked twice
+  h = harness(); h.d.apiError = Object.assign(new Error("NEVER-PRIVATE-UPSTREAM"), { status: 502, refuse: true, upstream: true });
+  out = await ask(h, { title: "Home Lantern", kind: null, raw: "the film Home Lantern" });
+  assert.equal(out.answer, "on_shelves"); assert.equal(searches(h), 1);
+  out = await ask(h, { title: "Lost Road", kind: "movie", raw: "the film Lost Road" });
+  assert.equal(out.answer, "miss"); assert.equal(out.seerr_state, "down"); assert.equal(searches(h), 2);
+  assert.doesNotMatch(JSON.stringify(out), /NEVER/);
+});
+
+test("clerkreq review F13: a one-character title is a title (\"M\", \"9\"); no title at all is bad_title - never the older site's \"bad\"", async () => {
+  const h = harness();
+  h.d.searchRows = [{ type: "movie", tmdb: 920, title: "M", year: 1931, media_status: 1, availability: "unknown" }];
+  const out = await ask(h, { title: "M", kind: null });
+  assert.equal(out.answer, "seerr"); assert.equal(out.seerr.tmdb, 920);
+  for (const title of ["", "  ", "!!"]) assert.equal((await h.call("request_offer", { title })).code, "bad_title", JSON.stringify(title));
+  assert.equal((await h.call("no_such_op", {})).code, "bad", "an unknown op is still 'bad' (Unknown op.)");
+});
+
+test("clerkreq review F10: the request server refusing at the yes (a quota) is 'refused' - never 'already requested'", async () => {
+  const h = harness(); await ask(h);
+  h.d.requestError = Object.assign(new Error("NEVER The request server refused it (quota). Nothing was charged."), { status: 409, refuse: true, upstream: true, refused: true });
+  const out = await h.send();
+  assert.equal(out.code, "refused"); assert.doesNotMatch(JSON.stringify(out), /NEVER/);
+  // an upstream "already requested" is still requested
+  await ask(h); h.d.requestError = Object.assign(new Error("That's already been requested. Nothing was charged."), { status: 409, refuse: true, upstream: true });
+  assert.equal((await h.send()).code, "requested");
+});
+
+test("clerkreq review F11: request_offer says the title is on the shelves as the other kind", async () => {
+  const h = harness(); h.d.searchRows = [];
+  const out = await ask(h, { title: "Home Lantern", kind: "show" });
+  assert.equal(out.answer, "miss"); assert.deepEqual(out.shelf_title, { kind: "movie", title: "Home Lantern", year: 2001 });
 });

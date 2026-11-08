@@ -535,3 +535,17 @@ test("the browser routes answer as before (playFor / startFor carry the pad chec
   assert.equal(p.carried_from, null, "_carry is never taken from a request");
   await stopAll();
 });
+
+test("clerkreq review F16: with the clerk off, a show / film ask never ranks another show's episode that only shares the name", () => {
+  const ep = { type: "episode", title: "The Good Doctor", show: "Crime Unit: Intent", season: 1, episode: 9 };
+  const show = { type: "show", title: "The Good Place", year: 2016 };
+  for (const hint of ["show", "movie"]) {
+    assert.equal(PC.nameOnlyEpisode(ep, "the good doctor", { hint }), true, hint);
+    assert.ok(PC.score(ep, "the good doctor", { hint }) < PC.score(show, "the good doctor", { hint }), hint);
+  }
+  // no kind said: an episode asked for by its own title is still that episode (1.99ajl)
+  assert.equal(PC.nameOnlyEpisode(ep, "the good doctor", { hint: null }), false);
+  assert.ok(PC.score(ep, "the good doctor", {}) >= 70);
+  // the show's own episode is never "name only"
+  assert.equal(PC.nameOnlyEpisode({ ...ep, show: "The Good Doctor" }, "the good doctor", { hint: "show" }), false);
+});

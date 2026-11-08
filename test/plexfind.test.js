@@ -784,3 +784,52 @@ test("clerkreq S5: a title-level ask (request_offer) never counts an episode or 
   r = await f.finder.find({ ask: { title: "Clockwork Orchard", kind: "show", season: 4, year: 2002 }, raw: "", titleLevel: true }, externalContext);
   assert.deepEqual(r.rows, []); assert.equal(r.seerr.tmdb, 501); assert.equal(r.seerr.season, 4);
 });
+
+// ── 1.99?? clerkreq review (2026-11-08) ──
+test("clerkreq review F5: a bare title only an episode has stays that episode when Seerr's same-named title is one the clerk can't offer", async () => {
+  const f = goodDoctor(fixture(), "none");
+  // a film of that name IS on Plex, in a section the clerk doesn't serve (Seerr: available) - the bare line still gets the episode
+  f.external.search["the good doctor"] = [{ type: "movie", tmdb: 740006, title: "The Good Doctor", year: 2011, availability: "available", media_status: 5 }];
+  const r = await run(f, { title: "the good doctor" }, { raw: "pepe play the good doctor" }, externalContext);
+  assert.notEqual(r.code, "unavailable", "the episode on the shelves is offered, never 'that one isn't available here'");
+  assert.deepEqual(r.rows.map((x) => x.key), ["30019"]); assert.equal(r.seerr, undefined); assert.equal(r.seerr_choices, undefined);
+  assert.doesNotMatch(JSON.stringify(r), /740006|"available"/);
+  // a film ask of a title the clerk can't offer is still unavailable (nothing on the shelves to offer instead)
+  assert.equal((await run(f, { title: "The Good Doctor", kind: "movie" }, { raw: "the movie the good doctor" }, externalContext)).code, "unavailable");
+});
+
+test("clerkreq review F6: a film kept as a show's special (S00) is that film for a film ask and a title-level ask", async () => {
+  const f = fixture();
+  const special = f.rows.find((r) => r.key === "10001");          // Clockwork Orchard S0E1
+  special.title = "Big Score Movie"; special.duration = 5400;
+  f.external.search["big score movie"] = [{ type: "movie", tmdb: 7249, title: "Big Score Movie", year: 2007, availability: "unknown", media_status: 1 }];
+  let r = await run(f, { title: "Big Score Movie", kind: "movie" }, { raw: "the movie big score movie" }, externalContext);
+  assert.deepEqual(r.rows.map((x) => x.key), ["10001"], "the special on the shelves, never a request for it"); assert.equal(r.seerr, undefined);
+  r = await f.finder.find({ ask: { title: "Big Score Movie", kind: "movie" }, raw: "", titleLevel: true }, externalContext);
+  assert.deepEqual(r.rows.map((x) => x.key), ["10001"]); assert.equal(r.seerr, undefined);
+  r = await f.finder.find({ ask: { title: "Big Score Movie" }, raw: "", titleLevel: true }, externalContext);
+  assert.deepEqual(r.rows.map((x) => x.key), ["10001"]); assert.equal(r.seerr, undefined);
+  assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0, "nothing to look up: it's here");
+  // a regular episode of that name is still no film (S1+ - kept aside), and a show ask never takes the special
+  special.season = 1;
+  r = await run(f, { title: "Big Score Movie", kind: "movie" }, { raw: "the movie big score movie" }, externalContext);
+  assert.deepEqual(r.rows, []); assert.equal(r.seerr.tmdb, 7249);
+  special.season = 0;
+  r = await run(f, { title: "Big Score Movie", kind: "show" }, { raw: "the show big score movie" }, externalContext);
+  assert.ok(!r.rows.some((x) => x.key === "10001"), "a show ask never takes another show's special");
+});
+
+test("clerkreq review F11: a title on the shelves as the other kind, or without the season asked, says so (shelf_title)", async () => {
+  const f = fixture();
+  let r = await run(f, { title: "Clockwork Orchard", kind: "movie" }, { raw: "the movie clockwork orchard" }, externalContext);
+  assert.deepEqual(r.rows, []); assert.deepEqual(r.shelf_title, { kind: "show", title: "Clockwork Orchard", year: 2002 });
+  r = await run(f, { title: "Harbour Signal", kind: "show" }, { raw: "the show harbour signal" }, externalContext);
+  assert.deepEqual(r.shelf_title, { kind: "movie", title: "Harbour Signal", year: 1984 });
+  r = await f.finder.find({ ask: { title: "Clockwork Orchard", kind: "show", season: 9 }, raw: "", titleLevel: true }, externalContext);
+  assert.deepEqual(r.shelf_title, { kind: "show", title: "Clockwork Orchard", year: 2002, season: 9 });
+  // the title as asked is here: nothing to say
+  r = await run(f, { title: "Clockwork Orchard", kind: "show" }, { raw: "the show clockwork orchard" }, externalContext);
+  assert.equal(r.shelf_title, undefined);
+  r = await run(f, { title: "Lost Lantern Road", kind: "movie" }, { raw: "the movie lost lantern road" }, externalContext);
+  assert.equal(r.shelf_title, undefined);
+});

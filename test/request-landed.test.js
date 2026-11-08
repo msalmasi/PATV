@@ -68,3 +68,17 @@ test("wiring: mediarequests says a landed chat request through bridge.requestLan
   const src = fs.readFileSync(path.join(repo, "mediarequests.js"), "utf8");
   assert.match(src, /require\("\.\/bridge"\)\.requestLanded\(/);
 });
+
+test("clerkreq review F7: a web-only account whose u:<id> chat key is incognito / hidden is never named either", async () => {
+  clearJobs();
+  const h = (l) => crypto.createHash("sha256").update("pepe-hidden:" + l).digest("hex").slice(0, 20);
+  quotes.setHidden([h("u:u_web")]);
+  try {
+    assert.equal(quotes.isHidden("u:u_web"), true);
+    assert.equal((await bridge.requestLanded({ roomId: ROOM.id, userId: "u_web", title: "Alien", year: 1979, anon: false })).queued, true);
+    assert.deepEqual({ camfrog: jobs()[0].camfrog, display: jobs()[0].display, userId: jobs()[0].userId }, { camfrog: "", display: "", userId: "" });
+  } finally { quotes.setHidden([]); clearJobs(); }
+  assert.equal((await bridge.requestLanded({ roomId: ROOM.id, userId: "u_web", title: "Alien", year: 1979, anon: false })).queued, true);
+  assert.equal(jobs()[0].display, "webonly", "not hidden: named as before");
+  clearJobs();
+});

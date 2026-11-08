@@ -382,3 +382,13 @@ test("clerkreq S6: the switch is on by default and lives in /admin/media", () =>
   assert.match(view, /name="request_landed_relay"/);
   assert.match(view, /_bools" value="[^"]*request_landed_relay/);
 });
+
+test("clerkreq review F10: Overseerr refusing a request (a quota) is marked refused - Pepe never calls it 'already requested'", async () => {
+  const u = await mkUser({ bal: 5000 });
+  O.fail = { status: 403, body: { message: "Movie Quota exceeded." } };
+  await assert.rejects(R.request(u, { type: "movie", tmdb: 11 }), (e) => e.status === 409 && e.upstream === true && e.refused === true && /refused it/.test(e.message));
+  const u2 = await mkUser({ bal: 5000 });
+  O.fail = { status: 409, body: { message: "Request for this media already exists." } };
+  await assert.rejects(R.request(u2, { type: "movie", tmdb: 11 }), (e) => e.status === 409 && e.upstream === true && !e.refused);
+  O.fail = null;
+});
