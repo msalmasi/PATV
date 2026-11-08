@@ -393,7 +393,9 @@ function createCatalog(options = {}) {
    *  are frozen, each caller gets its own arrays. A failed read is not kept (the next caller tries again). */
   async function roots() {
     const s = await status();
-    if (!s.ready) return { movies: [], shows: [] };
+    // 1.99?? plexclerk review: never an empty library standing in for one that isn't ready or can't be read (status() says
+    // ready:false when its own read fails) - a list rematch would store 0 members for every list
+    if (!s.ready) throw coded("catalog_down", "catalog is not ready");
     const block = ratings(settings().clerk_block_ratings);
     const key = JSON.stringify([rowsGeneration, [...block].sort(), s.at, s.full_at, s.v, s.count]);
     if (!rootsKept || rootsKept.key !== key || now() - rootsKept.at > ROOTS_MAX_AGE_MS) {
@@ -411,7 +413,7 @@ function createCatalog(options = {}) {
     return { movies: [...kept.movies], shows: [...kept.shows] };
   }
   // A caller gets its own copy (a kept answer is never handed out to be changed).
-  const shelvesCopy =(v) => ({ ...v, genres: [...v.genres], shelves: v.shelves.map((r) => ({ ...r })), catalog: { ...v.catalog } });
+  const shelvesCopy = (v) => ({ ...v, genres: [...v.genres], shelves: v.shelves.map((r) => ({ ...r })), catalog: { ...v.catalog } });
   async function shelves() {
     const s = await status();
     if (!s.ready) return { ok: true, genres: [], shelves: [], v: s.v, catalog: { ready: false, at: s.at } };
@@ -758,7 +760,7 @@ function createCatalog(options = {}) {
   let outsideLists;
   function listsCache() {
     if (!outsideLists) outsideLists = options.lists || require("./plexlists").createLists({
-      catalog: { write, read, rows, getByKeys, admin }, settings, now,
+      catalog: { write, read, rows, roots, byTitle, getByKeys, admin }, settings, now,   // 1.99?? plexclerk review: + roots (match())
       permissions: options.permissions, guard: options.guard
     });
     return outsideLists;
@@ -901,6 +903,7 @@ const current = () => {
   return singleton;
 };
 module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE, BACKGROUND_QUEUE };
-for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
+// 1.99?? plexclerk review: roots / byTitle too - production's finder and lists use this module, not an instance
+for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "roots", "byTitle", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
 // plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
 module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args) };
