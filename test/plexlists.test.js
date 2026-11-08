@@ -29,12 +29,12 @@ const fixtureItems = () => [
   { rank: 106, mediatype: "movie", title: "Outside Unknown Name", release_year: 2001 },
   { rank: 107, mediatype: "movie", imdb_id: "tt7999999", title: "Wrong ID", release_year: 2001 },
 ];
-async function setup(t, overrides = {}) {
+async function setup(t, overrides = {}, catalogOptions = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plexlists-test-"));
   const file = path.join(dir, "catalog.db"), calls = [], errors = [], requests = [];
   let clock = AT, secret = crypto.randomBytes(24).toString("hex"), handler = null;
   const cfg = { clerk_lists: true, clerk_block_ratings: "X,XXX,AO,R18,R18+" };
-  const catalog = createCatalog({ file, settings: () => cfg, now: () => clock, log: { log() {}, error() {} } });
+  const catalog = createCatalog({ file, settings: () => cfg, now: () => clock, log: { log() {}, error() {} }, ...catalogOptions });
   await catalog.importSnapshot(snapshot());
   const meta = { id: 8001, name: "Lantern Top 250", description: "NEVER RETAIN", items: 9 };
   const server = http.createServer(async (req, res) => {
@@ -413,4 +413,159 @@ test("catalog shutdown releases active list rematch before waiting for sync", as
   } finally { clearTimeout(timeout); }
   assert.equal((await syncing).ok, true);
   assert.equal(closes, 1);
+});
+
+// ── plexlists (prod 2026-11-08 ~05:50Z): /admin/media's "Outside lists" card said "Could not read the outside lists. Refresh
+// the page to try again." on every load ──
+// Proven on prod (a read-only probe through the site's own modules): MDBLIST_API_KEY loaded, 0 lists, 0 members, a 255,833-row
+// catalog. list()'s last read - the membership re-check joined with the catalog - was planned as "SCAN c": every catalog row's
+// JSON checked (json_valid / json_extract) to find the members of no list at all, 651 ms with no budget, so the 400 ms chat
+// search budget stopped it (too_broad) and failure() turned that into the generic lists_unavailable, logging nothing.
+async function bigCatalog(catalog) {
+  // prod's shape: ~12k films, ~3k shows, ~240k episodes (no outside list knows any of them)
+  await catalog.write(async (tx) => {
+    for (const [n, base, type, section, parent] of [[12000, 1000000, "movie", "71", null], [3000, 3000000, "show", "72", null], [240000, 2000000, "episode", "72", "201"]]) {
+      await tx.run(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?)
+        INSERT INTO plex_catalog(key,type,title,title_fold,show_key,show_fold,section,content_rating,data,seen_at,server_plays,pad_plays)
+        SELECT CAST(?+x AS TEXT),?,'Synthetic work','synthetic work',?,'harbor shift',?,'PG',
+          json_object('key',CAST(?+x AS TEXT),'type',?,'section',?,'title','Synthetic work','show_key',?,'content_rating','PG','summary',?),1,0,0 FROM n`,
+      [n, base, type, parent, section, base, type, section, parent, "s".repeat(500)]);
+    }
+  });
+}
+// Every statement a call read, with its query plan: none may walk the whole catalog (the cost follows the lists' members).
+async function noCatalogScan(h, armed, label) {
+  const seen = [...new Set(armed.map((j) => j.sql))]; armed.length = 0;
+  assert.ok(seen.length > 0, label + ": read something");
+  for (const sql of seen) {
+    const plan = (await h.catalog.read("EXPLAIN QUERY PLAN " + sql)).map((r) => r.detail);
+    assert.ok(!plan.some((d) => /^SCAN (c|plex_catalog)\b/.test(d)), label + ": " + sql.replace(/\s+/g, " ").slice(0, 160) + " -> " + plan.join(" | "));
+  }
+  armed.length = 0;
+}
+
+test("prod shape (0 lists, a 255k-row catalog): the card reads, and no list read walks the whole catalog", { timeout: 120000 }, async (t) => {
+  const armed = [], h = await setup(t, {}, { onRead: (job) => armed.push(job) });
+  await bigCatalog(h.catalog);
+  armed.length = 0;
+  assert.deepEqual(await h.lists.list(), { ok: true, configured: true, enabled: true, lists: [] }, "0 lists, 0 members");
+  await noCatalogScan(h, armed, "0 lists: the card");
+  assert.deepEqual(await h.lists.members(), []); assert.deepEqual(await h.lists.shelves(), []);
+  assert.deepEqual(await h.lists.membership([]), [], "an empty key list is no error"); assert.deepEqual(await h.lists.membership(["101"]), []);
+  await noCatalogScan(h, armed, "0 lists: chat reads");
+  assert.deepEqual(await h.catalog.getByKeys([]), []);
+  assert.equal((await h.lists.importSnapshot({ configured: [{ id: "8001", name: "Lantern Top 250", ranked: true, items: [
+    { type: "movie", imdb: "tt7000101", title: "Provider label", year: 2001, rank: 1 }, { type: "show", tvdb: "9201", title: "Alias", year: 2001, rank: 2 },
+    { type: "movie", title: "Outside Unknown Name", year: 2001, rank: 3 }] }] })).ok, true, "matching a list against the big catalog");
+  armed.length = 0;
+  const card = await h.lists.list();
+  assert.equal(card.ok, true); assert.deepEqual(card.lists.map((l) => [l.id, l.items, l.matched, l.unmatched]), [["8001", 3, 2, 1]]);
+  await noCatalogScan(h, armed, "1 list: the card");
+  assert.deepEqual((await h.lists.members()).map((r) => [r.key, r.rank]), [["101", 1], ["201", 2]]);
+  assert.deepEqual((await h.lists.members({ id: "mdblist:8001", rank_max: 1 })).map((r) => r.key), ["101"]);
+  assert.deepEqual((await h.lists.members({ kind: "show" })).map((r) => r.key), ["201"]);
+  assert.deepEqual((await h.lists.membership(["101", "2000001", "999"])).map((r) => r.key), ["101"]);
+  assert.deepEqual((await h.lists.shelves()).map((r) => [r.name, r.count]), [["Lantern Top 250", 2]]);
+  await noCatalogScan(h, armed, "1 list: chat reads");
+});
+
+test("the card's and a list's add/refresh reads run on the catalog's admin budget; chat reads keep the search budget", async (t) => {
+  const { SEARCH_BUDGET_MS, ADMIN_BUDGET_MS } = require("../plexcatalog");
+  assert.ok(Number(ADMIN_BUDGET_MS) > SEARCH_BUDGET_MS, "a budget of its own, longer than a chat search's");
+  const armed = [], h = await setup(t, {}, { onRead: (job) => armed.push(job) });
+  const budgets = () => { const b = [...new Set(armed.map((j) => j.budgetMs))]; armed.length = 0; return b; };
+  armed.length = 0;
+  assert.equal((await h.lists.add("8001")).ok, true);
+  assert.ok(armed.filter((j) => /^SELECT c\.\* FROM plex_catalog/.test(j.sql)).length >= 2, "add() matched the list against the catalog");
+  assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "every read add() made");
+  assert.equal((await h.lists.list()).lists[0].matched, 4);
+  assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "the card");
+  assert.equal((await h.lists.refresh("8001")).ok, true); assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "a refresh");
+  h.clock(AT + DAY); assert.equal((await h.lists.tick()).ok, true); assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "the daily refresh");
+  assert.equal((await h.lists.rematch()).ok, true); assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "a rematch after a catalog sync");
+  assert.equal((await h.lists.members()).length, 4); await h.lists.shelves(); await h.lists.membership(["101"]);
+  assert.deepEqual(budgets(), [SEARCH_BUDGET_MS], "chat reads keep the search budget");
+  await h.catalog.admin.read("SELECT 1 AS n", [], { budgetMs: 60000 });
+  assert.deepEqual(budgets(), [ADMIN_BUDGET_MS], "the admin lane takes no budget from its caller");
+  await h.catalog.read("SELECT 1 AS n", [], { budgetMs: 60000 });
+  assert.deepEqual(budgets(), [SEARCH_BUDGET_MS], "a caller's read() still can't ask for more than the search budget");
+  assert.deepEqual(await h.catalog.admin.getByKeys([]), []); assert.deepEqual(budgets(), [], "an empty key list reads nothing");
+  assert.deepEqual((await h.catalog.admin.rows({ keys: ["101"] })).map((r) => r.key), ["101"]);
+});
+
+test("a read past its budget: the card says busy, the server log says why - once a streak, never the key", async () => {
+  const secret = "fixture-" + crypto.randomBytes(12).toString("hex"), logs = [];
+  let fail = () => Object.assign(new Error("too_broad"), { code: "too_broad" });
+  const read = async () => { if (fail) throw fail(); return []; };
+  const catalog = { write: async () => {}, read, getByKeys: async () => [], rows: async () => [] };
+  catalog.admin = { read, getByKeys: catalog.getByKeys, rows: catalog.rows };
+  const sink = (...a) => logs.push(a.join(" "));
+  const lists = createLists({ catalog, settings: () => ({ clerk_lists: true }), key: () => secret, request() { throw new Error("no provider call"); },
+    log: { log: sink, warn: sink, error: sink } });
+  assert.deepEqual(await lists.list(), { ok: false, code: "lists_busy" }, "a read past its budget is 'busy', not 'unavailable'");
+  assert.deepEqual(await lists.list(), { ok: false, code: "lists_busy" });
+  assert.equal(logs.length, 1, "logged once: " + logs.join(" / ")); assert.match(logs[0], /plexlists/); assert.match(logs[0], /too_broad/);
+  fail = () => Object.assign(new Error("busy"), { code: "busy" });
+  assert.deepEqual(await lists.list(), { ok: false, code: "lists_busy" }, "the catalog's read queue was full");
+  assert.equal(logs.length, 2); assert.match(logs[1], /busy/);
+  fail = () => new Error("SQLITE_CORRUPT: database disk image is malformed " + secret + " " + encodeURIComponent(secret));
+  assert.deepEqual(await lists.list(), { ok: false, code: "lists_unavailable" });
+  assert.equal(logs.length, 3); assert.match(logs[2], /SQLITE_CORRUPT/);
+  assert.equal((await lists.members()).length, 0, "chat reads still fail closed"); assert.equal(logs.length, 4, "...and say why once"); await lists.members();
+  assert.equal(logs.length, 4);
+  fail = null; assert.equal((await lists.list()).ok, true);
+  fail = () => Object.assign(new Error("too_broad"), { code: "too_broad" });
+  assert.equal((await lists.list()).code, "lists_busy"); assert.equal(logs.length, 5, "a new streak after a good read is logged again");
+  assert.ok(logs.every((l) => !l.includes(secret) && !l.includes(encodeURIComponent(secret))), "never the key");
+  await lists.close();
+});
+
+test("the card names the reason: busy (try again) or unavailable on load, and why an add or a search was refused", async () => {
+  const vm = require("node:vm"), locale = require("../locales/en.json");
+  function element(tag) {
+    return { tag, children: [], handlers: {}, style: {}, textContent: "", hidden: false, value: "", disabled: false,
+      get firstChild() { return this.children[0] || null; },
+      appendChild(child) { this.children.push(child); return child; },
+      removeChild(child) { this.children.splice(this.children.indexOf(child), 1); },
+      addEventListener(name, fn) { this.handlers[name] = fn; },
+      set innerHTML(_) { throw new Error("Provider text must not become HTML"); } };
+  }
+  const nodes = new Map();
+  for (const id of ["clerkLists","clControls","clStatus","clOut","clSearchOut","clInput","clAdd","clQuery","clSearch","clMsg"]) nodes.set(id, element("div"));
+  let answer = {};
+  const context = {
+    document: { getElementById: (id) => nodes.get(id) || null, createElement: element, querySelectorAll: () => [], querySelector: () => null, addEventListener() {} },
+    window: { addEventListener() {}, __t(key, fallback, values) {
+      assert.ok(locale[key], key); assert.equal(locale[key], fallback, key + " default equals en.json");
+      return fallback.replace(/\{(\w+)\}/g, (m, n) => values && values[n] != null ? String(values[n]) : m); } },
+    console, Promise, Date, Number, setTimeout, clearTimeout, encodeURIComponent,
+    fetch(url) { const r = answer[url.split("?")[0]] || { ok: true, checks: {} }; return Promise.resolve({ ok: true, json: () => Promise.resolve(r) }); }
+  };
+  const source = fs.readFileSync(path.join(__dirname, "../public/js/media-admin.js"), "utf8");
+  const flush = async () => { for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve)); };
+  const L = (k) => locale["js.media.lists." + k];
+  answer = { "/api/media/admin/lists": { ok: false, code: "lists_busy" } };
+  vm.runInNewContext(source, context); await flush();
+  assert.equal(nodes.get("clStatus").textContent, L("busy"), "busy: try again");
+  answer = { "/api/media/admin/lists": { ok: false, code: "lists_unavailable" } };
+  vm.runInNewContext(source, context); await flush();
+  assert.equal(nodes.get("clStatus").textContent, L("load_failed"), "anything else: the old line");
+  const ready = { ok: true, configured: true, enabled: true, lists: [] };
+  for (const [code, key] of [["invalid_list", "why_invalid_list"], ["not_found", "why_not_found"], ["ambiguous_list", "why_ambiguous_list"],
+    ["list_limit", "why_list_limit"], ["quiet", "why_quiet"], ["rate_limited", "why_rate_limited"], ["daily_budget", "why_rate_limited"],
+    ["provider_auth", "why_provider_auth"], ["provider_unavailable", "why_provider"], ["provider_timeout", "why_provider"], ["provider_invalid", "why_provider"],
+    ["list_too_large", "why_list_too_large"], ["lists_busy", "busy"], ["lists_unavailable", "failed"], ["something_new", "failed"]]) {
+    answer = { "/api/media/admin/lists": ready, "/api/media/admin/lists/add": { ok: false, code } };
+    vm.runInNewContext(source, context); await flush();
+    nodes.get("clInput").value = "x"; nodes.get("clAdd").handlers.click(); await flush();
+    assert.equal(nodes.get("clMsg").textContent, L(key), "add refused: " + code);
+  }
+  answer = { "/api/media/admin/lists": ready, "/api/media/admin/lists/search": { ok: false, code: "daily_budget" } };
+  vm.runInNewContext(source, context); await flush();
+  nodes.get("clQuery").value = "top"; nodes.get("clSearch").handlers.click(); await flush();
+  assert.equal(nodes.get("clMsg").textContent, L("why_rate_limited"), "a search says why too");
+  answer = { "/api/media/admin/lists": ready, "/api/media/admin/lists/search": { ok: false, code: "something_new" } };
+  vm.runInNewContext(source, context); await flush();
+  nodes.get("clQuery").value = "top"; nodes.get("clSearch").handlers.click(); await flush();
+  assert.equal(nodes.get("clMsg").textContent, L("search_failed"));
 });
