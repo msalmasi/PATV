@@ -240,7 +240,8 @@
     s.closeButton.disabled = !!(s.attempt && s.attempt.stage === 'mine'); s.cancelButton.disabled = s.closeButton.disabled;
     s.destination.disabled = s.busy || !s.targets.length; s.more.disabled = s.busy;
     Array.prototype.forEach.call(s.picks.querySelectorAll('button'), function (b) { b.disabled = s.busy; });
-    Object.keys(s.toolButtons).forEach(function (k) { var b = s.toolButtons[k]; b.disabled = s.busy || !d.file || !d.valid || (k !== 'mention' && (!d.decoded || d.legacy || d.gif)) || (k === 'trim' && d.kind !== 'video'); b.setAttribute('aria-pressed', String(s.sheetName === k)); });
+    // storyfix2: a camera clip under a second has no 1 s window to trim
+    Object.keys(s.toolButtons).forEach(function (k) { var b = s.toolButtons[k]; b.disabled = s.busy || !d.file || !d.valid || (k !== 'mention' && (!d.decoded || d.legacy || d.gif)) || (k === 'trim' && (d.kind !== 'video' || !(d.duration >= 1))); b.setAttribute('aria-pressed', String(s.sheetName === k)); });
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
@@ -304,20 +305,25 @@
     // after a capture Retake takes 📷 Camera's place (one way back to the camera, not two)
     var captured = !!(info && info.camera); s.retake.hidden = !captured; s.picks.querySelector('[data-picker="camera"]').hidden = captured; s.camWhy = '';
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
-    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw };
+    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
     s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
     m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
-    if (kind === 'video') { m.muted = true; m.playsInline = true; m.setAttribute('playsinline', ''); m.preload = 'metadata'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
+    // storyfix2: muted + inline (attributes too, as iOS reads them) and preload auto, for the first frame below
+    if (kind === 'video') { m.muted = true; m.defaultMuted = true; m.playsInline = true; ['playsinline', 'webkit-playsinline', 'muted'].forEach(function (a) { m.setAttribute(a, ''); }); m.preload = 'auto'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
     function loaded() {
       if (!live(s) || id !== s.pickId) return;
       d.w = kind === 'video' ? m.videoWidth : m.naturalWidth; d.h = kind === 'video' ? m.videoHeight : m.naturalHeight;
       if (!d.w || !d.h) return failed();
       d.decoded = true; d.legacy = d.gif; resetFrame(d);
       if (kind === 'video') {
-        d.duration = isFinite(m.duration) ? m.duration : info && info.secs;   // a fresh recording can report no length
-        if (!isFinite(d.duration) || d.duration < 1 || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
+        // a fresh recording can report no length (Infinity, NaN, 0): the camera's measured hold stands in
+        d.duration = isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs;
+        // storyfix2: a camera clip has no 1 s minimum here - the camera makes it at least 1.2 s, and whatever the file holds of
+        // it posts (an iPhone recording can hold less than the hold); a chosen file keeps the server's 1 s rule for a trim
+        if (!isFinite(d.duration) || !(d.duration > 0) || (!d.camera && d.duration < 1) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
         else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
+        firstFrame(s, m, id);
       }
       render(s); paintControls(s);
       // ssfix2: the note goes once the picture has been painted (two frames on), not at 'load': the paint decode is the peak
@@ -331,8 +337,18 @@
       add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); }));
       add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { choose(s, 'gallery'); })); paintControls(s);
     }
-    m.addEventListener(kind === 'video' ? 'loadedmetadata' : 'load', loaded); m.addEventListener('error', failed); m.src = objectURL(s, file);
+    // storyfix2: a video starts at 0.001 s (a media fragment): iOS then puts its first frame up without playing it
+    m.addEventListener(kind === 'video' ? 'loadedmetadata' : 'load', loaded); m.addEventListener('error', failed); m.src = objectURL(s, file) + (kind === 'video' ? '#t=0.001' : '');
     say(s, ''); render(s); paintControls(s);
+  }
+  // storyfix2 (1.99??): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
+  // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
+  // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play,
+  // paused as soon as it starts, is the other. Where even that is refused (Low Power Mode), the fragment alone shows it.
+  function firstFrame(s, m, id) {
+    var played; try { played = m.play(); } catch (e) { played = null; }
+    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); }, function () { /* refused: the media fragment shows the frame */ });
+    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); });
   }
   function asIs(s) {
     var d = s.d;
@@ -489,7 +505,7 @@
     f.addEventListener('keydown', function (e) { if (list.hidden) return; if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); at = (at + (e.key === 'ArrowDown' ? 1 : -1) + people.length) % people.length; highlight(); } else if ((e.key === 'Enter' || e.key === 'Tab') && at >= 0) { e.preventDefault(); choose(people[at]); } }); f.focus();
   }
   function trimSheet(s) {
-    var d = s.d; if (d.kind !== 'video' || !d.decoded || !d.trim) return;
+    var d = s.d; if (d.kind !== 'video' || !d.decoded || !d.trim || !(d.duration >= 1)) return;
     var box = sheet(s, 'trim', _t('js.feed.ss.trim', '✂️ Trim')), bar = add(box, el('div', 'sst-trim-bar')), fill = add(bar, el('span', 'sst-trim-fill'));
     var report = add(box, el('p', 'sst-trim-report')); report.setAttribute('aria-live', 'polite'); var inputs = {}, handles = {};
     function update(which, raw) {
@@ -511,7 +527,12 @@
     var d = s.d; if (d.legacy || d.gif) return null;
     var edit = { v: 1, pad: s.target.id, fit: d.fit, text: d.texts.map(function (t) { return t.text.trim(); }).filter(Boolean), stickers: d.stickers.map(function (t) { return { pack: t.pack, sticker: t.sticker }; }) };
     if (d.fit === 'fill') edit.crop = { x: d.crop.x, y: d.crop.y, w: d.crop.w, h: d.crop.h };
-    if (d.kind === 'video') edit.trim = { start: d.trim.start, end: d.trim.end };
+    // storyfix2: a camera clip says so, and kept whole it goes with no trim - the length a browser shows for an iPhone recording
+    // can run past what the file holds, so the server encodes all of it (a trim of one is clamped to the file there)
+    if (d.kind === 'video') {
+      if (d.camera) edit.camera = true;
+      if (!d.camera || d.trim.start > 0 || d.trim.end < d.duration) edit.trim = { start: d.trim.start, end: d.trim.end };
+    }
     if (overlay) edit.overlay = overlay; return edit;
   }
   function overlay(s) { return fonts(s.d).then(function () { var c = document.createElement('canvas'); c.width = W; c.height = H; draw(c, s.d); return new Promise(function (resolve, reject) { c.toBlob(function (blob) { if (!blob || blob.size > (s.caps.overlayMb || 2) * 1024 * 1024) reject(new Error(_t('js.feed.ss.overlay_big', 'Those layers are too detailed. Remove a layer and try again.'))); else resolve(blob); }, 'image/png'); }); }); }

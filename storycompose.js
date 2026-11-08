@@ -21,7 +21,7 @@ function keys(value, allowed, message) {
 }
 function cleanEdit(raw, { kind } = {}) {
   const L = limits();
-  keys(raw, ["v", "pad", "fit", "crop", "trim", "overlay", "text", "stickers"], "That story edit has unsupported fields.");
+  keys(raw, ["v", "pad", "fit", "crop", "trim", "overlay", "text", "stickers", "camera"], "That story edit has unsupported fields.");
   if (raw.v !== 1) throw new Refuse(400, "That story edit version isn't supported.");
   if (kind !== "image" && kind !== "video") throw new Refuse(400, "Only pictures and videos can be edited as stories.");
   if (typeof raw.pad !== "string" || !raw.pad.trim() || raw.pad.length > 160 || /[\x00-\x1f\x7f-\x9f]/.test(raw.pad))
@@ -42,6 +42,14 @@ function cleanEdit(raw, { kind } = {}) {
     if (!finite(start) || !finite(end) || start < 0 || end <= start || end - start < 1 || end - start > L.STORY_MAX_SECS + 0.5)
       throw new Refuse(400, "Choose between 1 and 30 seconds of video.");
     edit.trim = { start, end };
+  }
+  // storyfix2 (1.99??): camera: true = a clip the story camera recorded (story-camera.js). The length a browser shows for it can
+  // run past the media the file holds (an iPhone's MediaRecorder MP4), so its trim is clamped to the file and, kept whole, it
+  // comes with no trim at all (video() below)
+  if (Object.hasOwn(raw, "camera")) {
+    if (raw.camera !== true) throw new Refuse(400, "That story edit has unsupported fields.");
+    if (kind !== "video") throw new Refuse(400, "Only a video can be a camera clip.");
+    edit.camera = true;
   }
   if (Object.hasOwn(raw, "overlay")) {
     if (typeof raw.overlay !== "string" || !ID_RE.test(raw.overlay)) throw new Refuse(400, "That story overlay isn't valid.");
@@ -109,15 +117,28 @@ async function displayedVideoSize(input, sn, pr) {
 // decoding), the first video stream, the demuxer forced and local files only, as everywhere here; the ffprobe 4.2 on the VPS knows
 // every option used. -> seconds (ms precision), 0 when no packet has a time.
 async function packetSecs(input, ffmt) {
-  const r = await media.run(media.bin("ffprobe"), ["-v", "error", "-protocol_whitelist", "file", "-f", ffmt, "-select_streams", "v:0",
-    "-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", input], { timeoutMs: 30000, maxOut: 8 * 1024 * 1024 });
-  let end = 0;
-  for (const line of String((r && r.out) || "").split(/\r?\n/)) {
-    const [pts, dur] = line.split(","), at = Number(pts) + (Number(dur) || 0);
-    if (Number.isFinite(at) && at > end) end = at;
-  }
-  return Math.round(end * 1000) / 1000;
+  const span = await packetSpan(input, ffmt, "v:0");
+  return span && span.end > 0 ? span.end : 0;
 }
+// storyfix2 (1.99??): where a file's packets start and end - every stream unless `streams` names one (an iPhone recording's sound
+// can run on after its picture stops, so the media's length is the longest stream's). Demuxing only, the demuxer forced, local
+// files only; ffprobe 4.2 knows every option. -> { start, end } in seconds (ms precision), null when no packet has a time.
+async function packetSpan(input, ffmt, streams) {
+  const args = ["-v", "error", "-protocol_whitelist", "file", "-f", ffmt];
+  if (streams) args.push("-select_streams", streams);
+  args.push("-show_entries", "packet=pts_time,duration_time", "-of", "csv=p=0", input);
+  const r = await media.run(media.bin("ffprobe"), args, { timeoutMs: 30000, maxOut: 8 * 1024 * 1024 });
+  let start = Infinity, end = -Infinity;
+  for (const line of String((r && r.out) || "").split(/\r?\n/)) {
+    const [pts, dur] = line.split(","), at = pts === undefined || pts.trim() === "" ? NaN : Number(pts);
+    if (!Number.isFinite(at)) continue;
+    start = Math.min(start, at); end = Math.max(end, at + (Number(dur) || 0));
+  }
+  const ms = (n) => Math.round(n * 1000) / 1000;
+  return Number.isFinite(end) ? { start: ms(start), end: ms(end) } : null;
+}
+// the seconds a span covers, counted from 0 as a browser shows the file (a late first packet is a gap before it, not less media)
+const spanSecs = (span) => (span ? Math.round((span.end - Math.min(0, span.start)) * 1000) / 1000 : 0);
 async function picture(input, sn, edit, overlay) {
   const L = limits(), sharp = require("sharp");
   let intermediate = null, out = null;
@@ -146,16 +167,37 @@ async function video(input, sn, edit, overlay, caps, work) {
   if (!sn.ffmt) throw new media.MediaError("That video type isn't supported.");
   const pr = await media.probe(input, sn.ffmt).catch(() => null);
   if (!pr || !pr.video) throw new media.MediaError("A story needs a video track, not audio alone.");
-  // story camera (1.99alu): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header
-  if (!Number.isFinite(pr.secs) || pr.secs <= 0) pr.secs = await packetSecs(input, sn.ffmt).catch(() => 0);
+  // story camera (1.99alu): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header.
+  // storyfix2 (1.99??): measured over every stream's packets (was the video's alone: a picture that stops before the sound
+  // made the clip shorter than it is)
+  let span;
+  const measured = async () => { if (span === undefined) span = await packetSpan(input, sn.ffmt).catch(() => null); return spanSecs(span); };
+  if (!Number.isFinite(pr.secs) || pr.secs <= 0) pr.secs = await measured();
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) throw new media.MediaError("That video's length couldn't be read.");
+  // storyfix2: the header's length is checked against the packets for a camera clip's trim, and for any trim that runs past it -
+  // the longer of the two is the media's length (a short header is no reason to refuse or cut a clip)
+  let secs = pr.secs;
+  if (edit.trim && (edit.camera || edit.trim.end > secs + 0.5)) secs = Math.max(secs, await measured());
   const sourceCap = Math.min(L.STORY_SRC_MAX_SECS, Number(caps.max_video_secs) || L.STORY_SRC_MAX_SECS);
   if (pr.secs > sourceCap) throw new media.MediaError("The source video is too long for a story edit.");
   if (Number(pr.video.width) * Number(pr.video.height) > 8192 * 8192) throw new media.MediaError("That video's frame size is too big.");
-  if (edit.trim && edit.trim.end > pr.secs + 0.5) throw new media.MediaError("The trim goes past the end of the video.");
-  if (!edit.trim && pr.secs > L.STORY_MAX_SECS + 0.5) throw new media.MediaError("Trim it to 30 seconds.");
+  let start = 0, duration;
+  if (edit.trim && edit.camera) {
+    // storyfix2: a camera clip's trim is in the browser's length, which can run past the file (an iPhone's MP4): clamped to the
+    // media, refused only when nothing of it is left
+    if (edit.trim.start > secs - 0.1) throw new media.MediaError("The trim starts after the end of the video.");
+    start = edit.trim.start; duration = Math.min(edit.trim.end, secs) - start;
+  } else if (edit.trim) {
+    if (edit.trim.end > secs + 0.5) throw new media.MediaError("The trim goes past the end of the video.");
+    start = edit.trim.start; duration = edit.trim.end - start;
+  } else if (edit.camera) {
+    // storyfix2: a camera clip kept whole: all the file holds, up to the story's length (the result is checked below)
+    duration = L.STORY_MAX_SECS;
+  } else {
+    if (pr.secs > L.STORY_MAX_SECS + 0.5) throw new media.MediaError("Trim it to 30 seconds.");
+    duration = pr.secs;
+  }
   const size = await displayedVideoSize(input, sn, pr); shape(edit, size.w, size.h);
-  const start = edit.trim ? edit.trim.start : 0, duration = edit.trim ? edit.trim.end - start : pr.secs;
   const out = outputNames(".mp4"), outPath = media.filePath(out.file);
   let png = null;
   if (overlay) { png = path.join(work, "overlay.png"); await sharp(overlay).resize(L.STORY_VIDEO_W, L.STORY_VIDEO_H).png().toFile(png); }
@@ -216,4 +258,4 @@ async function process(input, sn, attachment, caps = {}) {
     if (work && path.dirname(path.resolve(work)) === path.resolve(media.dir(), "tmp")) fs.rmSync(work, { recursive: true, force: true });
   }
 }
-module.exports = { cleanEdit, overlayCheck, process, packetSecs, Refuse };
+module.exports = { cleanEdit, overlayCheck, process, packetSecs, packetSpan, Refuse };

@@ -993,7 +993,7 @@ test("Story camera fix: a recording's length is measured over every stream - a h
 test("Story camera fix: a trim past a header length that says less than the packets gets a second look before it is refused", videoOptions, async () => {
   const M = require(path.join(repo, "feedmedia")), file = path.join(tmp, "iphone-1.2.mp4"); iphoneMp4(file, 1.2);
   const real = M.probe;
-  M.probe = async (...a) => Object.assign(await real(...a), { secs: 0.6 });     // a header claiming 0.6 s of a 1.2 s file
+  M.probe = async (...a) => { const pr = await real(...a); return a[0] === file ? Object.assign(pr, { secs: 0.6 }) : pr; };     // a header claiming 0.6 s of the 1.2 s source
   try {
     const out = await composeClip(file, { trim: { start: 0, end: 1.2 } });
     assert.ok(out.secs >= 1.1 && out.secs <= 1.35, String(out.secs));
