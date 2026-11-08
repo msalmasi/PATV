@@ -354,3 +354,71 @@ test("an older bot: mode next / replace and plain plays answer as before; the ne
   r = await call({ op: "play", as: asU(starter), room: ROOM, key: "501", scope: "title", mode: "replace", replace_slot: st.state.library.slot_id });
   assert.deepEqual([r.ok, r.replaced && r.replaced.title], [true, "Charade (1963)"], JSON.stringify(r));
 });
+
+// ── 1.99?? plexqueue review fixes (F2 / F6 / F8) ──
+test("review F2: a plain play refused busy (something from Plex started between Pepe's question and the yes) carries the speaker's padState and what queueing the title costs them (secs), so Pepe offers queue / replace right there; an older Pepe's fields are unchanged", async () => {
+  await conf.set({ library_price: 50000 }, "test");
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const bob = await mkUser("pleb", 2000000);
+  let r = await call({ op: "play", as: asU(bob), room: ROOM, key: "501", scope: "title", price: 100000, secs: 5760 });
+  assert.deepEqual([r.ok, r.code, r.can_replace, r.playing], [false, "busy_library", false, "Charade (1963)"], JSON.stringify(r));
+  assert.ok(r.state && r.state.library, "padState rides along: " + JSON.stringify(r));
+  assert.deepEqual([r.state.library.title, r.state.library.queue_as, r.state.library.can_replace, r.queue_cost], ["Charade (1963)", "after", false, 100000],
+                   "bob may line it up (2 started hours), not replace it");
+  r = await call({ op: "play", as: asU(owner), room: ROOM, key: "501", scope: "title", secs: 5760 });
+  assert.deepEqual([r.ok, r.code, r.can_replace, r.state && r.state.library.queue_as, r.state && r.state.library.can_replace, typeof r.state.library.slot_id],
+                   [false, "busy_library", true, "after", true, "string"], "the pad's owner: both");
+  r = await call({ op: "play", as: asU(bob), room: ROOM, key: "501", scope: "title", price: 100000 });
+  assert.deepEqual([r.code, r.queue_cost, r.state && r.state.library.queue_as], ["busy_library", undefined, "after"], "no secs: no figure (Pepe's queue yes asks the site's)");
+  r = await call({ op: "play", as: asU(bob), room: ROOM, key: "501", scope: "title", price: 100000, secs: "lots" });
+  assert.equal(r.queue_cost, undefined, "a bad secs is ignored");
+});
+
+test("review F6: adding to your OWN row already waiting in the line - about when it starts counts that row's titles first (after() and padState)", async () => {
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const bob = await mkUser();
+  let r = await queueIt(bob, "501");
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.ok(near(r.eta_sec, 6700, 6780), "the first one starts when Charade ends: " + r.eta_sec);
+  const st = await search(bob, "carnival");
+  assert.deepEqual([st.state.library.queue_as, st.state.library.line.place, st.state.library.line.mine], ["after", 1, 1]);
+  assert.ok(near(st.state.library.eta_sec, 6700 + 5760, 6780 + 5760), "padState: after Charade AND his Night of the Living Dead: " + st.state.library.eta_sec);
+  r = await queueIt(bob, "502");
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual([r.how, r.place, r.items], ["after", 1, 2]);
+  assert.ok(near(r.eta_sec, 6700 + 5760, 6780 + 5760), "after(): Carnival of Souls starts after both: " + r.eta_sec);
+  const carol = await mkUser();
+  const st2 = await search(carol, "night");
+  assert.ok(near(st2.state.library.eta_sec, 6700 + 5760 + 4680, 6780 + 5760 + 4680), "someone new: after Charade and bob's two: " + st2.state.library.eta_sec);
+});
+
+test("review F8: a line-up is tied to the title the confirm named - padState says behind_slot, play mode queue sends it back; something else on by the yes -> behind_changed with what's on now (and its slot), nothing lined up", async () => {
+  const a = await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const u = await mkUser();
+  const st = await search(u, "night");
+  assert.deepEqual([st.state.library.queue_as, st.state.library.behind_slot], ["after", a.slot.id], "the slot a line-up goes behind");
+  assert.ok(PC.CODES.includes("behind_changed"));
+  let r = await queueIt(u, "501", { behind_slot: "11111111-2222-4333-8444-555555555555" });
+  assert.deepEqual([r.ok, r.code, r.playing, r.behind_slot], [false, "behind_changed", "Charade (1963)", a.slot.id], JSON.stringify(r));
+  assert.equal((await rowsOf()).length, 0, "nothing lined up");
+  r = await queueIt(u, "501", { behind_slot: a.slot.id });
+  assert.deepEqual([r.ok, r.how, r.place], [true, "after", 1], JSON.stringify(r));
+  // a row of your own already waiting: the same check before it grows
+  r = await queueIt(u, "502", { behind_slot: "11111111-2222-4333-8444-555555555555" });
+  assert.deepEqual([r.ok, r.code], [false, "behind_changed"]);
+  assert.deepEqual(JSON.parse((await rowsOf())[0].items).map((x) => x.key), ["501"], "it did not grow");
+  // an older Pepe (no behind_slot): as before; a running queue of your own (the END): no title is named, nothing to check
+  r = await queueIt(u, "502");
+  assert.deepEqual([r.ok, r.items], [true, 2]);
+  await clear();
+  const starter = await mkUser();
+  await Q.startFor(starter, { room: ROOM, keys: ["911", "912"] });
+  await goLive();
+  const sa = await search(starter, "charade");
+  assert.deepEqual([sa.state.library.queue_as, sa.state.library.behind_slot], ["append", undefined], "the end of your own queue names no title");
+  r = await queueIt(starter, "500", { behind_slot: "11111111-2222-4333-8444-555555555555" });
+  assert.deepEqual([r.ok, r.how], [true, "append"], JSON.stringify(r));
+});
