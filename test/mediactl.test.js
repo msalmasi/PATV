@@ -1370,3 +1370,81 @@ test("1.7.0 review: a Plex that can't be read doesn't end a stream - seek, resum
   assert.equal(h.spawned.length, before);
   h.fixture.items["7102"] = saved;
 });
+
+// ── 1.7.1 (site catfix, prod 2026-11-08): 1.7.0's /collections walked every collection's members inside ONE answer at four Plex
+// reads a second and sent nothing until the end - the largest movie section's walk took minutes, the site's client gave up
+// after 15 s, and the walk went on for minutes more with nobody waiting, holding the shared four-a-second budget. Nothing was
+// logged (only 5xx answers were). 1.7.1: /collections?start=&size= answers one bounded page of shelves; a catalog read stops
+// when the site stops waiting; a slow or abandoned catalog read is logged (path and Plex read count only, never the query). ──
+const invent = (n, from = 7600) => Array.from({ length: n }, (_, i) => ({ ratingKey: String(from + i), librarySectionID: "71", type: "collection", title: `Invented Shelf ${i}` }));
+
+test("1.7.1: /collections?start=&size= answers one bounded page of shelves with total and next; without size the whole list as 1.7.0 did", async t => {
+  const h = await clerkHarness(t);
+  assert.equal(M.VERSION, "1.7.1");
+  h.fixture.collections = invent(7);
+  h.fixture.members = ["7101", "7102"];
+  const pages = [];
+  for (let start = 0, guard = 0; start != null && guard < 10; guard++) {
+    const before = h.fixture.seen.length;
+    const r = await h.request("GET", `/collections?section=71&start=${start}&size=3`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.total, 7);
+    assert.ok(h.fixture.seen.length - before <= 1 + 3, `one listing read + one member read per shelf on the page: ${h.fixture.seen.length - before}`);
+    assert.ok(r.json.collections.every(c => c.members.join() === "7101,7102"));
+    pages.push(r.json.collections.map(c => c.key));
+    start = r.json.next;
+  }
+  assert.deepEqual(pages, [["7600", "7601", "7602"], ["7603", "7604", "7605"], ["7606"]]);
+  const listings = h.fixture.seen.filter(c => c.path === "/library/sections/71/collections");
+  assert.deepEqual(listings.map(c => [c.query.get("X-Plex-Container-Start"), c.query.get("X-Plex-Container-Size")]), [["0", "3"], ["3", "3"], ["6", "3"]]);
+  const big = await h.request("GET", "/collections?section=71&start=0&size=5000");
+  assert.equal(h.fixture.seen.filter(c => c.path === "/library/sections/71/collections").at(-1).query.get("X-Plex-Container-Size"), "50", "a page is at most 50 shelves");
+  assert.equal(big.json.next, null);
+  const whole = await h.request("GET", "/collections?section=71");
+  assert.equal(whole.status, 200);
+  assert.deepEqual(whole.json.collections.map(c => c.key), pages.flat(), "no size: every shelf in one answer, as before");
+  assert.equal("next" in whole.json, false, "...in 1.7.0's shape");
+  assert.equal((await h.request("GET", "/collections?section=71&start=0&size=3", undefined)).json.collections.length, 3);
+  assertClerkNoDeniedMetadata(whole.json);
+});
+
+test("1.7.1: a catalog walk stops when the site stops waiting, says so in the log, and leaves the shared budget to the next read", async t => {
+  const h = await clerkHarness(t);
+  h.fixture.collections = invent(40);
+  h.fixture.members = ["7101", "7102"];
+  const logs = [];
+  for (const level of ["log", "warn", "error"]) t.mock.method(console, level, (...a) => logs.push(a.join(" ")));
+  const route = "/collections?section=71";
+  const ts = String(Date.now()), nonce = crypto.randomBytes(12).toString("hex");
+  const ac = new AbortController();
+  const asked = fetch(h.origin + route, { signal: ac.signal, headers: { "x-mc-ts": ts, "x-mc-nonce": nonce,
+    "x-mc-sig": M.sign(SECRET, { ts, nonce, method: "GET", url: route, body: "" }) } }).catch(e => e);
+  assert.ok(await waitFor(() => h.fixture.seen.length >= 3, 5000), "the walk started");
+  ac.abort();                      // the site's client gives up (its timeout) - 40 shelves would take ~10 s more
+  await asked;
+  const at = h.fixture.seen.length;
+  await new Promise(r => setTimeout(r, 1500));
+  assert.ok(h.fixture.seen.length <= at + 2, `the walk stopped: ${h.fixture.seen.length - at} Plex reads after the site left`);
+  assert.ok(await waitFor(() => logs.some(l => /^\[mediactl\] GET \/collections: the site stopped waiting after \d+\.\d s \(\d+ Plex reads\)/.test(l))), logs.join("\n"));
+  assert.ok(!logs.join("\n").includes("section=71"), "the query (section ids) stays out of the log");
+  const t0 = Date.now();
+  const next = await h.request("GET", "/catalog?section=71&type=1");
+  assert.equal(next.status, 200);
+  assert.ok(Date.now() - t0 < 1500, `the next read isn't queued behind the abandoned walk: ${Date.now() - t0} ms`);
+});
+
+test("1.7.1: a slow catalog read is logged with its time and Plex read count (path only)", async t => {
+  const h = await clerkHarness(t, {}, { slowLogMs: 0 });
+  const logs = [];
+  t.mock.method(console, "log", (...a) => logs.push(a.join(" ")));
+  h.fixture.collections = invent(2);
+  assert.equal((await h.request("GET", "/collections?section=71&start=0&size=10")).status, 200);
+  assert.ok(logs.some(l => /^\[mediactl\] GET \/collections 200 in \d+\.\d s \(3 Plex reads\)$/.test(l)), logs.join("\n"));
+  assert.equal((await h.request("GET", "/catalog?section=71&type=1")).status, 200);
+  assert.ok(logs.some(l => /^\[mediactl\] GET \/catalog 200 in \d+\.\d s \(1 Plex reads?\)$/.test(l)), logs.join("\n"));
+  assert.ok(!logs.join("\n").includes("section=71"));
+  const quiet = await clerkHarness(t);   // the default: only reads of 10 s or more
+  logs.length = 0;
+  assert.equal((await quiet.request("GET", "/catalog?section=71&type=1")).status, 200);
+  assert.equal(logs.filter(l => l.includes("/catalog")).length, 0);
+});
