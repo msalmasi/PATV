@@ -229,7 +229,7 @@
     if (sub) sub.textContent = T("sng_sub", "Sit & Go · tournament chips (not PAT) · no rake");
     const SG = CZ.sng, mt = (me && me.tourney) || {};
     const stat = (label, val) => `<div class="sng-stat"><small>${esc(label)}</small><b>${val}</b></div>`;
-    const clock = (dl) => `<span data-sngdl="${Number(dl)}">${SG.mmss(Number(dl) - (Date.now() - CZ.skew()))}</span>`;
+    const clock = (dl) => `<span data-sngdl="${Number(dl)}"></span>`;     // (filled by CZ.sng.tick: the header's HTML only changes when its state does)
     const reg = tn.status === "registering", live = tn.status === "running" || tn.status === "settling";
     let html = `<div class="sng-top"><span class="sng-badge">🏁 ${esc(T("sng_badge", "Sit & Go"))}${tn.turbo ? " · " + esc(T("sng_turbo_tag", "Turbo")) : ""}</span>` +
       `<span class="tag gold">${esc(T("sng_entry_n", "Entry {buyin} + {fee}", { buyin: fmt(tn.buyin), fee: fmt(tn.fee) }))}</span>` +
@@ -255,7 +255,7 @@
     }
     if ((reg || live) && me && me.admin && tn.status !== "settling") acts.push(`<button type="button" class="cz-btn red sm" data-sng="cancel">${esc(T("sng_cancel", "Cancel (refund everyone)"))}</button>`);
     if (acts.length) html += `<div class="sng-acts">${acts.join("")}</div>`;
-    if (head.dataset.v !== html) { head.dataset.v = html; head.innerHTML = html; }
+    if (head.dataset.v !== html) { head.dataset.v = html; head.innerHTML = html; SG.tick(); }
     let r = "";
     if (tn.status === "finished") {
       r = `<h2>🏆 ${esc(T("sng_results", "Results"))}</h2><ol>` + tn.places.map((p) => `<li${mt.place === p.place ? ' class="me"' : ""}><span>${SG.medal(p.place - 1)} ${esc(p.name)}` +

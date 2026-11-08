@@ -470,7 +470,7 @@
   setInterval(tickSng, 1000);
   const medal = (i) => ["🥇", "🥈", "🥉"][i] || "#" + (i + 1);
   const prizeTags = (prizes) => (prizes || []).map((p, i) => `<span class="tag" aria-label="${esc(T("sng_place_prize", "Place {n}: {amount} PAT", { n: i + 1, amount: fmt(p) }))}">${medal(i)} ${fmt(p)}</span>`).join("");
-  const clockHTML = (dl) => `<b data-sngdl="${Number(dl)}">${mmss(Number(dl) - (Date.now() - skew))}</b>`;
+  const clockHTML = (dl) => `<b data-sngdl="${Number(dl)}"></b>`;      // (filled by tickSng: the card's HTML stays the same from second to second)
   function sngState(r) {
     if (r.status === "registering") {
       return r.countdown_at ? esc(T("sng_starts_in", "Starts in")) + " " + clockHTML(r.countdown_at)
@@ -516,7 +516,7 @@
     if (sec.hidden) return;
     const html = list.length ? list.map((r) => sngCard(r, sg)).join("")
       : `<div class="lob-empty">${esc(T("sng_none", "No Sit & Go is open right now. Create one and others can join you."))}</div>`;
-    if ($("cz-sngs").dataset.v !== html) { $("cz-sngs").dataset.v = html; $("cz-sngs").innerHTML = html; }
+    if ($("cz-sngs").dataset.v !== html) { $("cz-sngs").dataset.v = html; $("cz-sngs").innerHTML = html; tickSng(); }
     const note = $("cz-sng-note");
     if (note.dataset.def === undefined) note.dataset.def = note.textContent;
     note.textContent = sg.audience === "staff" ? T("sng_staff_only", "Sit & Gos are open to staff only for now.") : note.dataset.def;
@@ -915,5 +915,5 @@
                 skew: () => skew,
                 // 1.99ajw casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)
                 seatWho, personMenu, pepeMenu, people: () => ppl.d, loadPeople, view: () => lastView, me: meName,
-                sng: { mmss, medal, prizeTags } };          // (h22: the table page's Sit & Go header - casinohm.js)
+                sng: { mmss, medal, prizeTags, tick: tickSng } };          // (h22: the table page's Sit & Go header - casinohm.js)
 })();
