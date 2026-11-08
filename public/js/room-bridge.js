@@ -1487,6 +1487,9 @@
   }
 
   window.PATVRoom = { audio: audio, relay: relay, ptt: ptt, clipStatus: clipStatus, _ios: IOS,
+    // story camera (1.99??, story-camera.js): the camera's mic shares this page's audio session - before() just before it
+    // opens, after() once it is released (the room's playback / auto, the player's volume and resume), like push-to-talk
+    session: recSession,
     // micvad 1.99akk: the pure pieces of the level path, for the tests (test/micvad-player.test.js, micvad-contract.test.js)
     _lv: { header: lvHeader, session: lvSession, walk: lvWalk, scan: lvScan, feed: lvFeed, digitAt: lvAt, next: lvNext, fromPeak: lvFromPeak, heights: lvHeights } };
 })();

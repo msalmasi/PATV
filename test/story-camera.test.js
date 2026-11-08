@@ -892,7 +892,7 @@ test("Story camera review: a file the studio refuses, chosen with the camera's ð
   const P = camPage(), root = await openStudio(P);
   cam(P).querySelector(".scam-gallery").click(); pickFile(P, "text/plain", "notes.txt"); await flush(10);
   assert.ok(cam(P), "still on the camera"); assert.equal(liveTracks(P.streams[0]), 2); assert.ok(root.classList.contains("scam-open"));
-  const why = status(P); assert.ok(why.length > 0); assert.equal(cam(P).querySelector(".scam-note").textContent, why, "said on the camera, where it can be seen");
+  const why = status(P); assert.ok(why.length > 0); assert.equal(cam(P).querySelector(".scam-note p").textContent, why, "said on the camera, where it can be seen");
   assert.ok(!cam(P).querySelector(".scam-note").hidden);
   const big = new Blob([new Uint8Array(16)], { type: "video/mp4" }); big.name = "huge.mp4"; Object.defineProperty(big, "size", { value: 500 * 1024 * 1024 });
   const g = P.doc.querySelector('[data-pick="gallery"]'); g.files = [big]; g.dispatchEvent(new Ev("change")); await flush(10);

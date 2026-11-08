@@ -15,6 +15,18 @@
 // Recordings: Chrome / Android / Firefox write WebM (VP8 + Opus) with no length in its header - written in here before
 // the hand-off (webmDuration), so the editor and ffprobe can read it; WebKit (every iPhone browser) writes MP4 (H.264 +
 // AAC). The server re-encodes either (storycompose.js) and measures a header with no length from its packets.
+// Review fixes (1.99??):
+//   * o.wait: the view is up at once, but the camera and mic are asked for only on go() - once the studio knows this person
+//     can post (no prompt for a camera that could never post)
+//   * a refusal is remembered only when it is the CAMERA's: a combined request refused while the mic is blocked and the
+//     camera is still to ask gets the camera alone (silent videos). A memo is forgotten as soon as the Permissions API
+//     says the site is allowed again (checked on load, on a blocked open, and on the permission's change event)
+//   * no camera: a desktop (fine pointer) whose device list has no videoinput never shows the view; a NotFound is kept
+//     for the page; both are tried again on devicechange. A phone always tries (its list can be empty before permission)
+//   * iOS audio session: 'play-and-record' just before the mic opens, handed back the moment the camera is released -
+//     inside the gesture that ends a capture (a let-go stops every track at once). On a pad page room-bridge.js owns the
+//     session (PATVRoom.session: its playback / auto, the room player's volume and resume); elsewhere the old type returns
+//   * a desktop webcam that names no facing faces you: its preview is mirrored too (the saved file still isn't)
 (function () {
   'use strict';
   if (window.patvStoryCamera) return;
@@ -23,12 +35,17 @@
   var WEBM = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'], MP4 = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
   var WEBM_SILENT = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'], MP4_SILENT = ['video/mp4;codecs=avc1', 'video/mp4'];
   var SVG = 'http://www.w3.org/2000/svg', RING = 238.76, current = null, refused = false, micRefused = false, serial = 0;
+  // the page's view of its cameras: none = a NotFound this page (until devicechange); cams = videoinputs listed (null = not known yet)
+  var none = false, cams = null, camsAsk = null, watching = {};
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function add(p, e) { p.appendChild(e); return e; }
   function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
   function prevent(e) { e.preventDefault(); }
   function memo(key, value) { try { if (value === undefined) return window.sessionStorage.getItem(key); window.sessionStorage.setItem(key, value); } catch (e) { /* private mode: this page only */ } return null; }
+  function unmemo(key) { try { window.sessionStorage.removeItem(key); } catch (e) { /* private mode */ } }
   function media() { var n = window.navigator, m = n && n.mediaDevices; return m && typeof m.getUserMedia === 'function' ? m : null; }
+  function coarse() { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } }
+  function denial(e) { return !!e && (e.name === 'NotAllowedError' || e.name === 'SecurityError' || e.name === 'PermissionDeniedError'); }
   function stopAll(stream) { if (stream && stream.getTracks) stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /* already ended */ } }); }
   function clock(secs) { var s = Math.max(0, Math.floor(secs)); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
   function stamp() { var d = new Date(), p = function (n) { return ('0' + n).slice(-2); }; return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
@@ -36,7 +53,34 @@
   function unavailable() {
     if (window.isSecureContext === false || !media()) return _t('js.feed.cam.unsupported', 'This browser can\'t show a live camera here. Use 📷 Camera or 🖼️ Gallery instead.');
     if (refused || memo(MEMO) === 'denied') return _t('js.feed.cam.denied', 'Camera access is off for this site, so the live camera can\'t open. Use 📷 Camera or 🖼️ Gallery instead.');
+    if (none || (cams === 0 && !coarse())) return _t('js.feed.cam.none', 'No camera was found. Choose a picture or video with 🖼️ Gallery.');
     return '';
+  }
+  // how many cameras the device list shows (no permission needed; a browser lists one per kind before it); -1 = can't tell
+  function probe() {
+    if (cams != null) return Promise.resolve(cams);
+    if (camsAsk) return camsAsk;
+    var M = media(); if (!M || typeof M.enumerateDevices !== 'function') return Promise.resolve(-1);
+    var ask = camsAsk = Promise.resolve().then(function () { return M.enumerateDevices(); }).then(function (list) {
+      var n = (list || []).filter(function (d) { return d && d.kind === 'videoinput'; }).length;
+      if (camsAsk === ask) { cams = n; camsAsk = null; } return n;
+    }, function () { if (camsAsk === ask) camsAsk = null; return -1; });
+    return ask;
+  }
+  // the Permissions API's state for 'camera' / 'microphone' (null = can't tell); the first status of each is watched, so a
+  // site allowed again in the browser's settings forgets the memo at once
+  function perm(name) {
+    var P = window.navigator && window.navigator.permissions;
+    if (!P || typeof P.query !== 'function') return Promise.resolve(null);
+    return Promise.resolve().then(function () { return P.query({ name: name }); }).then(function (st) {
+      if (st && typeof st.addEventListener === 'function' && !watching[name]) { watching[name] = true; st.addEventListener('change', function () { if (st.state === 'granted') forget(name); }); }
+      return st && st.state ? st.state : null;
+    }, function () { return null; });
+  }
+  function forget(name) { if (name === 'camera') { refused = false; unmemo(MEMO); } else { micRefused = false; unmemo(MEMO_MIC); } }
+  function recheck() {
+    if (refused || memo(MEMO) === 'denied') perm('camera').then(function (s) { if (s === 'granted') forget('camera'); });
+    if (micRefused || memo(MEMO_MIC) === 'denied') perm('microphone').then(function (s) { if (s === 'granted') forget('microphone'); });
   }
   // the recorder type: WebM where it is native (its length is fixed below), MP4 on Apple's WebKit; null = can't record here
   function recType(silent) {
@@ -52,15 +96,20 @@
     var ic = add(b, el('span', 'scam-ic', icon)); ic.setAttribute('aria-hidden', 'true'); b.addEventListener('click', fn); return b;
   }
 
+  // o: { wait, draft, secs(), file(file, info), gallery(), close(), unavailable(why) }. o.wait: the view only, until go().
   function open(host, o) {
-    var why = unavailable(); if (why) { o.unavailable(why); return null; }
+    var why = unavailable(); if (why) { recheck(); o.unavailable(why); return null; }
     if (current) close(current);
     var c = current = { id: ++serial, host: host, o: o, facing: 'environment', device: null, gen: 0, closed: false, ready: false, paused: false, busy: false,
-      mic: micRefused || memo(MEMO_MIC) === 'denied' ? false : true, noMic: false, restarts: 0, handled: -Infinity, on: [] };
-    build(c); bind(c); start(c);
+      waiting: !!o.wait, session: false, mic: micRefused || memo(MEMO_MIC) === 'denied' ? false : true, noMic: false, restarts: 0, handled: -Infinity, on: [] };
+    build(c); bind(c);
+    if (c.waiting) note(c, _t('js.feed.cam.starting', 'Starting the camera…')); else start(c);
     c.shutter.focus();
-    return { close: function () { close(c); }, cancel: function () { cancel(c); } };
+    return { close: function () { close(c); }, cancel: function () { cancel(c); }, go: function () { go(c); },
+      // a word over the camera (a file the studio refused, chosen with 🖼️): it stays until the next press
+      say: function (text) { if (!c.closed) note(c, text, 'error'); } };
   }
+  function go(c) { if (c.closed || !c.waiting) return; c.waiting = false; if (!c.paused) start(c); }
   function build(c) {
     var v = c.view = el('div', 'scam'); v.setAttribute('role', 'group'); v.setAttribute('aria-label', _t('js.feed.cam.label', 'Story camera')); v.setAttribute('data-facing', c.facing);
     var video = c.video = add(v, el('video', 'scam-video'));
@@ -69,7 +118,9 @@
     ['loadedmetadata', 'playing', 'resize'].forEach(function (type) { video.addEventListener(type, function () { ready(c); }); });
     add(v, el('div', 'scam-flash'));
     var top = add(v, el('div', 'scam-top'));
-    c.closeButton = add(top, button('scam-close', '✕', _t('js.feed.cam.close', 'Close the camera'), function () { cancel(c); }));
+    // ✕ closes the camera; with no draft behind it, that is the whole story editor (the studio's close callback)
+    var closeLabel = c.o.draft ? _t('js.feed.cam.close', 'Close the camera') : _t('js.feed.cam.close_story', 'Close story editor');
+    c.closeButton = add(top, button('scam-close', '✕', closeLabel, function () { cancel(c); }));
     c.time = add(top, el('span', 'scam-time')); c.time.hidden = true; c.time.setAttribute('aria-hidden', 'true');
     c.flip = add(top, button('scam-flip', '🔄', _t('js.feed.cam.flip', 'Switch camera'), function () { flip(c); })); c.flip.hidden = true;
     c.note = add(v, el('div', 'scam-note')); c.note.setAttribute('role', 'status'); c.note.setAttribute('aria-live', 'polite'); c.note.hidden = true;
@@ -108,45 +159,69 @@
   function paint(c) {
     if (!c.view) return;
     var rec = !!c.rec, v = c.view, can = recType(c.noMic) != null;
+    // let go before the shortest clip (MIN_MS), or stopped and still writing: it says so, not "Let go to stop"
+    var finishing = rec && (c.rec.stopping || !!c.rec.min), finish = _t('js.feed.cam.finishing', 'Finishing the video…');
     v.classList.toggle('scam-ready', !!c.ready); v.classList.toggle('scam-recording', rec); v.setAttribute('data-facing', c.facing);
-    c.shutter.setAttribute('aria-disabled', String(!c.ready || c.busy));
-    c.shutter.setAttribute('aria-label', rec ? _t('js.feed.cam.recording', 'Recording. Let go to stop.') : can ? _t('js.feed.cam.shutter', 'Take a photo. Press and hold to record a video.') : _t('js.feed.cam.shutter_photo', 'Take a photo'));
-    c.hint.textContent = rec ? _t('js.feed.cam.release', 'Let go to stop') : c.noMic && can ? _t('js.feed.cam.no_mic', 'No microphone: videos will have no sound.')
+    c.shutter.setAttribute('aria-disabled', String(!c.ready || c.busy || finishing));
+    c.shutter.setAttribute('aria-label', finishing ? finish : rec ? _t('js.feed.cam.recording', 'Recording. Let go to stop.') : can ? _t('js.feed.cam.shutter', 'Take a photo. Press and hold to record a video.') : _t('js.feed.cam.shutter_photo', 'Take a photo'));
+    c.hint.textContent = finishing ? finish : rec ? _t('js.feed.cam.release', 'Let go to stop') : c.noMic && can ? _t('js.feed.cam.no_mic', 'No microphone: videos will have no sound.')
       : can ? _t('js.feed.cam.hint', 'Tap for a photo, hold for a video') : _t('js.feed.cam.hint_photo', 'Tap for a photo');
     c.flip.disabled = rec || c.busy; c.gallery.disabled = rec || c.busy; c.time.hidden = !rec;
   }
   // a note over the camera: 'wait' goes when the picture arrives; an error stays until the next press
   function note(c, text, kind) { c.noteKind = text ? kind || 'wait' : ''; c.noteText.textContent = text || ''; c.note.hidden = !text; c.retry.hidden = kind !== 'retry'; }
   function micOnly(e) {
-    // the camera AND/OR the mic were refused: try the camera alone only when the camera itself is allowed (no second prompt)
-    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError' || e.name === 'PermissionDeniedError')) {
-      var P = window.navigator && window.navigator.permissions;
-      if (!P || typeof P.query !== 'function') return Promise.resolve(false);
-      return Promise.resolve().then(function () { return P.query({ name: 'camera' }); }).then(function (st) { return !!st && st.state === 'granted'; }, function () { return false; });
-    }
+    // camera + mic refused together: the camera alone is tried when the camera itself is allowed (no second prompt), or when
+    // it is the MIC that is blocked and the camera is still to ask (a single camera-only prompt). Anything else is the camera's.
+    if (denial(e)) return Promise.all([perm('camera'), perm('microphone')]).then(function (s) { return s[0] === 'granted' || (s[0] === 'prompt' && s[1] === 'denied'); });
     return Promise.resolve(true);    // no mic, a busy mic, a constraint: the camera alone
   }
+  // iOS (Safari 17+'s Audio Session API): the page records only in a play-and-record session, and only a user gesture lets a
+  // paused room player play again - so it is set just before the mic opens and handed back as the camera is released.
+  function sessionBefore(c) {
+    if (c.session) return; c.session = true;
+    var R = c.sessionBy = window.PATVRoom && window.PATVRoom.session && typeof window.PATVRoom.session.before === 'function' ? window.PATVRoom.session : null;
+    if (R) { try { R.before(); } catch (e) { /* the room's own session stays */ } return; }
+    try { var A = window.navigator && window.navigator.audioSession; if (A) { c.sessionWas = A.type; A.type = 'play-and-record'; } } catch (e) { /* no Audio Session API */ }
+  }
+  function sessionAfter(c) {
+    if (!c.session) return; c.session = false;
+    var R = c.sessionBy; c.sessionBy = null;
+    if (R) { try { R.after(); } catch (e) { /* the room's own session stays */ } return; }
+    try {
+      var A = window.navigator && window.navigator.audioSession;
+      if (A && A.type === 'play-and-record') A.type = c.sessionWas && c.sessionWas !== 'play-and-record' ? c.sessionWas : 'auto';
+    } catch (e) { /* no Audio Session API */ }
+  }
   function start(c) {
-    if (c.closed) return;
+    if (c.closed || c.waiting) return;
     var why = unavailable(); if (why) { fallback(c, why); return; }
     var n = ++c.gen, M = media(), video = { width: { ideal: 1920 }, height: { ideal: 1080 } };
     if (c.device) video.deviceId = { exact: c.device }; else video.facingMode = { ideal: c.facing };
-    c.ready = false; c.paused = false; if (c.noteKind !== 'error') note(c, _t('js.feed.cam.starting', 'Starting the camera…')); paint(c);
+    thaw(c); c.ready = false; c.paused = false; if (c.noteKind !== 'error') note(c, _t('js.feed.cam.starting', 'Starting the camera…')); paint(c);
     function ask(audio) { return Promise.resolve().then(function () { return M.getUserMedia({ video: video, audio: audio ? { echoCancellation: true, noiseSuppression: true } : false }); }); }
-    var withMic = c.mic;
-    var asked = !withMic ? ask(false) : ask(true).catch(function (e) {
-      return micOnly(e).then(function (retry) {
-        if (!retry) throw e;
-        return ask(false).then(function (stream) { c.mic = false; if (e && e.name === 'NotAllowedError') { micRefused = true; memo(MEMO_MIC, 'denied'); } return stream; });
+    function live() { return n === c.gen && !c.closed && !c.paused; }
+    probe().then(function (count) {
+      if (!live()) return null;
+      // a desktop whose device list has no camera: nothing to ask for (a phone asks anyway - its list can be empty before permission)
+      if (count === 0 && !coarse()) { var e = new Error('no camera'); e.name = 'NotFoundError'; throw e; }
+      var withMic = c.mic;
+      if (withMic) sessionBefore(c); else sessionAfter(c);
+      return !withMic ? ask(false) : ask(true).catch(function (e) {
+        return micOnly(e).then(function (retry) {
+          if (!retry || n !== c.gen || c.closed) throw e;
+          sessionAfter(c);
+          return ask(false).then(function (stream) { c.mic = false; if (denial(e)) { micRefused = true; memo(MEMO_MIC, 'denied'); } return stream; });
+        });
       });
-    });
-    asked.then(function (stream) { if (n !== c.gen || c.closed || c.paused) { stopAll(stream); return; } attach(c, stream); },
+    }).then(function (stream) { if (!stream) return; if (!live()) { stopAll(stream); return; } attach(c, stream); },
       function (e) { if (n !== c.gen || c.closed) return; failed(c, e); });
   }
   function attach(c, stream) {
     c.stream = stream; c.noMic = !(stream.getAudioTracks && stream.getAudioTracks().length);
     var track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null, st = track && track.getSettings ? track.getSettings() : {};
     if (st && typeof st.facingMode === 'string' && st.facingMode) c.facing = st.facingMode === 'user' ? 'user' : 'environment';
+    else if (!coarse()) c.facing = 'user';     // a desktop webcam names no facing: it faces you, so its preview is mirrored too
     c.deviceId = st && st.deviceId;
     if (track) track.addEventListener('ended', function () { if (c.stream === stream && !c.closed) ended(c); });
     try { c.video.srcObject = stream; } catch (e) { failed(c, e); return; }
@@ -173,36 +248,49 @@
   }
   function failed(c, e) {
     var name = e && e.name, why;
-    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
-      refused = true; memo(MEMO, 'denied'); why = _t('js.feed.cam.denied', 'Camera access is off for this site, so the live camera can\'t open. Use 📷 Camera or 🖼️ Gallery instead.');
-    } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') why = _t('js.feed.cam.none', 'No camera was found. Choose a picture or video with 🖼️ Gallery.');
-    else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') why = _t('js.feed.cam.busy', 'The camera is in use by another app. Close it, then tap 📷 Camera to try again.');
+    if (denial(e)) {
+      // the camera's own refusal (micOnly ruled out a blocked mic): remembered for the session, watched for an allow
+      refused = true; memo(MEMO, 'denied'); perm('camera'); why = _t('js.feed.cam.denied', 'Camera access is off for this site, so the live camera can\'t open. Use 📷 Camera or 🖼️ Gallery instead.');
+    } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'OverconstrainedError') {
+      none = true; why = _t('js.feed.cam.none', 'No camera was found. Choose a picture or video with 🖼️ Gallery.');     // this page, until devicechange
+    } else if (name === 'NotReadableError' || name === 'TrackStartError' || name === 'AbortError') why = _t('js.feed.cam.busy', 'The camera is in use by another app. Use 📷 Camera or 🖼️ Gallery instead.');
     else why = _t('js.feed.cam.error', 'The camera couldn\'t start. Use 📷 Camera or 🖼️ Gallery instead.');
     fallback(c, why);
   }
   function fallback(c, why) { var o = c.o; close(c); o.unavailable(why); }
-  function release(c) {
+  // keep: the audio session stays (a flip: the next camera opens at once with the mic)
+  function release(c, keep) {
     c.gen++; var s = c.stream; c.stream = null; c.ready = false;
     stopAll(s);
     if (c.video) { try { c.video.pause(); } catch (e) { /* not playing */ } try { c.video.srcObject = null; } catch (e) { /* old browser */ } }
-    // iOS: hand the page's audio session back to playback once the mic is off (see room-bridge.js)
-    try { var A = window.navigator && window.navigator.audioSession; if (s && A && A.type === 'play-and-record') A.type = 'auto'; } catch (e) { /* no Audio Session API */ }
+    if (!keep) sessionAfter(c);
     paint(c);
   }
+  // the last frame stays on screen (over the released camera) while a capture is encoded
+  function freeze(c) {
+    if (c.frozen) return c.frozen;
+    var v = c.video, w = v && v.videoWidth, h = v && v.videoHeight; if (!w || !h) return null;
+    var canvas = document.createElement('canvas'), ctx = canvas.getContext && canvas.getContext('2d'); if (!ctx) return null;
+    canvas.width = w; canvas.height = h;
+    try { ctx.drawImage(v, 0, 0, w, h); } catch (e) { return null; }
+    canvas.className = 'scam-freeze'; canvas.setAttribute('aria-hidden', 'true'); c.view.insertBefore(canvas, c.video.nextSibling || null);
+    return (c.frozen = canvas);
+  }
+  function thaw(c) { if (c.frozen) { c.frozen.remove(); c.frozen = null; } if (c.view) c.view.classList.remove('scam-snap'); }
   function away(c) {
     if (c.closed) return;
     if (c.press) { clearTimeout(c.press.timer); c.press = null; }
     if (c.rec) stopRec(c, 'hidden');      // what was filmed is kept: it goes to the editor
     c.paused = true; release(c);
   }
-  function back(c) { if (c.closed || !c.paused || c.rec || c.busy) return; c.paused = false; c.restarts = 0; start(c); }
+  function back(c) { if (c.closed || !c.paused || c.rec || c.busy) return; c.paused = false; c.restarts = 0; start(c); }     // (still waiting: start waits too)
   function flip(c) {
     if (c.rec || c.busy || c.closed) return;
     // a phone: the other facing mode; a desktop whose cameras have no facing: the next camera in the list
     var t = c.stream && c.stream.getVideoTracks ? c.stream.getVideoTracks()[0] : null, st = t && t.getSettings ? t.getSettings() : {};
     if (!(st && st.facingMode) && c.cams && c.cams.length > 1) c.device = c.cams[(c.cams.indexOf(c.device || c.deviceId) + 1) % c.cams.length];
     else { c.device = null; c.facing = c.facing === 'user' ? 'environment' : 'user'; }
-    release(c); start(c);      // released first: a phone opens one camera at a time
+    release(c, true); start(c);      // released first: a phone opens one camera at a time (the audio session stays)
   }
   function down(c, e) {
     if (e.button != null && e.button !== 0) return;
@@ -224,17 +312,14 @@
   }
   function photo(c) {
     if (c.closed || c.busy || c.rec || !c.ready) return;
-    var v = c.video, w = v.videoWidth, h = v.videoHeight; if (!w || !h) return;
-    var canvas = document.createElement('canvas'), ctx = canvas.getContext && canvas.getContext('2d');
-    if (!ctx || typeof canvas.toBlob !== 'function') { note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); return; }
-    canvas.width = w; canvas.height = h;
-    try { ctx.drawImage(v, 0, 0, w, h); } catch (e) { note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); return; }
-    // the frame stays on screen while it encodes; the camera is already off
-    c.busy = true; canvas.className = 'scam-freeze'; canvas.setAttribute('aria-hidden', 'true'); c.view.insertBefore(canvas, c.video.nextSibling || null);
-    c.view.classList.add('scam-snap'); release(c);
+    var v = c.video; if (!v.videoWidth || !v.videoHeight) return;
+    // the frame, at the stream's own size, stays on screen while it encodes; the camera is already off (in this gesture)
+    var canvas = freeze(c);
+    if (!canvas || typeof canvas.toBlob !== 'function') { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); return; }
+    c.busy = true; c.view.classList.add('scam-snap'); release(c);
     canvas.toBlob(function (blob) {
       c.busy = false; if (c.closed) return;
-      if (!blob || !blob.size) { canvas.remove(); c.view.classList.remove('scam-snap'); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); start(c); return; }
+      if (!blob || !blob.size) { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); start(c); return; }
       hand(c, blob, 'image/jpeg', 0);
     }, 'image/jpeg', JPEG_Q);
   }
@@ -264,9 +349,12 @@
   function stopRec(c, why) {
     var rec = c.rec; if (!rec || rec.stopping) return;
     var held = now() - rec.began;
-    if (why === 'release' && held < MIN_MS) { if (!rec.min) rec.min = setTimeout(function () { rec.min = 0; stopRec(c, 'min'); }, MIN_MS - held); return; }
+    if (why === 'release' && held < MIN_MS) { if (!rec.min) { rec.min = setTimeout(function () { rec.min = 0; stopRec(c, 'min'); }, MIN_MS - held); paint(c); } return; }
     rec.stopping = true; rec.ended = now(); clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock);
-    try { if (rec.r.state !== 'inactive') rec.r.stop(); else done(c, rec); } catch (e) { done(c, rec); }
+    try { if (rec.r.state !== 'inactive') rec.r.stop(); else { done(c, rec); return; } } catch (e) { done(c, rec); return; }
+    // the recorder keeps what it has; every track stops now - inside the let-go itself (iOS: the session and a paused
+    // room player come back from a gesture), with the last frame left on screen until the clip is handed over
+    freeze(c); release(c);
   }
   function done(c, rec) {
     if (rec.done) return; rec.done = true; if (c.rec === rec) c.rec = null;
@@ -275,7 +363,7 @@
     var type = String(rec.r.mimeType || rec.type || (rec.chunks[0] && rec.chunks[0].type) || 'video/webm').split(';')[0].trim() || 'video/webm';
     c.live.textContent = ''; release(c);
     if (c.closed || rec.discard) return;
-    if (rec.failed || !rec.chunks.length) { note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); if (!c.paused) start(c); return; }
+    if (rec.failed || !rec.chunks.length) { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); if (!c.paused) start(c); return; }
     var blob = new Blob(rec.chunks, { type: type });
     c.busy = true; paint(c);
     (/webm/.test(type) ? webmDuration(blob, secs).catch(function () { return blob; }) : Promise.resolve(blob)).then(function (b) { c.busy = false; hand(c, b, type, secs); });
@@ -387,5 +475,12 @@
     }, function () { return blob; });
   }
 
+  // the page's first look, no prompt: how many cameras are listed, and whether a refusal remembered in this tab still holds;
+  // a camera plugged in (or out) is looked for again
+  (function () {
+    var M = media(); if (!M) return;
+    if (typeof M.addEventListener === 'function') M.addEventListener('devicechange', function () { cams = null; camsAsk = null; none = false; });
+    probe(); recheck();
+  })();
   window.patvStoryCamera = { open: open, available: function () { return !unavailable(); }, _webmDuration: webmDuration, _recType: recType };
 })();

@@ -4,7 +4,8 @@
 .sst.scam-open > .sst-card { visibility: hidden; }
 .sst.scam-open { -webkit-backdrop-filter: none; backdrop-filter: none; }   /* nothing behind the camera is seen: no blur to compute */
 .scam { position: absolute; inset: 0; z-index: var(--ds-z-sticky); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; isolation: isolate;
-  background: var(--ds-media-bg); color: var(--ds-text-strong); font-family: var(--ds-font); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  background: var(--ds-media-bg); color: var(--ds-text-strong); font-family: var(--ds-font); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  touch-action: none; }   /* a pinch or double-tap on the preview never zooms the page under the camera */
 .scam .scam-video, .scam .scam-freeze { position: absolute; inset: 0; z-index: var(--ds-z-raised); inline-size: 100%; block-size: 100%; object-fit: contain; background: var(--ds-media-bg); pointer-events: none; }
 .scam .scam-freeze { z-index: var(--ds-z-sticky); }
 .scam[data-facing="user"] .scam-video, .scam[data-facing="user"] .scam-freeze { transform: scaleX(-1); }
