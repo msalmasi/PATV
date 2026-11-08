@@ -81,14 +81,27 @@ async function setup(t, overrides = {}) {
   let clock = AT;
   const cfg = { clerk_block_ratings: "X,XXX,AO,R18,R18+", catalog_sync_min: 60 };
   const api = { allowed: true, old: false, error: false, rows: fixtureRows(), sections: sections.map((s) => ({ ...s })), pageSize: 2 };
-  const calls = [], logs = [], tautCalls = [];
-  const mediactl = async (method, route) => {
-    calls.push(route);
+  const calls = [], logs = [], tautCalls = [], reads = [];
+  const mediactl = async (method, route, _body, opts = {}) => {
+    calls.push(route); reads.push({ route, timeout: opts.timeout });
+    // 1.99?? catfix: a test can answer (or fail) any read first - api.hook(route, opts) -> an answer, a throw, or undefined
+    if (api.hook) { const r = await api.hook(route, opts); if (r !== undefined) return r; }
     if (api.error) return { status: 502, json: { error: "Provider body must not appear" } };
     const u = new URL(route, "http://fixture.local");
     if (route === "/sections") return { status: api.old ? 404 : 200, json: { ok: !api.old, allow_list_set: api.allowed, sections: api.sections } };
-    if (route === "/health") return { status: 200, json: { ok: true, version: "1.7.0" } };
-    if (u.pathname === "/collections") return { status: 200, json: { ok: true, collections: snapshot().shelves } };
+    if (route === "/health") return { status: 200, json: { ok: true, version: api.version || "1.7.0" } };
+    if (u.pathname === "/collections") {
+      const all = api.collections || snapshot().shelves;
+      // mediactl 1.7.0 walks every collection's members inside ONE answer (api.walkMs: how long that takes); the site's client
+      // gives up after opts.timeout with no byte received - the real call() rejects "can't be reached (timeout)"
+      if (api.walkMs && !(opts.timeout >= api.walkMs)) throw Object.assign(new Error("The media-control service can't be reached (timeout)."), { status: 502, refuse: true });
+      if (semverOf(api.version) >= 1007001 && u.searchParams.has("size")) {   // 1.7.1: a page of shelves per answer
+        const start = Number(u.searchParams.get("start") || 0), size = Number(u.searchParams.get("size"));
+        const page = all.slice(start, start + size);
+        return { status: 200, json: { ok: true, collections: page, total: all.length, next: start + page.length < all.length ? start + page.length : null } };
+      }
+      return { status: 200, json: { ok: true, collections: all } };
+    }
     if (u.pathname === "/catalog") {
       const type = { 1: "movie", 2: "show", 4: "episode" }[u.searchParams.get("type")], sec = u.searchParams.get("section");
       let list = api.rows.filter((r) => r.type === type && (r.section === sec || (sec === "1" && ["3", "4"].includes(r.section)))); // broken provider injects denied rows
@@ -103,8 +116,10 @@ async function setup(t, overrides = {}) {
     tautulli: { configured: () => true, call: async (cmd, args) => { tautCalls.push({ cmd, ...args }); return { data: [{ rating_key: "1", play_count: 7 }, { rating_key: "5", play_count: 99 }] }; } },
     log: { log: (s) => logs.push(s), error: (s) => logs.push(s) }, ...overrides });
   t.after(async () => { await catalog.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  return { catalog, cfg, api, calls, logs, tautCalls, setClock: (v) => { clock = v; }, dir };
+  return { catalog, cfg, api, calls, logs, tautCalls, reads, setClock: (v) => { clock = v; }, dir };
 }
+function semverOf(v) { const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v || "1.7.0"); return m ? Number(m[1]) * 1e6 + Number(m[2]) * 1e3 + Number(m[3]) : 0; }
+const timeoutError = () => Object.assign(new Error("The media-control service can't be reached (timeout)."), { status: 502, refuse: true });
 
 test("full catalog sync filters sections/ratings, pages all types, stores bounded crow fields and safe shelves", async (t) => {
   const h = await setup(t);
@@ -436,4 +451,205 @@ test("shelves aggregates 10k films and 200k episodes without fetching metadata J
   assert.equal(armed.filter(aggregate).length, 0, "asked again: the kept answer");
   h.cfg.clerk_block_ratings += ",TV-14";
   assert.equal((await h.catalog.shelves()).genres.includes("Scale Series"), false);
+});
+
+// ── 1.99?? catfix (prod 2026-11-08: the clerk turned on, the card said "Last sync: Never" / "catalog source unavailable") ──
+// Proven on prod (read-only, the site's own mediactl client): every catalog page answers in under 4 s, but mediactl 1.7.0
+// answers a section's /collections only after walking every collection's members at its four Plex reads a second, and the
+// largest movie section's walk takes minutes - the client gave up after 15 s with no byte received. The run threw away the
+// whole section it had just read (no "at", no "full_at"), and every next run started over and failed at the same read.
+test("catfix: a section's /collections walk longer than the old 15 s no longer fails the sync (mediactl 1.7.0)", async (t) => {
+  const h = await setup(t);
+  h.api.walkMs = 4 * 60000;   // one section's whole collections walk inside one answer (minutes on prod)
+  const r = await h.catalog.sync({ full: true });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const cols = h.reads.filter((x) => x.route.startsWith("/collections"));
+  assert.equal(cols.length, 2, "one whole-section answer per allowed section");
+  assert.ok(cols.every((x) => x.timeout >= 10 * 60000), "1.7.0's walk gets a timeout fit for it: " + cols.map((x) => x.timeout));
+  const pages = h.reads.filter((x) => x.route.startsWith("/catalog"));
+  assert.ok(pages.every((x) => x.timeout >= 30000 && x.timeout <= 120000), "a page keeps a page's timeout: " + pages.map((x) => x.timeout));
+  assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Quiet Comedies", 2]]);
+  const st = await h.catalog.status();
+  assert.equal(st.ready, true); assert.equal(st.error, null); assert.equal(st.at, AT); assert.equal(st.full_at, AT);
+});
+
+test("catfix: mediactl 1.7.1 answers /collections a page of shelves at a time; every page is stored, a repeated shelf once", async (t) => {
+  const h = await setup(t);
+  h.api.version = "1.7.1";
+  h.api.walkMs = 4 * 60000;   // a whole walk would still be slow - the site never asks 1.7.1 for one
+  const shelves = Array.from({ length: 23 }, (_, n) => ({ key: String(900 + n), name: "Paged Shelf " + String(n).padStart(2, "0"), members: ["1", "2"] }));
+  shelves.splice(10, 0, { ...shelves[9] });   // Plex's list moved between two pages: the last shelf of page 1 opens page 2 again
+  // the fake pages the list; a paged read is quick, so it isn't held to the whole walk's time
+  h.api.hook = (route, opts) => {
+    const u = new URL(route, "http://fixture.local");
+    if (u.pathname !== "/collections") return undefined;
+    assert.ok(u.searchParams.has("size"), "1.7.1 is asked for pages");
+    assert.ok(opts.timeout >= 60000 && opts.timeout <= 300000, "a page of shelves gets a page's timeout: " + opts.timeout);
+    const start = Number(u.searchParams.get("start")), size = Number(u.searchParams.get("size"));
+    assert.ok(size >= 1 && size <= 50, "a bounded page: " + size);
+    const page = shelves.slice(start, start + size);
+    return { status: 200, json: { ok: true, collections: page, total: shelves.length, next: start + page.length < shelves.length ? start + page.length : null } };
+  };
+  const r = await h.catalog.sync({ full: true });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.ok(h.calls.filter((c) => c.startsWith("/collections?section=1")).length >= 3, "more than one page for section 1");
+  const names = (await h.catalog.shelves()).shelves.map((s) => s.name);
+  assert.deepEqual(names, shelves.filter((s, i) => i !== 10).map((s) => s.name), "every page's shelves, the repeated one once");
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_shelf_members"))[0].n, 23 * 2);
+  // the next full sweep replaces the section's shelves (page 1 clears them), it doesn't pile them up
+  shelves.splice(0, shelves.length, { key: "990", name: "Only Shelf Left", members: ["1"] });
+  h.setClock(AT + 86400000);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Only Shelf Left", 1]]);
+});
+
+test("catfix: a read that fails for a passing reason is tried again after a wait; an answer that can't change isn't", async (t) => {
+  const slept = [];
+  const h = await setup(t, { sleep: async (ms) => { slept.push(ms); } });
+  let fails = 2;
+  h.api.hook = (route) => {
+    if (route.includes("section=1&type=1&start=2") && fails > 0) { fails--; throw timeoutError(); }
+    return undefined;
+  };
+  const r = await h.catalog.sync({ full: true });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(h.calls.filter((c) => c.includes("section=1&type=1&start=2")).length, 3, "two failures, then the page");
+  assert.deepEqual(slept.filter((ms) => ms > 250), [2000, 10000], "backing off between tries");
+  assert.equal((await h.catalog.getByKeys(["3"])).length, 1, "the page that failed twice is in the catalog");
+  for (const status of [429, 500, 502, 503, 504]) {
+    const x = await setup(t, { sleep: async () => {} });
+    let left = 1;
+    x.api.hook = (route) => route.includes("type=4") && left-- > 0 ? { status, json: { ok: false, error: "busy" } } : undefined;
+    assert.equal((await x.catalog.sync({ full: true })).ok, true, status + " is tried again");
+  }
+  // a refusal that won't change by asking again (a section no longer allowed, a bad request): no second try
+  const y = await setup(t, { sleep: async (ms) => { if (ms > 250) slept.push("y" + ms); } });
+  y.api.hook = (route) => route.includes("type=4") ? { status: 404, json: { ok: false, error: "Not in the Plex library" } } : undefined;
+  const no = await y.catalog.sync({ full: true });
+  assert.equal(no.ok, false);
+  assert.equal(y.calls.filter((c) => c.includes("type=4")).length, 1);
+  assert.equal(slept.some((v) => String(v).startsWith("y")), false);
+  assert.equal(no.error, "catalog source unavailable: episode page from 0 of section 2 (shows) - media-control answered 404");
+});
+
+test("catfix: the last sync error says which read failed, how, after how many tries - and when", async (t) => {
+  const h = await setup(t);
+  h.api.walkMs = 10 * 3600000;   // a walk nothing waits for
+  const r = await h.catalog.sync({ full: true });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /^catalog source unavailable: collections of section 1 \(movies\) - no answer within \d+ s \(2 tries\)$/);
+  const st = await h.catalog.status();
+  assert.equal(st.error, r.error);
+  assert.equal(st.error_at, AT);
+  assert.equal(st.at, null, "nothing finished yet");
+  const x = await setup(t);
+  x.api.hook = (route) => route === "/sections" ? { status: 503, json: { ok: false } } : undefined;
+  assert.equal((await x.catalog.sync()).error, "catalog source unavailable: the section list - media-control answered 503 (4 tries)");
+  const y = await setup(t);
+  y.api.hook = (route) => route.includes("type=2") ? { status: 200, json: { ok: true, rows: "not a list" } } : undefined;
+  assert.equal((await y.catalog.sync()).error, "catalog source unavailable: show page from 0 of section 2 (shows) - media-control's answer wasn't usable");
+  const z = await setup(t);
+  z.api.hook = (route) => route.startsWith("/catalog") ? Promise.reject(Object.assign(new Error("The media-control service isn't configured."), { status: 503, extra: { code: "encoder_down" } })) : undefined;
+  assert.equal((await z.catalog.sync()).error, "catalog source unavailable: movie page from 0 of section 1 (movies) - media-control isn't configured on the site");
+  for (const l of [...h.logs, ...x.logs, ...y.logs, ...z.logs]) assert.equal(/Quiet Harbor|Window Office|Fixture Cinema|Fixture Series/.test(l), false, "no titles in the log: " + l);
+  // a successful sync clears the error and its time
+  h.api.walkMs = 0;
+  h.setClock(AT + 60000);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  const ok = await h.catalog.status();
+  assert.equal(ok.error, null); assert.equal(ok.error_at, null); assert.equal(ok.ready, true);
+});
+
+test("catfix: a full sweep that stops keeps what it read and the next run carries on from that page; its end still removes what Plex dropped", async (t) => {
+  const h = await setup(t);
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);   // full_at = AT
+  // later that day "Sync now" (a full sweep) loses media-control at section 2's episodes - and Plex has since dropped key 3
+  h.setClock(AT + 3600000);
+  h.api.rows = h.api.rows.filter((r) => r.key !== "3");
+  let down = true;
+  h.api.hook = (route) => down && route.includes("section=2&type=4") ? { status: 503, json: { ok: false } } : undefined;
+  const failed = await h.catalog.sync({ full: true });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.error, "catalog source unavailable: episode page from 0 of section 2 (shows) - media-control answered 503 (4 tries)");
+  const mid = await h.catalog.status();
+  assert.deepEqual([mid.at, mid.full_at], [AT, AT], "the unfinished sweep sets neither");
+  assert.deepEqual(mid.progress, { started: AT + 3600000, done: 1, total: 2, received: 3 }, "section 1 done, section 2's shows read");
+  assert.equal((await h.catalog.getByKeys(["3"])).length, 1, "an unfinished sweep removes nothing");
+  assert.ok(h.logs.some((l) => /sync failed: .*kept: 1 of 2 sections done/.test(l)), h.logs.join("\n"));
+  // the next run - a plain timer tick on the same day, which would otherwise be a delta - finishes that sweep
+  down = false; h.calls.length = 0;
+  h.setClock(AT + 7200000);
+  const resumed = await h.catalog.sync();
+  assert.equal(resumed.ok, true, JSON.stringify(resumed));
+  assert.equal(resumed.full, true); assert.equal(resumed.resumed, true);
+  assert.equal(h.calls.some((c) => c.includes("section=1")), false, "section 1 is not read again: " + h.calls.join(" "));
+  assert.equal(h.calls.some((c) => c.includes("section=2&type=2")), false, "nor section 2's shows");
+  assert.ok(h.calls.some((c) => c.includes("section=2&type=4&start=0")), "it carries on at the episode page that failed");
+  assert.equal(h.calls.some((c) => c.includes("since=")), false, "a full read, no delta filter");
+  assert.deepEqual(await h.catalog.getByKeys(["3"]), [], "the finished sweep removes what Plex no longer has");
+  const done = await h.catalog.status();
+  assert.deepEqual([done.at, done.full_at], [AT + 3600000, AT + 3600000], "the sweep's own start (the next delta reads everything changed since)");
+  assert.deepEqual([done.error, done.progress, done.ready], [null, null, true]);
+  assert.deepEqual((await h.catalog.rows()).map((r) => r.key).sort(), ["1", "2", "20", "21"]);
+  assert.deepEqual((await h.catalog.shelves()).shelves.map((s) => [s.name, s.count]), [["Quiet Comedies", 2]]);
+  // and the next tick is an ordinary delta again
+  h.setClock(AT + 3 * 3600000); h.calls.length = 0;
+  const delta = await h.catalog.sync();
+  assert.deepEqual([delta.ok, delta.full, delta.resumed], [true, false, false]);
+  assert.ok(h.calls.some((c) => c.includes("since=" + (Math.floor((AT + 3600000) / 1000) - 1))));
+});
+
+test("catfix: a sweep stopped part-way through a page run or by the maintenance window carries on at that page", async (t) => {
+  const h = await setup(t);
+  h.setClock(Date.UTC(2026, 10, 6, 3, 30));
+  h.api.rows.push(row(8, "Lantern Courier"), row(9, "Paper Garden"));   // section 1: pages at 0, 2, 4, 6 (two rows a page)
+  let quietAt = null;
+  h.api.hook = (route) => {
+    if (quietAt == null && route.includes("section=1&type=1&start=4")) { quietAt = Date.UTC(2026, 10, 6, 3, 45); h.setClock(quietAt); }
+    return undefined;
+  };
+  const r = await h.catalog.sync({ full: true });
+  assert.deepEqual([r.ok, r.error], [false, "maintenance window"]);
+  const st = await h.catalog.status();
+  assert.equal(st.progress.done, 0);
+  h.api.hook = null; h.calls.length = 0;
+  h.setClock(Date.UTC(2026, 10, 6, 4, 30));
+  const again = await h.catalog.sync();
+  assert.equal(again.ok, true, JSON.stringify(again));
+  const first = h.calls.find((c) => c.startsWith("/catalog"));
+  assert.equal(first, "/catalog?section=1&type=1&start=6&size=500", "the page the window stopped, not the section's first");
+  assert.equal(h.calls.some((c) => c.includes("section=1&type=1&start=0")), false);
+  assert.equal((await h.catalog.getByKeys(["1", "8", "9"])).length, 3);
+});
+
+test("catfix: an unfinished sweep is started over when the block list changed or it is more than a day old; a dry run never touches it", async (t) => {
+  for (const change of ["block", "age"]) {
+    const h = await setup(t);
+    h.api.hook = (route) => route.includes("type=4") ? { status: 404, json: { ok: false } } : undefined;
+    assert.equal((await h.catalog.sync({ full: true })).ok, false);
+    assert.notEqual((await h.catalog.status()).progress, null);
+    h.api.hook = null; h.calls.length = 0;
+    const dry = await h.catalog.sync({ dry: true });
+    assert.equal(dry.ok, true);
+    assert.ok(h.calls.some((c) => c.includes("section=1&type=1&start=0")), "a dry run reads everything");
+    assert.notEqual((await h.catalog.status()).progress, null, "...and leaves the unfinished sweep as it was");
+    h.calls.length = 0;
+    if (change === "block") { h.cfg.clerk_block_ratings += ",NC-17"; h.setClock(AT + 60000); }
+    else h.setClock(AT + 27 * 3600000);
+    const r = await h.catalog.sync();
+    assert.equal(r.ok, true); assert.equal(r.resumed, false);
+    assert.ok(h.calls.some((c) => c.includes("section=1&type=1&start=0")), change + ": started over");
+  }
+});
+
+test("catfix: the timer looks again sooner after a run that failed for a passing reason", () => {
+  const { nextTickMin } = require("../plexcatalog");
+  const cfg = { catalog_sync_min: 60 };
+  assert.equal(nextTickMin(cfg, false, null), 5, "every switch off: the idle look");
+  assert.equal(nextTickMin(cfg, true, { ok: true }), 60);
+  assert.equal(nextTickMin(cfg, true, { ok: false, retry: true }), 10);
+  assert.equal(nextTickMin(cfg, true, { ok: false, retry: false }), 60, "needs a newer mediactl: nothing to gain by asking sooner");
+  assert.equal(nextTickMin(cfg, true, null), 60, "the maintenance window: no run, the usual wait");
+  assert.equal(nextTickMin({ catalog_sync_min: 10 }, true, { ok: false, retry: true }), 10);
+  assert.equal(nextTickMin({ catalog_sync_min: 5 }, true, { ok: true }), 10, "never more often than every 10 minutes");
 });
