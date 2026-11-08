@@ -5,7 +5,8 @@
 //   GET  /api/casino/lobby                  open tables (both games), the rooms a table can be pushed to, the switches
 //   GET  /api/casino/t/:id                  one table's public state + the viewer's own seat (Hold'em: ONLY their own hole
 //                                            cards); per-user, never cached
-//   POST /api/casino/open                   {game: bj|holdem, blinds?, idem}  open a web-only table
+//   POST /api/casino/open                   {game: bj|holdem, blinds?, theme?, idem}  open a web-only table (1.99?? h20: theme = a
+//                                            casino/themes.js id; the lobby's `themes.pick` says whether this viewer may pick one)
 //   POST /api/casino/t/:id/act              {verb, amount?, idem}
 //   POST /api/casino/t/:id/push             {room|null, mode: add|remove}  attach / detach a Camfrog room Pepe serves (1.99ox: several at once; null = web only; host or admin)
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
@@ -41,6 +42,7 @@ const path = require("path");
 const { getQuery } = require("../dbUtils");
 const svc = require("./service");
 const rewards = require("./rewards");
+const themes = require("./themes");       // 1.99?? h20: the table themes (the lobby's picker flag, the table page's theme files)
 
 const WEB_VERBS = new Set(["bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
                            "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand"]);
@@ -180,7 +182,9 @@ function register(app, { isBotToken, addUser }) {
                                                      : "Pepe deals blackjack on the web: sit down with your PAT, no Camfrog needed — or play the same table from a Camfrog room.",
                       image: (res.locals.ogBase || "") + require("../og").pageUrl(title), url: (res.locals.ogBase || "") + (res.locals.ogPath || "") };
     res.render(game === "holdem" ? "casino-hm" : "casino-bj", { user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
-                                                                tableId: id, title, bjOn: !!st.bj_enabled, hmOn: !!st.hm_enabled });
+                                                                tableId: id, title, bjOn: !!st.bj_enabled, hmOn: !!st.hm_enabled,
+                                                                // 1.99?? h20: a themed table's page loads its CSS / art / sound (classic: none)
+                                                                theme: T ? themes.themeOf(T, st) : "classic" });
   };
   app.get("/casino/blackjack", addUser, page("bj"));
   app.get("/casino/blackjack/t/:id", addUser, page("bj"));
@@ -214,7 +218,8 @@ function register(app, { isBotToken, addUser }) {
       return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
     });
     res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
-               stream: svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null) });   // (h22: the Sit & Go block)
+               stream: svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
+               themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st) });   // 1.99?? h20: may this viewer pick a theme
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -309,7 +314,8 @@ function register(app, { isBotToken, addUser }) {
     if (!IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
     const game = b.game === "holdem" ? "holdem" : "bj";
     // 1.99ov: b.hr = a 💎 High Roller blackjack table (Hold'em: the ladder's blinds say it)
-    const args = game === "holdem" ? (b.blinds ? [String(b.blinds).slice(0, 24)] : []) : b.hr ? ["hr"] : [];
+    const args = (game === "holdem" ? (b.blinds ? [String(b.blinds).slice(0, 24)] : []) : b.hr ? ["hr"] : [])
+      .concat(b.theme ? [String(b.theme).slice(0, 24)] : []);          // 1.99?? h20: the picker's theme (the service checks it)
     const out = await svc.act(actor, "start", args, { room: null, game },
                               `web-${actor.uid}-${idem}`);
     res.status(out.ok ? 200 : 409).json(out);

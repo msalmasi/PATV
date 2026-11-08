@@ -27,6 +27,13 @@
 
   <div id="cz-open-wrap">
     <h2 class="lob-h"><%- t('casino.open_h') %></h2>
+    <%# 1.99?? h20: the table theme picker (casino-ui.js; shown only when the casino_themes switch lets this viewer pick) - one choice
+        for every Open button below %>
+    <div id="cz-themepick" hidden style="display:grid;gap:8px;margin:0 0 12px">
+      <span class="ds-label" id="cz-themepick-lbl" style="color:var(--mut)"><%- t('casino.theme_pick') %></span>
+      <div class="blinds" id="cz-themes" role="group" aria-labelledby="cz-themepick-lbl"></div>
+      <p id="cz-themenote" style="margin:0;color:var(--mut);font-size:var(--ds-fs-meta)"></p>
+    </div>
     <div class="openbox">
       <div class="tcard" id="cz-open-bj"<%= bjOn ? '' : ' hidden' %>>
         <div class="tcard-h"><span class="ic" aria-hidden="true">🂡</span><div><b><%- t('casino.bj_title') %></b><small><%- t('casino.bj_rules') %></small></div></div>

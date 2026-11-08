@@ -1,7 +1,8 @@
 // casino-ui.js — the casino tables' shared front end (D10 design pass, 2026-10-11): helpers for cards (deal / flip
 // animations by diffing what's on the felt), chips, avatars, countdown rings tied to the server's deadlines, the toast /
-// aria-live announcer, sheets (history, host tools), and the casino LOBBY (both games). casinobj.js and casinohm.js
-// draw their own tables on top of it. Strings: __t("js.casino.*", English default) - the defaults equal locales/en.json.
+// aria-live announcer, sheets (history, host tools), the table's theme (1.99?? h20: CZ.theme), and the casino LOBBY (both
+// games; its theme picker). casinobj.js and casinohm.js draw their own tables on top of it. Strings: __t("js.casino.*",
+// English default) - the defaults equal locales/en.json.
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
 (function () {
@@ -362,11 +363,39 @@
     w.title = T("watching_n", "{n} watching", { n: n || 0 });
   }
 
+  // ── 1.99?? h20: the table's theme (casino/themes.js - presentation only). A themed table's page carries the theme's CSS
+  // (public/css/casino-themes.css, every rule under .cz-theme-<id> on #cz-table), its art (<template id="cz-theme-<id>">: the
+  // scene behind the felt + the sign) and the sound cues (casino-sound.js); a classic page has none of it. Every render calls
+  // theme(t, at) - at = {scene: where the scene goes (first child), sign: what the sign goes before}: the class and the art
+  // change only when the theme does (the switch going off turns a saloon table classic), the sound cues see every state.
+  const THEME_NAME = { classic: () => T("theme_classic", "Classic"), saloon: () => T("theme_saloon", "Saloon") };
+  const THEME_ICON = { classic: "🃏", saloon: "🤠" };
+  const themeName = (id) => (THEME_NAME[id] ? THEME_NAME[id]() : String(id || ""));
+  let themeOn = null;
+  function theme(t, at) {
+    const id = t && typeof t.theme === "string" && /^[a-z]{1,20}$/.test(t.theme) ? t.theme : "classic";
+    const wrap = $("cz-table");
+    if (wrap && themeOn !== id) {
+      themeOn = id;
+      for (const c of Array.from(wrap.classList)) if (c.indexOf("cz-theme-") === 0) wrap.classList.remove(c);
+      for (const el of Array.from(wrap.querySelectorAll("[data-cz-art]"))) el.remove();
+      const tpl = id !== "classic" ? $("cz-theme-" + id) : null;
+      if (tpl && tpl.content) {
+        wrap.classList.add("cz-theme-" + id);
+        const put = (sel, place) => { const src = tpl.content.querySelector(sel); if (src) { const el = src.cloneNode(true); el.setAttribute("data-cz-art", ""); place(el); } };
+        if (at && at.scene) put(".cz-scene", (el) => at.scene.insertBefore(el, at.scene.firstChild));
+        if (at && at.sign && at.sign.parentNode) put(".cz-sign", (el) => at.sign.parentNode.insertBefore(el, at.sign));
+      }
+    }
+    if (window.CZSound) window.CZSound.update(id, t);
+    return id;
+  }
+
   // ── the LOBBY (both games; the page's own game first) ──
   // 1.99ov: High Roller tables are a section of their own (💎): only High Rollers open / join them, everyone can watch. Their
   // Hold'em blinds come from the ladder the server sends (limits.holdem.hr_ladder); normal tables stay at 5,000/10,000 or less.
   const BLINDS = ["10/20", "25/50", "50/100", "100/200", "250/500", "1000/2000", "5000/10000"];
-  let lobbyTab = game, lobbyData = null, blinds = "25/50", hrBlinds = null;
+  let lobbyTab = game, lobbyData = null, blinds = "25/50", hrBlinds = null, lobbyTheme = "classic";
   function phaseText(t) {
     if (t.game === "holdem") {
       if (t.phase === "between") return t.hand_no ? T("ph_between", "Between hands") : T("ph_waiting", "Waiting for players");
@@ -393,7 +422,8 @@
       `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : hm ? "🃏" : "🂡"}</span><div><b>${esc(T("table_of", "{host}'s table", { host: t.host }))}</b>` +
       `<small>${esc(hm ? T("g_holdem", "No-Limit Hold'em") : T("g_bj", "Blackjack"))} · ${esc(phaseText(t))}</small></div></div>` +
       `<div class="seatdots" aria-label="${esc(T("seats_v", "{n} of {max} seats taken", { n: t.players, max: t.max_seats }))}">${dots}<span>${fmt(t.players)}/${fmt(t.max_seats)}</span></div>` +
-      `<div class="meta"><span class="tag gold">${esc(stakes)}</span>${hr ? `<span class="tag hr">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}${where}` +
+      `<div class="meta"><span class="tag gold">${esc(stakes)}</span>${hr ? `<span class="tag hr">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}` +
+      `${t.theme && t.theme !== "classic" ? `<span class="tag">${THEME_ICON[t.theme] || "🎨"} ${esc(themeName(t.theme))}</span>` : ""}${where}` +
       `${t.on_stream ? `<span class="tag red">📺 ${esc(T("on_stream", "On Pepe's stream"))}</span>` : t.stream_queue ? `<span class="tag">📺 #${t.stream_queue}</span>` : ""}` +
       `${t.proof ? `<a class="tag green" href="${esc(t.proof)}">🔐 ${esc(T("fair_short", "Fair"))}</a>` : ""}</div>` +
       `<div class="acts">${join}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
@@ -434,6 +464,24 @@
     }
     const bb = Number(blinds.split("/")[1]);
     $("cz-buyrange").textContent = T("buy_range", "Buy-in {min}–{max} chips (20–200 big blinds).", { min: fmt(bb * 20), max: fmt(bb * 200) });
+    // 1.99?? h20: the table theme picker - only when the switch lets this viewer pick (the lobby's themes.pick); one choice for every
+    // Open button below (a game the theme isn't drawn for opens classic)
+    const tlist = j.themes && j.themes.pick ? j.themes.list || [] : [];
+    const tpick = $("cz-themepick");
+    if (tpick) {
+      tpick.hidden = !signed || tlist.length < 2;
+      if (!tlist.some((x) => x.id === lobbyTheme)) lobbyTheme = "classic";
+      const tb = $("cz-themes");
+      const tsig = tlist.map((x) => x.id).join();
+      if (tb.dataset.v !== tsig) {
+        tb.dataset.v = tsig;
+        tb.innerHTML = tlist.map((x) => `<button type="button" data-th="${esc(x.id)}" aria-pressed="false">${THEME_ICON[x.id] || "🎨"} ${esc(themeName(x.id))}</button>`).join("");
+      }
+      for (const b of tb.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.th === lobbyTheme));
+      const cur = tlist.find((x) => x.id === lobbyTheme);
+      $("cz-themenote").textContent = !cur || cur.default ? "" : T("theme_note", "Looks only: the rules, the cards, the odds and every PAT amount stay the same.") +
+        (cur.games.includes("bj") ? "" : " " + T("theme_bj_classic", "Blackjack tables open in Classic for now."));
+    }
     // the 💎 card: High Rollers open tables from it; everyone else sees what it is and where the role comes from
     // 1.99sk: two sub-sections (blackjack / Hold'em), each with its limits for everyone; the pickers and buttons (.hr-only)
     // for High Rollers; a game that's switched off drops its sub-section
@@ -613,6 +661,9 @@
     const body = { game: g === "holdem" ? "holdem" : "bj", idem: idem() };
     if (g === "holdem") body.blinds = high ? hrBlinds : blinds;
     else if (high) body.hr = true;
+    // 1.99?? h20: the picked theme, for a game it's drawn for (the server checks the switch and the viewer again)
+    const th = lobbyData && lobbyData.themes && lobbyData.themes.pick ? (lobbyData.themes.list || []).find((x) => x.id === lobbyTheme) : null;
+    if (th && !th.default && th.games.includes(g === "holdem" ? "holdem" : "bj")) body.theme = th.id;
     const j = await post("/api/casino/open", body);
     btn.disabled = false;
     if (j.ok && j.table) location.href = (g === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + j.table + (g === "holdem" ? "?sit=1" : "#bet");
@@ -634,6 +685,7 @@
     }
     pickBlinds($("cz-blinds"), (v) => { blinds = v; });
     pickBlinds($("cz-hrblinds"), (v) => { hrBlinds = v; });
+    if ($("cz-themes")) $("cz-themes").addEventListener("click", (e) => { const b = e.target.closest("button[data-th]"); if (b) { lobbyTheme = b.dataset.th; renderLobby(); } });
     $("cz-open-bj-go").addEventListener("click", () => openTable("bj"));
     $("cz-open-hm-go").addEventListener("click", () => openTable("holdem"));
     $("cz-open-hrbj-go").addEventListener("click", () => openTable("bj", true));
@@ -918,7 +970,7 @@
     };
   }
 
-  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, note, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG,
+  window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, note, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG, theme,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew,
                 // 1.99ajw casino2: the person menu (seatWho wraps a seat's avatar + plate), the table's pads / people (casino-chat.js)

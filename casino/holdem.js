@@ -27,6 +27,7 @@ const money = require("./money");
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (casino/veil.js)
 const sizing = require("./sizing");
 const notices = require("./notices");     // 1.99alq train3: the timeout rule's one-time notice at a buy-in
+const themes = require("./themes");       // 1.99?? h20: the table's theme (presentation + the dealer's flavour lines only)
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -152,6 +153,7 @@ function install(core) {
   }
 
   // (h22: opts.tourney - a sit & go's table: no rake, so no tournament chip ever leaves the table)
+  // (1.99?? h20: opts.theme - the table's theme, casino/themes.js; a sit & go passes none = classic)
   function newTable(host, room, sb, bb, highStakes, opts) {
     const id = require("crypto").randomBytes(5).toString("hex");
     return {
@@ -160,7 +162,13 @@ function install(core) {
       min_buy: bb * HC.MIN_BUY_BB, max_buy: bb * HC.MAX_BUY_BB, high_stakes: !!highStakes,
       dl: { turn: null, next: null, idle: null }, turn: null, turn_token: 0, next: null, intent: null, rake_due: null,
       opno: 0, multi: [], dump: {}, log: [], last_round: null, rev: 0, closed_at: null, last_activity: clock(),
+      theme: themes.clean(opts && opts.theme, "holdem"),   // 1.99?? h20: for the table's whole life (casino/themes.js; absent = classic)
     };
+  }
+  // 1.99?? h20: the saloon dealer's flavour line (casino/themes.js line: null on classic / the switch off) - one more "line" event
+  async function flavour(T, event, vars) {
+    const text = themes.line(T, S.settings, event, vars);
+    if (text) await emit(T, "line", text);
   }
 
   // the next hand's seed, committed before any of its cards exist
@@ -172,7 +180,7 @@ function install(core) {
                          VALUES (?, ?, ?, ?, 1, ?)`, [T.id, n, T.next.commitment, T.client_seed, clock()]);
   }
 
-  async function start(actor, room, blinds) {
+  async function start(actor, room, blinds, theme) {
     let sb = 25, bb = 50;
     if (blinds && HR_WORDS.includes(String(blinds).toLowerCase())) [sb, bb] = HC.HR_LADDER[0];
     else if (blinds) {
@@ -189,7 +197,7 @@ function install(core) {
       return R(false, `max blinds are ${fmt(HC.SB_CAP)}/${fmt(HC.BB_CAP)}. 💎 High Roller tables play ${ladderText()}.`);
     }
     if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN);
-    const T = newTable(actor, room, sb, bb, high);
+    const T = newTable(actor, room, sb, bb, high, { theme });
     S.tables.set(T.id, T);
     V.enter(T, actor);               // 1.99ajw casino2 rework: the opener's "opened" line and the host name follow their veil
     await commitNext(T);
@@ -198,6 +206,7 @@ function install(core) {
     await emit(T, "opened", `🃏 ${actor.name} opened a ${high ? "💎 High Roller " : ""}No-Limit Hold'em table — blinds ${fmt(sb)}/${fmt(bb)}. ` +
                `Buy in with !sit <amount> (${fmt(T.min_buy)}–${fmt(T.max_buy)} chips). 2+ players then !holdem deal. Chips = PAT. ` +
                `Play here or on the web: ${link(T)}`, { client_seed: T.client_seed, url: link(T) });
+    await flavour(T, "open", { sb: fmt(sb), bb: fmt(bb) });
     return R(true, "table open.", { table: T.id, quiet: true });
   }
 
@@ -453,6 +462,13 @@ function install(core) {
                    { shown: visible.map((r)=>({name:r.name,cards:r.cards.slice(),hand:r.hand,seat:uidHash(r.who)})) });
       } else if (t === "awards") {
         for (const a of ev.awards) await emit(T, "line", `🏆 ${a.name} wins ${fmt(a.amount)} (${a.pot}) with ${a.hand}.`);
+        // 1.99?? h20: a showdown pot of BIG_POT_BB+ big blinds - ONE flavour line for the hand (split / side pots: its biggest winner)
+        if (ev.awards.length && ev.awards.reduce((s, a) => s + a.amount, 0) + ev.rake >= themes.BIG_POT_BB * e.bb) {
+          const took = {};
+          for (const a of ev.awards) took[a.who] = (took[a.who] || 0) + a.amount;
+          const top = ev.awards.reduce((b, a) => (took[a.who] > took[b.who] ? a : b), ev.awards[0]);
+          await flavour(T, "pot", { name: top.name, pot: fmt(took[top.who]) });
+        }
         T.last_round = { hand_no: e.hand_no, uncontested: false, board: (T.sd || {}).board || e.board.slice(), shown: (T.sd || {}).pub || (T.sd || {}).shown || [],
                          pot: ev.awards.reduce((s, a) => s + a.amount, 0) + ev.rake, rake: ev.rake,
                          winners: ev.awards.map((a) => ({ name: V.nameOf(T, a.who, a.name), seat: V.seatOf(T, a.who), amount: a.amount, hand: a.hand, pot: a.pot })) };
@@ -613,7 +629,7 @@ function install(core) {
     return R(true, "table closed.", { quiet: true });
   }
 
-  const HELP = "🃏 No-Limit Hold'em — !holdem start <sb>/<bb> opens a table; !sit <amount> buys in; !holdem deal starts a hand. " +
+  const HELP = "🃏 No-Limit Hold'em — !holdem start <sb>/<bb> opens a table (add a theme word when themes are on, e.g. !holdem start 25/50 saloon); !sit <amount> buys in; !holdem deal starts a hand. " +
                "On your turn: !check, !call, !bet <n>, !raise <to>, !allin, !fold. Sizing: 3bb, +2bb, 75%, pot, half, min, all. " +
                "!pre check_fold|check|call|call_any|fold|off; !sitout; !sitin [post]. Hole cards arrive by PM (!cards resends). Leave with !stand. " +
                "Losing hands are mucked unless show is selected; the fairness proof still reveals the deck.";
@@ -789,6 +805,7 @@ function install(core) {
       id: T.id, game: "holdem", status: T.status, rev: T.rev, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: V.hostName(T),
       phase: T.status === "closed" ? "closed" : e.hand_active ? H.STREET_NAME[e.street] : "between", hand_no: e.hand_no,
       sb: e.sb, bb: e.bb, min_buy: T.min_buy, max_buy: T.max_buy, high_stakes: T.high_stakes, max_seats: HC.MAX_SEATS, act_secs: HC.ACT_SECS,
+      theme: themes.themeOf(T, S.settings),         // 1.99?? h20: classic whenever the switch is off
       presets_pot: String(S.settings.hm_presets_pot || "33,50,75,100,150").split(",").map(Number),
       presets_bb: String(S.settings.hm_presets_bb || "2.5,3,4").split(",").map(Number),
       adverts: core.advertList(T), rake_pct: T.tourney ? 0 : HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
@@ -834,7 +851,7 @@ function install(core) {
 
   const lobbyRow = (T) => ({ game: "holdem", phase: T.eng.hand_active ? H.STREET_NAME[T.eng.street] : "between", players: T.eng.seats.length,
                              max_seats: HC.MAX_SEATS, sb: T.eng.sb, bb: T.eng.bb, min_buy: T.min_buy, max_buy: T.max_buy, hand_no: T.eng.hand_no,
-                             high_stakes: T.high_stakes });
+                             high_stakes: T.high_stakes, theme: themes.themeOf(T, S.settings) });
 
   return { HC, start, run, tick, due, recover, publicView, meView, privateFor, lobbyRow, closeTable, cardsFor, HELP,
            midRound: (T) => T.eng.hand_active,

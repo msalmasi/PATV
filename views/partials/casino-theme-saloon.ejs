@@ -1,0 +1,64 @@
+<%# views/partials/casino-theme-saloon.ejs - hand-off 20 (owner 2026-11-04, NL-5): the western saloon's art, original and drawn (inline SVG,
+    no image, no font download, nothing fetched). casino-ui.js CZ.theme clones it into a saloon table: .cz-scene behind the felt (a
+    dim saloon in silhouette - the back bar with its bottles and mirror, a wagon-wheel lamp, the swinging half-doors, the floor;
+    low contrast so the table stays the focus; on phones a wood-panel background instead - public/css/casino-themes.css) and
+    .cz-sign, the "Pepe's Saloon" sign in place of the felt's lettering (on phones the scene's .cz-wallsign above the felt instead -
+    the top seats leave no room on a narrow felt). Decoration only: aria-hidden, no pointer events.
+    Locals: t. %>
+<template id="cz-theme-saloon">
+<div class="cz-scene" aria-hidden="true"><svg class="cz-scene-art" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid slice" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="czs-wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#24160c"/><stop offset=".6" stop-color="#1b110a"/><stop offset=".61" stop-color="#150d07"/><stop offset="1" stop-color="#100905"/></linearGradient>
+<pattern id="czs-plank" width="46" height="560" patternUnits="userSpaceOnUse"><rect width="46" height="560" fill="url(#czs-wall)"/><rect x="44" width="2" height="560" fill="#0d0703" opacity=".8"/><rect x="9" width="1" height="560" fill="#4a2e18" opacity=".22"/><rect x="27" width="1" height="560" fill="#4a2e18" opacity=".12"/></pattern>
+<radialGradient id="czs-glow" cx=".5" cy=".05" r=".6"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".16"/><stop offset=".55" stop-color="#ffcf7a" stop-opacity=".03"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>
+<linearGradient id="czs-mirror" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2c2a23"/><stop offset=".55" stop-color="#1b1a16"/><stop offset="1" stop-color="#27251f"/></linearGradient>
+<linearGradient id="czs-shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
+</defs>
+<rect width="1200" height="560" fill="url(#czs-plank)"/>
+<path d="M430 300V112Q600 34 770 112V300Z" fill="url(#czs-mirror)" stroke="#3a2614" stroke-width="12"/>
+<path d="M480 290 540 120M548 292 596 112" stroke="#fff" stroke-opacity=".045" stroke-width="22"/>
+<path d="M40 150h370v9H40zM40 250h370v9H40zM790 150h370v9H790zM790 250h370v9H790z" fill="#33200f"/>
+<path d="M40 159h370v4H40zM40 259h370v4H40zM790 159h370v4H790zM790 259h370v4H790z" fill="#0f0804"/>
+<path d="M145 84 h6 v18 q6.0 3 6.0 12 v36 h-18 v-36 q0 -9 6.0 -12 z M230 96 h6 v12 q5.0 3 5.0 12 v30 h-16 v-30 q0 -9 5.0 -12 z M308 76 h6 v10 q7.0 3 7.0 12 v52 h-20 v-52 q0 -9 7.0 -12 z M56 174 h6 v12 q8.0 3 8.0 12 v52 h-22 v-52 q0 -9 8.0 -12 z M82 176 h6 v10 q6.0 3 6.0 12 v52 h-18 v-52 q0 -9 6.0 -12 z M110 198 h6 v10 q7.0 3 7.0 12 v30 h-20 v-30 q0 -9 7.0 -12 z M167 180 h6 v10 q7.0 3 7.0 12 v48 h-20 v-48 q0 -9 7.0 -12 z M224 198 h6 v10 q6.0 3 6.0 12 v30 h-18 v-30 q0 -9 6.0 -12 z M274 178 h6 v18 q5.0 3 5.0 12 v42 h-16 v-42 q0 -9 5.0 -12 z M300 190 h6 v12 q6.0 3 6.0 12 v36 h-18 v-36 q0 -9 6.0 -12 z M326 184 h6 v18 q5.0 3 5.0 12 v36 h-16 v-36 q0 -9 5.0 -12 z M350 190 h6 v12 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M805 98 h6 v10 q7.0 3 7.0 12 v30 h-20 v-30 q0 -9 7.0 -12 z M880 98 h6 v10 q8.0 3 8.0 12 v30 h-22 v-30 q0 -9 8.0 -12 z M934 82 h6 v14 q5.0 3 5.0 12 v42 h-16 v-42 q0 -9 5.0 -12 z M987 82 h6 v14 q8.0 3 8.0 12 v42 h-22 v-42 q0 -9 8.0 -12 z M1018 68 h6 v18 q8.0 3 8.0 12 v52 h-22 v-52 q0 -9 8.0 -12 z M1046 90 h6 v18 q8.0 3 8.0 12 v30 h-22 v-30 q0 -9 8.0 -12 z M1076 76 h6 v14 q7.0 3 7.0 12 v48 h-20 v-48 q0 -9 7.0 -12 z M1131 98 h6 v10 q8.0 3 8.0 12 v30 h-22 v-30 q0 -9 8.0 -12 z M834 196 h6 v12 q6.0 3 6.0 12 v30 h-18 v-30 q0 -9 6.0 -12 z M1017 184 h6 v12 q8.0 3 8.0 12 v42 h-22 v-42 q0 -9 8.0 -12 z M1049 184 h6 v18 q6.0 3 6.0 12 v36 h-18 v-36 q0 -9 6.0 -12 z M1074 192 h6 v10 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M1106 192 h6 v10 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M1136 194 h6 v14 q8.0 3 8.0 12 v30 h-22 v-30 q0 -9 8.0 -12 z" fill="#3e2611"/>
+<path d="M53 84 h6 v12 q5.0 3 5.0 12 v42 h-16 v-42 q0 -9 5.0 -12 z M81 80 h6 v10 q8.0 3 8.0 12 v48 h-22 v-48 q0 -9 8.0 -12 z M109 84 h6 v12 q8.0 3 8.0 12 v42 h-22 v-42 q0 -9 8.0 -12 z M174 76 h6 v14 q5.0 3 5.0 12 v48 h-16 v-48 q0 -9 5.0 -12 z M207 90 h6 v18 q6.0 3 6.0 12 v30 h-18 v-30 q0 -9 6.0 -12 z M259 82 h6 v14 q6.0 3 6.0 12 v42 h-18 v-42 q0 -9 6.0 -12 z M283 88 h6 v14 q6.0 3 6.0 12 v36 h-18 v-36 q0 -9 6.0 -12 z M340 84 h6 v18 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M377 90 h6 v12 q8.0 3 8.0 12 v36 h-22 v-36 q0 -9 8.0 -12 z M140 172 h6 v18 q5.0 3 5.0 12 v48 h-16 v-48 q0 -9 5.0 -12 z M193 186 h6 v10 q7.0 3 7.0 12 v42 h-20 v-42 q0 -9 7.0 -12 z M248 196 h6 v12 q6.0 3 6.0 12 v30 h-18 v-30 q0 -9 6.0 -12 z M376 188 h6 v14 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M842 82 h6 v14 q8.0 3 8.0 12 v42 h-22 v-42 q0 -9 8.0 -12 z M907 76 h6 v10 q7.0 3 7.0 12 v52 h-20 v-52 q0 -9 7.0 -12 z M959 90 h6 v12 q8.0 3 8.0 12 v36 h-22 v-36 q0 -9 8.0 -12 z M1100 88 h6 v14 q5.0 3 5.0 12 v36 h-16 v-36 q0 -9 5.0 -12 z M804 194 h6 v14 q6.0 3 6.0 12 v30 h-18 v-30 q0 -9 6.0 -12 z M870 178 h6 v12 q8.0 3 8.0 12 v48 h-22 v-48 q0 -9 8.0 -12 z M901 172 h6 v14 q5.0 3 5.0 12 v52 h-16 v-52 q0 -9 5.0 -12 z M932 188 h6 v14 q8.0 3 8.0 12 v36 h-22 v-36 q0 -9 8.0 -12 z M962 184 h6 v18 q7.0 3 7.0 12 v36 h-20 v-36 q0 -9 7.0 -12 z M992 174 h6 v12 q5.0 3 5.0 12 v52 h-16 v-52 q0 -9 5.0 -12 z" fill="#1e2b18"/>
+<path d="M51 112 h2 v32 h-2z M76 106 h2 v38 h-2z M104 112 h2 v32 h-2z M142 118 h2 v26 h-2z M172 106 h2 v38 h-2z M204 124 h2 v20 h-2z M228 124 h2 v20 h-2z M256 112 h2 v32 h-2z M280 118 h2 v26 h-2z M304 102 h2 v42 h-2z M336 118 h2 v26 h-2z M372 118 h2 v26 h-2z M51 202 h2 v42 h-2z M79 202 h2 v42 h-2z M106 224 h2 v20 h-2z M138 206 h2 v38 h-2z M163 206 h2 v38 h-2z M189 212 h2 v32 h-2z M221 224 h2 v20 h-2z M245 224 h2 v20 h-2z M272 212 h2 v32 h-2z M297 218 h2 v26 h-2z M324 218 h2 v26 h-2z M346 218 h2 v26 h-2z M372 218 h2 v26 h-2z M801 124 h2 v20 h-2z M837 112 h2 v32 h-2z M875 124 h2 v20 h-2z M903 102 h2 v42 h-2z M932 112 h2 v32 h-2z M954 118 h2 v26 h-2z M982 112 h2 v32 h-2z M1013 102 h2 v42 h-2z M1041 124 h2 v20 h-2z M1072 106 h2 v38 h-2z M1098 118 h2 v26 h-2z M1126 124 h2 v20 h-2z M801 224 h2 v20 h-2z M831 224 h2 v20 h-2z M865 206 h2 v38 h-2z M899 202 h2 v42 h-2z M927 218 h2 v26 h-2z M958 218 h2 v26 h-2z M990 202 h2 v42 h-2z M1012 212 h2 v32 h-2z M1046 218 h2 v26 h-2z M1070 218 h2 v26 h-2z M1102 218 h2 v26 h-2z M1131 224 h2 v20 h-2z" fill="#ffd9a0" opacity=".07"/>
+<path d="M0 318h1200v14H0z" fill="#3c2514"/><path d="M0 332h1200v4H0z" fill="#120a05"/>
+<path d="M0 336h1200v136H0z" fill="#1f130a"/>
+<path d="M30 352h170v104H30zM230 352h170v104H230zM430 352h170v104H430zM630 352h170v104H630zM830 352h170v104H830zM1030 352h150v104H1030z" fill="none" stroke="#2c1b0e" stroke-width="5"/>
+<path d="M0 472h1200v88H0z" fill="#140c06"/>
+<path d="M-600 560 L-264 476 M-520 560 L-206 476 M-440 560 L-149 476 M-360 560 L-91 476 M-280 560 L-34 476 M-200 560 L24 476 M-120 560 L82 476 M-40 560 L139 476 M40 560 L197 476 M120 560 L254 476 M200 560 L312 476 M280 560 L370 476 M360 560 L427 476 M440 560 L485 476 M520 560 L542 476 M600 560 L600 476 M680 560 L658 476 M760 560 L715 476 M840 560 L773 476 M920 560 L830 476 M1000 560 L888 476 M1080 560 L946 476 M1160 560 L1003 476 M1240 560 L1061 476 M1320 560 L1118 476 M1400 560 L1176 476 M1480 560 L1234 476 M1560 560 L1291 476 M1640 560 L1349 476 M1720 560 L1406 476 M1800 560 L1464 476" stroke="#0b0603" stroke-width="3"/>
+<g class="czs-doors">
+<path d="M962 268h6v196h-6zM1104 268h6v196h-6z" fill="#2a190c"/>
+<path class="czs-door czs-door-l" d="M970 286Q1002 270 1034 280V452H970Z" fill="#2c1a0d" stroke="#3d2614" stroke-width="3"/>
+<path class="czs-door czs-door-r" d="M1038 280Q1070 270 1102 286V452H1038Z" fill="#2c1a0d" stroke="#3d2614" stroke-width="3"/>
+<path d="M972 290 h58 M1040 290 h58 M972 304 h58 M1040 304 h58 M972 318 h58 M1040 318 h58 M972 332 h58 M1040 332 h58 M972 346 h58 M1040 346 h58 M972 360 h58 M1040 360 h58 M972 374 h58 M1040 374 h58 M972 388 h58 M1040 388 h58 M972 402 h58 M1040 402 h58 M972 416 h58 M1040 416 h58 M972 430 h58 M1040 430 h58 M972 444 h58 M1040 444 h58" stroke="#1a0f07" stroke-width="3" opacity=".8"/>
+</g>
+<g class="czs-lamp">
+<path d="M600 0V30M560 0 590 34M640 0 610 34" stroke="#2a190c" stroke-width="3"/>
+<ellipse cx="600" cy="46" rx="100" ry="17" fill="none" stroke="#3d2715" stroke-width="7"/>
+<path d="M600 46 L700.0 46.0 M600 46 L686.6 54.5 M600 46 L650.0 60.7 M600 46 L600.0 63.0 M600 46 L550.0 60.7 M600 46 L513.4 54.5 M600 46 L500.0 46.0 M600 46 L513.4 37.5 M600 46 L550.0 31.3 M600 46 L600.0 29.0 M600 46 L650.0 31.3 M600 46 L686.6 37.5" stroke="#36220f" stroke-width="3"/>
+<ellipse cx="600" cy="46" rx="15" ry="6" fill="#3d2715"/>
+<path d="M694.1 50.4 h5 v-10 h-5z M623.4 62.4 h5 v-10 h-5z M526.8 58.0 h5 v-10 h-5z M500.9 41.6 h5 v-10 h-5z M571.6 29.6 h5 v-10 h-5z M668.2 34.0 h5 v-10 h-5z" fill="#cdbb94" opacity=".35"/>
+<g class="czs-flame" fill="#ffcf70" opacity=".5"><ellipse cx="696.6" cy="34.4" rx="3.2" ry="6"/><ellipse cx="625.9" cy="46.4" rx="3.2" ry="6"/><ellipse cx="529.3" cy="42.0" rx="3.2" ry="6"/><ellipse cx="503.4" cy="25.6" rx="3.2" ry="6"/><ellipse cx="574.1" cy="13.6" rx="3.2" ry="6"/><ellipse cx="670.7" cy="18.0" rx="3.2" ry="6"/></g>
+</g>
+<rect width="1200" height="560" fill="url(#czs-glow)"/>
+<rect width="1200" height="560" fill="url(#czs-shade)"/>
+</svg><svg class="cz-wallsign" viewBox="0 0 260 64" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 5H250L257 13V51L250 59H10L3 51V13Z" fill="#5c3417" stroke="#24120a" stroke-width="3"/>
+<path d="M6 13 12 7H248L254 13V24H6Z" fill="#8f5c2e" opacity=".45"/><path d="M6 43H254V50L248 56H12L6 50Z" fill="#2a1408" opacity=".4"/>
+<path d="M12 19Q80 14 150 20T250 17M10 46Q90 50 170 44T252 47M40 31Q120 28 220 33" stroke="#3a1f0c" stroke-width="1.3" fill="none" opacity=".55"/>
+<path d="M8 9H252" stroke="#a87a4a" stroke-width="1" opacity=".35"/>
+<circle cx="15" cy="32" r="3" fill="#c9a24a"/><circle cx="245" cy="32" r="3" fill="#c9a24a"/>
+<circle cx="14.2" cy="31.2" r="1" fill="#f3e2a6"/><circle cx="244.2" cy="31.2" r="1" fill="#f3e2a6"/>
+<text x="130" y="42" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="27" font-weight="700" letter-spacing="1.5" fill="#f3d98b" stroke="#24120a" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke"><%- t('casino.theme_saloon_sign') %></text>
+</svg></div>
+<svg class="cz-sign" viewBox="0 0 260 64" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 5H250L257 13V51L250 59H10L3 51V13Z" fill="#5c3417" stroke="#24120a" stroke-width="3"/>
+<path d="M6 13 12 7H248L254 13V24H6Z" fill="#8f5c2e" opacity=".45"/><path d="M6 43H254V50L248 56H12L6 50Z" fill="#2a1408" opacity=".4"/>
+<path d="M12 19Q80 14 150 20T250 17M10 46Q90 50 170 44T252 47M40 31Q120 28 220 33" stroke="#3a1f0c" stroke-width="1.3" fill="none" opacity=".55"/>
+<path d="M8 9H252" stroke="#a87a4a" stroke-width="1" opacity=".35"/>
+<circle cx="15" cy="32" r="3" fill="#c9a24a"/><circle cx="245" cy="32" r="3" fill="#c9a24a"/>
+<circle cx="14.2" cy="31.2" r="1" fill="#f3e2a6"/><circle cx="244.2" cy="31.2" r="1" fill="#f3e2a6"/>
+<text x="130" y="42" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="27" font-weight="700" letter-spacing="1.5" fill="#f3d98b" stroke="#24120a" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke"><%- t('casino.theme_saloon_sign') %></text>
+</svg>
+</template>

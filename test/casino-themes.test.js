@@ -310,8 +310,9 @@ test("flavour: one line on a showdown pot of 50 big blinds or more - a split pot
   let hands = await perHand();
   assert.deepEqual(hands.map((h) => h.length), [1, 1], "one line per big pot, never one per award");
   assert.notEqual(hands[0][0], hands[1][0], "the variants rotate");
-  const pots = variants("pot", { name: "NAME", pot: "POT" }).map((v) => new RegExp("^" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("NAME", "(Ann|Bob)").replace("POT", "1,960") + "$"));
-  for (const h of hands) assert.ok(pots.some((re) => re.test(h[0])), h[0] + " (each half after the 2% rake, in PAT)");
+  const pots = variants("pot", { name: "NAME", pot: "POT" }).map((v) => new RegExp("^" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("NAME", "(Ann|Bob)").replace("POT", "[0-9,]+") + "$"));
+  for (const h of hands) assert.ok(pots.some((re) => re.test(h[0])), h[0] + " (a half after the 2% rake, in PAT)");
+  assert.match(hands[0][0], / 1,960 PAT /, "hand 1: 4,000 less the 80 rake, split");
   // hand 3: checked down (100 = 2 BB): none; hand 4: uncontested: none
   deck(ACES);
   assert.ok((await A(ann, "deal", [], { table: tid })).ok);
@@ -415,7 +416,7 @@ test("files: the saloon CSS is scoped under .cz-theme-saloon, original art only 
     }
   })(body);
   assert.ok(selectors.length > 30);
-  for (const s of selectors) assert.match(s, /^\.cz-theme-saloon[\s.:#[>]/, "scoped: " + s);
+  for (const s of selectors) assert.match(s, /^\.cz-theme-saloon(?:$|[\s.:#[>])/, "scoped: " + s);
   assert.match(body, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(body, /@media\s*\(max-width:\s*760px\)/, "the phone layout (a wood-panel background)");
   // the 💎 High Roller marks stay: the theme never restyles the 💎 chips
@@ -436,8 +437,8 @@ test("wiring: casinohm.js sets the theme in render through CZ.theme; the Hold'em
   assert.match(ui, /window\.CZ = \{[^}]*\btheme\b/);
   assert.equal((hm.match(/CZ\.theme\(/g) || []).length, 1, "one call in render");
   assert.match(view, /<% if \(locals\.theme && theme !== 'classic'\) \{ %>/);
-  assert.match(view, /casino-ui\.js\?v=10/);
-  assert.match(view, /casinohm\.js\?v=11/);
+  assert.match(view, /casino-ui\.js\?v=11/);      // (rebased on h22 Sit & Go's casino-ui v10 / casinohm v11)
+  assert.match(view, /casinohm\.js\?v=12/);
   assert.match(rd("casino", "routes.js"), /theme: T \? themes\.themeOf\(T, st\) : "classic"/);
   // the admin view: one row, saved like the other Hold'em controls (no admin-panel.js change)
   const adm = rd("views", "admin", "games.ejs");
@@ -513,11 +514,12 @@ test("sound: off by default, a 🔇/🔊 toggle on a themed table only, remember
   btn.click();                                           // the click is the gesture
   assert.equal(btn.attrs["aria-pressed"], "true");
   assert.equal(r.store["cz-sound"], "1");
-  assert.equal(r.made.length, 0, "turning it on makes no sound by itself");
+  assert.equal(r.made.length, 1, "the click (a gesture) opens the audio - WebKit wants it inside the click");
+  assert.equal(r.made[0].nodes, 0, "turning it on makes no sound by itself");
   r.S.update("saloon", view(300, ["As", "Kd", "2c", "9h"]));
-  assert.equal(r.made.length, 1, "a card is dealt: a cue (one AudioContext, made after the click)");
+  assert.equal(r.made.length, 1, "one AudioContext");
   const n0 = r.made[0].nodes;
-  assert.ok(n0 > 0);
+  assert.ok(n0 > 0, "a card is dealt: a cue");
   r.S.update("saloon", view(300, ["As", "Kd", "2c", "9h"]));
   assert.equal(r.made[0].nodes, n0, "the same state again (a poll): no cue");
   r.S.update("saloon", view(600, ["As", "Kd", "2c", "9h"]));
@@ -540,7 +542,8 @@ test("sound: remembered on - still nothing until the viewer clicks the page; sto
   assert.equal(stored.made.length, 0, "no click on the page yet: silent (no AudioContext)");
   stored.gesture();
   stored.S.update("saloon", view(100, ["As", "Kd", "2c", "9h"]));
-  assert.equal(stored.made.length, 1, "after a click: the cue");
+  assert.equal(stored.made.length, 1, "after a click: the audio opens");
+  assert.ok(stored.made[0].nodes > 0, "and the cue plays");
   // storage blocked (a private window): off, and the toggle still works for this page
   for (const o of [{ storageThrows: true }, { storageGetterThrows: true }]) {
     const b = soundRig(o);

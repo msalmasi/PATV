@@ -25,6 +25,7 @@ const PATAmount = require("../public/js/patamount");   // 1.99sk: a typed bet - 
 const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achievements / drops / win XP / gang rep (rewards.js)
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
+const themes = require("./themes");       // 1.99?? h20: the card tables' themes (presentation only; casino_themes switch)
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -144,6 +145,8 @@ async function loadSettings(force) {
     // engine flags and of each Camfrog room's `!casino backend on|off`.
     bj_front: FRONTS.includes(kv.bj_front) ? kv.bj_front : "auto",
     hm_front: FRONTS.includes(kv.hm_front) ? kv.hm_front : "auto",
+    // 1.99?? h20: the table themes switch - off (the default) | staff | everyone (casino/themes.js)
+    casino_themes: themes.MODES.includes(kv.casino_themes) ? kv.casino_themes : "off",
   };
   // 1.99ov: blackjack limits (normal tables, then High Roller tables) - a bad pair falls back to the defaults
   const lim = (k, d) => (Number.isFinite(Number(kv[k])) && Number(kv[k]) >= 1 ? Math.trunc(Number(kv[k])) : d);
@@ -166,12 +169,13 @@ const HM_QOL_NUMBERS = { hm_sitout_mins: 10, hm_timebank_secs: 30, hm_timebank_m
 const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3,4" };
 const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
   const sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)
   const qolNumber = Object.hasOwn(HM_QOL_NUMBERS, key), qolList = Object.hasOwn(HM_QOL_LISTS, key);
   if (qolNumber && (!Number.isInteger(Number(value)) || Number(value) < (key === "hm_sitout_mins" ? 1 : 0) || Number(value) > 3600)) throw new Error("invalid Hold'em timer");
   if (qolList && !validPresetList(value)) throw new Error("use a short comma-separated list of positive numbers");
   if (/_front$/.test(key) && !FRONTS.includes(String(value))) throw new Error("front end must be auto, patv or pepe");
+  if (key === "casino_themes" && !themes.MODES.includes(String(value))) throw new Error("table themes must be off, staff or everyone");
   await ensure();
   if (LIMIT_KEYS.includes(key)) {
     const n = Math.trunc(Number(String(value).replace(/,/g, "")));
@@ -180,7 +184,7 @@ async function setSetting(key, value, actor) {
     const next = Object.assign({}, cur, { [key]: n });
     if (next.bj_min_bet > next.bj_max_bet || next.bj_hr_min_bet > next.bj_hr_max_bet) throw new Error("the minimum must not be above the maximum");
   }
-  const v = sngValue !== null ? sngValue : qolNumber || qolList ? String(value) : /_front$/.test(key) ? String(value)
+  const v = sngValue !== null ? sngValue : qolNumber || qolList ? String(value) : /_front$/.test(key) || key === "casino_themes" ? String(value)
           : LIMIT_KEYS.includes(key) ? String(Math.trunc(Number(String(value).replace(/,/g, ""))))
           : key !== "max_tables" ? (value === true || value === "1" || value === "on" || value === "true" ? "1" : "0")
                                  : String(Math.max(0, Math.trunc(Number(value)) || 0));
@@ -698,7 +702,7 @@ function stop() {
 // quiet: the room already sees it as a public line - Pepe doesn't @-reply it (the web shows it as a status)
 const R = (ok, reply, extra) => Object.assign({ ok, reply }, extra || {});
 
-async function cmdStart(actor, room, game, blinds) {
+async function cmdStart(actor, room, game, blinds, words) {
   const st = await loadSettings();
   if (game === "holdem" ? !st.hm_enabled : !st.bj_enabled) {
     return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
@@ -712,7 +716,14 @@ async function cmdStart(actor, room, game, blinds) {
                                              : "a blackjack table is already open — !bet to play.");
   }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
-  if (game === "holdem") return HM.start(actor, room, blinds);
+  // 1.99?? h20: a theme word anywhere after start (casino/themes.js decide: off = dropped with a note; an unknown word refused)
+  const tp = themes.pick(words || (blinds ? [blinds] : []), (w) => /^\d/.test(w) || HR_WORDS.includes(w.toLowerCase()));
+  const tm = themes.mode(st);
+  const th = themes.decide(tp, tm, tm === "staff" && tp.theme && tp.theme !== themes.DEFAULT ? await isSiteAdmin(actor.uid) : false, game);
+  if (th.refuse) return R(false, th.refuse);
+  blinds = tp.rest[0];
+  const told = (out) => (th.note && out.ok ? Object.assign(out, { reply: th.note, quiet: false }) : out);
+  if (game === "holdem") return told(await HM.start(actor, room, blinds, th.theme));
   // 1.99ov: "!bj start hr" (or the web's High Roller button) opens a 💎 High Roller table - High Rollers only
   const high = HR_WORDS.includes(String(blinds || "").toLowerCase());
   if (blinds && !high) return R(false, "usage: !blackjack start  (or !blackjack start hr for a 💎 High Roller table)");
@@ -956,7 +967,7 @@ async function run(actor, verb, args, opts) {
       const u = await userRow(actor.uid);
       if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
     }
-    if (["start", "open", "new"].includes(verb)) return cmdStart(actor, opts.room || null, "holdem", args[0]);
+    if (["start", "open", "new"].includes(verb)) return cmdStart(actor, opts.room || null, "holdem", args[0], args);
     if (ADVERT_VERBS.includes(verb)) return advertCmd(live, actor, verb, args);
     if (!live) {
       return R(false, ["status", "", "table", "info", "show"].includes(verb) ? "no Hold'em table open. Start one: !holdem start 25/50."
@@ -973,7 +984,7 @@ async function run(actor, verb, args, opts) {
     const u = await userRow(actor.uid);
     if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
   }
-  if (verb === "start") return cmdStart(actor, opts.room || null, "bj", args[0]);
+  if (verb === "start") return cmdStart(actor, opts.room || null, "bj", args[0], args);
   if (verb === "fair") {
     return R(true, live && live.last_revealed ? `🔐 Shuffle proof for round ${live.last_revealed}: ${fairLink(live, live.last_revealed)}`
                                               : "🔐 No round finished at this table yet — each round's proof is posted when it ends.");
