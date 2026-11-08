@@ -134,6 +134,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
   const requestSource = () => requests || require("./mediarequests");
   const vectorSource = () => vectors || require("./plexvectors");
   const seerrCache = new Map(), SEERR_MS = 2000, CACHE_MS = 24 * 3600 * 1000;
+  const FAMILY_MAX = 40;   // 1.99?? plexfind recall: a franchise's shows checked for one episode title (prod's "Star Trek": 14 shows)
   async function bounded(fn, deadline) {
     const ms = Math.max(0, deadline - Date.now());
     if (!ms) return null;
@@ -282,11 +283,16 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         candidates.push(...hits.map((r) => ({ r, why: record.match === "exact" ? "recall" : "guess", exact: record.match === "exact", guess: index })));
         continue;
       }
-      const shows = roots.filter((r) => r.type === "show" && sameName(r.title, title) && (year == null || Number(r.year) === year));
+      // 1.99?? plexfind recall (owner 2026-11-08): an EPISODE guess's year may be the episode's own air year (a model gives Darmok's
+      // 1991 for The Next Generation, 1987) - it was compared with the show's year only, so the right episode came back "unknown".
+      // The show's year or the episode's (its year / aired, a year either way) both fit; a show guess still needs the show's year.
+      const episodeYear = (show, r) => year == null || Number(show.year) === year
+        || [Number(r.year), Number(String(r.aired || "").slice(0, 4))].some((y) => y > 0 && Math.abs(y - year) <= 1);
+      const shows = roots.filter((r) => r.type === "show" && sameName(r.title, title) && (year == null || g.kind === "episode" || Number(r.year) === year));
       let hits = [], mismatch = false;
       const season = integer(g.season, 0, 200), episode = integer(g.episode, 1, 2000), episodeTitle = clean(g.episode_title);
       for (const show of shows) {
-        const eps = safe(await catalog.rows({ kind: "episode", show_key: String(show.key) })).sort(episodeOrder);
+        const eps = safe(await catalog.rows({ kind: "episode", show_key: String(show.key) })).filter((r) => g.kind !== "episode" || episodeYear(show, r)).sort(episodeOrder);
         if (g.kind === "show") { if (eps.length) hits.push({ r: eps.find((r) => Number(r.season) === 1 && Number(r.episode) === 1) || eps[0], match: "partial" }); continue; }
         const named = episodeTitle ? eps.filter((r) => sameName(r.title, episodeTitle)) : [];
         if (season != null && episode != null) {
@@ -296,6 +302,20 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
           else if (named.length) hits.push(...named.map((r) => ({ r, match: "partial" })));
           else mismatch = true;
         } else if (season == null && episode == null && named.length) hits.push(...named.map((r) => ({ r, match: "partial" })));
+      }
+      // 1.99?? plexfind recall: the franchise's name ("Star Trek" for The Next Generation, "The Office" for The Office (US)) - when the
+      // named shows have no such episode, the shows whose title starts with that name (whole words) are its family: exactly ONE of
+      // their episodes with that episode title (and the guessed numbers and year, when given) verifies; two or more stay unverified.
+      if (!hits.length && g.kind === "episode" && episodeTitle) {
+        const base = norm(title), family = roots.filter((r) => r.type === "show" && norm(r.title).startsWith(base + " "));
+        if (family.length && family.length <= FAMILY_MAX) {
+          const byShow = new Map(family.map((r) => [String(r.key), r]));
+          const pool = typeof catalog.byTitle === "function" ? safe(await catalog.byTitle(episodeTitle, { kind: "episode" }))
+            : (await Promise.all(family.map((show) => catalog.rows({ kind: "episode", show_key: String(show.key) })))).flatMap((rows) => safe(rows));
+          const found = pool.filter((r) => byShow.has(String(r.show_key)) && sameName(r.title, episodeTitle)
+            && (season == null || Number(r.season) === season) && (episode == null || Number(r.episode) === episode) && episodeYear(byShow.get(String(r.show_key)), r));
+          if (found.length === 1) { hits.push({ r: found[0], match: season != null && episode != null ? "exact" : "partial" }); mismatch = false; }
+        }
       }
       if (hits.length) {
         record.status = "in"; record.match = hits.every((hit) => hit.match === "exact") ? "exact" : "partial";

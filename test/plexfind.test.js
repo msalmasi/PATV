@@ -424,8 +424,8 @@ test("an episode recall verifies with the episode's air year, and a franchise na
   r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork Orchard", episode_title: "The Pear Tree", year: 2005 })] });
   assert.deepEqual(r.rows.map((x) => x.key), ["20023"], "the named show's S2E3 is another episode: the family's exact match");
   assert.equal(r.recall[0].status, "in");
-  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork" })] });
-  assert.deepEqual(r.rows, [], "both shows have a Chapter 2.3 S2E3: never a guess between them"); assert.notEqual(r.recall[0].status, "in");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork", season: 1, episode: 1, episode_title: "Chapter 1.1" })] });
+  assert.deepEqual(r.rows, [], "both shows have a Chapter 1.1 S1E1: never a guess between them"); assert.notEqual(r.recall[0].status, "in");
   r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork", episode_title: "The Pear Tree", season: 1, episode: 1 })] });
   assert.deepEqual(r.rows, [], "the title in the family but not those numbers"); assert.notEqual(r.recall[0].status, "in");
   r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clock", episode_title: "The Pear Tree" })] });
