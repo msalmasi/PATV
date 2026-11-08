@@ -2497,6 +2497,50 @@
    ]
   },
   {
+   "id": "mtt",
+   "title": "!mtt · join · leave · info · me",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!mtt"
+   ],
+   "aliases": [
+    "!tourney"
+   ],
+   "syntax": [
+    "!mtt",
+    "!mtt info <no>",
+    "!mtt join <no> [remind]",
+    "!mtt leave <no>",
+    "!mtt remind <no> [off]",
+    "!mtt me",
+    "!mtt top <no>",
+    "!mtt pause <no> / resume <no>",
+    "!mtt cancel <no> confirm"
+   ],
+   "summary": "🏆 Scheduled multi-table Hold'em tournaments on publicaccess.tv: sign up ahead, one blind clock for every table, tables balanced as players bust, a final table on Pepe's stream; the top finishers share the prizes.",
+   "details": "**Scheduled tournaments** are multi-table Hold'em tournaments on the publicaccess.tv casino that start at a set time (its admins schedule them), played from a room whose casino runs there and on the web. They start switched off: until publicaccess.tv's casino admins switch them on (staff first, then everyone), `!mtt` says so. `!tourney` is the same command.\n**!mtt** lists the next ones (number, name, start time, entry, players registered); **!mtt <no>** or **!mtt info <no>** shows one: the structure, the entries and - while it runs - the level, the blinds and the players left. **!mtt top <no>** shows the biggest stacks; **!mtt me** tells you in a PM where you're registered or playing (your table, stack, level and the players left, with the table's link).\n**!mtt join <no> [remind]** registers you: the entry (the buy-in plus a fee to the House - 10 % of the buy-in unless the admins change it) is held in escrow until it ends. With `remind` you get a reminder 15 minutes before it starts (or later: **!mtt remind <no>**; **!mtt remind <no> off** drops it). Registration stays open into the first levels (late registration), and where re-entries are allowed, `!mtt join <no>` after you bust buys a new entry while it's open. **!mtt leave <no>** unregisters you with a full refund, the fee too - only before it starts. A tournament takes a limited number of players from Camfrog rooms (20 unless the admins change it); more can join on the web.\n**The game:** everyone gets the same tournament chips (1,500 unless the admins change it) - not PAT: they can't be bought, topped up or turned into PAT. One clock raises the blinds at every table (every 5 minutes, turbo 3); tables are balanced and broken as players bust, and the last players meet at the final table, which goes on Pepe's stream. On the bubble the tables can play hand-for-hand. Pepe sends a room player their hole cards and their turn (stack, to call, the pot, the board, the moves and the time left) as a PM in their own room - nothing about your hand is said in the room. Play with the usual `!check` `!call` `!bet` `!raise` `!allin` `!fold`: they go to the table where it's your turn (at two tables at once, use the web or `!mtt me`). Someone who isn't there when it starts sits out until they type `!sitin`; sitting out only blinds you away - a tournament seat is never stood up.\n**Prizes** (the buy-ins) are paid in PAT once at the end: about the top 15 % of the field, the bigger shares to the top places (small fields: the winner takes it all with 2-3 players, 65 % / 35 % with 4-6, 50 % / 30 % / 20 % with 7-9). Finishes also earn leaderboard points on the website.\n**!mtt pause <no>** / **!mtt resume <no>** and **!mtt cancel <no> confirm** (publicaccess.tv admins with the casino capability): pause every table after its hand, or call it off and refund every entry in full, fee included.\nA room's tournament announcements (registration open, the start, the final table, the winner) follow its Hold'em switch. In a room whose casino runs on Pepe's own tables, or where Hold'em is switched off, `!mtt` says so - they're on the web too.",
+   "examples": [
+    "!mtt",
+    "!mtt join 12 remind",
+    "!mtt me",
+    "!tourney top 12"
+   ],
+   "keywords": [
+    "tournament",
+    "tourney",
+    "mtt",
+    "multi-table",
+    "scheduled tournament",
+    "poker",
+    "texas holdem",
+    "casino"
+   ],
+   "gates": [
+    "game_poker_enabled"
+   ]
+  },
+  {
    "id": "blackjack",
    "title": "!blackjack start",
    "category": "games",
@@ -8719,5 +8763,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "3d6f97ff3ca19485"
+ "hash": "e76d1656a8e997a5"
 }
