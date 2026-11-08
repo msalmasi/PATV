@@ -66,7 +66,8 @@ library has 1,381 collections and Plex takes 2-3 s per member read, so that answ
 takes about an hour - far past the site's 15 s, so every catalog sync failed there.
 The site now reads shelves only in its daily full sweep, asks 1.7.1 for pages of 5
 (about 15 s each), and gives a 1.7.0 whole answer 2 minutes, after which that section
-keeps the shelves it had. A catalog read (`/sections`, `/catalog`, `/collections`) stops at
+keeps the shelves it had. A 1.7.1 page that still fails after its tries does the same,
+and the pages read so far replace the section's shelves only once its last page lands. A catalog read (`/sections`, `/catalog`, `/collections`) stops at
 its next Plex read once the site has stopped waiting (its client closed the
 connection), instead of holding the shared budget for minutes, and is logged:
 `[mediactl] GET /collections: the site stopped waiting after 15.0 s (60 Plex reads) -

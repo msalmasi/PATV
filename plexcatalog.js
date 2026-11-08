@@ -154,6 +154,10 @@ function createCatalog(options = {}) {
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelves (key TEXT PRIMARY KEY,name TEXT,kind TEXT,source TEXT,ranked INTEGER NOT NULL DEFAULT 0,section TEXT)");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelf_members (shelf TEXT,key TEXT,rank INTEGER,PRIMARY KEY(shelf,key),FOREIGN KEY(shelf) REFERENCES plex_shelves(key) ON DELETE CASCADE,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_shelf_member_key ON plex_shelf_members(key)");
+      // 1.99?? catfix review: a paged walk's shelves wait here until the section's last page lands (promoteShelves). Never read
+      // by the clerk; members are checked against plex_catalog again when they move over.
+      await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelves_next (key TEXT PRIMARY KEY,name TEXT,kind TEXT,section TEXT)");
+      await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelf_members_next (shelf TEXT,key TEXT,PRIMARY KEY(shelf,key),FOREIGN KEY(shelf) REFERENCES plex_shelves_next(key) ON DELETE CASCADE)");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_catalog_state (key TEXT PRIMARY KEY,value TEXT)");
       try {
         if (options.noFts) throw new Error("FTS disabled by test");
@@ -239,8 +243,10 @@ function createCatalog(options = {}) {
       const count = (await read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n;
       // 1.99?? catfix: an unfinished full sweep - how far it got (the next run carries on from there)
       const p = s.progress && typeof s.progress === "object" ? s.progress : null;
-      const progress = p ? { started: number(p.at, null), done: Array.isArray(p.done) ? p.done.length : 0,
-        total: sections.filter((x) => x.policy === "allowed").length, received: Math.max(0, number(p.received)) } : null;
+      const allowedIds = sections.filter((x) => x.policy === "allowed").map((x) => String(x.id));
+      // 1.99?? catfix review: a section read earlier in the sweep and turned off since isn't "read" of the allowed ones
+      const progress = p ? { started: number(p.at, null), done: Array.isArray(p.done) ? p.done.filter((id) => allowedIds.includes(String(id))).length : 0,
+        total: allowedIds.length, received: Math.max(0, number(p.received)) } : null;
       return { ready: s.allow_list_set === true && !!s.full_at && now() - s.full_at <= 3 * DAY && s.supported === true,
         at: s.at || null, full_at: s.full_at || null, version: s.version || null, allow_list_set: s.allow_list_set === true,
         requires_1_7: s.supported === false, sections, count, blocked: s.blocked || {}, dropped: s.dropped || 0,
@@ -351,6 +357,7 @@ function createCatalog(options = {}) {
     await revoke(tx, denied.map((r) => r.key));
     await purgeOrphans(tx);
     await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
+    await tx.run("DELETE FROM plex_shelves_next WHERE section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
   }
   async function installSections(tx, sections, allow, block) {
     await tx.run("DELETE FROM plex_sections");
@@ -379,10 +386,13 @@ function createCatalog(options = {}) {
   async function ftsDrop(tx, keys) {
     for (const k of new Set(keys.map(String))) if (KEY.test(k)) await tx.run("DELETE FROM plex_catalog_fts WHERE rowid=?", [Number(k)]);
   }
-  // 1.99?? catfix: paged collections (mediactl 1.7.1+) arrive a page at a time - the first page replaces the section's shelves,
-  // later pages add to them, and a shelf a page repeats (Plex's list moved between two pages) is kept once
-  async function storeShelves(tx, section, list, { replace = true } = {}) {
-    if (replace) await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section=?", [section]);
+  // 1.99?? catfix: paged collections (mediactl 1.7.1+) arrive a page at a time, and a shelf a page repeats (Plex's list moved
+  // between two pages) is kept once. 1.99?? catfix review: the pages are staged (plex_shelves_next) and swapped in by
+  // promoteShelves when the section's last page lands - page 0 used to delete the section's shelves and the rest came back five
+  // at a time over an hour, so the clerk saw part of them (for days, when a walk stopped). A whole answer (1.7.0) is stored
+  // straight away: it is one transaction anyway.
+  async function storeShelves(tx, section, list, { replace = true, staged = false } = {}) {
+    if (replace) await tx.run(staged ? "DELETE FROM plex_shelves_next WHERE section=?" : "DELETE FROM plex_shelves WHERE source='kometa' AND section=?", [section]);
     for (const s of list || []) {
       const name = text(s.name || s.title), prefix = "kometa:" + section + ":", rawKey = text(String(s.key || ""), 160);
       const key = rawKey.startsWith(prefix) ? rawKey : prefix + rawKey;
@@ -391,10 +401,26 @@ function createCatalog(options = {}) {
       const found = members.length ? await tx.all("SELECT key,type FROM plex_catalog WHERE section=? AND key IN (" + members.map(() => "?").join(",") + ")", [section, ...members]) : [];
       if (!found.length) continue;
       const kind = s.kind || (found.every((r) => r.type === "movie") ? "movie" : "show");
+      if (staged) {
+        if ((await tx.run("INSERT OR IGNORE INTO plex_shelves_next(key,name,kind,section) VALUES (?,?,?,?)", [key, name, kind, section])).changes !== 1) continue;
+        for (const r of found) await tx.run("INSERT OR IGNORE INTO plex_shelf_members_next(shelf,key) VALUES (?,?)", [key, r.key]);
+        continue;
+      }
       if ((await tx.run("INSERT OR IGNORE INTO plex_shelves(key,name,kind,source,ranked,section) VALUES (?,?,?,'kometa',0,?)", [key, name, kind, section])).changes !== 1) continue;
       for (const r of found) await tx.run("INSERT OR IGNORE INTO plex_shelf_members(shelf,key,rank) VALUES (?,?,NULL)", [key, r.key]);
     }
   }
+  /** The section's staged shelves replace its live ones in one go; a member is kept only while its row is still in that section. */
+  async function promoteShelves(tx, section) {
+    await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section=?", [section]);
+    const live = "FROM plex_shelf_members_next m JOIN plex_catalog c ON c.key=m.key AND c.section=n.section";
+    await tx.run("INSERT OR IGNORE INTO plex_shelves(key,name,kind,source,ranked,section) SELECT n.key,n.name,n.kind,'kometa',0,n.section FROM plex_shelves_next n " +
+      "WHERE n.section=? AND EXISTS (SELECT 1 " + live + " WHERE m.shelf=n.key)", [section]);
+    await tx.run("INSERT OR IGNORE INTO plex_shelf_members(shelf,key,rank) SELECT m.shelf,m.key,NULL FROM plex_shelves_next n JOIN plex_shelf_members_next m ON m.shelf=n.key " +
+      "JOIN plex_catalog c ON c.key=m.key AND c.section=n.section JOIN plex_shelves s ON s.key=n.key AND s.source='kometa' AND s.section=n.section WHERE n.section=?", [section]);
+    await clearStaged(tx, section);
+  }
+  const clearStaged = (tx, section = null) => tx.run("DELETE FROM plex_shelves_next" + (section == null ? "" : " WHERE section=?"), section == null ? [] : [section]);
   // 1.99?? catfix: rewrites only the index rows whose shelf names changed (by rowid). It blanked every row and then found each
   // member by the unindexed key column - a rewrite of the whole index and a scan per shelf member at the end of every sync.
   async function rebuildShelfFts(tx) {
@@ -440,7 +466,12 @@ function createCatalog(options = {}) {
     const c = p.cursor;
     if (c != null && (typeof c !== "object" || !/^[A-Za-z0-9_-]{1,64}$/.test(String(c.section)) || ![2, 4, 1, "collections"].includes(c.type) ||
       !Number.isInteger(c.start) || c.start < 0)) return null;
-    return { v: 1, at: p.at, seen: p.seen, fingerprint, done: p.done.map(String), cursor: c || null,
+    // 1.99?? catfix review: `back` is where the page before the cursor started, `before` the counts as that page began
+    const back = c && Number.isInteger(c.back) && c.back >= 0 && c.back <= c.start ? c.back : null;
+    const b = c && back != null && c.before && typeof c.before === "object" ? c.before : null;
+    const cursor = c ? { section: String(c.section), type: c.type, start: c.start, back,
+      before: b ? { received: Math.max(0, number(b.received)), dropped: Math.max(0, number(b.dropped)), blocked: b.blocked && typeof b.blocked === "object" ? { ...b.blocked } : {} } : null } : null;
+    return { v: 1, at: p.at, seen: p.seen, fingerprint, done: p.done.map(String), cursor,
       received: Math.max(0, number(p.received)), dropped: Math.max(0, number(p.dropped)), blocked: p.blocked && typeof p.blocked === "object" ? { ...p.blocked } : {},
       skipped: Array.isArray(p.skipped) ? p.skipped.filter((x) => x && typeof x === "object").map((x) => ({ section: String(x.section), why: text(String(x.why || ""), 120) })) : [] };
   }
@@ -505,15 +536,29 @@ function createCatalog(options = {}) {
       let version = null;
       try { const h = await provider("/health", { waits: [] }); version = /^\d+\.\d+\.\d+$/.test(h.version || "") ? h.version : null; } catch (e) { if (e.code === "quiet") throw e; }
       const allowed = new Set(sections.filter((s) => s.policy === "allowed").map((s) => s.id));
-      if (resume) log.log("[plexcatalog] carrying on the full sweep from " + new Date(run.at).toISOString() + ": " + run.done.length + " of " + allowed.size + " sections done");
+      if (resume) log.log("[plexcatalog] carrying on the full sweep from " + new Date(run.at).toISOString() + ": " + run.done.filter((id) => allowed.has(id)).length + " of " + allowed.size + " sections done");
       const seen = dry ? at : resume ? run.seen : await write(async (tx) => {
         const prior = await tx.all("SELECT value FROM plex_catalog_state WHERE key='seen_generation'");
         const next = Math.max(at, number(prior[0] && parsed(prior[0].value, 0)) + 1);
         await putState(tx, "seen_generation", next);
         run.seen = next;
+        if (full) await clearStaged(tx);   // a new sweep: nothing staged by an earlier one is carried into it
         await saveRun(tx, null, null);
         return next;
       });
+      // 1.99?? catfix review: a resumed sweep starts at the page BEFORE its cursor (`back`), with the counts as that page began.
+      // Plex's listing is read by offset: a title it removed before the cursor while the sweep waited (10 minutes, the window, a
+      // day) shifts the rest down one place, and the title that moved from the cursor to just before it was never read - the
+      // sweep's end then deleted it. Reading a page again is harmless (upserts, the same seen marker); a page holds 500.
+      const backAt = (here) => {
+        if (here.back == null) return here.start;
+        if (here.before) {
+          received = here.before.received; dropped = here.before.dropped;
+          for (const k of Object.keys(blocked)) delete blocked[k];
+          Object.assign(blocked, here.before.blocked);
+        }
+        return here.back;
+      };
       const since = !full && previous.at ? Math.max(0, Math.floor(previous.at / 1000) - 1) : null;
       for (const s of sections.filter((r) => r.policy === "allowed")) {
         if (run.done.includes(s.id)) continue;
@@ -522,8 +567,9 @@ function createCatalog(options = {}) {
         const from = here ? (here.type === "collections" ? types.length : Math.max(0, types.indexOf(here.type))) : 0;
         for (let ti = from; ti < types.length; ti++) {
           const type = types[ti];
-          let start = here && here.type === type ? here.start : 0;
+          let start = here && here.type === type ? backAt(here) : 0;
           for (;;) {
+            const mark = { received, dropped, blocked: { ...blocked } };
             const where = { step: "catalog", section: s.id, kind: s.type, type, start, since: since != null };
             const route = "/catalog?section=" + encodeURIComponent(s.id) + "&type=" + type + "&start=" + start + "&size=500" + (since != null ? "&since=" + since : "");
             const page = await provider(route, { where }), clean = [], revoked = [];
@@ -544,7 +590,7 @@ function createCatalog(options = {}) {
                 await upsert(tx, r, seen);
               }
               // the rows and the place after them, in one transaction
-              await saveRun(tx, next != null ? { section: s.id, type, start: next }
+              await saveRun(tx, next != null ? { section: s.id, type, start: next, back: start, before: mark }
                 : { section: s.id, type: ti + 1 < types.length ? types[ti + 1] : "collections", start: 0 }, null);
             });
             if (next == null) break;
@@ -553,34 +599,38 @@ function createCatalog(options = {}) {
         }
         // Shelves (Plex collections) are the full sweep's only: a large section's are thousands of slow Plex reads (prod: 1381
         // collections, 2-3 s a member read). mediactl 1.7.1+ answers a page of shelves at a time; 1.7.0 ignores start/size and
-        // answers the whole section at once - when that doesn't come in COLLECTIONS_WALK_TIMEOUT_MS the section keeps the
-        // shelves it had (one try: 1.7.0 goes on walking after the site leaves) and the sweep goes on.
-        const paged = pagedCollections(version);
-        let cstart = here && here.type === "collections" ? here.start : 0;
-        for (;;) {
-          if (!full) break;
+        // answers the whole section at once (one try: 1.7.0 goes on walking after the site leaves). 1.99?? catfix review: the
+        // catalog can do without shelves, so a shelves read that still fails - after its tries, or an answer that isn't usable -
+        // never stops the sweep (on 1.7.1 that held every later run on the same page: no deltas, full_at never moved). The
+        // section keeps the shelves it had, the sweep goes on, and the next day's sweep tries again.
+        let paged = pagedCollections(version);
+        let cstart = here && here.type === "collections" ? backAt(here) : 0;
+        while (full) {
           const where = { step: "collections", section: s.id, kind: s.type, start: cstart };
           const route = "/collections?section=" + encodeURIComponent(s.id) + "&start=" + cstart + "&size=" + COLLECTIONS_PAGE;
-          let c;
-          if (paged) c = await provider(route, { where, timeout: COLLECTIONS_PAGE_TIMEOUT_MS });
-          else {
-            try { c = await provider(route, { where, timeout: COLLECTIONS_WALK_TIMEOUT_MS, waits: [] }); }
-            catch (e) {
-              if (e.code !== "upstream" || !e.detail || e.detail.unusable) throw e;
-              const why = describeWhy(e.detail);
-              skipped.push({ section: s.id, why });
-              log.log("[plexcatalog] " + describeRead(where) + " not refreshed: " + why + " - media-control 1.7.1 reads them a page at a time");
-              if (!dry) await write((tx) => saveRun(tx, null, s.id));
-              break;
-            }
+          let c, pagedAnswer, next;
+          try {
+            c = await provider(route, paged ? { where, timeout: COLLECTIONS_PAGE_TIMEOUT_MS } : { where, timeout: COLLECTIONS_WALK_TIMEOUT_MS, waits: [] });
+            if (!Array.isArray(c.collections)) throw unusable(where);
+            pagedAnswer = Object.prototype.hasOwnProperty.call(c, "next");
+            next = pagedAnswer && c.next != null ? Number(c.next) : null;
+            if (next != null && (!Number.isInteger(next) || next <= cstart || next > 10000000)) throw unusable(where);
+          } catch (e) {
+            if (e.code !== "upstream" || !e.detail) throw e;   // the maintenance window, a write: the sweep stops and keeps its place
+            const why = describeWhy(e.detail) + (e.detail.attempts > 1 ? " (" + e.detail.attempts + " tries)" : "");
+            skipped.push({ section: s.id, why });
+            log.log("[plexcatalog] " + describeRead(where) + " not refreshed: " + why + " - " + (paged ? "the section keeps the shelves it had" : "media-control 1.7.1 reads them a page at a time"));
+            if (!dry) await write(async (tx) => { await clearStaged(tx, s.id); await saveRun(tx, null, s.id); });
+            break;
           }
-          if (!Array.isArray(c.collections)) throw unusable(where);
-          const pagedAnswer = Object.prototype.hasOwnProperty.call(c, "next");
-          const next = pagedAnswer && c.next != null ? Number(c.next) : null;
-          if (next != null && (!Number.isInteger(next) || next <= cstart || next > 10000000)) throw unusable(where);
+          if (pagedAnswer) paged = true;   // a 1.7.1 answer though /health didn't say so: the next pages are read as pages
           if (!dry) await write(async (tx) => {
-            await storeShelves(tx, s.id, c.collections, { replace: cstart === 0 || !pagedAnswer });
-            await saveRun(tx, next != null ? { section: s.id, type: "collections", start: next } : null, next != null ? null : s.id);
+            if (!pagedAnswer) { await clearStaged(tx, s.id); await storeShelves(tx, s.id, c.collections); }
+            else {
+              await storeShelves(tx, s.id, c.collections, { staged: true, replace: cstart === 0 });
+              if (next == null) await promoteShelves(tx, s.id);
+            }
+            await saveRun(tx, next != null ? { section: s.id, type: "collections", start: next, back: cstart } : null, next != null ? null : s.id);
           });
           if (next == null) break;
           cstart = next;
@@ -610,7 +660,8 @@ function createCatalog(options = {}) {
         await putState(tx, "error", error); await putState(tx, "error_at", now()); await putState(tx, "error_detail", e.detail || null);
         if (e.code === "old") await putState(tx, "supported", false);
       }).catch(() => {});
-      const kept = keep && run.seen != null ? " - kept: " + run.done.length + " of " + sections.filter((r) => r.policy === "allowed").length + " sections done, the next run carries on" : "";
+      const ids = sections.filter((r) => r.policy === "allowed").map((r) => r.id);
+      const kept = keep && run.seen != null ? " - kept: " + run.done.filter((id) => ids.includes(id)).length + " of " + ids.length + " sections done, the next run carries on" : "";
       log.log("[plexcatalog] sync failed: " + error + kept);
       return { ok: false, dry, error, received, dropped, retry: e.code !== "old" };
     }
@@ -650,6 +701,7 @@ function createCatalog(options = {}) {
     let kept = 0, dropped = 0, blocked = {};
     await write(async (tx) => {
       await tx.run("DELETE FROM plex_shelves");
+      await clearStaged(tx);
       if (fts) await tx.run("DELETE FROM plex_catalog_fts");
       await tx.run("DELETE FROM plex_catalog");
       await installSections(tx, sections, true, block);
@@ -663,8 +715,10 @@ function createCatalog(options = {}) {
       kept -= orphaned; dropped += orphaned;
       for (const s of sections.filter((x) => x.policy === "allowed")) await storeShelves(tx, s.id, snapshot.shelves || []);
       await rebuildShelfFts(tx);
+      // 1.99?? catfix review: the import replaces the catalog, so an unfinished sweep ends here too - carried on, its old seen
+      // marker would make its end delete every imported row - and its error and skipped shelves go with it
       for (const [k, v] of Object.entries({ at: Math.min(stamp, number(snapshot.at, stamp)), full_at: Math.min(stamp, number(snapshot.full_at, stamp)), supported: true, allow_list_set: true, version: "snapshot", v: stamp,
-        block_fingerprint: [...block].sort().join(","), blocked, dropped, error: null })) await putState(tx, k, v);
+        block_fingerprint: [...block].sort().join(","), blocked, dropped, error: null, error_at: null, error_detail: null, progress: null, shelves_skipped: [] })) await putState(tx, k, v);
     });
     // Import replaces the same rows as a full sync. Rebuild local list membership even
     // on staging without mediactl; no provider call is needed or allowed here.
