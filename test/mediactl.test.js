@@ -1408,7 +1408,7 @@ test("1.7.1: /collections?start=&size= answers one bounded page of shelves with 
   assertClerkNoDeniedMetadata(whole.json);
 });
 
-// 1.99?? catfix review: the fail-closed policy is checked on every page, not only on the whole (unpaged) answer
+// 1.99alx catfix review: the fail-closed policy is checked on every page, not only on the whole (unpaged) answer
 test("1.7.1: every page of /collections keeps the fail-closed section policy, and the pages together are the whole answer", async t => {
   for (const plex143 of [false, true]) {
     const h = await clerkHarness(t);   // 72 adult, 73 off: their shelves (7250, 7350) and members (7201, 7301) never leave

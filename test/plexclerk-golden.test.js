@@ -205,7 +205,7 @@ test("catalog admin card renders translated labels and treats provider metadata 
   assert.match(text(nodes.get("pcOut")), /sync is running/);
   assert.equal(nodes.get("pcSync").disabled, false);
   assert.equal(timers.size, 1, "one status poll during sync");
-  // 1.99?? catfix review: the card's catfix lines - an unfinished sweep's progress, when the last error happened, the sections
+  // 1.99alx catfix review: the card's catfix lines - an unfinished sweep's progress, when the last error happened, the sections
   // whose collections the last full sync left as they were - come from en.json keys and render as text
   status = { ...status, syncing: false, ready: false,
     error: "catalog source unavailable: episode page from 0 of section 73 (shows) - no answer within 60 s (4 tries) <b>bold</b>", error_at: 1793876400000,

@@ -84,7 +84,7 @@ async function setup(t, overrides = {}) {
   const calls = [], logs = [], tautCalls = [], reads = [];
   const mediactl = async (method, route, _body, opts = {}) => {
     calls.push(route); reads.push({ route, timeout: opts.timeout });
-    // 1.99?? catfix: a test can answer (or fail) any read first - api.hook(route, opts) -> an answer, a throw, or undefined
+    // 1.99alx catfix: a test can answer (or fail) any read first - api.hook(route, opts) -> an answer, a throw, or undefined
     if (api.hook) { const r = await api.hook(route, opts); if (r !== undefined) return r; }
     if (api.error) return { status: 502, json: { error: "Provider body must not appear" } };
     const u = new URL(route, "http://fixture.local");
@@ -453,7 +453,7 @@ test("shelves aggregates 10k films and 200k episodes without fetching metadata J
   assert.equal((await h.catalog.shelves()).genres.includes("Scale Series"), false);
 });
 
-// ── 1.99?? catfix (prod 2026-11-08: the clerk turned on, the card said "Last sync: Never" / "catalog source unavailable") ──
+// ── 1.99alx catfix (prod 2026-11-08: the clerk turned on, the card said "Last sync: Never" / "catalog source unavailable") ──
 // Proven on prod (read-only, the site's own mediactl client): every catalog page answers in under 4 s, but mediactl 1.7.0
 // answers a section's /collections only after walking every collection's members, and the largest movie section has 1381
 // collections whose member reads take Plex ~2-3 s each - that walk did not answer within 15 minutes (about an hour), while
@@ -559,7 +559,7 @@ test("catfix: a read that fails for a passing reason is tried again after a wait
 
 test("catfix: the last sync error says which read failed, how, after how many tries - and when", async (t) => {
   const h = await setup(t);
-  // a catalog page that never answers: tried again, then the sweep stops there (and carries on later). (1.99?? catfix review:
+  // a catalog page that never answers: tried again, then the sweep stops there (and carries on later). (1.99alx catfix review:
   // a shelves page no longer stops the sweep - its section keeps the shelves it had - so this reads a catalog page.)
   h.api.hook = (route) => route.includes("section=2&type=4") ? Promise.reject(timeoutError()) : undefined;
   const r = await h.catalog.sync({ full: true });
@@ -644,7 +644,7 @@ test("catfix: a sweep stopped part-way through a page run or by the maintenance 
   const again = await h.catalog.sync();
   assert.equal(again.ok, true, JSON.stringify(again));
   const first = h.calls.find((c) => c.startsWith("/catalog"));
-  // 1.99?? catfix review: from the page before the one the window stopped (re-read, so a title Plex removed while the sweep
+  // 1.99alx catfix review: from the page before the one the window stopped (re-read, so a title Plex removed while the sweep
   // waited can't shift another past the cursor) - not the section's first
   assert.equal(first, "/catalog?section=1&type=1&start=4&size=500", "the page before the one the window stopped, not the section's first");
   assert.equal(h.calls.some((c) => c.includes("section=1&type=1&start=0")), false);
@@ -683,7 +683,7 @@ test("catfix: the timer looks again sooner after a run that failed for a passing
   assert.equal(nextTickMin({ catalog_sync_min: 5 }, true, { ok: true }), 10, "never more often than every 10 minutes");
 });
 
-// 1.99?? catfix review: every client-side failure but "not configured" read as "can't be reached" and was tried 4 times - a
+// 1.99alx catfix review: every client-side failure but "not configured" read as "can't be reached" and was tried 4 times - a
 // certificate pin that no longer matches said "media-control can't be reached (4 tries)" and its real cause appeared nowhere;
 // and the timer came back every 10 minutes even for failures asking again can't fix.
 test("catfix review: a failure asking again can't fix is named and tried once; an unreachable service says why", async (t) => {
@@ -721,7 +721,7 @@ test("catfix review: a failure asking again can't fix is named and tried once; a
   assert.equal(late.r.retry, true);
 });
 
-// 1.99?? catfix, the next wall after the collections one: the search index's key is an UNINDEXED FTS5 column, so every
+// 1.99alx catfix, the next wall after the collections one: the search index's key is an UNINDEXED FTS5 column, so every
 // "DELETE FROM plex_catalog_fts WHERE key=?" (one per row written, per revoked key, per shelf member) scans the whole index.
 // Measured (synthetic, this box): 5.8 ms a delete at 16k rows, 85 ms at 240k - a 500-row episode page spent ~42 s deleting,
 // a full sweep hours; on prod the second sweep read the same section 2.4x slower than the first (8.5 vs 3.5 minutes) as the
@@ -774,7 +774,7 @@ test("catfix: an index built before (rowids not the keys) is rebuilt on open, in
   } finally { await again.close(); }
 });
 
-// ── 1.99?? catfix review: shelves can't stop the sweep, paged shelves swap in whole, a resume re-reads the page before its
+// ── 1.99alx catfix review: shelves can't stop the sweep, paged shelves swap in whole, a resume re-reads the page before its
 // cursor, an import ends an unfinished sweep, and the stored tables (not only the read filter) stay clean across a resume ──
 /** mediactl 1.7.1's paged /collections for section 1 (section 2 has none); fail(start) -> true makes that page time out. */
 function pagedShelves(h, list, fail = () => false) {

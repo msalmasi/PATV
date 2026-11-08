@@ -21,7 +21,7 @@ const number = (v, fallback = 0) => Number.isFinite(Number(v)) && v !== null && 
 const strings = (v, n = 20, max = 80) => Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === "string").map((x) => text(x, max)).filter(Boolean))].slice(0, n) : [];
 const parsed = (v, d = []) => { try { return JSON.parse(v); } catch (_) { return d; } };
 const IDLE_CHECK_MIN = 5;      // 1.99alq train3 verify: minutes between looks while every clerk switch is off (start())
-// 1.99?? catfix (prod 2026-11-08, "Last sync: Never" / "catalog source unavailable"): every read had the client's 15 s, and
+// 1.99alx catfix (prod 2026-11-08, "Last sync: Never" / "catalog source unavailable"): every read had the client's 15 s, and
 // mediactl 1.7.0 answers a section's /collections only after walking every collection's members - the largest section has
 // 1381 collections at 2-3 s a member read (about an hour) - so each run read that whole section, gave up on its collections,
 // threw the run away (no "at", no "full_at"), and the next run started over. Now: a page gets PAGE_TIMEOUT_MS (the slowest
@@ -58,7 +58,7 @@ function describeWhy(f) {
   if (f.status == null) return "media-control can't be reached" + (f.reason ? " (" + f.reason + ")" : "");
   return "media-control answered " + f.status;
 }
-/** 1.99?? catfix review: what a failed call() says, as flags and a short reason - the error code only (never the message's
+/** 1.99alx catfix review: what a failed call() says, as flags and a short reason - the error code only (never the message's
  *  address). A pin that doesn't match, a URL that can't be used and "not configured" are `lasting`: asking again can't fix them. */
 function clientFailure(e) {
   const msg = String((e && e.message) || ""), code = e && typeof e.code === "string" ? e.code : "";
@@ -168,7 +168,7 @@ function createCatalog(options = {}) {
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelves (key TEXT PRIMARY KEY,name TEXT,kind TEXT,source TEXT,ranked INTEGER NOT NULL DEFAULT 0,section TEXT)");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelf_members (shelf TEXT,key TEXT,rank INTEGER,PRIMARY KEY(shelf,key),FOREIGN KEY(shelf) REFERENCES plex_shelves(key) ON DELETE CASCADE,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_shelf_member_key ON plex_shelf_members(key)");
-      // 1.99?? catfix review: a paged walk's shelves wait here until the section's last page lands (promoteShelves). Never read
+      // 1.99alx catfix review: a paged walk's shelves wait here until the section's last page lands (promoteShelves). Never read
       // by the clerk; members are checked against plex_catalog again when they move over.
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelves_next (key TEXT PRIMARY KEY,name TEXT,kind TEXT,section TEXT)");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelf_members_next (shelf TEXT,key TEXT,PRIMARY KEY(shelf,key),FOREIGN KEY(shelf) REFERENCES plex_shelves_next(key) ON DELETE CASCADE)");
@@ -181,7 +181,7 @@ function createCatalog(options = {}) {
         await run(writer, "DROP TABLE temp.plex_fts_probe");
         await run(writer, "CREATE VIRTUAL TABLE IF NOT EXISTS plex_catalog_fts USING fts5(key UNINDEXED,title,show,summary,genres,shelves,people,tokenize='unicode61 remove_diacritics 2')");
         fts = true;
-        // 1.99?? catfix: an index row's rowid is its Plex key (ftsRow); one built before that (or without FTS) is rebuilt here
+        // 1.99alx catfix: an index row's rowid is its Plex key (ftsRow); one built before that (or without FTS) is rebuilt here
         const counts = (await all(writer, "SELECT (SELECT COUNT(*) FROM plex_catalog) AS rows,(SELECT COUNT(*) FROM plex_catalog_fts) AS indexed," +
           "(SELECT COUNT(*) FROM plex_catalog_fts WHERE rowid<>CAST(key AS INTEGER)) AS loose"))[0];
         if (counts.rows !== counts.indexed || counts.loose) {
@@ -255,10 +255,10 @@ function createCatalog(options = {}) {
     try {
       const s = await state(), sections = await read("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
       const count = (await read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n;
-      // 1.99?? catfix: an unfinished full sweep - how far it got (the next run carries on from there)
+      // 1.99alx catfix: an unfinished full sweep - how far it got (the next run carries on from there)
       const p = s.progress && typeof s.progress === "object" ? s.progress : null;
       const allowedIds = sections.filter((x) => x.policy === "allowed").map((x) => String(x.id));
-      // 1.99?? catfix review: a section read earlier in the sweep and turned off since isn't "read" of the allowed ones
+      // 1.99alx catfix review: a section read earlier in the sweep and turned off since isn't "read" of the allowed ones
       const progress = p ? { started: number(p.at, null), done: Array.isArray(p.done) ? p.done.filter((id) => allowedIds.includes(String(id))).length : 0,
         total: allowedIds.length, received: Math.max(0, number(p.received)) } : null;
       return { ready: s.allow_list_set === true && !!s.full_at && now() - s.full_at <= 3 * DAY && s.supported === true,
@@ -393,15 +393,15 @@ function createCatalog(options = {}) {
       await ftsRow(tx, r, names.map((s) => s.name).join(" "));
     }
   }
-  // 1.99?? catfix: the search index row's rowid IS the Plex key (keys are 1-12 digits, KEY), so a write finds its row directly.
+  // 1.99alx catfix: the search index row's rowid IS the Plex key (keys are 1-12 digits, KEY), so a write finds its row directly.
   // The key column is UNINDEXED: "WHERE key=?" read the whole index for every row written (85 ms each at 240k rows).
   const ftsRow = (tx, r, shelves) => tx.run("INSERT INTO plex_catalog_fts(rowid,key,title,show,summary,genres,shelves,people) VALUES (?,?,?,?,?,?,?,?)",
     [Number(r.key), r.key, r.title, r.show, r.summary, r.genres.join(" "), shelves, [...r.directors, ...r.cast].join(" ")]);
   async function ftsDrop(tx, keys) {
     for (const k of new Set(keys.map(String))) if (KEY.test(k)) await tx.run("DELETE FROM plex_catalog_fts WHERE rowid=?", [Number(k)]);
   }
-  // 1.99?? catfix: paged collections (mediactl 1.7.1+) arrive a page at a time, and a shelf a page repeats (Plex's list moved
-  // between two pages) is kept once. 1.99?? catfix review: the pages are staged (plex_shelves_next) and swapped in by
+  // 1.99alx catfix: paged collections (mediactl 1.7.1+) arrive a page at a time, and a shelf a page repeats (Plex's list moved
+  // between two pages) is kept once. 1.99alx catfix review: the pages are staged (plex_shelves_next) and swapped in by
   // promoteShelves when the section's last page lands - page 0 used to delete the section's shelves and the rest came back five
   // at a time over an hour, so the clerk saw part of them (for days, when a walk stopped). A whole answer (1.7.0) is stored
   // straight away: it is one transaction anyway.
@@ -435,7 +435,7 @@ function createCatalog(options = {}) {
     await clearStaged(tx, section);
   }
   const clearStaged = (tx, section = null) => tx.run("DELETE FROM plex_shelves_next" + (section == null ? "" : " WHERE section=?"), section == null ? [] : [section]);
-  // 1.99?? catfix: rewrites only the index rows whose shelf names changed (by rowid). It blanked every row and then found each
+  // 1.99alx catfix: rewrites only the index rows whose shelf names changed (by rowid). It blanked every row and then found each
   // member by the unindexed key column - a rewrite of the whole index and a scan per shelf member at the end of every sync.
   async function rebuildShelfFts(tx) {
     if (!fts) return;
@@ -478,7 +478,7 @@ function createCatalog(options = {}) {
     const c = p.cursor;
     if (c != null && (typeof c !== "object" || !/^[A-Za-z0-9_-]{1,64}$/.test(String(c.section)) || ![2, 4, 1, "collections"].includes(c.type) ||
       !Number.isInteger(c.start) || c.start < 0)) return null;
-    // 1.99?? catfix review: `back` is where the page before the cursor started, `before` the counts as that page began
+    // 1.99alx catfix review: `back` is where the page before the cursor started, `before` the counts as that page began
     const back = c && Number.isInteger(c.back) && c.back >= 0 && c.back <= c.start ? c.back : null;
     const b = c && back != null && c.before && typeof c.before === "object" ? c.before : null;
     const cursor = c ? { section: String(c.section), type: c.type, start: c.start, back,
@@ -519,7 +519,7 @@ function createCatalog(options = {}) {
     await init();
     const previous = await state(), cfg = settings(), block = ratings(cfg.clerk_block_ratings), fingerprint = [...block].sort().join(",");
     const at = now();
-    // 1.99?? catfix: an unfinished full sweep (a read that kept failing, the maintenance window, a restart) is carried on from
+    // 1.99alx catfix: an unfinished full sweep (a read that kept failing, the maintenance window, a restart) is carried on from
     // the page it stopped at - with its own start time and seen marker, so its end still removes what Plex no longer has.
     // Any run while one is unfinished is that sweep (a delta in between would stamp rows with another marker).
     const resume = dry ? null : resumable(previous.progress, at, fingerprint);
@@ -558,7 +558,7 @@ function createCatalog(options = {}) {
         await saveRun(tx, null, null);
         return next;
       });
-      // 1.99?? catfix review: a resumed sweep starts at the page BEFORE its cursor (`back`), with the counts as that page began.
+      // 1.99alx catfix review: a resumed sweep starts at the page BEFORE its cursor (`back`), with the counts as that page began.
       // Plex's listing is read by offset: a title it removed before the cursor while the sweep waited (10 minutes, the window, a
       // day) shifts the rest down one place, and the title that moved from the cursor to just before it was never read - the
       // sweep's end then deleted it. Reading a page again is harmless (upserts, the same seen marker); a page holds 500.
@@ -611,7 +611,7 @@ function createCatalog(options = {}) {
         }
         // Shelves (Plex collections) are the full sweep's only: a large section's are thousands of slow Plex reads (prod: 1381
         // collections, 2-3 s a member read). mediactl 1.7.1+ answers a page of shelves at a time; 1.7.0 ignores start/size and
-        // answers the whole section at once (one try: 1.7.0 goes on walking after the site leaves). 1.99?? catfix review: the
+        // answers the whole section at once (one try: 1.7.0 goes on walking after the site leaves). 1.99alx catfix review: the
         // catalog can do without shelves, so a shelves read that still fails - after its tries, or an answer that isn't usable -
         // never stops the sweep (on 1.7.1 that held every later run on the same page: no deltas, full_at never moved). The
         // section keeps the shelves it had, the sweep goes on, and the next day's sweep tries again.
@@ -675,7 +675,7 @@ function createCatalog(options = {}) {
       const ids = sections.filter((r) => r.policy === "allowed").map((r) => r.id);
       const kept = keep && run.seen != null ? " - kept: " + run.done.filter((id) => ids.includes(id)).length + " of " + ids.length + " sections done, the next run carries on" : "";
       log.log("[plexcatalog] sync failed: " + error + kept);
-      // 1.99?? catfix review: no sooner look for what asking again can't fix (an old mediactl, the site's own configuration)
+      // 1.99alx catfix review: no sooner look for what asking again can't fix (an old mediactl, the site's own configuration)
       return { ok: false, dry, error, received, dropped, retry: e.code !== "old" && !(e.detail && e.detail.lasting) };
     }
   }
@@ -728,7 +728,7 @@ function createCatalog(options = {}) {
       kept -= orphaned; dropped += orphaned;
       for (const s of sections.filter((x) => x.policy === "allowed")) await storeShelves(tx, s.id, snapshot.shelves || []);
       await rebuildShelfFts(tx);
-      // 1.99?? catfix review: the import replaces the catalog, so an unfinished sweep ends here too - carried on, its old seen
+      // 1.99alx catfix review: the import replaces the catalog, so an unfinished sweep ends here too - carried on, its old seen
       // marker would make its end delete every imported row - and its error and skipped shelves go with it
       for (const [k, v] of Object.entries({ at: Math.min(stamp, number(snapshot.at, stamp)), full_at: Math.min(stamp, number(snapshot.full_at, stamp)), supported: true, allow_list_set: true, version: "snapshot", v: stamp,
         block_fingerprint: [...block].sort().join(","), blocked, dropped, error: null, error_at: null, error_detail: null, progress: null, shelves_skipped: [] })) await putState(tx, k, v);
@@ -760,7 +760,7 @@ function createCatalog(options = {}) {
       const on = inUse(settings() || {});
       let last = null;
       if (!closed && on && !quiet(now())) last = await sync();
-      // 1.99?? catfix: a run that failed for a passing reason is tried again after RETRY_MIN (an unfinished sweep carries on)
+      // 1.99alx catfix: a run that failed for a passing reason is tried again after RETRY_MIN (an unfinished sweep carries on)
       if (!closed) { timer = setTimeout(tick, nextTickMin(settings() || {}, on, last) * 60000); if (timer.unref) timer.unref(); }
     };
     timer = setTimeout(tick, 0);

@@ -46,7 +46,7 @@
           done: Number(j.embed.done) || 0, left: Number(j.embed.left) || 0, model: j.embed.model, dim: Number(j.embed.dim) || 0
         }));
       if (j.syncing) pcText(out, "p", ct("syncing", "Catalog sync is running. You can leave this page."));
-      // 1.99?? catfix: an unfinished full sync (it carries on from where it stopped) and when the last error happened
+      // 1.99alx catfix: an unfinished full sync (it carries on from where it stopped) and when the last error happened
       if (j.progress) pcText(out, "p", ct("progress", "Full sync in progress since {at}: {done} of {total} sections read, {n} titles so far. The next run carries on from there.", {
         at: pcDate(j.progress.started), done: Number(j.progress.done) || 0, total: Number(j.progress.total) || 0, n: Number(j.progress.received) || 0
       }));
