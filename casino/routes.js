@@ -35,6 +35,17 @@
 //                                            h22: game "sng" = !sng (verbs "" / list, new, join, leave, info, cancel, help; up to 5 args);
 //                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`;
 //                                            review: + `sng_on` (the switch: off | staff | everyone; "off" while Hold'em is off)
+// h22 phase 2 (1.99??) 🏆 SCHEDULED tournaments (casino/mtt.js; each one's tables are /casino/holdem/t/:id with table.tourney.kind "mtt"):
+//   GET  /casino/holdem/mtt/:id             the tournament page (302 to /casino/holdem while the switch hides it from this viewer)
+//   GET  /casino/holdem/leaderboard         the leaderboard page;  GET /admin/casino/mtt  the schedule manager (casino.admin)
+//   GET  /api/casino/mtt                    the lobby block (also GET /api/casino/lobby -> mtt): {mtt_on, can_register, upcoming, registering, running, recent, mine}
+//   GET  /api/casino/mtt/leaderboard        ?period=YYYY-MM|all&page=n (50 a page; veiled players never on it)
+//   GET  /api/casino/mtt/:id                {mtt: the view, me, results}   /players?page= (masked rows)   /tables   /me
+//   POST /api/casino/mtt/:id/register {idem, remind} (also late registration + re-entry) · /unregister {idem} · /remind {idem, on, telegram}
+//   POST /api/casino/admin/mtt {id?, ...fields} create (repeat makes a series) / edit · /api/casino/admin/mtt/:id/<op> (cancel, void, pause,
+//        resume, start, delay, max, stream, overlay-retry) · /api/casino/admin/mtt/:id/entry/:n/(refund|dq) · GET /api/casino/admin/mtt[/:id[/log]]
+//   bot act game "mtt" (!mtt / !tourney; up to 2 args); a room player's bare Hold'em verb goes to the table where it's their turn first
+//   (svc.tourneyTableFor); the poll reads `scene` {held} and answers `private_mtt` (cards / turn prompts / notice PMs) + `mtt_on`.
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
 "use strict";
@@ -51,8 +62,12 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
                            "table", "info", "show", "rules", "how", "fair", "",
                            "sit", "buyin", "buy", "join", "cashout", "next", "check", "call", "fold", "allin", "all-in", "raise", "cards",
                            "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert", "pre", "sitout", "sitin", "showhand",
-                           "list", "cancel", "register", "unregister"]);      // (h22: + the !sng verbs, game "sng")
+                           "list", "cancel", "register", "unregister",       // (h22: + the !sng verbs, game "sng")
+                           "reenter", "remind", "me", "top", "standings", "pause", "resume", "schedule"]);   // (h22 phase 2: + the !mtt verbs, game "mtt")
 const ID = /^[0-9a-f]{10}$/;
+const MID = /^m[0-9a-f]{9}$/;            // h22 phase 2: a scheduled tournament ("m" + 9 hex - never a table's 10 hex)
+// h22 phase 2: the verbs a room player's bare command resolves turn-first for (never !sit / !holdem start: those are the room's table's)
+const TURN_VERBS = new Set(["check", "call", "fold", "raise", "bet", "allin", "all-in", "pre", "cards", "hand", "hole", "sitout", "sitin", "showhand"]);
 const IDEM = /^[\w:.\-]{8,100}$/;
 const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
 
@@ -88,6 +103,7 @@ async function avatarOf(uid) {
   avCache.set(uid, { url, ts: t });
   return url;
 }
+const tcache = new Map();            // h22 phase 2: table id -> {k: "<id>:<rev>", at, table} (MTT tables' public part, 1 s)
 // Spectators: web viewers of a table page (signed-in account or a hashed address) seen polling in the last WATCH_MS,
 // minus the ones seated. Memory only; nothing about a viewer leaves this map but the count.
 const WATCH_MS = 10 * 1000;
@@ -125,7 +141,8 @@ async function history(tableId, limit) {
   return masked.map(({ r, results }) => ({ round: r.round_no, revealed: r.revealed, results, proof: `/casino/fair/${tableId}/${r.round_no}` }));
 }
 
-function register(app, { isBotToken, addUser }) {
+function register(app, { isBotToken, addUser, discordBridge }) {
+  svc.setDiscordBridge(discordBridge);     // h22 phase 2: the tournament channel posts (index.js discordBridge)
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
   // 1.99alq train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
   // when it opens; a script looping on it was unlimited database work)
@@ -209,7 +226,7 @@ function register(app, { isBotToken, addUser }) {
       me = { name: actor.name, admin: actor.admin, balance: Number(u.points_balance) || 0, high_roller: !!hr };
     }
     // 1.99ajw casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
-    for (const T of Array.from(svc.S.tables.values())) if (T.status === "open") await svc.refreshVeil(T);
+    for (const T of Array.from(svc.S.tables.values())) if (T.status === "open" && !svc.isMttTable(T)) await svc.refreshVeil(T);   // (h22 phase 2: not the MTT tables - a page each)
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
     const tables = svc.lobby().map((row) => {
       const T = svc.getTable(row.id);
@@ -219,7 +236,8 @@ function register(app, { isBotToken, addUser }) {
     });
     res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
                stream: svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
-               themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st) });   // 1.99amf h20: may this viewer pick a theme
+               themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st),   // 1.99amf h20: may this viewer pick a theme
+               mtt: await svc.MT.lobby(actor ? actor.uid : null) });                                                         // (h22 phase 2: the 🏆 block)
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -230,13 +248,22 @@ function register(app, { isBotToken, addUser }) {
     const T = svc.getTable(req.params.id);
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
-    const out = { ok: true, now: Date.now(), table: svc.publicView(T), rooms: svc.freshRooms() };
+    // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
+    const mtt = svc.isMttTable(T);
+    const ck = mtt ? `${T.id}:${T.rev}` : null;
+    let pub = ck && tcache.get(T.id);
+    if (!(pub && pub.k === ck && Date.now() - pub.at < 1000)) {
+      const table = svc.publicView(T);
+      const keys = (T.eng && T.eng.seats) || [];
+      const seats = table.seats || [];
+      // D10: each seat's public avatar (both views list seats in T.eng.seats order) - (1.99ajw casino2 rework: never on a masked seat)
+      for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = seats[i].veil ? null : await avatarOf(keys[i]);
+      pub = { k: ck, at: Date.now(), table };
+      if (ck) { tcache.set(T.id, pub); if (tcache.size > 500) tcache.delete(tcache.keys().next().value); }
+    }
+    const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms() };
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId) : null;     // only the viewer's own seat / cards
-    // D10: each seat's public avatar (both views list seats in T.eng.seats order) and how many web viewers are watching
-    const keys = (T.eng && T.eng.seats) || [];
-    const seats = out.table.seats || [];
-    // (1.99ajw casino2 rework: never on a masked seat - its label, no picture)
-    for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = seats[i].veil ? null : await avatarOf(keys[i]);
+    if (mtt && req.user && req.user.userId) svc.MT.seen(req.user.userId);                    // (h22 phase 2: start presence)
     out.watching = noteViewer(T, req);
     res.json(out);
   });
@@ -325,7 +352,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/api/casino/sng", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     await svc.boot();
-    for (const T of Array.from(svc.S.tables.values())) if (T.tourney && T.status === "open") await svc.refreshVeil(T);
+    for (const T of Array.from(svc.S.tables.values())) if (T.tourney && T.status === "open" && !svc.isMttTable(T)) await svc.refreshVeil(T);
     res.json(Object.assign({ ok: true }, await svc.TN.lobby(req.user && req.user.userId ? String(req.user.userId) : null)));
   });
   app.post("/api/casino/sng/new", addUser, async (req, res) => {
@@ -353,6 +380,142 @@ function register(app, { isBotToken, addUser }) {
       res.json(await svc.act(actor, verb, args, { game: "sng", room: null }, `web-${actor.uid}-${idem}`));
     });
   }
+
+  // ── h22 phase 2: 🏆 scheduled tournaments (casino/mtt.js) - every money move through svc.act (idempotent, under the casino's mutex) ──
+  const MT = svc.MT;
+  const mttOf = async (id) => (MID.test(String(id || "")) ? svc.S.mtts.get(String(id)) || (await MT.loadOne(String(id))) : null);
+  const uidOf = (req) => (req.user && req.user.userId ? String(req.user.userId) : null);
+  const pagesRender = (view) => async (req, res) => {
+    await svc.boot();
+    const st = await svc.loadSettings();
+    const id = req.params && req.params.id ? String(req.params.id) : null;
+    if (id) {
+      const M = await mttOf(id);
+      if (!M || !(await MT.canSee(M, uidOf(req)))) return res.redirect("/casino/holdem");
+      MT.seen(uidOf(req));
+    } else if (!(await MT.canSee({ id: "-" }, uidOf(req))) && view === "board") return res.redirect("/casino/holdem");
+    res.set({ "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" });
+    res.render("casino-mtt", { user: req.user ? req.user.username : null, signedIn: !!uidOf(req), mttId: id, view, title: view === "board" ? "Tournament leaderboard" : "Tournament",
+                               hmOn: !!st.hm_enabled });
+  };
+  app.get("/casino/holdem/mtt/:id", addUser, pagesRender("mtt"));
+  app.get("/casino/holdem/leaderboard", addUser, pagesRender("board"));
+  app.get("/api/casino/mtt", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    await svc.boot();
+    res.json(Object.assign({ ok: true, now: Date.now() }, await MT.lobby(uidOf(req))));
+  });
+  app.get("/api/casino/mtt/leaderboard", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    await svc.boot();
+    const uid = uidOf(req);
+    const out = await MT.leaderboard(req.query.period, req.query.page);
+    if (uid) out.my_veiled_points = await MT.veiledPoints(uid);
+    res.json(Object.assign({ ok: true }, out));
+  });
+  const mttGet = (fn) => async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    await svc.boot();
+    const M = await mttOf(req.params.id);
+    if (!M) return res.status(404).json({ ok: false, error: "No such tournament.", code: "E_NO_MTT" });
+    const uid = uidOf(req);
+    if (!(await MT.canSee(M, uid))) return res.status(403).json({ ok: false, error: "Tournaments aren't open yet.", code: "E_SWITCH" });
+    MT.seen(uid);
+    try { res.json(Object.assign({ ok: true }, await fn(M, uid, req))); }
+    catch (e) { console.error("[casino] mtt view:", e); res.status(500).json({ ok: false, error: "Couldn't load the tournament." }); }
+  };
+  app.get("/api/casino/mtt/:id", addUser, mttGet(async (M, uid) => ({ now: Date.now(), mtt: MT.publicView(M), me: uid ? await MT.meFor(M, uid) : null, results: await MT.results(M) })));
+  app.get("/api/casino/mtt/:id/players", addUser, mttGet(async (M, uid, req) => MT.players(M, req.query.page)));
+  app.get("/api/casino/mtt/:id/tables", addUser, mttGet(async (M) => ({ tables: MT.tablesView(M) })));
+  app.get("/api/casino/mtt/:id/me", addUser, mttGet(async (M, uid) => {
+    if (!uid) return { me: null };
+    return { me: await MT.meFor(M, uid) };
+  }));
+  for (const [seg, verb] of [["register", "join"], ["unregister", "leave"], ["remind", "remind"]]) {
+    app.post(`/api/casino/mtt/:id/${seg}`, addUser, async (req, res) => {
+      if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
+      const actor = await webActor(req);
+      if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
+      const b = req.body || {};
+      const idem = String(b.idem || "");
+      if (!MID.test(req.params.id) || !IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
+      const M = await mttOf(req.params.id);
+      if (!M) return res.status(404).json({ ok: false, error: "No such tournament.", code: "E_NO_MTT" });
+      const args = [String(M.no)].concat(seg === "register" && b.remind ? ["remind"] : seg === "remind" ? [b.on === false ? "off" : "on"] : []);
+      const out = await svc.act(actor, verb, args, { game: "mtt", room: null, telegram: seg === "remind" && b.telegram != null ? !!b.telegram : undefined }, `web-${actor.uid}-mtt-${seg}-${idem}`);
+      const code = out.ok ? 200 : /aren't open yet/.test(out.reply || "") ? 403 : /Slow down/i.test(out.reply || "") ? 429 : 409;
+      res.status(code).json(out);
+    });
+  }
+  // admin (casino.admin; JSON fetch; every action audited in casino/mtt.js)
+  const adminOk = async (req) => {
+    if (!isJsonFetch(req) && req.method === "POST") return null;
+    if (!req.user || !req.user.userId) return null;
+    const u = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    return u && require("../siteperms").can(u, "casino.admin") ? { uid: u.userId, name: u.username, userId: u.userId, username: u.username } : null;
+  };
+  app.get("/admin/casino/mtt", addUser, async (req, res) => {
+    const a = await adminOk(req);
+    if (!a) return res.redirect("/login");
+    await svc.boot();
+    res.render("admin/casino-mtt", { user: req.user ? req.user.username : null, title: "Tournaments" });
+  });
+  app.get("/api/casino/admin/mtt", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const a = await adminOk(req);
+    if (!a) return res.status(403).json({ ok: false, error: "Casino admins only." });
+    await svc.boot();
+    const st = await svc.loadSettings();
+    let onair = [];
+    try { onair = (await require("../onairqueue").list()).map((b) => ({ at: b.at || null })); } catch (e) { onair = []; }   // (the on-air warning only)
+    res.json({ ok: true, list: await MT.adminList(), gate: await MT.gateState(), settings: Object.fromEntries(Object.entries(st).filter(([k]) => k === "casino_mtt" || k.startsWith("mtt_"))),
+               rooms: svc.freshRooms(), onair, now: Date.now() });
+  });
+  app.get("/api/casino/admin/mtt/:id", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const a = await adminOk(req);
+    if (!a) return res.status(403).json({ ok: false, error: "Casino admins only." });
+    const M = await mttOf(req.params.id);
+    if (!M) return res.status(404).json({ ok: false, error: "No such tournament." });
+    res.json({ ok: true, mtt: await MT.adminView(M) });
+  });
+  app.get("/api/casino/admin/mtt/:id/log", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const a = await adminOk(req);
+    if (!a) return res.status(403).json({ ok: false, error: "Casino admins only." });
+    const M = await mttOf(req.params.id);
+    if (!M) return res.status(404).json({ ok: false, error: "No such tournament." });
+    res.json({ ok: true, log: await MT.logOf(M) });
+  });
+  const adminPost = async (req, res, op, id, body) => {
+    if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
+    const a = await adminOk(req);
+    if (!a) return res.status(req.user && req.user.userId ? 403 : 401).json({ ok: false, error: "Casino admins only." });
+    await svc.boot();
+    const M = id ? await mttOf(id) : null;
+    if (id && !M) return res.status(404).json({ ok: false, error: "No such tournament." });
+    try {
+      const r = await svc.locked(() => MT.admin(op, a, M, body));
+      res.status(r && r.ok ? 200 : (r && r.status) || 409).json(Object.assign({ ok: false }, r));
+    } catch (e) {
+      res.status(e && e.status ? e.status : 500).json({ ok: false, error: e && e.status ? e.message : "Something went wrong." });
+      if (!(e && e.status)) console.error("[casino] mtt admin:", e);
+    }
+  };
+  app.post("/api/casino/admin/mtt", addUser, (req, res) => {
+    const b = req.body || {};
+    return adminPost(req, res, b.id ? "edit" : "create", b.id && MID.test(String(b.id)) ? String(b.id) : null, b);
+  });
+  app.post("/api/casino/admin/mtt/:id/entry/:n/:op", addUser, (req, res) => {
+    const op = req.params.op === "refund" ? "refund" : req.params.op === "dq" ? "dq" : null;
+    if (!op || !MID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such action." });
+    return adminPost(req, res, op, req.params.id, Object.assign({}, req.body || {}, { n: Math.floor(Number(req.params.n)) }));
+  });
+  app.post("/api/casino/admin/mtt/:id/:op", addUser, (req, res) => {
+    const ops = ["cancel", "void", "pause", "resume", "start", "delay", "max", "stream", "overlay-retry"];
+    if (!ops.includes(req.params.op) || !MID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such action." });
+    return adminPost(req, res, req.params.op, req.params.id, req.body || {});
+  });
 
   app.post(["/api/casino/t/:id/act", "/api/casino/bj/t/:id/act"], addUser, async (req, res) => {
     if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
@@ -427,6 +590,7 @@ function register(app, { isBotToken, addUser }) {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     svc.noteRooms(b.rooms);
+    svc.MT.noteScene(b.scene);                 // h22 phase 2: Pepe's on-air pick / IRL feed holds OBS (the final table's stream line)
     const wait = Math.max(0, Math.min(8, Number(b.wait) || 0)) * 1000;
     try {
       const st = await svc.loadSettings();
@@ -446,6 +610,7 @@ function register(app, { isBotToken, addUser }) {
       // h22 review: the Sit & Go switch as it stands for everyone (off | staff | everyone; "off" while Hold'em on the site is off) - Pepe's
       // answer in a room whose casino runs on his own tables (no pointer to a web lobby that shows no Sit & Go section)
       out.sng_on = st.hm_enabled ? st.casino_sng || "off" : "off";
+      out.mtt_on = st.hm_enabled ? st.casino_mtt || "off" : "off";        // h22 phase 2: the scheduled tournaments' switch (private_mtt rides in `out`)
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {
       console.error("[casino] poll:", e);
@@ -467,15 +632,26 @@ function register(app, { isBotToken, addUser }) {
     const room = b.room ? String(b.room).slice(0, 64) : null;
     if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;
-    if (!table && room) { await svc.boot(); const T = svc.tableForRoom(room); table = T ? T.id : null; }
-    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : null;     // (h22: "sng" = !sng)
+    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
+    // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's
+    // table if they sit there, then the only tournament table they sit at (svc.tourneyTableFor); seated at more than one: use the web
+    let mttBare = false;
+    if (!table && room && (game === "holdem" || game === null) && TURN_VERBS.has(verb)) {
+      await svc.boot();
+      const f = svc.tourneyTableFor(u.userId, room, { turnOnly: game === null });     // (a game-less !bet / !stand: only where it's their turn)
+      if (f.err) return res.json({ ok: false, reply: f.err, pm: true });
+      if (f.T) { table = f.T.id; mttBare = svc.isMttTable(f.T); }
+    }
+    if (!table && room && game !== "mtt") { await svc.boot(); const T = svc.tableForRoom(room); table = T ? T.id : null; }
     const actor = { uid: u.userId, name: String(b.name || u.displayname || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40),
                     username: u.username, camfrog: b.camfrog ? String(b.camfrog).slice(0, 40) : u.camfrogUsername || null, via: "room",
                     iph: null, admin: !!b.admin, room };
     // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
     const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : 24;
     const args = Array.isArray(b.args) ? b.args.slice(0, game === "sng" ? 5 : 2).map((x) => String(x).slice(0, argMax)) : [];   // (h22: !sng new <seats> <buy-in> [turbo] [at N])
-    const out = await svc.act(actor, verb, args, { room, table, game }, `cf-${idem}`);
+    const out = await svc.act(actor, verb, args, { room, table, game: mttBare ? "holdem" : game }, `cf-${idem}`);
+    // (h22 phase 2) a bare verb at an MTT table: quiet on success (the next PM is the feedback), an error comes back as a PM
+    if (mttBare) { if (out.ok) out.quiet = true; else out.pm = true; }
     res.json(out);
   });
 }

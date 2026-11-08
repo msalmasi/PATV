@@ -289,7 +289,7 @@ function install(core) {
                                    x.tourney.size === p.size && x.tourney.buyin === p.buyin && !!x.tourney.turbo === !!p.turbo &&
                                    (x.tourney.start_at || null) === (p.at || null) && clock() - x.tourney.created < SNG.DUP_MS);
     if (dup) return R(true, `🏁 you opened this Sit & Go a moment ago — you're registered (#${short(dup)}): ${link(dup)}`, { table: dup.id });
-    const tables = Array.from(S.tables.values()).filter((x) => x.status === "open");
+    const tables = Array.from(S.tables.values()).filter((x) => x.status === "open" && !(x.tourney && x.tourney.kind === "mtt"));   // (h22 phase 2: MTT tables don't count)
     if (room && tables.some((x) => roomsOf(x).includes(room))) return R(false, "a table is already open here — finish it first, or open the sit & go on the web.");
     if (st.max_tables > 0 && tables.length >= st.max_tables) return R(false, `the casino has ${tables.length} tables open already.`);
     if (openFor(actor.uid) >= SNG.MAX_OPEN_PER) return R(false, `you're in ${SNG.MAX_OPEN_PER} sit & gos that haven't started yet — that's the most at once.`);

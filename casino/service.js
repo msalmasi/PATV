@@ -15,6 +15,10 @@
 //   * h22 (1.99alz): 🏁 Sit & Gos (casino/tourney.js, TN) are Hold'em tables with a `tourney` block, on the same core: run() sends
 //     game "sng" there, their settings live with the others (casino_sng off | staff | everyone + sng_*), their hands earn no casino
 //     rewards (hmRewards), they're kept out of the cash lobby / Pepe's open-table list, and a finished one lingers LINGER_MS for its results.
+//   * h22 phase 2 (1.99??): SCHEDULED multi-table tournaments (casino/mtt.js, MT) - their tables are Hold'em tables with a tourney block of
+//     kind "mtt" (the ROUTE below sends them there): run() sends game "mtt" there, casino_mtt off | staff | everyone + mtt_* live with the other
+//     settings, the MTT tick runs in tickOnce, their tables refuse push / advertise / a host's stream, aren't counted by max_tables, and the
+//     stream slot gives the final table its place (streamTake: a tournament table on the slot is never pre-empted).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("../dbUtils");
@@ -26,6 +30,7 @@ const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achieve
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
 const themes = require("./themes");       // 1.99amf h20: the card tables' themes (presentation only; casino_themes switch)
+const MTCFG = require("./mtt");           // h22 phase 2 (1.99??): the scheduled tournaments' settings (pure); the service is MT below
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -51,7 +56,7 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto", casino_sng: "off",
+  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto", casino_sng: "off", casino_mtt: "off",
               bj_min_bet: C.MIN_BET, bj_max_bet: C.MAX_BET, bj_hr_min_bet: C.HR_MIN_BET, bj_hr_max_bet: C.HR_MAX_BET },
   stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
@@ -104,6 +109,7 @@ function ensure() {
     await runQuery(`CREATE TABLE IF NOT EXISTS casino_settings (key TEXT PRIMARY KEY, value TEXT, updated INTEGER, actor TEXT)`);
     const m = await getQuery("SELECT MAX(seq) AS s FROM casino_events");
     S.lastSeq = (m[0] && m[0].s) || 0;
+    await MT.ensure();                       // h22 phase 2: casino_mtt + its entries / points / watch / reminders / log tables
   })().catch((e) => { readyP = null; throw e; });
   return readyP;
 }
@@ -161,6 +167,8 @@ async function loadSettings(force) {
   for (const [k, d] of Object.entries(HM_QOL_LISTS)) S.settings[k] = validPresetList(kv[k]) ? String(kv[k]) : d;
   // h22: the Sit & Go switch (casino_sng: off | staff | everyone, default off) + its fee / buy-ins / payouts / levels (a bad row = its default)
   Object.assign(S.settings, SNGCFG.readSettings(kv));
+  // h22 phase 2: casino_mtt (off | staff | everyone, default off) + mtt_* (a bad row = its default)
+  Object.assign(S.settings, MTCFG.readMttSettings(kv));
   S.settingsAt = clock();
   return S.settings;
 }
@@ -169,8 +177,10 @@ const HM_QOL_NUMBERS = { hm_sitout_mins: 10, hm_timebank_secs: 30, hm_timebank_m
 const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3,4" };
 const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
 async function setSetting(key, value, actor) {
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
-  const sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)
+  if (/h2b/i.test(String(key))) throw new Error("the H2b date is a code constant, not a setting");     // (h22 phase 2: casino/mttbudget.js H2B_AT)
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS, MTCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
+  let sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)
+  if (MTCFG.SETTING_KEYS.includes(key)) { sngValue = MTCFG.checkMttSetting(key, value); await MT.checkAsync(key, sngValue); }   // h22 phase 2
   const qolNumber = Object.hasOwn(HM_QOL_NUMBERS, key), qolList = Object.hasOwn(HM_QOL_LISTS, key);
   if (qolNumber && (!Number.isInteger(Number(value)) || Number(value) < (key === "hm_sitout_mins" ? 1 : 0) || Number(value) > 3600)) throw new Error("invalid Hold'em timer");
   if (qolList && !validPresetList(value)) throw new Error("use a short comma-separated list of positive numbers");
@@ -202,8 +212,13 @@ async function save(T) {
                   ON CONFLICT(id) DO UPDATE SET status = excluded.status, room = excluded.room, state = excluded.state,
                     rev = excluded.rev, updated = excluded.updated`,
                  [T.id, T.game, T.status, T.room, T.host.uid, JSON.stringify(T), T.rev, T.created, T.updated]);
-  wake();
+  if (!mttQuiet(T)) wake();
 }
+// h22 phase 2: a scheduled tournament's table plays in no room - its events reach nobody but its own log (the only reader of casino_events
+// is Pepe's poll, rooms only), and Pepe's long-poll is woken for it only when it is on the stream slot or a room player sits there
+const isMttTable = (T) => !!(T && T.tourney && T.tourney.kind === "mtt");
+const mttQuiet = (T, extra) => isMttTable(T) && !roomsOf(T).length && !(extra && Array.isArray(extra.rooms) && extra.rooms.length) &&
+                               S.stream.table !== T.id && !T.eng.seats.some((k) => (T.players[k] || {}).via === "room");
 
 // ── events (the cursor Pepe long-polls; public only) ──
 async function emit(T, kind, text, extra) {
@@ -212,14 +227,23 @@ async function emit(T, kind, text, extra) {
   const rs = roomsOf(T);
   // 1.99ajw casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
   const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
-  const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
-                           [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
-  if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
+  const quiet = isMttTable(T) && !rs.length && !(Array.isArray(data.rooms) && data.rooms.length);
+  if (!quiet) {
+    const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
+                             [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
+    if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
+  }
   if (text) {
     // 1.99ajw casino2 rework (casino/veil.js): the table's log (the website's) is written with every label in force
     T.log.push({ ts, text: V.maskText(T, String(text), { fresh: true }).slice(0, 240) });   // (verify: fresh - the labels in force)
     if (T.log.length > C.LOG_KEEP) T.log.splice(0, T.log.length - C.LOG_KEEP);
   }
+  if (!mttQuiet(T, extra)) wake();
+}
+/** h22 phase 2: an event that belongs to no table (a scheduled tournament's room line: table_id = the tournament's id, kind "mtt") */
+async function emitRaw(tableId, room, kind, data) {
+  const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)", [tableId, room || null, clock(), kind, JSON.stringify(data || {})]);
+  if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
   wake();
 }
 function wake() {
@@ -619,6 +643,7 @@ async function tickOnce() {
     });
   }
   await locked(() => streamTick()).catch((e) => console.error("[casino] stream:", e));
+  if (MT.due()) await locked(() => MT.tick()).catch((e) => console.error("[casino] mtt:", e));     // h22 phase 2: the scheduled tournaments' clock
   // housekeeping: old events
   if (Math.random() < 0.002) runQuery("DELETE FROM casino_events WHERE ts < ?", [clock() - C.EVENT_KEEP_MS]).catch(() => {});
 }
@@ -669,6 +694,8 @@ async function boot({ tick = true } = {}) {
     await require("./notices").stamp(clock()).catch((e) => console.error("[casino] notices:", e && e.message ? e.message : e));
     await loadSettings(true);
     await streamLoad();
+    // h22 phase 2: the scheduled tournaments are loaded (their clocks moved by the downtime) BEFORE any table recovers a hand - nothing acts yet
+    await MT.loadAll();
     const rows = await getQuery("SELECT state FROM casino_tables WHERE status = 'open'");
     for (const r of rows) {
       let T;
@@ -677,6 +704,7 @@ async function boot({ tick = true } = {}) {
       await locked(() => recover(T)).catch((e) => console.error(`[casino] recover ${T.id}:`, e));
     }
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
+    await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
     if (tick && !S.tick) {
       let busy = false;
       S.tick = setInterval(() => {
@@ -694,6 +722,7 @@ function stop() {
   S.tick = null;
   S.booted = null;
   S.tables.clear();
+  if (S.mtts) S.mtts.clear();
   S.stream = { table: null, by: null, ts: 0, queue: [] };
   wake();
 }
@@ -708,7 +737,7 @@ async function cmdStart(actor, room, game, blinds, words) {
   if (game === "holdem" ? !st.hm_enabled : !st.bj_enabled) {
     return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
   }
-  const open = Array.from(S.tables.values()).filter((t) => t.status === "open");
+  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && !isMttTable(t));   // (h22 phase 2: MTT tables don't count)
   const here = room ? open.find((t) => roomsOf(t).includes(room)) : null;      // one table per room (either game; 1.99ox: any attached room)
   if (here) {
     // (h22 review: a sit & go here isn't "!sit to join" - a buy-in amount is no entry there)
@@ -956,6 +985,11 @@ async function run(actor, verb, args, opts) {
     if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
     return TN.run(actor, verb, Array.isArray(args) ? args : [], opts);
   }
+  // h22 phase 2: !mtt - the scheduled tournaments (casino/mtt.js). At an MTT table the Hold'em verbs below apply (holdem.js asks MT first).
+  if (opts.game === "mtt") {
+    if (actor.uid && !rateOk(actor.uid)) return R(false, "Slow down a little.");
+    return MT.run(actor, verb, Array.isArray(args) ? args : [], opts);
+  }
   const alias = { open: "start", new: "start", go: "deal", wager: "bet", auto: "autobet", rebet: "autobet", close: "end", stop: "end",
                   quit: "leave", insure: "insurance", stay: "stand", dd: "double", table: "status", info: "status", show: "status",
                   rules: "help", how: "help", "": "status" };
@@ -965,7 +999,7 @@ async function run(actor, verb, args, opts) {
   // a Hold'em table here (or "!holdem ..."): its own verbs - the shared ones (!bet !stand !leave) mean the Hold'em ones
   if ((live && live.game === "holdem") || (!live && game === "holdem")) {
     if (live && game === "bj") return R(false, "a Hold'em table is running here — !holdem status.");
-    if (["help", "rules", "how"].includes(verb)) return R(true, live && live.tourney ? TN.HELP : HM.HELP);    // (h22 review: a sit & go's own help)
+    if (["help", "rules", "how"].includes(verb)) return R(true, live && live.tourney ? (isMttTable(live) ? MT.HELP : TN.HELP) : HM.HELP);    // (h22 review: a sit & go's own help)
     if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
     if (["start", "open", "new", "sit", "buyin", "buy", "join"].includes(verb)) {
       const u = await userRow(actor.uid);
@@ -1017,17 +1051,23 @@ async function act(actor, verb, args, opts, key) {
   key = String(key).slice(0, 120);
   // 1.99ajw casino2 rework (casino/veil.js): whether the person acting is veiled now - their seat is masked before a line names them
   if (actor && actor.uid && actor.veil === undefined) actor.veil = await V.kindForActor(actor);
+  if (actor && actor.via === "room" && actor.uid && S.mttSeenRoom) S.mttSeenRoom.set(String(actor.uid), clock());   // (h22 phase 2: start presence)
   return locked(async () => {
     const prev = await getQuery("SELECT response FROM casino_actions WHERE key = ?", [key]);
     if (prev.length) return Object.assign(JSON.parse(prev[0].response), { replayed: true });
     let out;
     try {
-      out = await run(actor, verb, Array.isArray(args) ? args : [], opts);
+      // (h22 phase 2) the caller's key reaches run(): an MTT money op writes its casino_actions row INSIDE its own transaction
+      out = await run(actor, verb, Array.isArray(args) ? args : [], Object.assign({}, opts || {}, { act_key: key }));
     } catch (e) {
       console.error("[casino] act:", e);
       // (h22 review) a sit & go's entry commits before its lines and its start: after a failure there it may have gone through
-      const tn = opts && (opts.game === "sng" || (opts.table && S.tables.get(opts.table) && S.tables.get(opts.table).tourney));
-      out = R(false, tn ? "something went wrong — !sng shows whether you're registered." : "something went wrong — nothing was charged.");
+      const tt = opts && opts.table ? S.tables.get(opts.table) : null;
+      const mt = opts && (opts.game === "mtt" || isMttTable(tt));
+      const tn = opts && (opts.game === "sng" || (tt && tt.tourney));
+      out = R(false, mt ? "something went wrong — !mtt me shows whether you're in." : tn ? "something went wrong — !sng shows whether you're registered." : "something went wrong — nothing was charged.");
+      const prev2 = await getQuery("SELECT response FROM casino_actions WHERE key = ?", [key]);
+      if (prev2.length) return Object.assign(JSON.parse(prev2[0].response), { replayed: true });     // (an MTT op committed its answer)
     }
     const tid = out.table || (opts && opts.table) || null;
     // 1.99ajw casino2 rework (casino/veil.js): a reply that names others (!bj status, "waiting on X") names a masked player by their
@@ -1067,6 +1107,7 @@ async function push(tableId, room, actor, mode) {
   return locked(async () => {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
+    if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can move it.");
     const cur = roomsOf(T);
     if (room && mode !== "remove") {
@@ -1253,6 +1294,7 @@ async function stream(tableId, on, actor, override) {
   return locked(async () => {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
+    if (isMttTable(T) && !(actor.admin && override)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2: only an admin's override)
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can put it on the stream.");
     if (!on) {
       const had = S.stream.table === T.id || S.stream.queue.includes(T.id);
@@ -1317,6 +1359,7 @@ function findRoom(q) {
 /** on: advertise the table in `room` (posts the line now); off: stop. Host or admin. */
 async function advertiseIn(T, room, actor, on) {
   if (!T || T.status !== "open") return R(false, "That table has closed.");
+  if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)
   if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can advertise it.");
   const r = findRoom(room) || (advertsOf(T).includes(room) ? { id: room, name: roomName(room) } : null);
   if (!r) return R(false, "Pepe isn't in that room with the casino on right now.");
@@ -1402,7 +1445,7 @@ async function poll(after, waitMs) {
   await boot();
   // a client with no cursor yet (or one from another database - a staging refresh) starts from now: no replay
   if (Number(after) < 0 || Number(after) > S.lastSeq) {
-    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, await roomTables());
+    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [] });
   }
   after = Math.max(0, Math.trunc(Number(after) || 0));
   const read = () => getQuery("SELECT seq, table_id, room, ts, kind, data FROM casino_events WHERE seq > ? AND room IS NOT NULL ORDER BY seq LIMIT 200", [after]);
@@ -1417,7 +1460,7 @@ async function poll(after, waitMs) {
   }
   const events = rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
   return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, S.lastSeq), events, stream: S.stream.table },
-                       await roomTables());
+                       await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []) });
 }
 
 async function fairRecord(tableId, round) {
@@ -1521,7 +1564,6 @@ const TN = SNGCFG.install({ S, clock, save, emit, userRow, R, fmt, link, runQuer
 // hand's big blind the big blind again. Now: the big blind always moves forward one seat, a small blind on last hand's small blind is dead
 // (0 for that hand; the level's small blind is shown), heads-up never the big blind twice in a row. The record is T.tourney.last (dealt).
 const SEATP = require("./mttseat");
-const HMENG = require("./hmengine");
 const sngRoute = Object.assign(Object.create(TN), {
   beforeHand(T) {
     TN.beforeHand(T);
@@ -1549,6 +1591,77 @@ const sngRoute = Object.assign(Object.create(TN), {
   },
 });
 KINDS.sng = sngRoute;
+// ── h22 phase 2 (1.99??): 🏆 scheduled multi-table tournaments (casino/mtt.js) on Hold'em tables of tourney kind "mtt" ──
+const core2 = { discordBridge: null };
+const MT = MTCFG.install({ S, clock, save, emitRaw, userRow, R, fmt, siteBase, runQuery, getQuery, streamGone, loadSettings, HM, wake,
+                           freshRooms: () => freshRooms(), streamTake: (T, mode, by, M) => streamTake(T, mode, by, M),
+                           get discordBridge() { return core2.discordBridge; } });
+KINDS.mtt = { beforeDeal: MT.beforeDeal, dealt: MT.dealt, noDealNext: MT.noDealNext, beforeHand: () => null, afterHand: MT.handEnd, tick: MT.tableTick,
+              due: () => false, recover: MT.recoverTable, tableVerb: MT.tableVerb, view: MT.view, meView: MT.meView, outAtDeal: MT.outAtDeal, outNow: MT.outNow };
+/** routes.js: the Discord bridge (index.js discordBridge) for the tournament channel posts */
+const setDiscordBridge = (fn) => { core2.discordBridge = typeof fn === "function" ? fn : null; };
+
+/**
+ * h22 phase 2: put a tournament's final table on Pepe's stream (internal, not locked: called inside the MTT's locked job after a commit).
+ * mode "take" | "queue" | "off". A tournament table on the slot (a sit & go's or another MTT's) is never pre-empted: T goes into the queue
+ * after the last tournament table already queued. A cash table on the slot is pre-empted by "take": it goes to the head of the queue with
+ * its own line. -> {line} for the tournament's rooms (null = nothing to say)
+ */
+async function streamTake(T, mode, by, M) {
+  if (!T || T.status !== "open" || mode === "off") return null;
+  const no = M ? M.no : "?";
+  const held = MT.sceneHeld();
+  const onNow = held ? `📺 The final table of #${no} goes on Pepe's stream as soon as the current show ends.` : `📺 The final table of #${no} is on Pepe's stream now.`;
+  if (S.stream.table === T.id) return { line: null };
+  const cur = S.stream.table && streamable(S.stream.table) ? S.tables.get(S.stream.table) : null;
+  const take = async () => {
+    S.stream.queue = S.stream.queue.filter((x) => x !== T.id);
+    Object.assign(S.stream, { table: T.id, by: by || `tournament #${no}`, ts: clock() });
+    T.last_activity = Math.max(T.last_activity || 0, clock());
+    await emit(T, "stream", "📺 This Hold'em table is on Pepe's stream now.", { on: true });
+  };
+  if (!cur) { await take(); await streamSave(); return { line: onNow }; }
+  if (cur.tourney) {
+    if (!S.stream.queue.includes(T.id)) {
+      let at = 0;
+      S.stream.queue.forEach((id, i) => { const Q = S.tables.get(id); if (Q && Q.tourney) at = i + 1; });
+      S.stream.queue.splice(at, 0, T.id);
+    }
+    await streamSave();
+    return { line: `📺 The final table of #${no} is next on Pepe's stream, after the current tournament table.` };
+  }
+  if (mode === "take") {
+    S.stream.queue = [cur.id].concat(S.stream.queue.filter((x) => x !== T.id && x !== cur.id));
+    await emit(cur, "stream", `📺 Pepe's stream moved to the final table of tournament #${no} - this table is next in line.`, { on: false });
+    await take();
+    await streamSave();
+    return { line: onNow };
+  }
+  if (!S.stream.queue.includes(T.id)) S.stream.queue.push(T.id);
+  await streamSave();
+  return { line: `📺 The final table of #${no} is in line for Pepe's stream.` };
+}
+
+/**
+ * h22 phase 2: the table a room player's bare Hold'em verb (!call, !fold, ...) is for - TURN FIRST: (1) the open table where it is their turn
+ * right now; (2) the room's table if they sit there; (3) the only tournament table they sit at; else, seated at more than one: ask them to
+ * use the web. -> {T} | {T: null} (nothing better than the room's table: today's behaviour) | {err}
+ */
+function tourneyTableFor(uid, room, opts) {
+  uid = String(uid);
+  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && t.game === "holdem");
+  const turn = open.filter((t) => t.eng.hand_active && HMENG.currentActor(t.eng) === uid);
+  if (turn.length === 1) return { T: turn[0] };
+  if (turn.length > 1) return { err: "You're at more than one table - use the web, or !mtt me." };
+  if (opts && opts.turnOnly) return { T: null };
+  const here = room ? tableForRoom(room) : null;
+  if (here && here.game === "holdem" && here.eng.seats.includes(uid)) return { T: here };
+  const tn = open.filter((t) => t.tourney && t.eng.seats.includes(uid));
+  if (tn.length === 1) return { T: tn[0] };
+  if (tn.length > 1) return { err: "You're at more than one table - use the web, or !mtt me." };
+  return { T: here || null };
+}
+const HMENG = require("./hmengine");
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
@@ -1559,6 +1672,7 @@ function limits() {
 
 module.exports = {
   C, S, HM, TN, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  MT, isMttTable, tourneyTableFor, streamTake, setDiscordBridge, tourneyKind,    // h22 phase 2: the scheduled tournaments
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
   refreshVeil, myHands,  // the routes re-read a table's veils before they answer

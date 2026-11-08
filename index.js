@@ -1427,7 +1427,7 @@ require("./cfnames").register(app, { addUser });       // 1.99ajn padppl: the Ca
 require("./netban").register(app, { addUser });        // 1.99ajn padppl: 🌐⛔ network bans - admin routes (/api/admin/netbans, /api/admin/nets/:userId)
 require("./webpush").register(app, { addUser });   // 1.99acd: 🔔 Web Push (QW-1) - browser notifications for DMs + mentions, /admin/push (OFF by default; /sw.js is mounted at the top)
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
-require("./casino/routes").register(app, { isBotToken, addUser });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md)
+require("./casino/routes").register(app, { isBotToken, addUser, discordBridge });   // 1.99lj: the casino backend - blackjack owned by the site (docs/casino-backend.md); h22 phase 2: + discordBridge (tournament posts)
 require("./userstats").register(app, { isBotToken });
 require("./streaks").register(app, { isBotToken, addUser });   // 1.99xi: 🔥 daily activity streaks (Pepe's !streak, /api/streaks/me, the grace rule)
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation

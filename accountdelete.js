@@ -157,6 +157,7 @@ const HOLD = {
   "loan": ["A loan (as lender or borrower) - repay it or wait until it's settled", "/wallet"],
   "loan request": ["An open loan request - cancel it", "/wallet"],
   "escrow hold": ["PAT held in escrow for a game, bet or challenge - finish or cancel it", "/wallet"],
+  "tournament entry": ["You're in a poker tournament (or its guaranteed prize is still on its way) - finish or unregister first", "/casino/holdem#mtt"],   // h22 phase 2
   "escrow payout": ["An escrow payout still on its way to you - wait for it", "/wallet"],
   "gang member": ["You're in a gang - leave it first (!gang leave in chat)", "/gangs"],
   "market position": ["A position in an open market - sell it or wait for the result", "/markets"],
@@ -507,6 +508,7 @@ const DELETE_ROWS = [
   ["voice_owned", "user_id", "uid"], ["user_badges", "userId", "uid"], ["achievement_feed", "userId", "uid"], ["ach_marks", "userId", "uid"],
   ["activity_days", "userId", "uid"],
   ["casino_ach_counts", "userId", "uid"], ["casino_ach_base", "userId", "uid"], ["casino_notice_seen", "userId", "uid"], ["user_roles", "userId", "uid"], ["pad_members", "user_id", "uid"],
+  ["casino_mtt_watch", "user_id", "uid"], ["casino_mtt_reminders", "user_id", "uid"], ["casino_mtt_points", "user_id", "uid"],   // h22 phase 2 (entries are kept: ledger evidence, no names)
   ["pad_user_flairs", "user_id", "uid"], ["feed_room_members", "user_id", "uid"], ["launchpad_visits", "user_id", "uid"], ["premium_plus_waitlist", "user_id", "uid"],
   ["camfrog_userstats", "login", "login"], ["golive_log", "user_id", "uid"],
   ["help_misses", "user_id", "uid"], ["age_attest", "user_id", "uid"], ["plex_watch_stats", "user_id", "uid"],

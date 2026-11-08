@@ -452,7 +452,7 @@ async function maskRounds(tableId, rows) {
   });
 }
 
-module.exports = { SOMEONE, NAMED_GAP_MS, LEAVE_GRACE_MS, REFRESH_MS, MAX_PEOPLE, kindOf, kindForActor, keysOf, enter, apply, refresh, state, masked, label, seatOf,
+module.exports = { SOMEONE, NAMED_GAP_MS, LEAVE_GRACE_MS, REFRESH_MS, MAX_PEOPLE, kindOf, kindForActor, kindForUid, keysOf, enter, apply, refresh, state, masked, label, seatOf,   // (h22 phase 2: + kindForUid)
   nameOf, hostName, camName, maskText, maskWith, maskLog, maskRound, maskRounds, _hooks: hooks,
   _setClock: (f) => { clock = f || (() => { try { return require("./service").S.hooks.now(); } catch (e) { return Date.now(); } }); },
   _reset: () => { fresh.clear(); rowCache.clear(); kindCache.clear(); savedCache.clear(); } };

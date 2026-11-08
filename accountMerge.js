@@ -304,6 +304,13 @@ const RULES = {
   // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)
   "casino_ach_base.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MIN" } }),
   "casino_rep_queue.userId": { keep: "the casino's gang-rep journal (keyed by the win, delivered to Pepe by Camfrog name)" },
+  // h22 phase 2 (1.99??): scheduled poker tournaments (casino/mtt.js) - entries follow the account (moveUserRows refuses while one is still
+  // in play, E_TOURNEY_ACTIVE), the best finish per tournament is kept, a watch / reminder follows; who scheduled one is the admin audit's
+  "casino_mtt_entries.user_id": M(),
+  "casino_mtt_points.user_id": M({ key: ["tid"], merge: { points: "MAX", place: "MIN", cashed: "MAX", won: "MAX" } }),
+  "casino_mtt_watch.user_id": M({ key: ["tid"] }),
+  "casino_mtt_reminders.user_id": M(),
+  "casino_mtt.created_by_user_id": { keep: "who scheduled the tournament (admin audit)" },
   // G1: gangs.js - a member's PATV account follows the merge (the member is keyed by the Camfrog login, so no collision); the
   // rep journal is keyed by the win
   "gang_members.userId": M(), "gang_rep_events.userId": { keep: "the gang-rep journal (keyed by the win)" },
@@ -753,6 +760,12 @@ async function mergeWelcome(fromId, toId, out) {
 async function moveUserRows(fromId, toId, opts = {}) {
   const out = { moved: {}, folded: {}, left: {}, unclassified: [], recount: { posts: [], comments: [] } };
   if (!fromId || !toId || fromId === toId) return out;
+  // h22 phase 2 (1.99??): never while either account has a poker tournament entry in play or a guaranteed part still owed - its uid is in
+  // the tournament's live seat / transit state (re-keying live engine state is refused, not attempted). Before any write.
+  if (await tableExists("casino_mtt_entries")) {
+    const busy = await getQuery("SELECT 1 FROM casino_mtt_entries WHERE user_id IN (?, ?) AND (state IN ('held','playing') OR overlay_due > 0) LIMIT 1", [fromId, toId]);
+    if (busy.length) throw Object.assign(new Error("has a poker tournament in progress - merge after it ends"), { code: "E_TOURNEY_ACTIVE", status: 409 });
+  }
   const names = { from: opts.fromUsername || null, to: opts.toUsername || null };
   if (!names.from || !names.to) {
     for (const r of await getQuery("SELECT userId, username FROM users WHERE userId IN (?, ?)", [fromId, toId])) {

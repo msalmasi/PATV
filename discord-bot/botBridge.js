@@ -260,6 +260,38 @@ async function handleStageGoLive(client, body, res) {
   return send(res, 200, { ok: true, id: posted.id });
 }
 
+// h22 phase 2 (1.99??): a scheduled poker tournament's channel post (casino/mtt.js discord(): reg_open | starting | final | winner) - the
+// stage pattern: never on staging, a channel in the PATV guild, the canonical tournament link only, escaped text, and only the configured
+// role pinged (on 'starting' alone; never @everyone / @here). One post per (tournament, kind) is the site's (its casino_mtt_log key).
+const TOURNEY_KINDS = ['reg_open', 'starting', 'final', 'winner'];
+const fmtPat = (n) => Math.trunc(Number(n) || 0).toLocaleString('en-US');
+async function handleCasinoTourney(client, body, res) {
+  if (process.env.STAGING) return send(res, 409, { error: 'staging_disabled' });
+  if (!body || !stageId(body.channel_id) || (body.role_id != null && !stageId(body.role_id))) return send(res, 400, { error: 'bad_channel_or_role' });
+  if (!stageUrl(body.url) || !/^\/casino\/holdem\/mtt\/m[0-9a-f]{9}$/.test(new URL(body.url).pathname)) return send(res, 400, { error: 'bad_url' });
+  const title = stageText(body.title, 60), kind = body.kind;
+  if (!title || !TOURNEY_KINDS.includes(kind) || !Number.isInteger(body.no) || body.no < 1) return send(res, 400, { error: 'bad_post' });
+  const channel = await client.channels.fetch(body.channel_id);
+  if (!channel || !channel.guild || channel.guild.id !== PATV_GUILD_ID) return send(res, 403, { error: 'foreign_guild' });
+  if (!channel.isTextBased() || typeof channel.send !== 'function') return send(res, 400, { error: 'not_text_channel' });
+  let roles = [];
+  if (kind === 'starting' && body.role_id) {
+    const available = [...(await channel.guild.roles.fetch()).values()];
+    const r = available.find((x) => x.id === body.role_id && x.id !== PATV_GUILD_ID);
+    if (r) roles = [r.id];
+  }
+  const head = { reg_open: '🏆 Registration is open', starting: '🏆 Starting soon', final: '🏆 Final table', winner: '🏆 Winner' }[kind];
+  const buyin = Number(body.buyin) > 0 ? `${fmtPat(body.buyin)} + ${fmtPat(body.fee)} PAT` : 'Freeroll';
+  const lines = [`Buy-in: ${buyin}`];
+  if (Number(body.guarantee) > 0) lines.push(`🛡 ${fmtPat(body.guarantee)} PAT guaranteed`);
+  if (Number(body.start_at) > 0) lines.push(`Starts <t:${Math.floor(Number(body.start_at) / 1000)}:f>`);
+  if (kind === 'winner' && body.winner) lines.push(`🏆 ${stageMd(stageText(body.winner, 40))} wins!`);
+  const embed = { title: `${head}: #${body.no} ${stageMd(title)}`, description: lines.join('\n'), url: body.url, footer: { text: 'PATV poker tournaments' } };
+  const posted = await channel.send({ content: roles.map((id) => '<@&' + id + '>').join(' '), embeds: [embed],
+    allowedMentions: { parse: [], users: [], roles, repliedUser: false } });
+  return send(res, 200, { ok: true, id: posted.id });
+}
+
 function start(client) {
   // BOT_BRIDGE_*; the old POKER_BRIDGE_* names still work.
   const env = (k) => process.env[`BOT_BRIDGE_${k}`] || process.env[`POKER_BRIDGE_${k}`];
@@ -284,6 +316,7 @@ function start(client) {
     const path = (req.url || '').split('?')[0];
     try {
       if (path === '/stage/golive') return await handleStageGoLive(client, body, res);
+      if (path === '/casino/tourney') return await handleCasinoTourney(client, body, res);      // h22 phase 2
       if (path === '/poker/chips') return await handleChips(client, body, res);
       if (path === '/poker/newgame') return await handleNewGame(client, body, res);
       if (path === '/store/purchase') return await handleStorePurchase(client, body, res);
