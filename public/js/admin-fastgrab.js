@@ -23,9 +23,13 @@
     ['ceiling', 'Ceiling (every room)', ['grabs / min, all rooms'], "Pepe's fast grabs a minute across every room together - always every room's."]
   ];
   var FIELDS = ROWS.map(function (r) { return r[0]; });
+  var LABELS = {}; ROWS.forEach(function (r) { LABELS[r[0]] = r[1]; });
+  var WORD = { on: 'fast grab', contest: 'contest', fair: 'fair', claim: 'claim', web: 'web clips', chatty: 'chatty' };
 
+  function has(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
   function isToggle(f) { return TOGGLES.indexOf(f) >= 0; }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function copy(o) { var out = {}; for (var k in (o || {})) if (has(o, k)) out[k] = o[k]; return out; }
   /** "global" | "all" | "room:<id>" -> {scope, room} */
   function whereOf(sel, all) {
     var s = String(sel || 'global');
@@ -38,8 +42,7 @@
     if (!fg) return {};
     var r = where.scope === 'room' ? roomOf(fg, where.room) : null;
     var v = r ? r.values : fg.global;
-    var out = {};
-    for (var k in (v || {})) out[k] = v[k];
+    var out = copy(v);
     if (fg.global && fg.global.ceiling != null) out.ceiling = fg.global.ceiling;
     return out;
   }
@@ -50,27 +53,61 @@
     var r = roomOf(fg, where.room);
     return (r && r.own && r.own[f]) || 'global';
   }
-  /** contest on = fast grab on + fair off + claim swallow; off = fair on (the command's bundle, mirrored so the card shows it). */
-  function bundle(edits, f, v) {
-    edits[f] = v;
-    if (f === 'contest' && v === true) { edits.on = true; edits.fair = false; edits.claim = 'swallow'; }
-    if (f === 'contest' && v === false) edits.fair = true;
-    return edits;
-  }
-  /** The change to send: only the fields whose edit differs from Pepe's value, + the follows (a room's own value dropped). */
-  function change(cur, edits, follows) {
-    var set = {}, n = 0;
-    FIELDS.forEach(function (f) {
-      if (follows && follows[f]) { set[f] = 'follow'; n++; return; }
-      if (!edits || !Object.prototype.hasOwnProperty.call(edits, f)) return;
-      if (!same(edits[f], cur[f])) { set[f] = edits[f]; n++; }
-    });
-    return n ? set : null;
+  /** The rooms with a value of their own for f - the global doesn't change them, every room (-all) clears them (never the
+      ceiling: it is every room's). */
+  function overriders(fg, f) {
+    if (!fg || f === 'ceiling') return [];
+    return (fg.rooms || []).filter(function (r) { return !!(r.own && r.own[f]); });
   }
   function fmt(f, v) {
     if (v == null) return '–';
     if (isToggle(f)) return v ? 'on' : 'off';
     return Array.isArray(v) ? v.join(' / ') : String(v);
+  }
+  /** "Players Lounge 15, Houseplants 6 / 10 / 15 (partly) +2 more" */
+  function ownList(fg, f) {
+    var rs = overriders(fg, f);
+    var t = rs.slice(0, 3).map(function (r) { return r.name + ' ' + fmt(f, r.values && r.values[f]) + (r.own[f] === 'mixed' ? ' (partly)' : ''); }).join(', ');
+    return t + (rs.length > 3 ? ' +' + (rs.length - 3) + ' more' : '');
+  }
+  /** What !mic fastgrab contest on|off also sets: on = fast grab on + fair off + claim swallow; off = fair on. Pepe applies
+      contest FIRST, then the change's own on / fair / claim - so an admin's on / fair / claim that differs from this is sent
+      even when it equals his value now (grabcard review). */
+  function implied(contest) {
+    return contest === true ? { on: true, fair: false, claim: 'swallow' } : contest === false ? { fair: true } : {};
+  }
+  /** What the card shows for f: the admin's edit, else what a contest edit's bundle sets, else Pepe's value. */
+  function shown(cur, edits, f) {
+    if (has(edits, f)) return edits[f];
+    var imp = has(edits, 'contest') ? implied(edits.contest) : {};
+    return has(imp, f) ? imp[f] : cur[f];
+  }
+  /** Drops (in place) the edits that would change nothing: one equal to what Pepe would store anyway - his value now, or for
+      on / fair / claim beside a contest edit, what its bundle sets. Every room (-all): an edit equal to the global's value
+      still clears the rooms with their own value for it, so it stays. */
+  function prune(fg, w, edits) {
+    var cur = current(fg, w);
+    var spread = function (f) { return w.scope === 'all' && overriders(fg, f).length > 0; };
+    if (has(edits, 'contest') && same(edits.contest, cur.contest) && !spread('contest')) delete edits.contest;
+    var imp = has(edits, 'contest') ? implied(edits.contest) : {};
+    Object.keys(edits).forEach(function (f) {
+      if (f === 'contest') return;
+      if (has(imp, f)) { if (same(edits[f], imp[f])) delete edits[f]; return; }   // (the bundle sets it - with -all, everywhere)
+      if (same(edits[f], cur[f]) && !spread(f)) delete edits[f];
+    });
+    return edits;
+  }
+  /** The change to send: {field: value | 'follow'} or null - the edits that change something, + a room's "follow the global"
+      boxes (its own value dropped). (Every room's "every room to this value" box is an edit of the value shown: prune keeps
+      it while a room has its own.) */
+  function change(fg, w, edits, follows) {
+    var e = prune(fg, w, copy(edits));
+    var set = {}, n = 0;
+    FIELDS.forEach(function (f) {
+      if (w.scope === 'room' && follows && follows[f] && f !== 'ceiling') { set[f] = 'follow'; n++; return; }
+      if (has(e, f)) { set[f] = e[f]; n++; }
+    });
+    return n ? set : null;
   }
   function rangeText(fg, f) {
     var r = fg && fg.ranges && fg.ranges[f], d = fg && fg.defaults && fg.defaults[f];
@@ -82,7 +119,8 @@
   function num(s) { var t = String(s == null ? '' : s).trim(); return /^-?\d{1,7}$/.test(t) ? parseInt(t, 10) : null; }
 
   var api = { FIELDS: FIELDS, ROWS: ROWS, ARITY: ARITY, TOGGLES: TOGGLES, whereOf: whereOf, current: current, sourceOf: sourceOf,
-              bundle: bundle, change: change, fmt: fmt, rangeText: rangeText, num: num };
+              overriders: overriders, ownList: ownList, implied: implied, shown: shown, prune: prune, change: change, fmt: fmt,
+              rangeText: rangeText, num: num };
   if (typeof window !== 'undefined') window.PatvFastGrab = api;
   if (typeof document === 'undefined' || !document.getElementById || !document.getElementById('fastgrab')) return;
 
@@ -91,35 +129,55 @@
   var V = null;
   try { V = JSON.parse(($('fgData') || {}).textContent || 'null'); } catch (e) { V = null; }
   V = V || { online: false, fg: null, actions: [] };
-  var EDIT = {}, FOLLOW = {}, PENDING = null, BUSY = false;
+  // EDIT: the admin's values; FOLLOW: the row boxes (follow the global / every room to this). SENT: the last save, until Pepe
+  // answers (his answer clears only what it saved). STALE: his answer came while the admin was in a box - redraw when they leave.
+  var EDIT = {}, FOLLOW = {}, PENDING = null, SENT = null, BUSY = false, STALE = false;
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function when(ms) { return ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''; }
   function where() { return whereOf(($('fgWhere') || {}).value, !!($('fgAll') || {}).checked); }
+  function wkey(w) { return w.scope + ':' + w.room; }
   function msg(t, cls) { var m = $('fgMsg'); if (m) { m.textContent = t; m.className = 'adm-msg' + (cls ? ' ' + cls : ''); } }
   function dirty() { return Object.keys(EDIT).length + Object.keys(FOLLOW).length > 0; }
+  function each(list, fn) { for (var i = 0; i < ((list && list.length) || 0); i++) fn(list[i]); }
 
-  var WHERE_KEY = null;
+  var WHERE_KEY = null, NAMES = {};
+  /** The Where list, rebuilt only when Pepe's room list changed (a rebuild under an open dropdown would close it). -> the id of
+      the picked room when it dropped out of his list (grabcard review: the select fell back to the global quietly, and a
+      Save sent the room's edits there) - its edits are dropped and the card says so. */
   function drawWhere() {
-    var sel = $('fgWhere'); if (!sel) return;
-    var keep = sel.value || 'global';
-    // rebuilt only when Pepe's room list changed (a rebuild under an open dropdown would close it)
-    var key = JSON.stringify(((V.fg && V.fg.rooms) || []).map(function (r) { return [r.id, r.name, r.joined]; }));
-    var allL0 = $('fgAllL'); if (allL0) allL0.hidden = where().scope === 'room';
-    if (key === WHERE_KEY) return;
-    WHERE_KEY = key;
-    sel.textContent = '';
-    var g = el('option', null, 'Global default (every room without its own)'); g.value = 'global'; sel.appendChild(g);
-    ((V.fg && V.fg.rooms) || []).forEach(function (r) {
-      var o = el('option', null, r.name + (r.name !== r.id ? ' (' + r.id + ')' : '') + (r.joined ? '' : ' - Pepe is not in it now'));
-      o.value = 'room:' + r.id; sel.appendChild(o);
-    });
-    sel.value = keep;
-    if (sel.value !== keep) sel.value = 'global';
+    var sel = $('fgWhere'); if (!sel) return null;
+    var keep = sel.value || 'global', lost = null;
+    var rooms = (V.fg && V.fg.rooms) || [];
+    var key = JSON.stringify(rooms.map(function (r) { return [r.id, r.name, r.joined]; }));
+    if (key !== WHERE_KEY) {
+      WHERE_KEY = key;
+      var before = NAMES; NAMES = {};
+      sel.textContent = '';
+      var g = el('option', null, 'Global default (every room without its own)'); g.value = 'global'; sel.appendChild(g);
+      rooms.forEach(function (r) {
+        NAMES[r.id] = r.name;
+        var o = el('option', null, r.name + (r.name !== r.id ? ' (' + r.id + ')' : '') + (r.joined ? '' : ' - Pepe is not in it now'));
+        o.value = 'room:' + r.id; sel.appendChild(o);
+      });
+      sel.value = keep;
+      if (sel.value !== keep) {
+        sel.value = 'global';
+        if (keep.indexOf('room:') === 0) {
+          lost = keep.slice(5);
+          var had = dirty();
+          EDIT = {}; FOLLOW = {};
+          var all = $('fgAll'); if (all) all.checked = false;     // (ticked before the room was picked: never every room now)
+          msg('⚠ Pepe no longer reports ' + (before[lost] || lost) + ' (he left it or restarted)'
+              + (had ? ' - your unsaved changes for it were dropped' : '') + '. Showing the global default.', 'err');
+        }
+      }
+    }
     var allL = $('fgAllL'); if (allL) allL.hidden = where().scope === 'room';
+    return lost;
   }
 
   function control(f, cur, label) {
-    var v = Object.prototype.hasOwnProperty.call(EDIT, f) ? EDIT[f] : cur[f];
+    var v = shown(cur, EDIT, f);
     var box = el('span', 'fg-ctl');
     if (isToggle(f) || f === 'claim') {
       var s = el('select', 'ds-in'); s.setAttribute('data-fg', f); s.setAttribute('aria-label', label);
@@ -127,8 +185,8 @@
       opts.forEach(function (o) { var op = el('option', null, o[1]); op.value = o[0]; s.appendChild(op); });
       s.value = isToggle(f) ? (v ? 'on' : 'off') : String(v || '');
       s.addEventListener('change', function () {
-        bundle(EDIT, f, isToggle(f) ? s.value === 'on' : s.value);
-        prune(); drawRows();
+        EDIT[f] = isToggle(f) ? s.value === 'on' : s.value;
+        prune(V.fg, where(), EDIT); sync();
       });
       box.appendChild(s);
       return box;
@@ -147,22 +205,33 @@
   }
   function onNum(ev) {
     var f = ev.target.getAttribute('data-fg');
-    var inputs = ($('fgRows').querySelectorAll ? $('fgRows').querySelectorAll('input') : []);
     var nums = [];
-    for (var i = 0; i < inputs.length; i++) if (inputs[i].getAttribute('data-fg') === f) nums.push(num(inputs[i].value));
+    each($('fgRows').querySelectorAll('input'), function (n) { if (n.getAttribute('data-fg') === f) nums.push(num(n.value)); });
     if (nums.some(function (n) { return n === null; })) { msg('⚠ ' + f + ': whole numbers only.', 'err'); return; }
     EDIT[f] = ARITY[f] === 1 ? nums[0] : nums;
-    prune(); drawRows();
+    // (no redraw: the box the admin moves to - the next of a breaker's / pause's numbers - must stay the same box)
+    prune(V.fg, where(), EDIT); sync();
   }
-  /** An edit back at Pepe's value is no edit. */
-  function prune() {
-    var cur = current(V.fg, where());
-    Object.keys(EDIT).forEach(function (f) { if (same(EDIT[f], cur[f])) delete EDIT[f]; });
+  function edited(cur, f) { return has(EDIT, f) || !!FOLLOW[f] || !same(shown(cur, EDIT, f), cur[f]); }
+  /** A row box: a room's "follow the global" (FOLLOW) / every room's "every room to this value" (= an edit of the value shown:
+      a contest one brings its bundle like any contest edit; unticked, the edit goes). */
+  function rowBox(f, attr, text) {
+    var every = attr === 'data-every';
+    var lab = el('label', 'adm-help fg-follow'), cb = el('input'); cb.type = 'checkbox'; cb.setAttribute(attr, f);
+    cb.checked = every ? has(EDIT, f) : !!FOLLOW[f];
+    cb.addEventListener('change', function () {
+      if (every) { if (cb.checked) EDIT[f] = shown(current(V.fg, where()), EDIT, f); else delete EDIT[f]; prune(V.fg, where(), EDIT); }
+      else if (cb.checked) FOLLOW[f] = true; else delete FOLLOW[f];
+      sync();
+    });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' ' + text));
+    return lab;
   }
 
   function drawRows() {
     var body = $('fgRows'); if (!body) return;
     body.textContent = '';
+    STALE = false;
     var w = where(), cur = current(V.fg, w), fg = V.fg;
     ['fgNow', 'fgRoomsNow'].forEach(function (id) { var n = $(id); if (n) n.hidden = !!fg; });   // (the page's snapshot: the table has it now)
     if (!fg) {
@@ -172,31 +241,66 @@
     } else {
       ROWS.forEach(function (row) {
         var f = row[0], tr = el('tr');
-        if (Object.prototype.hasOwnProperty.call(EDIT, f) || FOLLOW[f]) tr.className = 'fg-edited';
+        tr.setAttribute('data-row', f);
+        tr.className = edited(cur, f) ? 'fg-edited' : '';
         var name = el('td'); name.appendChild(el('b', null, row[1])); name.appendChild(el('div', 'adm-help', row[3])); tr.appendChild(name);
         var c = el('td'); c.appendChild(control(f, cur, row[1])); tr.appendChild(c);
         var src = sourceOf(fg, w, f), s = el('td');
         s.appendChild(el('span', 'adm-pill' + (src === 'room' ? ' ok' : ''), src === 'room' ? "this room's own" : src === 'mixed' ? 'room + global' : src));
-        if (w.scope === 'room' && (src === 'room' || src === 'mixed')) {
-          var lab = el('label', 'adm-help fg-follow'), cb = el('input'); cb.type = 'checkbox'; cb.checked = !!FOLLOW[f]; cb.setAttribute('data-follow', f);
-          cb.addEventListener('change', function () { if (cb.checked) FOLLOW[f] = true; else delete FOLLOW[f]; drawRows(); });
-          lab.appendChild(cb); lab.appendChild(document.createTextNode(' follow the global')); s.appendChild(lab);
-        }
+        if (w.scope === 'room' && (src === 'room' || src === 'mixed')) s.appendChild(rowBox(f, 'data-follow', 'follow the global'));
+        // (grabcard review) the global / every room: which rooms keep a value of their own for this setting
+        var own = w.scope !== 'room' ? ownList(fg, f) : '';
+        if (own && w.scope === 'global') s.appendChild(el('div', 'adm-help', 'Rooms with their own (not changed by the global): ' + own));
+        if (own && w.scope === 'all') s.appendChild(rowBox(f, 'data-every', 'every room to this value (clears their own: ' + own + ')'));
         tr.appendChild(s);
         tr.appendChild(el('td', 'adm-help', rangeText(fg, f)));
         body.appendChild(tr);
       });
     }
-    var info = $('fgContest');
-    if (info) {
-      var bits = [];
-      if (w.scope === 'room' && cur.contest) bits.push(cur.contest_active ? '⚔️ Contest is active here.' : '⚔️ Contest is set but not active here: ' + (cur.contest_why || 'see !mic fastgrab') + '.');
-      if (w.scope === 'room' && cur.resting_min) bits.push('⏸ The breaker rests the fast grab here for ' + cur.resting_min + ' more min.');
-      if (w.scope === 'all') bits.push('Every room: sets the global and clears each room\'s own value for what you change (-all).');
-      if (dirty()) bits.push('✏️ ' + (Object.keys(EDIT).length + Object.keys(FOLLOW).length) + ' change(s) not saved yet.');
-      info.textContent = bits.join(' ');
-    }
+    info(w, cur);
     saveState();
+  }
+  /** After an edit (or a poll while the admin edits): the rows' marks, every box's value - the switches a contest edit's
+      bundle moves, Pepe's newer values - and the summary, in place, never a rebuild (a rebuild replaced the box the admin was
+      moving to, and closed a phone's keyboard; grabcard review). The box the admin is in is left as it is. */
+  function sync() {
+    var body = $('fgRows'), w = where(), cur = current(V.fg, w), a = document.activeElement;
+    if (body && V.fg && body.querySelectorAll) {
+      each(body.querySelectorAll('tr'), function (tr) {
+        var f = tr.getAttribute('data-row'); if (f) tr.className = edited(cur, f) ? 'fg-edited' : '';
+      });
+      each(body.querySelectorAll('select'), function (s) {
+        var f = s.getAttribute('data-fg'); if (!f || s === a) return;
+        var v = shown(cur, EDIT, f);
+        s.value = isToggle(f) ? (v ? 'on' : 'off') : String(v || '');
+      });
+      each(body.querySelectorAll('input'), function (n) {
+        if (n === a) return;
+        var f = n.getAttribute('data-fg');
+        if (f && ARITY[f]) {
+          var v = shown(cur, EDIT, f), x = ARITY[f] === 1 ? v : (v || [])[Number(n.getAttribute('data-i'))];
+          n.value = x == null ? '' : String(x);
+        } else if (n.getAttribute('data-every')) n.checked = has(EDIT, n.getAttribute('data-every'));
+        else if (n.getAttribute('data-follow')) n.checked = !!FOLLOW[n.getAttribute('data-follow')];
+      });
+    }
+    info(w, cur);
+    saveState();
+  }
+  function info(w, cur) {
+    var box = $('fgContest'); if (!box) return;
+    var bits = [];
+    if (w.scope === 'room' && cur.contest) bits.push(cur.contest_active ? '⚔️ Contest is active here.' : '⚔️ Contest is set but not active here: ' + (cur.contest_why || 'see !mic fastgrab') + '.');
+    if (w.scope === 'room' && cur.resting_min) bits.push('⏸ The breaker rests the fast grab here for ' + cur.resting_min + ' more min.');
+    if (w.scope === 'all') bits.push('Every room: sets the global and clears each room\'s own value for what you change (-all).');
+    if (V.fg && has(EDIT, 'contest')) {
+      var imp = implied(EDIT.contest), also = Object.keys(imp).filter(function (f) { return !has(EDIT, f); });
+      if (also.length) bits.push('⚔️ Contest ' + (EDIT.contest ? 'on' : 'off') + ' also sets ' + also.map(function (f) { return WORD[f] + ' ' + fmt(f, imp[f]); }).join(', ')
+                                 + ' (like !mic fastgrab contest ' + (EDIT.contest ? 'on' : 'off') + '); a switch you set yourself wins.');
+    }
+    var set = V.fg ? change(V.fg, w, EDIT, FOLLOW) : null, n = set ? Object.keys(set).length : 0;
+    if (n) bits.push('✏️ ' + n + ' change(s) not saved yet.');
+    box.textContent = bits.join(' ');
   }
   function saveState() { var save = $('fgSave'); if (save) save.disabled = !V.fg || !V.online || BUSY; }
   /** Is the admin in one of the card's boxes right now? (a redraw would throw away what they are typing) */
@@ -225,9 +329,16 @@
         }) : [];
         msg((a.status === 'done' ? '✅ ' : '❌ ') + (a.message || (a.status === 'done' ? 'Saved.' : 'Pepe refused it.'))
             + (cl.length ? ' Clamped: ' + cl.join(', ') + '.' : ''), a.status === 'done' ? 'ok' : 'err');
-        if (a.status === 'done') { EDIT = {}; FOLLOW = {}; }
-        PENDING = null;
-        drawRows();
+        // done: the edits it saved are done - not the ones made since (grabcard review: those were thrown away)
+        if (a.status === 'done' && SENT && SENT.key === wkey(where())) {
+          Object.keys(SENT.set).forEach(function (f) {
+            if (FOLLOW[f] && SENT.follow[f]) delete FOLLOW[f];
+            if (has(EDIT, f) && same(EDIT[f], SENT.set[f])) delete EDIT[f];
+          });
+        }
+        PENDING = null; SENT = null;
+        prune(V.fg, where(), EDIT);
+        if (typing()) { STALE = true; sync(); } else drawRows();      // (never under a box being typed in)
       }
     }
   }
@@ -238,33 +349,38 @@
         if (!d || !d.ok) return;
         var before = JSON.stringify([V.fg, V.online]);
         V = d;
-        drawWhere();
-        // redrawn only when Pepe's values changed and nobody is editing or typing in the card
-        if (!dirty() && !typing() && JSON.stringify([V.fg, V.online]) !== before) drawRows(); else prune();
-        saveState();
+        var changed = JSON.stringify([V.fg, V.online]) !== before;
+        var lost = drawWhere();
+        // redrawn when the picked room is gone, when Pepe stopped reporting the block, when his answer waited for the admin to
+        // leave a box, or when his values changed and nobody is editing or typing in the card (else: updated in place)
+        if (lost || (changed && !V.fg) || (STALE && !typing()) || (changed && !dirty() && !typing())) drawRows();
+        else { prune(V.fg, where(), EDIT); sync(); }
         drawStatus();
       }).catch(function () {});
   }
 
   function save() {
-    var w = where(), cur = current(V.fg, w);
-    var set = change(cur, EDIT, FOLLOW);
-    if (!set) { msg('Nothing changed.'); return; }
+    var w = where();
+    if (w.scope === 'room' && !roomOf(V.fg, w.room)) { msg('⚠ Pepe no longer reports that room - pick it again (or another).', 'err'); return; }
+    prune(V.fg, w, EDIT);
+    var set = change(V.fg, w, EDIT, FOLLOW);
+    if (!set) { msg('Nothing changed.'); sync(); return; }
     if (w.scope === 'all' && !confirm('Every room: this sets the global and clears every room\'s own value for these settings. Go on?')) return;
     var reason = ($('fgReason') || {}).value || '';
-    BUSY = true; msg('…'); drawRows();
+    var sent = { key: wkey(w), set: set, follow: copy(FOLLOW) };
+    BUSY = true; msg('…'); saveState();
     return fetch('/api/admin/pepe/fastgrab', { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
       body: JSON.stringify({ scope: w.scope, room: w.room, set: set, reason: reason.trim() || undefined }) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         BUSY = false;
-        if (d && d.ok) { PENDING = d.id; msg('Sent to Pepe - his answer (what he stored) shows here in a few seconds.'); }
+        if (d && d.ok) { PENDING = d.id; SENT = sent; msg('Sent to Pepe - his answer (what he stored) shows here in a few seconds.'); }
         else msg('❌ ' + ((d && d.error) || 'failed'), 'err');
-        drawRows();
+        sync();
         return load();
       })
-      .catch(function () { BUSY = false; msg('❌ The site did not answer.', 'err'); drawRows(); });
+      .catch(function () { BUSY = false; msg('❌ The site did not answer.', 'err'); sync(); });
   }
 
   var sel = $('fgWhere');
@@ -274,6 +390,6 @@
   var sb = $('fgSave'); if (sb) sb.addEventListener('click', save);
   var ub = $('fgUndo'); if (ub) ub.addEventListener('click', function () { EDIT = {}; FOLLOW = {}; msg(''); drawRows(); });
   drawWhere(); drawRows(); drawStatus();
-  api._card = { save: save, load: load, state: function () { return { V: V, EDIT: EDIT, FOLLOW: FOLLOW, PENDING: PENDING }; } };
+  api._card = { save: save, load: load, state: function () { return { V: V, EDIT: EDIT, FOLLOW: FOLLOW, PENDING: PENDING, SENT: SENT }; } };
   setInterval(function () { if (!document.hidden) load(); }, 4000);
 })();

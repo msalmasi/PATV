@@ -407,8 +407,11 @@ test("card script, pure part: only the fields you changed are sent; contest on/o
   // (review) every room (-all): the global's own value still clears the rooms that have their own - an edit, or the row's box
   assert.deepEqual(j(C.change(fg, ALL, { rate: 10 }, {})), { rate: 10 }, "Players Lounge has its own rate: -all 10 clears it");
   assert.equal(C.change(fg, ALL, { shots: 12 }, {}), null, "no room has its own shots: nothing to do");
-  assert.deepEqual(j(C.change(fg, ALL, {}, { rate: true, fair: true })), { fair: true, rate: 10 }, "every room to the value shown (the global's)");
-  assert.equal(C.change(fg, G, {}, { rate: true }), null, "(the global alone: no such box)");
+  assert.deepEqual(j(C.change(fg, ALL, { rate: 10, fair: true }, {})), { fair: true, rate: 10 }, "every room to the value shown (the global's)");
+  assert.deepEqual(j(C.change(fg, ALL, { contest: false }, {})), { contest: false }, "...contest too (Players Lounge has its own; its bundle: fair on)");
+  assert.equal(C.shown(C.current(fg, ALL), { contest: false }, "fair"), true);
+  assert.equal(C.change(fg, G, {}, { rate: true }), null, "(follow is a room's: not for the global or every room)");
+  assert.equal(C.change(fg, ALL, {}, { rate: true }), null);
   assert.deepEqual(j(C.overriders(fg, "rate").map((r) => r.id)), [YW]);
   assert.deepEqual(j(C.overriders(fg, "ceiling")), []);
   assert.equal(C.ownList(fg, "breaker"), "Houseplants 6 / 10 / 15 (partly)");
@@ -538,8 +541,20 @@ test("card script (review): every room (-all) - the rooms with their own value a
   K.byId.fgAll.checked = true; K.byId.fgAll.fire("change");
   typeIn(K.inputs("rate")[0], "11"); typeIn(K.inputs("rate")[0], "10");
   typeIn(K.inputs("shots")[0], "13"); typeIn(K.inputs("shots")[0], "12");
+  assert.equal(K.rowOf("Rate").all().find((n) => n.getAttribute("data-every") === "rate").checked, true, "the typed global value = the row's box");
   K.byId.fgSave.fire("click"); await flush();
   assert.deepEqual(K.posts.at(-1).set, { rate: 10 });
+  // the box on contest is a contest edit: its bundle shows (fair on everywhere), unticked it all goes back
+  K = card(view); await flush();
+  K.byId.fgAll.checked = true; K.byId.fgAll.fire("change");
+  const ce = K.rowOf("Contest").all().find((n) => n.getAttribute("data-every") === "contest");
+  ce.checked = true; ce.fire("change");
+  assert.match(K.byId.fgContest.textContent, /Contest off also sets fair on/);
+  assert.equal(K.inputs("fair")[0].value, "on");
+  ce.checked = false; ce.fire("change");
+  assert.doesNotMatch(K.byId.fgContest.textContent, /not saved|also sets/);
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 0);
 });
 
 test("card script (review): the picked room drops out of Pepe's list - the card says so and drops its edits; nothing goes to the global (or every room)", async () => {
