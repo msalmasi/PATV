@@ -19,7 +19,8 @@
 //     search    {q, year?, season?, episode?, target: stage | cam}  -> {rows (<= 5), free, how, per_hour, state, target, pad}
 //     shelves   {} -> allowed genres and shelves; find {ask,raw,exclude?,limit?} -> verified rows (<=20), catalog and pricing
 //               A known show's unmatched detail may return alternatives:[season rows] (<=5), never an automatic first episode.
-//               One show + about (1.99?? clerkfast): rows in the word search's order; clear:true when exactly one of its episodes has
+//               One show + about (1.99?? clerkfast): a single pick's rows in the word search's order (a selection word keeps air
+//               order); clear:true when exactly one of its episodes has
 //               every telling word of the description (plexfind describedOnce) - the bot may answer that one without its model.
 //               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
 //               probe:true checks catalog titles before interpretation without an external Seerr lookup.

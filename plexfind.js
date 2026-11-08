@@ -63,7 +63,8 @@ const DESCRIBE_COMMON = 0.2;
 const stem = (w) => w.length > 4 && w.endsWith("ies") ? w.slice(0, -3) + "y"
   : w.length > 4 && /(?:s|x|z|ch|sh)es$/.test(w) ? w.slice(0, -2)
     : w.length > 3 && w.endsWith("s") && !/(?:ss|us|is)$/.test(w) ? w.slice(0, -1) : w;
-const wordsOf = (text) => new Set(norm(text).split(" ").filter(Boolean).map(stem));
+// review F7: normOf, not the cached norm - summaries are long and many; the bounded cache is for the titles (1.99amh)
+const wordsOf = (text) => new Set(normOf(String(text || "")).split(" ").filter(Boolean).map(stem));
 function describedOnce(about, show, episodes) {
   const own = wordsOf(show && show.title);
   const words = [...new Set(norm(about).split(" ").filter((w) => w.length >= 3 && !DESCRIBE_SKIP.has(w)).map(stem))].filter((w) => !own.has(w));
@@ -442,13 +443,17 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         if (a.season != null) eps = eps.filter((r) => Number(r.season) === a.season);
         if (a.episode != null) eps = eps.filter((r) => Number(r.episode) === a.episode && (a.season != null || Number(r.season) === 1));
         if (a.about) {
-          // 1.99?? clerkfast: in the word search's own (bm25) order - re-sorted into season order, the best hit was wherever it aired
+          // 1.99?? clerkfast: a single pick in the word search's own (bm25) order - re-sorted into season order, the best hit was
+          // wherever it aired. review F1: ONLY a single pick - a selection word (latest / finale / pilot / oldest / first or last N /
+          // in order / a season) orders the matches by air date as before ("the newest Halloween episode" took the worst word hit)
+          const single = a.select === "one" && !selectionList;
           const rank = new Map();
           (await catalog.search(a.about, { kind: "episode", show_key: String(show.key), limit: 500, budgetMs: 400 }))
             .forEach((r, i) => { if (!rank.has(String(r.key))) rank.set(String(r.key), i); });
-          eps = eps.filter((r) => rank.has(String(r.key))).sort((x, y) => rank.get(String(x.key)) - rank.get(String(y.key)));
+          eps = eps.filter((r) => rank.has(String(r.key)));
+          if (single) eps.sort((x, y) => rank.get(String(x.key)) - rank.get(String(y.key)));
           // one show, a first ask (a reroll's excluded rows would make the rest look unique), a single pick
-          if (wantedShows.length === 1 && !exclude.size && a.select === "one") {
+          if (wantedShows.length === 1 && !exclude.size && single) {
             const once = describedOnce(a.about, show, available);
             if (once && eps.some((r) => String(r.key) === once)) clearKey = once;
           }
