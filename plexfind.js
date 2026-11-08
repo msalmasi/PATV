@@ -25,6 +25,9 @@ const norm = (s) => {
   return value;
 };
 const sameName = (left, right) => { const value = norm(left); return !!value && value === norm(right); };
+// 1.99?? clerkreq S3: a name as said, its article KEPT - "The Good Doctor" (2017) is not "Good Doctor" (2013), though sameName folds both
+const keptOf = (text) => String(text || "").toLowerCase().normalize("NFKD").replace(/([a-z])[̀-ͯ]+/g, "$1").normalize("NFC")
+  .replace(/&/g, " and ").replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim();
 const clean = (s, n = 100) => typeof s === "string" ? s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
 const integer = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
 const names = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => clean(x)).filter(Boolean).slice(0, 3) : [];
@@ -172,14 +175,19 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     finally { clearTimeout(timer); }
   }
   // Cache only public title/availability fields, never posters, overviews, raw upstream errors or request rights.
+  // 1.99?? clerkreq S4: -> the cached entry | {miss: "off" (not allowed here / requests off or not configured) | "none" | "down" (a
+  // timeout or an error)} - a Seerr that didn't answer was a silent null, the same as "no such title"
+  const seerrOff = (e) => !!(e && e.refuse && !e.upstream && (e.status === 403 || e.status === 503));
   async function seerrSearch(title, context, deadline) {
-    if (!context.allowSeerr || !title) return null;
+    if (!context.allowSeerr) return { miss: "off" };
     const key = norm(title);
-    if (!key) return null;
+    if (!title || !key) return { miss: "none" };
     const cached = seerrCache.get(key);
     if (cached && now() - cached.at < CACHE_MS) { seerrCache.delete(key); seerrCache.set(key, cached); return cached; }
-    const found = await bounded(() => requestSource().search(context.user || null, title), deadline);
-    if (!Array.isArray(found)) return null;
+    let failure = null;
+    const found = await bounded(() => Promise.resolve().then(() => requestSource().search(context.user || null, title))
+      .catch((e) => { failure = e || {}; return null; }), deadline);
+    if (!Array.isArray(found)) return { miss: seerrOff(failure) ? "off" : "down" };
     const entry = { at: now(), rows: found.filter((r) => r && ["movie", "tv"].includes(r.type) && /^[1-9]\d{0,8}$/.test(String(r.tmdb)))
       .slice(0, 20).map((r) => ({ kind: r.type, tmdb: Number(r.tmdb), title: clean(r.title), year: integer(Number(r.year), 1880, 2200),
         availability: ["unknown", "pending", "processing", "partial", "available", "blocked", "deleted"].includes(r.availability) ? r.availability : "unknown",
@@ -198,28 +206,64 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         .map((s) => ({ n: s.n, episodes: s.episodes, status: Number(s.status) || 1 })) };
     entry.details.set(key, value); return value;
   }
+  const gated = (r) => r.media_status === 5 || r.media_status === 6 || r.availability === "available";
+  /** -> null (no lookup for it) | {miss: off | none | down} | {unavailable} | {requested, title, year, kind, season?} |
+   *  {choices: [{title, year, kind, tmdb, media_status}] (2-3)} | the one title {title, year, kind, tmdb, availability, season?} */
   async function missingTitle(want, context, deadline) {
     if (want.recall && want.kind === "movie" && want.year == null) return null;
     const title = clean(want.kind === "episode" ? want.show : want.title);
     const entry = await seerrSearch(title, context, deadline);
-    if (!entry) return null;
+    if (entry.miss) return entry;
     const kind = want.kind === "movie" ? "movie" : ["show", "episode"].includes(want.kind) ? "tv" : null;
-    const matches = entry.rows.filter((r) => (!kind || r.kind === kind) && sameName(r.title, title)
+    let matches = entry.rows.filter((r) => (!kind || r.kind === kind) && sameName(r.title, title)
       && (want.year == null || r.year != null && Math.abs(r.year - want.year) <= (r.kind === "movie" ? 1 : 0)));
-    if (matches.length !== 1) return null; // Never turn an ambiguous external title into a request.
+    if (!matches.length) return { miss: "none" };
+    // Never turn an ambiguous external title into a request. 1.99?? clerkreq S3 (owner 2026-11-08: "The Good Doctor" matched both the 2017
+    // series and the 2013 "Good Doctor" - a silent null, "nothing on the shelves fits that"): the one whose name, its article kept, is the
+    // name said; then the very year said (a film's ±1 let two in); still several = the speaker's choice, never a guess
+    if (matches.length > 1) {
+      const said = keptOf(title), kept = matches.filter((r) => keptOf(r.title) === said);
+      if (kept.length) matches = kept;
+      if (matches.length > 1 && want.year != null) { const year = matches.filter((r) => r.year === want.year); if (year.length) matches = year; }
+    }
+    if (matches.length > 1) {
+      // an already-available one is never offered or named (it may be a title the library keeps out of the clerk's sections)
+      const open = matches.filter((r) => !gated(r));
+      if (!open.length) return { unavailable: true };
+      if (open.length > 1) {
+        if (want.kind === "episode") return { miss: "none" };   // which show's episode? the recall's own "which one?" asks
+        return { choices: open.slice(0, 3).map((r) => ({ title: r.title, year: r.year, kind: r.kind, tmdb: r.tmdb, media_status: r.media_status })) };
+      }
+      matches = open;
+    }
     const row = matches[0];
-    if (row.media_status === 5 || row.availability === "available" || row.media_status === 6) return { unavailable: true };
+    if (gated(row)) return { unavailable: true };
+    // 1.99?? clerkreq S3: a film Seerr already has a request for (pending / processing) - said, never offered (request() refuses it at the yes)
+    if (row.kind === "movie" && (row.media_status === 2 || row.media_status === 3)) return { requested: true, title: row.title, year: row.year, kind: "movie" };
     if (want.kind === "episode") {
-      if (integer(want.season, 1, 200) == null || integer(want.episode, 1, 2000) == null) return null;
+      if (integer(want.season, 1, 200) == null || integer(want.episode, 1, 2000) == null) return { miss: "none" };
       const d = await seerrDetails(entry, row, deadline);
-      if (!d || want.year != null && d.year !== want.year) return null;
+      if (!d || want.year != null && d.year !== want.year) return { miss: "none" };
       const season = d.seasons.find((s) => s.n === want.season && s.episodes >= want.episode);
-      if (!season) return null;
+      if (!season) return { miss: "none" };
       if (d.media_status === 5 || d.media_status === 6 || season.status === 5) return { unavailable: true };
+      return { title: d.title, year: d.year, kind: row.kind, season: want.season, tmdb: row.tmdb, availability: row.availability };
+    }
+    if (row.kind === "tv" && integer(want.season, 1, 200) != null) {
+      // 1.99?? clerkreq: a season asked for by number ("!plex request <show> season 3", "pepe play <show> season 3" the library lacks):
+      // that season, as Seerr knows it - on its way already (pending / processing / partly in) is said, never offered again
+      const d = await seerrDetails(entry, row, deadline);
+      if (!d || want.year != null && d.year !== want.year) return { miss: "none" };
+      const season = d.seasons.find((s) => s.n === want.season);
+      if (!season) return { miss: "none" };
+      if (d.media_status === 5 || d.media_status === 6 || season.status === 5) return { unavailable: true };
+      if ([2, 3, 4].includes(season.status)) return { requested: true, title: d.title, year: d.year, kind: "tv", season: want.season };
       return { title: d.title, year: d.year, kind: row.kind, season: want.season, tmdb: row.tmdb, availability: row.availability };
     }
     return { title: row.title, year: row.year, kind: row.kind, tmdb: row.tmdb, availability: row.availability };
   }
+  /** 1.99?? clerkreq S4: what a missingTitle answer says of Seerr - ok (it answered about the title) | none | down | off */
+  const stateOf = (found) => (found && found.miss ? found.miss : "ok");
   const deepLimits = () => deepMax || require("./plexpad").DEEP_MAX;
   const effectiveRating = (r, parents) => String(r.content_rating || (r.type === "episode" && parents.get(String(r.show_key)) || {}).content_rating || "").replace(/^[A-Za-z]{2}\/\s*/, "");   // 1.99alq train3 verify: never a country prefix ("gb/R18")
   const allowed = (r, sections, s, parents = new Map()) => !!r && KEY.test(String(r.key)) && sections.has(String(r.section))
@@ -392,8 +436,22 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         + (reference.shelves || []).filter((g) => (row.shelves || []).some((v) => sameName(v, g))).length * 2
         + (reference.year && row.year && Math.floor(reference.year / 10) === Math.floor(row.year / 10) ? 1 : 0);
     };
+    // 1.99?? clerkreq S1 (owner 2026-11-08 13:48 ET: "pepe play the tv series The Good Doctor" -> another show's S1E9 called "The Good
+    // Doctor"): a SHOW or a FILM ask never takes an episode that only shares the name - those are kept aside (namedEpisodes: the answer's
+    // episode_named, never a candidate, never exact) and the title goes to Seerr. A title-level ask (request_offer) the same, whatever
+    // its kind. A bare line that only an episode's title matches is that episode, but never "exact" (episodeNamed: why episode_named) -
+    // it may be a show or a film we don't carry (Seerr is asked beside it, S2); an EPISODE ask keeps it as before.
+    const askedKind = a.kind, titleLevel = request.titleLevel === true;
+    const titleKind = askedKind === "show" || askedKind === "movie" || titleLevel;
+    let namedEpisodes = [], episodeNamed = false;
+    const episodesFor = async (title) => {
+      const eps = await episodesTitled(title);
+      if (titleKind) { if (!namedEpisodes.length) namedEpisodes = eps; return []; }
+      if (eps.length && askedKind == null) episodeNamed = true;
+      return eps;
+    };
     let exactRows = raw ? roots.filter((r) => sameName(r.title, raw)) : [];
-    if (!exactRows.length && raw) exactRows = await episodesTitled(raw);
+    if (!exactRows.length && raw) exactRows = await episodesFor(raw);
     const literal = exactRows.length > 0;
     if (literal) {
       const kinds = [...new Set(exactRows.map((r) => r.type))];
@@ -404,21 +462,32 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     if (shelfSelection.missing) return { ...base, shelf_missing: true, shelf_suggestions: shelfSelection.suggestions };
     a._shelfFilters = shelfSelection.filters;
     a.shelves = shelfSelection.filters.map((f) => f.name);
-    if (!exactRows.length && a.title) exactRows = roots.filter((r) => sameName(r.title, a.title));
-    if (!exactRows.length && a.title) exactRows = await episodesTitled(a.title);
-    const exact = literal || (exactRows.length > 0 && a.select === "one" && !a.about && !a.like);
+    // (S1: "filter by kind as well" - "the movie <a show's name>" is not that show's exact row)
+    if (!exactRows.length && a.title) exactRows = roots.filter((r) => sameName(r.title, a.title) && !(["show", "movie"].includes(askedKind) && r.type !== askedKind));
+    if (!exactRows.length && a.title) exactRows = await episodesFor(a.title);
+    const exact = !episodeNamed && (literal || (exactRows.length > 0 && a.select === "one" && !a.about && !a.like));
     const verified = literal ? { records: [], candidates: [], missing: [] } : await verifyRecall(a.guesses, roots, safe);
     verified.candidates = verified.candidates.filter((x) => matches(x.r, { ...a, title: null, year: null, years: null, about: null, like: null,
       quality: a.quality === "best" && x.r.type === "episode" && rating(x.r) == null ? "any" : a.quality }, seen, parents));
     const recall = verified.records, recalled = recall.length > 0;
-    let seerr = null;
+    let seerr = null, seerrState = null, seerrChoices = null, seerrRequested = null;
+    // 1.99?? clerkreq S3/S4: what one missingTitle answer leaves - its state, a choice for the speaker, an already-requested title
+    const took = (found) => {
+      if (!found) return;
+      seerrState = stateOf(found);
+      if (found.choices) seerrChoices = found.choices;
+      if (found.requested) seerrRequested = { title: found.title, year: found.year, kind: found.kind, ...(found.season != null ? { season: found.season } : {}) };
+    };
     if (recalled && !verified.candidates.length && verified.missing.length) {
       const first = verified.missing[0], found = await missingTitle(first.want, context, Date.now() + SEERR_MS);
       if (found && found.unavailable) return { ...base, code: "unavailable" };
-      if (found) { first.record.status = "missing"; first.record.seerr = found; seerr = found; }
+      took(found);
+      if (found && found.tmdb) { first.record.status = "missing"; first.record.seerr = found; seerr = found; }
     }
     let clearKey = null;   // 1.99amq clerkfast: the one episode the description singles out (describedOnce), if any
-    let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && matches(r, a, seen, parents)).map((r) => ({ r, why: "exact", exact })), plans = [], alternatives = [];
+    // (1.99?? clerkreq S1: an episode only its own title named - a bare line - is offered as episode_named, never exact)
+    let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && !titleKind && matches(r, a, seen, parents))
+      .map((r) => ({ r, why: episodeNamed ? "episode_named" : "exact", exact })), plans = [], alternatives = [];
     const selectionList = ["first_n", "last_n", "season", "series", "in_order"].includes(a.select) || (a.select === "one" && a.season != null && a.episode == null);
     const makePlan = (rows, why, show, scope = "list", alternative = false) => {
       if (!rows.length) return;
@@ -616,12 +685,22 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       record.status = "unknown"; delete record.key; delete record.match;
     }
     // One cached Seerr lookup per request, only after a named title failed or for a proven newer-release note.
-    if (!recalled && !offered.length && !shelfSelection.filters.length && a.title && !a.about && !a.like) seerr = await missingTitle({ kind: a.kind === "show" || a.kind === "episode" ? "show" : a.kind, title: a.title, year: a.year }, context, Date.now() + SEERR_MS);
-    if (seerr && seerr.unavailable) return { ...base, code: "unavailable" };
+    // 1.99?? clerkreq S2: a named title failed = nothing offered, OR all that's offered is an episode only its title named (a bare line:
+    // the show / film of that name may exist elsewhere), OR (a title-level ask) nothing offered IS that title - a near title isn't it
+    const allNamed = offered.length > 0 && offered.every((r) => r.why === "episode_named");
+    const isTitle = (r) => (r.kind === "movie" ? sameName(r.title, a.title) : ["episode", "season", "show"].includes(r.kind) && sameName(r.show, a.title));
+    if (!recalled && (!offered.length || allNamed || titleLevel && !offered.some(isTitle)) && !shelfSelection.filters.length && a.title && !a.about && !a.like) {
+      const k = episodeNamed ? askedKind : a.kind;
+      const found = await missingTitle({ kind: k === "show" || k === "episode" ? "show" : k, title: a.title, year: a.year,
+        ...(a.season != null && a.episode == null ? { season: a.season } : {}) }, context, Date.now() + SEERR_MS);
+      if (found && found.unavailable) return { ...base, code: "unavailable" };
+      took(found);
+      if (found && found.tmdb) seerr = found;
+    }
     if (!recalled && offered.length && !shelfSelection.filters.length && a.select === "latest" && a.title && offered.every((r) => r.kind === "movie") && context.allowSeerr) {
       const entry = await seerrSearch(a.title, context, Date.now() + SEERR_MS), currentYear = new Date(now()).getUTCFullYear();
       // mediarequests exposes release years only. A past year proves release; a current/future year does not.
-      const newer = entry && entry.rows.filter((r) => r.kind === "movie" && (sameName(r.title, a.title) || norm(r.title).startsWith(norm(a.title) + " ")) && r.year > Math.max(...offered.map((x) => Number(x.year) || 0)) && r.year < currentYear)
+      const newer = entry && entry.rows && entry.rows.filter((r) => r.kind === "movie" && (sameName(r.title, a.title) || norm(r.title).startsWith(norm(a.title) + " ")) && r.year > Math.max(...offered.map((x) => Number(x.year) || 0)) && r.year < currentYear)
         .sort((x, y) => y.year - x.year)[0];
       if (newer && !roots.some((r) => r.type === "movie" && norm(r.title) === norm(newer.title) && Math.abs(Number(r.year) - newer.year) <= 1)) {
         if (newer.media_status === 5 || newer.media_status === 6 || newer.availability === "available") return { ...base, code: "unavailable" };
@@ -638,7 +717,18 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       || recallHasVariants(verified.candidates.filter((candidate) => visibleKeys.has(String(candidate.r.key))));
     // 1.99amq clerkfast: clear - the description singles out the first row (the bot may answer without its model)
     const clear = !!clearKey && !ambiguous && !seerr && offered.length > 0 && offered[0].key === clearKey && offered[0].kind === "episode";
+    // 1.99?? clerkreq S2: the episodes that only share the name (<= 3, each through the last safety read): {key, label, show} - so the bot
+    // can say "no show or film called X - there's a <show> episode by that name"
+    let named = [];
+    if (allNamed) named = offered.slice(0, 3).map((r) => ({ key: r.key, label: r.label, show: r.show || null }));
+    else if (namedEpisodes.length && !offered.length) {
+      const checked = await fresh(namedEpisodes.slice(0, 3).map((r) => String(r.key)));
+      if (checked.state.ready) named = checked.rows.filter((r) => r.type === "episode").slice(0, 3).map((r) => ({ key: String(r.key),
+        label: single(r, "episode_named", false, checked.s, checked.parents).label, show: (checked.parents.get(String(r.show_key)) || {}).title || r.show || null }));
+    }
     return { ...base, rows: offered, exact: !!exact && rows.length > 0, recall, ...(seerr ? { seerr } : {}), ...(ambiguous ? { ambiguous: true } : {}), ...(cut ? { cut } : {}),
+      ...(seerrState ? { seerr_state: seerrState } : {}), ...(seerrChoices && !seerr ? { seerr_choices: seerrChoices } : {}),
+      ...(seerrRequested && !seerr ? { seerr_requested: seerrRequested } : {}), ...(named.length ? { episode_named: named } : {}),
       ...(clear ? { clear: true } : {}),
       ...(shelfSelection.filters.some((f) => f.no_rank) ? { no_rank: true } : {}),
       ...(!rows.length && alternativeRows.length ? { alternatives: alternativeRows.map((row) => provenance(row, shelfSelection.filters)) } : {}), catalog: { ready: true, at: chosen.state.at || null } };

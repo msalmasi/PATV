@@ -264,7 +264,9 @@ test("raw exact titles override selection words, including command forms; ordina
   // 1.99?? clerkreq: a film / show ask never takes an episode that only shares the name (it is kept aside: episode_named); a bare
   // line that only an episode's title matches is that episode, but never "exact" (it may be a show or film we don't carry)
   const rawEpisode = await run(f, { title: "lantern", select: "latest", kind: "movie" }, { raw: "play The Last Lantern" });
-  assert.deepEqual(rawEpisode.rows, []); assert.equal(rawEpisode.exact, false); assert.deepEqual(rawEpisode.episode_named.map((x) => x.key), ["10023"]);
+  assert.ok(!rawEpisode.rows.some((x) => x.key === "10023"), "a film ask's films ('lantern'), never the episode"); assert.equal(rawEpisode.exact, false);
+  const onlyEpisode = await run(f, { title: "The Last Lantern", kind: "movie" }, { raw: "play The Last Lantern" });
+  assert.deepEqual(onlyEpisode.rows, []); assert.deepEqual(onlyEpisode.episode_named.map((x) => x.key), ["10023"]);
   const bareEpisode = await run(f, { title: "lantern", select: "latest" }, { raw: "play The Last Lantern" });
   assert.deepEqual(bareEpisode.rows.map((x) => [x.key, x.why]), [["10023", "episode_named"]]); assert.equal(bareEpisode.exact, false);
   const askedEpisode = await run(f, { title: "lantern", select: "latest", kind: "episode" }, { raw: "play The Last Lantern" });

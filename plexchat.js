@@ -24,7 +24,12 @@
 //               every telling word of the description (plexfind describedOnce) - the bot may answer that one without its model.
 //               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
 //               probe:true checks catalog titles before interpretation without an external Seerr lookup.
-//     browse    find with limit 3; request {kind,tmdb,season?,target} consumes this speaker/pad's verified 10-minute offer.
+//     browse    find with limit 3; request {kind,tmdb,season?,target,veiled?} consumes this speaker/pad's verified 10-minute offer
+//               (1.99?? clerkreq: -> + id; the request remembers origin chat + the pad, anon when veiled - S6).
+//     request_offer {title, kind?, year?, season?, target} (1.99?? clerkreq S5) -> answer on_shelves (rows) | seerr (+ request) |
+//               choices (seerr_choices, each + request) | miss (seerr_state); refusals requested (+ label) / unavailable / request_off.
+//               find's answer also says (1.99?? clerkreq S1-S4): episode_named [{key,label,show}], seerr_state ok|none|down|off,
+//               seerr_choices (each + request), seerr_requested {title,year,kind}.
 //     embed_todo {model?,dim?,limit?,after?}; embed_put {model,dim,vecs} are authenticated bot-only operations with no speaker/room.
 //               find accepts qvec:{model,dim,v,scale}; malformed/mismatched vectors silently retain ordinary word search.
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace | queue}
@@ -67,7 +72,8 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after",
   // ... review F8: what a line-up was to wait for isn't on any more (Pepe asks again, naming what is)
   "behind_changed"];
-const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
+// (1.99?? clerkreq S5: + request_offer - "pepe request <title>": what can happen for that title, opRequest still the only write)
+const OPS = new Set(["search", "find", "browse", "request", "request_offer", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
 const CONTINUE_MS = 14 * 24 * 3600 * 1000;
@@ -338,7 +344,15 @@ async function opFind(user, b) {
   }
   if (out.code === "unavailable") throw new Fail("unavailable", "That one isn't available here.", 404);
   if (out.seerr) out.request = await requestPreview(user, b, R, origin, out.seerr);
-  const S = conf().get(), per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
+  // 1.99?? clerkreq S3/S5: Seerr's choices (the speaker picks one) - each with its own preview and offer, as the one title's
+  if (Array.isArray(out.seerr_choices)) for (const c of out.seerr_choices) c.request = await requestPreview(user, b, R, origin, { kind: c.kind, tmdb: c.tmdb, title: c.title, year: c.year });
+  await priceRows(user, R, A, target, out);
+  return { ok: true, ...out, clerk: conf().get().clerk_enabled, free: !!A.free, how: A.how || null, per_hour: perHour(A), state: out.state, target, pad: { id: R.id, title: R.title || R.id } };
+}
+const perHour = (A) => (A.free ? 0 : Math.max(0, Math.floor(Number(conf().get().library_price) || 0)));
+/** A find answer's rows (and alternatives) priced for `user` on pad R: price / estimate, what queueing costs (out.state = padState). */
+async function priceRows(user, R, A, target, out) {
+  const S = conf().get(), per = perHour(A);
   const state = await ML().padState(user, R.id).catch(() => null);
   for (const row of [...out.rows, ...(out.alternatives || [])]) {
     const sec = Array.isArray(row.keys) ? row.total_sec : row.duration;
@@ -350,7 +364,62 @@ async function opFind(user, b) {
     if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) row.next_cost = await MQ().addCostFor(R.id, sec || 0).catch(() => 0);
     if (target === "stage") { const qc = await queueCost(user, R, state, A, sec); if (qc != null) row.queue_cost = qc; }   // 1.99amw plexqueue
   }
-  return { ok: true, ...out, clerk: S.clerk_enabled, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
+  out.state = state;
+}
+/** 1.99?? clerkreq S5 (owner 2026-11-08: "pepe request the series The Good Doctor" got a made-up "Request logged" and nothing was asked for):
+ *  "pepe request <title>" / "!plex request <title> [year] [season N]". The same gates as find (the speaker, the rate, the clerk's access,
+ *  the pad: an 18+ pad / a PM / a Telegram line refused request_off; requests off -> answer miss + seerr_state off), a forced title-level
+ *  ask ({title, kind?, year?, season?}: an episode or a near title is never "on the shelves"), then ONE answer:
+ *    answer on_shelves  rows (priced as find's - the bot offers play / queue / replace) - it's here already
+ *    answer seerr       seerr + request (requestPreview: {may, cost} | {may: false, reason}) - Seerr's one title
+ *    answer choices     seerr_choices [{title, year, kind, tmdb, media_status, request}] (2-3) - each its own offer
+ *    answer miss        seerr_state none | down | off (+ reason off) - nothing to request
+ *    refusals           requested (+ label) | unavailable | the usual (link, pad, clerk_off, rate, catalog_down ...)
+ *  opRequest stays the only write. An older site has no such op: "bad" (Unknown op.) - the bot says it can't request from chat yet. */
+async function opRequestOffer(user, b) {
+  const title = clean(b.title, 100);
+  if (title.length < 2) throw new Fail("bad", "Say a title.", 400);
+  const { target, R, A } = await clerkAccess(user, b);
+  const origin = requestsOn() ? await requestRoom(user, b, R) : null;
+  if (requestsOn() && !origin) throw new Fail("request_off", "Requests from chat aren't available here.", 403);
+  const year = intOr(b.year, 1880, 2200), season = b.season == null ? null : intOr(b.season, 1, 200);
+  const kind = season != null ? "show" : ["movie", "show"].includes(b.kind) ? b.kind : null;
+  let maxSec = Infinity;
+  if (target === "stage") {
+    const limits = await require("./mainstage").limitsFor(R.id);
+    maxSec = Math.max(60, (limits.library_max - ML()._q.SLACK_MIN) * 60);
+  }
+  let out;
+  try {
+    out = await CF().find({ ask: { title, kind, year, ...(season != null ? { season } : {}) }, raw: "", exclude: [], limit: 5, target, titleLevel: true },
+      { seenKeys: [], maxSec, user, allowSeerr: !!origin && requestsOn() });
+  } catch (e) {
+    if (e && e.refuse) throw e;
+    throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+  }
+  if (out.code === "unavailable") throw new Fail("unavailable", "That one isn't available here.", 404);
+  const pad = { id: R.id, title: R.title || R.id };
+  const same = (row) => (row.kind === "movie" ? norm(row.title) === norm(title) : ["episode", "season", "show"].includes(row.kind) && norm(row.show) === norm(title))
+    && (season == null || row.kind === "season" && Number(row.season) === season);
+  const have = (out.rows || []).filter(same);
+  if (have.length) {
+    const shelf = { rows: have.slice(0, 3), alternatives: [] };
+    await priceRows(user, R, A, target, shelf);
+    return { ok: true, answer: "on_shelves", rows: shelf.rows, exact: true, catalog: out.catalog, free: !!A.free, how: A.how || null, per_hour: perHour(A),
+             state: shelf.state, target, pad };
+  }
+  const base = { ok: true, title, ...(out.seerr_state ? { seerr_state: out.seerr_state } : {}), catalog: out.catalog, target, pad };
+  if (out.seerr_requested) {
+    const r = out.seerr_requested;
+    throw Object.assign(new Fail("requested", "That's already been requested - it's on its way.", 409), { label: `${r.title}${r.year ? ` (${r.year})` : ""}` });
+  }
+  if (out.seerr) return { ...base, answer: "seerr", seerr: out.seerr, request: await requestPreview(user, b, R, origin, out.seerr) };
+  if (Array.isArray(out.seerr_choices) && out.seerr_choices.length) {
+    const choices = [];
+    for (const c of out.seerr_choices) choices.push({ ...c, request: await requestPreview(user, b, R, origin, { kind: c.kind, tmdb: c.tmdb, title: c.title, year: c.year }) });
+    return { ...base, answer: "choices", seerr_choices: choices };
+  }
+  return { ...base, answer: "miss", seerr_state: out.seerr_state || (origin ? "none" : "off"), ...(!requestsOn() ? { reason: "off" } : {}) };
 }
 async function opRequest(user, b) {
   const { target, R } = await clerkAccess(user, b);
@@ -372,10 +441,13 @@ async function opRequest(user, b) {
   }
   if (JSON.stringify(costOf(rights.cost)) !== JSON.stringify(offer.cost)) throw new Fail("request_stale", "The request cost changed. Ask for a fresh offer.", 409);
   try {
-    const result = await MR().request(user, { type: kind, tmdb, ...(season != null ? { seasons: [season] } : {}) });
+    // 1.99?? clerkreq S6: a request from chat remembers where it came from - the pad (its Camfrog room hears "<title> just landed" when it's
+    // on Plex) and whether the speaker was veiled (incognito / hidden: never named there)
+    const result = await MR().request(user, { type: kind, tmdb, ...(season != null ? { seasons: [season] } : {}) },
+      { origin: "chat", pad: origin.id, anon: b.veiled === true });
     const status = ["submitting", "pending", "approved", "partial", "available", "declined", "failed"].includes(result.status) ? result.status : "pending";
     const cost = costOf({ with: result.paid_with, price: result.price }) || offer.cost;
-    return { ok: true, status, label: status, paid_with: cost.with, price: cost.price };
+    return { ok: true, status, label: status, paid_with: cost.with, price: cost.price, ...(Number.isSafeInteger(result.id) ? { id: result.id } : {}) };
   } catch (e) {
     let code = "upstream";
     if (e && e.refuse) {
@@ -702,6 +774,7 @@ async function handle(b = {}) {
     if (op === "search") r = await opSearch(user, b);
     else if (op === "find" || op === "browse") r = await opFind(user, b);
     else if (op === "request") r = await opRequest(user, b);
+    else if (op === "request_offer") r = await opRequestOffer(user, b);
     else if (op === "shelves") r = await opShelves(user, b);
     else if (op === "play") r = await opPlay(user, b, ctx);
     else if (op === "control") r = await opControl(user, b);
