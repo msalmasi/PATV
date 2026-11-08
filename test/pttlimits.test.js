@@ -14,6 +14,8 @@
 //      recorder and the job keep a clip to 30 s (the card says which)
 //   2. nginx in front of the site takes at most 1 MB (client_max_body_size 1m, botupload.js): the byte cap stays under it, and the
 //      page words ANY 413 (nginx's HTML one too) as "too big", not "couldn't reach the site"
+//      (2026-11-08: nginx takes 4 MB on POST /api/rooms/<slug>/clip only - the cap is (max + 1 s) x 24 KB/s, 600 KB..3.5 MB, under
+//      nginx's 4 MB and under Pepe's own cap for each max length; the body is re-checked against the length its job carries)
 //   3. the recorder stops 0.5 s before the max length and never sends one that ran over max + 0.5 s (Pepe's own check)
 //   4. a clip Pepe said is playing gets its own length + 90 s to say how it went (a 120 s clip isn't failed mid-play)
 //   node --test test/pttlimits.test.js
@@ -252,20 +254,31 @@ test("max length: the setting, +1 s for the recorder's stop; the refusal names i
   await setLimits({ reset: true });
 });
 
-test("the byte cap grows with the max length (room for 2x the recorder's 32 kbit/s at 120 s), with a hard ceiling under nginx's 1 MB", async () => {
-  // the recorder asks for 32 kbit/s Opus = 4 KB a second; a browser that ignores it (AAC on Safari) can be far above that
-  for (const s of [3, 30, 60, 120]) {
-    assert.ok(PT.maxBytes(s) >= (s + 1) * 4000 * 2, s + " s: at least 2x the recorder's bitrate");
-    assert.ok(PT.maxBytes(s) >= 600 * 1024, s + " s: never below today's 600 KB");
-    assert.ok(PT.maxBytes(s) <= PT.BYTES_CEIL, s + " s: under the ceiling");
+// The byte cap after nginx's 2026-11-08 change: POST /api/rooms/<slug>/clip takes up to 4 MB (client_max_body_size 4m on that
+// location only; every other request stays at 1 MB - botupload.js). Review fix 2's 960 KB ceiling (under the old 1 MB) cut a
+// Safari clip off past ~47 s; now the cap is (max + 1 s) x 24 KB/s (192 kbit/s = 6x the recorder's 32 kbit/s, room for Safari's
+// AAC), never below 600 KB, never above 3.5 MB - under nginx's 4 MB, and under PEPE's own cap for the same max length at every
+// length (pepe_relay.clip_max_bytes in pttlimits-bot: 1.5 MB up to ~47 s, 32 kB/s above, a 4 MB ceiling - 3.84 MB at 120 s), so
+// he never refuses a clip the site took as "the recording is empty or too big".
+const NGINX_CLIP_MAX = 4 * 1024 * 1024;
+const pepeMaxBytes = (s) => Math.min(4000000, Math.max(1500000, Math.floor(s * 32000)));   // pepe_relay.clip_max_bytes
+test("the byte cap: (max + 1 s) x 24 KB/s, 600 KB floor, 3.5 MB ceiling - under nginx's 4 MB clip upload and under Pepe's own cap at every max length", async () => {
+  assert.equal(PT.BYTES_PER_SEC, 24 * 1024, "24 KB a second");
+  assert.equal(PT.BYTES_FLOOR, 600 * 1024, "never below today's 600 KB");
+  assert.equal(PT.BYTES_CEIL, Math.round(3.5 * 1024 * 1024), "a 3.5 MB ceiling");
+  assert.ok(PT.BYTES_CEIL <= NGINX_CLIP_MAX - 256 * 1024, "the ceiling stays well under nginx's 4 MB on the clip upload: " + PT.BYTES_CEIL);
+  const [lo, hi] = PT.LIMITS.max_secs;
+  for (let s = lo; s <= hi; s++) {
+    const b = PT.maxBytes(s);
+    assert.equal(b, Math.min(PT.BYTES_CEIL, Math.max(600 * 1024, (s + 1) * 24 * 1024)), s + " s: (max + 1 s) x 24 KB/s inside floor / ceiling");
+    // the recorder asks for 32 kbit/s Opus = 4 KB a second; a browser that ignores it (AAC on Safari) can be far above that
+    assert.ok(b >= (s + 1) * 4000 * 6, s + " s: at least 6x the recorder's bitrate");
+    assert.ok(b <= pepeMaxBytes(s), `${s} s: under Pepe's own cap for the same length (${b} <= ${pepeMaxBytes(s)})`);
+    assert.ok(b <= NGINX_CLIP_MAX, s + " s: under nginx's 4 MB");
   }
-  assert.ok(PT.maxBytes(30) >= 31 * 4000 * 5, "30 s keeps its 5x headroom");
-  assert.ok(PT.maxBytes(120) > PT.maxBytes(30));
+  assert.equal(PT.maxBytes(30), 31 * 24 * 1024, "30 s: 744 KB (Pepe's 1.5 MB)");
+  assert.equal(PT.maxBytes(120), 121 * 24 * 1024, "120 s: about 2.8 MB (Pepe's 3.84 MB)");
   assert.equal(PT.maxBytes(100000), PT.BYTES_CEIL, "a huge value stops at the ceiling");
-  // review fix 2: nginx in front of publicaccess.tv and staging answers anything over client_max_body_size 1m itself (botupload.js) -
-  // a cap above it could never be reached, and the page would get nginx's HTML 413 instead of the site's JSON one
-  const NGINX_MAX = 1024 * 1024;
-  assert.ok(PT.BYTES_CEIL <= NGINX_MAX - 32 * 1024, "the ceiling stays under nginx's 1 MB (with room to spare): " + PT.BYTES_CEIL);
   reset();
   await pepeSays();                     // (review fix 1: a 120 s max only while Pepe follows the job's limits)
   await setLimits({ gap_s: 0, burst: 30, max_secs: 30 });
@@ -276,9 +289,35 @@ test("the byte cap grows with the max length (room for 2x the recorder's 32 kbit
   await setLimits({ gap_s: 0, burst: 30, max_secs: 120 });
   r = await upload(110, Buffer.alloc(PT.maxBytes(30) + 1024, 1));
   assert.equal(r.status, 200, "the same clip fits once the max length is 120 s: " + JSON.stringify(r.d));
-  r = await upload(110, Buffer.alloc(PT.BYTES_CEIL + 1024, 1));
-  assert.equal(r.status, 413, "never past the ceiling");
+  r = await upload(110, Buffer.alloc(1024 * 1024 + 64 * 1024, 1));
+  assert.equal(r.status, 200, "past the old 1 MB (nginx takes 4 MB on the clip upload now): " + JSON.stringify(r.d));
+  r = await upload(119, Buffer.alloc(PT.maxBytes(120) - 1024, 1));
+  assert.equal(r.status, 200, "just under the 120 s cap: " + JSON.stringify(r.d));
+  r = await upload(119, Buffer.alloc(PT.maxBytes(120) + 1024, 1));
+  assert.equal(r.status, 413, "never past the 120 s cap");
+  assert.equal(r.d && r.d.code, "too_big");
   await setLimits({ reset: true });
+});
+
+test("the body is checked again against the length its job carries - a max length lowered during the upload can't send Pepe a clip over his cap for it", async () => {
+  reset();
+  await pepeSays();
+  await setLimits({ gap_s: 0, burst: 30, max_secs: 120 });
+  // the body parser read the cap for 120 s; by the time the upload is checked and counted the setting says 30 s (an admin saved
+  // in between) - the job would carry max_secs 30, and Pepe would refuse (and the member lose) a body over his 30 s cap
+  const real = PT.effective;
+  PT.effective = (...a) => Object.assign(real(...a), { max_secs: 30 });
+  try {
+    let r;
+    try { r = await upload(20, Buffer.alloc(PT.maxBytes(30) + 1024, 1)); } finally { PT.effective = real; }
+    assert.equal(r.status, 413, JSON.stringify(r.d));
+    assert.equal(r.d && r.d.code, "too_big");
+    assert.equal(relay._jobs.size, 0, "no clip job");
+    assert.equal((relay._hits.get("clip|p1") || []).length, 0, "nothing counted on the play limit");
+    assert.equal((relay._hits.get("clipup|p1") || []).length, 0, "nor on the flood guard");
+    r = await upload(20, Buffer.alloc(PT.maxBytes(30) + 1024, 1));
+    assert.equal(r.status, 200, "the setting really is 120 s: the same body goes through");
+  } finally { reset(); await setLimits({ reset: true }); }
 });
 
 test("every clip job tells Pepe its limits: max_secs, gap_s, burst, window_s - the values it was accepted under", async () => {
