@@ -13,6 +13,8 @@
 //   GET  /sections                   1.7.0: section ids, policy and reviewed section names (others are hidden)
 //   GET  /catalog?section=&type=      1.7.0: paged catalog metadata from an explicitly allowed section
 //   GET  /collections?section=       1.7.0: collections and up to 2000 allowed member keys each
+//                                     1.7.1: &start=&size= (size <= 50) answers one page of collections + total + next; a catalog
+//                                     read stops when the site stops waiting, and a slow or abandoned one is logged
 //   GET  /streams                     every stream's status
 //   PUT  /streams/:stage              start {rtmp, key, ratingKey, offset, quality, audio, sub, title}
 //   POST /streams/:stage/stop         stop + forget
@@ -54,7 +56,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.7.0";
+const VERSION = "1.7.1";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -208,14 +210,19 @@ function makePlex(cfg, req = request, now = Date.now) {
   // This clock is deliberately independent of the injectable Plex identity-cache clock.
   let catalogTurn = Promise.resolve(), catalogStarted = -Infinity;
   const catalogClock = () => Number(process.hrtime.bigint()) / 1e6;
-  async function catalogGet(p) {
+  // 1.7.1: ctx = the HTTP request's {gone(), reads}. A read whose site stopped waiting (its client gave up and closed the
+  // connection) takes no turn and no Plex read: the walk ends there (499) and the budget goes to the next request.
+  async function catalogGet(p, ctx = null) {
     const turn = catalogTurn.then(async () => {
       let wait;
       while ((wait = 250 - (catalogClock() - catalogStarted)) > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (ctx && ctx.gone && ctx.gone()) return false;
       catalogStarted = catalogClock();
+      return true;
     });
     catalogTurn = turn.catch(() => {});
-    await turn;
+    if (!(await turn)) throw fail(499, "the site stopped waiting");
+    if (ctx) ctx.reads = (ctx.reads || 0) + 1;
     return get(p);
   }
   function catalogSection(id) {
@@ -340,8 +347,8 @@ function makePlex(cfg, req = request, now = Date.now) {
   }
   return {
     sectionOk: (id) => sectionOk(cfg, id),
-    async sections() {
-      const mc = await catalogGet("/library/sections");
+    async sections(ctx = null) {
+      const mc = await catalogGet("/library/sections", ctx);
       const sections = [];
       for (const d of mc.Directory || []) {
         const id = String(d.key == null ? "" : d.key);
@@ -350,14 +357,14 @@ function makePlex(cfg, req = request, now = Date.now) {
         const policy = p.adult.includes(id) ? "adult" : p.allowed.includes(id) && sectionOk(cfg, id) ? "allowed" : "off";
         let count = countOf(d.totalSize != null ? d.totalSize : d.count);
         if (policy === "allowed" && d.totalSize == null && d.count == null) {
-          const c = await catalogGet(`/library/sections/${id}/all?type=${d.type === "movie" ? 1 : 2}&X-Plex-Container-Start=0&X-Plex-Container-Size=0`);
+          const c = await catalogGet(`/library/sections/${id}/all?type=${d.type === "movie" ? 1 : 2}&X-Plex-Container-Start=0&X-Plex-Container-Size=0`, ctx);
           count = countOf(c.totalSize);
         }
         sections.push({ id, title: policy === "allowed" ? String(d.title || "") : "(hidden)", type: d.type, count, policy });
       }
       return { allow_list_set: sectionLists(cfg).allowed.length > 0, sections };
     },
-    async catalog({ section, type = 1, since, start = 0, size = 500 } = {}) {
+    async catalog({ section, type = 1, since, start = 0, size = 500 } = {}, ctx = null) {
       section = catalogSection(section);
       if (!["1", "2", "4"].includes(String(type))) throw fail(400, "bad type");
       start = clampInt(start, 0, Number.MAX_SAFE_INTEGER, 0);
@@ -372,19 +379,24 @@ function makePlex(cfg, req = request, now = Date.now) {
         // episode.updatedAt%3E%3E=<since>). Movies (checked on Plex 1.43.4) and shows keep the bare field, their own.
         q.set(String(type) === "4" ? "episode.updatedAt>>" : "updatedAt>>", String(since));
       }
-      const mc = await catalogGet(`/library/sections/${section}/all?${q}`);
+      const mc = await catalogGet(`/library/sections/${section}/all?${q}`, ctx);
       const raw = rowsOf(mc, size);
       const wantedType = { 1: "movie", 2: "show", 4: "episode" }[String(type)];
       const rows = raw.filter((m) => sameSection(m, section) && KEY_RE.test(String(m.ratingKey)) && m.type === wantedType).map(catalogRow);
       return { rows, ...pageInfo(mc, raw, start, size) };
     },
-    async collections(section) {
+    // 1.7.1: with `size` (1-50) one page of collections from `start` -> {collections, total, next}; without it every collection in
+    // one answer, as 1.7.0 did (that walk can take minutes on a large library - each collection's members are read too)
+    async collections(section, { start = null, size = null, ctx = null } = {}) {
       section = catalogSection(section);
+      const paged = size != null && String(size) !== "";
+      const per = paged ? clampInt(size, 1, 50, 10) : 100;
       const collections = [], seen = new Set();
-      let start = 0;
+      let total = 0, next = null;
+      start = paged ? clampInt(start, 0, Number.MAX_SAFE_INTEGER, 0) : 0;
       do {
-        const mc = await catalogGet(`/library/sections/${section}/collections?X-Plex-Container-Start=${start}&X-Plex-Container-Size=100`);
-        const raw = rowsOf(mc, 100);
+        const mc = await catalogGet(`/library/sections/${section}/collections?X-Plex-Container-Start=${start}&X-Plex-Container-Size=${per}`, ctx);
+        const raw = rowsOf(mc, per);
         for (const m of raw) {
           const key = String(m.ratingKey == null ? "" : m.ratingKey);
           if (!KEY_RE.test(key) || seen.has(key) || (m.librarySectionID != null && !sameSection(m, section))) continue;
@@ -392,7 +404,7 @@ function makePlex(cfg, req = request, now = Date.now) {
           const members = [], memberKeys = new Set();
           let at = 0;
           do {
-            const children = await catalogGet(`/library/collections/${key}/children?X-Plex-Container-Start=${at}&X-Plex-Container-Size=500`);
+            const children = await catalogGet(`/library/collections/${key}/children?X-Plex-Container-Start=${at}&X-Plex-Container-Size=500`, ctx);
             const items = rowsOf(children, 500);
             for (const child of items) {
               const k = String(child.ratingKey == null ? "" : child.ratingKey);
@@ -403,9 +415,10 @@ function makePlex(cfg, req = request, now = Date.now) {
           // The upstream childCount may include denied keys. Only the visible, bounded set leaves this service.
           collections.push({ key, title: String(m.title || ""), count: members.length, members });
         }
-        start = pageInfo(mc, raw, start, 100).next;
-      } while (start != null);
-      return { collections };
+        const info = pageInfo(mc, raw, start, per);
+        total = info.total; next = info.next; start = next;
+      } while (!paged && start != null);
+      return paged ? { collections, total, next } : { collections };
     },
     async search(q, limit = 20) {
       const mc = await get(`/hubs/search?query=${encodeURIComponent(q)}&limit=${clampInt(limit, 1, 50, 20)}&includeCollections=0&includeExternalMedia=0`);
@@ -901,6 +914,9 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
 }
 
 // ── HTTP ──
+// 1.7.1: the catalog routes (paced Plex walks) whose slow or abandoned answers are logged
+const CATALOG_ROUTES = new Set(["/sections", "/catalog", "/collections"]);
+const SLOW_LOG_MS = 10000;
 function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
   plex = plex || makePlex(cfg);
   streams = streams || makeStreams(cfg, plex);
@@ -924,17 +940,20 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
     res.writeHead(status, { "Content-Type": "application/json", "Content-Length": b.length, "Cache-Control": "no-store" });
     res.end(b);
   };
-  async function route(req, res, body) {
+  async function route(req, res, body, ctx = null) {
     const u = new URL(req.url, "http://x");
     const p = u.pathname;
     let m;
-    if (req.method === "GET" && p === "/sections") return send(res, 200, { ok: true, ...await plex.sections() });
+    if (req.method === "GET" && p === "/sections") return send(res, 200, { ok: true, ...await plex.sections(ctx) });
     if (req.method === "GET" && p === "/catalog") {
       const q = u.searchParams;
       return send(res, 200, { ok: true, ...await plex.catalog({ section: q.get("section"), type: q.get("type") || 1,
-        since: q.get("since"), start: q.get("start") || 0, size: q.get("size") || 500 }) });
+        since: q.get("since"), start: q.get("start") || 0, size: q.get("size") || 500 }, ctx) });
     }
-    if (req.method === "GET" && p === "/collections") return send(res, 200, { ok: true, ...await plex.collections(u.searchParams.get("section")) });
+    if (req.method === "GET" && p === "/collections") {
+      const q = u.searchParams;
+      return send(res, 200, { ok: true, ...await plex.collections(q.get("section"), { start: q.get("start"), size: q.get("size"), ctx }) });
+    }
     if (req.method === "GET" && p === "/search") {
       const q = String(u.searchParams.get("q") || "").trim().slice(0, 100);
       if (q.length < 2) return send(res, 400, { ok: false, error: "Type at least 2 characters." });
@@ -989,11 +1008,23 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
         return send(res, 200, { ok: true, version: VERSION, encoder: cfg.encoder, plex: !!cfg.plexToken, streams: streams.list().filter((s) => s.state === "playing").length });
       }
       if (!authOk(req, body)) return send(res, 401, { ok: false, error: "unauthorized" });
-      try { await route(req, res, body); }
+      // 1.7.1: the site gave up on this request (its client's timeout closed the connection) -> its catalog walk stops
+      let gone = false, goneAt = null;
+      res.on("close", () => { if (!res.writableFinished) { gone = true; goneAt = Date.now(); } });
+      const pathOnly = req.url.split("?")[0], t0 = Date.now(), ctx = { gone: () => gone, reads: 0 };
+      let status = null;
+      try { await route(req, res, body, ctx); status = res.statusCode; }
       catch (e) {
         const st = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
-        if (st >= 500) console.error("[mediactl]", req.method, req.url.split("?")[0], e.message);
-        if (!res.headersSent) send(res, st, { ok: false, error: e.status ? e.message : "internal error" });
+        status = st;
+        if (st >= 500) console.error("[mediactl]", req.method, pathOnly, e.message);
+        if (!res.headersSent && !gone) send(res, st, { ok: false, error: e.status ? e.message : "internal error" });
+      }
+      // 1.7.1: a catalog read nobody waited for, or one that took a while, is logged - its path and Plex read count only
+      if (CATALOG_ROUTES.has(pathOnly)) {
+        const took = (((gone ? goneAt : Date.now()) - t0) / 1000).toFixed(1), reads = `${ctx.reads} Plex read${ctx.reads === 1 ? "" : "s"}`;
+        if (gone) console.warn(`[mediactl] ${req.method} ${pathOnly}: the site stopped waiting after ${took} s (${reads}) - ${status === 499 ? "stopped there" : "answered too late"}`);
+        else if (Date.now() - t0 >= (cfg.slowLogMs != null ? cfg.slowLogMs : SLOW_LOG_MS)) console.log(`[mediactl] ${req.method} ${pathOnly} ${status} in ${took} s (${reads})`);
       }
     });
   };

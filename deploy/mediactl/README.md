@@ -58,6 +58,18 @@ All three new routes use the existing signed HTTPS authentication:
 | `GET /sections` | `allow_list_set`, plus section IDs, type, count and policy (`allowed`, `adult`, `off`). Adult/off names are always `(hidden)`. |
 | `GET /catalog?section=<reviewed-id>&type=1&start=0&size=500` | A page of movie metadata, `total` and `next`; types `2` and `4` read shows and episodes. `size` is capped at 500. |
 | `GET /collections?section=<reviewed-id>` | Allowed collections and up to 2,000 allowed member keys each. |
+| `GET /collections?section=<reviewed-id>&start=0&size=10` | 1.7.1: one page of those collections (`size` 1-50), plus `total` and `next`. |
+
+1.7.1 (site catfix, prod 2026-11-08): without `size`, `/collections` walks every
+collection's members inside one answer at four Plex reads a second and sends nothing
+until the end. On the largest library that took minutes, past the site's 15 s, so
+every catalog sync failed there. The site now asks for pages (and gives a 1.7.0 whole
+answer 20 minutes). A catalog read (`/sections`, `/catalog`, `/collections`) stops at
+its next Plex read once the site has stopped waiting (its client closed the
+connection), instead of holding the shared budget for minutes, and is logged:
+`[mediactl] GET /collections: the site stopped waiting after 15.0 s (60 Plex reads) -
+stopped there`. A catalog read of 10 s or more is logged with its time and Plex read
+count. These lines carry the path only, never the query.
 
 Catalog rows contain descriptive metadata and public metadata IDs, never media file
 paths or Plex tokens. Summaries are capped at 1,000 characters (500 for episodes);
@@ -83,7 +95,7 @@ The main agent fills the policy on the host, after owner approval:
 2. Put reviewed IDs in `MEDIACTL_SECTIONS`, and every adult library ID in
    `MEDIACTL_SECTIONS_ADULT` in the existing service environment. Empty lists are
    compatibility defaults, not a completed policy review.
-3. After the approved install/restart, read `/health` (version `1.7.0`) and signed
+3. After the approved install/restart, read `/health` (version `1.7.1`) and signed
    `/sections`; verify the allow-list is set and each reviewed policy is correct.
 4. Using a known denied key locally, make **read-only** signed `/item/<key>` and
    `/poster/<key>` requests. Both must refuse without returning metadata. Check
