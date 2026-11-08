@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): the account lifecycle around a scheduled tournament - a merge is refused (E_TOURNEY_ACTIVE, in both directions, before
+// h22 phase 2 (1.99amj): the account lifecycle around a scheduled tournament - a merge is refused (E_TOURNEY_ACTIVE, in both directions, before
 // any write) while either account has an entry in play or a guaranteed part still owed, and goes through once it's over; the stale sweep /
 // provider merges see "tournament entry"; account deletion is blocked by it (a freeroll entry has no escrow hold, so it must be the entry);
 // delete removes the watch / reminder / points rows and keeps the entries (ledger evidence, no names); the export carries entries + points.

@@ -1,4 +1,4 @@
-// h22 phase 2 review (1.99??): the scheduled tournaments' play rules the first build got wrong - on the REAL casino service + escrow ledger
+// h22 phase 2 review (1.99amj): the scheduled tournaments' play rules the first build got wrong - on the REAL casino service + escrow ledger
 // (test/fixtures/mtt-harness.js):
 //   * hand-for-hand: the bubble round's busts at DIFFERENT tables share the round's batch (ranked by their starting stacks, ties split) even
 //     after the first bust bursts the bubble, and the round's bust lines wait until every table of the round has finished its hand

@@ -1,4 +1,4 @@
-// casino/mttseat.js — the seating rules of a scheduled multi-table tournament (hand-off 22 phase 2, 1.99??; docs/casino-backend.md
+// casino/mttseat.js — the seating rules of a scheduled multi-table tournament (hand-off 22 phase 2, 1.99amj; docs/casino-backend.md
 // "Scheduled tournaments (MTT)"). Pure functions on plain arrays / objects: no I/O, no clock, no randomness of their own.
 //
 //   * drawOrder: the provably fair seating draw - an HMAC-SHA256 Fisher-Yates over the sorted entry keys, keyed by the tournament's

@@ -1,4 +1,4 @@
-// h22 phase 2 review (1.99??): the scheduled tournaments' HTTP + Pepe surface, the cases the first build got wrong (casino/routes.js,
+// h22 phase 2 review (1.99amj): the scheduled tournaments' HTTP + Pepe surface, the cases the first build got wrong (casino/routes.js,
 // casino/service.js tourneyTableFor, casino/mtt.js start presence):
 //   * start presence: the lobby block's poll (GET /api/casino/mtt, /api/casino/lobby), registering on the web, and a room registrant
 //     watching on the web count as present; an absent web entrant is told (inbox) that they start sitting out

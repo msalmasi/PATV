@@ -6,7 +6,7 @@
     a countdown ring on the server's deadline, the buy-in / top-up sheet, the showdown reveal, history with the rake,
     spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinohm.js.
     h22 (1.99alz): 🏁 Sit & Go - the lobby's section + its Create sheet (casino-ui.js), a sit & go table's header + results card
-    (casinohm.js); each in one marked block below. h22 phase 2 (1.99??): 🏆 the scheduled tournaments' block (casinomtt.js), marked below. %>
+    (casinohm.js); each in one marked block below. h22 phase 2 (1.99amj): 🏆 the scheduled tournaments' block (casinomtt.js), marked below. %>
 <%- include('partials/casino-css') %>
 <%# 1.99ajw casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
@@ -119,7 +119,7 @@
 <main class="ds-page flow cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>" data-user="<%= signedIn && user ? user : '' %>">
   <%- include('partials/casino-top', { t, game: 'holdem', tableId }) %>
   <% if (!tableId) { %><%- include('partials/casino-lobby', { t, game: 'holdem', bjOn: locals.bjOn, hmOn: locals.hmOn }) %>
-  <%# ── h22 phase 2 (1.99??): 🏆 scheduled tournaments - the lobby's block (casinomtt.js moves it above the Sit & Go section; GET /api/casino/mtt) ── %>
+  <%# ── h22 phase 2 (1.99amj): 🏆 scheduled tournaments - the lobby's block (casinomtt.js moves it above the Sit & Go section; GET /api/casino/mtt) ── %>
   <section class="mtt-sec" id="cz-mtt" hidden aria-labelledby="cz-mtt-h">
     <h2 class="lob-h mtt" id="cz-mtt-h"><a id="mtt" class="mtt-anchor"></a><%- t('casino.mtt.h') %></h2>
     <p class="sng-note" id="cz-mtt-note"><%- t('casino.mtt.note') %></p>
@@ -256,5 +256,5 @@
 <script src="/public/js/casino-ui.js?v=12"></script><%# h22: v10 (the Sit & Go lobby section + sheet); 1.99amf h20: v11 (CZ.theme, the lobby's theme picker - rebased on h22's v10); h22 phase 2: v12 (an MTT table polls every 2 s off-turn - one above both sides' v11) %>
 <% if (locals.theme && theme !== 'classic') { %><script src="/public/js/casino-sound.js?v=2"></script><% } %>
 <script src="/api/casino/sizing.js?v=1"></script>
-<script src="/public/js/casinomtt.js?v=2"></script><%# h22 phase 2 (1.99??): the 🏆 Tournaments block + an MTT table's header (before casinohm.js); review: v2 (the table's results card, the own-table link) %>
+<script src="/public/js/casinomtt.js?v=2"></script><%# h22 phase 2 (1.99amj): the 🏆 Tournaments block + an MTT table's header (before casinohm.js); review: v2 (the table's results card, the own-table link) %>
 <script src="/public/js/casinohm.js?v=14"></script><%# h22: v11 (the Sit & Go header + results); 1.99amf h20: v12 (the theme), verify: v13 (the sign on the felt, out of the board's column - rebased on h22's v11); h22 phase 2: v14 (an MTT table's header is casinomtt.js's - one above themes' v13 / phase 2's v12) %>

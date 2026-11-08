@@ -5,7 +5,7 @@
 // English default) - the defaults equal locales/en.json.
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
-// h22 phase 2 (1.99??): a scheduled tournament's table polls every 2 s while it isn't your turn (1 s on your turn, 5 s hidden).
+// h22 phase 2 (1.99amj): a scheduled tournament's table polls every 2 s while it isn't your turn (1 s on your turn, 5 s hidden).
 (function () {
   "use strict";
   const root = document.getElementById("cb");

@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): the scheduled tournaments' HTTP surface (casino/routes.js): JSON fetch + X-Requested-With on every POST, the
+// h22 phase 2 (1.99amj): the scheduled tournaments' HTTP surface (casino/routes.js): JSON fetch + X-Requested-With on every POST, the
 // 401 / 403 / 404 / 409 / 429 answers, admin routes behind casino.admin (each one audited) and the owner-only ones (void, overlay retry),
 // the settings' bounds, Pepe's !mtt verbs (game "mtt", two args), a room player's bare Hold'em verb resolved turn-first, Telegram refused,
 // BOT_VERBS, the pages, and the MTT table view's 1 s public cache keyed by the table's rev.

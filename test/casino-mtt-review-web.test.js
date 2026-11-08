@@ -1,4 +1,4 @@
-// h22 phase 2 review (1.99??): the scheduled tournaments' web + admin surfaces the first build got wrong:
+// h22 phase 2 review (1.99amj): the scheduled tournaments' web + admin surfaces the first build got wrong:
 //   * the table header ("Table 6 · 3 tables left", never "Table 6 of 3"), a busted / finished entrant's results card at the table, the lobby
 //     card's "Take me to my table" (the table, not the tournament page), "Remind me" only before the start (public/js/casinomtt.js in a vm)
 //   * the lobby's Tournaments tab strip isn't caught by casino-ui.js's `.lob-tabs button` handlers (that broke the cash-table list)
@@ -78,14 +78,14 @@ test("the lobby card: 'Take me to my table' links the table (my_table); 'Remind 
 
 test("the lobby's Tournaments tab strip isn't a .lob-tabs strip (casino-ui.js's lobby handlers select every `.lob-tabs button`); .mtt-tabs is styled", () => {
   const ejs = fs.readFileSync(path.join(h.repo, "views", "casino-hm.ejs"), "utf8");
-  const block = ejs.slice(ejs.indexOf("h22 phase 2 (1.99??): 🏆 scheduled tournaments - the lobby's block"), ejs.indexOf("── /h22 phase 2 ── %>", ejs.indexOf("the lobby's block")));
+  const block = ejs.slice(ejs.indexOf("h22 phase 2 (1.99amj): 🏆 scheduled tournaments - the lobby's block"), ejs.indexOf("── /h22 phase 2 ── %>", ejs.indexOf("the lobby's block")));
   assert.ok(block.length > 100);
   assert.match(block, /class="mtt-tabs"/);
   assert.doesNotMatch(block, /lob-tabs/, "never matched by casino-ui.js's `.lob-tabs button`");
   const ui = fs.readFileSync(path.join(h.repo, "public", "js", "casino-ui.js"), "utf8");
   assert.match(ui, /querySelectorAll\("\.lob-tabs button"\)/, "(what casino-ui.js selects)");
   const css = fs.readFileSync(path.join(h.repo, "views", "partials", "casino-css.ejs"), "utf8");
-  const mb = css.slice(css.indexOf("h22 phase 2 (1.99??): 🏆 scheduled tournaments"), css.indexOf("/* ── /h22 phase 2 ── */"));
+  const mb = css.slice(css.indexOf("h22 phase 2 (1.99amj): 🏆 scheduled tournaments"), css.indexOf("/* ── /h22 phase 2 ── */"));
   assert.match(mb, /\.mtt-tabs\s*\{/);
   assert.match(mb, /\.mtt-tabs button\[aria-selected="true"\]/);
 });

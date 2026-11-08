@@ -1,6 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: true }) %>
-<%# h22 phase 2 (1.99??): the 🏆 tournament schedule manager (casino.admin) - public/js/admin-mtt.js draws it from GET /api/casino/admin/mtt:
+<%# h22 phase 2 (1.99amj): the 🏆 tournament schedule manager (casino.admin) - public/js/admin-mtt.js draws it from GET /api/casino/admin/mtt:
     the lists (upcoming / registering / running / finished / cancelled), the create / edit form with live previews (the fee, the late-entry depth,
     the estimated length, the projected payouts at max entries, the guarantee's gate, the on-air warning) and every row's actions (edit, delay,
     raise max, cancel, void and refund, pause, resume, start now, stream, retry the guarantee, refund an entry, disqualify, the log).

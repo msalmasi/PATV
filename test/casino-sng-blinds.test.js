@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??), commit "sng: blind planner" - an SNG BEHAVIOUR CHANGE (DELIVERY.md): the scheduled tournaments' blind planner
+// h22 phase 2 (1.99amj), commit "sng: blind planner" - an SNG BEHAVIOUR CHANGE (DELIVERY.md): the scheduled tournaments' blind planner
 // (casino/mttseat.js blindPlan) at a Sit & Go too. Phase 1 already moves a busted BUTTON back to the nearest seat still in (the next hand
 // moves it on clockwise); it still skipped a big blind when the big blind or the small blind busted (hmengine.startHand moves the button
 // one seat, so the seat after the busted big blind posted the small blind instead), and going heads-up after the button busted gave last

@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): the seating rules of a scheduled multi-table tournament (casino/mttseat.js) - pure; the blind planner proven on JSON
+// h22 phase 2 (1.99amj): the seating rules of a scheduled multi-table tournament (casino/mttseat.js) - pure; the blind planner proven on JSON
 // copies of the REAL engine (casino/hmengine.js, unchanged): the seating draw, the start split, the blind plan (busts in every position,
 // moves out, arrivals, heads-up), balancing, breaking and the final table condition. Vectors: test/fixtures/mtt-seat-vectors.json.
 "use strict";

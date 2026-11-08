@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): the prize arithmetic of a scheduled multi-table tournament (casino/mttpay.js) - pure, integer amounts. The small-field
+// h22 phase 2 (1.99amj): the prize arithmetic of a scheduled multi-table tournament (casino/mttpay.js) - pure, integer amounts. The small-field
 // bands, the curve in basis points (pinned for E = 2..500), the escrow / overlay splits, places from bust batches (ties, across tables,
 // a disqualification, re-entries), the tie split's odd PAT in odd-chip order, the leaderboard points and the estimated length.
 "use strict";

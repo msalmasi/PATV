@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): every cut point of a scheduled tournament - a crash INSIDE a transaction (S.hooks.crash "mtt:<op>:in-tx": nothing
+// h22 phase 2 (1.99amj): every cut point of a scheduled tournament - a crash INSIDE a transaction (S.hooks.crash "mtt:<op>:in-tx": nothing
 // committed, M and every touched table restored by full replacement, no new table reaches S.tables), right AFTER a commit (the post-commit
 // work is lost; the restart picks it up) and a restart (svc.stop() + boot() on the same database) at each step of section 27 of the spec.
 // Every case checks PAT conservation (wallets + held + House) and that every hold ends exactly once.

@@ -285,7 +285,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
   await each("shop_orders", "status", "SELECT buyer_id AS id FROM shop_orders WHERE status NOT IN ('completed','refunded','cancelled','closed','resolved') UNION SELECT seller_id FROM shop_orders WHERE status NOT IN ('completed','refunded','cancelled','closed','resolved')", (f) => f.holds.add("open shop order"));
   await each("prizes", "seller_id", "SELECT seller_id AS id FROM prizes WHERE seller_id IS NOT NULL AND COALESCE(status,'active') IN ('active','pending','review')", (f) => f.holds.add("shop listing"));
   await each("cosmetic_listings", "status", "SELECT seller_id AS id FROM cosmetic_listings WHERE status = 'active'", (f) => f.holds.add("cosmetic listing"));
-  // h22 phase 2 (1.99??): a poker tournament entry in play (casino/mtt.js; a freeroll entry has no escrow hold) or a guaranteed part still owed
+  // h22 phase 2 (1.99amj): a poker tournament entry in play (casino/mtt.js; a freeroll entry has no escrow hold) or a guaranteed part still owed
   await each("casino_mtt_entries", "overlay_due", "SELECT DISTINCT user_id AS id FROM casino_mtt_entries WHERE state IN ('held','playing') OR overlay_due > 0", (f) => f.holds.add("tournament entry"));
   if (await tableExists("markets")) {
     await each("market_orders", "market_id", "SELECT o.user_id AS id FROM market_orders o JOIN markets m ON m.id = o.market_id WHERE m.status = 'open' OR o.status = 'pending'", (f) => f.holds.add("market order"));

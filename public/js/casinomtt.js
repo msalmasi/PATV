@@ -1,4 +1,4 @@
-// casinomtt.js — 🏆 scheduled multi-table tournaments on the web (hand-off 22 phase 2, 1.99??; casino/mtt.js): the Hold'em lobby's
+// casinomtt.js — 🏆 scheduled multi-table tournaments on the web (hand-off 22 phase 2, 1.99amj; casino/mtt.js): the Hold'em lobby's
 // Tournaments block (#cz-mtt, above the Sit & Go section, from GET /api/casino/mtt), the tournament page (/casino/holdem/mtt/<id>: the
 // header, the Info / Players / Tables / Prizes / Results tabs, Register / Unregister / Re-enter / Remind me), the leaderboard
 // (/casino/holdem/leaderboard) and the header of a tournament TABLE (casinohm.js asks window.CZMTT.tableHead when table.tourney.kind is

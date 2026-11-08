@@ -1,4 +1,4 @@
-// admin-mtt.js — the 🏆 tournament schedule manager (/admin/casino/mtt; hand-off 22 phase 2, 1.99??; casino/mtt.js). The lists, the
+// admin-mtt.js — the 🏆 tournament schedule manager (/admin/casino/mtt; hand-off 22 phase 2, 1.99amj; casino/mtt.js). The lists, the
 // create / edit form with live previews (the fee, the late-entry depth in big blinds, the estimated length and end, the projected payouts at
 // max entries, the most a guarantee could add vs the caps, an on-air warning) and every row's actions - all JSON fetch, every one audited.
 (function () {

@@ -15,7 +15,7 @@
 //   * h22 (1.99alz): 🏁 Sit & Gos (casino/tourney.js, TN) are Hold'em tables with a `tourney` block, on the same core: run() sends
 //     game "sng" there, their settings live with the others (casino_sng off | staff | everyone + sng_*), their hands earn no casino
 //     rewards (hmRewards), they're kept out of the cash lobby / Pepe's open-table list, and a finished one lingers LINGER_MS for its results.
-//   * h22 phase 2 (1.99??): SCHEDULED multi-table tournaments (casino/mtt.js, MT) - their tables are Hold'em tables with a tourney block of
+//   * h22 phase 2 (1.99amj): SCHEDULED multi-table tournaments (casino/mtt.js, MT) - their tables are Hold'em tables with a tourney block of
 //     kind "mtt" (the ROUTE below sends them there): run() sends game "mtt" there, casino_mtt off | staff | everyone + mtt_* live with the other
 //     settings, the MTT tick runs in tickOnce, their tables refuse push / advertise / a host's stream, aren't counted by max_tables, and the
 //     stream slot gives the final table its place (streamTake: a tournament table on the slot is never pre-empted).
@@ -30,7 +30,7 @@ const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achieve
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
 const themes = require("./themes");       // 1.99amf h20: the card tables' themes (presentation only; casino_themes switch)
-const MTCFG = require("./mtt");           // h22 phase 2 (1.99??): the scheduled tournaments' settings (pure); the service is MT below
+const MTCFG = require("./mtt");           // h22 phase 2 (1.99amj): the scheduled tournaments' settings (pure); the service is MT below
 
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
@@ -1529,7 +1529,7 @@ const refreshVeil = (T) => V.refresh(T, persistVeil);
 const noTourney = (fn) => (T, ...a) => (T && T.tourney ? null : fn(T, ...a));
 const hmRewards = Object.assign(Object.create(rewards), { holdemPot: noTourney(rewards.holdemPot), holdemHand: noTourney(rewards.holdemHand),
                                                           holdemBoardRoyal: noTourney(rewards.holdemBoardRoyal), holdemShowdown: noTourney(rewards.holdemShowdown) });
-// h22 phase 2 (1.99??): the tournament ROUTER - holdem.js calls ROUTE for every table with a tourney block. kindOf(T): "sng" (or no kind:
+// h22 phase 2 (1.99amj): the tournament ROUTER - holdem.js calls ROUTE for every table with a tourney block. kindOf(T): "sng" (or no kind:
 // a row written before phase 2) -> casino/tourney.js (TN), "mtt" -> casino/mtt.js (MT). beforeDeal / dealt / noDealNext are phase 2's
 // hooks: a sit & go deals as before (beforeDeal {deal: true}, dealt nothing, NEXT_SECS after a failed deal).
 const tourneyKind = (T) => (T && T.tourney ? T.tourney.kind || "sng" : null);
@@ -1558,7 +1558,7 @@ const HM = require("./holdem").install({
 // ── h22: 🏁 Sit & Gos (casino/tourney.js) on Hold'em tables ──
 const TN = SNGCFG.install({ S, clock, save, emit, userRow, R, fmt, link, runQuery, streamGone, loadSettings, HM,
                             roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T) });
-// h22 phase 2 (1.99??), "sng: blind planner" - an SNG behaviour change (flagged, droppable): the scheduled tournaments' blind planner
+// h22 phase 2 (1.99amj), "sng: blind planner" - an SNG behaviour change (flagged, droppable): the scheduled tournaments' blind planner
 // (casino/mttseat.js blindPlan) at a Sit & Go too. Phase 1 moves a busted button back to the nearest seat still in; a busted big or small
 // blind still skipped a big blind (hmengine.startHand moves the button one seat), and going heads-up after the button busted gave last
 // hand's big blind the big blind again. Now: the big blind always moves forward one seat, a small blind on last hand's small blind is dead
@@ -1591,7 +1591,7 @@ const sngRoute = Object.assign(Object.create(TN), {
   },
 });
 KINDS.sng = sngRoute;
-// ── h22 phase 2 (1.99??): 🏆 scheduled multi-table tournaments (casino/mtt.js) on Hold'em tables of tourney kind "mtt" ──
+// ── h22 phase 2 (1.99amj): 🏆 scheduled multi-table tournaments (casino/mtt.js) on Hold'em tables of tourney kind "mtt" ──
 const core2 = { discordBridge: null };
 const MT = MTCFG.install({ S, clock, save, emitRaw, userRow, R, fmt, siteBase, runQuery, getQuery, streamGone, loadSettings, HM, wake,
                            freshRooms: () => freshRooms(), streamTake: (T, mode, by, M) => streamTake(T, mode, by, M),

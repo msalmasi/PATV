@@ -310,7 +310,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("achievements", "marks", rows("ach_marks", "userId = ?", [uid]));
   await put("achievements", "streak_days", rows("activity_days", "userId = ?", [uid]));   // 1.99xi: 🔥 the days your streak is made of
   await put("achievements", "casino_counts", rows("casino_ach_counts", "userId = ?", [uid]));
-  // h22 phase 2 (1.99??): your poker tournament entries (casino/mtt.js) and leaderboard points
+  // h22 phase 2 (1.99amj): your poker tournament entries (casino/mtt.js) and leaderboard points
   await put("casino", "tournaments", (async () => ({ entries: await rows("casino_mtt_entries", "user_id = ?", [uid], { omit: ["hold_id", "enter_key", "refund_key"] }),
                                                      points: await rows("casino_mtt_points", "user_id = ?", [uid]) }))());
   await put("cosmetics", "items", rows("user_cosmetics", "user_id = ?", [uid]));

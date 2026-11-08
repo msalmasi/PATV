@@ -260,7 +260,7 @@ async function handleStageGoLive(client, body, res) {
   return send(res, 200, { ok: true, id: posted.id });
 }
 
-// h22 phase 2 (1.99??): a scheduled poker tournament's channel post (casino/mtt.js discord(): reg_open | starting | final | winner) - the
+// h22 phase 2 (1.99amj): a scheduled poker tournament's channel post (casino/mtt.js discord(): reg_open | starting | final | winner) - the
 // stage pattern: never on staging, a channel in the PATV guild, the canonical tournament link only, escaped text, and only the configured
 // role pinged (on 'starting' alone; never @everyone / @here). One post per (tournament, kind) is the site's (its casino_mtt_log key).
 const TOURNEY_KINDS = ['reg_open', 'starting', 'final', 'winner'];

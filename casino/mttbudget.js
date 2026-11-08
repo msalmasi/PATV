@@ -1,5 +1,5 @@
 // casino/mttbudget.js — the ONLY module a scheduled tournament's guarantee touches the incentive budget through (hand-off 22 phase 2,
-// 1.99??; docs/casino-backend.md "Guarantees and freerolls"). Guaranteed pools and freerolls are paid from the INCENTIVE budget through
+// 1.99amj; docs/casino-backend.md "Guarantees and freerolls"). Guaranteed pools and freerolls are paid from the INCENTIVE budget through
 // the budget service (hand-off 23 D3, PO-5: policy/budget.js), and only from H2b on - Tue 2026-12-01 14:00:00 UTC. Never from the
 // House, the Fed or a player's PAT: nothing here (or in any casino/mtt*.js file) moves PAT any other way.
 //

@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): scheduled multi-table Hold'em tournaments (casino/mtt.js) on the REAL casino service + the REAL escrow ledger, a test
+// h22 phase 2 (1.99amj): scheduled multi-table Hold'em tournaments (casino/mtt.js) on the REAL casino service + the REAL escrow ledger, a test
 // database, a fake clock and bot players (test/fixtures/mtt-harness.js):
 //   * the switch casino_mtt (off / staff / everyone); register (one TNY hold of buy-in + fee), the refusals (PAT, ban, dup-linked and
 //     same-address over the whole tournament, full, escrow not live, the room cap), unregister (a full refund), re-registering (gen 2)

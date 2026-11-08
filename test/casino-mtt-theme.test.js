@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??), the rebase onto site 1.99amh (hand-off 20's card table themes, 1.99amf, landed first): which theme a SCHEDULED
+// h22 phase 2 (1.99amj), the rebase onto site 1.99amh (hand-off 20's card table themes, 1.99amf, landed first): which theme a SCHEDULED
 // tournament's table gets. The themes brief keeps tournaments out of its scope (G:/ops/handoffs/20-poker-themes.md "Out of scope": hand-off
 // 22) and says nothing else about them; hand-off 20's own rebase onto h22 made a Sit & Go table classic (casino/tourney.js builds it with
 // HM.newTable(..., { tourney: true }) - no opts.theme, and the Create sheet offers no theme). So an MTT table takes the SAME path

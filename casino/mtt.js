@@ -1,4 +1,4 @@
-// casino/mtt.js — 🏆 SCHEDULED MULTI-TABLE Hold'em tournaments (hand-off 22 phase 2, 1.99??; docs/casino-backend.md
+// casino/mtt.js — 🏆 SCHEDULED MULTI-TABLE Hold'em tournaments (hand-off 22 phase 2, 1.99amj; docs/casino-backend.md
 // "Scheduled tournaments (MTT)"). Built on phase 1 (casino/tourney.js, the Sit & Go): the same money rules (decisions 1-11 of the
 // brief), the same engine (casino/hmengine.js, unchanged), the same table code (casino/holdem.js) - every MTT table is an ordinary
 // Hold'em table with a tourney block {kind: "mtt"} that service.js's router sends here.

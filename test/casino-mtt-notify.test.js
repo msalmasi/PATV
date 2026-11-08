@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): the scheduled tournaments' notices - the inbox kind "tourney" (🏆, Telegram opt-in: off by default, the inline
+// h22 phase 2 (1.99amj): the scheduled tournaments' notices - the inbox kind "tourney" (🏆, Telegram opt-in: off by default, the inline
 // toggle sets it), reminders due and sent once (remind-on entrants and watchers), stale reminders dropped (cancel, start now, a delay),
 // result + cancel notices to every entrant, room lines only in the announce rooms (a player's own lines only in their room, a per-room
 // budget that merges bust lines), Pepe's notice PMs only where pmAllowed, and the Discord kinds (starting + winner by default; the role

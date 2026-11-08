@@ -1,4 +1,4 @@
-// casino/mttpay.js — the prize arithmetic of a scheduled multi-table tournament (hand-off 22 phase 2, 1.99??; docs/casino-backend.md
+// casino/mttpay.js — the prize arithmetic of a scheduled multi-table tournament (hand-off 22 phase 2, 1.99amj; docs/casino-backend.md
 // "Scheduled tournaments (MTT)"). Pure, integer arithmetic on what is paid: the curve is computed once (basis points, an integer array,
 // fixed when late registration closes); every PAT amount after that is floor / remainder arithmetic, so the prizes add up to the pool
 // exactly, to the PAT.

@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): guarantees and freerolls (casino/mttbudget.js) - the incentive budget through the budget service (PO-5, hand-off 23
+// h22 phase 2 (1.99amj): guarantees and freerolls (casino/mttbudget.js) - the incentive budget through the budget service (PO-5, hand-off 23
 // D3: stubbed here through mttbudget._hooks.budget, with a REAL policy/config and rows in policy_ownership), only from H2b (Tue 2026-12-01
 // 14:00:00 UTC). The create gate vs the spend gate, the creation checks (caps, weekly exposure, series, headroom, the group), the overlay paid
 // ONCE under its key after the escrow settle (incentives down by O, wallets up by O, nothing from the House / the Fed / a player), every

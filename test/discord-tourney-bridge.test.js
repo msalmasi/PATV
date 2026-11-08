@@ -1,5 +1,5 @@
 "use strict";
-// h22 phase 2 (1.99??): discord-bot/botBridge.js POST /casino/tourney - a scheduled poker tournament's channel post (casino/mtt.js): never on
+// h22 phase 2 (1.99amj): discord-bot/botBridge.js POST /casino/tourney - a scheduled poker tournament's channel post (casino/mtt.js): never on
 // staging (409 staging_disabled), the canonical /casino/holdem/mtt/<id> link only, a channel in the PATV guild, escaped text, and only the
 // configured role pinged on 'starting' (allowedMentions limited to it; never @everyone / @here). One post per (tournament, kind) is the site's.
 const test = require("node:test"), assert = require("node:assert/strict");

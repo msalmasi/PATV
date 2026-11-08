@@ -1,4 +1,4 @@
-// test/fixtures/mtt-harness.js — the shared set-up of the scheduled-tournament tests (hand-off 22 phase 2, 1.99??): a temporary database, the
+// test/fixtures/mtt-harness.js — the shared set-up of the scheduled-tournament tests (hand-off 22 phase 2, 1.99amj): a temporary database, the
 // REAL casino service + escrow ledger, a fake clock (svc.S.hooks.now), bot players, a deterministic deck and the PAT conservation oracle.
 // Nothing happens when this file is loaded (node --test runs every .js under test/): a test file calls harness(name) first thing.
 "use strict";

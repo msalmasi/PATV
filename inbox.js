@@ -38,7 +38,7 @@ const KINDS = {
   cosmetics:   { icon: "🎨", label: "Cosmetics", link: "/cosmetics" },
   lotto:       { icon: "🎟️", label: "Lotto", link: "/lotto" },
   raffle:      { icon: "🎫", label: "Raffles (wins, draws, refunds)", link: "/raffles" },   // 1.99xk: raffles.js
-  tourney:     { icon: "🏆", label: "Poker tournaments", link: "/casino/holdem#mtt" },   // h22 phase 2 (1.99??): casino/mtt.js (Telegram: opt-in)
+  tourney:     { icon: "🏆", label: "Poker tournaments", link: "/casino/holdem#mtt" },   // h22 phase 2 (1.99amj): casino/mtt.js (Telegram: opt-in)
   tip:         { icon: "💸", label: "Tips", link: "/history" },
   gift:        { icon: "🎁", label: "Gifts sent to you under a frog name (yours to accept)", link: "/wallet#gifts" },   // 1.99ajn padppl: veilgift.js
   achievement: { icon: "🏅", label: "Achievements", link: "/achievements" },

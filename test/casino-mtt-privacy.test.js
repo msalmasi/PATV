@@ -1,4 +1,4 @@
-// h22 phase 2 (1.99??): privacy on every scheduled-tournament surface - a veiled entrant (incognito, out, a failed check = unknown) is
+// h22 phase 2 (1.99amj): privacy on every scheduled-tournament surface - a veiled entrant (incognito, out, a failed check = unknown) is
 // "someone" in the players list, !mtt top, the results, the room lines and the batched hand-for-hand lines; no account ids, addresses, the
 // draw seed (before the end) or M.people in any answer; veiled results stay off the public leaderboard and someone veiled NOW is left off it;
 // a moved player starts a new seat session at the new table; hole cards and turn prompts only in the player's own view and in Pepe's

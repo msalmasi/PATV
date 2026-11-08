@@ -35,7 +35,7 @@
 //                                            h22: game "sng" = !sng (verbs "" / list, new, join, leave, info, cancel, help; up to 5 args);
 //                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`;
 //                                            review: + `sng_on` (the switch: off | staff | everyone; "off" while Hold'em is off)
-// h22 phase 2 (1.99??) 🏆 SCHEDULED tournaments (casino/mtt.js; each one's tables are /casino/holdem/t/:id with table.tourney.kind "mtt"):
+// h22 phase 2 (1.99amj) 🏆 SCHEDULED tournaments (casino/mtt.js; each one's tables are /casino/holdem/t/:id with table.tourney.kind "mtt"):
 //   GET  /casino/holdem/mtt/:id             the tournament page (302 to /casino/holdem while the switch hides it from this viewer)
 //   GET  /casino/holdem/leaderboard         the leaderboard page;  GET /admin/casino/mtt  the schedule manager (casino.admin)
 //   GET  /api/casino/mtt                    the lobby block (also GET /api/casino/lobby -> mtt): {mtt_on, can_register, upcoming, registering, running, recent, mine}

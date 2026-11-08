@@ -9,7 +9,7 @@
 // the players left and the prize table (while it registers: who's in, the countdown, Register / Unregister), the results card the end;
 // there is no buy-in, top-up, stand-up or deal button there (tournament chips aren't PAT).
 // 1.99amf h20: a themed table (t.theme) is dressed by CZ.theme (casino-ui.js) - the look only.
-// h22 phase 2 (1.99??): at a 🏆 scheduled tournament's table (table.tourney.kind "mtt") the header is casinomtt.js's (window.CZMTT.tableHead:
+// h22 phase 2 (1.99amj): at a 🏆 scheduled tournament's table (table.tourney.kind "mtt") the header is casinomtt.js's (window.CZMTT.tableHead:
 // tournament + table number, players left, average stack, your rank, the next level, holds, the move to your new table).
 (function () {
   "use strict";
@@ -233,7 +233,7 @@
     head.hidden = !tn;
     if (!tn) { res.hidden = true; return; }
     const sub = document.querySelector(".cz-brand small");          // (the top bar's cash-table line: chips = PAT, the rake - not here)
-    // ── h22 phase 2 (1.99??): a 🏆 scheduled tournament's table - its header is casinomtt.js's (CZMTT.tableHead) ──
+    // ── h22 phase 2 (1.99amj): a 🏆 scheduled tournament's table - its header is casinomtt.js's (CZMTT.tableHead) ──
     if (tn.kind === "mtt") {
       if (sub) sub.textContent = T("mtt_sub", "Tournament · tournament chips (not PAT) · no rake");
       if (window.CZMTT) window.CZMTT.tableHead(t, me, head, res);

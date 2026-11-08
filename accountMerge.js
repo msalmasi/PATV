@@ -304,7 +304,7 @@ const RULES = {
   // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)
   "casino_ach_base.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MIN" } }),
   "casino_rep_queue.userId": { keep: "the casino's gang-rep journal (keyed by the win, delivered to Pepe by Camfrog name)" },
-  // h22 phase 2 (1.99??): scheduled poker tournaments (casino/mtt.js) - entries follow the account (moveUserRows refuses while one is still
+  // h22 phase 2 (1.99amj): scheduled poker tournaments (casino/mtt.js) - entries follow the account (moveUserRows refuses while one is still
   // in play, E_TOURNEY_ACTIVE), the best finish per tournament is kept, a watch / reminder follows; who scheduled one is the admin audit's
   "casino_mtt_entries.user_id": M(),
   "casino_mtt_points.user_id": M({ key: ["tid"], merge: { points: "MAX", place: "MIN", cashed: "MAX", won: "MAX" } }),
@@ -760,7 +760,7 @@ async function mergeWelcome(fromId, toId, out) {
 async function moveUserRows(fromId, toId, opts = {}) {
   const out = { moved: {}, folded: {}, left: {}, unclassified: [], recount: { posts: [], comments: [] } };
   if (!fromId || !toId || fromId === toId) return out;
-  // h22 phase 2 (1.99??): never while either account has a poker tournament entry in play or a guaranteed part still owed - its uid is in
+  // h22 phase 2 (1.99amj): never while either account has a poker tournament entry in play or a guaranteed part still owed - its uid is in
   // the tournament's live seat / transit state (re-keying live engine state is refused, not attempted). Before any write.
   if (await tableExists("casino_mtt_entries")) {
     const busy = await getQuery("SELECT 1 FROM casino_mtt_entries WHERE user_id IN (?, ?) AND (state IN ('held','playing') OR overlay_due > 0) LIMIT 1", [fromId, toId]);

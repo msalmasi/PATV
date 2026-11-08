@@ -330,7 +330,7 @@ function install(core) {
   async function beginHand(T) {
     const e = T.eng;
     if (e.hand_active) return false;
-    // h22 phase 2 (1.99??): a scheduled tournament's table runs its boundary first (the clock's blinds, arrivals, balancing, breaking,
+    // h22 phase 2 (1.99amj): a scheduled tournament's table runs its boundary first (the clock's blinds, arrivals, balancing, breaking,
     // the final table, hand-for-hand) - also with 0-1 players seated; a sit & go answers {deal: true} here
     if (T.tourney) { const r = await TN().beforeDeal(T); if (!r || !r.deal) return false; }
     if (!H.canStart(e)) return false;

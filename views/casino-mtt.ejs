@@ -1,6 +1,6 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: view === 'board' ? t('casino.mtt.board_title') : t('casino.mtt.page_title'), user: user}) %>
-<%# views/casino-mtt.ejs - h22 phase 2 (1.99??): 🏆 a scheduled tournament's page (/casino/holdem/mtt/<id>: the header with the level, the blinds,
+<%# views/casino-mtt.ejs - h22 phase 2 (1.99amj): 🏆 a scheduled tournament's page (/casino/holdem/mtt/<id>: the header with the level, the blinds,
     the next level, players left, the average stack, the prize pool, the paid places and the hand-for-hand / paused banners; the Info, Players,
     Tables, Prizes and Results tabs; Register / Unregister / Re-enter / Remind me) and the leaderboard (/casino/holdem/leaderboard). Drawn by
     public/js/casinomtt.js from /api/casino/mtt/<id> (3 s while it runs, 15 s otherwise). %>
