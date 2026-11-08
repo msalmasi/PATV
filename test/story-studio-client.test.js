@@ -237,6 +237,8 @@ function studioPage(options = {}) {
         node.setAttribute('src', v); if (!String(v).startsWith('blob:')) return;
         const blob = blobs.get(v), isSource = node.classList.contains('sst-source');
         queueMicrotask(() => { if (isSource && options.decode === false) { node.dispatchEvent(new Ev('error')); return; }
+          // storyprev: options.sourceVideo(node, src) loads the editor's <video> the way a test says (true = it did)
+          if (isSource && tag === 'video' && options.sourceVideo && options.sourceVideo(node, String(v))) return;
           node.naturalWidth = options.width || 1080; node.naturalHeight = options.height || 1920; node.videoWidth = options.width || 1080; node.videoHeight = options.height || 1920;
           node.duration = options.duration || 42; node.currentTime = 0; node.paused = true;
           if (node.onload) node.onload(); node.dispatchEvent(new Ev(tag === 'video' ? 'loadedmetadata' : 'load')); void blob;
@@ -253,7 +255,7 @@ function studioPage(options = {}) {
     clearTimeout: (id) => { const i = held.indexOf(id); if (i >= 0) held.splice(i, 1); else if (!(id && id.fn)) clearImmediate(id); },
     requestAnimationFrame: (f) => setImmediate(f), cancelAnimationFrame: (id) => clearImmediate(id),
     addEventListener: (type, fn) => { winListeners.push({ type, fn }); }, removeEventListener: (type, fn) => { const i = winListeners.findIndex((l) => l.type === type && l.fn === fn); if (i >= 0) winListeners.splice(i, 1); }, confirm: () => true,
-    location: { reload() { throw new Error('must never reload'); }, pathname: options.pathname || '/feed', search: '', href: options.pathname || '/feed' },
+    location: { reload() { throw new Error('must never reload'); }, pathname: options.pathname || '/feed', search: options.search || '', href: (options.pathname || '/feed') + (options.search || '') },
     // ssfix: the tab's session storage (shared between the "before" and "after" page of a reload) and how this page was loaded
     sessionStorage: options.sessionStorage,
     performance: options.navigation ? { getEntriesByType: (t) => t === 'navigation' ? [{ type: options.navigation }] : [] } : undefined,
@@ -912,7 +914,7 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=5/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame
+  assert.match(html, /story-studio\.js\?v=6/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1
   assert.match(html, /story-studio\.css\?v=3/);
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
@@ -931,4 +933,47 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
   }
   assert.equal(jsPins, 4); assert.equal(cssPins, 5);
   assert.match(fs.readFileSync(path.join(repo, "views/messages.ejs"), "utf8"), /messages\.js\?v=14/);
+});
+
+// ── storyprev (1.99??): a <video> with no size at 'loadedmetadata' is waited for ('resize' / 'loadeddata' / 'canplay', WAIT_MS),
+//    a refused media fragment gets one plain try, and a gallery video this browser can't show keeps "Post it as it is" in
+//    kinder words; ?storydebug=1 shows what the browser made of it (story-camera.test.js has the camera's poster) ──
+const WAIT_MS = 4000;
+test('Studio storyprev: a gallery video with no size at loadedmetadata is not refused at once - canplay brings it; nothing in the wait gets the kinder recovery', async () => {
+  let video = null;
+  const P = studioPage({ hold: [WAIT_MS], sourceVideo: (node) => { video = node; node.videoWidth = 0; node.videoHeight = 0; node.duration = 8; node.dispatchEvent(new Ev('loadedmetadata')); return true; } });
+  const root = await studioOpen(P); await studioPick(P, 'video/mp4'); await flush(4);
+  assert.equal(P.doc.querySelector('.sst-status').textContent, '', 'no failure at loadedmetadata'); assert.ok(P.doc.querySelector('.sst-recovery').hidden);
+  assert.equal(P.held.filter((h) => h.ms === WAIT_MS).length, 1, 'one bounded wait');
+  video.videoWidth = 1080; video.videoHeight = 1920; video.dispatchEvent(new Ev('canplay')); await flush(4);
+  assert.equal(P.held.filter((h) => h.ms === WAIT_MS).length, 0, 'the wait is over'); assert.ok(!P.doc.querySelector('.sst-post').disabled); assert.ok(!P.doc.querySelector('[data-tool="crop"]').disabled);
+  assert.ok(root.classList.contains('sst-video'));
+  // nothing within the wait: the recovery - it will still post
+  const Q = studioPage({ hold: [WAIT_MS], sourceVideo: (node) => { node.videoWidth = 0; node.videoHeight = 0; node.duration = 8; node.dispatchEvent(new Ev('loadedmetadata')); return true; } });
+  await studioOpen(Q); await studioPick(Q, 'video/mp4'); await flush(4);
+  const wait = Q.held.find((h) => h.ms === WAIT_MS); assert.ok(wait); wait.fn(); await flush(4);
+  const st = Q.doc.querySelector('.sst-status'); assert.match(st.textContent, /This browser can't preview this video here, but it will still post\. Post it as it is \(up to 30 seconds\), or pick another\./);
+  assert.ok(!Q.doc.querySelector('.sst-recovery').hidden); clickText(Q, 'Post it as it is');
+  Q.doc.querySelector('.sst-post').click(); await flush(16); assert.equal(Q.uploaded.length, 1); assert.equal(Q.uploaded[0].body.edit, undefined);
+  // a phone says phone
+  const R = studioPage({ decode: false }); R.win.matchMedia = (q) => ({ matches: /pointer:\s*coarse/.test(q), media: q });
+  await studioOpen(R); await studioPick(R, 'video/mp4'); await flush(6);
+  assert.match(R.doc.querySelector('.sst-status').textContent, /^Your phone can't preview this video here, but it will still post\./);
+  // a picture keeps its own words
+  const S = studioPage({ decode: false }); await studioOpen(S); await studioPick(S, 'image/jpeg'); await flush(4);
+  assert.match(S.doc.querySelector('.sst-status').textContent, /cannot preview that file/);
+});
+
+test('Studio storyprev: a refused media fragment is tried once without it; the debug read-out is off unless ?storydebug=1', async () => {
+  const srcs = [];
+  const P = studioPage({ sourceVideo: (node, src) => { srcs.push(src); if (/#t=/.test(src)) { node.error = { code: 4, message: 'unsupported' }; node.dispatchEvent(new Ev('error')); return true; } return false; } });
+  await studioOpen(P); await studioPick(P, 'video/mp4'); await flush(6);
+  assert.equal(srcs.length, 2); assert.match(srcs[0], /#t=0\.001$/); assert.doesNotMatch(srcs[1], /#/);
+  assert.ok(P.doc.querySelector('.sst-recovery').hidden); assert.equal(P.doc.querySelector('[data-tool="trim"]').disabled, false);
+  assert.equal(P.doc.querySelector('.sst-debug'), null, 'off by default');
+  const Q = studioPage({ search: '?storydebug=1' }); await studioOpen(Q); await studioPick(Q, 'video/mp4'); await flush(6);
+  const box = Q.doc.querySelector('.sst-preview .sst-debug'); assert.ok(box);
+  assert.match(box.textContent, /workshop\.mp4/); assert.match(box.textContent, /gallery/); assert.match(box.textContent, /1080×1920/); assert.match(box.textContent, /loadedmetadata \+\d+ ms/);
+  assert.ok(!Q.calls.some((c) => /debug/i.test(String(c.url))), 'no network');
+  await studioPick(Q, 'image/jpeg'); assert.equal(Q.doc.querySelectorAll('.sst-debug').length, 1, 'one read-out, for the current pick'); assert.match(Q.doc.querySelector('.sst-debug').textContent, /image\/jpeg/);
 });
