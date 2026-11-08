@@ -4,7 +4,7 @@
    and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node).
    1.99amu micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
    and Pepe check it: 1-20 characters, never starting with / or !, nothing his chat would change; empty = none). v3: that last check.
-   1.99?? micreplies (v4): + -mic replies fast-grab (!mic fastgrab replies - his -mic command answers fast-grab too). */
+   1.99anf micreplies (v4): + -mic replies fast-grab (!mic fastgrab replies - his -mic command answers fast-grab too). */
 (function () {
   'use strict';
   var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty', 'replies', 'blockbreak', 'selfunblock'];

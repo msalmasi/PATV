@@ -14,7 +14,7 @@
 //     the admin page too, a toggle plus field for whatever the unblock code is ...)"): blockbreak (on by default) and selfunblock
 //     (off by default) switches + the unblockcode text field - 1-20 printable characters, trimmed, case kept, never a leading
 //     "/" or "!" (it can never be a Camfrog or a Pepe command); empty = none
-//   * 1.99?? micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): replies (off by default) - Pepe's -mic
+//   * 1.99anf micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): replies (off by default) - Pepe's -mic
 //     command answers (!ask / !roast / !look ... -mic, a -mic !remind / !relay) fast-grab too, like chatty mic-ups
 //   node --test test/fastgrab.test.js
 "use strict";
@@ -395,7 +395,7 @@ test("the rooms page renders the card: Pepe's current values, the rooms (room vs
   assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · replies off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20 · blockbreak on · selfunblock off · unblockcode none/);
   assert.match(html, /<b>Players Lounge<\/b> \(You_Were_Never_Here\): on on · contest on · fair off · claim swallow · rate 15 \(its own\)/);
   assert.match(html, /<b>Pepe&#39;s Pad<\/b> \(PepeFrog.Room\): follows the global/);
-  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=4" defer><\/script>/, "(1.99amu micblock: v2 - the new rows; v3 - the code's chat-layer check; 1.99?? micreplies: v4 - the -mic replies row)");
+  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=4" defer><\/script>/, "(1.99amu micblock: v2 - the new rows; v3 - the code's chat-layer check; 1.99anf micreplies: v4 - the -mic replies row)");
   assert.match(html, /Block break/, "micblock: the card explains the block break and the self-unblock");
   assert.match(html, /unblock code/i);
   const rawData = html.match(/<script type="application\/json" id="fgData">([\s\S]*?)<\/script>/)[1];
@@ -503,7 +503,7 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   const view = (await api("GET", "boss")).d;
   const K = card(view);
   await flush();
-  assert.equal(K.byId.fgRows.children.length, 17, "one row per setting (1.99amu micblock: + block break, self-unblock, unblock code; 1.99?? micreplies: + -mic replies)");
+  assert.equal(K.byId.fgRows.children.length, 17, "one row per setting (1.99amu micblock: + block break, self-unblock, unblock code; 1.99anf micreplies: + -mic replies)");
   assert.equal(K.byId.fgOnline.textContent, "live");
   assert.equal(K.byId.fgNow.hidden, true, "the page's snapshot gives way to the table");
   assert.equal(K.inputs("rate")[0].value, "10", "the global's rate (Where: global default)");
@@ -738,7 +738,7 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
     FG.validate({ scope: "all", set: { contest: true } }, FG.cleanState(block())).args,
     // 1.99amu micblock: the block break off + the self-unblock with its code (trimmed, case kept) in Pepe's Pad only
     FG.validate({ scope: "room", room: PAD, set: { blockbreak: false, selfunblock: true, unblockcode: " Ok 1 " } }, FG.cleanState(block())).args,
-    // 1.99?? micreplies: -mic replies fast-grab on in Houseplants only
+    // 1.99anf micreplies: -mic replies fast-grab on in Houseplants only
     FG.validate({ scope: "room", room: PLANT, set: { replies: true } }, FG.cleanState(block())).args,
   ];
   const badArgs = [["room", YW, "volume=11"], ["room", YW, "rate=1.5"], ["global", "", "rate=follow"], ["room", YW, "breaker=1,2"],

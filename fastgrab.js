@@ -40,7 +40,7 @@ const KIND = "mic.fastgrab";
 const AUDIT = "pepe.fastgrab";
 const TAG = "pepe-fastgrab";
 const SCOPES = ["room", "global", "all"];
-// 1.99?? micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): + replies - Pepe's -mic command answers
+// 1.99anf micreplies (the owner, 11-08: "Yes, make it a toggle like chatty fastmic."): + replies - Pepe's -mic command answers
 // (!ask / !roast / !look ... -mic, a -mic !remind / !relay) fast-grab too where it is on (!mic fastgrab replies on|off; off by default)
 const TOGGLES = ["on", "contest", "fair", "web", "chatty", "replies", "blockbreak", "selfunblock"];
 const CLAIMS = ["swallow", "release", "plain"];
