@@ -240,7 +240,7 @@
     s.closeButton.disabled = !!(s.attempt && s.attempt.stage === 'mine'); s.cancelButton.disabled = s.closeButton.disabled;
     s.destination.disabled = s.busy || !s.targets.length; s.more.disabled = s.busy;
     Array.prototype.forEach.call(s.picks.querySelectorAll('button'), function (b) { b.disabled = s.busy; });
-    // storyfix2: a camera clip under a second has no 1 s window to trim
+    // storyfix2: a video under a second has no 1 s window to trim
     Object.keys(s.toolButtons).forEach(function (k) { var b = s.toolButtons[k]; b.disabled = s.busy || !d.file || !d.valid || (k !== 'mention' && (!d.decoded || d.legacy || d.gif)) || (k === 'trim' && (d.kind !== 'video' || !(d.duration >= 1))); b.setAttribute('aria-pressed', String(s.sheetName === k)); });
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
   }
@@ -319,9 +319,10 @@
       if (kind === 'video') {
         // a fresh recording can report no length (Infinity, NaN, 0): the camera's measured hold stands in
         d.duration = isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs;
-        // storyfix2: a camera clip has no 1 s minimum here - the camera makes it at least 1.2 s, and whatever the file holds of
-        // it posts (an iPhone recording can hold less than the hold); a chosen file keeps the server's 1 s rule for a trim
-        if (!isFinite(d.duration) || !(d.duration > 0) || (!d.camera && d.duration < 1) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
+        // storyfix2: no 1 s minimum here - a video kept whole goes with no trim (editFor) and posts whatever the file holds (an
+        // iPhone recording can hold less than the hold; a quick clip from the phone's capture input is short too); only a trim
+        // needs a second (the Trim tool is off under one)
+        if (!isFinite(d.duration) || !(d.duration > 0) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
         else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
         firstFrame(s, m, id);
       }
@@ -527,11 +528,12 @@
     var d = s.d; if (d.legacy || d.gif) return null;
     var edit = { v: 1, pad: s.target.id, fit: d.fit, text: d.texts.map(function (t) { return t.text.trim(); }).filter(Boolean), stickers: d.stickers.map(function (t) { return { pack: t.pack, sticker: t.sticker }; }) };
     if (d.fit === 'fill') edit.crop = { x: d.crop.x, y: d.crop.y, w: d.crop.w, h: d.crop.h };
-    // storyfix2: a camera clip says so, and kept whole it goes with no trim - the length a browser shows for an iPhone recording
-    // can run past what the file holds, so the server encodes all of it (a trim of one is clamped to the file there)
+    // storyfix2: a camera clip says so, and any video kept whole (inside the story's length) goes with no trim - the length a
+    // browser shows can run past what the file holds (an iPhone recording, chosen or just taken), so the server encodes all of
+    // it (a camera clip's own trim is clamped to the file there)
     if (d.kind === 'video') {
       if (d.camera) edit.camera = true;
-      if (!d.camera || d.trim.start > 0 || d.trim.end < d.duration) edit.trim = { start: d.trim.start, end: d.trim.end };
+      if (d.trim.start > 0 || d.trim.end < d.duration) edit.trim = { start: d.trim.start, end: d.trim.end };
     }
     if (overlay) edit.overlay = overlay; return edit;
   }

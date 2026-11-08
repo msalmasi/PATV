@@ -1088,6 +1088,11 @@ test("Story camera fix verify: a camera trim on a recording whose first packet i
   const c = await composeClip(file, { camera: true, trim: { start: 0, end: 1.5 } }, "fit");
   assert.ok(c.secs >= 0.6 && c.secs <= 0.8, "0-1.5 s holds 0.7 s of media (the first frame is at 0.793 s) -> " + c.secs);   // was 1.5 s, to 2.29 s
   await assert.rejects(composeClip(file, { camera: true, trim: { start: 3.75, end: 4.8 } }, "fit"), /starts after the end/);
+  // a trim wholly in the time before the first packet (2 s in here) holds no media - said so, never a negative -t
+  const later = path.join(tmp, "later-start.webm");
+  fs.writeFileSync(later, execFileSync("ffmpeg", ["-hide_banner", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=360x640:r=30:d=2",
+    "-c:v", "libvpx", "-b:v", "300k", "-output_ts_offset", "2", "-f", "webm", "pipe:1"], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }));
+  await assert.rejects(composeClip(later, { camera: true, trim: { start: 0, end: 1.5 } }, "fit"), /ends before the video starts/);
   // a picture that stops before its sound (header-less): a camera trim that starts after the picture's end has nothing to show
   const pic = path.join(tmp, "short-picture-trim.webm");
   fs.writeFileSync(pic, execFileSync("ffmpeg", ["-hide_banner", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=c=green:s=360x640:r=10:d=1",

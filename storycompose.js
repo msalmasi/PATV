@@ -174,19 +174,27 @@ async function video(input, sn, edit, overlay, caps, work) {
   const measured = async () => { if (span === undefined) span = await packetSpan(input, sn.ffmt).catch(() => null); return spanSecs(span); };
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) pr.secs = await measured();
   if (!Number.isFinite(pr.secs) || pr.secs <= 0) throw new media.MediaError("That video's length couldn't be read.");
-  // storyfix2: the header's length is checked against the packets for a camera clip's trim, and for any trim that runs past it -
-  // the longer of the two is the media's length (a short header is no reason to refuse or cut a clip)
-  let secs = pr.secs;
-  if (edit.trim && (edit.camera || edit.trim.end > secs + 0.5)) secs = Math.max(secs, await measured());
   const sourceCap = Math.min(L.STORY_SRC_MAX_SECS, Number(caps.max_video_secs) || L.STORY_SRC_MAX_SECS);
   if (pr.secs > sourceCap) throw new media.MediaError("The source video is too long for a story edit.");
+  // storyfix2: the header's length is checked against the packets for a camera clip (kept whole or trimmed), and for any trim
+  // that runs past it - the longer of the two is the media's length (a short header is no reason to refuse or cut a clip).
+  // storyfix2 verify: the source cap holds against that length too - a header that says less is no way past it (0.5 s for the
+  // last packet's own length)
+  let secs = pr.secs;
+  if (edit.camera || (edit.trim && edit.trim.end > secs + 0.5)) secs = Math.max(secs, await measured());
+  if (secs > sourceCap + 0.5) throw new media.MediaError("The source video is too long for a story edit.");
   if (Number(pr.video.width) * Number(pr.video.height) > 8192 * 8192) throw new media.MediaError("That video's frame size is too big.");
   let start = 0, duration;
   if (edit.trim && edit.camera) {
     // storyfix2: a camera clip's trim is in the browser's length, which can run past the file (an iPhone's MP4): clamped to the
-    // media, refused only when nothing of it is left
+    // media, refused only when nothing of it is left.
+    // storyfix2 verify: the browser's timeline (and secs) start at 0, but ffmpeg's input -ss counts from the file's first
+    // timestamp - a recording whose first packet is late was cut that much later than shown. The seek is taken back by it;
+    // the time before the first packet holds no media, so it isn't counted in the length either
+    const first = span && span.start > 0 ? span.start : 0;
     if (edit.trim.start > secs - 0.1) throw new media.MediaError("The trim starts after the end of the video.");
-    start = edit.trim.start; duration = Math.min(edit.trim.end, secs) - start;
+    if (edit.trim.end <= first + 0.05) throw new media.MediaError("The trim ends before the video starts.");
+    start = Math.max(0, edit.trim.start - first); duration = Math.min(edit.trim.end, secs) - Math.max(edit.trim.start, first);
   } else if (edit.trim) {
     if (edit.trim.end > secs + 0.5) throw new media.MediaError("The trim goes past the end of the video.");
     start = edit.trim.start; duration = edit.trim.end - start;
@@ -216,6 +224,8 @@ async function video(input, sn, edit, overlay, caps, work) {
   try {
     await media.run(media.bin("ffmpeg"), args);
     const result = await media.probe(outPath, "mov").catch(() => null);
+    // storyfix2 verify: a camera trim past the picture's end (its sound runs on) encodes no picture - that's what to say
+    if (edit.trim && edit.camera && (!result || !result.video || !result.secs)) throw new media.MediaError("The trim starts after the end of the video.");
     if (!result || !result.video || !result.secs || result.secs > L.STORY_MAX_SECS + 0.5) throw new media.MediaError("The finished story must be at most 30 seconds.");
     if (Number(result.video.width) !== L.STORY_VIDEO_W || Number(result.video.height) !== L.STORY_VIDEO_H) throw new media.MediaError("The finished story has the wrong picture size.");
     const posterPng = path.join(work, "poster.png");
