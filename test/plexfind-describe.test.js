@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? clerkfast (owner 2026-11-08: "video clerk just failed again in Pepe's pad on the simpsons/pink shirt question"):
+// 1.99amq clerkfast (owner 2026-11-08: "video clerk just failed again in Pepe's pad on the simpsons/pink shirt question"):
 // "the episode of <show> where <description>" is searched in THAT show's episodes by the description's words. The rows come in
 // the word search's own order (they were re-sorted into season / episode order - the best hit was wherever it aired), and the
 // answer says `clear` only when exactly ONE of the show's episodes has every telling word of the description in its title or

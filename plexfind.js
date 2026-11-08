@@ -49,7 +49,7 @@ const titleMatch = (title, query) => {
 const episodeOrder = (a, b) => (a.aired && b.aired ? String(a.aired).localeCompare(String(b.aired)) : 0)
   || ((Number(a.season) || 0) - (Number(b.season) || 0)) || ((Number(a.episode) || 0) - (Number(b.episode) || 0)) || String(a.key).localeCompare(String(b.key));
 const movieOrder = (a, b) => String(a.aired || `${a.year || 0}-01-01`).localeCompare(String(b.aired || `${b.year || 0}-01-01`)) || String(a.key).localeCompare(String(b.key));
-// 1.99?? clerkfast (owner 2026-11-08, the pink-shirt ask): "the episode of <show> where <description>" - is ONE of that show's
+// 1.99amq clerkfast (owner 2026-11-08, the pink-shirt ask): "the episode of <show> where <description>" - is ONE of that show's
 // episodes clearly the one? Only when exactly one episode has every TELLING word of the description in its title or summary.
 // Telling: not a filler word, not the show's own name, and in no more than a fifth of the show's episodes ("homer" is in most
 // Simpsons summaries and tells nothing). A word NO episode has means the summaries can't settle it (prod's summary for the
@@ -163,7 +163,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
   const requestSource = () => requests || require("./mediarequests");
   const vectorSource = () => vectors || require("./plexvectors");
   const seerrCache = new Map(), SEERR_MS = 2000, CACHE_MS = 24 * 3600 * 1000;
-  const FAMILY_MAX = 40;   // 1.99?? plexfind recall: a franchise's shows checked for one episode title (prod's "Star Trek": 14 shows)
+  const FAMILY_MAX = 40;   // 1.99amq plexfind recall: a franchise's shows checked for one episode title (prod's "Star Trek": 14 shows)
   async function bounded(fn, deadline) {
     const ms = Math.max(0, deadline - Date.now());
     if (!ms) return null;
@@ -312,7 +312,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         candidates.push(...hits.map((r) => ({ r, why: record.match === "exact" ? "recall" : "guess", exact: record.match === "exact", guess: index })));
         continue;
       }
-      // 1.99?? plexfind recall (owner 2026-11-08): an EPISODE guess's year may be the episode's own air year (a model gives Darmok's
+      // 1.99amq plexfind recall (owner 2026-11-08): an EPISODE guess's year may be the episode's own air year (a model gives Darmok's
       // 1991 for The Next Generation, 1987) - it was compared with the show's year only, so the right episode came back "unknown".
       // The show's year or the episode's (its year / aired, a year either way) both fit; a show guess still needs the show's year.
       const episodeYear = (show, r) => year == null || Number(show.year) === year
@@ -332,7 +332,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
           else mismatch = true;
         } else if (season == null && episode == null && named.length) hits.push(...named.map((r) => ({ r, match: "partial" })));
       }
-      // 1.99?? plexfind recall: the franchise's name ("Star Trek" for The Next Generation, "The Office" for The Office (US)) - when the
+      // 1.99amq plexfind recall: the franchise's name ("Star Trek" for The Next Generation, "The Office" for The Office (US)) - when the
       // named shows have no such episode, the shows whose title starts with that name (whole words) are its family: exactly ONE of
       // their episodes with that episode title (and the guessed numbers and year, when given) verifies; two or more stay unverified.
       if (!hits.length && g.kind === "episode" && episodeTitle) {
@@ -417,7 +417,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       if (found && found.unavailable) return { ...base, code: "unavailable" };
       if (found) { first.record.status = "missing"; first.record.seerr = found; seerr = found; }
     }
-    let clearKey = null;   // 1.99?? clerkfast: the one episode the description singles out (describedOnce), if any
+    let clearKey = null;   // 1.99amq clerkfast: the one episode the description singles out (describedOnce), if any
     let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && matches(r, a, seen, parents)).map((r) => ({ r, why: "exact", exact })), plans = [], alternatives = [];
     const selectionList = ["first_n", "last_n", "season", "series", "in_order"].includes(a.select) || (a.select === "one" && a.season != null && a.episode == null);
     const makePlan = (rows, why, show, scope = "list", alternative = false) => {
@@ -443,7 +443,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         if (a.season != null) eps = eps.filter((r) => Number(r.season) === a.season);
         if (a.episode != null) eps = eps.filter((r) => Number(r.episode) === a.episode && (a.season != null || Number(r.season) === 1));
         if (a.about) {
-          // 1.99?? clerkfast: a single pick in the word search's own (bm25) order - re-sorted into season order, the best hit was
+          // 1.99amq clerkfast: a single pick in the word search's own (bm25) order - re-sorted into season order, the best hit was
           // wherever it aired. review F1: ONLY a single pick - a selection word (latest / finale / pilot / oldest / first or last N /
           // in order / a season) orders the matches by air date as before ("the newest Halloween episode" took the worst word hit)
           const single = a.select === "one" && !selectionList;
@@ -570,7 +570,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         } catch (_) { /* A stale/missing vector cache silently keeps phase 2a's candidates. */ }
       }
     }
-    if (clearKey) {        // 1.99?? clerkfast: first, whatever the vectors' order (it is always one of the word hits they fuse)
+    if (clearKey) {        // 1.99amq clerkfast: first, whatever the vectors' order (it is always one of the word hits they fuse)
       const at = candidates.findIndex((x) => String(x.r.key) === clearKey);
       if (at < 0) clearKey = null;
       else if (at > 0) candidates.unshift(...candidates.splice(at, 1));
@@ -636,7 +636,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     const visibleKeys = new Set(offered.map((row) => row.key));
     const ambiguous = (!!a.title && wantedShows.length > 1 && new Set(offered.map((r) => r.show_key).filter(Boolean)).size > 1)
       || recallHasVariants(verified.candidates.filter((candidate) => visibleKeys.has(String(candidate.r.key))));
-    // 1.99?? clerkfast: clear - the description singles out the first row (the bot may answer without its model)
+    // 1.99amq clerkfast: clear - the description singles out the first row (the bot may answer without its model)
     const clear = !!clearKey && !ambiguous && !seerr && offered.length > 0 && offered[0].key === clearKey && offered[0].kind === "episode";
     return { ...base, rows: offered, exact: !!exact && rows.length > 0, recall, ...(seerr ? { seerr } : {}), ...(ambiguous ? { ambiguous: true } : {}), ...(cut ? { cut } : {}),
       ...(clear ? { clear: true } : {}),

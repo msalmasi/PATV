@@ -403,7 +403,7 @@ test("recall checks show/name/SxE and treats IDs only as hints", async () => {
   assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0);
 });
 
-// 1.99?? plexfind recall (owner 2026-11-08: "the episode of star trek where they communicate by telling stories" - the model answered in
+// 1.99amq plexfind recall (owner 2026-11-08: "the episode of star trek where they communicate by telling stories" - the model answered in
 // 6.4 s and its guess came back "unknown": "I'm not sure which one that is"). An episode guess's year is often the EPISODE's air year
 // (Darmok 1991, The Next Generation 1987) and its show the franchise's name; the right episode must still verify, a wrong one must not.
 test("an episode recall verifies with the episode's air year, and a franchise name finds its one show", async () => {
