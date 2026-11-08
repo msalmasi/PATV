@@ -928,8 +928,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=7/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation
-  assert.match(html, /story-studio\.css\?v=4/);
+  assert.match(html, /story-studio\.js\?v=8/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes
+  assert.match(html, /story-studio\.css\?v=5/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
@@ -1300,17 +1300,18 @@ test('Studio storyux verify: the grips sit off the selected layer\'s corners - t
   const G = geometry(), stageBox = { w: 300, h: 500 }, RD = G.GRIP.del, RT = G.GRIP.turn;
   assert.ok(RD >= 24 && RT >= 21, 'finger-sized');
   const clear = (g, c, hw, hh, rot, k, r) => { const dx = g[k].x - c.x, dy = g[k].y - c.y, lx = dx * Math.cos(rot) + dy * Math.sin(rot), ly = -dx * Math.sin(rot) + dy * Math.cos(rot); return Math.hypot(Math.max(Math.abs(lx) - hw, 0), Math.max(Math.abs(ly) - hh, 0)) >= r; };
-  // which of the box's corners a grip is off, on screen: the delete takes the top-left-most, the turn the bottom-right-most
+  // which of the box's corners a grip is off, on screen: the delete takes the highest (then leftmost), the turn the lowest (then
+  // rightmost) - scored x + 2y on screen
   const cornerOf = (p, c, rot) => { const dx = p.x - c.x, dy = p.y - c.y; return [Math.sign(dx * Math.cos(rot) + dy * Math.sin(rot)), Math.sign(-dx * Math.sin(rot) + dy * Math.cos(rot))]; };
-  const score = (k, c, hw, hh, rot) => c.x + k[0] * hw * Math.cos(rot) - k[1] * hh * Math.sin(rot) + c.y + k[0] * hw * Math.sin(rot) + k[1] * hh * Math.cos(rot);
+  const score = (k, c, hw, hh, rot) => c.x + k[0] * hw * Math.cos(rot) - k[1] * hh * Math.sin(rot) + 2 * (c.y + k[0] * hw * Math.sin(rot) + k[1] * hh * Math.cos(rot));
   const ALL = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
   for (const [hw, hh, rot] of [[18, 22, 0], [18, 22, .7], [60, 30, -2.5], [10, 10, Math.PI / 4], [40, 18, Math.PI]]) {
     const c = { x: 150, y: 250 }, g = G.grips(c, hw, hh, rot, stageBox, [], true);
     assert.ok(clear(g, c, hw, hh, rot, 'del', RD), 'delete clear of the box at ' + rot); assert.ok(clear(g, c, hw, hh, rot, 'turn', RT), 'turn clear of the box at ' + rot);
     assert.notEqual(g.del.at, g.turn.at);
     const scores = ALL.map((k) => score(k, c, hw, hh, rot));
-    assert.ok(score(cornerOf(g.del, c, rot), c, hw, hh, rot) <= Math.min(...scores) + 1e-6, 'delete at the top-left-most corner, turned or not: ' + rot);
-    assert.ok(score(cornerOf(g.turn, c, rot), c, hw, hh, rot) >= Math.max(...scores) - 1e-6, 'turn at the bottom-right-most corner: ' + rot);
+    assert.ok(score(cornerOf(g.del, c, rot), c, hw, hh, rot) <= Math.min(...scores) + 1e-6, 'delete at the highest (then leftmost) corner, turned or not: ' + rot);
+    assert.ok(score(cornerOf(g.turn, c, rot), c, hw, hh, rot) >= Math.max(...scores) - 1e-6, 'turn at the lowest (then rightmost) corner: ' + rot);
     assert.ok(Math.hypot(g.del.x - g.turn.x, g.del.y - g.turn.y) >= RD + RT, 'the two never overlap');
   }
   // at the top edge, the top corners would leave the stage: the grips go below; in the top-left corner, wherever there is room

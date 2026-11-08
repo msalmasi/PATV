@@ -16,6 +16,11 @@
 // camera, or the picker; a quiet question first when there are edits), and every icon button is a round icon whose words
 // are its aria-label and tooltip. The posted story matches the preview: the overlay is the same canvas, and the picture's
 // window goes as Fill's crop or Fit's frame (storycompose.js renders both from the same window).
+// storyux verify (1.99??, the review): a tap only selects (a click on the delete grip counts only when its press began there);
+// the grips sit just off the layer's whole hit box where there is room (G.grips), never over it, under the header's buttons or out
+// of the stage; on a phone the header and the tools let touches through between their buttons; hit areas stack as drawn; a lost
+// pointerup ends with the next press; the picture moves by a transform mid-gesture; Escape / a click outside / the X share one
+// quiet question; focus lands on the picture after a pick; the page can still be zoomed from the sheets and the footer.
 (function () {
   'use strict';
   if (window.patvStoryStudio) return;
@@ -99,6 +104,9 @@
   function field(label, input) { var l = el('label', 'sst-field'); add(l, el('span', 'ds-label', label)); add(l, input); return l; }
   function input(type, value) { var i = el('input', 'ds-in'); i.type = type; if (value != null) i.value = value; return i; }
   function live(s) { return current === s && !s.closed; }
+  function noZoom(n) { n.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false }); }
+  // a layer's smallest hit box (CSS px), as story-studio.css sizes .sst-layer: 36 px, 44 px tall for a finger
+  function hitBox() { var coarse = false; try { coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { /* no media queries */ } return { w: 36, h: coarse ? 44 : 36 }; }
   // ── storyux: the geometry - pure, shared by the gestures, the keyboard and the tests (patvStoryStudio.geometry) ──
   // Frame fractions: 0..1 of the 9:16 story frame (x of its width, y of its height); canvas px: the 1080 × 1920 overlay.
   // The picture's WINDOW (d.crop) is what the frame shows of it, in picture fractions and always the 9:16 shape; its RECT is
@@ -172,9 +180,34 @@
       if (snap && moved) { if (Math.abs(t.x - .5) < SNAP) { t.x = .5; g.v = true; } if (Math.abs(t.y - .5) < SNAP * W / H) { t.y = .5; g.h = true; } }
       keepIn(t); return g;
     }
-    return { RATIO: RATIO, LIMITS: { text: TEXT, sticker: STICKER, deep: DEEP, small: SMALL, min: MIN, snap: SNAP },
+    // storyux verify: where a selected layer's grips go (stage px). Each sits just off the layer's turned box - out along a
+    // corner's diagonal (or past an edge's middle where no corner has room) - so its finger-sized hit circle never covers the
+    // layer, wholly inside the stage and clear of every cover (the buttons over the picture). The delete takes the highest
+    // place with room (then the leftmost: top-left, top-right, bottom-left...), the turn grip the lowest other one (then the
+    // rightmost: bottom-right first), clear of the delete; with room nowhere, the first inside the stage, else the preferred
+    // one pulled in. c: the centre, hw / hh: half the box, rot: its turn.
+    // -> { del, turn (when asked) }, each { at, x, y (stage px), lx, ly (px from the box's own top-left, unturned) }
+    var GRIP = { del: 24, turn: 21 }, CORNERS = { tl: [-1, -1], tr: [1, -1], bl: [-1, 1], br: [1, 1] }, MIDS = { t: [0, -1], r: [1, 0], b: [0, 1], l: [-1, 0] };
+    function grips(c, hw, hh, rot, stage, covers, withTurn) {
+      var cs = Math.cos(rot || 0), sn = Math.sin(rot || 0);
+      function at(name, x, y, r) { var dx = x - c.x, dy = y - c.y; return { at: name, r: r, x: x, y: y, lx: hw + dx * cs + dy * sn, ly: hh - dx * sn + dy * cs }; }
+      function spot(name, k, r) {
+        var off = k[0] && k[1] ? r / Math.SQRT2 + 1 : r + 1, lx = k[0] * (hw + off), ly = k[1] * (hh + off);
+        return at(name, c.x + lx * cs - ly * sn, c.y + lx * sn + ly * cs, r);
+      }
+      function ranked(set, r, sign) { return Object.keys(set).map(function (n) { return spot(n, set[n], r); }).sort(function (a, b) { return sign * (a.x + 2 * a.y - b.x - 2 * b.y); }); }
+      function inside(p) { return p.x - p.r >= 0 && p.y - p.r >= 0 && p.x + p.r <= stage.w && p.y + p.r <= stage.h; }
+      function clear(p) { return inside(p) && (covers || []).every(function (q) { var dx = Math.max(q.x0 - p.x, 0, p.x - q.x1), dy = Math.max(q.y0 - p.y, 0, p.y - q.y1); return dx * dx + dy * dy >= p.r * p.r; }); }
+      function pull(p) { return at(p.at, stage.w > 2 * p.r ? clamp(p.x, p.r, stage.w - p.r) : stage.w / 2, stage.h > 2 * p.r ? clamp(p.y, p.r, stage.h - p.r) : stage.h / 2, p.r); }
+      function choose(list, ok) { list = list.filter(ok); return list.filter(clear)[0] || list.filter(inside)[0] || (list[0] && pull(list[0])); }
+      var out = { del: choose(ranked(CORNERS, GRIP.del, 1).concat(ranked(MIDS, GRIP.del, 1)), function () { return true; }) }, d = out.del;
+      if (withTurn) out.turn = choose(ranked(CORNERS, GRIP.turn, -1).concat(ranked(MIDS, GRIP.turn, -1)), function (p) { return p.at !== d.at && Math.hypot(p.x - d.x, p.y - d.y) >= p.r + d.r; })
+        || pull(spot(d.at === 'br' ? 'tl' : 'br', CORNERS[d.at === 'br' ? 'tl' : 'br'], GRIP.turn));
+      return out;
+    }
+    return { RATIO: RATIO, LIMITS: { text: TEXT, sticker: STICKER, deep: DEEP, small: SMALL, min: MIN, snap: SNAP }, GRIP: GRIP,
       cover: cover, contain: contain, rect: rect, widths: widths, canFill: canFill, place: place, zoom: zoom, pan: pan, layout: layout, same: same,
-      stickerPx: stickerPx, box: box, spread: spread, keepIn: keepIn, turnOf: turnOf, angle: angle, twoFinger: twoFinger, moveItem: moveItem };
+      stickerPx: stickerPx, box: box, spread: spread, keepIn: keepIn, turnOf: turnOf, angle: angle, twoFinger: twoFinger, moveItem: moveItem, grips: grips };
   })();
   function req(url, body, method) {
     var o = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };
@@ -196,10 +229,12 @@
     s.attempt = null; s.ready = null; s.busy = false;
     if (live(s)) { s.progress.hidden = true; paintControls(s); say(s, _t('js.feed.ss.cancelled', 'Posting cancelled. Your draft is still here.')); }
   }
-  function close(s, done) {
+  // storyux verify: Escape and a click outside ask the X's quiet question (never a browser dialog), and only when there is
+  // something to lose - edits, or a post on its way; sure = its Discard was pressed
+  function close(s, done, sure) {
     if (!live(s)) return;
     if (!done && s.attempt && s.attempt.stage === 'mine') return;
-    if (!done && (s.d.file || s.busy) && !window.confirm(_t('js.feed.ss.discard', 'Discard this story?'))) return;
+    if (!done && !sure && (s.busy || edited(s))) { ask(s, 'close'); return; }
     if (!done) cancel(s);
     if (s.cam) { var cam = s.cam; s.cam = null; cam.close(); }
     s.closed = true; settle(s); clearTimeout(s.suggestTimer); clearTimeout(s.wheelTimer); revoke(s); s.gesture = null; if (s.raf && window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0;
@@ -230,11 +265,12 @@
     var s = { id: ++serial, opener: opener || document.activeElement, pad: String(pad || ''), urls: [], d: { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: false }, caps: {}, targets: [], busy: false, closed: false, selected: null, drawId: 0, pickId: 0 };
     current = s; s.root = el('div', 'sst ds-scrim sheet'); s.root.setAttribute('role', 'dialog'); s.root.setAttribute('aria-modal', 'true'); s.root.tabIndex = -1; s.root.setAttribute('aria-label', _t('js.feed.sc.title', 'Add your story'));
     s.root.addEventListener('click', function (e) { if (e.target === s.root) close(s); });
-    // storyux: iOS - a pinch anywhere in the editor never zooms the page (Safari ignores user-scalable=no; its own gesture events can be stopped)
-    s.root.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
     s.oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; add(document.body, s.root);
     s.card = add(s.root, el('section', 'ds-modal sst-card'));
-    var head = add(s.card, el('header', 'sst-head'));
+    var head = s.head = add(s.card, el('header', 'sst-head'));
+    // storyux verify: iOS - a pinch on the picture (the stage's own listener) or on the buttons over it never zooms the page (Safari
+    // ignores user-scalable=no; its gesture events can be stopped); the sheets and the footer still can, for their small print
+    noZoom(head);
     // storyux: one X at the top left - with no picture it closes the editor; with one it goes back to the camera (or the picker)
     s.closeButton = add(head, iconButton(_t('js.feed.ss.close_x', '✕ Close story editor'), function () { close(s); }, 'icon sm quiet sst-icon-only sst-close'));
     s.backButton = add(head, iconButton(_t('js.feed.ss.back_camera', '✕ Back to the camera'), function () { goBack(s); }, 'icon sm quiet sst-icon-only sst-back')); s.backButton.hidden = true;
@@ -244,15 +280,26 @@
     s.body = add(s.card, el('div', 'sst-body')); var work = add(s.body, el('div', 'sst-work'));
     s.previewWrap = add(work, el('div', 'sst-preview-wrap')); s.preview = add(s.previewWrap, el('div', 'sst-preview')); s.preview.tabIndex = 0;
     s.preview.setAttribute('aria-label', _t('js.feed.ss.preview', 'Story preview. Use the editing tools to make it yours.'));
-    s.help = add(s.preview, el('span', 'ds-sr-only', _t('js.feed.ss.gesture_help', 'Drag to move. Pinch to resize, twist to turn. Keyboard: arrows move, + and − resize, [ and ] turn, Delete removes.')));
+    // storyux verify: what works where - the picture's own gestures and keys on the picture, a layer's on each layer
+    s.help = add(s.preview, el('span', 'ds-sr-only', _t('js.feed.ss.stage_help', 'Drag to move the picture, pinch to zoom, double-tap to start again. Keyboard: arrows move it, + and − zoom, 0 starts again.')));
     s.help.id = 'sst-help-' + s.id; s.preview.setAttribute('aria-describedby', s.help.id);
+    s.layerHelp = add(s.preview, el('span', 'ds-sr-only', _t('js.feed.ss.gesture_help', 'Drag to move. Pinch to resize, twist to turn. Keyboard: arrows move, + and − resize, [ and ] turn, Delete removes, Enter edits a text\'s words.')));
+    s.layerHelp.id = 'sst-layer-help-' + s.id;
+    s.mentionHelp = add(s.preview, el('span', 'ds-sr-only', _t('js.feed.ss.mention_help', 'Drag to move. Keyboard: arrows move, Delete removes.')));
+    s.mentionHelp.id = 'sst-mention-help-' + s.id; s.hit = hitBox();
     s.empty = add(s.preview, el('div', 'sst-empty')); var emptyIcon = add(s.empty, el('span', 'ds-ic', _t('js.feed.ss.camera_icon', '📷'))); emptyIcon.setAttribute('aria-hidden', 'true'); add(s.empty, el('p', null, _t('js.feed.ss.choose', 'Choose a picture or video')));
     s.canvas = add(s.preview, el('canvas', 'sst-overlay')); s.canvas.width = W; s.canvas.height = H; s.canvas.setAttribute('aria-hidden', 'true');
     // storyux: the centre guides a layer snaps to, the layers' hit areas, and the selection (outline, delete, turn/size corner)
     s.guides = {}; ['v', 'h'].forEach(function (k) { var g = s.guides[k] = add(s.preview, el('span', 'sst-guide')); g.setAttribute('data-guide', k); g.setAttribute('aria-hidden', 'true'); g.hidden = true; });
     s.handles = add(s.preview, el('div', 'sst-handles')); s.layers = {};
     s.sel = add(s.handles, el('div', 'sst-select')); s.sel.hidden = true;
-    s.selDel = add(s.sel, iconButton(_t('js.feed.ss.delete_x', '✕ Delete layer'), function (e) { if (e) e.stopPropagation(); if (picked(s) && !s.busy) removeLayer(s, s.selected); }, 'icon sm sst-sel-del'));
+    // storyux verify: a pointer's click deletes only when its press began on this grip, of this layer - the tap that selected a
+    // layer put the grip under the finger, and a phone sends that tap's click to it (Enter / Space are clicks with detail 0)
+    s.selDel = add(s.sel, iconButton(_t('js.feed.ss.delete_x', '✕ Delete layer'), function (e) {
+      var armed = s.delArm; s.delArm = null; if (e) e.stopPropagation();
+      if (e && (e.detail || 0) > 0 && !(armed && armed === picked(s))) return;
+      if (picked(s) && !s.busy) removeLayer(s, s.selected);
+    }, 'icon sm sst-sel-del'));
     s.selTurn = add(s.sel, el('span', 'sst-sel-turn')); s.selTurn.setAttribute('aria-hidden', 'true');
     s.picks = add(work, el('div', 'sst-picks'));
     [['camera', _t('js.feed.ss.camera', '📷 Camera')], ['gallery', _t('js.feed.ss.gallery', '🖼️ Gallery')]].forEach(function (pair) {
@@ -273,7 +320,7 @@
     s.summary = add(s.body, el('aside', 'sst-summary')); add(s.summary, el('h3', 'ds-eyebrow', _t('js.feed.ss.summary', 'Story details')));
     add(s.summary, el('p', null, _t('js.feed.ss.canvas', 'Canvas 9:16'))); add(s.summary, el('p', null, _t('js.feed.ss.lifetime', 'Appears for 24 hours')));
     s.summaryPad = add(s.summary, el('p')); s.summaryAs = add(s.summary, el('p'));
-    s.tools = add(s.card, el('div', 'sst-tools')); s.toolButtons = {};
+    s.tools = add(s.card, el('div', 'sst-tools')); s.toolButtons = {}; noZoom(s.tools);
     // storyux: 📐 is the layout toggle (pressed = Fill) - the picture itself is placed and sized by touch, not in a sheet
     [['layout', _t('js.feed.ss.layout', '📐 Fill the screen')], ['text', _t('js.feed.ss.text', '🔤 Text')], ['sticker', _t('js.feed.ss.sticker', '🧸 Sticker')], ['mention', _t('js.feed.ss.mention', '👤 Mention')], ['trim', _t('js.feed.ss.trim', '✂️ Trim')]].forEach(function (p) {
       s.toolButtons[p[0]] = add(s.tools, iconButton(p[1], function () { tool(s, p[0]); })); s.toolButtons[p[0]].setAttribute('data-tool', p[0]);
@@ -299,7 +346,9 @@
     s.leave = function () { var p = s.pending; if (p && p.phase === 'open' && (p.back || !p.away)) settle(s); };   // left after coming back; not while the camera is in front
     document.addEventListener('visibilitychange', s.vis); document.addEventListener('pointerdown', s.touch, true);
     window.addEventListener('blur', s.away); window.addEventListener('focus', s.back); window.addEventListener('pageshow', s.back); window.addEventListener('pagehide', s.leave);
-    if (window.visualViewport) { s.viewport = function () { s.root.style.setProperty('--sst-vh', Math.floor(window.visualViewport.height) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
+    // storyux verify: the keyboard shrinks the editor; a pinch-zoomed page (scale > 1) doesn't - its visual viewport is smaller
+    // only because it is magnified
+    if (window.visualViewport) { s.viewport = function () { var v = window.visualViewport; s.root.style.setProperty('--sst-vh', Math.floor(v.height * (v.scale > 0 ? v.scale : 1)) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
     stage(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
     // story camera: a new studio opens on the live camera; one reopened after a reload (ssfix) shows its picker and says what happened
     if (!resumed) camera(s);
@@ -360,7 +409,7 @@
     s.post.textContent = s.failed ? _t('js.feed.ss.retry', 'Retry') : _t('js.feed.sc.post', 'Post story');
   }
   function changed(s, pixels) { s.failed = false; if (pixels && s.ready) { discard([s.ready.id]); s.ready = null; } render(s); paintControls(s); }
-  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); if (opener && opener.isConnected) opener.focus(); }
+  function closeSheet(s) { if (!s.sheet) return; var opener = s.sheetOpener; s.sheetSlot.textContent = ''; s.sheet = null; s.sheetName = null; s.sheetLayer = null; s.suggestions = null; s.mentionInput = null; clearTimeout(s.suggestTimer); s.root.classList.remove('sst-has-sheet'); s.root.removeAttribute('data-sheet'); paintControls(s); layoutHandles(s); if (opener && opener.isConnected) opener.focus(); }
   function sheet(s, name, title) {
     var opener = document.activeElement; closeSheet(s); s.sheetOpener = opener; s.sheetName = name; s.root.classList.add('sst-has-sheet'); s.root.setAttribute('data-sheet', name);
     s.sheet = add(s.sheetSlot, el('section', 'sst-sheet')); s.sheet.setAttribute('aria-label', title);
@@ -476,7 +525,7 @@
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
     if (s.still) { s.still.remove(); s.still = null; }
     var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
-    s.selected = null; s.gesture = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
+    s.selected = null; s.gesture = null; s.mediaAt = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
     m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
     m.setAttribute('draggable', 'false');     // storyux: a desktop drag pans the picture, never drags the image out
@@ -579,6 +628,9 @@
     // storyfix2: a video starts at 0.001 s (a media fragment): iOS then puts its first frame up without playing it
     m.addEventListener('error', broke); m.src = url + (frag ? '#t=0.001' : '');
     say(s, ''); render(s); paintControls(s);
+    // storyux verify: the pickers (and a camera that took it) are gone now - the focus goes to the picture, unless it is on
+    // something still on screen
+    var a = document.activeElement; if (!a || a === document.body || a === s.root || !s.root.contains(a) || s.picks.contains(a) || s.recovery.contains(a)) s.preview.focus();
   }
   // storyfix2 (1.99aly): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
   // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
@@ -605,12 +657,15 @@
     fonts(d).then(function () { if (!live(s) || n !== s.drawId) return; draw(s.canvas, d); layoutHandles(s); }).catch(function () { if (live(s)) say(s, _t('js.feed.ss.font_failed', 'The text font could not load. Try again before posting.'), true); });
   }
   // storyux: the picture where its window puts it - in Fit too (it may be smaller than the frame, or zoomed past it)
-  // (storyprev: a camera clip's poster - s.still - is framed exactly like its video, whichever of the two shows)
-  function placeMedia(s) {
+  // storyux verify: under a gesture (moving) the picture moves by a transform from where it was last laid out - no layout per
+  // frame of a picture up to 8x the frame; its size and place are written once, when the gesture ends (render)
+  // (storyprev: a camera clip's poster - s.still - is framed exactly like its video, whichever of the two shows, mid-gesture too)
+  function placeMedia(s, moving) {
     var d = s.d, m = s.media; if (!m || !d.decoded) return;
-    m.style.transform = ''; m.style.inlineSize = '100%'; m.style.blockSize = '100%'; m.style.insetInlineStart = '0'; m.style.insetBlockStart = '0';
-    if (d.legacy || !d.crop) { m.style.objectFit = 'contain'; return frameStill(s); }
-    var r = G.rect(d.crop); m.style.objectFit = 'fill';
+    if (d.legacy || !d.crop) { s.mediaAt = null; m.style.transform = ''; m.style.inlineSize = '100%'; m.style.blockSize = '100%'; m.style.insetInlineStart = '0'; m.style.insetBlockStart = '0'; m.style.objectFit = 'contain'; return frameStill(s); }
+    var r = G.rect(d.crop), b = s.mediaAt;
+    if (moving && b) { m.style.transform = 'translate(' + (r.x - b.x) / b.w * 100 + '%, ' + (r.y - b.y) / b.h * 100 + '%) scale(' + r.w / b.w + ', ' + r.h / b.h + ')'; return frameStill(s); }
+    m.style.transform = ''; m.style.objectFit = 'fill'; s.mediaAt = r;
     m.style.inlineSize = r.w * 100 + '%'; m.style.blockSize = r.h * 100 + '%'; m.style.insetInlineStart = r.x * 100 + '%'; m.style.insetBlockStart = r.y * 100 + '%';
     frameStill(s);
   }
@@ -668,17 +723,31 @@
     if (d.legacy && d.decoded) { var scale = Math.min(W / d.w, H / d.h); mw = d.w * scale; mh = d.h * scale; }
     s.handles.style.insetInlineStart = (W - mw) / W * 50 + '%'; s.handles.style.insetBlockStart = (H - mh) / H * 50 + '%';
     s.handles.style.inlineSize = mw / W * 100 + '%'; s.handles.style.blockSize = mh / H * 100 + '%'; s.handles.hidden = !d.decoded;
-    layersOf(d).forEach(function (t) {
-      var b = s.layers[t.id] || (s.layers[t.id] = makeLayer(s, t)); keep[t.id] = true;
-      if (b.parentNode !== s.handles) s.handles.insertBefore(b, s.sel);
+    var list = layersOf(d); list.forEach(function (t) { keep[t.id] = true; });
+    Object.keys(s.layers).forEach(function (id) { if (!keep[id]) { s.layers[id].remove(); delete s.layers[id]; } });
+    // storyux verify: the hit areas stack as the layers are drawn (texts, then stickers, then the mention chips): a new one joins
+    // at its place, and a kept one is never moved (a moved node loses its focus)
+    list.forEach(function (t, i) {
+      var b = s.layers[t.id] || (s.layers[t.id] = makeLayer(s, t)), here = s.handles.children[i];
+      if (here !== b) s.handles.insertBefore(b, here || s.sel);
       placeLayer(s, b, t);
     });
-    Object.keys(s.layers).forEach(function (id) { if (!keep[id]) { s.layers[id].remove(); delete s.layers[id]; } });
-    placeSelect(s);
+    measure(s); placeSelect(s);
+  }
+  // storyux verify: the stage's size, the buttons over it (the header's and the tools' on a phone, a sheet) and the mention chips'
+  // sizes - read when the handles are laid out (a render, a resize, a sheet closing), never during a gesture
+  function measure(s) {
+    var hb = s.handles.getBoundingClientRect(); s.stageBox = { w: hb.width || 0, h: hb.height || 0 }; s.covers = []; s.chips = {};
+    Array.prototype.forEach.call(s.card.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-sheet'), function (n) {
+      if (n.hidden || !n.offsetParent) return; var r = n.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return;
+      s.covers.push({ x0: r.left - hb.left, y0: r.top - hb.top, x1: r.left + r.width - hb.left, y1: r.top + r.height - hb.top });
+    });
+    s.d.mentions.forEach(function (t) { var b = s.layers[t.id]; if (b) s.chips[t.id] = { w: b.offsetWidth || 0, h: b.offsetHeight || 0 }; });
   }
   function makeLayer(s, t) {
     var b = button(t.type === 'mention' ? '@' + t.username : '', null, 'sst-layer' + (t.type === 'mention' ? ' sst-mention' : ''));
     b.setAttribute('data-layer', t.id); b.setAttribute('aria-label', _t('js.feed.ss.layer', 'Edit {name}', { name: layerName(t) }));
+    b.setAttribute('aria-describedby', (t.type === 'mention' ? s.mentionHelp : s.layerHelp).id);
     // a pointer's tap is the stage's (detail > 0); Enter / Space / assistive tech select it - and open a text's words
     b.addEventListener('click', function (e) { if ((e.detail || 0) > 0 || s.busy) return; e.preventDefault(); select(s, t); if (t.type === 'text') textSheet(s, t); });
     b.addEventListener('keydown', function (e) { layerKey(s, t, e); });
@@ -688,18 +757,27 @@
     b.style.insetInlineStart = t.x * 100 + '%'; b.style.insetBlockStart = t.y * 100 + '%';
     if (t.type !== 'mention') { var bx = G.box(t); b.style.inlineSize = bx.w / W * 100 + '%'; b.style.blockSize = bx.h / H * 100 + '%'; b.style.transform = 'translate(-50%, -50%) rotate(' + (t.rot || 0) + 'rad)'; }
     b.classList.toggle('selected', s.selected === t);
+    if (s.selected === t) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
     if (t.type === 'text' || t.type === 'sticker') b.setAttribute('aria-label', _t('js.feed.ss.layer', 'Edit {name}', { name: layerName(t) }));
   }
-  // the outline, its delete handle and (text / sticker) its turn-and-size corner, on the selected layer's box
+  // the outline on the selected layer's whole hit box (its drawn box, at least a finger's size), its delete grip and (text /
+  // sticker) its turn-and-size grip just off it where there is room (G.grips; px from measure(), so nothing is read per frame)
   function placeSelect(s) {
     var t = picked(s), x = s.sel; if (s.handles.lastChild !== x) s.handles.appendChild(x);
     x.hidden = !t || !s.d.decoded; if (x.hidden) return;
-    var b = s.layers[t.id];
-    x.style.insetInlineStart = b.style.insetInlineStart; x.style.insetBlockStart = b.style.insetBlockStart;
-    x.style.inlineSize = t.type === 'mention' ? 'auto' : b.style.inlineSize; x.style.blockSize = t.type === 'mention' ? 'auto' : b.style.blockSize;
-    x.style.transform = t.type === 'mention' ? 'translate(-50%, -50%)' : b.style.transform;
-    x.classList.toggle('sst-select-chip', t.type === 'mention'); s.selTurn.hidden = t.type === 'mention';
-    x.style.setProperty('--sst-rot', (t.type === 'mention' ? 0 : t.rot || 0) + 'rad');      // the handles stay upright on a turned layer
+    var st = s.stageBox || { w: 0, h: 0 }, mention = t.type === 'mention', rot = mention ? 0 : t.rot || 0, half = hitHalf(s, t, st);
+    var g = G.grips({ x: t.x * st.w, y: t.y * st.h }, half.w, half.h, rot, st, s.covers || [], !mention);
+    x.style.insetInlineStart = t.x * 100 + '%'; x.style.insetBlockStart = t.y * 100 + '%';
+    x.style.inlineSize = 2 * half.w + 'px'; x.style.blockSize = 2 * half.h + 'px'; x.style.transform = 'translate(-50%, -50%) rotate(' + rot + 'rad)';
+    x.classList.toggle('sst-select-chip', mention); s.selTurn.hidden = mention;
+    x.style.setProperty('--sst-rot', rot + 'rad');      // the grips stay upright on a turned layer
+    gripAt(s.selDel, g.del); if (g.turn) gripAt(s.selTurn, g.turn);
+  }
+  function gripAt(n, p) { n.style.insetInlineStart = p.lx + 'px'; n.style.insetBlockStart = p.ly + 'px'; n.setAttribute('data-at', p.at); }
+  // half a layer's hit box, stage px: what .sst-layer's own size and min sizes make of it (a chip: as measured)
+  function hitHalf(s, t, st) {
+    if (t.type === 'mention') { var c = (s.chips && s.chips[t.id]) || { w: 0, h: 0 }; return { w: Math.max(c.w, s.hit.w) / 2, h: Math.max(c.h, s.hit.h) / 2 }; }
+    var b = G.box(t); return { w: Math.max(b.w / W * st.w, s.hit.w) / 2, h: Math.max(b.h / H * st.h, s.hit.h) / 2 };
   }
   function select(s, t) {
     if (s.selected === t) { layoutHandles(s); return; }
@@ -741,32 +819,40 @@
     function own() { return s.d.w / s.d.h; }
     function layerAt(target) { var b = target && target.closest ? target.closest('.sst-layer') : null, id = b && b.getAttribute('data-layer'); return id ? layersOf(s.d).filter(function (t) { return t.id === id; })[0] || null : null; }
     function ids(g) { return Object.keys(g.pts).slice(0, 2); }
+    function count(g) { return Object.keys(g.pts).length; }
     function rebase(g) {
       g.start = ids(g).map(function (id) { return { x: g.pts[id].x, y: g.pts[id].y }; }); g.acc = 0; g.prev = g.start.length === 2 ? G.angle(g.start[0], g.start[1]) : 0;
       g.rect = (g.target === 'base' ? P : s.handles).getBoundingClientRect();
-      if (g.target && g.target !== 'base' && g.target !== 'wait') { g.s0 = snapshot(g.target); if (g.turn) { var c = centre(g); g.v0 = { x: g.start[0].x - c.x, y: g.start[0].y - c.y }; } }
+      // storyux verify: the corner grip measures from the centre as it was pressed - keepIn pushing a growing layer back from an
+      // edge would otherwise lengthen the arm every frame, and the layer would run ahead of the finger
+      if (g.target && g.target !== 'base' && g.target !== 'wait') { g.s0 = snapshot(g.target); if (g.turn) { g.c0 = centre(g); g.v0 = { x: g.start[0].x - g.c0.x, y: g.start[0].y - g.c0.y }; } }
       if (g.target === 'base') g.w0 = Object.assign({}, s.d.crop);
     }
     function centre(g) { return { x: g.rect.left + g.target.x * g.rect.width, y: g.rect.top + g.target.y * g.rect.height }; }
     function down(e) {
       if (!live(s) || s.busy || !s.d.decoded || (e.button != null && e.button > 0)) return;
-      if (e.target && e.target.closest && e.target.closest('.sst-sel-del')) return;          // its own click
-      unask(s);
+      // the delete grip's own press: its click may delete (the tap that only selected a layer can't)
+      if (e.target && e.target.closest && e.target.closest('.sst-sel-del')) { s.delArm = picked(s); return; }
+      s.delArm = null; unask(s);
       var g = s.gesture, turnCorner = !!(e.target && e.target.closest && e.target.closest('.sst-sel-turn'));
+      // storyux verify: a gesture whose pointerup never came (a capture lost to Alt+Tab, a lift the page never heard) ends here -
+      // the same pointer pressed again, or a new first pointer (isPrimary: no other pointer of its kind is down)
+      if (g && (g.pts[e.pointerId] || e.isPrimary === true)) { if (s.raf && window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0; end(); g = null; }
       if (!g) {
         var hit = turnCorner ? picked(s) : layerAt(e.target);
         if (!hit && !picked(s) && !canPan(s)) return;
-        g = s.gesture = { pts: {}, n: 0, moved: false, two: false, turn: turnCorner && !!hit, hit: hit, target: hit || (picked(s) ? 'wait' : 'base') };
+        g = s.gesture = { pts: {}, moved: false, two: false, turn: turnCorner && !!hit, hit: hit, target: hit || (picked(s) ? 'wait' : 'base') };
         if (hit && hit !== s.selected) select(s, hit);
-      } else if (g.n >= 2 || g.turn) return;
-      g.pts[e.pointerId] = { x: e.clientX, y: e.clientY }; g.n++;
-      if (g.n === 2) { g.two = true; if (g.target === 'wait') g.target = picked(s); if (g.target && g.target !== 'base' && g.target.type === 'mention') g.target = null; }
+      } else if (count(g) >= 2 || g.turn) return;
+      g.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (count(g) === 2) { g.two = true; if (g.target === 'wait') g.target = picked(s); if (g.target && g.target !== 'base' && g.target.type === 'mention') g.target = null; }
       try { if (P.setPointerCapture) P.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
       if (e.pointerType === 'mouse' && e.preventDefault) e.preventDefault();       // no text selection or image drag
       rebase(g);
     }
     function move(e) {
       var g = s.gesture, p = g && g.pts[e.pointerId]; if (!p) return;
+      if (e.pointerType === 'mouse' && e.buttons != null && !(e.buttons & 1)) { up(e); return; }    // its button came up where we never heard it
       p.x = e.clientX; p.y = e.clientY;
       if (!g.moved) { var i = ids(g).indexOf(String(e.pointerId)), q = g.start[i]; if (q && Math.hypot(p.x - q.x, p.y - q.y) > SLOP) g.moved = true; }
       if (!s.raf) s.raf = raf(function () { s.raf = 0; apply(); });
@@ -778,7 +864,7 @@
       if (g.target === 'wait') { if (!g.moved) return; select(s, null); g.target = canPan(s) ? 'base' : null; if (g.target) { g.rect = P.getBoundingClientRect(); g.w0 = Object.assign({}, s.d.crop); } }
       if (!g.target) return;
       var now = ids(g).map(function (id) { return g.pts[id]; }), m;
-      if (g.turn) { var c = centre(g), v = { x: now[0].x - c.x, y: now[0].y - c.y }, l0 = Math.hypot(g.v0.x, g.v0.y);
+      if (g.turn) { var c = g.c0, v = { x: now[0].x - c.x, y: now[0].y - c.y }, l0 = Math.hypot(g.v0.x, g.v0.y);
         m = { scale: l0 > 0 ? Math.hypot(v.x, v.y) / l0 : 1, turn: G.turnOf(Math.atan2(v.y, v.x) - Math.atan2(g.v0.y, g.v0.x)) }; }
       else if (now.length === 2) {
         var a = G.angle(now[0], now[1]); g.acc += G.turnOf(a - g.prev); g.prev = a;           // more than half a turn adds up
@@ -789,7 +875,7 @@
         if (now.length === 2) { var m0 = { x: (g.start[0].x + g.start[1].x) / 2, y: (g.start[0].y + g.start[1].y) / 2 }, m1 = { x: (now[0].x + now[1].x) / 2, y: (now[0].y + now[1].y) / 2 };
           s.d.crop = G.zoom(g.w0, own(), s.d.fit, m.scale, f(m0), f(m1)); }
         else s.d.crop = G.pan(g.w0, own(), s.d.fit, m.dx / r.width, m.dy / r.height);
-        placeMedia(s); dirty(s, true); return;
+        placeMedia(s, true); dirty(s, true); return;
       }
       guides(s, G.moveItem(g.target, g.s0, m, g.rect, { snap: true })); paintLayer(s, g.target);
     }
@@ -797,8 +883,8 @@
       var g = s.gesture; if (!g || !g.pts[e.pointerId]) return;
       if (s.raf) { if (window.cancelAnimationFrame) window.cancelAnimationFrame(s.raf); s.raf = 0; apply(); }   // its last move still counts
       if (s.gesture !== g) return;
-      delete g.pts[e.pointerId]; g.n--;
-      if (g.n > 0) { rebase(g); return; }                             // the other finger carries on, from here
+      delete g.pts[e.pointerId];
+      if (count(g) > 0) { rebase(g); return; }                        // the other finger carries on, from here
       var tap = !g.moved && !g.two && !g.wk && e.type === 'pointerup' && !s.busy; end();
       if (tap) tapped(s, g.hit, g.target);
     }
@@ -811,22 +897,25 @@
     P.addEventListener('pointermove', move);
     P.addEventListener('pointerup', up);
     P.addEventListener('pointercancel', up);
+    // storyux verify: a capture the stage lost (the window lost focus mid-drag) ends that pointer; one a layer's own button lost
+    // as the stage took the capture over (bubbling up from it) does not
+    P.addEventListener('lostpointercapture', function (e) { if (e.target === P) up(e); });
     // the page never scrolls, zooms, selects or calls out under the stage (touch-action: none in the CSS does most of it)
     P.addEventListener('touchmove', function (e) { if (live(s) && s.d.file) e.preventDefault(); }, { passive: false });
     ['contextmenu', 'dragstart', 'selectstart'].forEach(function (type) { P.addEventListener(type, function (e) { e.preventDefault(); }); });
     // WebKit's own pinch events: always kept from zooming the page; they move a layer (or the picture) only when the pointer
     // stream has lost the second finger (scale and rotation from gesturestart, in degrees)
     P.addEventListener('gesturestart', function (e) {
-      e.preventDefault(); var g = s.gesture; s.wk = null; if (!live(s) || s.busy || !s.d.decoded || (g && g.n >= 2)) return;
+      e.preventDefault(); var g = s.gesture; s.wk = null; if (!live(s) || s.busy || !s.d.decoded || (g && count(g) >= 2)) return;
       var t = g ? (g.target === 'wait' ? picked(s) : g.target) : picked(s) || (canPan(s) ? 'base' : null);
       if (!t || (t !== 'base' && t.type === 'mention')) return;
       s.wk = { target: t, s0: t === 'base' ? null : snapshot(t), w0: t === 'base' ? Object.assign({}, s.d.crop) : null, used: false };
     }, { passive: false });
     P.addEventListener('gesturechange', function (e) {
-      e.preventDefault(); var g = s.gesture, w = s.wk; if (!w || !live(s) || s.busy || (g && g.n >= 2)) return;
+      e.preventDefault(); var g = s.gesture, w = s.wk; if (!w || !live(s) || s.busy || (g && count(g) >= 2)) return;
       var k = Number(e.scale) > 0 ? Number(e.scale) : 1, turn = (Number(e.rotation) || 0) * Math.PI / 180;
       w.used = true; if (g) { g.wk = true; if (g.target === 'wait') g.target = w.target; }
-      if (w.target === 'base') { s.d.crop = G.zoom(w.w0, own(), s.d.fit, k, { x: .5, y: .5 }, { x: .5, y: .5 }); placeMedia(s); dirty(s, true); return; }
+      if (w.target === 'base') { s.d.crop = G.zoom(w.w0, own(), s.d.fit, k, { x: .5, y: .5 }, { x: .5, y: .5 }); placeMedia(s, true); dirty(s, true); return; }
       guides(s, G.moveItem(w.target, w.s0, { scale: k, turn: turn }, s.handles.getBoundingClientRect(), { snap: true })); paintLayer(s, w.target);
     }, { passive: false });
     // no pointer gesture around it (an engine without pointer events): its end is the change
@@ -841,7 +930,7 @@
       if (t) { G.moveItem(t, snapshot(t), e.shiftKey ? { turn: dv * .0025 } : { scale: k }, s.handles.getBoundingClientRect()); paintLayer(s, t); dirty(s, true); wheelDone(s); return; }
       var r = P.getBoundingClientRect(), f = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
       if (!(f.x >= 0 && f.x <= 1)) f.x = .5; if (!(f.y >= 0 && f.y <= 1)) f.y = .5;
-      s.d.crop = G.zoom(s.d.crop, own(), s.d.fit, k, f, f); placeMedia(s); dirty(s, true); wheelDone(s);
+      s.d.crop = G.zoom(s.d.crop, own(), s.d.fit, k, f, f); placeMedia(s, true); dirty(s, true); wheelDone(s);
     }, { passive: false });
     // the focused picture: arrows pan (Shift: 10%), + − zoom, 0 puts it back
     P.addEventListener('keydown', function (e) {
@@ -871,7 +960,8 @@
       if (hit.type === 'text' && last && last.on === hit && now - last.at < TAP_MS) { s.lastTap = null; textSheet(s, hit); }
       return;
     }
-    if (target === 'wait' || picked(s)) { select(s, null); return; }
+    // storyux verify: the tap that lets a layer go is no half of a double tap (two taps to be sure it's let go kept the framing)
+    if (target === 'wait' || picked(s)) { select(s, null); s.lastTap = null; return; }
     if (last && last.on === 'base' && now - last.at < TAP_MS && canPan(s)) { s.lastTap = null; resetFrame(s.d, s.d.fit); changed(s, true); }
   }
   function tool(s, name) { if (s.busy || !s.d.file || !s.d.valid) return; if (name === 'layout') toggleLayout(s); else if (name === 'text') textSheet(s); else if (name === 'sticker') stickerSheet(s); else if (name === 'mention') mentionSheet(s); else if (name === 'trim') trimSheet(s); }
@@ -951,15 +1041,27 @@
   }
   function goBack(s) {
     if (!live(s) || s.busy || !s.d.file) return;
-    if (edited(s) && !s.ask) { ask(s); return; }
+    // storyux verify: while the question is up the X only points at it - Discard is the one way to drop the edits
+    if (s.ask) { focusAsk(s); return; }
+    if (edited(s)) { ask(s, 'back'); return; }
+    leave(s);
+  }
+  // the draft let go, back to the live camera (or the picker)
+  function leave(s) {
     unask(s); fresh(s);
     if (!camera(s)) { paintControls(s); var first = s.picks.querySelector('button'); (first || s.root).focus(); say(s, s.camWhy || ''); }
   }
-  function ask(s) {
-    var bar = s.ask = add(s.card, el('div', 'sst-ask')); bar.setAttribute('role', 'group');
-    var q = _t('js.feed.ss.discard_edits', 'Discard your edits?'); bar.setAttribute('aria-label', q); add(bar, el('p', null, q));
+  function focusAsk(s) { var keep = s.ask && s.ask.querySelector('.sst-ask-keep'); if (keep) keep.focus(); }
+  // the quiet question: kind 'back' (the X - Discard goes back to the camera) or 'close' (Escape, a click outside - Discard
+  // closes the editor). storyux verify: any sheet closes first (the question is never behind its focus trap), and it sits under
+  // the header, by the X, on a desktop too
+  function ask(s, kind) {
+    if (s.ask) { focusAsk(s); return; }
+    closeSheet(s);
+    var bar = s.ask = s.card.insertBefore(el('div', 'sst-ask'), s.body); bar.setAttribute('role', 'group');
+    var q = kind === 'close' ? _t('js.feed.ss.discard', 'Discard this story?') : _t('js.feed.ss.discard_edits', 'Discard your edits?'); bar.setAttribute('aria-label', q); add(bar, el('p', null, q));
     var keep = add(bar, button(_t('js.feed.ss.keep_editing', 'Keep editing'), function () { unask(s, true); }, 'quiet sm sst-ask-keep'));
-    add(bar, button(_t('js.feed.ss.discard_go', 'Discard'), function () { goBack(s); }, 'sm sst-ask-go'));
+    add(bar, button(_t('js.feed.ss.discard_go', 'Discard'), function () { if (kind === 'close') close(s, false, true); else leave(s); }, 'sm sst-ask-go'));
     keep.focus();
   }
   function unask(s, refocus) { if (!s.ask) return; s.ask.remove(); s.ask = null; if (refocus && s.backButton && !s.backButton.hidden) s.backButton.focus(); }

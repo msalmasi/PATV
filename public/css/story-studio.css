@@ -1,7 +1,7 @@
 /* Story Studio: a documented full-screen editor variant of ds-scrim.sheet > ds-modal.
    The page remains underneath for no-reload posting. Crop, layer and trim handles are new
    controls built from ds tokens. All artwork stays in the local preview; mentions are DOM chips. */
-.sst { font-family: var(--ds-font); color: var(--ds-text); padding: var(--ds-sp-6); z-index: var(--ds-z-modal); touch-action: pan-x pan-y; }   /* storyux: no page pinch or double-tap zoom over the editor */
+.sst { font-family: var(--ds-font); color: var(--ds-text); padding: var(--ds-sp-6); z-index: var(--ds-z-modal); touch-action: manipulation; }   /* storyux verify: no double-tap zoom on its buttons; a pinch on the sheets or the footer still zooms the page (their small print) - never on the picture or the buttons over it */
 .sst.pad-acc {
   --ds-ac: var(--pad-accent);
   --ds-ac-2: var(--pad-accent);
@@ -28,23 +28,25 @@
 /* storyux: the stage - a picture to drag and pinch (no page scroll, zoom, text selection or long-press callout under it) */
 .sst.sst-has-media .sst-preview { cursor: grab; }
 .sst.sst-has-media .sst-preview:active { cursor: grabbing; }
-.sst .sst-source { -webkit-user-drag: none; pointer-events: none; max-inline-size: none; max-block-size: none; }
+.sst .sst-source { -webkit-user-drag: none; pointer-events: none; max-inline-size: none; max-block-size: none; transform-origin: 0 0; }   /* a gesture moves it by a transform from its laid-out box */
 .sst .sst-source, .sst .sst-overlay, .sst .sst-handles { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
 .sst .sst-overlay { pointer-events: none; }
 .sst .sst-handles { pointer-events: none; }
 .sst .sst-layer { pointer-events: auto; position: absolute; transform: translate(-50%, -50%); min-inline-size: 36px; min-block-size: 36px; border: 1px solid transparent; border-radius: var(--ds-r-xs); background: transparent; color: var(--ds-text-strong); padding: 0; touch-action: none; cursor: grab; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .sst .sst-layer:active { cursor: grabbing; }
 .sst .sst-mention.selected { border-color: var(--ds-ac); }
-/* the selection: a thin double line (light on dark, dark on light) on the layer's own turned box; its handles stay upright */
+/* the selection: a thin double line (light on dark, dark on light) on the layer's whole turned hit box (sized by the script);
+   its grips stay upright, just off its corners where there is room (the script places them) */
 .sst .sst-select { position: absolute; pointer-events: none; border: 1px solid var(--ds-text-strong); border-radius: var(--ds-r-xs); box-shadow: 0 0 0 1px var(--ds-media-bg), inset 0 0 0 1px var(--ds-media-bg); }
 .sst .sst-select.sst-select-chip { border: 0; box-shadow: none; }
-.sst .ds-btn.sst-sel-del { position: absolute; inset-inline-start: 0; inset-block-start: 0; transform: translate(-50%, -50%) rotate(calc(-1 * var(--sst-rot, 0rad))); pointer-events: auto;
+.sst .ds-btn.sst-sel-del { position: absolute; transform: translate(-50%, -50%) rotate(calc(-1 * var(--sst-rot, 0rad))); pointer-events: auto;
   --b-bg: var(--ds-media-panel); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line-strong); inline-size: 28px; min-inline-size: 28px; block-size: 28px; min-block-size: 28px; box-shadow: var(--ds-e-2); filter: none; }
 .sst .ds-btn.sst-sel-del .ds-ic { font-size: 13px; }
-.sst .sst-select-chip .ds-btn.sst-sel-del { transform: translate(-50%, calc(-100% - 18px)); }
-.sst .sst-sel-turn { position: absolute; inset-inline-end: 0; inset-block-end: 0; transform: translate(50%, 50%); pointer-events: auto; touch-action: none; cursor: nwse-resize;
+.sst .ds-btn.sst-sel-del:focus-visible { box-shadow: var(--ds-focus-ring), var(--ds-e-2); }   /* the ring over its shadow */
+.sst .sst-sel-turn { position: absolute; transform: translate(-50%, -50%) rotate(calc(-1 * var(--sst-rot, 0rad))); pointer-events: auto; touch-action: none; cursor: nwse-resize;
   inline-size: 18px; block-size: 18px; border-radius: 50%; background: var(--ds-text-strong); border: 2px solid var(--ds-media-bg); box-shadow: var(--ds-e-2); }
-.sst .sst-sel-turn::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; }   /* a finger-sized hit area */
+.sst .sst-sel-turn::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; }   /* a finger-sized hit area (G.GRIP.turn: 21 px) */
+.sst .sst-sel-turn:is([data-at="tr"], [data-at="bl"]) { cursor: nesw-resize; }
 /* the centre guides a dragged layer snaps to */
 .sst .sst-guide { position: absolute; pointer-events: none; background: var(--ds-ac); opacity: .9; }
 .sst .sst-guide[data-guide="v"] { inset-block: 0; inset-inline-start: 50%; inline-size: 1px; transform: translateX(-50%); }
@@ -136,6 +138,11 @@
   .sst .sst-filename { display: none; }
   .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-3), env(safe-area-inset-right, 0px)); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-3); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
   .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line); box-shadow: var(--ds-e-1); }
+  .sst .sst-tools .ds-btn.sst-round:focus-visible { box-shadow: var(--ds-focus-ring), var(--ds-e-1); }
+  /* storyux verify: over the picture, only the buttons take a touch - a layer under the header's gradient or between the tools
+     can still be grabbed - and a pinch there never zooms the page */
+  .sst .sst-head, .sst .sst-tools { pointer-events: none; touch-action: pan-x pan-y; }
+  .sst .sst-head .ds-btn, .sst .sst-tools .ds-btn { pointer-events: auto; }
   .sst .sst-tools .ds-ic { font-size: 22px; }
   .sst .sst-head .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
   .sst .sst-head .ds-btn.sst-round .ds-ic { font-size: 20px; }
