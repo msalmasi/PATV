@@ -2,7 +2,7 @@
    (grabcard 1.99amm; /admin/pepe/rooms#fastgrab - fastgrab.js -> website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py).
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change,
    and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node).
-   1.99?? micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
+   1.99amu micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
    and Pepe check it: 1-20 characters, never starting with / or !, nothing his chat would change; empty = none). v3: that last check. */
 (function () {
   'use strict';
@@ -212,7 +212,7 @@
       box.appendChild(s);
       return box;
     }
-    if (isText(f)) {                     // 1.99?? micblock: the unblock code (a text box; checked on change, never sent bad)
+    if (isText(f)) {                     // 1.99amu micblock: the unblock code (a text box; checked on change, never sent bad)
       var t = el('input', 'ds-in'); t.type = 'text'; t.setAttribute('maxlength', String(CODE_MAX)); t.setAttribute('autocomplete', 'off');
       t.setAttribute('data-fg', f); t.setAttribute('aria-label', label); t.setAttribute('placeholder', 'none');
       t.value = v == null ? '' : String(v);

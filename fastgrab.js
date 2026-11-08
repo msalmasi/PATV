@@ -19,7 +19,7 @@
 // Fields (the command's own words): on | contest | fair | web | chatty | blockbreak | selfunblock (on / off), claim (Pepe's modes),
 // rate | shots | tries | ceiling (a whole number), breaker (3) | pause (4) | fairwait (2) (whole numbers), unblockcode (text), and -
 // for a room - follow (drop the room's own value; it follows the global again).
-// 1.99?? micblock (the owner, 11-08: "give me a toggle to remove this courtesy" / "I do want that in Players_Lounge (add this to the
+// 1.99amu micblock (the owner, 11-08: "give me a toggle to remove this courtesy" / "I do want that in Players_Lounge (add this to the
 // admin page too, a toggle plus field for whatever the unblock code is in case it changes or is different in another room)"):
 // blockbreak = someone blocking Pepe's mic puts that room's mic on a 30-minute break (on by default, as before); selfunblock = when
 // someone blocks Pepe's mic there he types the room's unblockcode (for a room bot that unblocks whoever types it - Players Lounge's
@@ -72,7 +72,7 @@ const ints = (v, n) => {
   return out.every((x) => x !== null) ? out : null;
 };
 
-/** 1.99?? micblock: a room's unblock code -> {code, err} - Pepe's own check (pepe_fastgrabweb.unblock_code_clean): trimmed; "" / none /
+/** 1.99amu micblock: a room's unblock code -> {code, err} - Pepe's own check (pepe_fastgrabweb.unblock_code_clean): trimmed; "" / none /
     off = no code; else 1-CODE_MAX printable characters (no control, format or separator character but a plain space) that never start
     with "/" or "!" - and (review F8) nothing his chat layer would change: no * or `, no __ or ~~ (send_chat's markdown strip sends "*1*"
     as "1"), no word starting with "-" (a chat flag: "1 -global" sets "1" for every room). */
