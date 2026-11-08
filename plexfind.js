@@ -49,6 +49,34 @@ const titleMatch = (title, query) => {
 const episodeOrder = (a, b) => (a.aired && b.aired ? String(a.aired).localeCompare(String(b.aired)) : 0)
   || ((Number(a.season) || 0) - (Number(b.season) || 0)) || ((Number(a.episode) || 0) - (Number(b.episode) || 0)) || String(a.key).localeCompare(String(b.key));
 const movieOrder = (a, b) => String(a.aired || `${a.year || 0}-01-01`).localeCompare(String(b.aired || `${b.year || 0}-01-01`)) || String(a.key).localeCompare(String(b.key));
+// 1.99?? clerkfast (owner 2026-11-08, the pink-shirt ask): "the episode of <show> where <description>" - is ONE of that show's
+// episodes clearly the one? Only when exactly one episode has every TELLING word of the description in its title or summary.
+// Telling: not a filler word, not the show's own name, and in no more than a fifth of the show's episodes ("homer" is in most
+// Simpsons summaries and tells nothing). A word NO episode has means the summaries can't settle it (prod's summary for the
+// pink-shirt episode never says "pink" or "shirt" - and Team Homer's has "shirts"): never clear then, the bot's model decides.
+// Plurals / third person fold ("shirts" = "shirt", "wears" = "wear"); nothing else is stemmed.
+const DESCRIBE_SKIP = new Set(("a an the of and or but in on at to for by with from into onto off over under about as is are was were be been being " +
+  "it its this that these those they them their there here where when which who whom whose what how why he she his her him we us our you " +
+  "your i me my do does did not no so than then too very can will just one some any all has have had get gets got goes going went gone " +
+  "episode episodes show shows season seasons series part whereas while also").split(" "));
+const DESCRIBE_COMMON = 0.2;
+const stem = (w) => w.length > 4 && w.endsWith("ies") ? w.slice(0, -3) + "y"
+  : w.length > 4 && /(?:s|x|z|ch|sh)es$/.test(w) ? w.slice(0, -2)
+    : w.length > 3 && w.endsWith("s") && !/(?:ss|us|is)$/.test(w) ? w.slice(0, -1) : w;
+const wordsOf = (text) => new Set(norm(text).split(" ").filter(Boolean).map(stem));
+function describedOnce(about, show, episodes) {
+  const own = wordsOf(show && show.title);
+  const words = [...new Set(norm(about).split(" ").filter((w) => w.length >= 3 && !DESCRIBE_SKIP.has(w)).map(stem))].filter((w) => !own.has(w));
+  if (!words.length || !episodes.length) return null;
+  const texts = episodes.map((r) => wordsOf(`${r.title || ""} ${r.summary || ""}`));
+  const df = new Map(words.map((w) => [w, texts.reduce((n, t) => n + (t.has(w) ? 1 : 0), 0)]));
+  if (words.some((w) => !df.get(w))) return null;
+  const cap = Math.max(2, Math.ceil(episodes.length * DESCRIBE_COMMON));
+  const telling = words.filter((w) => df.get(w) <= cap);
+  if (!telling.length) return null;
+  const covering = episodes.filter((_, i) => telling.every((w) => texts[i].has(w)));
+  return covering.length === 1 ? String(covering[0].key) : null;
+}
 class ClerkError extends Error {
   constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; this.refuse = true; }
 }
@@ -388,6 +416,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       if (found && found.unavailable) return { ...base, code: "unavailable" };
       if (found) { first.record.status = "missing"; first.record.seerr = found; seerr = found; }
     }
+    let clearKey = null;   // 1.99?? clerkfast: the one episode the description singles out (describedOnce), if any
     let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && matches(r, a, seen, parents)).map((r) => ({ r, why: "exact", exact })), plans = [], alternatives = [];
     const selectionList = ["first_n", "last_n", "season", "series", "in_order"].includes(a.select) || (a.select === "one" && a.season != null && a.episode == null);
     const makePlan = (rows, why, show, scope = "list", alternative = false) => {
@@ -413,8 +442,16 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         if (a.season != null) eps = eps.filter((r) => Number(r.season) === a.season);
         if (a.episode != null) eps = eps.filter((r) => Number(r.episode) === a.episode && (a.season != null || Number(r.season) === 1));
         if (a.about) {
-          const hits = new Set((await catalog.search(a.about, { kind: "episode", show_key: String(show.key), limit: 500, budgetMs: 400 })).map((r) => String(r.key)));
-          eps = eps.filter((r) => hits.has(String(r.key)));
+          // 1.99?? clerkfast: in the word search's own (bm25) order - re-sorted into season order, the best hit was wherever it aired
+          const rank = new Map();
+          (await catalog.search(a.about, { kind: "episode", show_key: String(show.key), limit: 500, budgetMs: 400 }))
+            .forEach((r, i) => { if (!rank.has(String(r.key))) rank.set(String(r.key), i); });
+          eps = eps.filter((r) => rank.has(String(r.key))).sort((x, y) => rank.get(String(x.key)) - rank.get(String(y.key)));
+          // one show, a first ask (a reroll's excluded rows would make the rest look unique), a single pick
+          if (wantedShows.length === 1 && !exclude.size && a.select === "one") {
+            const once = describedOnce(a.about, show, available);
+            if (once && eps.some((r) => String(r.key) === once)) clearKey = once;
+          }
         }
         if (!eps.length) { offerSeasons(); continue; }
         if (a.select === "random") candidates.push(...(a.title && wantedShows.length > 1 ? shuffled(eps, a.quality, 1) : eps).map((r) => ({ r, why: "random", exact: false })));
@@ -528,6 +565,11 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         } catch (_) { /* A stale/missing vector cache silently keeps phase 2a's candidates. */ }
       }
     }
+    if (clearKey) {        // 1.99?? clerkfast: first, whatever the vectors' order (it is always one of the word hits they fuse)
+      const at = candidates.findIndex((x) => String(x.r.key) === clearKey);
+      if (at < 0) clearKey = null;
+      else if (at > 0) candidates.unshift(...candidates.splice(at, 1));
+    }
     // The last read is the safety boundary: never trust a search hit or a candidate retained across a sync/settings edit.
     if (a.select === "random") {
       const byKey = new Map(candidates.map((x) => [String(x.r.key), x]));
@@ -589,7 +631,10 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     const visibleKeys = new Set(offered.map((row) => row.key));
     const ambiguous = (!!a.title && wantedShows.length > 1 && new Set(offered.map((r) => r.show_key).filter(Boolean)).size > 1)
       || recallHasVariants(verified.candidates.filter((candidate) => visibleKeys.has(String(candidate.r.key))));
+    // 1.99?? clerkfast: clear - the description singles out the first row (the bot may answer without its model)
+    const clear = !!clearKey && !ambiguous && !seerr && offered.length > 0 && offered[0].key === clearKey && offered[0].kind === "episode";
     return { ...base, rows: offered, exact: !!exact && rows.length > 0, recall, ...(seerr ? { seerr } : {}), ...(ambiguous ? { ambiguous: true } : {}), ...(cut ? { cut } : {}),
+      ...(clear ? { clear: true } : {}),
       ...(shelfSelection.filters.some((f) => f.no_rank) ? { no_rank: true } : {}),
       ...(!rows.length && alternativeRows.length ? { alternatives: alternativeRows.map((row) => provenance(row, shelfSelection.filters)) } : {}), catalog: { ready: true, at: chosen.state.at || null } };
   }
