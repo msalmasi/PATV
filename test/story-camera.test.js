@@ -313,7 +313,7 @@ function camPage(options = {}) {
     const node = normalCreate(tag);
     node.setPointerCapture = (id) => { node.captured = id; }; node.releasePointerCapture = () => { node.captured = null; };
     if (tag === "canvas") {
-      const ctx = { font: "700 72px Ubuntu", fillStyle: "", save() {}, restore() {}, clearRect() {}, fillRect() {}, fillText() {}, strokeText() {},
+      const ctx = { font: "700 72px Ubuntu", fillStyle: "", save() {}, restore() {}, clearRect() {}, fillRect() {}, fillText() {}, strokeText() {}, translate() {}, rotate() {},
         measureText(t) { return { width: Array.from(t).length * 30 }; }, drawImage(...a) { P.draws.push({ canvas: node, args: a }); } };
       node.getContext = () => ctx;
       node.toBlob = (cb, type, quality) => {
@@ -471,7 +471,9 @@ test("Story camera: a tap takes one JPEG at the stream's own size through the ch
   assert.ok(cam(P) === null, "cam(P) should be null"); assert.ok(!root.classList.contains("scam-open"));
   assert.ok(root.querySelector("img.sst-source"), "the editor shows the photo"); assert.ok(root.classList.contains("sst-has-media"));
   assert.match(root.querySelector(".sst-filename").textContent, /^story-photo-\d{8}-\d{6}\.jpg$/);
-  assert.ok(!root.querySelector('[data-picker="retake"]').hidden, "Retake is offered after a capture");
+  // storyux: after a capture only the X back to the camera - no 📷 Camera, no 🖼️ Gallery, no Retake
+  assert.ok(!root.querySelector(".sst-back").hidden, "the X back to the camera after a capture"); assert.ok(root.querySelector(".sst-picks").hidden, "no Gallery or Camera button");
+  assert.ok(root.querySelector('[data-picker="retake"]') === null, "no Retake");
   root.querySelector(".sst-post").click(); await flush(24);
   assert.equal(P.uploaded.length, 1); const up = P.uploaded[0].body;
   assert.equal(up.kind, "image"); assert.equal(up.purpose, "story"); assert.match(up.name, /^story-photo-.*\.jpg$/); assert.ok(up.edit, "an edited Studio upload");
@@ -479,20 +481,30 @@ test("Story camera: a tap takes one JPEG at the stream's own size through the ch
   assert.ok(P.doc.querySelector(".sst") === null, "posted");
 });
 
-test("Story camera: Retake (in 📷 Camera's place) and 📷 Camera come back to the camera; ✕ there keeps the draft; a chosen file is not a capture", async () => {
+test("Story camera storyux: after a capture the X goes back to the live camera, letting the draft go; ✕ there closes the editor; a chosen file gets the same X", async () => {
   const P = camPage(), root = await openStudio(P); await tap(P);
-  const retake = root.querySelector('[data-picker="retake"]'); retake.click(); await flush(10);
-  assert.ok(cam(P)); assert.equal(P.gum.length, 2); assert.ok(cam(P).classList.contains("scam-ready")); assert.ok(root.classList.contains("scam-open"));
+  const x = root.querySelector(".sst-back"); assert.equal(x.getAttribute("aria-label"), "Back to the camera"); assert.equal(x.title, "Back to the camera");
+  x.click(); await flush(10);
+  assert.ok(cam(P), "X opens the live camera"); assert.equal(P.gum.length, 2); assert.ok(cam(P).classList.contains("scam-ready")); assert.ok(root.classList.contains("scam-open"));
+  assert.equal(P.pickClicks.camera, 0, "not the phone's capture input");
+  assert.ok(!root.classList.contains("sst-has-media"), "the photo is let go"); assert.ok(root.querySelector(".sst-source") === null);
+  assert.equal(cam(P).querySelector(".scam-close").getAttribute("aria-label"), "Close story editor", "no draft behind the camera now");
+  await tap(P); assert.equal(jpegs(P), 2); assert.equal(root.querySelectorAll(".sst-source").length, 1, "the new capture");
+  root.querySelector(".sst-back").click(); await flush(10); assert.ok(cam(P));
   cam(P).querySelector(".scam-close").click(); await flush();
-  assert.ok(cam(P) === null, "cam(P) should be null"); assert.ok(P.doc.querySelector(".sst"), "the studio stays, with the draft"); assert.ok(root.querySelector(".sst-source"));
-  assert.equal(liveTracks(P.streams[1]), 0); assert.ok(P.doc.activeElement === retake, "P.doc.activeElement should be retake");
-  retake.click(); await flush(10);
-  assert.ok(cam(P), "Retake opens the live camera"); assert.equal(P.pickClicks.camera, 0, "not the phone's capture input"); assert.equal(P.gum.length, 3);
-  await tap(P); assert.equal(jpegs(P), 2); assert.equal(root.querySelectorAll(".sst-source").length, 1, "the new capture replaced the old one");
-  pickFile(P, "image/jpeg", "garden.jpg"); await flush(10);
-  assert.ok(root.querySelector('[data-picker="retake"]').hidden); assert.equal(root.querySelector(".sst-filename").textContent, "garden.jpg");
-  root.querySelector('[data-picker="camera"]').click(); await flush(10);
-  assert.ok(cam(P), "📷 Camera opens the live camera"); assert.equal(P.pickClicks.camera, 0); assert.equal(P.gum.length, 4);
+  assert.ok(P.doc.querySelector(".sst") === null, "✕ on the camera closes the editor"); assert.equal(liveTracks(P.streams[2]), 0);
+  // a file chosen with the camera's 🖼️: the same single X, back to the camera
+  const Q = camPage(), q = await openStudio(Q); cam(Q).querySelector(".scam-gallery").click(); pickFile(Q, "image/jpeg", "garden.jpg"); await flush(10);
+  assert.ok(q.querySelector(".sst-picks").hidden); assert.ok(!q.querySelector(".sst-back").hidden); assert.equal(q.querySelector(".sst-filename").textContent, "garden.jpg");
+  q.querySelector(".sst-back").click(); await flush(10);
+  assert.ok(cam(Q), "X opens the live camera"); assert.equal(Q.pickClicks.camera, 0); assert.equal(Q.gum.length, 2);
+  // with edits: asked quietly in the editor first (no browser dialog), then back to the camera
+  const E = camPage(), e = await openStudio(E); await tap(E); E.win.confirm = () => { throw new Error("no browser dialog for this"); };
+  e.querySelector('[data-tool="text"]').click(); const ta = e.querySelector(".sst-text-input"); ta.value = "Hi"; ta.dispatchEvent(new Ev("input")); await flush(6);
+  e.querySelector(".sst-back").click(); await flush();
+  assert.ok(cam(E) === null, "asked first"); assert.ok(e.querySelector(".sst-ask")); assert.ok(e.classList.contains("sst-has-media"));
+  e.querySelector(".sst-ask-go").click(); await flush(10);
+  assert.ok(cam(E), "then back to the camera"); assert.equal(E.gum.length, 2); assert.ok(!e.classList.contains("sst-has-media"));
 });
 
 test("Story camera: press and hold records WebM with sound while held, stops on release, and the clip reaches the editor with its length", async () => {
@@ -552,10 +564,10 @@ test("Story camera: Enter and Space take a photo, and so does a click from assis
   const P = camPage(), root = await openStudio(P);
   const enter = fire(shutter(P), "keydown", { key: "Enter" }); assert.ok(enter.defaultPrevented); await flush(12);
   assert.equal(jpegs(P), 1); assert.ok(root.querySelector(".sst-source"));
-  root.querySelector('[data-picker="retake"]').click(); await flush(10);
+  root.querySelector(".sst-back").click(); await flush(10);
   fire(shutter(P), "keydown", { key: " ", repeat: true }); await flush(12); assert.equal(jpegs(P), 0 + 1, "a held-down key repeats nothing");
   fire(shutter(P), "keydown", { key: " " }); await flush(12); assert.equal(jpegs(P), 2);
-  root.querySelector('[data-picker="retake"]').click(); await flush(10);
+  root.querySelector(".sst-back").click(); await flush(10);
   fire(shutter(P), "click", { detail: 0 }); await flush(12); assert.equal(jpegs(P), 3);
 });
 
@@ -589,7 +601,7 @@ test("Story camera: flip releases the camera before opening the other one; only 
   await tap(P);
   const snap = P.snaps.find((x) => x.type === "image/jpeg"), drawn = P.draws.find((d) => d.canvas === snap.canvas);
   assert.deepEqual(drawn.args.slice(1), [0, 0, 1080, 1920], "the saved selfie reads the right way round (not mirrored)");
-  root.querySelector('[data-picker="retake"]').click(); await flush(10);
+  root.querySelector(".sst-back").click(); await flush(10);
   assert.deepEqual(P.gum[2].video.facingMode, { ideal: "environment" }, "every open starts on the back camera");
   cam(P).querySelector(".scam-flip").click(); await flush(10); cam(P).querySelector(".scam-flip").click(); await flush(10);
   assert.deepEqual(P.gum[4].video.facingMode, { ideal: "environment" }); assert.equal(cam(P).getAttribute("data-facing"), "environment");
@@ -647,7 +659,7 @@ test("Story camera: 🖼️ opens the studio's file picker and keeps the camera 
   cam(P).querySelector(".scam-gallery").click(); assert.equal(P.pickClicks.gallery, 1); assert.ok(cam(P), "cancelling the picker leaves the camera");
   pickFile(P, "video/mp4", "pond.mp4"); await flush(10);
   assert.ok(cam(P) === null, "cam(P) should be null"); assert.equal(liveTracks(P.streams[0]), 0); assert.ok(root.querySelector("video.sst-source"));
-  assert.ok(root.querySelector('[data-picker="retake"]').hidden);
+  assert.ok(root.querySelector(".sst-picks").hidden, "a chosen file: no Gallery or Camera button either"); assert.ok(!root.querySelector(".sst-back").hidden);
 });
 
 test("Story camera: a photo that can't be encoded says so and the camera starts again", async () => {
@@ -764,19 +776,22 @@ test("Story camera: CSS uses ds tokens, keeps the safe areas and stops the long-
 });
 
 // ── review fixes (1.99alu): every finding of the camera review gets its case here ──
-test("Story camera review: after an error the live camera can't get past, 📷 Camera and Retake open the phone's capture input - never the same error again", async () => {
+test("Story camera review: after an error the live camera can't get past, 📷 Camera (and the X's way back) open the phone's capture input - never the same error again", async () => {
   const P = camPage({ gum: () => ({ name: "TypeError", message: "bad constraints" }) }), root = await openStudio(P);
   assert.ok(cam(P) === null, "cam(P) should be null"); assert.match(status(P), /couldn't start/i);
   const asked = P.gum.length;
   root.querySelector('[data-picker="camera"]').click(); await flush(10);
   assert.equal(P.pickClicks.camera, 1, "📷 Camera: the capture input, as the message says"); assert.equal(P.gum.length, asked, "no second live start"); assert.ok(cam(P) === null, "cam(P) should be null");
-  // the camera worked for one photo, then is taken by another app: Retake falls back the same way
+  // the camera worked for one photo, then is taken by another app: the X falls back the same way (the picker, with the reason)
   const Q = camPage({ gum: (c, n) => (n > 1 ? { name: "NotReadableError" } : null) }), q = await openStudio(Q); await tap(Q);
-  q.querySelector('[data-picker="retake"]').click(); await flush(10);
+  q.querySelector(".sst-back").click(); await flush(10);
   assert.ok(cam(Q) === null, "cam(Q) should be null"); assert.match(status(Q), /another app/i); assert.doesNotMatch(status(Q), /tap 📷 Camera to try again/i);
+  assert.ok(!q.querySelector(".sst-picks").hidden, "the picker is back"); assert.ok(!q.classList.contains("sst-has-media"));
   const asked2 = Q.gum.length;
-  q.querySelector('[data-picker="retake"]').click(); await flush(10);
-  assert.equal(Q.pickClicks.camera, 1, "Retake: the capture input"); assert.equal(Q.gum.length, asked2);
+  q.querySelector('[data-picker="camera"]').click(); await flush(10);
+  assert.equal(Q.pickClicks.camera, 1, "📷 Camera: the capture input"); assert.equal(Q.gum.length, asked2);
+  await flush(); pickFile(Q, "image/jpeg", "garden.jpg"); await flush(10);
+  assert.equal(q.querySelector(".sst-back").getAttribute("aria-label"), "Choose another picture or video", "no live camera to go back to: the X says where it goes");
 });
 
 test("Story camera review: a blocked microphone with the camera still to ask gets the camera alone (silent videos); only the mic refusal is remembered", async () => {
@@ -815,7 +830,7 @@ test("Story camera review: iOS's audio session - play-and-record just before the
   assert.equal(P.sessAtGum[0], "play-and-record", "the mic opens in a session that can record (room-bridge left 'playback')");
   let s = shutter(P); fire(s, "pointerdown"); await P.clock.tick(120); fire(s, "pointerup");
   assert.equal(A.type, "playback", "a photo: handed back in the pointerup itself"); fire(s, "click", { detail: 1 }); await flush(12);
-  root.querySelector('[data-picker="retake"]').click(); await flush(10); assert.equal(A.type, "play-and-record");
+  root.querySelector(".sst-back").click(); await flush(10); assert.equal(A.type, "play-and-record");
   s = shutter(P); fire(s, "pointerdown"); await P.clock.tick(2000); fire(s, "pointerup");
   assert.equal(liveTracks(P.streams[1]), 0, "a let-go stops the camera and mic in the gesture"); assert.equal(A.type, "playback");
   await flush(16); assert.ok(root.classList.contains("sst-video"), "and the clip still arrives"); assert.equal(A.type, "playback");
@@ -893,13 +908,14 @@ test("Story camera review: a hold let go before the shortest clip says it is fin
   assert.equal(P.recorders[0].stops, 0); await P.clock.tick(1200); assert.equal(P.recorders[0].stops, 1);
 });
 
-test("Story camera review: after a capture Retake takes 📷 Camera's place (one way back, not two) and doesn't wear the flip's 🔄", async () => {
+test("Story camera review storyux: after a capture only the X shows - not 📷 Camera, not 🖼️ Gallery - and it doesn't wear the flip's 🔄", async () => {
   const P = camPage(), root = await openStudio(P), flipIcon = cam(P).querySelector(".scam-flip .scam-ic").textContent; await tap(P);
-  const retake = root.querySelector('[data-picker="retake"]'), camera = root.querySelector('[data-picker="camera"]');
-  assert.ok(!retake.hidden); assert.ok(camera.hidden, "📷 Camera steps aside for Retake");
-  assert.notEqual(retake.querySelector(".ds-ic").textContent, flipIcon); assert.match(retake.getAttribute("aria-label"), /retake/i);
+  const x = root.querySelector(".sst-back");
+  assert.ok(!x.hidden); assert.ok(root.querySelector(".sst-picks").hidden, "📷 Camera and 🖼️ Gallery step aside");
+  assert.notEqual(x.querySelector(".ds-ic").textContent, flipIcon); assert.equal(x.querySelector(".ds-ic").textContent, "✕"); assert.match(x.getAttribute("aria-label"), /camera/i);
+  assert.ok(root.querySelector(".sst-close").hidden, "one X, not two");
   pickFile(P, "image/jpeg", "garden.jpg"); await flush(10);
-  assert.ok(retake.hidden); assert.ok(!camera.hidden, "a chosen file: 📷 Camera is back");
+  assert.ok(!x.hidden); assert.ok(root.querySelector(".sst-picks").hidden, "a chosen file: the same");
 });
 
 test("Story camera review: a file the studio refuses, chosen with the camera's 🖼️, keeps the camera up and says why there", async () => {
@@ -919,8 +935,9 @@ test("Story camera review: the camera's ✕ says what it does - the whole story 
   const P = camPage(), root = await openStudio(P);
   const label = cam(P).querySelector(".scam-close").getAttribute("aria-label");
   assert.doesNotMatch(label, /camera/i); assert.match(label, /story/i);
-  await tap(P); root.querySelector('[data-picker="retake"]').click(); await flush(10);
-  assert.match(cam(P).querySelector(".scam-close").getAttribute("aria-label"), /camera/i);
+  // storyux: the X lets the draft go, so the camera it opens has none behind it - its ✕ closes the editor
+  await tap(P); root.querySelector(".sst-back").click(); await flush(10);
+  assert.match(cam(P).querySelector(".scam-close").getAttribute("aria-label"), /story/i);
 });
 
 test("Story camera review: with the camera loaded (the default), Tab stays on the camera's controls and never reaches the hidden editor", async () => {

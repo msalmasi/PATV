@@ -229,7 +229,9 @@ function studioPage(options = {}) {
       const stack = [], ctx = { font: '700 72px Ubuntu', fillStyle: '', save() { stack.push({ font: this.font, fillStyle: this.fillStyle }); }, restore() { Object.assign(this, stack.pop()); },
         clearRect(...a) { draws.push({ canvas: node, op: 'clear', args: a }); }, measureText(t) { return { width: Array.from(t).length * parseFloat(this.font.split(' ')[1]) * .55 }; },
         fillRect(...a) { draws.push({ canvas: node, op: 'rect', args: a }); }, fillText(...a) { draws.push({ canvas: node, op: 'text', args: a, font: this.font, direction: this.direction }); },
-        strokeText(...a) { draws.push({ canvas: node, op: 'stroke', args: a }); }, drawImage(...a) { draws.push({ canvas: node, op: 'image', args: a }); }
+        strokeText(...a) { draws.push({ canvas: node, op: 'stroke', args: a }); }, drawImage(...a) { draws.push({ canvas: node, op: 'image', args: a }); },
+        // storyux: layers are drawn at their centre, turned (a real 2D context's own transform calls)
+        translate(...a) { draws.push({ canvas: node, op: 'translate', args: a }); }, rotate(...a) { draws.push({ canvas: node, op: 'rotate', args: a }); }
       }; node.getContext = () => ctx; node.toBlob = (cb, type) => cb(new Blob(['overlay'], { type }));
     }
     if (tag === 'img' || tag === 'video') {
@@ -293,7 +295,7 @@ test('Studio: one listener, pad preselection, nested Escape, draft confirmation 
   assert.equal(P.doc.listeners.filter((l) => l.type === 'click').length, 1);
   const root = await studioOpen(P); assert.equal(root.getAttribute('aria-modal'), 'true'); assert.ok(root.classList.contains('pad-acc'));
   assert.equal(root.style['--pad-accent'], '#26c6da'); assert.match(P.doc.querySelector('.sst-destination').textContent, /Aurora Workshop/);
-  await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
+  await studioPick(P); P.doc.querySelector('[data-tool="mention"]').click();
   const e = new Ev('keydown', { key: 'Escape', bubbles: true }); P.doc.activeElement.dispatchEvent(e); assert.ok(e.defaultPrevented); assert.ok(P.doc.querySelector('.sst')); assert.equal(P.doc.querySelector('.sst-sheet'), null);
   let confirms = 0; P.win.confirm = () => { confirms++; return false; }; key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst')); assert.equal(confirms, 1);
   P.win.confirm = () => true; key(P.doc.activeElement, 'Escape'); assert.equal(P.doc.querySelector('.sst'), null); assert.equal(P.doc.activeElement, P.opener); assert.equal(P.revoked.length, 1);
@@ -408,7 +410,7 @@ test('Studio: destination accent is strict, profile avatar is round and event de
 });
 
 test('Studio: crop keyboard geometry stays inside source and typing does not move it', async () => {
-  const P = studioPage({ width: 1200, height: 1920 }); await studioOpen(P); await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
+  const P = studioPage({ width: 1200, height: 1920 }); await studioOpen(P); await studioPick(P);
   const preview = P.doc.querySelector('.sst-preview'); key(preview, '+'); for (let i = 0; i < 120; i++) key(preview, 'ArrowRight', { shiftKey: true });
   await studioText(P, 'A'.repeat(119) + '🎉more'); assert.equal(Array.from(P.doc.querySelector('.sst-text-input').value).length, 120); key(P.doc.querySelector('.sst-text-input'), 'ArrowLeft');
   P.doc.querySelector('.sst-post').click(); await flush(24); const c = P.uploaded[1].body.edit.crop; assert.ok(c.x >= 0 && c.x + c.w <= 1); assert.ok(c.y >= 0 && c.y + c.h <= 1); assert.ok(c.w < .9); assert.equal(c.x, 0);
@@ -488,9 +490,10 @@ test('Studio: unedited landscape mentions use the contained media rectangle and 
 });
 
 test('Studio: extreme panoramas keep Fit and the source duration cap is exact', async () => {
-  const P = studioPage({ width: 4000, height: 200 }); await studioOpen(P); await studioPick(P); P.doc.querySelector('[data-tool="crop"]').click();
-  const fill = P.doc.querySelectorAll('button').find((n) => n.textContent === 'Fill'); assert.ok(fill.disabled); const preview = P.doc.querySelector('.sst-preview'); key(preview, '+');
+  const P = studioPage({ width: 4000, height: 200 }); await studioOpen(P); await studioPick(P);
+  const fill = P.doc.querySelector('[data-tool="layout"]'); assert.ok(fill.disabled); const preview = P.doc.querySelector('.sst-preview'); key(preview, '+');
   P.doc.querySelector('.sst-post').click(); await flush(20); assert.equal(P.uploaded[0].body.edit.fit, 'fit'); assert.equal(P.uploaded[0].body.edit.crop, undefined);
+  const fr = P.uploaded[0].body.edit.frame; assert.ok(fr && fr.w < 1, 'zoomed inside Fit: a frame'); assert.ok(fr.x <= .5 && fr.x + fr.w >= .5);
   const Q = studioPage({ duration: 180.1 }); await studioOpen(Q); await studioPick(Q, 'video/mp4'); assert.ok(Q.doc.querySelector('.sst-post').disabled); assert.match(Q.doc.querySelector('.sst-status').textContent, /180 seconds/);
 });
 
@@ -555,7 +558,7 @@ test('Studio ssfix: a tab reloaded while the camera was open reopens the studio 
   const session = memoryStorage();
   const P = studioPage({ sessionStorage: session }); await studioOpen(P);
   P.doc.querySelector('.sst-destination').click(); clickText(P, 'Plain Pond');
-  P.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === '⚙️ Story options').click();
+  P.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === 'Story options').click();
   const check = P.doc.querySelector('.sst-sheet input[type="checkbox"]'); check.checked = true; check.dispatchEvent(new Ev('change')); clickText(P, 'Done');
   P.doc.querySelector('[data-picker="camera"]').click();
   assert.equal(Object.keys(session._s).length, 1, 'a small note in the tab session while the camera is open');
@@ -565,7 +568,7 @@ test('Studio ssfix: a tab reloaded while the camera was open reopens the studio 
   const root = Q.doc.querySelector('.sst'); assert.ok(root, 'the studio is open again');
   assert.match(Q.doc.querySelector('.sst-destination').textContent, /Plain Pond/);
   const st = statusOf(Q); assert.equal(st.role, 'alert'); assert.ok(st.error); assert.match(st.text, /reload/i); assert.match(st.text, /camera/i); assert.match(st.text, /Gallery/);
-  Q.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === '⚙️ Story options').click();
+  Q.doc.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === 'Story options').click();
   assert.equal(Q.doc.querySelector('.sst-sheet input[type="checkbox"]').checked, true, 'the NSFW choice is kept');
   assert.equal(Object.keys(session._s).length, 0, 'the note is used once');
   const R = studioPage({ sessionStorage: session, navigation: 'reload' }); await flush(6);
@@ -917,8 +920,8 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=6/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1
-  assert.match(html, /story-studio\.css\?v=3/);
+  assert.match(html, /story-studio\.js\?v=7/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation
+  assert.match(html, /story-studio\.css\?v=4/);
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);
   const signedOut = render({ story: { signed: false, compose: true, rooms: [], caps: [] }, storyStudioOn: () => true });
@@ -979,4 +982,256 @@ test('Studio storyprev: a refused media fragment is tried once without it; the d
   assert.match(box.textContent, /workshop\.mp4/); assert.match(box.textContent, /gallery/); assert.match(box.textContent, /1080×1920/); assert.match(box.textContent, /loadedmetadata \+\d+ ms/);
   assert.ok(!Q.calls.some((c) => /debug/i.test(String(c.url))), 'no network');
   await studioPick(Q, 'image/jpeg'); assert.equal(Q.doc.querySelectorAll('.sst-debug').length, 1, 'one read-out, for the current pick'); assert.match(Q.doc.querySelector('.sst-debug').textContent, /image\/jpeg/);
+});
+
+// ── storyux (1.99??): the owner (iPhone, iOS 26, Chrome = WebKit; 2026-11-08): "can we just interact with the objects to place and size
+//    them? Like drag to move or pinch to shrink. Having sliders for horizontal and vertical position or rotation or size is very
+//    janky. Same with the content itself... zoom in or out on it with normal gestures." + "we shouldn't show the gallery button and
+//    camera button after a photo is selected/taken. Just an 'x' to go back to the camera screen." + "the other buttons can be
+//    circles without labels" ──
+const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+// (DOM nodes are compared with assert.ok(a === b): a failing assert.equal on a fake node makes the reporter walk the whole VM graph)
+const geometry = () => studioPage().win.patvStoryStudio.geometry;
+/** A pointer event (touch unless said otherwise); captured pointers' moves and ups go to the stage, as in a browser. */
+function ptr(node, type, id, x, y, extra) { const e = new Ev(type, Object.assign({ bubbles: true, pointerId: id, clientX: x, clientY: y, button: 0, buttons: 1, pointerType: 'touch', isPrimary: id === 1 }, extra || {})); node.dispatchEvent(e); return e; }
+const stage = (P) => P.doc.querySelector('.sst-preview');
+const layerEl = (P, kind) => P.doc.querySelector('.sst-layer[data-layer^="' + kind + '-"]');
+const liveOps = (P, op) => P.draws.filter((r) => r.canvas.className === 'sst-overlay' && r.op === op);
+async function studioSticker(P) { P.doc.querySelector('[data-tool="sticker"]').click(); await flush(); P.doc.querySelector('.sst-sticker').click(); await flush(8); return layerEl(P, 'sticker'); }
+async function drag(P, node, from, to, id = 1, extra) { ptr(node, 'pointerdown', id, from[0], from[1], extra); await flush(); ptr(stage(P), 'pointermove', id, (from[0] + to[0]) / 2, (from[1] + to[1]) / 2, extra); await flush(); ptr(stage(P), 'pointermove', id, to[0], to[1], extra); await flush(); ptr(stage(P), 'pointerup', id, to[0], to[1], extra); await flush(6); }
+async function tapAt(P, node, x = 150, y = 250, id = 1) { ptr(node, 'pointerdown', id, x, y); ptr(stage(P), 'pointerup', id, x, y); await flush(6); }
+
+test('Studio storyux: gesture math - two fingers give scale, twist and the midpoint move; layers stay in the frame, snap to its centre and turn square', () => {
+  const G = geometry();
+  const m = G.twoFinger({ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 130, y: 65 }, { x: 130, y: 265 });
+  assert.ok(near(m.scale, 2)); assert.ok(near(m.turn, Math.PI / 2)); assert.ok(near(m.dx, -20)); assert.ok(near(m.dy, 65));
+  const frame = { width: 300, height: 500 };
+  const st = { type: 'sticker', x: .5, y: .5, size: 240, rot: 0 }, start = { x: .5, y: .5, size: 240, rot: 0 };
+  G.moveItem(st, start, m, frame, { snap: true });
+  assert.ok(near(st.x, .5 - 20 / 300)); assert.ok(near(st.y, .5 + 65 / 500)); assert.equal(st.size, 480); assert.ok(near(st.rot, Math.PI / 2));
+  // a drag alone moves, and never changes the size or the turn
+  const one = { type: 'sticker', x: .3, y: .3, size: 300, rot: .4 };
+  G.moveItem(one, { x: .3, y: .3, size: 300, rot: .4 }, { dx: 30, dy: -50 }, frame, { snap: true });
+  assert.ok(near(one.x, .4)); assert.ok(near(one.y, .2)); assert.equal(one.size, 300); assert.ok(near(one.rot, .4));
+  // a pinch and twist alone keep the place
+  const two = { type: 'text', x: .3, y: .7, size: 72, rot: 0, bounds: { w: 300, h: 110 } };
+  G.moveItem(two, { x: .3, y: .7, size: 72, rot: 0 }, { scale: 1.5, turn: .3 }, frame, { snap: true });
+  assert.ok(near(two.x, .3)); assert.ok(near(two.y, .7)); assert.ok(near(two.size, 108)); assert.ok(near(two.rot, .3));
+  // size limits: text 24..288 px, stickers 48..960 px (drawn in steps of 24 for crisp pixel art)
+  const big = { type: 'text', x: .5, y: .5, size: 72, rot: 0 }; G.moveItem(big, { x: .5, y: .5, size: 72, rot: 0 }, { scale: 10 }, frame); assert.equal(big.size, 288);
+  const tiny = { type: 'sticker', x: .5, y: .5, size: 240, rot: 0 }; G.moveItem(tiny, { x: .5, y: .5, size: 240, rot: 0 }, { scale: .01 }, frame); assert.equal(tiny.size, 48);
+  assert.equal(G.stickerPx(250), 240); assert.equal(G.stickerPx(262), 264); assert.equal(G.stickerPx(5000), 960);
+  // inside the frame: the turned layer's own box (a tall turned text can go nearer the side than an upright one)
+  const edge = { type: 'sticker', x: .99, y: .01, size: 240, rot: 0 }; G.keepIn(edge);
+  assert.ok(near(edge.x, 1 - 120 / 1080)); assert.ok(near(edge.y, 120 / 1920));
+  const tall = { type: 'text', x: .99, y: .99, size: 72, rot: Math.PI / 2, bounds: { w: 800, h: 100 } }; G.keepIn(tall);
+  assert.ok(near(tall.x, 1 - 50 / 1080)); assert.ok(near(tall.y, 1 - 400 / 1920));
+  const flat = { type: 'text', x: .99, y: .5, size: 72, rot: 0, bounds: { w: 800, h: 100 } }; G.keepIn(flat); assert.ok(near(flat.x, 1 - 400 / 1080));
+  const huge = { type: 'sticker', x: .9, y: .1, size: 960, rot: Math.PI / 4 }; G.keepIn(huge); assert.ok(near(huge.x, .5), 'wider than the frame turned: centred');
+  // snapping: near the centre lines it sticks there and says which guide to show; a turn near square snaps square
+  const s1 = { type: 'sticker', x: .51, y: .3, size: 240, rot: 0 }; let g = G.moveItem(s1, { x: .51, y: .3, size: 240, rot: 0 }, { dx: 0, dy: 0 }, frame, { snap: true });
+  assert.equal(s1.x, .5); assert.ok(g.v); assert.ok(!g.h);
+  const s2 = { type: 'sticker', x: .3, y: .5, size: 240, rot: 0 }; g = G.moveItem(s2, { x: .3, y: .5, size: 240, rot: 0 }, { dx: 0, dy: 3 }, frame, { snap: true });
+  assert.equal(s2.y, .5); assert.ok(g.h); assert.ok(!g.v);
+  const s3 = { type: 'sticker', x: .3, y: .3, size: 240, rot: 0 }; G.moveItem(s3, { x: .3, y: .3, size: 240, rot: 0 }, { dx: 30 }, frame, { snap: true }); assert.ok(near(s3.x, .4), 'away from the centre: no pull');
+  const s4 = { type: 'sticker', x: .3, y: .3, size: 240, rot: 0 }; g = G.moveItem(s4, { x: .3, y: .3, size: 240, rot: 0 }, { turn: Math.PI / 2 + .04 }, frame, { snap: true }); assert.ok(near(s4.rot, Math.PI / 2)); assert.ok(g.turn);
+  const s5 = { type: 'sticker', x: .3, y: .3, size: 240, rot: 0 }; G.moveItem(s5, { x: .3, y: .3, size: 240, rot: 0 }, { turn: .3 }, frame, { snap: true }); assert.ok(near(s5.rot, .3));
+  const s6 = { type: 'sticker', x: .51, y: .3, size: 240, rot: 0 }; G.moveItem(s6, { x: .51, y: .3, size: 240, rot: 0 }, { dx: 0 }, frame); assert.equal(s6.x, .51, 'no snapping unless asked (the keyboard steps through the centre)');
+  // a mention is a chip: it moves, never scales or turns, and stays 5% in from the edges
+  const mn = { type: 'mention', x: .5, y: .5 }; G.moveItem(mn, { x: .5, y: .5 }, { dx: 1000, dy: 0, scale: 3, turn: 1 }, frame);
+  assert.equal(mn.x, .95); assert.equal(mn.size, undefined); assert.equal(mn.rot, undefined);
+});
+
+test('Studio storyux: base picture math - pinch zooms about the fingers, drag pans; Fill never shows empty space, Fit may, within limits', () => {
+  const G = geometry(), own = 4000 / 3000, cover = G.cover(own), contain = G.contain(own);
+  assert.ok(near(cover.w, .421875)); assert.equal(cover.h, 1); assert.ok(near(cover.x, .2890625)); assert.equal(cover.y, 0);
+  assert.equal(contain.w, 1); assert.ok(near(contain.h, own / (9 / 16))); assert.ok(near(contain.y, (1 - contain.h) / 2));
+  // the picture point under the fingers stays under them (the fingers moved too: the picture follows)
+  const f0 = { x: .3, y: .25 }, f1 = { x: .35, y: .3 }, r0 = G.rect(cover), u = (f0.x - r0.x) / r0.w, v = (f0.y - r0.y) / r0.h;
+  const z = G.zoom(cover, own, 'fill', 2, f0, f1), r1 = G.rect(z);
+  assert.ok(near(z.w, cover.w / 2)); assert.ok(near(r1.x + u * r1.w, f1.x)); assert.ok(near(r1.y + v * r1.h, f1.y));
+  assert.ok(near(z.w * 4000 / (z.h * 3000), 9 / 16), 'still the 9:16 shape');
+  // Fill: dragged far right, the picture's left edge stops at the frame's; zoomed out, it stops at cover; zoomed in, 8x
+  const right = G.pan(z, own, 'fill', 5, 0), rr = G.rect(right); assert.equal(right.x, 0); assert.ok(rr.x <= 1e-9 && rr.x + rr.w >= 1 - 1e-9);
+  const down = G.pan(z, own, 'fill', 0, -5); assert.ok(near(down.y, 1 - down.h));
+  const out = G.zoom(z, own, 'fill', .1, { x: .5, y: .5 }, { x: .5, y: .5 }); assert.ok(near(out.w, cover.w)); assert.ok(out.x >= 0 && out.x + out.w <= 1 + 1e-9);
+  const deep = G.zoom(cover, own, 'fill', 100, { x: .5, y: .5 }, { x: .5, y: .5 }); assert.ok(near(deep.w, cover.w / 8));
+  // Fit: smaller than the whole picture (down to half), never pushed past the frame's centre lines
+  const small = G.zoom(contain, own, 'fit', .1, { x: .5, y: .5 }, { x: .5, y: .5 }); assert.ok(near(small.w, 2)); assert.ok(near(G.rect(small).w, .5));
+  const away = G.pan(small, own, 'fit', 3, 3), ra = G.rect(away); assert.ok(near(ra.x + ra.w / 2, 1)); assert.ok(near(ra.y + ra.h / 2, 1), 'the picture\'s centre stays in the frame');
+  const back = G.pan(small, own, 'fit', -3, -3), rb = G.rect(back); assert.ok(near(rb.x + rb.w / 2, 0)); assert.ok(near(rb.y + rb.h / 2, 0));
+  const fitIn = G.zoom(contain, own, 'fit', 100, { x: .5, y: .5 }, { x: .5, y: .5 }); assert.ok(near(fitIn.w, cover.w / 8), 'the same deepest zoom as Fill');
+  // Fit -> Fill and back (the layout toggle): cover around the same centre, then the whole picture
+  const filled = G.place(G.layout(away, own, 'fill'), own, 'fill'); assert.ok(near(filled.w, cover.w)); assert.ok(filled.x >= 0 && filled.x + filled.w <= 1 + 1e-9);
+  const whole = G.layout(filled, own, 'fit'); assert.ok(near(whole.w, contain.w) && near(whole.x, contain.x) && near(whole.y, contain.y));
+  // a 20:1 panorama can't fill (a crop under 5% of it), and its Fit limits still hold together
+  assert.equal(G.canFill(4000 / 200), false); assert.equal(G.canFill(own), true);
+  const pano = G.contain(20), pz = G.zoom(pano, 20, 'fit', 3, { x: .5, y: .5 }, { x: .5, y: .5 }); assert.ok(pz.w >= .05 - 1e-9 && pz.h >= .05);
+});
+
+test('Studio storyux: tap selects a layer (an outline and a delete handle); one finger drags it; two fingers pinch and twist it - drawn where its handle is', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P);
+  const sticker = await studioSticker(P); assert.ok(sticker, 'the sticker has its handle on the picture');
+  assert.ok(P.doc.querySelector('.sst-sheet') === null, 'adding a sticker closes the picker: it is placed on the picture, not with sliders');
+  const sel = P.doc.querySelector('.sst-select'); assert.ok(sel && !sel.hidden, 'a new sticker is selected');
+  const del = sel.querySelector('.sst-sel-del'); assert.equal(del.getAttribute('aria-label'), 'Delete layer'); assert.equal(del.title, 'Delete layer');
+  await tapAt(P, stage(P), 20, 20); assert.ok(P.doc.querySelector('.sst-select').hidden, 'a tap on the picture lets go of it');
+  await tapAt(P, sticker, 150, 250); assert.ok(!P.doc.querySelector('.sst-select').hidden, 'a tap on it selects it'); assert.ok(sticker.classList.contains('selected'));
+  // one finger: 60 px right, 50 px down on a 300 x 500 frame = +20% and +10%
+  await drag(P, sticker, [150, 250], [210, 300]);
+  assert.ok(near(parseFloat(sticker.style.insetInlineStart), 70)); assert.ok(near(parseFloat(sticker.style.insetBlockStart), 60));
+  let at = liveOps(P, 'translate').at(-1), img = liveOps(P, 'image').at(-1);
+  assert.deepEqual(at.args, [756, 1152], 'drawn at the same place as its handle (canvas px)'); assert.deepEqual(img.args.slice(1), [-120, -120, 240, 240]);
+  // two fingers: the first on the sticker, the second beside it; turned a quarter, then spread to twice the distance
+  ptr(sticker, 'pointerdown', 1, 210, 300); ptr(stage(P), 'pointerdown', 2, 260, 300, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointermove', 2, 210, 350, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointermove', 2, 210, 400, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointerup', 2, 210, 400, { isPrimary: false }); ptr(stage(P), 'pointerup', 1, 210, 300); await flush(6);
+  const rot = liveOps(P, 'rotate').at(-1); assert.ok(rot && near(rot.args[0], Math.PI / 2), 'turned a quarter');
+  img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480], 'twice the size');
+  assert.match(sticker.style.transform, /rotate\(1\.5707\d*rad\)/); assert.equal(sticker.style.inlineSize, 480 / 1080 * 100 + '%');
+  // the midpoint moved 25 px left and 50 px down: the sticker with it
+  at = liveOps(P, 'translate').at(-1); assert.deepEqual(at.args, [Math.round((.7 - 25 / 300) * 1080), Math.round((.6 + 50 / 500) * 1920)]);
+  // the delete handle removes it
+  P.doc.querySelector('.sst-sel-del').click(); await flush(4);
+  assert.ok(layerEl(P, 'sticker') === null); assert.ok(P.doc.querySelector('.sst-select').hidden);
+  P.doc.querySelector('.sst-post').click(); await flush(20); assert.deepEqual(P.uploaded.at(-1).body.edit.stickers, []);
+});
+
+test('Studio storyux: double-tap a text to edit its words; the keyboard moves (arrows), sizes (+ −), turns ([ ]) and deletes a focused layer', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); await studioText(P, 'Hello pond');
+  key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst-sheet') === null);
+  const text = layerEl(P, 'text'); assert.ok(text);
+  await tapAt(P, text, 150, 150); await tapAt(P, text, 150, 150);
+  const words = P.doc.querySelector('.sst-text-input'); assert.ok(words, 'a double tap opens the words'); assert.equal(words.value, 'Hello pond');
+  assert.equal(P.doc.querySelectorAll('.sst-sheet input[type="range"]').length, 0, 'no size or position sliders');
+  key(P.doc.activeElement, 'Escape');
+  text.focus(); const x0 = parseFloat(text.style.insetInlineStart);
+  key(text, 'ArrowRight'); assert.ok(near(parseFloat(text.style.insetInlineStart), x0 + 1, 1e-6), 'one step = 1% of the frame');
+  key(text, 'ArrowDown', { shiftKey: true }); assert.ok(near(parseFloat(text.style.insetBlockStart), 40, 1e-6), '30% + a shifted 10%');
+  const w0 = parseFloat(text.style.inlineSize); key(text, '+'); await flush(4); assert.ok(parseFloat(text.style.inlineSize) > w0 * 1.05, '+ grows it');
+  key(text, '-'); key(text, '-'); await flush(4); assert.ok(parseFloat(text.style.inlineSize) < w0, '− shrinks it');
+  key(text, ']'); await flush(4); assert.match(text.style.transform, /rotate\(0\.0872\d*rad\)/, '] turns it 5°');
+  key(text, '['); key(text, '['); await flush(4); assert.match(text.style.transform, /rotate\(-0\.0872\d*rad\)/);
+  key(text, 'Delete'); await flush(4); assert.ok(layerEl(P, 'text') === null);
+  P.doc.querySelector('.sst-post').click(); await flush(20); assert.deepEqual(P.uploaded.at(-1).body.edit.text, []);
+});
+
+test('Studio storyux: with nothing selected the picture itself pans (one finger) and zooms (two fingers); Fit posts a frame, Fill a crop that stays in the picture', async () => {
+  const P = studioPage({ width: 4000, height: 3000 }); await studioOpen(P); await studioPick(P);
+  const layout = P.doc.querySelector('[data-tool="layout"]'); assert.equal(layout.getAttribute('aria-pressed'), 'false', 'a landscape picture starts whole (Fit)');
+  const src = P.doc.querySelector('.sst-source'); assert.equal(src.style.inlineSize, '100%');
+  // two fingers 100 px apart around the middle, spread to 200: twice the size
+  ptr(stage(P), 'pointerdown', 1, 100, 250); ptr(stage(P), 'pointerdown', 2, 200, 250, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointermove', 1, 50, 250); ptr(stage(P), 'pointermove', 2, 250, 250, { isPrimary: false }); await flush();
+  ptr(stage(P), 'pointerup', 1, 50, 250); ptr(stage(P), 'pointerup', 2, 250, 250, { isPrimary: false }); await flush(6);
+  assert.ok(near(parseFloat(src.style.inlineSize), 200)); assert.ok(near(parseFloat(src.style.insetInlineStart), -50));
+  await drag(P, stage(P), [150, 250], [180, 250]);                 // + 10% of the frame
+  assert.ok(near(parseFloat(src.style.insetInlineStart), -40));
+  P.doc.querySelector('.sst-post').click(); await flush(20);
+  let edit = P.uploaded.at(-1).body.edit; assert.equal(edit.fit, 'fit'); assert.equal(edit.crop, undefined);
+  assert.ok(near(edit.frame.w, .5)); assert.ok(near(edit.frame.x, .2)); assert.ok(near(edit.frame.h, .5 * 4000 / 3000 / (9 / 16)));
+  // Fill (the round layout toggle): the picture covers the frame; dragged far, its edge stops at the frame's
+  const Q = studioPage({ width: 4000, height: 3000 }); await studioOpen(Q); await studioPick(Q);
+  Q.doc.querySelector('[data-tool="layout"]').click(); await flush();
+  assert.equal(Q.doc.querySelector('[data-tool="layout"]').getAttribute('aria-pressed'), 'true');
+  await drag(Q, stage(Q), [10, 250], [300, 250]);
+  Q.doc.querySelector('.sst-post').click(); await flush(20);
+  edit = Q.uploaded.at(-1).body.edit; assert.equal(edit.fit, 'fill'); assert.equal(edit.frame, undefined);
+  assert.equal(edit.crop.x, 0); assert.ok(near(edit.crop.w, .421875)); assert.ok(edit.crop.y >= 0 && edit.crop.y + edit.crop.h <= 1 + 1e-9);
+  // a double tap on the picture puts it back the way the layout starts
+  const R = studioPage({ width: 4000, height: 3000 }); await studioOpen(R); await studioPick(R);
+  await drag(R, stage(R), [150, 250], [200, 300]); await tapAt(R, stage(R)); await tapAt(R, stage(R));
+  R.doc.querySelector('.sst-post').click(); await flush(20); assert.equal(R.uploaded.at(-1).body.edit.frame, undefined, 'the whole picture again: no frame');
+});
+
+test('Studio storyux: after a photo is picked only an X is shown - no Gallery, no Camera; X goes back, and a draft with edits asks quietly first', async () => {
+  const P = studioPage(), root = await studioOpen(P);
+  const picks = P.doc.querySelector('.sst-picks'), head = P.doc.querySelector('.sst-head');
+  assert.ok(!picks.hidden); assert.ok(!P.doc.querySelector('[data-picker="camera"]').hidden); assert.ok(!P.doc.querySelector('[data-picker="gallery"]').hidden);
+  assert.ok(P.doc.querySelector('[data-picker="retake"]') === null, 'no Retake: the X is the one way back');
+  await studioPick(P);
+  assert.ok(picks.hidden, 'Gallery and Camera are gone once there is a picture');
+  const x = head.querySelector('.sst-back'), close = head.querySelector('.sst-close');
+  assert.ok(x && !x.hidden); assert.ok(close.hidden); assert.ok(head.children.indexOf(x) <= 1, 'top left');
+  assert.equal(x.querySelector('.ds-ic').textContent, '✕');
+  assert.equal(x.getAttribute('aria-label'), 'Choose another picture or video', 'no live camera here: X goes back to the picker'); assert.equal(x.title, x.getAttribute('aria-label'));
+  P.win.confirm = () => { throw new Error('no browser dialog for this'); };
+  x.click(); await flush(6);
+  assert.ok(!root.classList.contains('sst-has-media')); assert.ok(P.doc.querySelector('.sst-source') === null); assert.ok(!picks.hidden); assert.ok(!close.hidden && x.hidden);
+  assert.ok(P.calls.every((c) => c.url !== '/api/feed/uploads'), 'nothing was uploaded');
+  // with edits: a quiet question in the editor; Keep editing keeps everything, Discard goes back
+  await studioPick(P); await studioText(P, 'Keep me?'); key(P.doc.activeElement, 'Escape');
+  x.click(); await flush();
+  const ask = P.doc.querySelector('.sst-ask'); assert.ok(ask && !ask.hidden, 'asked in the editor'); assert.match(ask.textContent, /Discard your edits\?/);
+  assert.ok(root.classList.contains('sst-has-media'));
+  ask.querySelector('.sst-ask-keep').click(); await flush();
+  assert.ok(P.doc.querySelector('.sst-ask') === null); assert.ok(root.classList.contains('sst-has-media')); assert.ok(layerEl(P, 'text'), 'the text is still there');
+  x.click(); await flush(); key(P.doc.activeElement, 'Escape'); assert.ok(P.doc.querySelector('.sst-ask') === null, 'Escape keeps editing too'); assert.ok(P.doc.querySelector('.sst'));
+  x.click(); await flush(); P.doc.querySelector('.sst-ask .sst-ask-go').click(); await flush(6);
+  assert.ok(!root.classList.contains('sst-has-media')); assert.ok(layerEl(P, 'text') === null); assert.ok(!picks.hidden);
+  // a chosen video: the same X
+  await studioPick(P, 'video/mp4'); assert.ok(picks.hidden); assert.ok(!x.hidden);
+});
+
+test('Studio storyux: tool buttons are circles with no visible words, named by aria-label and title; Post stays a labelled button; no sliders anywhere for place, size, turn or zoom', async () => {
+  const P = studioPage(); await studioOpen(P);
+  const named = (b) => { const n = b.getAttribute('aria-label'); assert.ok(n && n.trim(), 'named'); assert.equal(b.title, n); assert.doesNotMatch(n, /^[←-⯿\u{1f000}-\u{1faff}]/u, 'the name is words, not the emoji'); };
+  const iconOnly = (b) => { for (const span of b.querySelectorAll('span')) assert.equal(span.getAttribute('aria-hidden'), 'true', 'only the icon shows: ' + b.getAttribute('aria-label')); assert.ok(b.classList.contains('sst-round'), 'round: ' + b.getAttribute('aria-label')); };
+  for (const b of P.doc.querySelectorAll('.sst-picks button, .sst-head button')) { named(b); iconOnly(b); }
+  await studioPick(P);
+  for (const b of P.doc.querySelectorAll('.sst-tools button, .sst-head button')) { named(b); iconOnly(b); }
+  assert.deepEqual(P.doc.querySelectorAll('.sst-tools button').map((b) => b.getAttribute('data-tool')), ['layout', 'text', 'sticker', 'mention', 'trim']);
+  assert.ok(P.doc.querySelector('.sst-button-label') === null);
+  const post = P.doc.querySelector('.sst-post'); assert.equal(post.textContent, 'Post story'); assert.ok(!post.classList.contains('sst-round'));
+  await studioText(P, 'Words'); assert.equal(P.doc.querySelectorAll('input[type="range"]').length, 0, 'the text sheet');
+  key(P.doc.activeElement, 'Escape'); await studioSticker(P); assert.equal(P.doc.querySelectorAll('input[type="range"]').length, 0, 'a placed sticker');
+  P.doc.querySelector('[data-tool="layout"]').click(); await flush(); assert.equal(P.doc.querySelectorAll('input[type="range"]').length, 0, 'the layout');
+  P.doc.querySelector('[data-tool="mention"]').click(); assert.equal(P.doc.querySelectorAll('input[type="range"]').length, 0, 'the mention sheet');
+  key(P.doc.activeElement, 'Escape');
+  // a video: the trim bar's two handles are the only ranges (a timeline, not a placement slider)
+  const Q = studioPage(); await studioOpen(Q); await studioPick(Q, 'video/mp4');
+  assert.deepEqual(Q.doc.querySelectorAll('input[type="range"]').map((r) => r.classList.contains('sst-trim-handle')), [true, true]);
+  for (const b of Q.doc.querySelectorAll('.sst-sheet .sst-position button')) { named(b); iconOnly(b); }
+  const js = SRC('story-studio.js'); assert.equal((js.match(/input\('range'/g) || []).length, 1, 'one range input is made: the trim handle'); assert.match(js, /input\('range', d\.trim/);
+  const css = fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
+  assert.match(css, /\.sst \.sst-round \{[^}]*border-radius:\s*50%/); assert.match(css, /\.sst \.sst-preview \{[^}]*touch-action:\s*none/);
+  assert.match(css, /\.sst \.sst-preview \{[^}]*-webkit-touch-callout:\s*none/); assert.match(css, /\.sst \.sst-preview \{[^}]*user-select:\s*none/);
+});
+
+test('Studio storyux: iPhone - WebKit gesture events stand in when the pointers lose the second finger, and the stage never scrolls, zooms or calls out the page', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); const sticker = await studioSticker(P);
+  const gs = new Ev('gesturestart', { bubbles: true, scale: 1, rotation: 0 }); ptr(sticker, 'pointerdown', 1, 150, 250); stage(P).dispatchEvent(gs); assert.ok(gs.defaultPrevented, 'no page zoom');
+  const gc = new Ev('gesturechange', { bubbles: true, scale: 2, rotation: 90 }); stage(P).dispatchEvent(gc); assert.ok(gc.defaultPrevented); await flush();
+  stage(P).dispatchEvent(new Ev('gestureend', { bubbles: true, scale: 2, rotation: 90 })); ptr(stage(P), 'pointerup', 1, 150, 250); await flush(6);
+  let img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480], 'the gesture scale'); assert.ok(near(liveOps(P, 'rotate').at(-1).args[0], Math.PI / 2), 'and its rotation (degrees)');
+  // both fingers seen as pointers: the pointer math wins and the gesture event is only kept from zooming the page
+  ptr(sticker, 'pointerdown', 1, 150, 250); ptr(stage(P), 'pointerdown', 2, 250, 250, { isPrimary: false }); stage(P).dispatchEvent(new Ev('gesturestart', { bubbles: true, scale: 1, rotation: 0 }));
+  const ignored = new Ev('gesturechange', { bubbles: true, scale: 3, rotation: 0 }); stage(P).dispatchEvent(ignored); assert.ok(ignored.defaultPrevented); await flush();
+  ptr(stage(P), 'pointerup', 2, 250, 250, { isPrimary: false }); ptr(stage(P), 'pointerup', 1, 150, 250); await flush(6);
+  img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480], 'unchanged: no pointer moved');
+  for (const type of ['touchmove', 'contextmenu', 'dragstart', 'selectstart']) { const e = new Ev(type, { bubbles: true }); stage(P).dispatchEvent(e); assert.ok(e.defaultPrevented, type); }
+  // a third finger is ignored; a cancelled touch ends the gesture without a tap
+  ptr(sticker, 'pointerdown', 1, 150, 250); ptr(stage(P), 'pointerdown', 2, 250, 250); ptr(stage(P), 'pointerdown', 3, 50, 50);
+  ptr(stage(P), 'pointermove', 3, 0, 0); await flush(); ptr(stage(P), 'pointercancel', 1, 150, 250); ptr(stage(P), 'pointercancel', 2, 250, 250); ptr(stage(P), 'pointercancel', 3, 0, 0); await flush(6);
+  img = liveOps(P, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480]);
+});
+
+test('Studio storyux: desktop - the wheel sizes the selected layer, Shift+wheel turns it, the corner handle turns and sizes it; with nothing selected the wheel zooms the picture', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P); await studioSticker(P);
+  const wheel = (o) => { const e = new Ev('wheel', Object.assign({ bubbles: true, clientX: 150, clientY: 250, deltaMode: 0 }, o)); stage(P).dispatchEvent(e); return e; };
+  const e = wheel({ deltaY: -200 }); assert.ok(e.defaultPrevented); await flush(4);
+  let img = liveOps(P, 'image').at(-1); assert.ok(img.args[3] > 240, 'wheel up grows it'); const grown = img.args[3];
+  wheel({ deltaY: 400, ctrlKey: true }); await flush(4); img = liveOps(P, 'image').at(-1); assert.ok(img.args[3] < grown, 'ctrl+wheel (a trackpad pinch) shrinks it');
+  wheel({ deltaY: 100, shiftKey: true }); await flush(4); assert.ok(liveOps(P, 'rotate').at(-1).args[0] > .1, 'Shift+wheel turns it');
+  // the corner handle: dragged from the corner to a point twice as far from the centre, a quarter turn round
+  const turn = P.doc.querySelector('.sst-select .sst-sel-turn'); assert.ok(turn); assert.equal(turn.getAttribute('aria-hidden'), 'true');
+  const Q = studioPage(); await studioOpen(Q); await studioPick(Q); await studioSticker(Q);
+  const handle = Q.doc.querySelector('.sst-select .sst-sel-turn'), mouse = { pointerType: 'mouse' };
+  ptr(handle, 'pointerdown', 1, 200, 250, mouse); ptr(stage(Q), 'pointermove', 1, 150, 350, mouse); await flush(); ptr(stage(Q), 'pointerup', 1, 150, 350, mouse); await flush(6);
+  img = liveOps(Q, 'image').at(-1); assert.deepEqual(img.args.slice(1), [-240, -240, 480, 480]); assert.ok(near(liveOps(Q, 'rotate').at(-1).args[0], Math.PI / 2));
+  // nothing selected: the wheel zooms the picture about the pointer
+  const R = studioPage(); await studioOpen(R); await studioPick(R); const src = R.doc.querySelector('.sst-source');
+  const z = new Ev('wheel', { bubbles: true, clientX: 150, clientY: 250, deltaY: -300, deltaMode: 0 }); stage(R).dispatchEvent(z); assert.ok(z.defaultPrevented); await flush(4);
+  assert.ok(parseFloat(src.style.inlineSize) > 100, 'zoomed in');
 });
