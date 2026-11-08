@@ -10,6 +10,10 @@
 //   * the site checks the SHAPE (a known field, on/off, a claim Pepe offers, the right count of whole numbers, a room he reports);
 //     the ranges are Pepe's (he clamps, the card shows asked -> stored)
 //   * PEPE_BOT_DIR=<camfrog-bot checkout>: the contract test runs the site's change through the bot's REAL pepe_fastgrabweb
+//   * 1.99?? micblock (the owner, 11-08: "give me a toggle to remove this courtesy" / "I do want that in Players_Lounge (add this to
+//     the admin page too, a toggle plus field for whatever the unblock code is ...)"): blockbreak (on by default) and selfunblock
+//     (off by default) switches + the unblockcode text field - 1-20 printable characters, trimmed, case kept, never a leading
+//     "/" or "!" (it can never be a Camfrog or a Pepe command); empty = none
 //   node --test test/fastgrab.test.js
 "use strict";
 const test = require("node:test");
@@ -41,16 +45,17 @@ const users = new Map([
 
 // What Pepe's _fgw_state() sends (camfrog-bot pepe_fastgrabweb.py; the contract test below checks the real one)
 const vals = (o = {}) => ({ on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, rate: 10, shots: 12, tries: 2,
-  breaker: [4, 10, 15], pause: [4, 120, 90, 300], fairwait: [500, 350], ceiling: 20, ...o });
+  breaker: [4, 10, 15], pause: [4, 120, 90, 300], fairwait: [500, 350], ceiling: 20, blockbreak: true, selfunblock: false, unblockcode: "", ...o });
 const roomVals = (o = {}) => vals({ contest_active: false, contest_why: null, resting_min: null, ...o });
 function block(o = {}) {
   return {
-    v: 1, fields: ["on", "contest", "fair", "web", "chatty", "claim", "rate", "shots", "tries", "breaker", "pause", "fairwait", "ceiling"],
+    v: 1, fields: ["on", "contest", "fair", "web", "chatty", "blockbreak", "selfunblock", "claim", "rate", "shots", "tries", "breaker", "pause",
+                   "fairwait", "ceiling", "unblockcode"],
     claims: ["swallow", "release", "plain"],
     ranges: { rate: [[1, 60]], shots: [[1, 100]], tries: [[1, 20]], breaker: [[1, 50], [1, 120], [0, 240]], pause: [[0, 50], [10, 1800], [0, 3600], [0, 3600]],
               fairwait: [[0, 2000], [0, 2000]], ceiling: [[1, 120]] },
     defaults: { rate: 10, shots: 12, tries: 2, breaker: [4, 10, 15], pause: [4, 120, 90, 300], fairwait: [500, 350], ceiling: 20,
-                on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false },
+                on: false, contest: false, fair: true, claim: "swallow", web: false, chatty: false, blockbreak: true, selfunblock: false, unblockcode: "" },
     global: vals({ on: true }),
     rooms: [
       { id: YW, name: "Players Lounge", joined: true, values: roomVals({ on: true, contest: true, contest_active: true, fair: false, rate: 15 }),
@@ -246,6 +251,57 @@ test("payload: ONE action kind mic.fastgrab [scope, room, field=value...] in the
   await settle();
 });
 
+test("micblock: block break + self-unblock switches and the unblock code - cleaned from Pepe's push, validated (never a command), sent in the card's order", async () => {
+  // Pepe's push: the three new fields, each its own type; a code that could be a command (or too long) is left out
+  const c = FG.cleanState(block({ rooms: [
+    { id: YW, name: "Players Lounge", joined: true, values: roomVals({ blockbreak: false, selfunblock: true, unblockcode: "1" }),
+      own: { blockbreak: "room", selfunblock: "room", unblockcode: "room" } },
+    { id: PAD, name: "Pepe's Pad", joined: true, values: roomVals({ blockbreak: "no", selfunblock: 1, unblockcode: "/kick bob" }), own: {} },
+    { id: PLANT, name: "Houseplants", joined: true, values: roomVals({ unblockcode: "x".repeat(21) }), own: {} },
+  ], last: [{ id: 9, ts: 1700000000, by: "boss", scope: "room", room: YW, set: { selfunblock: true, unblockcode: "1", blockbreak: "off" }, followed: [] }] }));
+  assert.ok(FG.FIELDS.includes("blockbreak") && FG.FIELDS.includes("selfunblock") && FG.FIELDS.includes("unblockcode"), "the card's fields");
+  assert.deepEqual(c.defaults.blockbreak, true); assert.deepEqual(c.defaults.selfunblock, false); assert.equal(c.defaults.unblockcode, "");
+  const y = c.rooms.find((r) => r.id === YW), pad = c.rooms.find((r) => r.id === PAD), pl = c.rooms.find((r) => r.id === PLANT);
+  assert.equal(y.values.blockbreak, false); assert.equal(y.values.selfunblock, true); assert.equal(y.values.unblockcode, "1");
+  assert.deepEqual(y.own, { blockbreak: "room", selfunblock: "room", unblockcode: "room" });
+  assert.equal(pad.values.blockbreak, undefined); assert.equal(pad.values.selfunblock, undefined);
+  assert.equal(pad.values.unblockcode, undefined, "a code that could be a command never reaches the card");
+  assert.equal(pl.values.unblockcode, undefined, "...nor one over 20 characters");
+  assert.deepEqual(c.last[0].set, { selfunblock: true, unblockcode: "1" }, "his last change: only well-typed values");
+  assert.equal(c.global.blockbreak, true);
+  // the admin's change: validated - the code is checked here like Pepe checks it
+  await pepeSays();
+  await settle();
+  const bad = [
+    [{ unblockcode: "/unblockmic pepefrog" }], [{ unblockcode: "!sb ribbit" }], [{ unblockcode: "  /kick bob" }], [{ unblockcode: "x".repeat(21) }],
+    [{ unblockcode: "1\n/kick bob" }], [{ unblockcode: "a\tb" }], [{ unblockcode: "\u200bx" }], [{ unblockcode: 1 }], [{ unblockcode: ["1"] }],
+    [{ selfunblock: "maybe" }], [{ blockbreak: 0 }],
+  ];
+  for (const [set] of bad) {
+    const r = await save({ scope: "room", room: YW, set });
+    assert.equal(r.status, 400, JSON.stringify(set) + " " + JSON.stringify(r.d));
+    assert.equal(r.d.field, Object.keys(set)[0], JSON.stringify(set));
+    assert.ok(r.d.error && r.d.error.length > 5);
+  }
+  assert.equal((await queued()).length, 0, "nothing queued");
+  const r = await save({ scope: "room", room: YW, set: { unblockcode: "  Ok 1 ", selfunblock: "on", blockbreak: false, rate: 15 } });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.deepEqual(r.d.args, ["room", YW, "rate=15", "blockbreak=off", "selfunblock=on", "unblockcode=Ok 1"], "trimmed, case kept, in the card's order");
+  const a = (await queued()).at(-1);
+  assert.match(a.label, /block break off, self-unblock on, unblock code "Ok 1"/);
+  await settle();
+  const none = await save({ scope: "global", set: { unblockcode: "" } });
+  assert.deepEqual(none.d.args, ["global", "", "unblockcode="], "empty = no code");
+  await settle();
+  const fol = await save({ scope: "room", room: YW, set: { unblockcode: "follow", selfunblock: null } });
+  assert.deepEqual(fol.d.args, ["room", YW, "selfunblock=follow", "unblockcode=follow"]);
+  await settle();
+  assert.equal(FG.codeClean("  Unblock Me ").code, "Unblock Me");
+  assert.equal(FG.codeClean("none").code, ""); assert.equal(FG.codeClean("none").err, null);
+  assert.ok(FG.codeClean("!x").err && FG.codeClean("/x").err && FG.codeClean("x".repeat(21)).err && FG.codeClean("a\u0007").err);
+  assert.equal(FG.codeClean("é😀1").code, "é😀1", "any printable character");
+});
+
 test("audit: one admin_audit row pepe.fastgrab per change - scope, room, what it sets, what it replaces (Pepe's last values), the action id, the reason; no audit = no change", async () => {
   await pepeSays();
   await settle();
@@ -324,10 +380,12 @@ test("the rooms page renders the card: Pepe's current values, the rooms (room vs
   assert.match(html, /<option value="room:You_Were_Never_Here">Players Lounge \(You_Were_Never_Here\)<\/option>/);
   assert.match(html, /<option value="room:PepeFrog.Room">Pepe&#39;s Pad \(PepeFrog.Room\)<\/option>/);
   assert.match(html, /<option value="global">Global default/);
-  assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20/);
+  assert.match(html, /Global now: on on · contest off · fair on · claim swallow · web off · chatty off · rate 10 · shots 12 · tries 2 · breaker 4\/10\/15 · pause 4\/120\/90\/300 · fairwait 500\/350 · ceiling 20 · blockbreak on · selfunblock off · unblockcode none/);
   assert.match(html, /<b>Players Lounge<\/b> \(You_Were_Never_Here\): on on · contest on · fair off · claim swallow · rate 15 \(its own\)/);
   assert.match(html, /<b>Pepe&#39;s Pad<\/b> \(PepeFrog.Room\): follows the global/);
-  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=1" defer><\/script>/);
+  assert.match(html, /<script src="\/public\/js\/admin-fastgrab.js\?v=2" defer><\/script>/, "(1.99?? micblock: v2 - the new rows)");
+  assert.match(html, /Block break/, "micblock: the card explains the block break and the self-unblock");
+  assert.match(html, /unblock code/i);
   const rawData = html.match(/<script type="application\/json" id="fgData">([\s\S]*?)<\/script>/)[1];
   assert.deepEqual(JSON.parse(rawData).fg.global, vals({ on: true }), "the card's data: Pepe's values");
   assert.doesNotMatch(rawData, /</, "no raw < in the embedded data");
@@ -433,7 +491,7 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   const view = (await api("GET", "boss")).d;
   const K = card(view);
   await flush();
-  assert.equal(K.byId.fgRows.children.length, 13, "one row per setting");
+  assert.equal(K.byId.fgRows.children.length, 16, "one row per setting (1.99?? micblock: + block break, self-unblock, unblock code)");
   assert.equal(K.byId.fgOnline.textContent, "live");
   assert.equal(K.byId.fgNow.hidden, true, "the page's snapshot gives way to the table");
   assert.equal(K.inputs("rate")[0].value, "10", "the global's rate (Where: global default)");
@@ -477,6 +535,33 @@ test("card script in a fake page: Pepe's values drawn (room vs global), an edit 
   fol.checked = true; fol.fire("change");
   K.byId.fgSave.fire("click"); await flush();
   assert.deepEqual(K.posts.at(-1).set.rate, "follow");
+  assert.doesNotMatch(K.byId.fgRows.textContent, /undefined|NaN/);
+});
+
+test("card script (micblock): the unblock code is a text box - a good code + the switch post ONE change (trimmed, case kept); a code that could be a command is refused in the card and never sent", async () => {
+  await pepeSays();
+  const view = (await api("GET", "boss")).d;
+  const K = card(view);
+  await flush();
+  K.byId.fgWhere.value = "room:" + YW; K.byId.fgWhere.fire("change");
+  const box = K.inputs("unblockcode")[0];
+  assert.ok(box, "the unblock code's box");
+  assert.equal(box.tagName, "INPUT");
+  assert.equal(box.value, "", "no code yet");
+  assert.match(K.rowOf("Unblock code").textContent, /never starting with \/ or !/);
+  assert.match(K.rowOf("Block break").textContent, /30-minute break/);
+  assert.match(K.rowOf("Self-unblock").textContent, /types the room's unblock code/);
+  assert.equal(K.inputs("blockbreak")[0].value, "on", "the block break: on by default");
+  assert.equal(K.inputs("selfunblock")[0].value, "off", "self-unblock: off by default");
+  box.value = "/kick bob"; box.fire("change");
+  assert.match(K.byId.fgMsg.textContent, /can't start with \/ or !/);
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 0, "a code that could be a command is never sent");
+  box.value = "  Ok 1 "; box.fire("change");
+  K.inputs("selfunblock")[0].value = "on"; K.inputs("selfunblock")[0].fire("change");
+  K.byId.fgSave.fire("click"); await flush();
+  assert.equal(K.posts.length, 1);
+  assert.deepEqual(K.posts[0].set, { selfunblock: true, unblockcode: "Ok 1" });
   assert.doesNotMatch(K.byId.fgRows.textContent, /undefined|NaN/);
 });
 
@@ -631,8 +716,12 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
     FG.validate({ scope: "global", set: { tries: 4, web: true } }, FG.cleanState(block())).args,
     FG.validate({ scope: "room", room: YW, set: { rate: "follow" } }, FG.cleanState(block())).args,
     FG.validate({ scope: "all", set: { contest: true } }, FG.cleanState(block())).args,
+    // 1.99?? micblock: the block break off + the self-unblock with its code (trimmed, case kept) in Pepe's Pad only
+    FG.validate({ scope: "room", room: PAD, set: { blockbreak: false, selfunblock: true, unblockcode: " Ok 1 " } }, FG.cleanState(block())).args,
   ];
-  const badArgs = [["room", YW, "volume=11"], ["room", YW, "rate=1.5"], ["global", "", "rate=follow"], ["room", YW, "breaker=1,2"]];
+  const badArgs = [["room", YW, "volume=11"], ["room", YW, "rate=1.5"], ["global", "", "rate=follow"], ["room", YW, "breaker=1,2"],
+                   ["room", YW, "unblockcode=/kick bob"], ["room", YW, "unblockcode=!sb x"], ["room", YW, "unblockcode=" + "x".repeat(21)],
+                   ["room", YW, "selfunblock=maybe"]];
   const script = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fastgrab-contract-")), "contract.py");
   fs.writeFileSync(script, [
     "import json, os, sys",
@@ -690,6 +779,13 @@ test("contract: the site's change through the bot's REAL pepe_fastgrabweb - the 
   assert.deepEqual(first.clamped.rate, { asked: [999], stored: [60] });
   assert.deepEqual(first.clamped.breaker, { asked: [0, 999, 999], stored: [1, 120, 240] });
   assert.deepEqual(st.ranges, FG.cleanState(block()).ranges, "the ranges the card shows = his");
+  // micblock: Pepe's Pad's own block break off, self-unblock on with its code; the others keep the defaults
+  const pad = st.rooms.find((r) => r.id === PAD);
+  assert.equal(pad.values.blockbreak, false); assert.equal(pad.values.selfunblock, true); assert.equal(pad.values.unblockcode, "Ok 1");
+  assert.deepEqual(pad.own, { blockbreak: "room", selfunblock: "room", unblockcode: "room" });
+  assert.equal(y.values.blockbreak, true); assert.equal(y.values.selfunblock, false); assert.equal(y.values.unblockcode, "");
+  assert.equal(st.defaults.blockbreak, true); assert.equal(st.defaults.selfunblock, false); assert.equal(st.defaults.unblockcode, "");
+  assert.match(out.good[4][1], /Pepe's Pad only: .*block break off .*unblock code 'Ok 1' .*self-unblock on/);
   // and the whole block fits the rooms state push
   assert.equal(await roomctl.setState({ rooms: ROOMS, fastgrab: out.state }), true);
   assert.ok(JSON.stringify(roomctl.cleanState({ rooms: ROOMS, fastgrab: out.state })).length < 64 * 1024);
