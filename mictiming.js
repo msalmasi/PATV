@@ -1,4 +1,4 @@
-// mictiming.js — ⏱ Pepe's mic timing pads, his speed-ups and the !mic yield list from the site (micspeed, 1.99??). Site Admins only.
+// mictiming.js — ⏱ Pepe's mic timing pads, his speed-ups and the !mic yield list from the site (micspeed, 1.99anb). Site Admins only.
 //
 // The owner, 2026-11-08: the timing pads on Pepe's own panel (grab confirm, lead-in, tail-out, the web clip settle) - "Lets add this to
 // the web panel as well"; for PepeLite, his own helper that grabs the mic for him - "Give pepe a list of people he should yield the mic

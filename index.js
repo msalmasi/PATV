@@ -1447,7 +1447,7 @@ require("./camevidence").register(app, { addUser, bySlug: (s) => require("./brid
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
 require("./fastgrab").register(app, { addUser });   // grabcard 1.99amm: ⚡ /admin/pepe/rooms#fastgrab - Pepe's !mic fastgrab switches + caps (website action mic.fastgrab)
-require("./mictiming").register(app, { addUser });  // micspeed 1.99??: ⏱ /admin/pepe/rooms#mictiming - Pepe's mic timing pads, speed-ups + yield list (website action mic.timing)
+require("./mictiming").register(app, { addUser });  // micspeed 1.99anb: ⏱ /admin/pepe/rooms#mictiming - Pepe's mic timing pads, speed-ups + yield list (website action mic.timing)
 require("./cmdswitch").register(app, { isBotToken, addUser }); // 1.99vc: 🎛️ /admin/pepe/commands - master switch + global default per command
 require("./roomaudiocfg").register(app, { isBotToken, addUser }); // 1.99yd: 🔊 /admin/pepe/audio - room-audio settings Pepe streams pads with
 require("./paddock").register(app, { addUser });

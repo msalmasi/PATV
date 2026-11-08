@@ -1,4 +1,4 @@
-/* ⏱ Mic timing - Pepe's mic timing pads, his speed-ups and the !mic yield list (micspeed 1.99??; /admin/pepe/rooms#mictiming -
+/* ⏱ Mic timing - Pepe's mic timing pads, his speed-ups and the !mic yield list (micspeed 1.99anb; /admin/pepe/rooms#mictiming -
    mictiming.js -> website action mic.timing -> camfrog-bot pepe_micspeed.py). All global (one mic, one set of timings).
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change, and
    shows what Pepe stored (and clamped) when he answers. window.PatvMicTiming = the pure part (the tests run it in node). */

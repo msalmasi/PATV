@@ -44,7 +44,7 @@ const CODES = Object.freeze(Object.keys(ERRORS));
 const NO_PAT_KINDS = ["room.ctl", "room.owner", "room.topic", "room.bridge", "room.visit", "stage.room", "cmd.switch", "privacy.incognito", "privacy.forget", "privacy.forgetme",
                       "privacy.memory",                         // 1.99aft: 🧠 Pepe's memory (bot 1.99afs pepe_incognito._mem_web)
                       "mic.fastgrab",                           // grabcard 1.99amm: ⚡ Fast mic grab (bot pepe_fastgrabweb._fgw_web)
-                      "mic.timing",                             // micspeed 1.99??: ⏱ Mic timing (bot pepe_micspeed._mt_web)
+                      "mic.timing",                             // micspeed 1.99anb: ⏱ Mic timing (bot pepe_micspeed._mt_web)
                       "privacy.recdelete", "privacy.export"];   // mic retention (bot 1.99afq pepe_mydata)
 const movesPat = (kind) => !kind || !NO_PAT_KINDS.includes(String(kind));
 const INTERNAL_NO_PAT = ["Something went wrong on Pepe's side.", "It may not have happened - reload the page to see where it stands before trying again; give support the incident id if it keeps happening."];
