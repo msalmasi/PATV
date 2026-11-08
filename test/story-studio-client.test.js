@@ -640,8 +640,9 @@ test('Studio ssfix: the empty state centres its camera icon over the words, and 
   // .ds-ic is a fixed 1.25em box: as a grid item it sat at the start of the column the words make (80 px left at 390 px)
   const empty = css.match(/\.sst \.sst-empty \{([^}]*)\}/)[1];
   assert.match(empty, /justify-items:\s*center/);
-  // (storywide: the editor's layout is the same on every screen - the plate rule comes after the dock's own background, so it wins)
-  const plate = css.search(/\.sst \.sst-status\.sst-error \{[^}]*background:\s*var\(--ds-danger-bg\)/), dock = css.search(/\.sst \.sst-status, \.sst \.sst-progress, \.sst \.sst-recovery \{[^}]*background:\s*var\(--ds-media-bg\)/);
+  // (storywide: the editor's layout is the same on every screen - the plate rule comes after the dock's own background, so it wins;
+  // storywide verify: over the picture its red tint lies on a dark plate - a 10% tint alone was unreadable over a bright photo)
+  const plate = css.search(/\.sst \.sst-status\.sst-error:not\(:empty\) \{[^}]*background:[^;]*var\(--ds-danger-bg\)[^;]*var\(--ds-media-panel\)/), dock = css.search(/\.sst \.sst-status:not\(:empty\), \.sst \.sst-recovery, \.sst \.sst-progress \{[^}]*background:/);
   assert.ok(plate > 0 && dock > 0 && plate > dock, 'an error keeps its plate over the dock\'s background');
 });
 
@@ -1361,7 +1362,7 @@ test('Studio storyux verify: the grips sit off the selected layer\'s corners - t
   assert.ok(q.cy - q.h / 2 < 2, 'the text is at the top'); assert.ok(q.del.y - RD >= 0 && q.turn.y - RT >= 0, 'both grips inside the stage'); assert.equal(q.del.corner, 'bl');
   // the buttons over the picture: a sticker near the header's X gets its delete grip on the other side
   const Q = studioPage(); await studioOpen(Q); await studioPick(Q);
-  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);   // (storywide: the post row is one of them)
+  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn, .sst-head .sst-lifetime')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);   // (storywide: the post row is one of them; storywide verify: the 24 h pill too)
   const headButtons = Q.doc.querySelectorAll('.sst-head .ds-btn');
   Q.doc.querySelector('.sst-back').getBoundingClientRect = rectOf(8, 8, 44, 44); headButtons[headButtons.length - 1].getBoundingClientRect = rectOf(248, 8, 44, 44);
   Q.doc.querySelectorAll('.sst-tools .ds-btn').forEach((b, i) => { b.getBoundingClientRect = rectOf(252, 60 + 56 * i, 44, 44); });
@@ -1667,7 +1668,7 @@ test('Studio storywide: a resize moves nothing in the story - the layers are fra
 
 test('Studio storywide: the post row over the picture is no place for a grip either', async () => {
   const P = studioPage(); await studioOpen(P); await studioPick(P);
-  for (const b of P.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
+  for (const b of P.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn, .sst-head .sst-lifetime')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
   P.doc.querySelector('.sst-post').getBoundingClientRect = rectOf(170, 440, 120, 48);           // Post story, over the stage's foot (bottom right)
   const sticker = await studioSticker(P); await drag(P, sticker, [150, 250], [200, 380]);
   const q = gripsOf(P), R = geometry().GRIP.turn;
@@ -1695,4 +1696,128 @@ test('Studio storywide: every control is placed from the stage\'s box - the head
   for (const side of ['top', 'right', 'bottom', 'left']) assert.match(rule('.sst .sst-safe'), new RegExp('env\\(safe-area-inset-' + side));
   assert.match(rule('.sst.ds-scrim.sheet'), /inset-block-start:\s*var\(--sst-vt/);
   assert.match(css, /\.sst \.sst-summary, \.sst \.sst-filename, \.sst \.sst-rules \{[^}]*display:\s*none/, 'the editor is the picture: no side panel');
+});
+
+// ── storywide verify (1.99??): the review of storywide on the owner's screen sizes. A status (the camera refused, Loading…) sat over the
+//    empty screen's Camera / Gallery; an error's 10% red plate over a bright photo was unreadable and blocked pan / pinch; a clip's
+//    header (X, 24 h, 🔇, ⚙️) ran out of a stage the keyboard had narrowed; long labels ran into the rail and out of the stage; the
+//    posting plates crossed a landscape stage and were black bars; the question covered the rail; a grip went under the 24 h pill;
+//    side notch insets weren't counted; and a mouse click on the dark around the stage no longer closed the editor. ──
+const cssRule = (css, sel) => { const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' \\{([^}]*)\\}').exec(css); assert.ok(m, 'a rule for ' + sel); return m[1]; };
+const studioCss = () => fs.readFileSync(path.join(repo, 'public/css/story-studio.css'), 'utf8');
+const roStub = (P) => { const seen = []; P.win.ResizeObserver = class { constructor(cb) { this.cb = cb; this.nodes = []; seen.push(this); } observe(n) { this.nodes.push(n); } disconnect() { this.gone = true; } }; return seen; };
+
+test('Studio storywide verify: what stacks over the post row (a status, the progress, "Post it as it is") is measured - the empty screen\'s Camera and Gallery sit above it and the rail stops short of it; measured again as it changes', async () => {
+  const P = studioPage({ visualViewport: { height: 745, width: 430, scale: 1 } }), seen = roStub(P);
+  const root = await studioOpen(P), screen = screenOf(P); screen(430, 745); viewportResize(P);
+  const ro = seen.find((o) => o.nodes.some((n) => n.classList && n.classList.contains('sst-foot'))); assert.ok(ro);
+  for (const k of ['sst-status', 'sst-recovery', 'sst-progress']) assert.ok(ro.nodes.some((n) => n.classList && n.classList.contains(k)), k + ' is observed');
+  const status = P.doc.querySelector('.sst-status'), progress = P.doc.querySelector('.sst-progress'), recovery = P.doc.querySelector('.sst-recovery');
+  const again = async () => { ro.cb([]); await flush(4); return root.style['--sst-stack']; };
+  status.textContent = ''; assert.equal(await again(), '0px', 'nothing said: nothing stacked');
+  status.textContent = 'Camera access is off for this site.'; status.getBoundingClientRect = rectOf(5.47, 616, 419.06, 50);
+  assert.equal(await again(), '50px', 'the camera\'s reason over the post row');
+  progress.hidden = false; progress.getBoundingClientRect = rectOf(5.47, 560, 419.06, 56); assert.equal(await again(), '106px', 'and the progress');
+  recovery.hidden = false; recovery.getBoundingClientRect = rectOf(5.47, 500, 419.06, 52); assert.equal(await again(), '158px');
+  progress.hidden = true; recovery.hidden = true; status.textContent = ''; assert.equal(await again(), '0px');
+  // a status over a sheet sits under the header (out of the post row's stack): not counted
+  status.textContent = 'Up to 10 stickers.'; P.win.getComputedStyle = (n) => ({ direction: 'ltr', position: n === status ? 'absolute' : 'static' });
+  assert.equal(await again(), '0px', 'a status placed under the header is no part of the stack');
+  const css = studioCss();
+  assert.match(cssRule(css, '.sst .sst-picks'), /inset-block-end:\s*calc\(var\(--sst-sb[^;]*var\(--sst-cover[^;]*var\(--sst-stack/, 'Camera / Gallery above the stack');
+  assert.match(cssRule(css, '.sst .sst-tools'), /max-block-size:[^;]*var\(--sst-cover[^;]*var\(--sst-stack/, 'the rail stops short of it');
+  // beside a narrow stage the stack is in the margin (below): Camera / Gallery only clear the post row's own band
+  assert.doesNotMatch(cssRule(css, '.sst.sst-framed .sst-picks'), /--sst-stack/);
+});
+
+test('Studio storywide verify: the status, the progress and the recovery are light plates - inset, rounded, see-through - an error readable over any picture; touches go through them to the picture; beside a narrow stage they sit wholly in its start margin', () => {
+  const css = studioCss();
+  const plate = cssRule(css, '.sst .sst-status:not(:empty), .sst .sst-recovery, .sst .sst-progress');
+  assert.match(plate, /margin:\s*0 var\(--ds-sp-3\) var\(--ds-sp-2\)/, 'inset from the stage\'s edges'); assert.match(plate, /border-radius:\s*var\(--ds-r-lg\)/);
+  assert.match(plate, /background:\s*var\(--ds-media-chip\)/, 'see-through, like the header\'s chips'); assert.match(plate, /backdrop-filter:\s*blur\(/);
+  assert.doesNotMatch(css, /\.sst \.sst-status, \.sst \.sst-progress, \.sst \.sst-recovery \{[^}]*background:\s*var\(--ds-media-bg\)/, 'no black bar across the picture');
+  const err = cssRule(css, '.sst .sst-status.sst-error:not(:empty)');
+  assert.match(err, /background:\s*linear-gradient\(var\(--ds-danger-bg\), var\(--ds-danger-bg\)\), var\(--ds-media-panel\)/, 'the red tint over the dark text plate (--ds-media-panel: readable over even a white frame)');
+  assert.ok(css.indexOf('.sst .sst-status.sst-error:not(:empty) {') > css.indexOf('.sst.sst-has-sheet .sst-status:not(:empty) {'), 'the error\'s plate wins over a sheet\'s too');
+  assert.match(cssRule(css, '.sst .sst-status, .sst .sst-recovery, .sst .sst-progress'), /pointer-events:\s*none/, 'a pan or a pinch under them still moves the picture');
+  assert.match(cssRule(css, '.sst .sst-recovery .ds-btn, .sst .sst-progress .ds-btn'), /pointer-events:\s*auto/, 'their buttons still take a tap');
+  const framed = cssRule(css, '.sst.sst-framed .sst-status:not(:empty), .sst.sst-framed .sst-recovery, .sst.sst-framed .sst-progress');
+  assert.match(framed, /align-self:\s*flex-start/); assert.match(framed, /inline-size:\s*calc\(var\(--sst-sx, 0px\) - var\(--sst-is, 0px\) - 2 \* var\(--ds-sp-3\)\)/, 'in the start margin, clear of the stage');
+  assert.match(cssRule(css, '.sst.sst-framed .sst-foot'), /background:\s*none/, 'beside a narrow stage no scrim crosses the picture');
+});
+
+test('Studio storywide verify: a stage the keyboard narrows keeps its whole header inside it - the 24 h pill goes first, then the gaps and the buttons tighten', async () => {
+  const G = geometry(); assert.ok(G.STAGE.tight > G.STAGE.tiny && G.STAGE.tiny > 0);
+  const fit = (w, h) => G.fitStage({ w, h, foot: FOOT });
+  assert.equal(fit(430, 745).head, 'full'); assert.equal(fit(393, 420).head, 'full', '236 px'); assert.equal(fit(375, 667).head, 'full');
+  assert.equal(fit(430, 365).head, 'tight', '205 px: the owner\'s phone, the keyboard up'); assert.equal(fit(375, 300).head, 'tight', '169 px');
+  assert.equal(fit(375, 245).head, 'tiny', '138 px: an SE with the keyboard up');
+  assert.equal(fit(844, 390).head, 'full', 'beside a narrow stage the header spans the screen');
+  // a clip's header: X, the title (shrinks to nothing), 24 h, 🔇 and ⚙️ - full: 44 px buttons, 8 px gaps, 12 px padding and the
+  // pill (~44 px); tight: no pill, 4 px gaps, 8 px padding; tiny: 36 px buttons, 4 px gaps, 6 px padding
+  assert.ok(3 * 44 + 44 + 4 * 8 + 2 * 12 <= G.STAGE.tight, 'the full header fits from tight up');
+  assert.ok(3 * 44 + 3 * 4 + 2 * 8 <= G.STAGE.tiny, 'the tight header fits from tiny up');
+  assert.ok(3 * 36 + 3 * 4 + 2 * 6 <= 136, 'the tiny header fits a 136 px stage');
+  const P = studioPage({ visualViewport: { height: 745, width: 430, scale: 1 } }), root = await studioOpen(P); await studioPick(P, 'video/mp4'); const screen = screenOf(P);
+  const cls = () => ['sst-head-tight', 'sst-head-tiny'].filter((c) => root.classList.contains(c)).join(' ');
+  screen(430, 745); viewportResize(P); assert.equal(cls(), '');
+  screen(430, 365); viewportResize(P); assert.equal(cls(), 'sst-head-tight');
+  screen(375, 245); viewportResize(P); assert.equal(cls(), 'sst-head-tight sst-head-tiny');
+  screen(844, 390); viewportResize(P); assert.equal(cls(), '');
+  const css = studioCss();
+  const pill = cssRule(css, '.sst .sst-lifetime'); assert.match(pill, /flex:\s*0 1 auto/); assert.match(pill, /min-inline-size:\s*0/); assert.match(pill, /text-overflow:\s*ellipsis/);
+  assert.match(cssRule(css, '.sst.sst-head-tight .sst-lifetime'), /display:\s*none/);
+  const tight = cssRule(css, '.sst.sst-head-tight .sst-head'); assert.match(tight, /gap:\s*var\(--ds-sp-1\)/); assert.match(tight, /padding:\s*var\(--ds-sp-2\)/);
+  assert.match(cssRule(css, '.sst.sst-head-tiny .sst-head'), /padding:\s*var\(--ds-sp-1h\)/);
+  const tiny = cssRule(css, '.sst.sst-head-tiny .sst-head .ds-btn.sst-round'); for (const k of ['inline-size', 'min-inline-size', 'block-size', 'min-block-size']) assert.match(tiny, new RegExp('(?:^|[;\\s])' + k + ':\\s*36px'));
+});
+
+test('Studio storywide verify: the quiet question keeps clear of the rail and wraps its words; beside a narrow stage the Post button stops short of the rail', () => {
+  const css = studioCss(), tools = cssRule(css, '.sst .sst-tools');
+  // the rail: 44 px buttons, 4 px padding, 8 px in from the stage's end edge = 60 px; the question keeps another 8 px from it
+  assert.match(tools, /inset-inline-end:\s*calc\(var\(--sst-sr, 0px\) \+ var\(--ds-sp-2\)\)/); assert.match(tools, /padding:\s*var\(--ds-sp-1\)/);
+  assert.match(cssRule(css, '.sst .sst-tools .ds-btn.sst-round'), /inline-size:\s*44px/);
+  assert.match(cssRule(css, '.sst.sst-bleed.sst-has-media .sst-ask'), /inset-inline-end:\s*calc\(var\(--sst-sr, 0px\) \+ 68px\)/);
+  const askBtn = cssRule(css, '.sst .sst-ask .ds-btn'); assert.match(askBtn, /white-space:\s*normal/); assert.match(askBtn, /max-inline-size:\s*100%/);
+  // beside a narrow stage the rail is 12-64 px past the stage's end edge: the Post button ends 12 px from the screen's edge
+  const post = cssRule(css, '.sst.sst-framed .sst-post');
+  assert.match(post, /max-inline-size:\s*calc\(var\(--sst-sr, 0px\) - var\(--sst-ie, 0px\) - 76px\)/); assert.match(post, /min-inline-size:\s*min\(110px, calc\(var\(--sst-sr, 0px\) - var\(--sst-ie, 0px\) - 76px\)\)/);
+});
+
+test('Studio storywide verify: the header\'s 24 h pill is no place for a grip either', async () => {
+  const Q = studioPage(); await studioOpen(Q); await studioPick(Q);
+  for (const b of Q.doc.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn, .sst-head .sst-lifetime')) b.getBoundingClientRect = rectOf(0, 0, 0, 0);
+  Q.doc.querySelector('.sst-lifetime').getBoundingClientRect = rectOf(8, 8, 44, 30);
+  const sticker = await studioSticker(Q); await drag(Q, sticker, [150, 250], [100, 110]);
+  const q = gripsOf(Q), RD = geometry().GRIP.del; assert.equal(q.del.corner, 'tr', 'the delete grip is not put under the pill');
+  assert.ok(Math.hypot(Math.max(8 - q.del.x, 0, q.del.x - 52), Math.max(8 - q.del.y, 0, q.del.y - 38)) >= RD, 'clear of the pill');
+});
+
+test('Studio storywide verify: the safe area\'s side insets are written for the CSS (--sst-is / --sst-ie, mirrored right to left) - beside a narrow stage the post row\'s ends, "Posted as" and the header keep clear of a notch and of the stage', async () => {
+  for (const dir of ['ltr', 'rtl']) {
+    const P = studioPage({ visualViewport: { height: 430, width: 932, scale: 1 } }); P.win.getComputedStyle = () => ({ direction: dir });
+    const root = await studioOpen(P); await studioPick(P); const screen = screenOf(P);
+    screen(932, 430, { l: 47, r: 30, b: 21 }); viewportResize(P); assert.ok(root.classList.contains('sst-framed'));
+    assert.deepEqual([root.style['--sst-is'], root.style['--sst-ie']], dir === 'ltr' ? ['47px', '30px'] : ['30px', '47px'], dir);
+    screen(430, 932); viewportResize(P); assert.deepEqual([root.style['--sst-is'], root.style['--sst-ie']], ['0px', '0px'], 'no insets');
+  }
+  const css = studioCss();
+  assert.match(cssRule(css, '.sst.sst-framed.ds-scrim.sheet .sst-card'), /padding-inline:\s*var\(--sst-is, 0px\) var\(--sst-ie, 0px\)/);
+  assert.match(cssRule(css, '.sst.sst-framed .sst-identity'), /max-inline-size:\s*calc\(var\(--sst-sx, 0px\) - var\(--sst-is, 0px\) - 3 \* var\(--ds-sp-3\)\)/);
+  assert.match(cssRule(css, '.sst.sst-framed .sst-destination'), /max-inline-size:\s*calc\(var\(--sst-sx, 0px\) - var\(--sst-is, 0px\) - 2 \* var\(--ds-sp-3\)\)/);
+  const head = cssRule(css, '.sst.sst-framed .sst-head'); assert.match(head, /padding-inline:\s*max\(var\(--ds-sp-3\), var\(--sst-is, 0px\), var\(--sst-ie, 0px\)\)/);
+  assert.match(cssRule(css, '.sst.sst-framed .sst-head .ds-pixel-h'), /max-inline-size:\s*calc\(var\(--sst-sx, 0px\) - max\(var\(--ds-sp-3\), var\(--sst-is, 0px\), var\(--sst-ie, 0px\)\) - 64px\)/);
+});
+
+test('Studio storywide verify: a mouse click on the dark around the stage closes the editor again (asking first with edits), as the desktop popup did - never a finger\'s tap there, nor a press that began on the picture', async () => {
+  const P = studioPage(); await studioOpen(P); await studioPick(P);
+  const body = P.doc.querySelector('.sst-body'), card = P.doc.querySelector('.sst-card');
+  ptr(body, 'pointerdown', 1, 20, 300, { pointerType: 'touch' }); clickAt(body); await flush(); assert.ok(P.doc.querySelector('.sst'), 'a finger\'s tap beside the stage leaves it open');
+  ptr(stage(P), 'pointerdown', 1, 150, 250, { pointerType: 'mouse' }); ptr(stage(P), 'pointerup', 1, 150, 250, { pointerType: 'mouse' }); await flush(4); clickAt(card); await flush();
+  assert.ok(P.doc.querySelector('.sst'), 'a press on the picture let go beside it leaves it open');
+  ptr(P.doc.querySelector('.sst-post'), 'pointerdown', 1, 280, 480, { pointerType: 'mouse' }); clickAt(body); await flush(); assert.ok(P.doc.querySelector('.sst'), 'a press on a button: open');
+  ptr(body, 'pointerdown', 1, 20, 300, { pointerType: 'mouse' }); clickAt(body); await flush(); assert.equal(P.doc.querySelector('.sst'), null, 'the mouse beside the stage: closed (no edits)');
+  const Q = studioPage(); await studioOpen(Q); await studioPick(Q); await studioText(Q, 'Mine'); key(Q.doc.activeElement, 'Escape');
+  const qb = Q.doc.querySelector('.sst-body'); ptr(qb, 'pointerdown', 1, 20, 300, { pointerType: 'mouse' }); clickAt(qb); await flush();
+  assert.ok(Q.doc.querySelector('.sst-ask'), 'with edits: the quiet question'); assert.match(Q.doc.querySelector('.sst-ask').textContent, /Discard this story\?/);
 });
