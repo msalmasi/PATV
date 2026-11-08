@@ -644,3 +644,19 @@ test("escrow guard: the settle refuses to pay out less than it holds (never a si
   assert.equal(await held(), 2200, "nothing moved");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_moves WHERE key = ?", [`tny:${tid}:finish`]))[0].n, 0);
 });
+
+test("a call-off whose refunds fail is tried again a minute later (not on every tick), then refunds in full", async () => {
+  await fresh();
+  const tid = await sng(ann, ["6", "1k"]);
+  const T = svc.getTable(tid);
+  const hid = T.tourney.entrants[0].hid;
+  T.tourney.entrants[0].hid = "s-missing";            // the refund can't find its hold: the whole call-off rolls back
+  await later(60 * 60 + 1);
+  assert.equal(T.tourney.status, "registering");
+  assert.equal(T.tourney.expires_at, NOW + 60000, "tried again in a minute");
+  assert.equal(await bal("u1"), 98900, "nothing moved");
+  T.tourney.entrants[0].hid = hid;
+  await later(61);
+  assert.equal(T.tourney.status, "cancelled");
+  assert.equal(await bal("u1"), 100000);
+});
