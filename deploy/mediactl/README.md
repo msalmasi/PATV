@@ -61,10 +61,12 @@ All three new routes use the existing signed HTTPS authentication:
 | `GET /collections?section=<reviewed-id>&start=0&size=10` | 1.7.1: one page of those collections (`size` 1-50), plus `total` and `next`. |
 
 1.7.1 (site catfix, prod 2026-11-08): without `size`, `/collections` walks every
-collection's members inside one answer at four Plex reads a second and sends nothing
-until the end. On the largest library that took minutes, past the site's 15 s, so
-every catalog sync failed there. The site now asks for pages (and gives a 1.7.0 whole
-answer 20 minutes). A catalog read (`/sections`, `/catalog`, `/collections`) stops at
+collection's members inside one answer and sends nothing until the end. The largest
+library has 1,381 collections and Plex takes 2-3 s per member read, so that answer
+takes about an hour - far past the site's 15 s, so every catalog sync failed there.
+The site now reads shelves only in its daily full sweep, asks 1.7.1 for pages of 5
+(about 15 s each), and gives a 1.7.0 whole answer 2 minutes, after which that section
+keeps the shelves it had. A catalog read (`/sections`, `/catalog`, `/collections`) stops at
 its next Plex read once the site has stopped waiting (its client closed the
 connection), instead of holding the shared budget for minutes, and is logged:
 `[mediactl] GET /collections: the site stopped waiting after 15.0 s (60 Plex reads) -
