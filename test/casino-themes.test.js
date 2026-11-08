@@ -335,6 +335,40 @@ test("flavour: one line on a showdown pot of 50 big blinds or more - a split pot
   assert.equal(cowboy(await events(c.table)).length, 0);
 });
 
+test("flavour (review 13): the 50 BB limit is pinned - 49 BB at a showdown says nothing, exactly 50 BB (rake included) one line, a big pot won uncontested none", async () => {
+  await fresh("everyone");
+  const { table: tid } = await open(ann, ["25/50", "saloon"]);                 // bb = 50: 50 big blinds = 2,500 chips
+  for (const p of [ann, bob]) assert.ok((await A(p, "sit", ["10000"], { table: tid })).ok);
+  const T = svc.getTable(tid);
+  const turn = async (verb, args) => { const kk = H.currentActor(T.eng); const r = await A(kk === "u1" ? ann : bob, verb, args || [], { table: tid }); assert.ok(r.ok, verb + ": " + r.reply); };
+  const potLines = async () => cowboy(await events(tid)).filter((e) => / PAT pot/.test(e.text)).map((e) => e.text);
+  const hand = async (to, finish) => {
+    deck(ACES);
+    assert.ok((await A(ann, "deal", [], { table: tid })).ok);
+    await turn("raise", [String(to)]);                                         // heads-up: the button opens, the big blind calls
+    await turn("call");
+    await finish();
+  };
+  // 49 big blinds (1,225 each = 2,450) to a showdown: none
+  await hand(1225, () => checkDown(tid));
+  assert.equal(T.last_round.uncontested, false);
+  assert.equal(T.last_round.pot, 2450);
+  assert.deepEqual(await potLines(), [], "49 BB: no line");
+  // exactly 50 big blinds (1,250 each = 2,500: 2,450 to the winner + the 50 rake) to a showdown: one line
+  await hand(1250, () => checkDown(tid));
+  assert.equal(T.last_round.pot, 2500);
+  assert.equal(T.last_round.rake, 50, "the 2% rake counts toward the pot");
+  let lines = await potLines();
+  assert.equal(lines.length, 1, "50 BB: the line");
+  assert.match(lines[0], / 2,450 PAT pot/, "the winner's take, in PAT");
+  // 80 big blinds won without a showdown (the flop bet is folded to): none
+  await hand(2000, async () => { await turn("bet", ["500"]); await turn("fold"); });
+  assert.equal(T.last_round.uncontested, true);
+  assert.ok(T.last_round.pot >= 4000, "a pot of " + T.last_round.pot);
+  lines = await potLines();
+  assert.equal(lines.length, 1, "uncontested: no line, however big");
+});
+
 // ── C + D: the lobby flag, POST /api/casino/open, the pages ──
 test("HTTP: the lobby's picker flag per viewer, POST /api/casino/open {theme}, the pages load the theme only for a themed table", async () => {
   await fresh();
@@ -431,6 +465,133 @@ test("files: the saloon CSS is scoped under .cz-theme-saloon, original art only 
   assert.match(part, /aria-hidden="true"/, "decoration only");
 });
 
+// ── the h20 verify review's fixes ──
+/** the CSS's rules: [{sel, decl: {prop: value}, media}] (one level of @media), comments dropped */
+function cssRules(src) {
+  const out = [];
+  (function walk(s, media) {
+    let i = 0;
+    while (i < s.length) {
+      const open = s.indexOf("{", i);
+      if (open < 0) break;
+      const head = s.slice(i, open).trim();
+      let depth = 1, j = open + 1;
+      while (depth && j < s.length) { if (s[j] === "{") depth++; else if (s[j] === "}") depth--; j++; }
+      const inner = s.slice(open + 1, j - 1);
+      if (/^@media/.test(head)) walk(inner, head);
+      else if (!/^@/.test(head)) {
+        const decl = {};
+        for (const d of inner.split(/;(?![^(]*\))/)) { const k = d.indexOf(":"); if (k > 0) decl[d.slice(0, k).trim()] = d.slice(k + 1).trim(); }
+        for (const sel of head.split(",")) out.push({ sel: sel.trim(), decl, media: media || null });
+      }
+      i = j;
+    }
+  })(src.replace(/\/\*[\s\S]*?\*\//g, ""), null);
+  return out;
+}
+const themeCss = () => cssRules(rd("public", "css", "casino-themes.css"));
+const px = (v) => String(v || "0").trim().split(/\s+/).map((x) => parseFloat(x) || 0);
+const sides = (v) => { const p = px(v); return [p[0], p[1] ?? p[0], p[2] ?? p[0], p[3] ?? p[1] ?? p[0]]; };   // top right bottom left
+
+test("review 1-3: the saloon adds no height and moves nothing - classic's wrap padding, the signs out of the flow, the logo's space kept, blackjack's rail inside classic's box", () => {
+  const R = themeCss();
+  // Hold'em: the wrap keeps classic's padding at every width (the phone sign took 44 more px and pushed the felt under the dock)
+  for (const r of R.filter((x) => /\.hm-wrap\b/.test(x.sel) && !/\.hm-wrap\s/.test(x.sel))) {
+    assert.ok(!Object.keys(r.decl).some((k) => /^padding/.test(k)), `${r.media || ""} ${r.sel}: no padding (classic's stays)`);
+  }
+  // the felt's lettering keeps its place in the board's column (the board, pot and message stay where classic has them)
+  const logo = R.filter((x) => x.sel === ".cz-theme-saloon .hm-logo");
+  assert.ok(logo.length && logo.every((x) => x.decl.visibility === "hidden" && !("display" in x.decl)), "hm-logo: hidden, not removed");
+  // the sign is out of the flow everywhere (Hold'em: on the felt between the top seats; blackjack: over its top rail)
+  const sign = R.filter((x) => /\.cz-sign$/.test(x.sel));
+  assert.ok(sign.find((x) => x.sel === ".cz-theme-saloon .cz-sign" && !x.media && x.decl.position === "absolute"), "the sign: position absolute");
+  for (const x of sign) assert.ok(!x.decl.position || x.decl.position === "absolute", `${x.media || ""} ${x.sel}: stays absolute`);
+  assert.ok(!sign.some((x) => "flex" in x.decl), "not a flex item any more");
+  // phones: the wall sign hangs in the table's top row (beside "All tables") - absolute, above the wrap; the scene lets it out
+  const phone = R.filter((x) => x.media && /max-width:\s*760px/.test(x.media));
+  const wall = phone.find((x) => /\.cz-wallsign$/.test(x.sel) && x.decl.display === "block");
+  assert.ok(wall && wall.decl.position === "absolute" && /^-\d/.test(wall.decl.top || ""), "the wall sign: absolute, above the wrap (top < 0): " + JSON.stringify(wall && wall.decl));
+  assert.ok(/inset-inline-end/.test(Object.keys(wall.decl).join()), "at the row's end (logical side: RTL too), clear of the link");
+  assert.ok(phone.some((x) => x.sel === ".cz-theme-saloon .cz-scene" && x.decl.overflow === "visible"), "phones: the scene doesn't clip it");
+  // blackjack: the wood rail is a border, so the padding gives it back - border + padding = classic's padding on every side
+  const view = rd("views", "casino-bj.ejs");
+  const cls = (re) => sides((re.exec(view) || [])[1]);
+  const classicDesk = cls(/\.felt\.bj \{ padding: ([^;]+);/);
+  const classicPhone = cls(/@media \(max-width: 600px\) \{\s*\.felt\.bj \{[^}]*padding: ([^;]+);/);
+  assert.deepEqual(classicDesk, [18, 16, 64, 16]);
+  assert.deepEqual(classicPhone, [14, 10, 16, 10]);
+  const bj = (media) => R.filter((x) => x.sel === ".cz-theme-saloon .felt.bj" && (media ? x.media && media.test(x.media) : !x.media));
+  const box = (rules) => {
+    let border = [0, 0, 0, 0], pad = null;
+    for (const r of rules) {
+      if (r.decl.border) border = sides(r.decl.border.match(/(\d+(?:\.\d+)?)px/)[1] + "px");
+      if (r.decl["border-width"]) border = sides(r.decl["border-width"]);
+      if (r.decl.padding) pad = sides(r.decl.padding);
+    }
+    return { border, pad };
+  };
+  const desk = box(bj(null));
+  assert.ok(desk.pad, "the desktop rule sets the padding");
+  assert.deepEqual(desk.border.map((b, i) => b + desk.pad[i]), classicDesk, "desktop: border + padding = classic");
+  const ph = box(bj(null).concat(bj(/max-width:\s*600px/)));
+  assert.deepEqual(ph.border.map((b, i) => b + ph.pad[i]), classicPhone, "phones: border + padding = classic");
+});
+
+test("review 6/7/12: a 💎 saloon table's rail turns gold; the rack's chips keep different colours; no chip rule can reach a 💎 chip", () => {
+  const R = themeCss();
+  const body = rd("public", "css", "casino-themes.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  // the rail's wood is one custom property (every rail layer reads it), and 💎 tables gild it
+  const root = R.find((x) => x.sel === ".cz-theme-saloon" && x.decl["--sl-wood"]);
+  assert.ok(root, "--sl-wood on the theme");
+  assert.equal((body.match(/#4b2a14/g) || []).length, 1, "the wood gradient is written once (--sl-wood), every rail uses var(--sl-wood)");
+  for (const r of R.filter((x) => /\.felt\.(hm|bj)$/.test(x.sel) && x.decl.background)) assert.match(r.decl.background, /var\(--sl-wood\)/, `${r.media || ""} ${r.sel}`);
+  const hr = R.find((x) => /^\.cz-theme-saloon \.felt\.hr$/.test(x.sel) && x.decl["--sl-wood"]);
+  assert.ok(hr, "💎: --sl-wood overridden on .felt.hr (Hold'em and blackjack)");
+  assert.notEqual(hr.decl["--sl-wood"], root.decl["--sl-wood"]);
+  assert.match(hr.decl["--sl-wood"], /#e8c45a/i, "gold in the 💎 rail (classic High Roller's --rail2)");
+  // the bet rack: every clay chip its own colour (25K and Max were both black-and-gold)
+  const faces = {};
+  for (const r of R.filter((x) => /\.chip(\.\w+)?:not\(\.hrc\)$/.test(x.sel) && x.decl["--c"])) {
+    const m = /\.chip(?:\.(\w+))?:not/.exec(r.sel);
+    faces[m[1] || "base"] = r.decl["--c"].toLowerCase();
+  }
+  for (const k of ["base", "c500", "c1k", "c5k", "c25k", "cmax"]) assert.ok(faces[k], "a face for " + k + ": " + JSON.stringify(faces));
+  assert.equal(new Set(Object.values(faces)).size, Object.keys(faces).length, "all different: " + JSON.stringify(faces));
+  // review 12: a chip selector without :not(.hrc) would restyle the 💎 c100k / c500k / c1m / c5m chips - every one carries it
+  const chipSels = R.map((x) => x.sel).filter((s) => /\.chip\b/.test(s));
+  assert.ok(chipSels.length >= 6);
+  for (const s of chipSels) assert.match(s, /\.chip(\.[\w-]+)*:not\(\.hrc\)/, "guarded: " + s);
+});
+
+test("review 4: the sign's lettering fits between its studs in every language (fitted when a translation is longer than the English)", () => {
+  const ejs = require("ejs");
+  const file = path.join(repo, "views", "partials", "casino-theme-saloon.ejs");
+  const render = (sign) => ejs.render(fs.readFileSync(file, "utf8"), { i18nT: (kk) => (kk === "casino.theme_saloon_sign" ? sign : EN[kk] || kk) }, { filename: file });
+  const texts = (html) => [...html.matchAll(/<text\b([^>]*)>([^<]*)<\/text>/g)].map((m) => ({ attrs: m[1], text: m[2],
+    len: (/\btextLength="([\d.]+)"/.exec(m[1]) || [])[1], adj: (/\blengthAdjust="([^"]+)"/.exec(m[1]) || [])[1],
+    fs: Number((/\bfont-size="([\d.]+)"/.exec(m[1]) || [])[1]), x: Number((/\bx="([\d.]+)"/.exec(m[1]) || [])[1]) }));
+  // English (209 units between studs at 15 / 245): drawn as it is
+  let t = texts(render(EN["casino.theme_saloon_sign"]));
+  assert.equal(t.length, 2, "the desktop sign + the phones' wall sign");
+  for (const x of t) { assert.equal(x.len, undefined, "English: no squeeze"); assert.equal(x.fs, 27); assert.equal(x.text, "Pepe's Saloon"); }
+  // the reviewer's measured overflows (Georgia bold 27 + 1.5 spacing: 253-272 units) and a much longer one: fitted
+  for (const s of ["Le saloon de Pepe", "El saloon de Pepe", "O Saloon do Pepe", "Il saloon di Pepe", "Das Saloon von Pepe am Ende der Straße"]) {
+    t = texts(render(s));
+    for (const x of t) {
+      assert.equal(x.text, s);
+      assert.ok(x.len && Number(x.len) <= 220 && Number(x.len) >= 200, s + ": textLength between the studs: " + x.len);
+      assert.equal(x.adj, "spacingAndGlyphs", s);
+      assert.equal(x.x, 130, "still centred");
+      assert.ok(x.fs >= 16 && x.fs <= 27, s + ": font " + x.fs);
+    }
+  }
+  assert.ok(texts(render("Das Saloon von Pepe am Ende der Straße"))[0].fs < 27, "a much longer one is also set smaller (not only squeezed)");
+  // markup-safe: an entity in the string is measured as its character and kept as written
+  t = texts(render("Pepe&#39;s Saloon"));
+  assert.equal(t[0].text, "Pepe&#39;s Saloon");
+  assert.equal(t[0].len, undefined, "&#39; counts as one apostrophe");
+});
+
 test("wiring: casinohm.js sets the theme in render through CZ.theme; the Hold'em page loads the theme files only for a theme; ?v= bumps", () => {
   const ui = rd("public", "js", "casino-ui.js"), hm = rd("public", "js", "casinohm.js"), view = rd("views", "casino-hm.ejs");
   assert.match(ui, /function theme\(t, at\)/);
@@ -438,7 +599,11 @@ test("wiring: casinohm.js sets the theme in render through CZ.theme; the Hold'em
   assert.equal((hm.match(/CZ\.theme\(/g) || []).length, 1, "one call in render");
   assert.match(view, /<% if \(locals\.theme && theme !== 'classic'\) \{ %>/);
   assert.match(view, /casino-ui\.js\?v=11/);      // (rebased on h22 Sit & Go's casino-ui v10 / casinohm v11)
-  assert.match(view, /casinohm\.js\?v=12/);
+  assert.match(view, /casinohm\.js\?v=13/, "v13: the sign anchored on the felt (h20 verify review 3; v12 before the rebase on h22's v11)");
+  for (const v of ["casino-hm.ejs", "casino-bj.ejs"]) {
+    assert.match(rd("views", v), /casino-themes\.css\?v=3/, v + ": the review's layout fixes");
+    assert.match(rd("views", v), /casino-sound\.js\?v=2/, v + ": the toggle in the table's top row");
+  }
   assert.match(rd("casino", "routes.js"), /theme: T \? themes\.themeOf\(T, st\) : "classic"/);
   // the admin view: one row, saved like the other Hold'em controls (no admin-panel.js change)
   const adm = rd("views", "admin", "games.ejs");
@@ -467,15 +632,24 @@ function soundRig(opts) {
   const made = [], listeners = {}, store = Object.assign({}, opts.seed || {});
   const el = (tag) => {
     const kids = [];
-    const o = { tagName: tag, children: kids, attrs: {}, hidden: false, textContent: "", className: "", dataset: {}, _l: {},
+    const o = { tagName: tag, children: kids, attrs: {}, hidden: false, _text: "", className: "", dataset: {}, _l: {}, parentNode: null,
+      get textContent() { return this._text + kids.map((c) => c.textContent).join(""); }, set textContent(v) { this._text = String(v); kids.length = 0; },
+      get nextSibling() { const p = this.parentNode; return p ? p.children[p.children.indexOf(this) + 1] || null : null; },
       setAttribute(a, v) { this.attrs[a] = String(v); }, getAttribute(a) { return this.attrs[a]; },
-      appendChild(c) { kids.push(c); c.parentNode = this; return c; }, insertBefore(c) { kids.unshift(c); c.parentNode = this; return c; },
+      appendChild(c) { kids.push(c); c.parentNode = this; return c; },
+      insertBefore(c, ref) { const i = ref ? kids.indexOf(ref) : -1; if (i < 0) kids.push(c); else kids.splice(i, 0, c); c.parentNode = this; return c; },
       addEventListener(ev, fn) { (this._l[ev] = this._l[ev] || []).push(fn); }, click() { for (const fn of this._l.click || []) fn({}); },
-      querySelector() { return null; } };
+      querySelector(sel) { return sel === ".back" ? kids.find((c) => c.className === "back") || null : null; } };
     return o;
   };
-  const bar = el("div");
-  const document = { createElement: el, querySelector: (s) => (s === ".cz-bar" ? bar : null), getElementById: () => null,
+  // the page: the header bar (.cz-bar) and the table section (#cz-table: the "All tables" link, then the wrap)
+  const bar = el("div"), table = el("section"), back = el("a"), wrapEl = el("div");
+  back.className = "back";
+  table.appendChild(back);
+  table.appendChild(wrapEl);
+  const document = { createElement: el,
+    querySelector: (s) => (s === ".cz-bar" ? bar : /^#cz-table\s*>?\s*\.back$/.test(s) ? back : s === "#cz-table" ? table : null),
+    getElementById: (id) => (id === "cz-table" ? table : null),
     addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); } };
   const localStorage = opts.storageThrows ? { getItem() { throw new Error("blocked"); }, setItem() { throw new Error("blocked"); } }
                                          : { getItem: (kk) => (kk in store ? store[kk] : null), setItem: (kk, v) => { store[kk] = String(v); } };
@@ -495,7 +669,9 @@ function soundRig(opts) {
   vm.createContext(ctx);
   vm.runInContext(rd("public", "js", "casino-sound.js"), ctx);
   const gesture = () => { for (const fn of (listeners.pointerdown || []).concat(listeners.keydown || [])) fn({}); };
-  return { window, bar, made, store, gesture, S: window.CZSound };
+  // the toggle, wherever it went (review 1/3: the table's top row, right after "All tables" - never the page header)
+  const toggle = () => table.children.find((c) => c.id === "cz-soundbtn") || bar.children.find((c) => c.id === "cz-soundbtn") || null;
+  return { window, bar, table, back, made, store, gesture, toggle, S: window.CZSound };
 }
 const view = (pot, board, done) => ({ game: "holdem", hand_no: 3, phase: "flop", pot, board, last_round: done ? { hand_no: done } : null });
 
@@ -503,10 +679,12 @@ test("sound: off by default, a 🔇/🔊 toggle on a themed table only, remember
   const r = soundRig();
   assert.ok(r.S && typeof r.S.update === "function");
   r.S.update("classic", view(100, []));
-  assert.equal(r.bar.children.length, 0, "classic: no toggle");
+  assert.equal(r.toggle(), null, "classic: no toggle");
   r.S.update("saloon", view(100, []));
-  assert.equal(r.bar.children.length, 1, "a themed table: the toggle in the header");
-  const btn = r.bar.children[0];
+  const btn = r.toggle();
+  assert.ok(btn, "a themed table: the toggle");
+  assert.equal(r.bar.children.length, 0, "review 1/3: not in the page header (an extra pill wrapped it onto another row)");
+  assert.equal(r.back.nextSibling, btn, "the table's own top row, right after 'All tables'");
   assert.equal(btn.attrs["aria-pressed"], "false", "off by default");
   assert.equal(btn.hidden, false);
   r.S.update("saloon", view(300, ["As", "Kd", "2c"]));
@@ -536,7 +714,7 @@ test("sound: off by default, a 🔇/🔊 toggle on a themed table only, remember
 test("sound: remembered on - still nothing until the viewer clicks the page; storage and WebAudio failures are safe", () => {
   const stored = soundRig({ seed: { "cz-sound": "1" } });
   stored.S.update("saloon", view(100, []));
-  const btn = stored.bar.children[0];
+  const btn = stored.toggle();
   assert.equal(btn.attrs["aria-pressed"], "true", "remembered on");
   stored.S.update("saloon", view(100, ["As", "Kd", "2c"]));
   assert.equal(stored.made.length, 0, "no click on the page yet: silent (no AudioContext)");
@@ -548,7 +726,7 @@ test("sound: remembered on - still nothing until the viewer clicks the page; sto
   for (const o of [{ storageThrows: true }, { storageGetterThrows: true }]) {
     const b = soundRig(o);
     assert.doesNotThrow(() => b.S.update("saloon", view(100, [])));
-    const t = b.bar.children[0];
+    const t = b.toggle();
     assert.equal(t.attrs["aria-pressed"], "false");
     assert.doesNotThrow(() => t.click());
     assert.equal(t.attrs["aria-pressed"], "true");
@@ -557,12 +735,12 @@ test("sound: remembered on - still nothing until the viewer clicks the page; sto
   // no WebAudio at all: nothing breaks, nothing plays
   const n = soundRig({ noAudio: true });
   n.S.update("saloon", view(100, []));
-  assert.doesNotThrow(() => { n.bar.children[0].click(); n.S.update("saloon", view(100, ["As", "Kd", "2c"])); });
+  assert.doesNotThrow(() => { n.toggle().click(); n.S.update("saloon", view(100, ["As", "Kd", "2c"])); });
   assert.equal(n.made.length, 0);
   // an AudioContext that throws on construction: silent, no error
   const bad = soundRig({ ctxThrows: true });
   bad.S.update("saloon", view(100, []));
-  assert.doesNotThrow(() => { bad.bar.children[0].click(); bad.S.update("saloon", view(100, ["As", "Kd", "2c"])); });
+  assert.doesNotThrow(() => { bad.toggle().click(); bad.S.update("saloon", view(100, ["As", "Kd", "2c"])); });
 });
 
 // ── H (phase 2): the saloon on blackjack ──
