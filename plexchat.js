@@ -37,7 +37,7 @@
 //                goes on with its feature and card - medialib.playFor / mediaqueue.startFor {replace: true}; -> + replaced {title, queue})
 //     control   {action: pause | resume | stop | seek | seek_rel | next | prev, value}
 //     np        {target?}                                             -> the pad's 📼 player (read-only view) + the on-air label
-//     continue  {show?}                                               -> the speaker's next episode (last 14 days) as one row
+//     continue  {show?}                                               -> the speaker's next episode (last 14 days) as one row (1.99?? plexqueue: + queue_cost, how, pad)
 //     rpm       {text}                                                -> a private "only you can see this" row for that account
 //   refusals: {ok: false, code, error, price?, estimate?, label?, cap?, need?, have?, max?, by?} - code is one of CODES
 "use strict";
@@ -595,10 +595,14 @@ async function opContinue(user, b) {
   if (!nxt) return { ok: true, row: null, last: String(hit.title || "") };
   const S = conf().get();
   const per = A.free ? 0 : Math.max(0, Math.floor(Number(S.library_price) || 0));
-  return { ok: true, row: slim({ key: nxt.key, type: "episode", title: nxt.title, show: nxt.show, season: nxt.season, episode: nxt.episode, duration: nxt.duration,
-                                 scope: "episode", exact: true, price: per ? ML().priceFor(nxt.duration, 0, S).price : 0,
-                                 estimate: per ? MQ().estimate(per, nxt.duration) : 0, label: labelOf(nxt) }),
-           free: !!A.free, state: await ML().padState(user, R.id).catch(() => null) };
+  const row = slim({ key: nxt.key, type: "episode", title: nxt.title, show: nxt.show, season: nxt.season, episode: nxt.episode, duration: nxt.duration,
+                     scope: "episode", exact: true, price: per ? ML().priceFor(nxt.duration, 0, S).price : 0,
+                     estimate: per ? MQ().estimate(per, nxt.duration) : 0, label: labelOf(nxt) });
+  const state = await ML().padState(user, R.id).catch(() => null);
+  // 1.99?? plexqueue: with something on, Pepe offers "queue it" for the next episode too - what that costs this speaker (+ how / the pad, for its words)
+  const qc = await queueCost(user, R, state, A, nxt.duration);
+  if (qc != null) row.queue_cost = qc;
+  return { ok: true, row, free: !!A.free, how: A.how || null, state, pad: { id: R.id, title: R.title || R.id } };
 }
 
 async function opRpm(user, b) {
