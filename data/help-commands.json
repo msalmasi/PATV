@@ -2330,7 +2330,7 @@
     "!sit [amount]"
    ],
    "summary": "Take a seat and buy in for that many chips (PAT is escrowed), e.g.",
-   "details": "Take a seat and buy in for that many chips (PAT is escrowed), e.g. **!sit 5000**. Sit during a hand to be dealt in on the next one. Up to 9 players.",
+   "details": "Take a seat and buy in for that many chips (PAT is escrowed), e.g. **!sit 5000**. Sit during a hand to be dealt in on the next one. Up to 9 players. At a 🏁 Sit & Go's table, `!sit` registers you until it starts (see `!sng`).",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -2432,7 +2432,7 @@
     "!stand"
    ],
    "summary": "Leave the table and swap your remaining chips back to PAT.",
-   "details": "Leave the table and swap your remaining chips back to PAT. In a live hand your chips go back to PAT once it ends (or `!fold` to leave sooner).",
+   "details": "Leave the table and swap your remaining chips back to PAT. In a live hand your chips go back to PAT once it ends (or `!fold` to leave sooner). At a 🏁 Sit & Go's table, `!stand` unregisters you with a full refund until it starts; after that tournament chips stay at the table (`!sitout` to sit out).",
    "examples": [],
    "keywords": [],
    "webchat": true
@@ -2457,6 +2457,44 @@
     "game_poker_enabled"
    ],
    "webchat": true
+  },
+  {
+   "id": "sng",
+   "title": "!sng · new · join · leave · info",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!sng"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!sng",
+    "!sng new <seats 2-9> <buy-in> [turbo] [at N]",
+    "!sng join [id]",
+    "!sng leave [id]",
+    "!sng info [id]",
+    "!sng cancel <id> [reason]"
+   ],
+   "summary": "🏁 Sit & Go Hold'em tournaments on publicaccess.tv: everyone pays the same entry and gets the same tournament chips, the blinds go up, and the top finishers share the prize pool.",
+   "details": "**Sit & Gos** are one-table Hold'em tournaments on the publicaccess.tv casino, played in a room whose casino runs there and on the web. They start switched off: until publicaccess.tv's casino admins switch them on (staff first, then everyone), `!sng new` and `!sng join` say so.\n**!sng** lists the open ones (`!tables` and `!poker` show them as links too); **!sng <id>** or **!sng info [id]** shows one: seats, entry, structure, who's registered and the prizes - while it runs, the level, the blinds, the time to the next level and the players left.\n**!sng new <seats 2-9> <buy-in> [turbo] [at N]** opens one and registers you, e.g. **!sng new 6 1k** or **!sng new 9 5k turbo at 4**. The buy-in is one of the casino's fixed list (1K, 5K, 25K or 100K PAT unless its admins change it); the entry is the buy-in plus a fee to the House (10 % of the buy-in unless they change it), held in escrow while you're registered. It starts when every seat is taken - or, with `at N`, 60 seconds after N players are in (at once if it fills first). Opened in a room, it plays in that room (one table per room); one that hasn't started within an hour is called off and every entry refunded.\n**!sng join [id]** registers you; **!sng leave [id]** unregisters you with a full refund, the fee too - only before it starts. Without an id they mean this room's sit & go, else the only one that fits. The id is the 6 characters `!sng` shows (4 or more are enough when they're unique). At a sit & go's table `!sit` registers and `!stand` / `!leave` unregister until it starts; `!holdem status` shows its info.\n**The game:** everyone gets 1,500 tournament chips - not PAT: they can't be bought, topped up or turned into PAT. The blinds go up every 5 minutes (turbo: 3), from 10/20; a new level starts with the next hand. Play with the usual `!check` `!call` `!bet` `!raise` `!allin` `!fold` and `!pre`; a timeout checks or folds, and `!sitout` / `!sitin` only mean being blinded while you're away - a tournament seat is never stood up. A player out of chips is out; two out on the same hand: the bigger stack at the start of that hand places higher, equal stacks share their places' prizes.\n**Prizes** (the buy-ins; the fees go to the House), paid in PAT once at the finish: 2-3 players, the winner takes it all; 4-6, 65 % / 35 %; 7-9, 50 % / 30 % / 20 %.\n**!sng cancel <id> [reason]** (publicaccess.tv admins with the casino capability) calls one off and refunds every entry in full, fee included.\nIn a room whose casino runs on Pepe's own tables, or where Hold'em is switched off, `!sng` says so.",
+   "examples": [
+    "!sng new 6 1k",
+    "!sng new 9 5k turbo at 4",
+    "!sng join a1b2c3",
+    "!sng"
+   ],
+   "keywords": [
+    "sit and go",
+    "sit & go",
+    "sng",
+    "tournament",
+    "poker",
+    "texas holdem",
+    "casino"
+   ],
+   "gates": [
+    "game_poker_enabled"
+   ]
   },
   {
    "id": "blackjack",
@@ -2499,7 +2537,7 @@
     "!poker"
    ],
    "summary": "The publicaccess.tv casino's open tables, as links: host, stakes, seats, 💎 for High Roller tables.",
-   "details": "Lists the open **publicaccess.tv casino** tables (blackjack and Hold'em; `!poker` lists Hold'em only) as short links: host, stakes or blinds, seats taken, 💎 for High Roller tables, up to 5 plus the lobby link. Tables in any room and web-only ones. Pepe also posts this line when you ask for a game with no table in your room (`!bj`, `!holdem`, `!bj status`). At most once every 2 minutes per room.",
+   "details": "Lists the open **publicaccess.tv casino** tables (blackjack and Hold'em; `!poker` lists Hold'em only) as short links: host, stakes or blinds, seats taken, 💎 for High Roller tables, up to 5 plus the lobby link. Open 🏁 Sit & Gos come after them (up to 3: seats, buy-in + fee, registered or the level and players left - see `!sng`). Tables in any room and web-only ones. Pepe also posts this line when you ask for a game with no table in your room (`!bj`, `!holdem`, `!bj status`). At most once every 2 minutes per room.",
    "examples": [
     "!tables",
     "!poker"
@@ -6592,10 +6630,12 @@
     "!mic onair on|off",
     "!mic regrab fast|normal",
     "!mic fastgrab on|off",
+    "!mic fastgrab fair on|off",
+    "!mic fastgrab claim swallow|release|plain",
     "!mic fastgrab inline on|off"
    ],
    "summary": "alerts switches the alert sound channel on or off for this room — the full alert controls are under !alerts.",
-   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed and the stage sources (`!onair setup sources`) while they're on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off. **fastgrab on** (per room, off by default): while a soundboard clip, a paid `!say` or an alert waits for a full mic, Pepe's grab goes out the instant someone drops it, so he wins a mic people are fighting over - one try per drop, two per clip, six a minute; never while his mic is blocked, on a mic break, left out by `!mic lock` or holding that mic on purpose, and after four grabs that didn't play in ten minutes it rests in that room for fifteen (the normal grab carries on; the room's mic break is untouched). Switching it off stops a waiting grab at once. `!mic fastgrab` alone shows how it's doing (won / lost / busy), `!mic fastgrab hook` the packet hook's own count. **fastgrab inline** sends that grab from inside the packet hook itself - for a staging test only.",
+   "details": "**alerts** switches the alert sound channel on or off for this room — the full alert controls are under `!alerts`. **music** makes Pepe hold the mic while the jukebox plays so the whole room hears it. **onair** makes Pepe hold the mic while something with sound is on air on his OBS - a stream or 📼 Plex slot, a YouTube / Twitch link (`!onair`), or the IRL feed and the stage sources (`!onair setup sources`) while they're on screen; never a Camfrog cam (no sound) - so the room hears it - it reaches his mic once an admin switched on 🎤 Pick's sound on Pepe's mic on /stage/admin and ran `!onair setup audio`. Each is per room; add `-global` for the default or `-all` for every room. **regrab fast** (per room): when the room's mic timer drops Pepe while he's holding the mic on purpose (the jukebox, an on-air pick, hold mode) he takes it straight back - about a second later - instead of waiting for his next check. A human blocking his mic still keeps him off. **fastgrab on** (per room, off by default): while a soundboard clip, a paid `!say` or an alert waits for a full mic, Pepe's grab goes out the instant someone drops it, so he wins a mic people are fighting over - one try per drop, two per clip, six a minute; never while his mic is blocked, on a mic break, left out by `!mic lock` or holding that mic on purpose, and after four grabs that didn't play in ten minutes it rests in that room for fifteen (the normal grab carries on; the room's mic break is untouched). Switching it off stops a waiting grab at once. **fastgrab fair** (per room, on by default): when someone drops after a very short hold - usually a double-click - Pepe waits 350 ms so they keep their turn; `fair off` makes him grab at once on every drop, no waiting (it also reaches a grab that's already waiting). **fastgrab claim** (per room, swallow by default) is how a won grab meets Pepe's own Talk click, whose grab the server refuses as a repeat - that left the clip muted: `swallow` sends that click's grab as a keepalive instead, `release` gives the slot back just before the click so the click takes it again (the room may see Pepe drop and re-take the mic), `plain` lets it be refused (a staging drill). Whatever the mode, Pepe checks his Talk button again right after a grab: switched off = he ends the silent hold, tries one normal click, and a clip that still can't play is refunded with no cooldown. `!mic fastgrab` alone shows how it's doing (won / lost / busy / muted) with fair=on|off and claim=, `!mic fastgrab hook` the packet hook's own count. **fastgrab inline** sends that grab from inside the packet hook itself - for a staging test only.",
    "examples": [
     "!mic onair on"
    ],
@@ -6957,6 +6997,40 @@
     "!saymod stats"
    ],
    "keywords": []
+  },
+  {
+   "id": "neversay",
+   "title": "!neversay add · remove · list · clear [-global]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!neversay"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!neversay",
+    "add <word or phrase>",
+    "remove <word or phrase>",
+    "list",
+    "clear",
+    "-global"
+   ],
+   "summary": "Words a room bans: Pepe stars them out in everything he types there and leaves them out of what he says.",
+   "details": "Some rooms' own bots kick for a word or a number (Players Lounge kicks for 111). Every match in a line Pepe sends into that room becomes stars of the same length (`111.` goes out as three stars and a dot), the rest of the line kept: his chat and AI replies, command answers, game lines, website users' relayed lines, `/msg` private messages to people in that room, captions and the room topic. A match is the whole word or number only, any case - `1110`, `2111` or `x111` are left alone, and only what's on the list counts (`one-eleven` isn't 111). A phrase is one entry. On the mic he simply skips the word, and the website shows the line the way the room got it. The room's list and the global one (`-global`) both apply. `!neversay` alone (or `list`) shows them dotted, so the answer itself can't trip the room's filter; `clear -all` empties every room's list too. Players Lounge starts with 111 on its list.",
+   "examples": [
+    "!neversay add 111",
+    "!neversay add some phrase",
+    "!neversay remove some phrase",
+    "!neversay list",
+    "!neversay clear -global"
+   ],
+   "keywords": [
+    "banned words",
+    "censor",
+    "filter",
+    "kick",
+    "never say"
+   ]
   },
   {
    "id": "activeroom",
@@ -8612,5 +8686,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "24043ff00476b375"
+ "hash": "e3413b5b05026a43"
 }
