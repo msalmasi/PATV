@@ -9,9 +9,11 @@
 //     committed in ONE transaction first; the auto account's merge runs in one transaction of its own (atomic) and the
 //     answer waits for it only a moment (CF_LINK_WAIT_MS)
 //   * a merge that fails is retried by the job tick - nothing half-moved, nothing moved twice
-//   * a repeat !verify of the code that login just used (same account, 15 minutes) answers 200 "already linked" with the
-//     same payload Pepe reads (frida-bot.py handle_verify: success, websiteUsername, unlinkedFrom, merged, addedBalance, addedXp)
-//   * the login re-key runs once per change (it ran twice: two login_changes rows per link)
+//   * a repeat !verify of the code that login just used (same account, 15 minutes) answers 200 "already linked" in the
+//     payload Pepe reads (frida-bot.py handle_verify: success, websiteUsername, unlinkedFrom, merged, addedBalance, addedXp)
+//     with nothing merged this time (review: today's Pepe ignores `already` and would announce the merge again)
+//   * the login re-key runs once per change (it ran twice: two login_changes rows per link), in the link's own transaction
+//     (review: a job retried after the login moved on recorded it late, onto a login that was someone else's by then)
 //   TZ=UTC node --test test/cfverify-fast.test.js      (uses a temp DB with the full schema)
 "use strict";
 const test = require("node:test");
@@ -161,19 +163,31 @@ test("the merge fails: nothing half-done (one transaction), the answer is still 
   assert.equal(Number((await row("fl-me")).points_balance), 338, "a done job never runs again");
 });
 
-test("a repeat !verify of the code that login just used: 200 'already linked', the same payload; anyone else, later, or after an unlink: 404", async () => {
+test("a repeat !verify of the code that login just used: 200 'already linked' (nothing merged THIS time); anyone else, later, or after an unlink: 404", async () => {
   await ready;
   await user("rp-me", { username: "replayreal", balance: 1 });
   await user("rp-auto", { username: "CFreplay", balance: 49, level: 1, xp: 0, cf: "replaycf" });
   await pending("rp-me", "replaycf", "RPT001");
   const first = await verify("RPT001", "replaycf");
   assert.equal(first.status, 200);
+  assert.equal(first.out.merged, true);
+  assert.equal(first.out.addedBalance, 49);
   await uc.settleCamfrogLinks();
   const again = await verify("RPT001", "ReplayCF");           // Pepe passes the chat author as typed
-  assert.equal(again.status, 200, `Pepe's retry (his first answer timed out) gets the outcome: ${JSON.stringify(again.out)}`);
+  assert.equal(again.status, 200, `Pepe's retry gets the outcome, not "Invalid or expired": ${JSON.stringify(again.out)}`);
+  for (const k of PAYLOAD) assert.ok(k in again.out, `the payload Pepe reads has ${k}: ${JSON.stringify(again.out)}`);
   assert.equal(again.out.success, true);
   assert.equal(again.out.already, true);
-  for (const k of PAYLOAD) assert.deepEqual(again.out[k], first.out[k], `${k} as in the first answer`);
+  assert.equal(again.out.websiteUsername, first.out.websiteUsername);
+  assert.equal(again.out.camfrogUsername, first.out.camfrogUsername);
+  // review: today's Pepe (frida-bot.py handle_verify) ignores `already` and says "Merged PAT X and Y XP from your bot
+  // account" whenever merged is true - a repeat must not read like a second credit
+  assert.equal(again.out.merged, false, "nothing merged this time - Pepe must not announce the merge again");
+  assert.equal(again.out.addedBalance, 0);
+  assert.equal(again.out.addedXp, 0);
+  assert.equal(again.out.unlinkedFrom, null, "nothing unlinked this time either");
+  assert.deepEqual(again.out.earlier, { merged: true, addedBalance: 49, addedXp: first.out.addedXp, unlinkedFrom: null },
+                   "what the link did, for a Pepe that reads `already`");
   assert.ok(again.ms < 1000, `${again.ms} ms`);
   assert.equal(Number((await row("rp-me")).points_balance), 50, "nothing merged twice");
   const other = await verify("RPT001", "someoneelse");
@@ -225,6 +239,72 @@ test("the login re-key runs once per change (prod: login_changes #45 and #46 for
                    "one row per change, the old holder's first");
   assert.equal((await row("rk-old")).camfrogUsername, null);
   assert.equal((await row("rk-new")).camfrogUsername, "rekeycf");
+});
+
+// review (finding 1): a job's merge failed and waits for its retry; meanwhile the login moved to ANOTHER account. The late
+// job must not touch the login: no login change recorded after the one that took it (Pepe and rekeySite would move the
+// first account's records onto a login that is someone else's now), and the login's notices / blocks are left for its
+// holder. The merge itself still lands on the account that proved the login first (the old path merged at link time).
+test("a link job retried after the login moved to another account: nothing login-specific lands on the old account", async () => {
+  await ready;
+  await user("mv-a", { username: "moveda" });
+  await user("mv-b", { username: "movedb" });
+  await user("mv-x", { username: "CFmoved", balance: 50, cf: "movedcf" });
+  await pending("mv-a", "movedcf", "MVA001");
+  slow.failNext = true;
+  const r1 = await verify("MVA001", "movedcf");
+  assert.equal(r1.status, 200, JSON.stringify(r1.out));
+  await uc.settleCamfrogLinks();
+  assert.equal((await getQuery("SELECT state FROM camfrog_link_jobs WHERE code = 'MVA001'"))[0].state, "merge", "the merge waits for its retry");
+  // B proves the same login (the job above still waiting)
+  await pending("mv-b", "movedcf", "MVB001");
+  const r2 = await verify("MVB001", "movedcf");
+  assert.equal(r2.status, 200, JSON.stringify(r2.out));
+  assert.equal(r2.out.unlinkedFrom, "moveda");
+  await uc.settleCamfrogLinks();
+  const lastB = (await getQuery("SELECT MAX(id) AS id FROM login_changes"))[0].id;
+  // things keyed by the login that arrive for its holder now (B)
+  await runQuery("INSERT INTO login_blocks (blocker_id, login, created) VALUES ('mv-someone', 'movedcf', ?)", [Date.now()]);
+  await runQuery("INSERT INTO inbox_pending (camfrog, kind, title, body, link, created, ref) VALUES ('movedcf', 'test', 'for the holder', '', '', ?, 'mv-ref')", [Date.now()]);
+  // the tick retries the first job
+  await uc.runCamfrogLinkJobs({ now: Date.now() + 3600e3 });
+  await uc.settleCamfrogLinks();
+  assert.equal((await getQuery("SELECT state FROM camfrog_link_jobs WHERE code = 'MVA001'"))[0].state, "done");
+  assert.equal(await exists("mv-x"), false, "merged into the account that proved the login first");
+  assert.equal(Number((await row("mv-a")).points_balance), 50);
+  assert.equal((await row("mv-a")).camfrogUsername, null);
+  assert.equal((await row("mv-b")).camfrogUsername, "movedcf");
+  const ch = await getQuery("SELECT id, userId, old_key, new_key, via FROM login_changes WHERE userId IN ('mv-a', 'mv-b') ORDER BY id");
+  assert.deepEqual(ch.map((c) => [c.userId, c.old_key, c.new_key, c.via]),
+                   [["mv-a", "u:mv-a", "movedcf", "camfrog:relink"],
+                    ["mv-a", "movedcf", "u:mv-a", "camfrog:taken"],
+                    ["mv-b", "u:mv-b", "movedcf", "camfrog:relink"]],
+                   "the login changes in the order they happened - none for A after B took the login");
+  assert.ok(ch.every((c) => c.id <= lastB), "nothing recorded by the late job");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM dm_blocks WHERE blocked_id = 'mv-a'"))[0].n, 0, "A got no block made on B's login");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM login_blocks WHERE login = 'movedcf'"))[0].n, 1, "left for the login's holder");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'mv-a' AND ref = 'mv-ref'"))[0].n, 0, "A got no notice for B's login");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox_pending WHERE camfrog = 'movedcf'"))[0].n, 1);
+});
+
+test("one account relinks twice while the first link's merge waits: its login changes land in the order they happened", async () => {
+  await ready;
+  await user("ro-a", { username: "reordera", cf: "orderk" });
+  await user("ro-x", { username: "CForderl", balance: 7, cf: "orderl" });
+  await pending("ro-a", "orderl", "ROL001");
+  slow.failNext = true;
+  assert.equal((await verify("ROL001", "orderl")).status, 200);
+  await uc.settleCamfrogLinks();
+  await pending("ro-a", "orderm", "ROM001");
+  assert.equal((await verify("ROM001", "orderm")).status, 200);
+  await uc.settleCamfrogLinks();
+  await uc.runCamfrogLinkJobs({ now: Date.now() + 3600e3 });
+  await uc.settleCamfrogLinks();
+  assert.equal(await exists("ro-x"), false, "the waiting merge landed");
+  assert.equal((await row("ro-a")).camfrogUsername, "orderm");
+  const ch = await getQuery("SELECT old_key, new_key FROM login_changes WHERE userId = 'ro-a' ORDER BY id");
+  assert.deepEqual(ch.map((c) => [c.old_key, c.new_key]), [["orderk", "orderl"], ["orderl", "orderm"]],
+                   "K -> L before L -> M (a late K -> L would strand K's records on L, which isn't this account's any more)");
 });
 
 test("completeCamfrogLink (the !signup claim page) still returns after the whole merge", async () => {
