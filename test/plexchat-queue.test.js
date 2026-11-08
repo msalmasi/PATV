@@ -1,4 +1,4 @@
-// 1.99?? site: plexqueue (owner 2026-11-08: "when i use !plex to add stuff to the stage, or use the video clerk mode, i seem to get the option
+// 1.99amw site: plexqueue (owner 2026-11-08: "when i use !plex to add stuff to the stage, or use the video clerk mode, i seem to get the option
 // to replace whats on the stage, but i should get the option of adding to the queue as well"): Pepe's bot route (plexchat.js POST
 // /api/medialib/bot) gets /stage's "+ Add to the queue" - op play mode "queue" = mediaqueue.queueFor - against the REAL media-control service
 // (deploy/mediactl, a mocked Plex + a fake ffmpeg), the test/upnext3.test.js harness:
@@ -355,7 +355,7 @@ test("an older bot: mode next / replace and plain plays answer as before; the ne
   assert.deepEqual([r.ok, r.replaced && r.replaced.title], [true, "Charade (1963)"], JSON.stringify(r));
 });
 
-// ── 1.99?? plexqueue review fixes (F2 / F6 / F8) ──
+// ── 1.99amw plexqueue review fixes (F2 / F6 / F8) ──
 test("review F2: a plain play refused busy (something from Plex started between Pepe's question and the yes) carries the speaker's padState and what queueing the title costs them (secs), so Pepe offers queue / replace right there; an older Pepe's fields are unchanged", async () => {
   await conf.set({ library_price: 50000 }, "test");
   await L.playFor(admin, { room: ROOM, key: "500" });

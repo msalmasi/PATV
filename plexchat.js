@@ -29,18 +29,18 @@
 //               find accepts qvec:{model,dim,v,scale}; malformed/mismatched vectors silently retain ordinary word search.
 //     play      {key, scope: title | episode | season | season_rest | series_from, target, price?, estimate?, mode: now | next | replace | queue}
 //               Clerk lists also send keys:[key], scope:list|series. Every key is checked before the existing queue builder runs.
-//               (1.99?? plexqueue: mode queue = /stage's "+ Add to the queue" - mediaqueue.queueFor: the END of a running queue the speaker may
+//               (1.99amw plexqueue: mode queue = /stage's "+ Add to the queue" - mediaqueue.queueFor: the END of a running queue the speaker may
 //                grow, else a queue of their OWN lined up after what's on; estimate = the row's queue_cost they said yes to;
 //                -> {queued, how: append | after, title, added, items, cost, per_hour, place, line, eta_sec, behind, behind_queue, behind_left}.
 //                A site that answers padState without library.queue_as doesn't know it: an older one reads it as a plain play - Pepe checks first)
-//               (1.99?? plexqueue review: mode queue + behind_slot = padState library.behind_slot, the title the confirm named - something else
+//               (1.99amw plexqueue review: mode queue + behind_slot = padState library.behind_slot, the title the confirm named - something else
 //                on by the yes: behind_changed {playing, behind_slot}; a plain play may send secs = its length: refused busy_library / busy_queue
 //                it carries the speaker's padState as state + queue_cost for those secs, so Pepe can offer queue / replace there)
 //               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
 //                goes on with its feature and card - medialib.playFor / mediaqueue.startFor {replace: true}; -> + replaced {title, queue})
 //     control   {action: pause | resume | stop | seek | seek_rel | next | prev, value}
 //     np        {target?}                                             -> the pad's 📼 player (read-only view) + the on-air label
-//     continue  {show?}                                               -> the speaker's next episode (last 14 days) as one row (1.99?? plexqueue: + queue_cost, how, pad)
+//     continue  {show?}                                               -> the speaker's next episode (last 14 days) as one row (1.99amw plexqueue: + queue_cost, how, pad)
 //     rpm       {text}                                                -> a private "only you can see this" row for that account
 //   refusals: {ok: false, code, error, price?, estimate?, label?, cap?, need?, have?, max?, by?} - code is one of CODES
 "use strict";
@@ -63,7 +63,7 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   "not_playing", "queue_off", "onair_off", "onair_library_off", "onair_staff", "onair_busy", "irl", "pepe_away", "rate", "link", "account", "bad",
   "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable",
   "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream", "embed_off", "embed_model", "embed_busy",
-  // 1.99?? plexqueue: the line's own refusals (mediaqueue.after / preflight) - Pepe words each one
+  // 1.99amw plexqueue: the line's own refusals (mediaqueue.after / preflight) - Pepe words each one
   "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after",
   // ... review F8: what a line-up was to wait for isn't on any more (Pepe asks again, naming what is)
   "behind_changed"];
@@ -142,7 +142,7 @@ function failBody(e) {
   if (x.playing_slot != null) out.playing_slot = String(x.playing_slot).slice(0, 64);   // (review fix: the slot Pepe names with the yes)
   if (e && e.price != null && out.price == null) out.price = e.price;
   if (e && e.label) out.label = String(e.label).slice(0, 120);
-  // 1.99?? plexqueue: a refusal's own figures (the line's "Lining it up takes X points ... and you have Y": need + balance; where it stands)
+  // 1.99amw plexqueue: a refusal's own figures (the line's "Lining it up takes X points ... and you have Y": need + balance; where it stands)
   for (const k of ["need", "place", "line"]) if (x[k] != null && Number.isFinite(Number(x[k]))) out[k] = Math.max(0, Math.floor(Number(x[k])));
   if (x.balance != null && Number.isFinite(Number(x.balance))) out.have = Math.max(0, Math.floor(Number(x.balance)));
   // ... review F8: the slot a line-up would go behind now (behind_changed); review F2: a busy plain play's padState for the speaker and what
@@ -348,7 +348,7 @@ async function opFind(user, b) {
       if (row.kind === "episode") row.estimate = per ? MQ().estimate(per, sec) : 0;
     }
     if (target === "stage" && state && state.library && state.library.queue && state.library.can_add) row.next_cost = await MQ().addCostFor(R.id, sec || 0).catch(() => 0);
-    if (target === "stage") { const qc = await queueCost(user, R, state, A, sec); if (qc != null) row.queue_cost = qc; }   // 1.99?? plexqueue
+    if (target === "stage") { const qc = await queueCost(user, R, state, A, sec); if (qc != null) row.queue_cost = qc; }   // 1.99amw plexqueue
   }
   return { ok: true, ...out, clerk: S.clerk_enabled, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
 }
@@ -449,7 +449,7 @@ async function opSearch(user, b) {
       row.next_cost = (await MQ().addCostFor(R.id, secs || 0).catch(() => null)) || 0;
     }
   }
-  // 1.99?? plexqueue: what "queue it" costs THIS speaker (padState library.queue_as: the end of their running queue / a queue of their own after
+  // 1.99amw plexqueue: what "queue it" costs THIS speaker (padState library.queue_as: the end of their running queue / a queue of their own after
   // what's on) - the figure play mode queue wants confirmed (a 409 re-asks with the right one)
   if (target === "stage") {
     for (const row of rows) {
@@ -459,7 +459,7 @@ async function opSearch(user, b) {
   }
   return { ok: true, rows, free: !!A.free, how: A.how || null, per_hour: per, state, target, pad: { id: R.id, title: R.title || R.id } };
 }
-/** 1.99?? plexqueue: what queueing `secs` of titles costs `user` on pad R (state = padState: its library.queue_as says how) - null: no queueing */
+/** 1.99amw plexqueue: what queueing `secs` of titles costs `user` on pad R (state = padState: its library.queue_as says how) - null: no queueing */
 async function queueCost(user, R, state, A, secs) {
   const how = state && state.library ? state.library.queue_as : null;
   if (how === "append") return (await MQ().addCostFor(R.id, secs || 0).catch(() => null)) || 0;
@@ -502,7 +502,7 @@ async function opPlay(user, b, ctx) {
     if (listed && keys.length > (conf().get().library_queue_max_items || 60)) throw new Fail("queue_full", "That list is longer than the queue limit.", 409);
   }
   if (b.mode === "queue") {
-    // 1.99?? plexqueue (owner 2026-11-08): Pepe's "queue it" = /stage's "+ Add to the queue" on this pad (mediaqueue.queueFor - its rules, its
+    // 1.99amw plexqueue (owner 2026-11-08): Pepe's "queue it" = /stage's "+ Add to the queue" on this pad (mediaqueue.queueFor - its rules, its
     // billing: the speaker's own, as it plays; estimate = the queue_cost they said yes to, 400 / 409 otherwise)
     const est = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
     // (review F8: behind_slot = the slot the confirm named - padState library.behind_slot; behind_changed if something else is on by the yes)
@@ -520,7 +520,7 @@ async function opPlay(user, b, ctx) {
     const r = await MQ().addNext(user, R.id, listed ? keys : [key], { estimate: est, scope: listed || scope === "title" || scope === "episode" ? null : scope });
     return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
-  // 1.99?? plexqueue review F2: something from Plex started between Pepe's question and a plain yes (busy_library / busy_queue): the refusal says
+  // 1.99amw plexqueue review F2: something from Plex started between Pepe's question and a plain yes (busy_library / busy_queue): the refusal says
   // what THIS speaker may do about it now (padState) and what queueing the title costs them (b.secs - its length as the row said; only a figure
   // to confirm: the queue yes is checked against the site's own, 400 / 409) - Pepe offers queue / replace right there. An older Pepe reads
   // can_replace / playing* as before
@@ -637,7 +637,7 @@ async function opContinue(user, b) {
                      scope: "episode", exact: true, price: per ? ML().priceFor(nxt.duration, 0, S).price : 0,
                      estimate: per ? MQ().estimate(per, nxt.duration) : 0, label: labelOf(nxt) });
   const state = await ML().padState(user, R.id).catch(() => null);
-  // 1.99?? plexqueue: with something on, Pepe offers "queue it" for the next episode too - what that costs this speaker (+ how / the pad, for its words)
+  // 1.99amw plexqueue: with something on, Pepe offers "queue it" for the next episode too - what that costs this speaker (+ how / the pad, for its words)
   const qc = await queueCost(user, R, state, A, nxt.duration);
   if (qc != null) row.queue_cost = qc;
   return { ok: true, row, free: !!A.free, how: A.how || null, state, pad: { id: R.id, title: R.title || R.id } };
@@ -659,7 +659,7 @@ async function audit(user, b, ctx, op, r) {
   try {
     const room = b.target === "cam" ? rooms().HOUSE_ROOM : (r.pad && r.pad.id) || b.room;
     const how = (ctx.via === "web" ? "web chat" : "room chat") + (ctx.login ? " as " + clean(ctx.login, 40) : "");
-    // 1.99?? plexqueue: mode queue - "queue" (the end of their own running queue) / "line up" (a queue of their own after what's on: its own action,
+    // 1.99amw plexqueue: mode queue - "queue" (the end of their own running queue) / "line up" (a queue of their own after what's on: its own action,
     // pepe_after, under the 📼 log's privacy rule for line-ups - only the pad's owner / admins see who lined up after someone's title)
     const qw = b.mode === "queue" && b.target !== "cam" ? (r.how === "after" ? "line up " : "queue ") : "";
     const what = op === "play" ? `${b.target === "cam" ? "cam " : ""}${qw}${b.mode === "next" ? "next " : b.mode === "replace" && b.target !== "cam" ? "instead " : ""}play ${clean(b.key, 12)}${r.title ? " -> " + clean(r.title, 80) : ""}`

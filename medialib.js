@@ -1041,7 +1041,7 @@ async function padState(user, room) {
                 // titles after this one (a replace ends them too)
                 can_replace: !!(user && user.userId && !(s && s.queue_id && !q) && (await mayControl(user, R.id, starter))),
                 left: q ? Math.max(0, q.items.length - q.pos - 1) : 0 };
-    // 1.99?? plexqueue (owner 2026-11-08: "i should get the option of adding to the queue as well"): what /stage's "+" offers THIS speaker here
+    // 1.99amw plexqueue (owner 2026-11-08: "i should get the option of adding to the queue as well"): what /stage's "+" offers THIS speaker here
     // (lineInfo - the sheet's own rules), so Pepe can offer "queue it" beside "replace it": queue_as "append" (the END of a running queue they
     // may grow) | "after" (a queue of their own lined up after what's on) | null (queue_why: queue_off / line_full / queue_held / busy / off);
     // line = the pad's line as they stand in it; booking_due = a booked stream plays next (no replace then - /stage hides it too, preflight
@@ -1057,7 +1057,7 @@ async function padState(user, room) {
     library.booking_due = li && li.booking ? li.booking : null;
     if (li && li.booking) library.can_replace = false;
     library.eta_sec = null;
-    // (1.99?? plexqueue review F6: a row of theirs already waiting - what they add goes on its end: after everyone ahead AND that row's titles)
+    // (1.99amw plexqueue review F6: a row of theirs already waiting - what they add goes on its end: after everyone ahead AND that row's titles)
     if (library.queue_as === "after") library.eta_sec = await MQ.lineEta(R.id, on, li.line, li.mineH ? li.line.indexOf(li.mineH) + 1 : Infinity).catch(() => null);
     else if (library.queue_as === "append") {
       const brk = await breakSec(R.id).catch(() => 0), rest = on.q.items.slice(on.q.pos + 1);
@@ -1066,7 +1066,7 @@ async function padState(user, room) {
     }
     // plexreplace review fix: the slot a replace names (Pepe sends it back with the yes - replace_changed if it isn't what's on by then)
     if (library.can_replace) library.slot_id = q ? q.slot_id : s.slot_id;
-    // 1.99?? plexqueue review F8: ... and the slot a line-up goes behind ("queue it after <title>" - Pepe sends it back: behind_changed if it isn't
+    // 1.99amw plexqueue review F8: ... and the slot a line-up goes behind ("queue it after <title>" - Pepe sends it back: behind_changed if it isn't
     // what's on by then); the end of their own queue names no title
     if (library.queue_as === "after" && on && on.slot_id) library.behind_slot = String(on.slot_id);
   }
@@ -1110,7 +1110,7 @@ async function state(user) {
 }
 /**
  * What "+ Add to the queue" means for `user` on pad R while `cur` (onNow, not busy) is on - ONE rule source for /stage's sheet (mine's on_pad)
- * and, 1.99?? plexqueue, Pepe's padState:
+ * and, 1.99amw plexqueue, Pepe's padState:
  *   upnext2 (E): a running queue you may grow (its starter, a library admin on a free one - mayGrow): can_add; or titles behind a single title
  *   (a queue of yours that starts when it ends - mediaqueue.after: whoever may ▶ Play here; one already waiting: its owner grows it).
  *   upnext3 (1.99alm, item 5): "+ Line up my queue after this one" behind someone else's running queue too, and in turn behind others lined
@@ -1173,7 +1173,7 @@ async function mine(user, roomId) {
       if (cur && !cur.busy) {
         out.on_pad = { title: cur.title || null, queue: !!cur.q, left: cur.left, by: cur.by || null, mine: !!(cur.starter && cur.starter === user.userId),
                        can_replace: !!(A.ok && (await mayControl(user, R.id, cur.starter))) };
-        // upnext2 (E) / upnext3 (1.99alm): "+ Add to the queue" / "+ Line up my queue" - lineInfo (1.99?? plexqueue: the same rules feed Pepe's
+        // upnext2 (E) / upnext3 (1.99alm): "+ Add to the queue" / "+ Line up my queue" - lineInfo (1.99amw plexqueue: the same rules feed Pepe's
         // padState, so chat offers exactly what this sheet does)
         const li = await lineInfo(user, R, cur, A);
         if (cur.q) out.on_pad.can_add = li.can_add;
@@ -1246,7 +1246,7 @@ async function player(user, room) {
   if (can) {
     const all = await mayControl(user, R.id, null);
     const rows = await getQuery("SELECT ts, user_id, username, action, detail FROM media_controls WHERE room_id = ? ORDER BY id DESC LIMIT 24", [R.id]);
-    // (1.99?? plexqueue: "pepe_after" = a line-up asked for in chat - the same privacy as the website's own queue_after row)
+    // (1.99amw plexqueue: "pepe_after" = a line-up asked for in chat - the same privacy as the website's own queue_after row)
     out.log = rows.filter((l) => all || !["queue_after", "queue_remove", "pepe_after"].includes(l.action) || (user && l.user_id === user.userId))
       .slice(0, 8).map((l) => ({ ts: l.ts, username: l.username, action: l.action, detail: l.detail }));
   }

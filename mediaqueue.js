@@ -973,7 +973,7 @@ async function addCostFor(roomId, secs) {
   if (!q) return null;
   return addCost(q, await I().session(roomId), secs);
 }
-// ── 1.99?? plexqueue: about WHEN something added now starts (Pepe's "#3 in the queue - it starts in about 1h10") ──
+// ── 1.99amw plexqueue: about WHEN something added now starts (Pepe's "#3 in the queue - it starts in about 1h10") ──
 /** What's left of the title on now (a pad's media_sessions row), by its live position: the saved position + what has played since its last
  *  look, plus what's left of its station break. Seconds. */
 function liveLeft(s) {
@@ -1074,7 +1074,7 @@ async function addNext(user, room, keys, opts = {}) {
       if (est == null || est === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT to the queue as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
       if (Math.floor(Number(est)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
     }
-    // 1.99?? plexqueue: opts.at "end" = /stage's "+ Add to the queue that's playing" (edit op add: on the END) - Pepe's "queue it"; else right
+    // 1.99amw plexqueue: opts.at "end" = /stage's "+ Add to the queue that's playing" (edit op add: on the END) - Pepe's "queue it"; else right
     // after the title on now (Pepe's "play it next"). ahead = titles still to come before the first one added (its place = ahead + 1)
     const end = !!(opts && opts.at === "end");
     const ahead = end ? Math.max(0, q.items.length - q.pos - 1) : 0;
@@ -1565,7 +1565,7 @@ async function after(user, b = {}) {
     const cur = await I().onNow(R);
     if (cur && cur.busy) throw refuse(409, "A queue is starting on this pad - try again in a moment.", { code: "busy_queue" });
     if (!cur) {
-      // 1.99?? plexqueue: a queue still 'starting' (no session yet) is what's on - not "nothing is playing" (the site lens's finding g)
+      // 1.99amw plexqueue: a queue still 'starting' (no session yet) is what's on - not "nothing is playing" (the site lens's finding g)
       if ((await getQuery("SELECT 1 FROM media_queues WHERE room_id = ? AND state = 'starting' LIMIT 1", [R.id]))[0]) {
         throw refuse(409, "A queue is starting on this pad - try again in a moment.", { code: "busy_queue" });
       }
@@ -1582,7 +1582,7 @@ async function after(user, b = {}) {
     if (cur.q && (await mayGrow(user, cur.q))) throw refuse(409, "Your queue is playing on this pad - add to it.", { code: "queue_on" });
     const behind = String(cur.slot_id);
     const nowTitle = cur.title || null;
-    // 1.99?? plexqueue review F8: b.behind_slot = the slot the person's confirm named ("queue it after <title>" - padState library.behind_slot):
+    // 1.99amw plexqueue review F8: b.behind_slot = the slot the person's confirm named ("queue it after <title>" - padState library.behind_slot):
     // something else on by the yes -> behind_changed with what's on now (Pepe asks again, naming it) - a line-up never goes behind a title nobody
     // agreed to wait for. An older caller (none): behind whatever is on, as before
     const wantBehind = typeof b.behind_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(b.behind_slot) ? b.behind_slot : null;
@@ -1616,7 +1616,7 @@ async function after(user, b = {}) {
         if (b.estimate == null || b.estimate === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT, charged as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
         if (Math.floor(Number(b.estimate)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
       }
-      // 1.99?? plexqueue review F6: about when the titles added now start - after everyone ahead AND this row's own titles already waiting (the line
+      // 1.99amw plexqueue review F6: about when the titles added now start - after everyone ahead AND this row's own titles already waiting (the line
       // as it stands before they go on: lineEta up to and including this row), not when the row itself starts
       const ln0 = await lineFor(R.id);
       const eta_sec = await lineEta(R.id, cur, ln0, ln0.findIndex((h) => h.row && h.row.id === wait.id) + 1);
@@ -1626,7 +1626,7 @@ async function after(user, b = {}) {
       await I().logControl(user, R.id, "queue_after", `+${put.length} title(s): ${fmtTitle(put[0])}`, { queue_id: wait.id });
       const ln = await lineFor(R.id);
       const at = ln.findIndex((h) => h.row && h.row.id === wait.id) + 1;
-      // 1.99?? plexqueue: + about when it starts and its rate (Pepe says where it landed)
+      // 1.99amw plexqueue: + about when it starts and its rate (Pepe says where it landed)
       return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0,
                place: at, line: ln.length, eta_sec, per_hour: Number(wait.per_hour) || 0 };
     }
@@ -1664,11 +1664,11 @@ async function after(user, b = {}) {
     try { stage.stageBump(R.id); } catch (e) { /* the 2 s cache: pages see it then */ }
     return { ok: true, after: true, queue_id: ins.id, added: built.items.length, items: built.items.length, total_sec: built.total_sec, estimate: pv.estimate,
              per_hour: pv.per_hour, title: fmtTitle(built.items[0]), behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0, place, line: ln.length,
-             eta_sec: await lineEta(R.id, cur, ln, Math.max(0, place - 1)) };       // (1.99?? plexqueue: about when it starts)
+             eta_sec: await lineEta(R.id, cur, ln, Math.max(0, place - 1)) };       // (1.99amw plexqueue: about when it starts)
   });
 }
 /**
- * 1.99?? plexqueue (owner 2026-11-08: "when i use !plex to add stuff to the stage, or use the video clerk mode, i seem to get the option to
+ * 1.99amw plexqueue (owner 2026-11-08: "when i use !plex to add stuff to the stage, or use the video clerk mode, i seem to get the option to
  * replace whats on the stage, but i should get the option of adding to the queue as well"): Pepe's "add it to the queue" from chat
  * (plexchat.js op play mode "queue") = exactly what /stage's "+" does for this person on this pad - one rule source, nothing copied:
  *   * a running queue they may grow (theirs, or a free one for a library admin - mayGrow): the titles go on its END (addNext at "end" = edit op
@@ -1838,5 +1838,5 @@ module.exports = { start, startFor, bookFor, addNext, mayGrow, addCost, addCostF
                    after, afterFor, cancelAfter, startAfter,                        // upnext2 (E): titles behind a single play
                    withdrawAfter, moveAfter,                                        // upnext2 review fixes (1.99alc)
                    lineFor, handOver, afterEnded, cancelLine, bookingDue, lineWaits, AFTER_MAX,     // upnext3 (1.99alm): the pad's line
-                   queueFor, lineEta, afterCostFor, liveLeft,                       // 1.99?? plexqueue: Pepe's "add it to the queue"
+                   queueFor, lineEta, afterCostFor, liveLeft,                       // 1.99amw plexqueue: Pepe's "add it to the queue"
                    _lock: withLock, _retire: retireForReplace };                    // plexreplace: medialib's replace (the pad's lock, a queue taken over)
