@@ -1,10 +1,13 @@
 /* ⚡ Fast mic grab - Pepe's !mic fastgrab switches and caps for one room, the global default or every room
    (grabcard 1.99amm; /admin/pepe/rooms#fastgrab - fastgrab.js -> website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py).
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change,
-   and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node). */
+   and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node).
+   1.99?? micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
+   and Pepe check it: 1-20 characters, never starting with / or !; empty = none). */
 (function () {
   'use strict';
-  var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty'];
+  var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty', 'blockbreak', 'selfunblock'];
+  var TEXTS = ['unblockcode'], CODE_MAX = 20;
   var ARITY = { rate: 1, shots: 1, tries: 1, breaker: 3, pause: 4, fairwait: 2, ceiling: 1 };
   // [field, label, units (one per number), what it does]
   var ROWS = [
@@ -20,14 +23,28 @@
     ['breaker', 'Breaker', ['misses in', 'min, rest', 'min'], 'That many grabs that did not play in that many minutes rest the fast grab there (rest 0 = never).'],
     ['pause', 'Contested pause', ['lost in', 's, pause', 's, up to', 's'], "Pepe's own pause on a mic he keeps losing (count 0 or first 0 = off; doubling up to the cap)."],
     ['fairwait', 'Fairness wait times', ['ms hold, wait', 'ms'], 'With fair on: a drop after a hold under the first number waits the second.'],
-    ['ceiling', 'Ceiling (every room)', ['grabs / min, all rooms'], "Pepe's fast grabs a minute across every room together - always every room's."]
+    ['ceiling', 'Ceiling (every room)', ['grabs / min, all rooms'], "Pepe's fast grabs a minute across every room together - always every room's."],
+    ['blockbreak', 'Block break', null, "Someone blocking Pepe's mic puts this room's mic on a 30-minute break (paid lines are refused before the charge meanwhile). Off = no break: Pepe tries again once the block is lifted."],
+    ['selfunblock', 'Self-unblock', null, "When someone blocks Pepe's mic here, he types the room's unblock code (below) a moment later - for a room bot that unblocks whoever types it. Once more 30 s later if no unblock comes; at most 3 in 10 min."],
+    ['unblockcode', 'Unblock code', null, 'What Pepe types to unblock himself (Players Lounge: 1). 1-20 characters, never starting with / or !; empty = none.']
   ];
   var FIELDS = ROWS.map(function (r) { return r[0]; });
   var LABELS = {}; ROWS.forEach(function (r) { LABELS[r[0]] = r[1]; });
-  var WORD = { on: 'fast grab', contest: 'contest', fair: 'fair', claim: 'claim', web: 'web clips', chatty: 'chatty' };
+  var WORD = { on: 'fast grab', contest: 'contest', fair: 'fair', claim: 'claim', web: 'web clips', chatty: 'chatty',
+               blockbreak: 'block break', selfunblock: 'self-unblock', unblockcode: 'unblock code' };
 
   function has(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
   function isToggle(f) { return TOGGLES.indexOf(f) >= 0; }
+  function isText(f) { return TEXTS.indexOf(f) >= 0; }
+  /** An unblock code typed in the card -> {code, err} (the site's codeClean: trimmed; empty / none = no code). */
+  function codeOf(v) {
+    var s = String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+    if (['', 'none', 'off', '-'].indexOf(s.toLowerCase()) >= 0) return { code: '', err: null };
+    if ((Array.from ? Array.from(s).length : s.length) > CODE_MAX) return { code: '', err: 'at most ' + CODE_MAX + ' characters' };
+    if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/.test(s)) return { code: '', err: 'printable characters only' };
+    if (s.charAt(0) === '/' || s.charAt(0) === '!') return { code: '', err: "it can't start with / or ! (that would be a command)" };
+    return { code: s, err: null };
+  }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
   function copy(o) { var out = {}; for (var k in (o || {})) if (has(o, k)) out[k] = o[k]; return out; }
   /** "global" | "all" | "room:<id>" -> {scope, room} */
@@ -62,6 +79,7 @@
   function fmt(f, v) {
     if (v == null) return '–';
     if (isToggle(f)) return v ? 'on' : 'off';
+    if (isText(f)) return v ? String(v) : 'none';
     return Array.isArray(v) ? v.join(' / ') : String(v);
   }
   /** "Players Lounge 15, Houseplants 6 / 10 / 15 (partly) +2 more" */
@@ -118,7 +136,7 @@
   /** One number input's text -> an int, or null (not a whole number). */
   function num(s) { var t = String(s == null ? '' : s).trim(); return /^-?\d{1,7}$/.test(t) ? parseInt(t, 10) : null; }
 
-  var api = { FIELDS: FIELDS, ROWS: ROWS, ARITY: ARITY, TOGGLES: TOGGLES, whereOf: whereOf, current: current, sourceOf: sourceOf,
+  var api = { FIELDS: FIELDS, ROWS: ROWS, ARITY: ARITY, TOGGLES: TOGGLES, TEXTS: TEXTS, codeOf: codeOf, whereOf: whereOf, current: current, sourceOf: sourceOf,
               overriders: overriders, ownList: ownList, implied: implied, shown: shown, prune: prune, change: change, fmt: fmt,
               rangeText: rangeText, num: num };
   if (typeof window !== 'undefined') window.PatvFastGrab = api;
@@ -189,6 +207,19 @@
         prune(V.fg, where(), EDIT); sync();
       });
       box.appendChild(s);
+      return box;
+    }
+    if (isText(f)) {                     // 1.99?? micblock: the unblock code (a text box; checked on change, never sent bad)
+      var t = el('input', 'ds-in'); t.type = 'text'; t.setAttribute('maxlength', String(CODE_MAX)); t.setAttribute('autocomplete', 'off');
+      t.setAttribute('data-fg', f); t.setAttribute('aria-label', label); t.setAttribute('placeholder', 'none');
+      t.value = v == null ? '' : String(v);
+      t.addEventListener('change', function () {
+        var c = codeOf(t.value);
+        if (c.err) { delete EDIT[f]; msg('⚠ ' + label + ': ' + c.err + '.', 'err'); prune(V.fg, where(), EDIT); sync(); return; }
+        EDIT[f] = c.code;
+        prune(V.fg, where(), EDIT); sync();
+      });
+      box.appendChild(t);
       return box;
     }
     var units = ROWS.filter(function (r) { return r[0] === f; })[0][2] || [];
@@ -280,6 +311,9 @@
         if (f && ARITY[f]) {
           var v = shown(cur, EDIT, f), x = ARITY[f] === 1 ? v : (v || [])[Number(n.getAttribute('data-i'))];
           n.value = x == null ? '' : String(x);
+        } else if (f && isText(f)) {
+          var tv = shown(cur, EDIT, f);
+          if (codeOf(n.value).err == null || has(EDIT, f)) n.value = tv == null ? '' : String(tv);   // (a refused code stays for fixing)
         } else if (n.getAttribute('data-every')) n.checked = has(EDIT, n.getAttribute('data-every'));
         else if (n.getAttribute('data-follow')) n.checked = !!FOLLOW[n.getAttribute('data-follow')];
       });

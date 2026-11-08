@@ -37,17 +37,21 @@
 <%# grabcard 1.99amm (the owner 2026-11-08: "where do i set the mic relay cooldowns and adjustable grab limits on the site?"): ⚡ Fast mic grab -
     Pepe's !mic fastgrab switches and caps for a room, the global default or every room (fastgrab.js: GET / POST /api/admin/pepe/fastgrab ->
     website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py; the values are the ones Pepe reports with his rooms state). The card's
-    script: public/js/admin-fastgrab.js. Admins only (pepe.rooms_commands_audio), each change audited (admin_audit pepe.fastgrab). %>
+    script: public/js/admin-fastgrab.js. Admins only (pepe.rooms_commands_audio), each change audited (admin_audit pepe.fastgrab).
+    1.99?? micblock: + Block break, Self-unblock and the Unblock code (the owner 11-08: "give me a toggle to remove this courtesy" / "a
+    toggle plus field for whatever the unblock code is"). %>
 <% const FG = locals.fg || { online: !!v.online, at: v.at || null, fg: (v.state && v.state.fastgrab) || null, actions: [] };
-   const _fgFmt = (x) => (typeof x === 'boolean' ? (x ? 'on' : 'off') : Array.isArray(x) ? x.join('/') : x == null ? '–' : String(x));
-   const _fgKeys = ['on', 'contest', 'fair', 'claim', 'web', 'chatty', 'rate', 'shots', 'tries', 'breaker', 'pause', 'fairwait', 'ceiling']; %>
+   const _fgFmt = (x) => (typeof x === 'boolean' ? (x ? 'on' : 'off') : Array.isArray(x) ? x.join('/') : x == null ? '–' : x === '' ? 'none' : String(x));
+   const _fgKeys = ['on', 'contest', 'fair', 'claim', 'web', 'chatty', 'rate', 'shots', 'tries', 'breaker', 'pause', 'fairwait', 'ceiling',
+                    'blockbreak', 'selfunblock', 'unblockcode']; %>
 <style>
   #fastgrab .fg-num { width: 6.5em; display: inline-block; margin: 2px 4px 2px 0; }
   #fastgrab tr.fg-edited td { background: var(--ds-gold-bg); }
   #fastgrab .fg-follow { display: block; margin-top: 4px; }
   #fastgrab .fg-unit { white-space: nowrap; }
   #fastgrab td .adm-help { margin: 2px 0 0; }
-  #fastgrab table.adm-tbl { max-height: none; }   /* (13 settings: the page scrolls, not a box inside it) */
+  #fastgrab table.adm-tbl { max-height: none; }   /* (16 settings: the page scrolls, not a box inside it) */
+  #fastgrab input[data-fg="unblockcode"] { width: 10em; }
   /* narrow screens (and the side panel): each setting is a block - name and what it does, then its value, where it comes from */
   @media (max-width: 760px) {
     #fastgrab table.adm-tbl, #fastgrab table.adm-tbl tbody, #fastgrab table.adm-tbl tr, #fastgrab table.adm-tbl td { display: block; width: auto; }
@@ -60,6 +64,7 @@
   <h2 id="fgT"><span class="ds-ic" aria-hidden="true">⚡</span> Fast mic grab <span class="adm-pill admin">admins</span> <span class="adm-pill" id="fgOnline"><%= FG.online ? (FG.fg ? 'live' : 'live (older Pepe)') : 'offline' %></span></h2>
   <p class="adm-help">How Pepe wins a mic people are fighting over while a soundboard clip, a paid <code>!say</code> or an alert waits for it: the switches and limits of <code>!mic fastgrab</code> (and Fast grab caps on his own panel). Pick a room to set its own values, or the global default that every room without its own follows (tick every room to also clear the rooms' own values, like <code>-all</code>). The values are what Pepe reports now; a save sends only what you changed, as one change, and he answers with what he stored - a number outside its range is clamped and the card says so.</p>
   <p class="adm-help">Looking for the <b>push-to-talk</b> (relayed mic) cooldown, clips per 10 minutes and max length? Those are on <a href="/admin/bridge#pttlimits">Bridge › Push-to-talk clips</a>.</p>
+  <p class="adm-help">When someone <b>blocks Pepe's mic</b> in a room: <b>Block break</b> (on by default) keeps him off that room's mic for 30 minutes; turn it off and he tries again as soon as the block is lifted. <b>Self-unblock</b> (off by default) makes him type the room's <b>Unblock code</b> in its chat a moment later, for a room bot that unblocks whoever types it (Players Lounge: <code>1</code>). Both are per room; a code is 1-20 characters and can't start with <code>/</code> or <code>!</code>.</p>
   <div class="adm-form">
     <label>Where<select id="fgWhere" class="ds-in">
       <option value="global">Global default (every room without its own)</option>
@@ -86,7 +91,7 @@
   </ul>
 </section>
 <script type="application/json" id="fgData"><%- JSON.stringify(FG).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-fastgrab.js?v=1" defer></script>
+<script src="/public/js/admin-fastgrab.js?v=2" defer></script>
 
 <script>
 (function () {

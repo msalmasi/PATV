@@ -272,6 +272,7 @@ test("micblock: block break + self-unblock switches and the unblock code - clean
   // the admin's change: validated - the code is checked here like Pepe checks it
   await pepeSays();
   await settle();
+  const n0 = (await queued()).length;
   const bad = [
     [{ unblockcode: "/unblockmic pepefrog" }], [{ unblockcode: "!sb ribbit" }], [{ unblockcode: "  /kick bob" }], [{ unblockcode: "x".repeat(21) }],
     [{ unblockcode: "1\n/kick bob" }], [{ unblockcode: "a\tb" }], [{ unblockcode: "\u200bx" }], [{ unblockcode: 1 }], [{ unblockcode: ["1"] }],
@@ -283,7 +284,7 @@ test("micblock: block break + self-unblock switches and the unblock code - clean
     assert.equal(r.d.field, Object.keys(set)[0], JSON.stringify(set));
     assert.ok(r.d.error && r.d.error.length > 5);
   }
-  assert.equal((await queued()).length, 0, "nothing queued");
+  assert.equal((await queued()).length, n0, "nothing queued");
   const r = await save({ scope: "room", room: YW, set: { unblockcode: "  Ok 1 ", selfunblock: "on", blockbreak: false, rate: 15 } });
   assert.equal(r.status, 200, JSON.stringify(r.d));
   assert.deepEqual(r.d.args, ["room", YW, "rate=15", "blockbreak=off", "selfunblock=on", "unblockcode=Ok 1"], "trimmed, case kept, in the card's order");

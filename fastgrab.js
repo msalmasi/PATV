@@ -16,9 +16,15 @@
 //          he stored + what he clamped, and pushes his state at once.
 //   admin  --GET  /api/admin/pepe/fastgrab-->  {online, at, fg, actions (the last mic.fastgrab actions + Pepe's answers), audit}
 //
-// Fields (the command's own words): on | contest | fair | web | chatty (on / off), claim (Pepe's modes), rate | shots | tries |
-// ceiling (a whole number), breaker (3) | pause (4) | fairwait (2) (whole numbers), and - for a room - follow (drop the room's own
-// value; it follows the global again). The ceiling is every room's whatever the scope. The site checks the SHAPE (a known field,
+// Fields (the command's own words): on | contest | fair | web | chatty | blockbreak | selfunblock (on / off), claim (Pepe's modes),
+// rate | shots | tries | ceiling (a whole number), breaker (3) | pause (4) | fairwait (2) (whole numbers), unblockcode (text), and -
+// for a room - follow (drop the room's own value; it follows the global again).
+// 1.99?? micblock (the owner, 11-08: "give me a toggle to remove this courtesy" / "I do want that in Players_Lounge (add this to the
+// admin page too, a toggle plus field for whatever the unblock code is in case it changes or is different in another room)"):
+// blockbreak = someone blocking Pepe's mic puts that room's mic on a 30-minute break (on by default, as before); selfunblock = when
+// someone blocks Pepe's mic there he types the room's unblockcode (for a room bot that unblocks whoever types it - Players Lounge's
+// is "1"; off by default). The code is checked here exactly as Pepe checks it (codeClean = pepe_fastgrabweb.unblock_code_clean):
+// 1-20 printable characters, trimmed, case kept, never a leading "/" or "!" - the line can never be a Camfrog or a Pepe command. The ceiling is every room's whatever the scope. The site checks the SHAPE (a known field,
 // on/off, a claim Pepe offers, the right count of whole numbers, a room Pepe reports); the RANGES are Pepe's - a number outside
 // one is clamped by him and the card shows "asked -> stored".
 // Guards: the Admin class (pepe.rooms_commands_audio, read from the account's row in the database - a stale sign-in can't), a
@@ -34,18 +40,22 @@ const KIND = "mic.fastgrab";
 const AUDIT = "pepe.fastgrab";
 const TAG = "pepe-fastgrab";
 const SCOPES = ["room", "global", "all"];
-const TOGGLES = ["on", "contest", "fair", "web", "chatty"];
+const TOGGLES = ["on", "contest", "fair", "web", "chatty", "blockbreak", "selfunblock"];
 const CLAIMS = ["swallow", "release", "plain"];
 const ARITY = Object.freeze({ rate: 1, shots: 1, tries: 1, breaker: 3, pause: 4, fairwait: 2, ceiling: 1 });
 const CAPS = Object.keys(ARITY);
-const FIELDS = Object.freeze(["on", "contest", "fair", "claim", "web", "chatty", ...CAPS]);   // (the card's order; Pepe applies contest first)
+const TEXTS = ["unblockcode"];
+const CODE_MAX = 20;
+// (the card's order; Pepe applies contest first)
+const FIELDS = Object.freeze(["on", "contest", "fair", "claim", "web", "chatty", ...CAPS, "blockbreak", "selfunblock", "unblockcode"]);
 const FOLLOW = "follow";
 const NUM_MAX = 1000000;
 const ROOMS_MAX = 20;
 const LAST_MAX = 8;
 const RATE = { max: 20, windowMs: 60 * 1000 };
 const hits = guard.limiter(RATE);
-const LABEL = { on: "fast grab", contest: "contest", fair: "fair", web: "web clips", chatty: "chatty", claim: "claim" };
+const LABEL = { on: "fast grab", contest: "contest", fair: "fair", web: "web clips", chatty: "chatty", claim: "claim",
+                blockbreak: "block break", selfunblock: "self-unblock", unblockcode: "unblock code" };
 
 class Refuse extends Error {
   constructor(status, msg, field = null) { super(msg); this.status = status; this.refuse = true; this.field = field; }
@@ -61,12 +71,29 @@ const ints = (v, n) => {
   return out.every((x) => x !== null) ? out : null;
 };
 
+/** 1.99?? micblock: a room's unblock code -> {code, err} - Pepe's own check (pepe_fastgrabweb.unblock_code_clean): trimmed; "" / none /
+    off = no code; else 1-CODE_MAX printable characters (no control, format or separator character but a plain space) that never start
+    with "/" or "!". */
+function codeClean(v) {
+  if (v != null && typeof v !== "string") return { code: "", err: "text" };
+  const s = String(v == null ? "" : v).trim();
+  if (["", "none", "off", "-"].includes(s.toLowerCase())) return { code: "", err: null };
+  if ([...s].length > CODE_MAX) return { code: "", err: `at most ${CODE_MAX} characters` };
+  if (/[\p{C}\p{Z}]/u.test(s.replace(/ /g, ""))) return { code: "", err: "printable characters only" };
+  if (s[0] === "/" || s[0] === "!") return { code: "", err: "it can't start with / or ! (that would be a command)" };
+  return { code: s, err: null };
+}
+
 /** One room's (or the global's) values from Pepe -> only the fields the card shows, each its own type (a bad one = left out). */
 function cleanValues(o, room) {
   if (!o || typeof o !== "object") return null;
   const v = {};
   for (const k of TOGGLES) if (typeof o[k] === "boolean") v[k] = o[k];
   if (typeof o.claim === "string" && /^[a-z]{1,12}$/.test(o.claim)) v.claim = o.claim;
+  for (const k of TEXTS) {
+    const c = typeof o[k] === "string" ? codeClean(o[k]) : null;
+    if (c && !c.err) v[k] = c.code;
+  }
   for (const k of CAPS) {
     const n = ints(o[k], ARITY[k]);
     if (n) v[k] = ARITY[k] === 1 ? n[0] : n;
@@ -94,6 +121,10 @@ function cleanState(s) {
   }
   for (const k of TOGGLES) if (s.defaults && typeof s.defaults[k] === "boolean") defaults[k] = s.defaults[k];
   if (s.defaults && typeof s.defaults.claim === "string") defaults.claim = str(s.defaults.claim, 12);
+  for (const k of TEXTS) {
+    const c = s.defaults && typeof s.defaults[k] === "string" ? codeClean(s.defaults[k]) : null;
+    if (c && !c.err) defaults[k] = c.code;
+  }
   const rooms = (Array.isArray(s.rooms) ? s.rooms : []).slice(0, 3 * ROOMS_MAX).map((r) => {
     const id = r && typeof r === "object" ? str(r.id, 128) : "";
     const values = id ? cleanValues(r.values, true) : null;
@@ -108,7 +139,10 @@ function cleanState(s) {
     for (const k of FIELDS) {
       if (!own(x.set, k)) continue;
       const val = x.set[k];
-      if (TOGGLES.includes(k) ? typeof val === "boolean" : k === "claim" ? typeof val === "string" : !!ints(val, ARITY[k])) {
+      if (TEXTS.includes(k)) {
+        const c = typeof val === "string" ? codeClean(val) : null;
+        if (c && !c.err) set[k] = c.code;
+      } else if (TOGGLES.includes(k) ? typeof val === "boolean" : k === "claim" ? typeof val === "string" : !!ints(val, ARITY[k])) {
         set[k] = k === "claim" ? str(val, 12) : val;
       }
       const c = own(x.clamped, k) ? x.clamped[k] : null;
@@ -157,6 +191,10 @@ function validate(b, fg) {
       if (k === "ceiling") throw new Refuse(400, "The ceiling is every room's - there's no global to follow.", k);
       if (scope !== "room") throw new Refuse(400, "Follow the global is for one room's own value.", k);
       set[k] = FOLLOW; enc = FOLLOW;
+    } else if (TEXTS.includes(k)) {
+      const c = codeClean(v);
+      if (c.err) throw new Refuse(400, `${LABEL[k]}: ${c.err === "text" ? "text" : c.err}.`, k);
+      set[k] = c.code; enc = c.code;
     } else if (TOGGLES.includes(k)) {
       const on = v === true || v === "on" ? true : v === false || v === "off" ? false : null;
       if (on === null) throw new Refuse(400, `${LABEL[k]}: on or off.`, k);
@@ -189,6 +227,7 @@ function labelOf(scope, room, fg, set) {
   const where = scope === "room" ? (((fg.rooms || []).find((r) => r.id === room) || {}).name || room) : scope === "all" ? "every room" : "global";
   const parts = Object.keys(set).map((k) => {
     const v = set[k];
+    if (TEXTS.includes(k) && v !== FOLLOW) return v ? `${LABEL[k]} "${v}"` : `${LABEL[k]} none`;
     return v === FOLLOW ? `${k} follows global` : typeof v === "boolean" ? `${LABEL[k]} ${v ? "on" : "off"}` : `${k} ${Array.isArray(v) ? v.join("/") : v}`;
   });
   return `Fast grab (${where}): ${parts.join(", ")}`;
@@ -264,4 +303,4 @@ function register(app, { addUser }) {
 }
 
 module.exports = { register, cleanState, cleanValues, validate, view, request, Refuse, KIND, AUDIT, TAG, FIELDS, TOGGLES, CAPS, ARITY,
-                   CLAIMS, SCOPES, FOLLOW, RATE, _hits: hits };
+                   CLAIMS, SCOPES, FOLLOW, RATE, TEXTS, CODE_MAX, codeClean, _hits: hits };
