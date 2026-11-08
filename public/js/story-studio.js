@@ -208,9 +208,33 @@
         || pull(spot(d.at === 'br' ? 'tl' : 'br', CORNERS[d.at === 'br' ? 'tl' : 'br'], GRIP.turn));
       return out;
     }
-    return { RATIO: RATIO, LIMITS: { text: TEXT, sticker: STICKER, deep: DEEP, small: SMALL, min: MIN, snap: SNAP }, GRIP: GRIP,
+    // storywide (1.99??): where the stage goes in the editor, in the editor's own px - o: { w, h, safe: { t, r, b, l }, foot: the
+    // post row's height }. The largest 9:16 inside the safe area: as wide as the screen where that fits, with the post row under
+    // it when there is room ('below') or else over its foot ('over', as in Snapchat); fitted by height - centred, equal margins -
+    // only when even the whole height can't hold the width. Its controls go inside it ('bleed'), unless it is too narrow for them
+    // (STAGE.bleed) and the margins beside it are wide enough to hold them (STAGE.side): then they go there ('framed' - a phone on
+    // its side). cover: how much of the stage's foot the post row covers; padB: where the post row ends, from the editor's foot.
+    // The layers are fractions of the stage, so its size never moves anything in the posted story.
+    var STAGE = { bleed: 320, side: 176 };
+    function fitStage(o) {
+      var sf = o.safe || {}, t = +sf.t || 0, r = +sf.r || 0, b = +sf.b || 0, l = +sf.l || 0, foot = Math.max(0, +o.foot || 0);
+      var cw = Math.max(0, +o.w || 0), ch = Math.max(0, +o.h || 0), aw = Math.max(0, cw - l - r), ah = Math.max(0, ch - t - b), tall = aw / RATIO;
+      var g = { foot: foot, dock: 'over', mode: 'bleed' };
+      if (tall + foot <= ah) { g.w = aw; g.h = tall; g.x = l; g.y = t + (ah - foot - tall) / 2; g.dock = 'below'; }
+      else if (tall <= ah) { g.w = aw; g.h = tall; g.x = l; g.y = t + (ah - tall) / 2; }
+      else { g.h = ah; g.w = ah * RATIO; g.x = l + (aw - g.w) / 2; g.y = t; }
+      g.right = cw - g.x - g.w; g.bottom = ch - g.y - g.h;
+      if (g.w < STAGE.bleed && g.x - l >= STAGE.side) g.mode = 'framed';
+      var inside = g.mode === 'bleed' && g.dock === 'over';
+      g.cover = inside ? foot : 0; g.padB = inside ? g.bottom : b;
+      // lift: with the post row under the stage, what stacks over it (a status, the progress, "Post it as it is") is lifted by the
+      // gap between them, into the stage's foot - never half over its edge
+      g.lift = g.mode === 'bleed' && g.dock === 'below' ? Math.max(0, g.bottom - g.padB - foot) : 0;
+      return g;
+    }
+    return { RATIO: RATIO, LIMITS: { text: TEXT, sticker: STICKER, deep: DEEP, small: SMALL, min: MIN, snap: SNAP }, GRIP: GRIP, STAGE: STAGE,
       cover: cover, contain: contain, rect: rect, widths: widths, canFill: canFill, place: place, zoom: zoom, pan: pan, layout: layout, same: same,
-      stickerPx: stickerPx, box: box, spread: spread, keepIn: keepIn, turnOf: turnOf, angle: angle, twoFinger: twoFinger, moveItem: moveItem, grips: grips };
+      stickerPx: stickerPx, box: box, spread: spread, keepIn: keepIn, turnOf: turnOf, angle: angle, twoFinger: twoFinger, moveItem: moveItem, grips: grips, fitStage: fitStage };
   })();
   function req(url, body, method) {
     var o = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };
@@ -247,7 +271,8 @@
     document.removeEventListener('visibilitychange', s.vis); document.removeEventListener('pointerdown', s.touch, true);
     window.removeEventListener('blur', s.away); window.removeEventListener('focus', s.back); window.removeEventListener('pageshow', s.back); window.removeEventListener('pagehide', s.leave);
     if (s.resize) window.removeEventListener('resize', s.resize);
-    if (s.viewport) window.visualViewport.removeEventListener('resize', s.viewport);
+    if (s.viewport) { window.visualViewport.removeEventListener('resize', s.viewport); window.visualViewport.removeEventListener('scroll', s.viewport); }
+    if (s.ro) { s.ro.disconnect(); s.ro = null; }
     s.root.remove(); document.body.style.overflow = s.oldOverflow; current = null;
     if (s.opener && s.opener.isConnected) s.opener.focus();
   }
@@ -345,10 +370,17 @@
     s.destination = add(row, button(null, function () { destinationSheet(s); }, 'quiet sst-destination')); s.destination.setAttribute('aria-label', _t('js.feed.sc.where', 'Where to post your story'));
     s.post = add(row, button(_t('js.feed.sc.post', 'Post story'), function () { post(s); }, 'sst-post'));
     s.rules = add(foot, el('p', 'sst-rules'));
-    s.identity = add(foot, el('p', 'sst-identity'));
+    s.identity = add(foot, el('p', 'sst-identity')); s.foot = foot;
+    // storywide: the safe area, as the editor's CSS sees it (env() can't be read from a script) - fit() measures it
+    s.safe = add(s.card, el('div', 'sst-safe')); s.safe.setAttribute('aria-hidden', 'true');
     s.key = function (e) { key(s, e); }; document.addEventListener('keydown', s.key, true);
     s.focus = function (e) { if (live(s) && !s.root.contains(e.target)) { var fs = focusables(s.root); (fs[0] || s.root).focus(); } }; document.addEventListener('focusin', s.focus);
-    s.resize = function () { layoutHandles(s); }; window.addEventListener('resize', s.resize);
+    s.resize = function () { fit(s); layoutHandles(s); }; window.addEventListener('resize', s.resize);
+    // storywide: a post row that changes size (a long pad name, a narrower stage) can move the stage - measured a frame later
+    if (window.ResizeObserver) {
+      s.ro = new window.ResizeObserver(function () { if (s.roFrame) return; s.roFrame = true; frameNow()(function () { s.roFrame = false; if (live(s) && fit(s)) layoutHandles(s); }); });
+      s.ro.observe(foot);
+    }
     // ssfix2: where the page is while a picker is out - away (hidden, blurred) and back (visible, focused, restored, touched)
     s.away = function () { if (s.pending && s.pending.phase === 'open') s.pending.away = true; };
     s.back = function () { back(s); };
@@ -361,9 +393,18 @@
     s.plVis = function () { hold(s, 'hidden', hiddenNow()); }; s.plHide = function () { hold(s, 'hidden', true); };
     document.addEventListener('visibilitychange', s.plVis); window.addEventListener('pagehide', s.plHide); window.addEventListener('pageshow', s.plVis);
     // storyux verify: the keyboard shrinks the editor; a pinch-zoomed page (scale > 1) doesn't - its visual viewport is smaller
-    // only because it is magnified
-    if (window.visualViewport) { s.viewport = function () { var v = window.visualViewport; s.root.style.setProperty('--sst-vh', Math.floor(v.height * (v.scale > 0 ? v.scale : 1)) + 'px'); layoutHandles(s); }; window.visualViewport.addEventListener('resize', s.viewport); s.viewport(); }
-    stage(s); paintControls(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
+    // only because it is magnified. storywide: a visual viewport scrolled down to the text field (the keyboard up; iOS keeps a fixed
+    // editor where the page was) moves the editor down with it (--sst-vt) - not a pinch-zoomed one's (that offset is the zoom's);
+    // and the stage is fitted again (fit())
+    if (window.visualViewport) {
+      s.viewport = function (e) {
+        var v = window.visualViewport, k = v.scale > 0 ? v.scale : 1;
+        s.root.style.setProperty('--sst-vh', Math.floor(v.height * k) + 'px'); s.root.style.setProperty('--sst-vt', (k <= 1.01 ? Math.max(0, Math.round(Number(v.offsetTop) || 0)) : 0) + 'px');
+        if (fit(s) || !e || e.type !== 'scroll') layoutHandles(s);       // (a pinch-zoomed page's scrolling moves nothing in the editor)
+      };
+      window.visualViewport.addEventListener('resize', s.viewport); window.visualViewport.addEventListener('scroll', s.viewport); s.viewport();
+    }
+    stage(s); paintControls(s); fit(s); say(s, _t('js.feed.sc.loading', 'Loading…')); s.root.focus();
     // storyplay: "+ Your story" is a tap - the first unlock of the editor's <video> (not a studio reopened by a reload: no tap)
     player(s); if (!resumed) unlock(s, 'open');
     // story camera: a new studio opens on the live camera; one reopened after a reload (ssfix) shows its picker and says what happened
@@ -410,6 +451,7 @@
     s.summaryPad.textContent = _t('js.feed.ss.posting_to', 'Posting to {name}', { name: p.profile ? _t('js.feed.ss.profile', 'Your profile') : p.title });
     s.summaryAs.textContent = _t('js.feed.ss.posted_as', 'Posted as {name}', { name: s.as });
     s.identity.textContent = s.summaryAs.textContent;
+    if (fit(s)) layoutHandles(s);        // storywide: the post row's words can change its height (where there's no ResizeObserver)
   }
   function paintControls(s) {
     var d = s.d; s.post.disabled = s.busy || !!s.pendingStickers || !s.target || !d.file || !d.valid || (!d.decoded && !d.legacy);
@@ -933,11 +975,31 @@
     });
     measure(s); placeSelect(s);
   }
+  // storywide (1.99??): the stage's box (G.fitStage) from the editor's own box, its safe area (the .sst-safe probe) and its post row,
+  // written as CSS variables on the editor - story-studio.css places the stage, the header, the tools, the post row, the sheets
+  // and the question from them, so no control is ever half over the stage's edge. Read on opening, on a resize (the keyboard
+  // too) and when the post row changes size - never during a gesture. -> true when anything changed (lay the handles out again)
+  function fit(s) {
+    if (!live(s) || !s.safe || !s.foot) return false;
+    var c = s.card.getBoundingClientRect(), p = s.safe.getBoundingClientRect(), f = s.foot.getBoundingClientRect(), cw = c.width || 0, ch = c.height || 0;
+    var safe = p.width > 0 && p.height > 0 ? { t: Math.max(0, p.top - c.top), l: Math.max(0, p.left - c.left), r: Math.max(0, c.left + cw - p.left - p.width), b: Math.max(0, c.top + ch - p.top - p.height) } : {};
+    var g = G.fitStage({ w: cw, h: ch, safe: safe, foot: f.height || 0 }), px = function (n) { return Math.round(n * 100) / 100 + 'px'; }, rtl = false;
+    try { rtl = getComputedStyle(s.root).direction === 'rtl'; } catch (e) { /* no styles: left to right */ }
+    // sx / sr: the stage's inline-start / -end margins (mirrored on a right-to-left page); lx: its left one (the stage itself is ltr)
+    var vars = { sx: rtl ? g.right : g.x, sr: rtl ? g.x : g.right, lx: g.x, sy: g.y, sw: g.w, sh: g.h, sb: g.bottom, 'pad-b': g.padB, cover: g.cover, foot: g.foot, lift: g.lift };
+    var key = Object.keys(vars).map(function (k) { return px(vars[k]); }).join(' ') + ' ' + g.mode + ' ' + g.dock;
+    if (key === s.fitKey) return false;
+    s.fitKey = key; s.fit = g;
+    Object.keys(vars).forEach(function (k) { s.root.style.setProperty('--sst-' + k, px(vars[k])); });
+    s.root.classList.toggle('sst-bleed', g.mode === 'bleed'); s.root.classList.toggle('sst-framed', g.mode === 'framed'); s.root.classList.toggle('sst-dock-over', g.dock === 'over');
+    return true;
+  }
   // storyux verify: the stage's size, the buttons over it (the header's and the tools' on a phone, a sheet) and the mention chips'
-  // sizes - read when the handles are laid out (a render, a resize, a sheet closing), never during a gesture
+  // sizes - read when the handles are laid out (a render, a resize, a sheet closing), never during a gesture. storywide: the post
+  // row's buttons too - over the stage's foot where it can't go under it
   function measure(s) {
     var hb = s.handles.getBoundingClientRect(); s.stageBox = { w: hb.width || 0, h: hb.height || 0 }; s.covers = []; s.chips = {};
-    Array.prototype.forEach.call(s.card.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-sheet, .sst-playbtn'), function (n) {
+    Array.prototype.forEach.call(s.card.querySelectorAll('.sst-head .ds-btn, .sst-tools .ds-btn, .sst-foot .ds-btn, .sst-sheet, .sst-playbtn'), function (n) {
       if (n.hidden || !n.offsetParent) return; var r = n.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0)) return;
       s.covers.push({ x0: r.left - hb.left, y0: r.top - hb.top, x1: r.left + r.width - hb.left, y1: r.top + r.height - hb.top });
     });

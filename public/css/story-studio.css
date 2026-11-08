@@ -1,7 +1,7 @@
 /* Story Studio: a documented full-screen editor variant of ds-scrim.sheet > ds-modal.
    The page remains underneath for no-reload posting. Crop, layer and trim handles are new
    controls built from ds tokens. All artwork stays in the local preview; mentions are DOM chips. */
-.sst { font-family: var(--ds-font); color: var(--ds-text); padding: var(--ds-sp-6); z-index: var(--ds-z-modal); touch-action: manipulation; }   /* storyux verify: no double-tap zoom on its buttons; a pinch on the sheets or the footer still zooms the page (their small print) - never on the picture or the buttons over it */
+.sst { font-family: var(--ds-font); color: var(--ds-text); padding: 0; z-index: var(--ds-z-modal); touch-action: manipulation; }   /* storyux verify: no double-tap zoom on its buttons; a pinch on the sheets or the footer still zooms the page (their small print) - never on the picture or the buttons over it */
 .sst.pad-acc {
   --ds-ac: var(--pad-accent);
   --ds-ac-2: var(--pad-accent);
@@ -14,22 +14,61 @@
 }
 .sst [hidden] { display: none !important; }
 .sst :is(button, input, textarea, select, a, [tabindex]):focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
-.sst .sst-card { inline-size: min(1100px, calc(100vw - 48px)); block-size: min(920px, calc(var(--sst-vh, 100dvh) - 48px)); max-block-size: none; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; background: var(--ds-surface); }
-.sst .sst-head { flex: none; display: flex; align-items: center; gap: var(--ds-sp-3); padding: var(--ds-sp-3) var(--ds-sp-4); border-block-end: 1px solid var(--ds-line); }
-.sst .sst-head .ds-pixel-h { font-size: 12px; line-height: 1.7; flex: 1; }
+/* storywide (1.99??): one layout on every screen, as in IG / Snapchat. The editor fills the visible screen (--sst-vh / --sst-vt from
+   the visual viewport: the keyboard, Chrome on iOS's bars) and the stage is the largest 9:16 in it - edge to edge on a phone. The
+   script (fit(): G.fitStage) writes the stage's box as variables on the editor: --sst-sx / --sst-sy its inline-start / top offset
+   (--sst-lx its left one), --sst-sw / --sst-sh its size, --sst-sr / --sst-sb the margins after and under it, --sst-pad-b where
+   the post row ends, --sst-cover how much of the stage's foot the post row covers, --sst-foot its height; and the classes
+   sst-bleed (every control inside the stage), sst-framed (a stage too narrow to hold them, with room beside it - a phone on its
+   side: they go wholly in the margins) and sst-dock-over (the post row over the picture's foot, not under it). No control is
+   ever half over the stage's edge. The 9:16 output is unchanged: the layers are fractions of the stage, whatever its size. */
+.sst.ds-scrim.sheet { padding: 0; place-items: stretch; inset-block-start: var(--sst-vt, 0px); background: var(--ds-media-bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.sst.ds-scrim.sheet .sst-card { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: flex-end; gap: 0; inline-size: 100%; block-size: var(--sst-vh, 100dvh); max-block-size: none;
+  border: 0; border-radius: var(--ds-r-xs); padding: 0; padding-inline: var(--sst-sx, 0px) var(--sst-sr, 0px); padding-block-end: var(--sst-pad-b, 0px); overflow: hidden; background: var(--ds-media-bg); }
+/* the safe area as this CSS sees it (the notch, the home indicator) - env() can't be read from a script; fit() measures this box */
+.sst .sst-safe { position: absolute; inset: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); visibility: hidden; pointer-events: none; }
+.sst .sst-body { position: absolute; inset: 0; display: block; }
+.sst .sst-work, .sst .sst-preview-wrap { display: block; }
+.sst .sst-summary, .sst .sst-filename, .sst .sst-rules { display: none; }   /* the editor is the picture: its 24 h is the header's, the pad rules are in ⚙️ */
+/* the stage: where the script puts it (its own direction is ltr, so it is placed from the left) */
+.sst .sst-preview { position: absolute; inset-block-start: var(--sst-sy, 0px); inset-inline-start: var(--sst-lx, var(--sst-sx, 0px)); inline-size: var(--sst-sw, 100%); block-size: var(--sst-sh, 100%); overflow: hidden;
+  background: var(--ds-media-bg); border-radius: var(--ds-r-lg); isolation: isolate; direction: ltr; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.sst.sst-framed .sst-preview { border-radius: var(--ds-r-sm); }
+/* the header: across the stage's top, inside it - the X at its start, then the title, 24 h, 🔇 / 🔊 and ⚙️ - over a soft scrim */
+.sst .sst-head { position: absolute; inset-block-start: var(--sst-sy, 0px); inset-inline-start: var(--sst-sx, 0px); inline-size: var(--sst-sw, 100%); z-index: var(--ds-z-sticky); display: flex; align-items: center; gap: var(--ds-sp-2);
+  padding: var(--ds-sp-3); border: 0; border-start-start-radius: var(--ds-r-lg); border-start-end-radius: var(--ds-r-lg); box-shadow: var(--ds-e-0) !important; background: linear-gradient(var(--ds-media-chip), transparent); }
+.sst .sst-head .ds-pixel-h { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.7; text-shadow: 0 1px 3px var(--ds-media-bg); }
+.sst .sst-head .ds-btn { background: var(--ds-media-chip); border-color: transparent; border-radius: var(--ds-r-pill); }
+.sst .sst-lifetime { flex: none; padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 11px; white-space: nowrap; }
 /* storyux: every icon button is a circle with its icon only (its words are its aria-label and tooltip) */
 .sst .ds-btn.sst-round { display: inline-grid; place-items: center; flex: none; inline-size: 40px; min-inline-size: 40px; block-size: 40px; min-block-size: 40px; padding: 0; border-radius: 50%; line-height: 1; }
 .sst .ds-btn.sst-round .ds-ic { font-size: 18px; line-height: 1; }
+.sst .sst-head .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
+.sst .sst-head .ds-btn.sst-round .ds-ic { font-size: 20px; }
 /* storyplay: a clip plays by itself; where this browser still refuses, a round ▶ over the picture plays it on a tap (its press is
    never the stage's: no pan, no pinch under it). The sound is the header's round 🔇 / 🔊, like its other icons */
 .sst .ds-btn.sst-playbtn { position: absolute; inset-block-start: 50%; inset-inline-start: 50%; transform: translate(-50%, -50%); z-index: var(--ds-z-raised); pointer-events: auto; touch-action: manipulation;
   inline-size: 72px; min-inline-size: 72px; block-size: 72px; min-block-size: 72px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line-strong); box-shadow: var(--ds-e-2); }
 .sst .ds-btn.sst-playbtn .ds-ic { font-size: 30px; }
-.sst .sst-lifetime { color: var(--ds-text-muted); font-size: 12px; white-space: nowrap; }
-.sst .sst-body { flex: 1 1 0; min-block-size: 120px; display: grid; grid-template-columns: minmax(0, 1fr) 240px; }
-.sst .sst-work { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; padding: var(--ds-sp-3) var(--ds-sp-4); gap: var(--ds-sp-2); }
-.sst .sst-preview-wrap { display: flex; flex: 1 1 0; min-block-size: 80px; align-items: center; justify-content: center; container-type: size; }
-.sst .sst-preview { position: relative; block-size: min(100%, 70vh, 640px); max-inline-size: 100%; aspect-ratio: 9 / 16; overflow: hidden; background: var(--ds-media-bg); border-radius: var(--ds-r-sm); isolation: isolate; direction: ltr; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+/* the tools: a column inside the stage's end edge, under the header (as in IG); it scrolls on a stage too short for all of them */
+.sst .sst-tools { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 64px); inset-inline-end: calc(var(--sst-sr, 0px) + var(--ds-sp-2)); z-index: var(--ds-z-sticky); display: flex; flex-direction: column; justify-content: flex-start;
+  gap: var(--ds-sp-3); padding: var(--ds-sp-1); border: 0; max-block-size: calc(var(--sst-sh, 100%) - 76px - var(--sst-cover, 0px)); overflow: auto; }
+.sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line); box-shadow: var(--ds-e-1); }
+.sst .sst-tools .ds-btn.sst-round:focus-visible { box-shadow: var(--ds-focus-ring), var(--ds-e-1); }
+.sst .sst-tools .ds-ic { font-size: 22px; }
+.sst .sst-tools [aria-pressed="true"], .sst .ds-seg [aria-pressed="true"] { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
+/* storyux verify: over the picture, only the buttons take a touch - a layer under the header's gradient or between the tools
+   can still be grabbed - and a pinch there never zooms the page */
+.sst .sst-head, .sst .sst-tools { pointer-events: none; touch-action: pan-x pan-y; }
+.sst .sst-head .ds-btn, .sst .sst-tools .ds-btn { pointer-events: auto; }
+.sst:not(.sst-has-media) .sst-tools, .sst:not(.sst-video) [data-tool="trim"] { display: none; }
+/* beside a stage too narrow to hold them (a phone on its side): the header across the screen's top and the tools next to the
+   stage, wholly in the margins */
+.sst.sst-framed .sst-head { inset-block-start: 0; inset-inline: 0; inline-size: auto; padding-block: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)) var(--ds-sp-4);
+  padding-inline: max(var(--ds-sp-3), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); border-start-start-radius: 0; border-start-end-radius: 0; background: none; }
+.sst.sst-framed .sst-head .ds-pixel-h { flex: 0 1 auto; max-inline-size: calc(var(--sst-sx, 0px) - 76px); }
+.sst.sst-framed .sst-lifetime { margin-inline-start: auto; }
+.sst.sst-framed .sst-tools { inset-block-start: calc(64px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-2), calc(var(--sst-sr, 0px) - 64px)); max-block-size: calc(100% - 76px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
 /* storyux: the stage - a picture to drag and pinch (no page scroll, zoom, text selection or long-press callout under it) */
 .sst.sst-has-media .sst-preview { cursor: grab; }
 .sst.sst-has-media .sst-preview:active { cursor: grabbing; }
@@ -56,47 +95,78 @@
 .sst .sst-guide { position: absolute; pointer-events: none; background: var(--ds-ac); opacity: .9; }
 .sst .sst-guide[data-guide="v"] { inset-block: 0; inset-inline-start: 50%; inline-size: 1px; transform: translateX(-50%); }
 .sst .sst-guide[data-guide="h"] { inset-inline: 0; inset-block-start: 50%; block-size: 1px; transform: translateY(-50%); }
-/* the X's quiet question: discard the edits? (in the editor, never a browser dialog) */
-.sst .sst-ask { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); flex: none; padding: var(--ds-sp-2) var(--ds-sp-4); background: var(--ds-surface-3); border-block: 1px solid var(--ds-line-menu); }
+/* the X's quiet question: discard the edits? (in the editor, never a browser dialog) - under the header, inside the stage */
+.sst .sst-ask { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 68px); inset-inline: calc(var(--sst-sx, 0px) + var(--ds-sp-3)) calc(var(--sst-sr, 0px) + var(--ds-sp-3)); z-index: var(--ds-z-pop);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); padding: var(--ds-sp-2) var(--ds-sp-4); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); background: var(--ds-media-panel); box-shadow: var(--ds-e-3); }
 .sst .sst-ask p { flex: 1 1 140px; margin: 0; font-size: 14px; font-weight: 700; }
 .sst .sst-ask-go { background: var(--ds-danger-solid); border-color: transparent; color: var(--ds-text-strong); }
 .sst .sst-mention { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); inline-size: max-content; max-inline-size: 90%; padding: var(--ds-sp-1) var(--ds-sp-2); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4); color: var(--ds-text-muted); font-size: 14px; }
+.sst .sst-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--ds-sp-3); text-align: center; padding: var(--ds-sp-4) var(--ds-sp-8); color: var(--ds-text-muted); font-size: 14px;
+  background: radial-gradient(ellipse at 50% 35%, var(--ds-ac-bg), transparent 65%); }
 /* (ssfix: .ds-ic is a fixed 1.25em box - as a grid item it sat at the start of the column the words make, not over them) */
 .sst .sst-empty .ds-ic { font-size: 36px; }
-.sst .sst-picks { display: flex; align-items: center; gap: var(--ds-sp-2); flex: none; }
-.sst .sst-picks { justify-content: center; }
-.sst .sst-picks .ds-btn.sst-round { inline-size: 48px; min-inline-size: 48px; block-size: 48px; min-block-size: 48px; }
-.sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 22px; }
-.sst .sst-filename { flex: none; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-inline-size: 0; font-size: 11px; color: var(--ds-text-muted); }
-.sst .sst-summary { border-inline-start: 1px solid var(--ds-line); padding: var(--ds-sp-6); font-size: 14px; overflow: auto; }
-.sst .sst-summary p { margin: var(--ds-sp-5) 0; padding-block-end: var(--ds-sp-3); border-block-end: 1px solid var(--ds-line); overflow-wrap: anywhere; }
-.sst .sst-tools { display: flex; justify-content: center; gap: var(--ds-sp-3); flex: none; padding: var(--ds-sp-2) var(--ds-sp-4); border-block: 1px solid var(--ds-line); }
-.sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-sunken); --b-line: var(--ds-line); }
-.sst .sst-tools .ds-ic { font-size: 20px; }
-.sst .sst-tools [aria-pressed="true"], .sst .ds-seg [aria-pressed="true"] { background: var(--ds-ac-bg); color: var(--ds-ac-2); border-color: var(--ds-ac-line); }
-.sst .sst-foot { flex: none; padding: var(--ds-sp-3) var(--ds-sp-4); border-block-start: 1px solid var(--ds-line); }
-.sst .sst-decision { display: flex; gap: var(--ds-sp-3); align-items: stretch; justify-content: space-between; }
-.sst .sst-destination { justify-content: flex-start; padding: var(--ds-sp-1) var(--ds-sp-2); text-align: start; min-inline-size: 0; max-inline-size: 65%; background: transparent; border: 0; }
+.sst .sst-empty > .ds-ic { font-size: 48px; }
+.sst .sst-empty p { font-size: 20px; color: var(--ds-text-strong); line-height: 1.4; max-inline-size: 220px; margin: 0 auto; }
+/* the empty stage's Camera and Gallery: inside it, above the post row */
+.sst .sst-picks { position: absolute; inset-inline: var(--sst-sx, 0px) var(--sst-sr, 0px); inset-block-end: calc(var(--sst-sb, 0px) + var(--sst-cover, 0px) + var(--ds-sp-6)); z-index: var(--ds-z-raised);
+  display: flex; align-items: center; justify-content: center; gap: var(--ds-sp-6); }
+.sst .sst-picks .ds-btn.sst-round { inline-size: 64px; min-inline-size: 64px; block-size: 64px; min-block-size: 64px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; }
+.sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 26px; }
+.sst .sst-picks .ds-btn.sst-round[data-picker="camera"] { order: 1; inline-size: 88px; min-inline-size: 88px; block-size: 88px; min-block-size: 88px; border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
+/* the post row, with the status, the progress and the recovery above it: under the stage where it fits; else over its foot
+   (sst-dock-over) on a soft scrim, its buttons the only things there that take a touch; beside a narrow stage, in the margins */
+.sst .sst-foot { margin-block-start: var(--sst-lift, 0px); padding: var(--ds-sp-2) var(--ds-sp-3); border: 0; background: transparent; }   /* lift: what stacks over a post row under the stage sits inside the stage's foot */
+.sst .sst-status, .sst .sst-recovery, .sst .sst-progress, .sst .sst-foot { position: relative; z-index: var(--ds-z-raised); flex: none; }
+.sst.sst-dock-over .sst-foot { pointer-events: none; background: linear-gradient(transparent, var(--ds-media-chip)); border-end-start-radius: var(--ds-r-lg); border-end-end-radius: var(--ds-r-lg); }
+.sst.sst-dock-over .sst-foot .ds-btn { pointer-events: auto; }
+.sst.sst-framed.ds-scrim.sheet .sst-card { padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }   /* the post row across the screen: its two ends in the margins */
+.sst.sst-framed .sst-foot { border-end-start-radius: 0; border-end-end-radius: 0; }
+.sst .sst-decision { display: flex; gap: var(--ds-sp-2); align-items: center; justify-content: space-between; }
+.sst .sst-destination { --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; justify-content: flex-start; padding: var(--ds-sp-1) var(--ds-sp-3) var(--ds-sp-1) var(--ds-sp-1); text-align: start; min-inline-size: 0; max-inline-size: 60%; }
 .sst .sst-destination > span { display: grid; min-inline-size: 0; }
 .sst .sst-destination small { font-size: 11px; color: var(--ds-text-muted); font-weight: 400; }
-.sst .sst-destination strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sst .sst-destination strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sst .sst-avatar { border-radius: var(--ds-r-sm); display: inline-grid; place-content: center; background: var(--ds-ac-bg); color: var(--ds-ac-2); font-size: 16px; }
 .sst .sst-avatar.sst-person { border-radius: 50%; }
-.sst .sst-post { min-inline-size: 150px; font-size: 14px; }
-.sst .sst-rules { margin: var(--ds-sp-2) 0 0; text-align: center; color: var(--ds-text-muted); font-size: 11px; }
-.sst .sst-identity { display: none; margin: var(--ds-sp-1) 0 0; color: var(--ds-text-muted); text-align: center; font-size: 11px; overflow-wrap: anywhere; }
+.sst .sst-post { min-inline-size: 110px; max-inline-size: 45%; font-size: 14px; white-space: normal; border-radius: var(--ds-r-pill); }
+.sst:not(.sst-has-media) .sst-post { display: none; }
+.sst:not(.sst-has-media) .sst-destination { max-inline-size: 100%; }
+.sst .sst-identity { margin: var(--ds-sp-1) 0 0; margin-inline-start: var(--ds-sp-2); color: var(--ds-text); text-align: start; font-size: 11px; overflow-wrap: anywhere; text-shadow: 0 1px 2px var(--ds-media-bg); }
+.sst.sst-framed .sst-destination { max-inline-size: calc(var(--sst-sx, 0px) - 2 * var(--ds-sp-3)); }
+.sst.sst-framed .sst-identity { max-inline-size: calc(var(--sst-sx, 0px) - 3 * var(--ds-sp-3)); }
+.sst.sst-framed .sst-post { max-inline-size: calc(var(--sst-sr, 0px) - 2 * var(--ds-sp-3)); }
 .sst .sst-rules a, .sst .sst-sheet a { color: var(--ds-ac-2); }
-.sst .sst-status { flex: none; font-size: 13px; padding-inline: var(--ds-sp-4); overflow-wrap: anywhere; }
+.sst .sst-status { font-size: 13px; padding-inline: var(--ds-sp-4); overflow-wrap: anywhere; }
 .sst .sst-status:not(:empty) { padding-block: var(--ds-sp-2); }
 .sst .sst-error { background: var(--ds-danger-bg); color: var(--ds-danger); border-block-start: 1px solid var(--ds-danger-line); }
-.sst .sst-recovery, .sst .sst-progress { display: flex; align-items: center; gap: var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-4); flex: none; }
+.sst .sst-recovery, .sst .sst-progress { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2); padding: var(--ds-sp-2) var(--ds-sp-4); }
+.sst .sst-recovery .ds-btn { white-space: normal; }
 .sst .sst-progress progress { flex: 1; accent-color: var(--ds-ac); inline-size: 0; }
-.sst .sst-sheet-slot { flex: none; min-block-size: 0; }
-.sst .sst-sheet { background: var(--ds-surface-3); border-block-start: 1px solid var(--ds-line-menu); padding: var(--ds-sp-2) var(--ds-sp-4); max-block-size: 34dvh; overflow: auto; }
-.sst .sst-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); margin-block-end: var(--ds-sp-2); }
-.sst .sst-sheet-body { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); position: relative; }
+.sst .sst-status, .sst .sst-progress, .sst .sst-recovery { background: var(--ds-media-bg); }
+/* (ssfix: an error keeps its plate on a phone too - a bare red line under the picture read as nothing having happened) */
+.sst .sst-status.sst-error { background: var(--ds-danger-bg); }
+.sst.sst-busy .sst-tools, .sst.sst-busy .sst-picks { display: none; }
+/* the sheets float over the picture from the bottom (as wide as the stage, at least 420 px), so opening a tool never changes the
+   composition; the selection's handles stay usable above them */
+.sst .sst-sheet-slot { position: absolute; inset-block: calc(var(--sst-sy, 0px) + 64px) 0; inset-inline: max(0px, calc((100% - max(var(--sst-sw, 100%), 420px)) / 2)); z-index: var(--ds-z-nav);
+  display: flex; flex-direction: column; justify-content: flex-end; min-block-size: 0; pointer-events: none; }
+.sst.sst-framed .sst-sheet-slot { inset-block-start: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)); }   /* between the header's corners: a short screen keeps its height for the sheet */
+.sst.sst-framed .sst-sheet { max-block-size: min(80%, 480px); }
+.sst .sst-sheet { display: flex; flex-direction: column; pointer-events: auto; padding: var(--ds-sp-2) var(--ds-sp-4) calc(var(--ds-sp-3) + env(safe-area-inset-bottom, 0px)); max-block-size: min(62%, 480px); overflow: hidden;
+  background: var(--ds-surface-3); border-block-start: 1px solid var(--ds-line-menu); border-start-start-radius: var(--ds-r-2xl); border-start-end-radius: var(--ds-r-2xl); box-shadow: var(--ds-e-3); animation: sst-sheet-in 160ms ease-out; }
+.sst .sst-sheet::before { content: ''; flex: none; align-self: center; inline-size: 32px; block-size: 4px; border-radius: var(--ds-r-pill); background: var(--ds-line-strong); margin-block: var(--ds-sp-1) var(--ds-sp-2); }
+.sst .sst-sheet-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: var(--ds-sp-3); margin-block-end: var(--ds-sp-2); }
+.sst .sst-sheet-head .ds-btn { flex: none; }
+.sst .sst-sheet-head .ds-eyebrow { min-inline-size: 0; overflow-wrap: anywhere; }
+.sst .sst-sheet-body { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-2) var(--ds-sp-3); position: relative; overflow: auto; overscroll-behavior: contain; min-block-size: 0; padding: var(--ds-sp-1); }
 .sst .sst-sheet-body > .sst-text-input, .sst .sst-sheet-body > .sst-trim-bar, .sst .sst-sheet-body > .sst-position, .sst .sst-sheet-body > .sst-stickers { flex-basis: 100%; }
+.sst[data-sheet="options"] .sst-sheet-body > .sst-field, .sst[data-sheet="options"] .sst-sheet-body > .sst-help { flex-basis: 100%; }
+/* Keep the footer's space to prevent canvas jumps, while removing covered controls from focus. */
+.sst.sst-has-sheet .sst-foot { visibility: hidden; }
+.sst.sst-has-sheet .sst-tools, .sst.sst-has-sheet .sst-picks { display: none; }
+/* a sheet over the picture: a status says itself under the header, inside the stage */
+.sst.sst-has-sheet .sst-status:not(:empty) { position: absolute; inset-block-start: calc(var(--sst-sy, 0px) + 68px); inset-inline: calc(var(--sst-sx, 0px) + var(--ds-sp-3)) calc(var(--sst-sr, 0px) + var(--ds-sp-3)); z-index: var(--ds-z-pop);
+  border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
 .sst .sst-field { display: flex; align-items: center; gap: var(--ds-sp-2); flex: 1 1 140px; min-inline-size: 0; }
 .sst .sst-field .ds-label { font-size: 11px; text-transform: none; letter-spacing: normal; }
 .sst .sst-field .ds-in { min-inline-size: 0; inline-size: 100%; }
@@ -104,9 +174,10 @@
 .sst .sst-field input[type="checkbox"] { inline-size: 20px; block-size: 20px; accent-color: var(--ds-ac); }
 .sst .sst-position { display: flex; gap: var(--ds-sp-3); flex-wrap: wrap; }
 .sst .sst-help { color: var(--ds-text-muted); font-size: 11px; margin: 0; }
-.sst .sst-colors { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1); }
-.sst .sst-colors button { inline-size: 36px; min-inline-size: 36px; block-size: 36px; padding: var(--ds-sp-1); background: var(--sst-ink); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-sm); }
+.sst .sst-colors { display: flex; flex-wrap: nowrap; gap: var(--ds-sp-1); inline-size: 100%; overflow-x: auto; padding: var(--ds-sp-1); }
+.sst .sst-colors button { flex: none; inline-size: 36px; min-inline-size: 36px; block-size: 36px; padding: var(--ds-sp-1); background: var(--sst-ink); border: 1px solid var(--ds-line-strong); border-radius: var(--ds-r-pill); }
 .sst .sst-text-input { font-size: 16px; resize: vertical; min-block-size: 52px; }
+.sst .ds-in { font-size: 16px; }
 .sst .sst-stickers { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: var(--ds-sp-2); }
 .sst .sst-sticker { display: grid; justify-items: center; font-size: 11px; }
 .sst .sst-sticker img { inline-size: 48px; block-size: 48px; image-rendering: pixelated; }
@@ -119,72 +190,6 @@
 .sst .sst-trim-handle::-webkit-slider-thumb { appearance: none; pointer-events: auto; inline-size: 24px; block-size: 40px; background: var(--ds-ac); border: 1px solid var(--ds-on-ac); border-radius: var(--ds-r-xs); cursor: ew-resize; }
 .sst .sst-trim-handle::-moz-range-thumb { pointer-events: auto; inline-size: 24px; block-size: 40px; background: var(--ds-ac); border: 1px solid var(--ds-on-ac); border-radius: var(--ds-r-xs); cursor: ew-resize; }
 .sst .sst-trim-report { font-size: 12px; font-variant-numeric: tabular-nums; margin: 0; }
-@media (max-width: 760px) {
-  .sst.ds-scrim.sheet { padding: 0; place-items: stretch; }
-  /* The workspace fills the phone; the exported canvas stays exactly 9:16.
-     Sheets float over it, so opening a tool never changes the composition. */
-  .sst.ds-scrim.sheet .sst-card { position: relative; isolation: isolate; inline-size: 100%; block-size: var(--sst-vh, 100dvh); max-block-size: none; border: 0; border-radius: var(--ds-r-xs); padding: 0; background: var(--ds-media-bg); }
-  .sst .sst-head { position: absolute; inset-block-start: 0; inset-inline: 0; z-index: var(--ds-z-sticky); border: 0; box-shadow: var(--ds-e-0) !important; padding: calc(var(--ds-sp-2) + env(safe-area-inset-top, 0px)) var(--ds-sp-3) var(--ds-sp-4); background: linear-gradient(var(--ds-media-panel), transparent); }
-  .sst .sst-head .ds-pixel-h { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-  .sst .sst-head .ds-btn { background: var(--ds-media-chip); border-color: transparent; border-radius: var(--ds-r-pill); }
-  .sst .sst-lifetime { padding: var(--ds-sp-1) var(--ds-sp-2); border-radius: var(--ds-r-pill); background: var(--ds-media-chip); color: var(--ds-text-strong); font-size: 11px; }
-  .sst .sst-body { display: flex; min-block-size: 0; }
-  .sst .sst-work { position: relative; inline-size: 100%; padding: 0; gap: 0; }
-  .sst .sst-preview-wrap { min-block-size: 0; }
-  .sst .sst-preview { block-size: min(100%, calc(100vw * 16 / 9)); max-block-size: none; border-radius: var(--ds-r-xs); }
-  .sst .sst-summary { display: none; }
-  .sst .sst-empty { background: radial-gradient(ellipse at 50% 35%, var(--ds-ac-bg), transparent 65%); padding-inline: var(--ds-sp-8); }
-  .sst .sst-empty p { font-size: 20px; color: var(--ds-text-strong); line-height: 1.4; max-inline-size: 220px; margin: 0 auto; }
-  .sst .sst-empty > .ds-ic { font-size: 48px; }
-  .sst .sst-picks { position: absolute; inset-inline: var(--ds-sp-4); inset-block-end: var(--ds-sp-6); justify-content: center; gap: var(--ds-sp-6); z-index: var(--ds-z-raised); }
-  .sst .sst-picks .ds-btn.sst-round { inline-size: 64px; min-inline-size: 64px; block-size: 64px; min-block-size: 64px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: transparent; }
-  .sst .sst-picks .ds-btn.sst-round .ds-ic { font-size: 26px; }
-  .sst .sst-picks .ds-btn.sst-round[data-picker="camera"] { order: 1; inline-size: 88px; min-inline-size: 88px; block-size: 88px; min-block-size: 88px; border: 3px solid var(--ds-text-strong); outline: 4px solid var(--ds-line-strong); outline-offset: 4px; }
-  .sst .sst-filename { display: none; }
-  .sst .sst-tools { position: absolute; inset-block-start: calc(76px + env(safe-area-inset-top, 0px)); inset-inline-end: max(var(--ds-sp-3), env(safe-area-inset-right, 0px)); z-index: var(--ds-z-sticky); flex-direction: column; justify-content: flex-start; gap: var(--ds-sp-3); padding: 0; border: 0; max-block-size: calc(var(--sst-vh, 100dvh) - 190px); overflow: auto; }
-  .sst .sst-tools .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; --b-bg: var(--ds-media-chip); --b-fg: var(--ds-text-strong); --b-line: var(--ds-line); box-shadow: var(--ds-e-1); }
-  .sst .sst-tools .ds-btn.sst-round:focus-visible { box-shadow: var(--ds-focus-ring), var(--ds-e-1); }
-  /* storyux verify: over the picture, only the buttons take a touch - a layer under the header's gradient or between the tools
-     can still be grabbed - and a pinch there never zooms the page */
-  .sst .sst-head, .sst .sst-tools { pointer-events: none; touch-action: pan-x pan-y; }
-  .sst .sst-head .ds-btn, .sst .sst-tools .ds-btn { pointer-events: auto; }
-  .sst .sst-tools .ds-ic { font-size: 22px; }
-  .sst .sst-head .ds-btn.sst-round { inline-size: 44px; min-inline-size: 44px; block-size: 44px; min-block-size: 44px; }
-  .sst .sst-head .ds-btn.sst-round .ds-ic { font-size: 20px; }
-  .sst .sst-ask { position: absolute; inset-block-start: calc(68px + env(safe-area-inset-top, 0px)); inset-inline: var(--ds-sp-3); z-index: var(--ds-z-pop); border: 1px solid var(--ds-line-menu); border-radius: var(--ds-r-lg); background: var(--ds-media-panel); box-shadow: var(--ds-e-3); }
-  .sst:not(.sst-has-media) .sst-tools, .sst:not(.sst-video) [data-tool="trim"] { display: none; }
-  .sst .sst-foot { padding: var(--ds-sp-2) var(--ds-sp-3) calc(var(--ds-sp-2) + env(safe-area-inset-bottom, 0px)); border: 0; background: var(--ds-media-bg); }
-  .sst .sst-decision { gap: var(--ds-sp-2); }
-  .sst .sst-identity { display: block; text-align: start; margin-inline-start: var(--ds-sp-2); }
-  .sst .sst-post { min-inline-size: 110px; max-inline-size: 45%; white-space: normal; border-radius: var(--ds-r-pill); }
-  .sst .sst-destination { max-inline-size: 55%; }
-  .sst .sst-destination strong { font-size: 13px; }
-  .sst:not(.sst-has-media) .sst-post { display: none; }
-  .sst:not(.sst-has-media) .sst-destination { max-inline-size: 100%; }
-  .sst .sst-rules { display: none; }
-  .sst .sst-sheet-slot { position: absolute; inset-inline: 0; inset-block: calc(64px + env(safe-area-inset-top, 0px)) 0; display: flex; flex-direction: column; justify-content: flex-end; pointer-events: none; z-index: var(--ds-z-nav); }
-  .sst .sst-sheet { display: flex; flex-direction: column; pointer-events: auto; padding: var(--ds-sp-2) var(--ds-sp-4) calc(var(--ds-sp-3) + env(safe-area-inset-bottom, 0px)); max-block-size: min(62%, 480px); border-start-start-radius: var(--ds-r-2xl); border-start-end-radius: var(--ds-r-2xl); overflow: hidden; box-shadow: var(--ds-e-3); animation: sst-sheet-in 160ms ease-out; }
-  .sst .sst-sheet::before { content: ''; flex: none; align-self: center; inline-size: 32px; block-size: 4px; border-radius: var(--ds-r-pill); background: var(--ds-line-strong); margin-block: var(--ds-sp-1) var(--ds-sp-2); }
-  .sst .sst-sheet-head { flex: none; }
-  .sst .sst-sheet-head .ds-btn { flex: none; }
-  .sst .sst-sheet-head .ds-eyebrow { min-inline-size: 0; overflow-wrap: anywhere; }
-  .sst .sst-sheet-body { overflow: auto; overscroll-behavior: contain; min-block-size: 0; padding: var(--ds-sp-1); }
-  .sst[data-sheet="options"] .sst-sheet-body > .sst-field, .sst[data-sheet="options"] .sst-sheet-body > .sst-help { flex-basis: 100%; }
-  /* Keep the footer's space to prevent canvas jumps, while removing covered controls from focus. */
-  .sst.sst-has-sheet .sst-foot { visibility: hidden; }
-  .sst.sst-has-sheet .sst-tools, .sst.sst-has-sheet .sst-picks { display: none; }
-  /* a sheet over the picture: the selection's handles stay usable above it, the picture keeps its place */
-  .sst.sst-has-sheet .sst-status:not(:empty) { position: absolute; inset-block-start: calc(68px + env(safe-area-inset-top, 0px)); inset-inline: var(--ds-sp-3); z-index: var(--ds-z-pop); border-radius: var(--ds-r-sm); background: var(--ds-media-panel); }
-  .sst .sst-progress, .sst .sst-recovery { flex-wrap: wrap; }
-  .sst .sst-recovery .ds-btn { white-space: normal; }
-  .sst .sst-status, .sst .sst-progress, .sst .sst-recovery { background: var(--ds-media-bg); }
-  /* (ssfix: an error keeps its plate on a phone too - a bare red line under the picture read as nothing having happened) */
-  .sst .sst-status.sst-error { background: var(--ds-danger-bg); }
-  .sst.sst-busy .sst-tools, .sst.sst-busy .sst-picks { display: none; }
-  .sst .sst-colors { flex-wrap: nowrap; inline-size: 100%; overflow-x: auto; padding: var(--ds-sp-1); }
-  .sst .sst-colors button { flex: none; border-radius: var(--ds-r-pill); }
-  .sst .ds-in { font-size: 16px; }
-}
 @keyframes sst-sheet-in { from { transform: translateY(var(--ds-sp-6)); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @media (pointer: coarse) {
   .sst .ds-btn:not(.sst-sel-del), .sst .sst-layer, .sst .sst-colors button { min-block-size: 44px; }
