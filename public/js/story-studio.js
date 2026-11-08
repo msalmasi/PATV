@@ -342,7 +342,7 @@
     m.addEventListener(kind === 'video' ? 'loadedmetadata' : 'load', loaded); m.addEventListener('error', failed); m.src = objectURL(s, file) + (kind === 'video' ? '#t=0.001' : '');
     say(s, ''); render(s); paintControls(s);
   }
-  // storyfix2 (1.99??): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
+  // storyfix2 (1.99aly): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
   // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
   // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play,
   // paused as soon as it starts, is the other. Where even that is refused (Low Power Mode), the fragment alone shows it.

@@ -43,7 +43,7 @@ function cleanEdit(raw, { kind } = {}) {
       throw new Refuse(400, "Choose between 1 and 30 seconds of video.");
     edit.trim = { start, end };
   }
-  // storyfix2 (1.99??): camera: true = a clip the story camera recorded (story-camera.js). The length a browser shows for it can
+  // storyfix2 (1.99aly): camera: true = a clip the story camera recorded (story-camera.js). The length a browser shows for it can
   // run past the media the file holds (an iPhone's MediaRecorder MP4), so its trim is clamped to the file and, kept whole, it
   // comes with no trim at all (video() below)
   if (Object.hasOwn(raw, "camera")) {
@@ -120,7 +120,7 @@ async function packetSecs(input, ffmt) {
   const span = await packetSpan(input, ffmt, "v:0");
   return span && span.end > 0 ? span.end : 0;
 }
-// storyfix2 (1.99??): where a file's packets start and end - every stream unless `streams` names one (an iPhone recording's sound
+// storyfix2 (1.99aly): where a file's packets start and end - every stream unless `streams` names one (an iPhone recording's sound
 // can run on after its picture stops, so the media's length is the longest stream's). Demuxing only, the demuxer forced, local
 // files only; ffprobe 4.2 knows every option. -> { start, end } in seconds (ms precision), null when no packet has a time.
 async function packetSpan(input, ffmt, streams) {
@@ -168,7 +168,7 @@ async function video(input, sn, edit, overlay, caps, work) {
   const pr = await media.probe(input, sn.ffmt).catch(() => null);
   if (!pr || !pr.video) throw new media.MediaError("A story needs a video track, not audio alone.");
   // story camera (1.99alu): a browser recording (MediaRecorder WebM, some fragmented MP4) can carry no length in its header.
-  // storyfix2 (1.99??): measured over every stream's packets (was the video's alone: a picture that stops before the sound
+  // storyfix2 (1.99aly): measured over every stream's packets (was the video's alone: a picture that stops before the sound
   // made the clip shorter than it is)
   let span;
   const measured = async () => { if (span === undefined) span = await packetSpan(input, sn.ffmt).catch(() => null); return spanSecs(span); };

@@ -925,7 +925,7 @@ test("Story camera review: with the camera loaded (the default), Tab stays on th
   assert.ok(!root.querySelector(".sst-card").contains(P.doc.activeElement));
 });
 
-// ── storyfix2 (1.99??): the owner's iPhone (iOS 26, 2026-11-08 ~02:00Z) - super short clips refused with "The trim goes past
+// ── storyfix2 (1.99aly): the owner's iPhone (iOS 26, 2026-11-08 ~02:00Z) - super short clips refused with "The trim goes past
 //    the end of the video.", and no preview of a clip just taken ──
 // What the site kept of his uploads (feed_attachments, his own rows): the page sent trim.end = the <video>'s own length for the
 // whole clip - 1.2146666 s and 1.5986666 s (58304 and 76736 samples at 48 kHz: WebKit's audio length), and the server's
