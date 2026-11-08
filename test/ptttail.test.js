@@ -122,6 +122,29 @@ test("ptttail: letting go keeps the recorder running PTT tail ms - Sending… at
   assert.equal(JSON.parse(read("locales", "en.json"))["js.pad.ptt.rec_sending"], "🎙 Sending…");
 });
 
+test("ptttail: 'too short' is still about the press - a quick double tap isn't sent because the tail made it longer; x-clip-secs keeps the tail", async () => {
+  // a 300 ms tap + tap: 0.7 s of wall time with the tail, but the person held it 0.3 s - too short, never uploaded (as before the tail)
+  let r = rig({ room: { pttTail: 400 } });
+  await r.key();
+  r.clock.t += 300;
+  await r.key();
+  const t = r.timer(400);
+  assert.ok(t, "the tap that sends gets the tail");
+  r.run(t);
+  await flush();
+  assert.equal(r.fetches.length, 0, "too short: never sent");
+  assert.equal(r.host.querySelector(".rb-ptt-txt").textContent, "too short — hold the button while you talk");
+  // 0.8 s pressed + the tail: sent, its length the wall time (1.2 s)
+  r = rig({ room: { pttTail: 400 } });
+  await r.key();
+  r.clock.t += 800;
+  await r.key();
+  r.run(r.timer(400));
+  await flush();
+  assert.equal(r.fetches.length, 1, "0.8 s pressed: sent");
+  assert.equal(r.fetches[0].init.headers["x-clip-secs"], "1.2");
+});
+
 test("ptttail: the max-length timer, pagehide, a hidden page, the mic switched off and destroy() stop at once - also during a tail", async () => {
   // the max-length timer (0.5 s before the max, so Pepe's +0.5 s check still holds): no tail
   let r = rig({ room: { pttTail: 400 } });
