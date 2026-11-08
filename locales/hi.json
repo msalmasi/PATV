@@ -10992,6 +10992,7 @@
   "js.media.lists.no_results": "कोई मिलती-जुलती सूची नहीं मिली।",
   "js.media.lists.search_failed": "सूचियाँ खोजी नहीं जा सकीं। बाद में फिर कोशिश करें।",
   "js.media.lists.busy": "कैटलॉग अभी व्यस्त है। एक मिनट बाद फिर से कोशिश करें।",
+  "js.media.lists.why_needs_key": "सर्वर पर MDBLIST_API_KEY की ज़रूरत है (और इसे जोड़ने के बाद रीस्टार्ट करें)।",
   "js.media.lists.why_invalid_list": "MDBList की सूची संख्या, या https://mdblist.com/lists/user-name/list-name जैसा सूची लिंक इस्तेमाल करें।",
   "js.media.lists.why_not_found": "MDBList पर वहाँ कोई सूची नहीं है। संख्या या लिंक जाँच लें।",
   "js.media.lists.why_ambiguous_list": "यह लिंक एक से ज़्यादा सूचियों से मेल खाता है। इसके बजाय सूची को उसकी संख्या से जोड़ें।",

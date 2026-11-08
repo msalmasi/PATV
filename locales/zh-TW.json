@@ -10859,6 +10859,7 @@
   "js.media.lists.no_results": "找不到符合的清單。",
   "js.media.lists.search_failed": "無法搜尋清單。請稍後再試。",
   "js.media.lists.busy": "目前目錄繁忙，請稍後一分鐘再試。",
+  "js.media.lists.why_needs_key": "伺服器需要設定 MDBLIST_API_KEY（加入後需要重新啟動）。",
   "js.media.lists.why_invalid_list": "請輸入 MDBList 清單編號，或清單連結，例如 https://mdblist.com/lists/user-name/list-name。",
   "js.media.lists.why_not_found": "MDBList 在該處找不到清單。請檢查編號或連結。",
   "js.media.lists.why_ambiguous_list": "此連結對應到多個清單。請改用清單編號新增。",

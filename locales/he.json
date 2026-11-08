@@ -11125,6 +11125,7 @@
   "js.media.lists.no_results": "אין רשימות תואמות.",
   "js.media.lists.search_failed": "לא ניתן לחפש רשימות. נסו שוב מאוחר יותר.",
   "js.media.lists.busy": "הקטלוג עמוס כרגע. נסו שוב בעוד דקה.",
+  "js.media.lists.why_needs_key": "נדרש MDBLIST_API_KEY בשרת (ויש להפעיל מחדש אחרי הוספתו).",
   "js.media.lists.why_invalid_list": "השתמשו במספר רשימה של MDBList, או בקישור לרשימה כמו https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "ל-MDBList אין שם רשימה כזו. בדקו את המספר או את הקישור.",
   "js.media.lists.why_ambiguous_list": "הקישור הזה מתאים ליותר מרשימה אחת. הוסיפו את הרשימה לפי המספר שלה.",

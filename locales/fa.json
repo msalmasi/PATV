@@ -10988,6 +10988,7 @@
   "js.media.lists.no_results": "فهرست مطابقی پیدا نشد.",
   "js.media.lists.search_failed": "جستجوی فهرست‌ها ممکن نشد. بعداً دوباره امتحان کن.",
   "js.media.lists.busy": "کاتالوگ الان شلوغ است. یک دقیقه دیگر دوباره امتحان کن.",
+  "js.media.lists.why_needs_key": "به MDBLIST_API_KEY روی سرور نیاز دارد (و بعد از افزودنش باید دوباره راه‌اندازی شود).",
   "js.media.lists.why_invalid_list": "شماره‌ی فهرست MDBList یا لینک فهرست را مثل https://mdblist.com/lists/user-name/list-name وارد کن.",
   "js.media.lists.why_not_found": "MDBList در آنجا فهرستی ندارد. شماره یا لینک را بررسی کن.",
   "js.media.lists.why_ambiguous_list": "این لینک به بیش از یک فهرست می‌خورد. فهرست را با شماره‌اش اضافه کن.",

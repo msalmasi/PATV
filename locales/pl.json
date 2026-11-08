@@ -11258,6 +11258,7 @@
   "js.media.lists.no_results": "Brak pasujących list.",
   "js.media.lists.search_failed": "Nie udało się wyszukać list. Spróbuj ponownie później.",
   "js.media.lists.busy": "Katalog jest teraz zajęty. Spróbuj ponownie za minutę.",
+  "js.media.lists.why_needs_key": "Wymaga MDBLIST_API_KEY na serwerze (oraz ponownego uruchomienia po jego dodaniu).",
   "js.media.lists.why_invalid_list": "Podaj numer listy MDBList albo link do listy, na przykład https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "MDBList nie ma tam takiej listy. Sprawdź numer lub link.",
   "js.media.lists.why_ambiguous_list": "Ten link pasuje do więcej niż jednej listy. Dodaj listę po jej numerze.",

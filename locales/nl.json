@@ -10992,6 +10992,7 @@
   "js.media.lists.no_results": "Geen overeenkomende lijsten.",
   "js.media.lists.search_failed": "Kon lijsten niet zoeken. Probeer het later opnieuw.",
   "js.media.lists.busy": "De catalogus is nu bezet. Probeer het over een minuutje opnieuw.",
+  "js.media.lists.why_needs_key": "Vereist MDBLIST_API_KEY op de server (en een herstart nadat je die hebt toegevoegd).",
   "js.media.lists.why_invalid_list": "Gebruik een MDBList-lijstnummer of een lijstlink zoals https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "MDBList heeft daar geen lijst. Controleer het nummer of de link.",
   "js.media.lists.why_ambiguous_list": "Die link past bij meer dan één lijst. Voeg de lijst in plaats daarvan toe via het nummer.",

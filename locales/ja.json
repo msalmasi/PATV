@@ -10859,6 +10859,7 @@
   "js.media.lists.no_results": "一致するリストがありません。",
   "js.media.lists.search_failed": "リストを検索できませんでした。しばらくしてから再試行してください。",
   "js.media.lists.busy": "カタログは現在混雑しています。1分ほどしてから再度お試しください。",
+  "js.media.lists.why_needs_key": "サーバーにMDBLIST_API_KEYが必要です(追加後は再起動してください)。",
   "js.media.lists.why_invalid_list": "MDBListのリスト番号、または https://mdblist.com/lists/user-name/list-name のようなリストのリンクを使用してください。",
   "js.media.lists.why_not_found": "MDBListにそのリストは見つかりません。番号またはリンクを確認してください。",
   "js.media.lists.why_ambiguous_list": "そのリンクは複数のリストに一致します。代わりにリスト番号で追加してください。",

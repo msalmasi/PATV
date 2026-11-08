@@ -10859,6 +10859,7 @@
   "js.media.lists.no_results": "일치하는 목록이 없어요.",
   "js.media.lists.search_failed": "목록을 검색하지 못했어요. 나중에 다시 시도해 주세요.",
   "js.media.lists.busy": "카탈로그가 지금 바빠요. 1분 뒤에 다시 시도해 주세요.",
+  "js.media.lists.why_needs_key": "서버에 MDBLIST_API_KEY가 필요해요 (추가한 후에는 재시작해야 해요).",
   "js.media.lists.why_invalid_list": "MDBList 목록 번호나 https://mdblist.com/lists/user-name/list-name 같은 목록 링크를 사용해 주세요.",
   "js.media.lists.why_not_found": "MDBList에 해당 목록이 없어요. 번호나 링크를 확인해 주세요.",
   "js.media.lists.why_ambiguous_list": "이 링크는 목록 여러 개와 일치해요. 대신 목록 번호로 추가해 주세요.",

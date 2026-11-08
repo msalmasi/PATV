@@ -10859,6 +10859,7 @@
   "js.media.lists.no_results": "Không có danh sách phù hợp.",
   "js.media.lists.search_failed": "Không thể tìm danh sách. Thử lại sau.",
   "js.media.lists.busy": "Thư viện hiện đang bận. Thử lại sau một phút.",
+  "js.media.lists.why_needs_key": "Cần MDBLIST_API_KEY trên máy chủ (và khởi động lại sau khi thêm).",
   "js.media.lists.why_invalid_list": "Dùng số danh sách của MDBList hoặc liên kết danh sách như https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "MDBList không có danh sách nào ở đó. Kiểm tra lại số hoặc liên kết.",
   "js.media.lists.why_ambiguous_list": "Liên kết này khớp với nhiều hơn một danh sách. Hãy thêm danh sách bằng số của nó.",

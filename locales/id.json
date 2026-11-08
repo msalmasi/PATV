@@ -10861,6 +10861,7 @@
   "js.media.lists.no_results": "Tidak ada daftar yang cocok.",
   "js.media.lists.search_failed": "Tidak bisa mencari daftar. Coba lagi nanti.",
   "js.media.lists.busy": "Katalognya lagi sibuk. Coba lagi sebentar lagi.",
+  "js.media.lists.why_needs_key": "Perlu MDBLIST_API_KEY di server (dan mulai ulang setelah menambahkannya).",
   "js.media.lists.why_invalid_list": "Pakai nomor daftar MDBList, atau link daftar seperti https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "MDBList tidak punya daftar di sana. Cek lagi nomor atau linknya.",
   "js.media.lists.why_ambiguous_list": "Link itu cocok dengan lebih dari satu daftar. Tambahkan daftarnya pakai nomornya saja.",

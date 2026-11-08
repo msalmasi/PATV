@@ -10994,6 +10994,7 @@
   "js.media.lists.no_results": "Eşleşen liste yok.",
   "js.media.lists.search_failed": "Listeler aranamadı. Daha sonra tekrar dene.",
   "js.media.lists.busy": "Katalog şu anda meşgul. Bir dakika sonra tekrar dene.",
+  "js.media.lists.why_needs_key": "Sunucuda MDBLIST_API_KEY gerekli (eklendikten sonra yeniden başlatman gerekir).",
   "js.media.lists.why_invalid_list": "Bir MDBList liste numarası ya da https://mdblist.com/lists/user-name/list-name gibi bir liste bağlantısı kullan.",
   "js.media.lists.why_not_found": "MDBList orada bir liste bulamadı. Numarayı ya da bağlantıyı kontrol et.",
   "js.media.lists.why_ambiguous_list": "Bu bağlantı birden fazla listeyle eşleşiyor. Bunun yerine listeyi numarasıyla ekle.",

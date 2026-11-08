@@ -11080,6 +11080,7 @@
   "js.media.lists.no_results": "No hay listas coincidentes.",
   "js.media.lists.search_failed": "No se pudieron buscar listas. Inténtalo más tarde.",
   "js.media.lists.busy": "El catálogo está ocupado en este momento. Inténtalo de nuevo en un minuto.",
+  "js.media.lists.why_needs_key": "Necesita MDBLIST_API_KEY en el servidor (y reiniciar tras añadirla).",
   "js.media.lists.why_invalid_list": "Usa un número de lista de MDBList o un enlace a la lista, como https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "MDBList no tiene ninguna lista ahí. Revisa el número o el enlace.",
   "js.media.lists.why_ambiguous_list": "Ese enlace coincide con más de una lista. Añade la lista por su número en su lugar.",

@@ -11524,6 +11524,7 @@
   "js.media.lists.no_results": "لا توجد قوائم مطابقة.",
   "js.media.lists.search_failed": "تعذّر البحث في القوائم. حاول لاحقًا.",
   "js.media.lists.busy": "الكتالوج مشغول الآن. حاول مرة أخرى بعد دقيقة.",
+  "js.media.lists.why_needs_key": "يحتاج إلى MDBLIST_API_KEY على الخادم (وإعادة تشغيل بعد إضافته).",
   "js.media.lists.why_invalid_list": "استخدم رقم قائمة MDBList، أو رابط قائمة مثل https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "لا توجد قائمة في MDBList بهذا الرقم. تحقق من الرقم أو الرابط.",
   "js.media.lists.why_ambiguous_list": "يطابق هذا الرابط أكثر من قائمة واحدة. أضف القائمة برقمها بدلاً من ذلك.",

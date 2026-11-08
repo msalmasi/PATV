@@ -10860,6 +10860,7 @@
   "js.media.lists.no_results": "ไม่พบรายการที่ตรงกัน",
   "js.media.lists.search_failed": "ไม่สามารถค้นหารายการได้ โปรดลองอีกครั้งภายหลัง",
   "js.media.lists.busy": "แคตตาล็อกไม่ว่างในขณะนี้ ลองอีกครั้งในอีกหนึ่งนาที",
+  "js.media.lists.why_needs_key": "ต้องมี MDBLIST_API_KEY บนเซิร์ฟเวอร์ (และต้องรีสตาร์ทหลังจากเพิ่มแล้ว)",
   "js.media.lists.why_invalid_list": "ใช้หมายเลขรายการ MDBList หรือลิงก์รายการ เช่น https://mdblist.com/lists/user-name/list-name",
   "js.media.lists.why_not_found": "MDBList ไม่มีรายการที่นั่น ตรวจสอบหมายเลขหรือลิงก์",
   "js.media.lists.why_ambiguous_list": "ลิงก์นั้นตรงกับมากกว่าหนึ่งรายการ ให้เพิ่มรายการด้วยหมายเลขแทน",

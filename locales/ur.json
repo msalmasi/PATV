@@ -10992,6 +10992,7 @@
   "js.media.lists.no_results": "کوئی مماثل فہرست نہیں۔",
   "js.media.lists.search_failed": "فہرستیں تلاش نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔",
   "js.media.lists.busy": "کیٹلاگ اس وقت مصروف ہے۔ ایک منٹ بعد دوبارہ کوشش کریں۔",
+  "js.media.lists.why_needs_key": "سرور پر MDBLIST_API_KEY درکار ہے (اسے شامل کرنے کے بعد دوبارہ شروع کریں)۔",
   "js.media.lists.why_invalid_list": "MDBList فہرست نمبر، یا https://mdblist.com/lists/user-name/list-name جیسا فہرست لنک استعمال کریں۔",
   "js.media.lists.why_not_found": "MDBList کے پاس وہاں کوئی فہرست نہیں ہے۔ نمبر یا لنک چیک کریں۔",
   "js.media.lists.why_ambiguous_list": "یہ لنک ایک سے زائد فہرستوں سے ملتا ہے۔ اس کے بجائے فہرست کو اس کے نمبر سے شامل کریں۔",

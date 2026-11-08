@@ -11258,6 +11258,7 @@
   "js.media.lists.no_results": "Подходящих списков нет.",
   "js.media.lists.search_failed": "Не удалось найти списки. Попробуй позже.",
   "js.media.lists.busy": "Каталог сейчас занят. Попробуй снова через минуту.",
+  "js.media.lists.why_needs_key": "Нужен MDBLIST_API_KEY на сервере (и перезапуск после его добавления).",
   "js.media.lists.why_invalid_list": "Укажи номер списка MDBList или ссылку на список вида https://mdblist.com/lists/user-name/list-name.",
   "js.media.lists.why_not_found": "В MDBList там нет такого списка. Проверь номер или ссылку.",
   "js.media.lists.why_ambiguous_list": "Под эту ссылку подходит несколько списков. Добавь список по его номеру.",
