@@ -1515,7 +1515,40 @@ const HM = require("./holdem").install({
 // ── h22: 🏁 Sit & Gos (casino/tourney.js) on Hold'em tables ──
 const TN = SNGCFG.install({ S, clock, save, emit, userRow, R, fmt, link, runQuery, streamGone, loadSettings, HM,
                             roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T) });
-KINDS.sng = TN;
+// h22 phase 2 (1.99??), "sng: blind planner" - an SNG behaviour change (flagged, droppable): the scheduled tournaments' blind planner
+// (casino/mttseat.js blindPlan) at a Sit & Go too. Phase 1 moves a busted button back to the nearest seat still in; a busted big or small
+// blind still skipped a big blind (hmengine.startHand moves the button one seat), and going heads-up after the button busted gave last
+// hand's big blind the big blind again. Now: the big blind always moves forward one seat, a small blind on last hand's small blind is dead
+// (0 for that hand; the level's small blind is shown), heads-up never the big blind twice in a row. The record is T.tourney.last (dealt).
+const SEATP = require("./mttseat");
+const HMENG = require("./hmengine");
+const sngRoute = Object.assign(Object.create(TN), {
+  beforeHand(T) {
+    TN.beforeHand(T);
+    const t = T.tourney, e = T.eng;
+    t.dead_pending = false;
+    if (!t.last || t.status !== "running") return;
+    const pl = SEATP.blindPlan(HMENG.seatedWithChips(e), t.last, []);
+    if (pl.fresh || !pl.bbUid) return;
+    e.button = pl.button;
+    if (pl.deadSb) { t.dead_pending = true; e.sb = 0; }
+  },
+  dealt(T, events) {
+    const t = T.tourney, e = T.eng;
+    t.last = { hand_no: e.hand_no, button: e.button, sb_key: e.sb_key, bb_key: e.bb_key, order: e.players.slice(), dead_sb: !!t.dead_pending };
+    if (t.hand_start) Object.assign(t.hand_start, { button: e.button, sb_key: e.sb_key, bb_key: e.bb_key, order: e.players.slice(), dead_sb: !!t.dead_pending });
+    if (t.dead_pending) {
+      const sb = TN.levelAt(t, t.level || 0)[0];
+      e.sb = sb;
+      const hs = (events || []).find((x) => x.t === "hand_start");
+      if (hs) hs.sb = sb;
+      const i = (events || []).findIndex((x) => x.t === "blind" && x.kind === "SB" && !x.amount);
+      if (i >= 0) events.splice(i, 1);
+    }
+    t.dead_pending = false;
+  },
+});
+KINDS.sng = sngRoute;
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
