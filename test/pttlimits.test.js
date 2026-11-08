@@ -8,6 +8,14 @@
 //     hard ceiling), the flood guard never below the per-10-minute number
 //   * every clip job carries them for Pepe: max_secs, gap_s, burst, window_s (the values the clip was accepted under)
 //   * the page gets the max length with the live view (room.pttMax); the recorder stops there and says the real number
+// Review fixes:
+//   1. an older Pepe refuses (and CHARGES, bad_clip) any clip over his own 30 s - so a max length over 30 applies only while Pepe
+//      says he follows the job's limits (ptt_limits: 1 on his pull / sync, seen in the last PEPE_TTL); until then the site, the
+//      recorder and the job keep a clip to 30 s (the card says which)
+//   2. nginx in front of the site takes at most 1 MB (client_max_body_size 1m, botupload.js): the byte cap stays under it, and the
+//      page words ANY 413 (nginx's HTML one too) as "too big", not "couldn't reach the site"
+//   3. the recorder stops 0.5 s before the max length and never sends one that ran over max + 0.5 s (Pepe's own check)
+//   4. a clip Pepe said is playing gets its own length + 90 s to say how it went (a 120 s clip isn't failed mid-play)
 //   node --test test/pttlimits.test.js
 "use strict";
 const test = require("node:test");
@@ -70,6 +78,13 @@ async function upload(secs = 3, body = Buffer.alloc(2000, 1)) {
   let d = null;
   try { d = await r.json(); } catch (e) { d = null; }
   return { status: r.status, d };
+}
+// review fix 1: Pepe's long-poll saying he follows each clip job's limits (ptt_limits: 1); flag = null -> an older Pepe's pull
+async function pepeSays(flag = 1) {
+  const r = await fetch(base + "/api/bridge/relay/pull", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify(Object.assign({ password: "bot-token", wait: 0, acks: [] }, flag == null ? {} : { ptt_limits: flag })) });
+  assert.equal(r.status, 200);
+  await r.json();
 }
 
 // ── the setting ──
@@ -223,6 +238,7 @@ test("max length: the setting, +1 s for the recorder's stop; the refusal names i
   assert.equal(r.d.code, "too_long");
   assert.equal(r.d.max, 30);
   assert.match(r.d.error, /Keep it under 30 seconds/);
+  await pepeSays();                     // (review fix 1: over 30 s only while Pepe follows the job's limits)
   await setLimits({ gap_s: 0, burst: 30, max_secs: 60 });
   assert.equal((await upload(45)).status, 200);
   assert.equal((await upload(61)).status, 200);
@@ -236,17 +252,22 @@ test("max length: the setting, +1 s for the recorder's stop; the refusal names i
   await setLimits({ reset: true });
 });
 
-test("the byte cap grows with the max length (room for 4x the recorder's 32 kbit/s), with a hard ceiling", async () => {
+test("the byte cap grows with the max length (room for 2x the recorder's 32 kbit/s at 120 s), with a hard ceiling under nginx's 1 MB", async () => {
   // the recorder asks for 32 kbit/s Opus = 4 KB a second; a browser that ignores it (AAC on Safari) can be far above that
   for (const s of [3, 30, 60, 120]) {
-    assert.ok(PT.maxBytes(s) >= (s + 1) * 4000 * 4, s + " s: at least 4x the recorder's bitrate");
+    assert.ok(PT.maxBytes(s) >= (s + 1) * 4000 * 2, s + " s: at least 2x the recorder's bitrate");
     assert.ok(PT.maxBytes(s) >= 600 * 1024, s + " s: never below today's 600 KB");
     assert.ok(PT.maxBytes(s) <= PT.BYTES_CEIL, s + " s: under the ceiling");
   }
+  assert.ok(PT.maxBytes(30) >= 31 * 4000 * 5, "30 s keeps its 5x headroom");
   assert.ok(PT.maxBytes(120) > PT.maxBytes(30));
   assert.equal(PT.maxBytes(100000), PT.BYTES_CEIL, "a huge value stops at the ceiling");
-  assert.ok(PT.BYTES_CEIL <= 3 * 1024 * 1024, "the ceiling stays small");
+  // review fix 2: nginx in front of publicaccess.tv and staging answers anything over client_max_body_size 1m itself (botupload.js) -
+  // a cap above it could never be reached, and the page would get nginx's HTML 413 instead of the site's JSON one
+  const NGINX_MAX = 1024 * 1024;
+  assert.ok(PT.BYTES_CEIL <= NGINX_MAX - 32 * 1024, "the ceiling stays under nginx's 1 MB (with room to spare): " + PT.BYTES_CEIL);
   reset();
+  await pepeSays();                     // (review fix 1: a 120 s max only while Pepe follows the job's limits)
   await setLimits({ gap_s: 0, burst: 30, max_secs: 30 });
   let r = await upload(29, Buffer.alloc(PT.maxBytes(30) + 1024, 1));
   assert.equal(r.status, 413, "over the cap for 30 s");
@@ -262,6 +283,7 @@ test("the byte cap grows with the max length (room for 4x the recorder's 32 kbit
 
 test("every clip job tells Pepe its limits: max_secs, gap_s, burst, window_s - the values it was accepted under", async () => {
   reset();
+  await pepeSays();                     // (review fix 1: a 90 s max only while Pepe follows the job's limits)
   const a = await upload();
   assert.equal(a.status, 200);
   await setLimits({ gap_s: 0, burst: 7, max_secs: 90 });
@@ -293,6 +315,7 @@ test("the live view carries the max length (room.pttMax) - changed at once", asy
   let v = await bridge.liveView(LR, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
   assert.equal(v.room.micRelay, true);
   assert.equal(v.room.pttMax, 30);
+  await pepeSays();                     // (review fix 1: a 75 s max only while Pepe follows the job's limits)
   await setLimits({ gap_s: 30, burst: 3, max_secs: 75 });
   v = await bridge.liveView(LR, 0, null, null, null, true, { viewer: { userId: "test-viewer" } });
   assert.equal(v.room.pttMax, 75);
@@ -320,8 +343,11 @@ class El {
   dispatchEvent() { return true; }
   fire(t, e) { (this.listeners[t] || []).forEach((fn) => fn(Object.assign({ preventDefault() {} }, e || {}))); }
 }
-function loadClient() {
-  const timers = [];
+function loadClient(opts = {}) {
+  const timers = [], fns = [], fetches = [];
+  // review fixes 2 + 3: a clock the test moves (how long a clip ran) and the upload's answer (opts.res)
+  const clock = { t: 1000000 };
+  class FakeDate extends Date { static now() { return clock.t; } }
   const win = {
     MediaRecorder: class { constructor(s) { this.stream = s; this.state = "inactive"; this.mimeType = "audio/webm"; }
       static isTypeSupported(t) { return t === "audio/webm"; }
@@ -337,20 +363,23 @@ function loadClient() {
       mediaDevices: { getUserMedia: () => Promise.resolve({ getTracks: () => [track] }) } },
     document: doc,
     localStorage: { getItem: () => null, setItem: () => {} },
-    setTimeout: (fn, ms) => { timers.push(ms); return timers.length; }, clearTimeout() {},
+    setTimeout: (fn, ms) => { timers.push(ms); fns.push({ fn, ms }); return fns.length; },
+    clearTimeout: (id) => { if (fns[id - 1]) fns[id - 1].cleared = true; },
     setInterval: () => 0, clearInterval: () => {}, requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
-    fetch: () => Promise.resolve({ json: () => ({ ok: true }) }), Blob: class { constructor(p, o) { this.type = o.type; } },
+    fetch: (url, o) => { fetches.push({ url, o }); return Promise.resolve(opts.res || { status: 200, ok: true, json: () => Promise.resolve({ ok: true, id: "j1" }) }); },
+    Blob: class { constructor(p, o) { this.type = o.type; } },
     CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } },
-    Date, JSON, Math, Number, String, Object, Array, Promise, isFinite, Uint8Array,
+    Date: FakeDate, JSON, Math, Number, String, Object, Array, Promise, isFinite, Uint8Array,
   };
   ctx.window.MediaRecorder = win.MediaRecorder;
   ctx.MediaRecorder = win.MediaRecorder;
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(repo, "public/js/room-bridge.js"), "utf8"), ctx);
-  return { PATV: ctx.window.PATVRoom, timers };
+  return { PATV: ctx.window.PATVRoom, timers, fns, fetches, clock };
 }
-async function record(update) {
-  const { PATV, timers } = loadClient();
+const flush = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); };
+async function record(update, opts) {
+  const { PATV, timers, fns, fetches, clock } = loadClient(opts);
   const host = new El("div");
   host.ownerDocument = null;
   const p = PATV.ptt(host, "room-pttlim");
@@ -359,24 +388,185 @@ async function record(update) {
   const idleText = txt.textContent;
   btn.fire("keydown", { key: "Enter" });
   await new Promise((r) => setImmediate(r));
-  return { idleText, btn, timers };
+  // the recorder's own auto-stop (the last timer it set while starting)
+  const auto = fns.filter((f) => f.ms >= 1000).pop() || null;
+  return { p, idleText, btn, txt, timers, fns, fetches, clock, auto };
 }
 
-test("the recorder stops at the server's max length and says the real number", async () => {
+test("the recorder stops at the server's max length (0.5 s early - review fix 3) and says the real number", async () => {
   let r = await record({ room: { micRelay: true, pttMax: 45 }, mine: [] });
   assert.equal(r.idleText, "up to 45 s · Pepe plays it on the mic when it's free");
   assert.equal(r.btn.getAttribute("aria-pressed"), "true", "recording");
-  assert.ok(r.timers.includes(45000), "auto-stop at 45 s: " + JSON.stringify(r.timers));
+  assert.ok(r.timers.includes(44500), "auto-stop 0.5 s before 45 s: " + JSON.stringify(r.timers));
   assert.ok(!r.timers.includes(20000), "not the old 20 s");
   r = await record({ room: { micRelay: true, pttMax: 120 }, mine: [] });
   assert.equal(r.idleText, "up to 120 s · Pepe plays it on the mic when it's free");
-  assert.ok(r.timers.includes(120000));
+  assert.ok(r.timers.includes(119500));
   // no number from the server (an older one) / a silly one: the default, 30 s
   r = await record({ room: { micRelay: true }, mine: [] });
   assert.equal(r.idleText, "up to 30 s · Pepe plays it on the mic when it's free");
-  assert.ok(r.timers.includes(30000));
+  assert.ok(r.timers.includes(29500));
   r = await record({ room: { micRelay: true, pttMax: 99999 }, mine: [] });
-  assert.ok(r.timers.includes(30000), "out of range: the default");
+  assert.ok(r.timers.includes(29500), "out of range: the default");
+});
+
+// ── review fixes ──
+
+test("review fix 1: over Pepe's own 30 s only while he says he follows the job's limits (ptt_limits: 1 on his pull, last 2 min)", async () => {
+  PT._reset();
+  await PT.init();
+  reset();
+  await setLimits({ gap_s: 0, burst: 30, max_secs: 60 });
+  assert.equal(PT.current().max_secs, 60, "the setting is saved as asked");
+  // no word from Pepe since the site started: an older Pepe refuses AND charges (bad_clip) anything over his 30 s - the site keeps 30
+  assert.equal(PT.pepeFollows(), false);
+  assert.equal(PT.effective().max_secs, 30);
+  let r = await upload(45);
+  assert.equal(r.status, 400, "a 45 s clip would cost the member a clip that never plays");
+  assert.equal(r.d.code, "too_long");
+  assert.equal(r.d.max, 30);
+  assert.match(r.d.error, /Keep it under 30 seconds/);
+  const short = await upload(25);
+  assert.equal(short.status, 200);
+  const job = relay.takeJobs(new Set([R.id])).find((j) => j.id === short.d.id);
+  assert.equal(job.max_secs, 30, "the job says the length the site enforced");
+  // an older Pepe's pull (no flag) changes nothing
+  await pepeSays(null);
+  assert.equal(PT.pepeFollows(), false);
+  assert.equal((await upload(45)).status, 400);
+  // a Pepe that reads the job's limits says so on his long-poll: the setting applies in full
+  await pepeSays();
+  assert.equal(PT.pepeFollows(), true);
+  assert.equal(PT.effective().max_secs, 60);
+  r = await upload(45);
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const j2 = relay.takeJobs(new Set([R.id])).find((j) => j.id === r.d.id);
+  assert.equal(j2.max_secs, 60);
+  // he went quiet (a rollback to an older build, Pepe down) for longer than PEPE_TTL: back to 30
+  assert.ok(PT.PEPE_TTL >= 30 * 1000 && PT.PEPE_TTL <= 5 * 60 * 1000, "a few of his 10 s long-polls: " + PT.PEPE_TTL);
+  PT.notePepe({ ptt_limits: 1 }, Date.now() - PT.PEPE_TTL - 1000);
+  assert.equal(PT.pepeFollows(), false);
+  assert.equal(PT.effective().max_secs, 30);
+  assert.equal((await upload(45)).status, 400);
+  // a stricter setting applies at once, Pepe or not (his own 30 s is the most he ever takes)
+  await setLimits({ gap_s: 0, burst: 30, max_secs: 10 });
+  assert.equal(PT.effective().max_secs, 10);
+  assert.equal((await upload(12)).status, 400);
+  // the card says whether he follows them
+  let v = await PT.view();
+  assert.equal(v.pepe.follows, false);
+  assert.deepEqual(v.pepe.old, { gap_s: 30, burst: 3, max_secs: 30 });
+  await pepeSays();
+  v = await PT.view();
+  assert.equal(v.pepe.follows, true);
+  assert.ok(v.pepe.at > 0);
+  await setLimits({ reset: true });
+});
+
+test("review fix 1: the bridge sync counts too (a Pepe that syncs without the long-poll) - bridge.js hands its body to pttlimits", () => {
+  const src = fs.readFileSync(path.join(repo, "bridge.js"), "utf8");
+  const sa = src.slice(src.indexOf("async function syncAnswer("), src.indexOf("async function syncAnswer(") + 4000);
+  assert.match(sa, /require\("\.\/pttlimits"\)\.notePepe\(body\)/, "syncAnswer notes Pepe's ptt_limits flag");
+  assert.match(src, /pttMax: require\("\.\/pttlimits"\)\.effective\(\)\.max_secs/, "the live view's pttMax is the length in force");
+  // a sync body's flag
+  PT._reset();
+  PT.notePepe({ ptt_limits: true });
+  assert.equal(PT.pepeFollows(), true);
+  PT._reset();
+  for (const bad of [null, {}, { ptt_limits: 0 }, { ptt_limits: "1" }, { ptt_limits: 2 }]) {
+    PT.notePepe(bad);
+    assert.equal(PT.pepeFollows(), false, JSON.stringify(bad));
+  }
+});
+
+test("review fix 2: the page words any 413 (nginx's HTML one too) as 'too big', never 'couldn't reach the site'", async () => {
+  for (const res of [
+    { status: 413, ok: false, json: () => Promise.reject(new SyntaxError("Unexpected token <")) },   // nginx's own page
+    { status: 413, ok: false, json: () => Promise.resolve({ ok: false, code: "too_big", error: "That recording is too big - try a shorter one." }) },
+  ]) {
+    const r = await record({ room: { micRelay: true, pttMax: 30 }, mine: [] }, { res });
+    r.clock.t += 10000;
+    r.btn.fire("keydown", { key: "Enter" });          // tap again: send
+    await flush();
+    assert.equal(r.fetches.length, 1, "uploaded");
+    assert.equal(r.txt.textContent, "that recording is too big — try a shorter one");
+  }
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["js.pad.ptt.too_big"], "that recording is too big — try a shorter one");
+});
+
+test("review fix 3: a clip that ran over max + 0.5 s (a late timer) is never sent - Pepe would refuse it and charge it", async () => {
+  // the auto-stop lands on time: sent, with its real length
+  let r = await record({ room: { micRelay: true, pttMax: 30 }, mine: [] });
+  assert.equal(r.auto && r.auto.ms, 29500);
+  r.clock.t += 29600;
+  r.auto.fn();
+  await flush();
+  assert.equal(r.fetches.length, 1, "sent");
+  assert.equal(r.fetches[0].o.headers["x-clip-secs"], "29.6");
+  // a busy page: the timer fired 0.9 s late (30.4 s in all) - still inside Pepe's +0.5 s, sent
+  r = await record({ room: { micRelay: true, pttMax: 30 }, mine: [] });
+  r.clock.t += 30400;
+  r.auto.fn();
+  await flush();
+  assert.equal(r.fetches.length, 1);
+  // 1.5 s late (31 s): Pepe decodes more than 30.5 s and charges it as bad_clip - kept here, said why
+  r = await record({ room: { micRelay: true, pttMax: 30 }, mine: [] });
+  r.clock.t += 31000;
+  r.auto.fn();
+  await flush();
+  assert.equal(r.fetches.length, 0, "not sent");
+  assert.equal(r.txt.textContent, "too long — keep it under 30 s");
+  // the length the recording STARTED with counts (a change of the setting meanwhile doesn't move it)
+  r = await record({ room: { micRelay: true, pttMax: 60 }, mine: [] });
+  assert.equal(r.auto.ms, 59500);
+  r.p.update({ room: { micRelay: true, pttMax: 30 }, mine: [] });
+  r.clock.t += 45000;
+  r.auto.fn();
+  await flush();
+  assert.equal(r.fetches.length, 1, "45 s of a 60 s max: sent");
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["js.pad.ptt.too_long"], "too long — keep it under {n} s");
+});
+
+test("review fix 4: a clip Pepe said is playing gets its own length + 90 s to say how it went (never failed mid-play)", async () => {
+  reset();
+  await pepeSays();
+  await setLimits({ gap_s: 0, burst: 30, max_secs: 120 });
+  const up = await upload(110);
+  assert.equal(up.status, 200, JSON.stringify(up.d));
+  relay.takeJobs(new Set([R.id]));                    // Pepe took it
+  relay.applyAcks([{ id: up.d.id, state: "playing", ok: true, msg: "playing on the mic now" }]);
+  const j = relay._jobs.get(up.d.id);
+  assert.equal(j.state, "playing");
+  // a busy room: it started 6.5 min after Pepe took it, and is 130 s in (a 110-120 s clip + the mic drop + his ack)
+  const now = Date.now();
+  j.playingAt = now - 130 * 1000;
+  j.claimed = j.playingAt - 6.5 * 60 * 1000;
+  relay._sweep(now);
+  assert.equal(j.state, "playing", "still open - his 'played' is on its way");
+  assert.ok(!j.limBack, "its limit not given back");
+  relay._sweep(j.playingAt + 211 * 1000);             // past 120 s + 90 s: Pepe never said
+  assert.equal(j.state, "done");
+  assert.equal(j.result.code, "unconfirmed");
+  // a 30 s clip keeps the 2 minutes it had
+  await setLimits({ reset: true });
+  reset();
+  const up2 = await upload(20);
+  relay.takeJobs(new Set([R.id]));
+  relay.applyAcks([{ id: up2.d.id, state: "playing", ok: true, msg: "playing" }]);
+  const j2 = relay._jobs.get(up2.d.id);
+  j2.playingAt = Date.now();
+  j2.claimed = j2.playingAt - 7.9 * 60 * 1000;
+  relay._sweep(j2.playingAt + 119 * 1000);
+  assert.equal(j2.state, "playing");
+  relay._sweep(j2.playingAt + 121 * 1000);
+  assert.equal(j2.state, "done");
+  // a job from before the setting (no limits on it): the 2 minutes
+  const old = relay.newJob({ kind: "clip", roomId: R.id, userId: "p1", username: "p1_patv", camfrog: "alice", data: Buffer.alloc(600), mime: "audio/webm", secs: 5 });
+  old.state = "playing"; old.playingAt = Date.now(); old.claimed = old.playingAt - 7.9 * 60 * 1000;
+  relay._sweep(old.playingAt + 121 * 1000);
+  assert.equal(old.state, "done");
 });
 
 test("the wording: one string with {n} (js.pad.ptt.upto_n), the old fixed '20 s' string gone from every catalog", () => {

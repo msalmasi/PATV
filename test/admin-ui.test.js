@@ -190,6 +190,9 @@ test("overview: tiles by role - admin-only data never reaches Staff", async () =
     assert.match(m[0], new RegExp('min="' + lo + '"'), name + " min");
     assert.match(m[0], new RegExp('max="' + hi + '"'), name + " max");
   }
+  // pttlimits review fix 1: whether Pepe follows them - an older Pepe charges a clip over his own 30 s, so the card says the site keeps
+  // clips to 30 s until he says he follows each job's limits (no Pepe in this test: not yet)
+  assert.match(ptA, /id="ptPepe"[^>]*>[^<]*Pepe hasn't said he follows these yet[^<]*at most 30 s/, "admins: Pepe's part, not yet");
   assert.match(ptS, /id="pttlimits"/, "staff: the card");
   assert.doesNotMatch(ptS, /id="ptForm"/, "...without the form");
   // CL6: chat takedowns (chatlog.read_all: Staff and up) - the per-login tool, holds, the staff audit; the reported chat lines queue
