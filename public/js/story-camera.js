@@ -30,7 +30,7 @@
 // storyprev (1.99amb): a capture tells the studio its size (info.width / height), and a clip brings a poster (info.poster, a
 // JPEG of the live preview's frame as the recording starts - else its last frame) and its recorder type (info.mime): an
 // iPhone may not show its own MediaRecorder MP4 in a <video> at all, and the editor shows the poster instead
-// storyplay (1.99??): o.gesture(why) - each of the camera's taps (the shutter's press, let-go, click or key; Try again) is told to
+// storyplay (1.99aml): o.gesture(why) - each of the camera's taps (the shutter's press, let-go, click or key; Try again) is told to
 // the studio while it is being handled, so the editor's <video> is played (unlocked) inside it: WebKit lets the clip the camera
 // hands over play by itself only on an element played inside a gesture before
 (function () {

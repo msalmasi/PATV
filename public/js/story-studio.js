@@ -21,7 +21,7 @@
 // of the stage; on a phone the header and the tools let touches through between their buttons; hit areas stack as drawn; a lost
 // pointerup ends with the next press; the picture moves by a transform mid-gesture; Escape / a click outside / the X share one
 // quiet question; focus lands on the picture after a pick; the page can still be zoomed from the sheets and the footer.
-// storyplay (1.99??): a clip plays by itself in the editor, like Instagram - muted, inline, looping inside its trim. ONE <video> carries
+// storyplay (1.99aml): a clip plays by itself in the editor, like Instagram - muted, inline, looping inside its trim. ONE <video> carries
 // every clip for the studio's life, unlocked inside the user's own gestures (WebKit lets a script play() an element only once that
 // element was played inside a gesture); where a play is still refused, a round ▶ over the picture plays it on a tap. See player().
 (function () {
@@ -676,7 +676,7 @@
   // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play is
   // the other. Where even that is refused (Low Power Mode), the fragment alone shows it. storyplay: that play is no longer paused
   // at once - the clip plays by itself (run()).
-  // ── storyplay (1.99??): the editor plays a clip by itself, like Instagram ──
+  // ── storyplay (1.99aml): the editor plays a clip by itself, like Instagram ──
   // The owner's iPhone (iOS 26, Chrome = WebKit, 2026-11-08): "it DOES autoplay if I press 'play' from the trim menu, then discard
   // the current story, then record a new story. At that point, it autoplays. Then if I discard again, it doesn't autoplay."
   // WebKit lets a script play() a <video> only once that ELEMENT has been played inside a user's gesture (the gesture lifts the

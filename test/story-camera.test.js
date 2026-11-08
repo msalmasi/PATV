@@ -153,7 +153,7 @@ class El {
 }
 for (const [p, a] of Object.entries(BOOL)) Object.defineProperty(El.prototype, p, { get() { return this.hasAttribute(a); }, set(v) { if (v) this.setAttribute(a, ""); else this.removeAttribute(a); } });
 for (const [p, a] of Object.entries(STR)) Object.defineProperty(El.prototype, p, { get() { return this.getAttribute(a) || ""; }, set(v) { this.setAttribute(a, v); } });
-// storyplay (1.99??): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch
+// storyplay (1.99aml): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch
 // (pointerup / touchend) and a mouse press. A finger going down (a touch's pointerdown, from touchstart) is none (iOS 9+).
 // GESTURE.on > 0 while such an event is being dispatched (the fake WebKit rule below reads it).
 const GESTURE = { on: 0 };
@@ -1133,7 +1133,7 @@ test("Story camera fix: an iPhone recording under a second, or one whose length 
 
 test("Story camera fix: the editor puts a video's first frame on screen - #t=0.001, preload auto, a muted inline play that goes on (storyplay), and never a seek", async () => {
   // iOS paints nothing for a <video> that has never played (preload is only ever 'metadata' there) and a seek on loadedmetadata
-  // leaves it black (WebKit bug 225963): the media fragment and the muted play each put the first frame up. storyplay (1.99??):
+  // leaves it black (WebKit bug 225963): the media fragment and the muted play each put the first frame up. storyplay (1.99aml):
   // the play is no longer paused at once - the clip plays by itself, as on Instagram
   const P = camPage(IPHONE), root = await openStudio(P);
   await quickClip(P);
@@ -1654,7 +1654,7 @@ test("Story camera storycombo: the X back to the camera lets a clip's poster and
   await tap(P); assert.ok(root.querySelector("img.sst-still") === null); assert.equal(root.querySelectorAll(".sst-debug").length, 1); assert.match(root.querySelector(".sst-debug").textContent, /image\/jpeg/);
 });
 
-// ── storyplay (1.99??): the editor plays a clip by itself, like Instagram - muted, inline, looping inside its trim. The owner's
+// ── storyplay (1.99aml): the editor plays a clip by itself, like Instagram - muted, inline, looping inside its trim. The owner's
 //    iPhone (iOS 26, Chrome = WebKit, 2026-11-08): "it can play the recording back because when i manually start it from the trim
 //    menu it works"; "It seems like it DOES autoplay if I press 'play' from the trim menu, then discard the current story, then
 //    record a new story. At that point, it autoplays. Then if I discard again, it doesn't autoplay." WebKit lets a script play() a
@@ -1913,7 +1913,7 @@ test("Story play: a silent unlock whose play() settles with AbortError (it ended
   assert.match(text, /unlocked by shutter up/); assert.equal(editorVideo(P).paused, false, "the clip plays by itself");
 });
 
-// ── storyplay verify (1.99??): the review of the autoplay build. (1) a clip whose <video> says nothing at all (WebKit holding the
+// ── storyplay verify (1.99aml): the review of the autoplay build. (1) a clip whose <video> says nothing at all (WebKit holding the
 //    load of an element no tap has unlocked - options.holdLoad - or the unlock not kept across a new source - options.unlockPerSource,
 //    the shipNotes' own risk case) never had a play() tried, so the ▶ fallback never showed: the poster sat there, only Trim's ▶ could
 //    start it (the owner's 1.99amb report). (3) a Trim handle dragged away and back fires no 'change' - the scrub's hold stayed on, the

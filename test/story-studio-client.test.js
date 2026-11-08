@@ -139,7 +139,7 @@ class El {
 }
 for (const [p, a] of Object.entries(BOOL)) Object.defineProperty(El.prototype, p, { get() { return this.hasAttribute(a); }, set(v) { if (v) this.setAttribute(a, ""); else this.removeAttribute(a); } });
 for (const [p, a] of Object.entries(STR)) Object.defineProperty(El.prototype, p, { get() { return this.getAttribute(a) || ""; }, set(v) { this.setAttribute(a, v); } });
-// storyplay (1.99??): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch and a
+// storyplay (1.99aml): the user's gesture as WebKit counts it for media - a click, a key press (not Escape), a lifted touch and a
 // mouse press; a finger going down is none. GESTURE.on > 0 while such an event is dispatched (studioPage's options.webkit reads it).
 const GESTURE = { on: 0 };
 const activates = (ev) => ev.type === "click" || ev.type === "pointerup" || ev.type === "touchend" || (ev.type === "keydown" && ev.key !== "Escape")
@@ -1507,7 +1507,7 @@ test('Studio storyux verify: on a phone the header and the tools let touches thr
   assert.doesNotMatch(css, /\.sst-sel-turn \{[^}]*inset-inline-end/, 'the script places the grips (off the corner with room, not a fixed corner)');
 });
 
-// ── storyplay (1.99??): a video plays by itself in the editor, like Instagram (the owner, iPhone, 2026-11-08). ONE <video> carries
+// ── storyplay (1.99aml): a video plays by itself in the editor, like Instagram (the owner, iPhone, 2026-11-08). ONE <video> carries
 //    every clip for the life of the studio, unlocked inside the user's own taps (WebKit lets a script play() an element only once
 //    it was played inside a gesture); a play still refused gets a round ▶ over the picture. story-camera.test.js has the camera's
 //    side (the shutter, Try again) and the fake's evidence; these are the studio on its own. ──
