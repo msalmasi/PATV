@@ -1181,12 +1181,14 @@ async function addText(P, words = "hi from the pond") {
   P.doc.querySelector(".sst-sheet-head button").click(); await flush();
 }
 const KIND = /can't preview this video here, but it will still post/;
+// storyux: a finger on the editor's stage (pointer events; the first finger is the primary one)
+const finger = (node, type, id, x, y) => fire(node, type, { pointerId: id, clientX: x, clientY: y, isPrimary: id === 1, pointerType: "touch", buttons: type === "pointerup" ? 0 : 1 });
 
 test("Story camera preview fix: a capture tells the editor its size, and a clip brings a poster - the live preview's frame as the recording starts", async () => {
   const P = camPage(IPHONE), infos = watchInfo(P), root = await openStudio(P);
   await tap(P);
   assert.equal(infos[0].kind, "image"); assert.equal(infos[0].width, 1080); assert.equal(infos[0].height, 1920); assert.equal(infos[0].poster, undefined, "a photo is its own picture");
-  root.querySelector('[data-picker="retake"]').click(); await flush(10);
+  root.querySelector(".sst-back").click(); await flush(10);      // storyux: the X back to the camera (was Retake)
   const live = cam(P).querySelector(".scam-video"), s = shutter(P);
   fire(s, "pointerdown"); await P.clock.tick(300); assert.equal(P.recorders.length, 1);
   const grab = P.draws.find((d) => d.canvas.classList.contains("scam-poster"));
@@ -1240,7 +1242,7 @@ test("Story camera preview fix: no size within the wait - a camera clip shows it
   await P.clock.tick(200);
   assert.doesNotMatch(status(P), /can.t preview|cannot preview/i); assert.ok(root.querySelector(".sst-recovery").hidden, "no recovery: the poster stands in");
   assert.ok(!still.hidden); assert.ok(!root.querySelector(".sst-post").disabled, "it can post");
-  for (const t of ["crop", "text", "sticker", "mention"]) assert.ok(!root.querySelector(`[data-tool="${t}"]`).disabled, t + " works on the poster");
+  for (const t of ["layout", "text", "sticker", "mention"]) assert.ok(!root.querySelector(`[data-tool="${t}"]`).disabled, t + " works on the poster");      // storyux: 📐 is Fill / Fit (was Crop)
   await addText(P);
   root.querySelector(".sst-post").click(); await flush(30);
   assert.equal(P.uploaded.length, 2); assert.equal(P.uploaded[0].body.purpose, "story_ovl");
@@ -1272,12 +1274,16 @@ test("Story camera preview fix: a MediaError 4 is tried once more without the me
   assert.doesNotMatch(status(P), /preview/i); assert.ok(root.querySelector(".sst-recovery").hidden);
   const still = root.querySelector("img.sst-still"), v = root.querySelector("video.sst-source"); assert.ok(still && !still.hidden);
   assert.ok(!root.querySelector(".sst-post").disabled, "no wait after an error");
-  // crop: the poster follows the frame the video would show
-  root.querySelector('[data-tool="crop"]').click(); await flush();
-  const zoom = root.querySelector('.sst-sheet-body input[type="range"]'); zoom.value = 2; zoom.dispatchEvent(new Ev("input")); await flush();
+  // the picture pinched on the stage (storyux - was the Crop sheet's zoom): the poster follows the frame the video would show -
+  // by the video's own transform mid-pinch, and laid out like it once the fingers lift
+  const stage = root.querySelector(".sst-preview");
+  finger(stage, "pointerdown", 1, 100, 250); finger(stage, "pointerdown", 2, 200, 250); await flush();
+  finger(stage, "pointermove", 1, 50, 250); finger(stage, "pointermove", 2, 250, 250); await flush();
+  assert.match(v.style.transform, /scale\(/, "mid-pinch: the video moves by a transform"); assert.equal(still.style.transform, v.style.transform, "and the poster with it");
+  finger(stage, "pointerup", 1, 50, 250); finger(stage, "pointerup", 2, 250, 250); await flush(6);
+  assert.equal(v.style.transform, ""); assert.equal(still.style.transform, "");
   assert.notEqual(v.style.inlineSize, "100%"); assert.equal(still.style.inlineSize, v.style.inlineSize); assert.equal(still.style.blockSize, v.style.blockSize);
-  assert.equal(still.style.insetInlineStart, v.style.insetInlineStart); assert.equal(still.style.objectFit, "fill");
-  P.doc.querySelector(".sst-sheet-head button").click(); await flush();
+  assert.equal(still.style.insetInlineStart, v.style.insetInlineStart); assert.equal(still.style.insetBlockStart, v.style.insetBlockStart); assert.equal(still.style.objectFit, "fill");
   await addText(P, "frog pond");
   root.querySelector(".sst-post").click(); await flush(30);
   const up = P.uploaded[1].body; assert.equal(up.kind, "video"); assert.equal(up.edit.camera, true); assert.equal(up.edit.fit, "fill");
@@ -1392,7 +1398,7 @@ test("Story camera preview verify: a <video> with no size is asked to decode whi
     await P.clock.tick(300); await flush(8);
     const v = root.querySelector("video.sst-source");
     assert.equal(status(P), "", which); assert.ok(root.querySelector(".sst-recovery").hidden, which);
-    assert.ok(!root.querySelector(".sst-post").disabled, which + ": open well inside the wait"); assert.ok(!root.querySelector('[data-tool="crop"]').disabled, which);
+    assert.ok(!root.querySelector(".sst-post").disabled, which + ": open well inside the wait"); assert.ok(!root.querySelector('[data-tool="layout"]').disabled, which);
     assert.equal(v.plays, 1, which + ": one muted play (the first frame), not two"); assert.equal(v.paused, true, which + ": paused on its first frame");
     root.querySelector(".sst-post").click(); await flush(24);
     assert.equal(P.uploaded[0].body.kind, "video"); assert.ok(P.uploaded[0].body.edit, which + ": with its edit");
@@ -1460,7 +1466,7 @@ test("Story camera preview verify: a gallery video whose metadata comes after th
   assert.match(status(P), KIND); assert.ok(!root.querySelector(".sst-recovery").hidden);
   late(gv); await flush(8);
   assert.equal(status(P), "", "the recovery's words go"); assert.ok(root.querySelector(".sst-recovery").hidden, "and its buttons");
-  assert.ok(!root.querySelector('[data-tool="crop"]').disabled, "editable"); assert.ok(!root.querySelector(".sst-post").disabled);
+  assert.ok(!root.querySelector('[data-tool="layout"]').disabled, "editable"); assert.ok(!root.querySelector(".sst-post").disabled);
   assert.equal(gv.plays, 1, "its first frame is put up");
   root.querySelector(".sst-post").click(); await flush(24); assert.ok(P.uploaded[0].body.edit, "posted with its edit");
   // a size that comes after the 4 s wait (no size at loadedmetadata) opens it too
@@ -1475,7 +1481,7 @@ test("Story camera preview verify: a gallery video whose metadata comes after th
   pickFile(R, "video/mp4", "big.mp4"); await flush(16); await R.clock.tick(10100);
   root3.querySelector(".sst-recovery").querySelectorAll("button").find((b) => b.textContent === "Post it as it is").click();
   late(iv); await flush(8);
-  assert.match(status(R), /Ready to post without edits/); assert.ok(root3.querySelector('[data-tool="crop"]').disabled);
+  assert.match(status(R), /Ready to post without edits/); assert.ok(root3.querySelector('[data-tool="layout"]').disabled);
   root3.querySelector(".sst-post").click(); await flush(24); assert.equal(R.uploaded[0].body.edit, undefined, "as it is");
 });
 
@@ -1508,4 +1514,69 @@ test("Story camera preview verify: the camera empties its poster and frozen canv
 test("Story camera storyux verify: after a capture the focus goes to the picture in the editor - not lost with the camera that closed", async () => {
   const P = camPage(), root = await openStudio(P); assert.ok(P.doc.activeElement === shutter(P), "the shutter has the focus");
   await tap(P); assert.ok(cam(P) === null, "the camera closed"); assert.ok(P.doc.activeElement === root.querySelector(".sst-preview"), "the preview has the focus");
+});
+
+// ── storycombo (1.99??): the preview fix (storyprev) and direct manipulation (storyux) together - a camera clip this browser
+//    can't show is edited on its poster with the new gestures: the poster moves exactly like the video would (its transform
+//    mid-gesture, its layout after), Fit's pinch posts a frame and Fill's a crop (camera: true either way), and the X back to
+//    the camera lets the poster and the ?storydebug=1 read-out go with the clip. ──
+async function pinchStage(P, root, spread = 2) {
+  const stage = root.querySelector(".sst-preview"), d = 50 * spread;
+  finger(stage, "pointerdown", 1, 100, 250); finger(stage, "pointerdown", 2, 200, 250); await flush();
+  finger(stage, "pointermove", 1, 150 - d, 250); finger(stage, "pointermove", 2, 150 + d, 250); await flush();
+  const mid = { video: root.querySelector("video.sst-source").style.transform, still: (root.querySelector("img.sst-still") || { style: {} }).style.transform };
+  finger(stage, "pointerup", 1, 150 - d, 250); finger(stage, "pointerup", 2, 150 + d, 250); await flush(6);
+  return mid;
+}
+const sameFrame = (a, b, label) => { for (const k of ["objectFit", "inlineSize", "blockSize", "insetInlineStart", "insetBlockStart", "transform"]) assert.equal(a.style[k], b.style[k], label + ": " + k); };
+
+test("Story camera storycombo: a clip framed on its poster - Fit's pinch posts a frame, Fill's drag a crop (camera: true); the poster moves with every gesture", async () => {
+  const P = camPage({ ...IPHONE, sourceVideo: (node) => { zeroMeta(node); return true; } }), root = await openStudio(P);
+  await quickClip(P); await P.clock.tick(4100);
+  const still = root.querySelector("img.sst-still"), v = root.querySelector("video.sst-source");
+  assert.ok(still && !still.hidden, "the poster is the preview"); assert.ok(!root.querySelector(".sst-post").disabled);
+  assert.equal(still.style.pointerEvents, "none", "the poster takes no touch: the stage under it gets every finger");
+  assert.ok(root.querySelector(".sst-picks").hidden, "no Gallery / Camera after the capture"); assert.ok(!root.querySelector(".sst-back").hidden, "one X");
+  const layout = root.querySelector('[data-tool="layout"]'); assert.equal(layout.getAttribute("aria-pressed"), "true", "a 9:16 clip starts filling the frame");
+  layout.click(); await flush(); assert.equal(layout.getAttribute("aria-pressed"), "false", "Fit: the whole picture"); sameFrame(still, v, "Fit");
+  const mid = await pinchStage(P, root);
+  assert.match(mid.video, /scale\(2, 2\)/, "mid-pinch: the video's transform"); assert.equal(mid.still, mid.video, "mid-pinch: the poster's is the same");
+  sameFrame(still, v, "after the pinch"); assert.equal(v.style.inlineSize, "200%");
+  await addText(P, "pond at dusk");
+  root.querySelector(".sst-post").click(); await flush(30);
+  let up = P.uploaded[1].body; assert.equal(up.kind, "video"); assert.equal(up.edit.camera, true); assert.equal(up.edit.fit, "fit"); assert.equal(up.edit.crop, undefined);
+  assert.deepEqual(up.edit.frame, { x: 0.25, y: 0.25, w: 0.5, h: 0.5 }, "Fit's frame, read against the poster's size"); assert.deepEqual(up.edit.text, ["pond at dusk"]);
+  assert.ok(P.doc.querySelector(".sst") === null, "posted");
+  // Fill: pinched, then one finger drags the picture as far as it goes - the crop stays inside the picture
+  const Q = camPage({ ...IPHONE, sourceVideo: (node) => { mediaError(node, 4); return true; } }), root2 = await openStudio(Q);
+  await quickClip(Q); const st2 = root2.querySelector("img.sst-still"), v2 = root2.querySelector("video.sst-source"); assert.ok(st2 && !st2.hidden);
+  await pinchStage(Q, root2);
+  const stage = root2.querySelector(".sst-preview");
+  finger(stage, "pointerdown", 1, 150, 250); await flush(); finger(stage, "pointermove", 1, 600, 250); await flush();
+  assert.equal(st2.style.transform, v2.style.transform, "mid-drag: the poster with the video"); assert.notEqual(v2.style.transform, "");
+  finger(stage, "pointerup", 1, 600, 250); await flush(6); sameFrame(st2, v2, "after the drag");
+  root2.querySelector(".sst-post").click(); await flush(30);
+  up = Q.uploaded.at(-1).body; assert.equal(up.edit.camera, true); assert.equal(up.edit.fit, "fill"); assert.equal(up.edit.frame, undefined);
+  assert.equal(up.edit.crop.x, 0, "dragged right as far as it goes: the picture's left edge"); assert.equal(up.edit.crop.w, 0.5);
+});
+
+test("Story camera storycombo: the X back to the camera lets a clip's poster and the debug read-out go - while it is waited for, and after edits on it", async () => {
+  // in the wait (no size yet): nothing to lose, straight back; the wait's give-up later changes nothing
+  const P = camPage({ ...IPHONE, search: "?storydebug=1", sourceVideo: (node) => { zeroMeta(node); return true; } }), root = await openStudio(P);
+  await quickClip(P); assert.ok(root.querySelector("img.sst-still")); assert.ok(root.querySelector(".sst-debug"));
+  root.querySelector(".sst-back").click(); await flush(10);
+  assert.ok(cam(P), "back at the live camera"); assert.ok(root.querySelector("img.sst-still") === null, "the poster went"); assert.ok(root.querySelector(".sst-debug") === null, "the read-out went");
+  assert.ok(root.querySelector(".sst-source") === null);
+  await P.clock.tick(4100); assert.equal(status(P), ""); assert.ok(root.querySelector(".sst-recovery").hidden); assert.ok(root.querySelector("img.sst-still") === null);
+  // a new clip: its own poster and read-out, one of each
+  await quickClip(P); await P.clock.tick(4100);
+  assert.equal(root.querySelectorAll("img.sst-still").length, 1); assert.equal(root.querySelectorAll(".sst-debug").length, 1); assert.ok(!root.querySelector("img.sst-still").hidden);
+  // edits on the poster (a pinch): the quiet question first, then Discard lets it all go
+  await pinchStage(P, root); P.win.confirm = () => { throw new Error("no browser dialog for this"); };
+  root.querySelector(".sst-back").click(); await flush();
+  assert.ok(root.querySelector(".sst-ask"), "asked first"); assert.ok(root.querySelector("img.sst-still"), "the poster stays while asked");
+  root.querySelector(".sst-ask-go").click(); await flush(10);
+  assert.ok(cam(P)); assert.ok(root.querySelector("img.sst-still") === null); assert.ok(root.querySelector(".sst-debug") === null);
+  // a photo after that: no poster, no stale read-out of the clip
+  await tap(P); assert.ok(root.querySelector("img.sst-still") === null); assert.equal(root.querySelectorAll(".sst-debug").length, 1); assert.match(root.querySelector(".sst-debug").textContent, /image\/jpeg/);
 });

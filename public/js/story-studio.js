@@ -466,7 +466,7 @@
   var WAIT_MS = 4000, LOAD_MS = 10000;
   function coarse() { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } }
   // a camera clip's poster as the preview's still: the <video>'s poster until it has a frame of its own, and an <img> over it
-  // (framed like the video by render()) that stays wherever this browser can't show the recording at all
+  // (framed like the video by placeMedia(), mid-gesture too) that stays wherever this browser can't show the recording at all
   function stillOf(s, m, poster) {
     var st = s.still = el('img', 'sst-source sst-still'); st.alt = ''; st.setAttribute('aria-hidden', 'true'); st.setAttribute('draggable', 'false'); st.style.objectFit = 'contain';
     // storyprev verify: it takes no touch - a press goes through to the <video> and the preview (crop pan, pinch), never to
@@ -1069,6 +1069,8 @@
   function fresh(s) {
     if (s.ready) discard([s.ready.id]); s.ready = null; s.failed = false; closeSheet(s); revoke(s);
     if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); s.media = null; }
+    // storyprev + storyux: a camera clip's poster and the ?storydebug=1 read-out go with the picture they stood for
+    if (s.still) { s.still.remove(); s.still = null; } if (s.debug) { s.debug.remove(); s.debug = null; }
     s.d = { file: null, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw }; s.pickId++; s.sniffId = (s.sniffId || 0) + 1;
     s.selected = null; s.gesture = null; s.lastTap = null; s.empty.hidden = false; s.filename.textContent = ''; s.recovery.hidden = true; s.recovery.textContent = '';
     say(s, ''); render(s); paintControls(s);

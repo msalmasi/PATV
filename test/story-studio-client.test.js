@@ -960,7 +960,7 @@ test('Studio storyprev: a gallery video with no size at loadedmetadata is not re
   assert.equal(P.doc.querySelector('.sst-status').textContent, '', 'no failure at loadedmetadata'); assert.ok(P.doc.querySelector('.sst-recovery').hidden);
   assert.equal(P.held.filter((h) => h.ms === WAIT_MS).length, 1, 'one bounded wait');
   video.videoWidth = 1080; video.videoHeight = 1920; video.dispatchEvent(new Ev('canplay')); await flush(4);
-  assert.equal(P.held.filter((h) => h.ms === WAIT_MS).length, 0, 'the wait is over'); assert.ok(!P.doc.querySelector('.sst-post').disabled); assert.ok(!P.doc.querySelector('[data-tool="crop"]').disabled);
+  assert.equal(P.held.filter((h) => h.ms === WAIT_MS).length, 0, 'the wait is over'); assert.ok(!P.doc.querySelector('.sst-post').disabled); assert.ok(!P.doc.querySelector('[data-tool="layout"]').disabled);
   assert.ok(root.classList.contains('sst-video'));
   // nothing within the wait: the recovery - it will still post
   const Q = studioPage({ hold: [WAIT_MS], sourceVideo: (node) => { node.videoWidth = 0; node.videoHeight = 0; node.duration = 8; node.dispatchEvent(new Ev('loadedmetadata')); return true; } });
