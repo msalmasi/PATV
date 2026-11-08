@@ -949,7 +949,7 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
   assert.match(fs.readFileSync(path.join(repo, "views/messages.ejs"), "utf8"), /messages\.js\?v=14/);
 });
 
-// ── storyprev (1.99??): a <video> with no size at 'loadedmetadata' is waited for ('resize' / 'loadeddata' / 'canplay', WAIT_MS),
+// ── storyprev (1.99amb): a <video> with no size at 'loadedmetadata' is waited for ('resize' / 'loadeddata' / 'canplay', WAIT_MS),
 //    a refused media fragment gets one plain try, and a gallery video this browser can't show keeps "Post it as it is" in
 //    kinder words; ?storydebug=1 shows what the browser made of it (story-camera.test.js has the camera's poster) ──
 const WAIT_MS = 4000;
@@ -992,7 +992,7 @@ test('Studio storyprev: a refused media fragment is tried once without it; the d
   await studioPick(Q, 'image/jpeg'); assert.equal(Q.doc.querySelectorAll('.sst-debug').length, 1, 'one read-out, for the current pick'); assert.match(Q.doc.querySelector('.sst-debug').textContent, /image\/jpeg/);
 });
 
-// ── storyux (1.99??): the owner (iPhone, iOS 26, Chrome = WebKit; 2026-11-08): "can we just interact with the objects to place and size
+// ── storyux (1.99amb): the owner (iPhone, iOS 26, Chrome = WebKit; 2026-11-08): "can we just interact with the objects to place and size
 //    them? Like drag to move or pinch to shrink. Having sliders for horizontal and vertical position or rotation or size is very
 //    janky. Same with the content itself... zoom in or out on it with normal gestures." + "we shouldn't show the gallery button and
 //    camera button after a photo is selected/taken. Just an 'x' to go back to the camera screen." + "the other buttons can be

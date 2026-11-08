@@ -37,7 +37,7 @@ function cleanEdit(raw, { kind } = {}) {
       throw new Refuse(400, "The crop must stay inside the picture and be at least five percent wide and tall.");
     edit.crop = { x: c.x, y: c.y, w: Math.min(c.w, 1 - c.x), h: Math.min(c.h, 1 - c.y) };
   } else if (Object.hasOwn(raw, "crop")) throw new Refuse(400, "Fit uses the whole picture, so it can't include a crop.");
-  // storyux (1.99??): frame = the picture pinched or dragged inside Fit (story-studio.js): the frame's 9:16 window over the
+  // storyux (1.99amb): frame = the picture pinched or dragged inside Fit (story-studio.js): the frame's 9:16 window over the
   // picture, in picture fractions, which can run past the picture's edges (black there). The editor's own limits: the
   // picture's centre stays in the frame, never smaller than half the whole picture (the window's shorter side at most 2
   // pictures), never past 8x the frame-filling zoom (its longer side at least 1/8) or a window under 5% of the picture.
@@ -111,7 +111,7 @@ function shape(edit, w, h) {
   if (win && Math.abs((w * win.w / (h * win.h)) / RATIO - 1) > 0.02)
     throw new media.MediaError(edit.fit === "fill" ? "The crop must have the story's 9:16 shape." : "The frame must have the story's 9:16 shape.");
 }
-// storyux (1.99??): the picture's window (Fill's crop, or Fit's frame - picture fractions, 9:16) drawn into an outW x outH story
+// storyux (1.99amb): the picture's window (Fill's crop, or Fit's frame - picture fractions, 9:16) drawn into an outW x outH story
 // the way the editor shows it (its RECT: the picture at -x/w, -y/h of the frame, 1/w by 1/h of it); the rest is black.
 // storyux verify: exact at any zoom - cutting whole source pixels and stretching them to the ideal place blew a half-pixel
 // rounding up by the zoom (14 px at the deepest zoom of a 640 x 360 photo, 30 of a video), and the picture slid off the

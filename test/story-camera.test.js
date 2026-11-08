@@ -1164,7 +1164,7 @@ test("Story camera fix verify: a short clip from the phone's capture input (the 
   root5.querySelector(".sst-post").click(); await flush(24); assert.deepEqual(T.uploaded[0].body.edit.trim, { start: 0, end: 30 });
 });
 
-// ── storyprev (1.99??): the owner's iPhone (iOS 26, Chrome = WebKit, 2026-11-08 ~03:45Z), after 1.99aly: a clip just taken with
+// ── storyprev (1.99amb): the owner's iPhone (iOS 26, Chrome = WebKit, 2026-11-08 ~03:45Z), after 1.99aly: a clip just taken with
 //    the story camera still says "This browser cannot preview that file" (it posts fine: the server re-encodes). The editor gave
 //    up the moment its <video> fired 'error', or had no size at 'loadedmetadata' (a MediaRecorder MP4 is fragmented, its moov
 //    empty: WebKit can learn the size only from a decoded frame, then fires 'resize'). Now a missing size is waited for (4 s at
@@ -1371,7 +1371,7 @@ test("Story camera preview fix: ?storydebug=1 (or localStorage patv.storydebug=1
   }
 });
 
-// ── storyprev verify (1.99??): the review of the preview fix. A poster that takes touches (iOS's image long-press menu); a wait
+// ── storyprev verify (1.99amb): the review of the preview fix. A poster that takes touches (iOS's image long-press menu); a wait
 //    for a size that never asks WebKit to decode (it decodes - and sizes - only once the video plays); the hand-over to the
 //    video pausing the user's own play; a late error after that hand-over leaving a blank preview; a gallery video's late
 //    metadata after the 10 s give-up thrown away; a poster-framed edit the server refuses with no way to post it as it is; the
@@ -1516,7 +1516,7 @@ test("Story camera storyux verify: after a capture the focus goes to the picture
   await tap(P); assert.ok(cam(P) === null, "the camera closed"); assert.ok(P.doc.activeElement === root.querySelector(".sst-preview"), "the preview has the focus");
 });
 
-// ── storycombo (1.99??): the preview fix (storyprev) and direct manipulation (storyux) together - a camera clip this browser
+// ── storycombo (1.99amb): the preview fix (storyprev) and direct manipulation (storyux) together - a camera clip this browser
 //    can't show is edited on its poster with the new gestures: the poster moves exactly like the video would (its transform
 //    mid-gesture, its layout after), Fit's pinch posts a frame and Fill's a crop (camera: true either way), and the X back to
 //    the camera lets the poster and the ?storydebug=1 read-out go with the clip. ──

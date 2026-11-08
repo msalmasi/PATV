@@ -192,7 +192,7 @@ test("animated pictures reject edits and remove the intermediate image", videoOp
   assert.deepEqual(files(), before);
 });
 
-// ── storyux (1.99??): the picture itself is pinched and dragged in the editor. Fill keeps posting a crop inside the picture; Fit
+// ── storyux (1.99amb): the picture itself is pinched and dragged in the editor. Fill keeps posting a crop inside the picture; Fit
 //    posts the frame's window over the picture ("frame", picture fractions, 9:16), which can run past the picture's edges - black
 //    there. The editor's geometry (story-studio.js, run here as it is) says where a point of the picture is shown; the composed
 //    story must put it there. ──

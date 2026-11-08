@@ -1,6 +1,6 @@
 // Story Studio (1.99alq): local drafts, one shared overlay renderer, and a versioned server edit.
 // No media leaves the device before Post. Mentions remain removable data, never overlay pixels.
-// storyux (1.99??): direct manipulation, no sliders (the owner, iPhone, 2026-11-08). On the picture (the stage):
+// storyux (1.99amb): direct manipulation, no sliders (the owner, iPhone, 2026-11-08). On the picture (the stage):
 //   a layer (text / sticker / mention)   tap = select it (an outline, a delete handle and - on a pointer - a turn/size corner);
 //                                        one finger drags it; two fingers pinch it and twist it at once; a double tap on a
 //                                        text edits its words. It stays in the frame (its turned box) and snaps to the centre
@@ -16,7 +16,7 @@
 // camera, or the picker; a quiet question first when there are edits), and every icon button is a round icon whose words
 // are its aria-label and tooltip. The posted story matches the preview: the overlay is the same canvas, and the picture's
 // window goes as Fill's crop or Fit's frame (storycompose.js renders both from the same window).
-// storyux verify (1.99??, the review): a tap only selects (a click on the delete grip counts only when its press began there);
+// storyux verify (1.99amb, the review): a tap only selects (a click on the delete grip counts only when its press began there);
 // the grips sit just off the layer's whole hit box where there is room (G.grips), never over it, under the header's buttons or out
 // of the stage; on a phone the header and the tools let touches through between their buttons; hit areas stack as drawn; a lost
 // pointerup ends with the next press; the picture moves by a transform mid-gesture; Escape / a click outside / the X share one
@@ -459,7 +459,7 @@
       else use(s, file, found.kind, !!found.gif, n, info);
     }, function () { if (live(s) && id === s.sniffId) refuse(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), n); });
   }
-  // storyprev (1.99??): the owner's iPhone (iOS 26) said "This browser cannot preview that file" for clips just taken with the
+  // storyprev (1.99amb): the owner's iPhone (iOS 26) said "This browser cannot preview that file" for clips just taken with the
   // story camera (they posted fine). The editor now waits WAIT_MS for a <video> with no size yet, tries a refused media
   // fragment once without it, and shows a camera clip's poster (story-camera.js: the live preview's frame as it started)
   // whenever the video can't show a frame - see use(). LOAD_MS: a file that says nothing at all.

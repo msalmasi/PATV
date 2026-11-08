@@ -27,7 +27,7 @@
 //     inside the gesture that ends a capture (a let-go stops every track at once). On a pad page room-bridge.js owns the
 //     session (PATVRoom.session: its playback / auto, the room player's volume and resume); elsewhere the old type returns
 //   * a desktop webcam that names no facing faces you: its preview is mirrored too (the saved file still isn't)
-// storyprev (1.99??): a capture tells the studio its size (info.width / height), and a clip brings a poster (info.poster, a
+// storyprev (1.99amb): a capture tells the studio its size (info.width / height), and a clip brings a poster (info.poster, a
 // JPEG of the live preview's frame as the recording starts - else its last frame) and its recorder type (info.mime): an
 // iPhone may not show its own MediaRecorder MP4 in a <video> at all, and the editor shows the poster instead
 (function () {
