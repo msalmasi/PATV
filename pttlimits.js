@@ -5,6 +5,10 @@
 //   gap_s     the cooldown between one person's clips, seconds (0-600; default 30; 0 = none)
 //   burst     clips per 10 minutes per person (1-30; default 3) - the play limit's window stays WINDOW_S
 //   max_secs  a clip's longest length, seconds (3-120; default 30)
+//   tail_ms   relaymic 1.99?? - the release tail: the recorder keeps going this long after the button is let go, so the word said as
+//             the finger lifts is in the clip (0-1000 ms; default 400; 0 = none) - the live view's room.pttTail (room-bridge.js)
+//   tail_ios  relaymic: the tail on iPhone / iPad too (0 / 1; default 0 = off - there the release stays inside the gesture until it's
+//             tested on the owner's iPhone) - room.pttTailIos
 //
 // Where: /admin/bridge "Push-to-talk clips" (views/admin/bridge.ejs; GET / POST /api/admin/pttlimits) - site admins (pads.config, read
 // from the account's class in the database), a same-origin fetch (X-Requested-With: fetch + guard.sameSite), each change an admin_audit
@@ -35,6 +39,10 @@ const SPEC = Object.freeze({
   gap_s: Object.freeze({ def: 30, lo: 0, hi: 600, label: "Cooldown between a person's clips (seconds)" }),
   burst: Object.freeze({ def: 3, lo: 1, hi: 30, label: "Clips per 10 minutes per person" }),
   max_secs: Object.freeze({ def: 30, lo: 3, hi: 120, label: "Max clip length (seconds)" }),
+  // relaymic 1.99??: the recorder's release tail (the page only - Pepe never sees it) and whether it applies on iOS (a 0 / 1 switch:
+  // true / false from the card's checkbox are taken too)
+  tail_ms: Object.freeze({ def: 400, lo: 0, hi: 1000, label: "Release tail (milliseconds)" }),
+  tail_ios: Object.freeze({ def: 0, lo: 0, hi: 1, label: "Release tail on iPhone / iPad (0 = off, 1 = on)", bool: true }),
 });
 const FIELDS = Object.freeze(Object.keys(SPEC));
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((k) => [k, SPEC[k].def])));
@@ -64,6 +72,7 @@ class Refuse extends Error {
 /** A stored value -> its clamped whole number (a bad one -> the default). */
 function clampOne(k, v) {
   const S = SPEC[k];
+  if (S.bool && typeof v === "boolean") return v ? 1 : 0;          // (relaymic: tail_ios)
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   if (!Number.isFinite(n)) return S.def;
   return Math.min(S.hi, Math.max(S.lo, Math.round(n)));
@@ -80,9 +89,11 @@ function validate(input, base = CFG) {
   for (const k of FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
     const S = SPEC[k], v = src[k];
-    const n = typeof v === "number" ? v : typeof v === "string" && /^\s*-?\d+\s*$/.test(v) ? Number(v) : NaN;
-    if (!Number.isInteger(n) || n < S.lo || n > S.hi) errors[k] = `${S.label}: a whole number from ${S.lo} to ${S.hi}.`;
-    else cfg[k] = n;
+    const n = S.bool && typeof v === "boolean" ? (v ? 1 : 0)          // (relaymic: tail_ios - the card's checkbox)
+      : typeof v === "number" ? v : typeof v === "string" && /^\s*-?\d+\s*$/.test(v) ? Number(v) : NaN;
+    if (!Number.isInteger(n) || n < S.lo || n > S.hi) {
+      errors[k] = S.bool ? `${S.label}: on or off.` : `${S.label}: a whole number from ${S.lo} to ${S.hi}.`;
+    } else cfg[k] = n;
   }
   return { cfg, errors };
 }
@@ -103,7 +114,7 @@ function init() {
   return ready;
 }
 
-/** The limits as set (the card's values): {gap_s, burst, max_secs, window_s}. Synchronous; the defaults until the row is read. */
+/** The limits as set (the card's values): {gap_s, burst, max_secs, tail_ms, tail_ios, window_s}. Synchronous; the defaults until the row is read. */
 function current() {
   if (!loaded) init().catch(() => {});
   return { ...CFG, window_s: WINDOW_S };
@@ -141,7 +152,7 @@ async function view() {
            max_bytes: maxBytes(), audit: audit.map((a) => ({ at: a.at, admin: a.admin, reason: a.reason || null, to: a.detail && a.detail.to ? a.detail.to : null })) };
 }
 
-/** Save (body: some of gap_s / burst / max_secs, or reset: true; reason optional) as `user` ({userId, username}). Throws Refuse. */
+/** Save (body: some of gap_s / burst / max_secs / tail_ms / tail_ios, or reset: true; reason optional) as `user` ({userId, username}). Throws Refuse. */
 async function save(user, body = {}) {
   await init();
   const task = saving.then(async () => {
@@ -168,7 +179,8 @@ async function save(user, body = {}) {
       await require("./adminaudit").record(user || { userId: "system" }, AUDIT, null, { action: b.reset === true ? "reset" : "save", from, to: next, changed },
         typeof b.reason === "string" && b.reason.trim() ? b.reason.trim().slice(0, 200) : null);
     } catch (e) { console.error("[pttlimits] audit:", e.message); }
-    console.log(`[pttlimits] push-to-talk clips: cooldown ${next.gap_s}s, ${next.burst} per ${WINDOW_S / 60} min, up to ${next.max_secs}s (${by || "?"})`);
+    console.log(`[pttlimits] push-to-talk clips: cooldown ${next.gap_s}s, ${next.burst} per ${WINDOW_S / 60} min, up to ${next.max_secs}s, ` +
+                `release tail ${next.tail_ms} ms${next.tail_ios ? " (iOS too)" : ""} (${by || "?"})`);
     return { cfg: { ...CFG }, changed };
   });
   saving = task.catch(() => {});

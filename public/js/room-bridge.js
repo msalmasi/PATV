@@ -8,8 +8,9 @@
 //                              a "!" line is a command Pepe runs as your Camfrog name (autocomplete + your private answers)
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip Pepe plays on the room's mic when it's free; shown only while
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
-//                              clips", 30 s by default) - the live view's room.pttMax (pttlimits)
-//   .useToast(fn)              (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
+//                              clips", 30 s by default) - the live view's room.pttMax (pttlimits). Letting go keeps recording
+//                              room.pttTail ms more (relaymic 1.99??: the release tail, so the last word is in the clip)
+//   .useToast(fn)             (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
 //                              line under the composer goes there instead (fn(text, {id, ms, bad, busy, sticky}); '' with the id =
 //                              take it down; busy = a step on the way, sticky = a state that lasts until '')
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
@@ -1340,6 +1341,21 @@
     var n = Number(d && d.room && d.room.pttMax);
     return isFinite(n) && n >= PTT_LO && n <= PTT_HI ? Math.floor(n) : PTT_DEF;
   }
+  // relaymic 1.99?? (owner 11-08: "Pepe cuts out the last word or so of web relay mic ups if the speaker doesn't leave a gap before
+  // hitting button to end the mic up"): the end was lost HERE - the recorder and the mic tracks stopped in the handler that ended the
+  // press, so what was said as the finger lifted was never recorded (+ 30-60 ms Chrome's Opus encoder drops). The release tail, like
+  // Discord's "release delay": letting go (or the tap / Enter that sends) keeps the recorder running room.pttTail ms more (pttlimits
+  // tail_ms - /admin/bridge "Push-to-talk clips", 0-1000, 400 by default). The button says Sending at once and a press meanwhile is
+  // ignored; after the tail the recorder stops and its onstop lets the mic go and uploads (x-clip-secs: the wall time, tail included).
+  // No tail on the max-length timer (Pepe's +0.5 s check still holds), a hidden / closed page, the room's mic switched off or destroy()
+  // - those stop at once, as before. iOS: only with room.pttTailIos (tail_ios, off by default) - there the release stays inside the
+  // gesture (the room player only resumes from one; play-and-record holds while any track is live). A view without it (or a bad
+  // value): no tail - the release as before.
+  var PTT_TAIL_HI = 1000;
+  function pttTailOf(d) {
+    var n = Number(d && d.room && d.room.pttTail);
+    return isFinite(n) && n > 0 ? Math.min(PTT_TAIL_HI, Math.floor(n)) : 0;
+  }
   // What the clip line says for the user's latest clip job (mineFor). Pepe (1.99bk) acks the steps:
   // queued -> waiting (someone else holds the mic) -> playing -> done: "played", or not ok with
   // "couldn't get the mic ..." after a patient wait. Older Pepes ack once ("queued ...") then again
@@ -1411,6 +1427,7 @@
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
     var opening = false, pressAt = 0, upAt = 0, tapMode = false, requestGen = 0;
     var recording = false, recordListeners = [], activeDoc = null, activeWin = null;
+    var tailMs = 0, tailIos = false, tailTimer = null, ending = false;   // relaymic: the release tail (update() reads room.pttTail / pttTailIos)
     // ptttoast 1.99ana (owner 11-08, Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" sat under the Dock's tool row - "they
     // should show up the same way the other stuff does as the modal that auto-dismisses"): useToast(fn) - the Room Dock hands in its chat
     // card's notices (pad-dock.js chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then nothing is written under the
@@ -1455,7 +1472,7 @@
     }
     host.addEventListener('patv:surfacechange', function () { adopt(host.ownerDocument); });
     adopt(host.ownerDocument || document);
-    function idle() { btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
+    function idle() { ending = false; btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
     // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
     // track is alive), then the room player gets its playback session + the user's volume back.
     function release() {
@@ -1466,11 +1483,34 @@
     }
     // Called from the gesture that ends the clip (pointerup / tap / key), so the release - and the room
     // player's resume - happen inside that gesture instead of later in MediaRecorder's onstop.
+    // relaymic: these stop at ONCE - the max-length timer, a hidden / closed page, the mic switched off, destroy() - a tail on its
+    // way too (cut short: the clip so far still goes)
     function stop() {
       requestGen++;                           // a late permission grant must not record after a surface closed
       clearTimeout(recTimer);
+      if (tailTimer) { clearTimeout(tailTimer); tailTimer = null; }
+      ending = false;
       if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
       if (stream) release();
+    }
+    // relaymic 1.99??: the end of a press - pointerup, the tap that sends, Enter. With a tail (pttTailOf; on iOS only with tail_ios) the
+    // recorder runs on: Sending at once, the mic open, and after the tail rec.stop() - its onstop releases the mic and uploads. Without
+    // one: stop() inside the gesture, as before.
+    function finish() {
+      var ms = IOS && !tailIos ? 0 : tailMs;
+      if (!(ms > 0) || !rec || rec.state !== 'recording') return stop();
+      if (ending) return;
+      ending = true;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.textContent = _t('js.pad.ptt.rec_sending', '🎙 Sending…');
+      var r = rec;
+      tailTimer = setTimeout(function () {
+        tailTimer = null;
+        if (rec !== r || r.state !== 'recording') return;     // (stopped some other way meanwhile)
+        requestGen++;
+        clearTimeout(recTimer);
+        try { r.stop(); } catch (e) { stop(); }                // the mic tracks go in onstop (release)
+      }, ms);
     }
     var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
     function send(chunks, mimeType, secs, capS, tid) {
@@ -1496,8 +1536,8 @@
         .catch(function () { say(_t('js.pad.relay.unreachable', 'couldn\'t reach the site'), 'bad'); });
     }
     function start() {
-      if (gone) return;
-      if (rec && rec.state === 'recording') return stop();
+      if (gone || ending) return;                // (relaymic: a press during the release tail is ignored)
+      if (rec && rec.state === 'recording') return finish();   // the tap that sends (relaymic: with the tail)
       if (opening) return;                       // a second press while the browser is still opening the mic
       opening = true; pressAt = Date.now();
       var myRequest = ++requestGen, tid = pressTid = 'ptt:p' + (++pressSeq), say = sayFor(tid);   // (ptttoast: this press's notice)
@@ -1543,16 +1583,24 @@
     function up() {
       if (!held) return;
       held = false; upAt = Date.now();
-      if (!rec || rec.state !== 'recording' || tapMode) return;
-      if (Date.now() - recAt > 400) stop();
+      if (ending || !rec || rec.state !== 'recording' || tapMode) return;
+      if (Date.now() - recAt > 400) finish();    // relaymic: the release tail
       else { tapMode = true; btn.textContent = _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send'); }
     }
-    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; upAt = 0; start(); });
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (ending) return;                        // relaymic: a press during the release tail is ignored
+      held = true; upAt = 0;
+      // relaymic: the pointer stays this button's until it lifts - a mouse sliding off the 40 px dock button mid-word fired pointerleave,
+      // which ended the clip (pointerleave stays below for a browser without pointer capture); one it can't capture records as before
+      try { if (btn.setPointerCapture && e.pointerId != null) btn.setPointerCapture(e.pointerId); } catch (x) { /* not capturable */ }
+      start();
+    });
     btn.addEventListener('pointerup', up);
     btn.addEventListener('pointercancel', up);
     btn.addEventListener('pointerleave', up);
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });   // iOS / Android long-press menu
-    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
+    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); if (ending) return; upAt = 1; start(); } });
     return {
       adopt: adopt,
       destroy: function () { gone = true; stop(); box.classList.add('hide'); if (pressTid) notice(pressTid, ''); },   // (ptttoast: and the press's notice)
@@ -1577,6 +1625,7 @@
         if (d && d.room) {
           var mx = pttMaxOf(d);
           if (mx !== maxS) { maxS = mx; if (txt.classList.contains('rb-ptt-idle')) txt.textContent = uptoText(); }
+          tailMs = pttTailOf(d); tailIos = d.room.pttTailIos === true;     // relaymic: the release tail (the next release uses it)
         }
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         if (k === last) return;

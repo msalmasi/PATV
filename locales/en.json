@@ -4971,6 +4971,7 @@
   "js.pad.ptt.hold": "🎙 Hold to talk",
   "js.pad.ptt.upto_n": "up to {n} s · Pepe plays it on the mic when it's free",
   "js.pad.ptt.rec_tap": "⏺ Recording — tap to send",
+  "js.pad.ptt.rec_sending": "🎙 Sending…",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Jump to live",
   "js.pad.audio.mode_rtc": "⚡ live",

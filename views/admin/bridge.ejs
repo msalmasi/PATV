@@ -20,28 +20,33 @@
     <label>Cooldown between a person's clips (seconds; 0 = none)<input class="ds-in" type="number" inputmode="numeric" name="gap_s" min="<%= P.limits.gap_s[0] %>" max="<%= P.limits.gap_s[1] %>" step="1" required value="<%= P.cfg.gap_s %>"></label>
     <label>Clips per 10 minutes per person<input class="ds-in" type="number" inputmode="numeric" name="burst" min="<%= P.limits.burst[0] %>" max="<%= P.limits.burst[1] %>" step="1" required value="<%= P.cfg.burst %>"></label>
     <label>Max clip length (seconds)<input class="ds-in" type="number" inputmode="numeric" name="max_secs" min="<%= P.limits.max_secs[0] %>" max="<%= P.limits.max_secs[1] %>" step="1" required value="<%= P.cfg.max_secs %>"></label>
+    <%# relaymic 1.99??: the recorder's release tail (room-bridge.js) - and whether it applies on iPhone / iPad (off until tested there) %>
+    <label>Release tail (milliseconds; 0 = none)<input class="ds-in" type="number" inputmode="numeric" name="tail_ms" min="<%= P.limits.tail_ms[0] %>" max="<%= P.limits.tail_ms[1] %>" step="1" required value="<%= P.cfg.tail_ms %>"></label>
+    <label><input type="checkbox" name="tail_ios" value="1"<%= P.cfg.tail_ios ? ' checked' : '' %>> Release tail on iPhone / iPad too</label>
     <label>Reason (optional)<input class="ds-in" name="reason" maxlength="200" autocomplete="off"></label>
     <div class="adm-actions">
       <button type="submit">Save</button>
-      <button type="button" id="ptReset" class="adm-btn ghost">Reset to defaults (<%= P.defaults.gap_s %> s · <%= P.defaults.burst %> per 10 min · <%= P.defaults.max_secs %> s)</button>
+      <button type="button" id="ptReset" class="adm-btn ghost">Reset to defaults (<%= P.defaults.gap_s %> s · <%= P.defaults.burst %> per 10 min · <%= P.defaults.max_secs %> s · <%= P.defaults.tail_ms %> ms tail)</button>
       <span id="ptMsg" class="adm-msg" role="status"></span>
     </div>
   </form>
-  <p class="adm-help" id="ptNow" role="status">Now: one clip every <%= P.cfg.gap_s %> s, <%= P.cfg.burst %> per 10 minutes, up to <%= P.cfg.max_secs %> s long<%= P.at ? ' · last change ' + new Date(P.at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' + (P.by ? ' by ' + P.by : '') : ' · the defaults' %>.</p>
+  <p class="adm-help" id="ptNow" role="status">Now: one clip every <%= P.cfg.gap_s %> s, <%= P.cfg.burst %> per 10 minutes, up to <%= P.cfg.max_secs %> s long, release tail <%= P.cfg.tail_ms %> ms (<%= P.cfg.tail_ios ? 'on iPhone / iPad too' : 'not on iPhone / iPad' %>)<%= P.at ? ' · last change ' + new Date(P.at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' + (P.by ? ' by ' + P.by : '') : ' · the defaults' %>.</p>
   <p class="adm-help"><b>Cooldown</b>: how long after one of their clips a person waits for the next. <b>Clips per 10 minutes</b>: how many of one person's clips can play in any 10 minutes. A clip that doesn't play (Pepe couldn't get the mic, the audio failed, Pepe never took it) doesn't count toward either. <b>Max clip length</b>: the recorder stops there and the pad page says it; a longer upload is refused. The upload size limit grows with the max length - 24 KB a second, 6x what the recorder asks for, room for Safari's higher bitrate (744 KB at 30 s, about 2.8 MB at 120 s<%= Number.isFinite(P.max_bytes) ? '; ' + Math.round(P.max_bytes / 1024) + ' KB now' : '' %>); a bigger upload is refused and the pad page says the clip is too big. Uploads per 10 minutes, played or not, stay capped at 12 (or at the clips-per-10-minutes number when that is higher).</p>
+  <p class="adm-help"><b>Release tail</b>: how long the recorder keeps going after the button is let go, so the last word someone says as they let go is in the clip (like Discord's release delay; 400 ms by default, up to 1000, 0 = none). The button says Sending at once and a press meanwhile is ignored; the room's audio stays turned down that much longer. The max length still stops a clip on time, and closing or hiding the page stops it at once. <b>On iPhone / iPad</b> it is off unless you tick it: there the clip ends inside the tap, which is how the room's sound comes back after a clip.</p>
   <%# pttlimits review fix 1: an older Pepe refuses AND counts a clip over his own 30 s - the site keeps clips to 30 s until he says he follows these %>
   <p class="adm-help" id="ptPepe" role="status"><% if (P.pepe && P.pepe.follows) { %>Pepe follows these - every clip carries them and he re-checks it with them<%= P.pepe.at ? ' (he last said so ' + new Date(P.pepe.at).toISOString().slice(11, 16) + ' UTC)' : '' %>.<% } else { const O = (P.pepe && P.pepe.old) || { gap_s: 30, burst: 3, max_secs: 30 }; %>Pepe hasn't said he follows these yet - until his update runs, a clip stays at most <%= O.max_secs %> s long here and on the pad page (his own limit: he would refuse a longer one and still count it), and his own <%= O.gap_s %> s cooldown and <%= O.burst %> per 10 minutes still apply (a clip he refuses for those doesn't count).<% } %></p>
   <ul id="ptAudit" class="adm-help" aria-label="Recent changes"></ul>
   <% } %>
 </section>
 <script>
-// pttlimits: the Push-to-talk clips card (pttlimits.js: GET / POST /api/admin/pttlimits {gap_s, burst, max_secs, reason} | {reset: true})
+// pttlimits: the Push-to-talk clips card (pttlimits.js: GET / POST /api/admin/pttlimits {gap_s, burst, max_secs, tail_ms, tail_ios, reason} |
+// {reset: true}) - relaymic 1.99??: + the release tail (tail_ms) and its iPhone / iPad switch (tail_ios: the checkbox, sent as 1 / 0)
 (function () {
   'use strict';
   var form = document.getElementById('ptForm');
   if (!form) return;
   var msg = document.getElementById('ptMsg'), now = document.getElementById('ptNow'), list = document.getElementById('ptAudit'), pepeEl = document.getElementById('ptPepe');
-  var NAMES = ['gap_s', 'burst', 'max_secs'], busy = false;
+  var NAMES = ['gap_s', 'burst', 'max_secs', 'tail_ms'], busy = false;
   function when(ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''; }
   function say(t, ok) { msg.textContent = t; msg.className = 'adm-msg ' + (ok ? 'ok' : 'err'); }
   function req(data) {
@@ -49,7 +54,11 @@
       headers: data ? { 'content-type': 'application/json', 'x-requested-with': 'fetch' } : {}, body: data ? JSON.stringify(data) : undefined })
       .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) { var e = new Error(d.error || ('HTTP ' + r.status)); e.field = d.field; throw e; } return d; }); });
   }
-  function line(c) { return 'one clip every ' + c.gap_s + ' s, ' + c.burst + ' per 10 minutes, up to ' + c.max_secs + ' s long'; }
+  // (relaymic: + the tail - an audit row from before it has none)
+  function line(c) {
+    return 'one clip every ' + c.gap_s + ' s, ' + c.burst + ' per 10 minutes, up to ' + c.max_secs + ' s long' +
+      (c.tail_ms != null ? ', release tail ' + c.tail_ms + ' ms (' + (c.tail_ios ? 'on iPhone / iPad too' : 'not on iPhone / iPad') + ')' : '');
+  }
   // review fix 1: whether Pepe follows them (same words as the page render)
   function pepeLine(p) {
     if (p && p.follows) return 'Pepe follows these - every clip carries them and he re-checks it with them' + (p.at ? ' (he last said so ' + new Date(Number(p.at)).toISOString().slice(11, 16) + ' UTC)' : '') + '.';
@@ -59,6 +68,7 @@
   function render(v) {
     if (!v || !v.cfg) return;
     NAMES.forEach(function (k) { if (form.elements[k]) form.elements[k].value = String(v.cfg[k]); });
+    if (form.elements.tail_ios) form.elements.tail_ios.checked = !!v.cfg.tail_ios;
     now.textContent = 'Now: ' + line(v.cfg) + (v.at ? ' · last change ' + when(v.at) + (v.by ? ' by ' + v.by : '') : ' · the defaults') + '.';
     if (pepeEl && v.pepe) pepeEl.textContent = pepeLine(v.pepe);
     list.textContent = '';
@@ -83,10 +93,11 @@
     e.preventDefault();
     var body = { reason: form.elements.reason.value.trim() };
     NAMES.forEach(function (k) { body[k] = form.elements[k].value.trim(); });
+    if (form.elements.tail_ios) body.tail_ios = form.elements.tail_ios.checked ? 1 : 0;
     send(body);
   });
   document.getElementById('ptReset').addEventListener('click', function () {
-    if (!window.confirm('Put the push-to-talk clip limits back to the defaults?')) return;
+    if (!window.confirm('Put the push-to-talk clip limits and the release tail back to the defaults?')) return;
     send({ reset: true, reason: form.elements.reason.value.trim() });
   });
   req().then(render).catch(function (e) { say(e.message, false); });
