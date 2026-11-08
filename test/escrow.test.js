@@ -318,3 +318,19 @@ test("wagers: rollback hands the records back (keyed); the ledger rollback waits
                                                              { supply: [{ key: "escrow:holds", amount: held.amount }] }, "ec-0003"));
   assert.equal(again.body.ok, true, JSON.stringify(again.body));
 });
+
+test("h22: a TNY hold (a Sit & Go entry) is a site service's: never in Pepe's mirror, his keyed calls can't move it, a rollback leaves it held", async () => {
+  assert.ok(L.isServiceKind("TNY"));
+  const { tx } = require(path.join(repo, "dbUtils"));
+  const h = await tx(async () => L.holdInTx({ key: "tny:abcdef0123:u5:enter:1", hid: null, account: await L.accountFor({ userId: "u5" }), amount: 1100,
+                                              ref: "TNY-abcdef0123", reason: "sit & go entry", via: "site", casino: true }));
+  assert.equal((await getQuery("SELECT kind, state FROM escrow_holds WHERE id = ?", [h.hid]))[0].kind, "TNY");
+  assert.ok(!(await L.holdsHeld()).some((x) => x.id === h.hid), "not in Pepe's mirror");
+  assert.equal((await L.heldTotal("service")).amount >= 1100, true, "counted as a service hold");
+  assert.equal((await post("/api/escrow/bot/refund", { key: "refund:" + h.hid, hid: h.hid, reason: "x" })).body.code, "E_SITE_HOLD");
+  assert.equal((await post("/api/escrow/bot/settle", { key: "settle:x-" + h.hid, hids: [h.hid], payouts: [], fees: [] })).body.code, "E_SITE_HOLD");
+  const rb = await post("/api/escrow/admin/rollback", { key: "er-tny-0001" });
+  assert.equal(rb.body.ok, true, JSON.stringify(rb.body));
+  assert.ok(!rb.body.holds.some((x) => x.id === h.hid), "a rollback never hands it to Pepe");
+  assert.equal((await getQuery("SELECT state FROM escrow_holds WHERE id = ?", [h.hid]))[0].state, "held");
+});
