@@ -13,6 +13,8 @@
 //   admin  --GET  /api/admin/pepe/rooms--> {online, state, actions: the last room.ctl actions with their results}
 //   grabcard 1.99amm: the same state push carries Pepe's !mic fastgrab settings (state.fastgrab, cleaned by fastgrab.js) for the
 //   page's ⚡ Fast mic grab card (/admin/pepe/rooms#fastgrab - its own API: GET / POST /api/admin/pepe/fastgrab, fastgrab.js)
+//   micspeed 1.99??: ...and his mic timing pads, speed-ups and yield list (state.mictiming, cleaned by mictiming.js) for the ⏱ Mic timing
+//   card (/admin/pepe/rooms#mictiming - GET / POST /api/admin/pepe/mictiming)
 //
 // Guards: Admin class (page + API), same-site + X-Requested-With: fetch, 20 changes a minute per admin, room names
 // checked for shape; Pepe re-checks site_admin and does one change at a time. A join password is used once: it is
@@ -71,8 +73,12 @@ function cleanState(s) {
   // grabcard 1.99amm: the !mic fastgrab settings Pepe has now (global + each room) for the Fast mic grab card (fastgrab.js) - only when
   // he sends them (an older Pepe: no key, the card says so)
   const fg = s.fastgrab ? require("./fastgrab").cleanState(s.fastgrab) : null;
+  // micspeed 1.99??: the mic timing pads, the speed-ups and the !mic yield list + state for the Mic timing card (mictiming.js) - only when
+  // he sends them (an older Pepe: no key, the card says so)
+  const mt = s.mictiming ? require("./mictiming").cleanState(s.mictiming) : null;
   return { rooms, active_room: str(s.active_room, 128) || null, active_auto: str(s.active_auto, 128) || null, pinned: !!s.pinned,
-           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj, bans, ...(fg ? { fastgrab: fg } : {}) };
+           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj, bans, ...(fg ? { fastgrab: fg } : {}),
+           ...(mt ? { mictiming: mt } : {}) };
 }
 
 async function setState(raw) {
@@ -169,9 +175,10 @@ function register(app, { isBotToken, addUser }) {
     try {
       await scrubPasswords();
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      // grabcard 1.99amm: + the Fast mic grab card's data (fastgrab.js)
+      // grabcard 1.99amm: + the Fast mic grab card's data (fastgrab.js); micspeed 1.99??: + the Mic timing card's (mictiming.js)
       res.render("admin/pepeRooms", { user: req.user.username, title: "Admin · Pepe's rooms", section: "pepe", isAdmin: true, v: await view(),
-                                      fg: await require("./fastgrab").view().catch(() => null) });
+                                      fg: await require("./fastgrab").view().catch(() => null),
+                                      mt: await require("./mictiming").view().catch(() => null) });
     } catch (e) { console.error("[roomctl] page:", e); res.status(500).send("Couldn't load the page."); }
   });
   app.get("/api/admin/pepe/rooms", addUser, admin(true), async (req, res) => {

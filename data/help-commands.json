@@ -6720,6 +6720,35 @@
    "webchat": true
   },
   {
+   "id": "mic-yield",
+   "title": "!mic yield on [minutes] · off · status",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!mic"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!mic yield on [minutes]",
+    "!mic yield off",
+    "!mic yield status"
+   ],
+   "summary": "Pepe gives the mic to the people on his yield list - in any room where one of them is, he never races them for it.",
+   "details": "For an owner or admin who grabs the mic with their own helper (PepeLite): **!mic yield on** turns it on for 60 minutes (or the minutes you give, at most 12 h); it stays on through a restart until it runs out. **off** ends it, **status** shows the time left, the list and the rooms where someone on it is right now. While it's on, in a room where a listed person is (on the mic, or on the room's user list) Pepe never races them: no fast grab, no contest, no hold or jukebox regrab and no bump. His clips there wait for a quiet mic - it must stay free 2 s with nobody on the list on it - or they're given up as \"Pepe is giving <name> the mic\", refunded and counted toward no cooldown. Rooms with nobody from the list are unaffected. The list itself (Camfrog logins, up to 20) is on the website's [Mic timing card](https://publicaccess.tv/admin/pepe/rooms#mictiming), with Pepe's mic timing pads and speed-ups.",
+   "examples": [
+    "!mic yield on",
+    "!mic yield on 120",
+    "!mic yield off"
+   ],
+   "keywords": [
+    "yield",
+    "give way",
+    "PepeLite",
+    "mic"
+   ],
+   "webchat": true
+  },
+  {
    "id": "alerts",
    "title": "!alerts",
    "category": "admin",
@@ -8763,5 +8792,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "5c04df2df9354ede"
+ "hash": "c69aacd5fc28635b"
 }

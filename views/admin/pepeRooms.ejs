@@ -93,6 +93,52 @@
 <script type="application/json" id="fgData"><%- JSON.stringify(FG).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/admin-fastgrab.js?v=3" defer></script>
 
+<%# micspeed 1.99?? (the owner 2026-11-08: the mic timing pads - "Lets add this to the web panel as well"; "Give pepe a list of people he
+    should yield the mic to when the yield command is active. (Admin page configurable)"; + the speed-ups, each one he can turn back): ⏱ Mic
+    timing - global, the same settings as Pepe's own panel (mictiming.js: GET / POST /api/admin/pepe/mictiming -> website action mic.timing
+    -> camfrog-bot pepe_micspeed.py; the values are the ones Pepe reports with his rooms state). The card's script:
+    public/js/admin-mictiming.js. Admins only (pepe.rooms_commands_audio), each change audited (admin_audit pepe.mictiming). %>
+<% const MT = locals.mt || { online: !!v.online, at: v.at || null, mt: (v.state && v.state.mictiming) || null, actions: [] };
+   const _mtFmt = (k, x) => (x == null ? '–' : typeof x === 'boolean' ? (x ? 'on' : 'off') : Array.isArray(x) ? (x.length ? x.join(', ') : 'nobody')
+                             : String(x) + (['grabconfirm', 'leadin', 'tailout', 'websettle'].includes(k) ? ' s' : ' ms'));
+   const _mtKeys = ['grabconfirm', 'leadin', 'tailout', 'websettle', 'talkplay', 'confirm', 'clickretry', 'ttspoll', 'yieldlist']; %>
+<style>
+  #mictiming .mt-num { width: 6.5em; display: inline-block; margin: 2px 4px 2px 0; }
+  #mictiming tr.mt-edited td { background: var(--ds-gold-bg); }
+  #mictiming .mt-unit { white-space: nowrap; }
+  #mictiming td .adm-help { margin: 2px 0 0; }
+  #mictiming table.adm-tbl { max-height: none; }
+  #mictiming input[data-mt="yieldlist"] { width: 100%; max-width: 28em; }
+  @media (max-width: 760px) {
+    #mictiming table.adm-tbl, #mictiming table.adm-tbl tbody, #mictiming table.adm-tbl tr, #mictiming table.adm-tbl td { display: block; width: auto; }
+    #mictiming table.adm-tbl thead { display: none; }
+    #mictiming table.adm-tbl tr { padding: 6px 0; border-bottom: 1px solid var(--ds-line); }
+    #mictiming table.adm-tbl td { border: 0; padding: 4px 12px; }
+  }
+</style>
+<section class="adm-card" id="mictiming" aria-labelledby="mtT">
+  <h2 id="mtT"><span class="ds-ic" aria-hidden="true">⏱</span> Mic timing <span class="adm-pill admin">admins</span> <span class="adm-pill" id="mtOnline"><%= MT.online ? (MT.mt ? 'live' : 'live (older Pepe)') : 'offline' %></span></h2>
+  <p class="adm-help">How fast Pepe's clips start once he has the mic, for every room (one mic, one set of timings): the timing pads from his own panel (grab confirm, lead-in, tail-out, the web clip settle) and the speed-ups - the Talk check during the clip, the fast grab's confirm window, the second-click retry and the TTS poll - each with its default, so you can turn it back. The values are what Pepe reports now (his own panel on the VM changes the same settings); a save sends only what you changed, as one change, and he answers with what he stored - a number outside its range is clamped and the card says so.</p>
+  <p class="adm-help"><b>Yield list</b>: Camfrog logins Pepe gives the mic to. Type <code>!mic yield on [minutes]</code> in a room (60 min by default, 12 h at most; <code>off</code> ends it, <code>status</code> shows it) - while it's on, in a room where someone on the list is, Pepe never races them for the mic (no fast grab, contest, regrab or bump) and his clips there wait for a quiet mic, or are refunded as "Pepe is giving &lt;name&gt; the mic". Rooms with nobody from the list are unaffected.</p>
+  <p class="adm-help" id="mtYield"><%= MT.mt && MT.mt.yield && MT.mt.yield.on ? '🤝 Yield is ON' + (MT.mt.yield.left_min ? ' for ' + MT.mt.yield.left_min + ' more min' : '') + '.' : 'Yield is off.' %></p>
+  <% if (MT.mt && MT.mt.values) { %>
+  <p class="adm-help" id="mtNow">Now: <%= _mtKeys.map((k) => k + ' ' + _mtFmt(k, MT.mt.values[k])).join(' · ') %></p>
+  <% } %>
+  <div class="adm-form"><label>Reason (optional)<input class="ds-in" id="mtReason" maxlength="200" autocomplete="off"></label></div>
+  <div class="adm-tbl-wrap"><table class="adm-tbl" data-filtered="1" aria-label="Mic timing settings"><thead><tr><th>Setting</th><th>Value</th><th>Range · default</th></tr></thead>
+    <tbody id="mtRows"><tr><td colspan="3" class="adm-help"><%= MT.mt ? 'Loading…' : (MT.online ? "This Pepe doesn't report his mic timing yet - use his own panel until his update runs." : 'No report from Pepe right now (offline?).') %></td></tr></tbody></table></div>
+  <p class="adm-help" id="mtPending"></p>
+  <div class="adm-actions"><button type="button" id="mtSave"<%= MT.mt && MT.online ? '' : ' disabled' %>>Save</button>
+    <button type="button" id="mtUndo" class="adm-btn ghost">Undo my edits</button>
+    <span id="mtMsg" class="adm-msg" role="status" aria-live="polite"></span></div>
+  <h3>Recent mic timing changes</h3>
+  <ul id="mtLog" class="adm-help">
+    <% (MT.actions || []).forEach((x) => { %><li><%= x.status === 'done' ? '✅' : x.status === 'failed' ? '❌' : '⏳' %> <%= x.username || '' %>: <%= x.label || '' %><%= x.message ? ' - ' + x.message : '' %></li><% }) %>
+  </ul>
+</section>
+<script type="application/json" id="mtData"><%- JSON.stringify(MT).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/admin-mictiming.js?v=1" defer></script>
+
 <script>
 (function () {
   'use strict';
