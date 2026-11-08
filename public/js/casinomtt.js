@@ -58,7 +58,8 @@
       else if (signed && j.can_register) acts.push(`<button type="button" class="cz-btn gold sm" data-mttact="register" data-id="${esc(r.id)}">${esc(r.status === "running" ? T("mtt_late_register", "Late register") : T("mtt_register", "Register"))}</button>`);
     }
     if (signed && !mine && (r.status === "scheduled" || r.status === "registering")) acts.push(`<button type="button" class="cz-btn ghost sm" data-mttact="remind" data-id="${esc(r.id)}">🔔 ${esc(T("mtt_remind", "Remind me"))}</button>`);
-    if (mine && r.status === "running") acts.push(`<a class="cz-btn gold sm" href="${esc(r.url)}">${esc(T("mtt_my_table", "Take me to my table"))}</a>`);
+    // (review) the seated entrant's table itself (the lobby row's my_table), the tournament page only while it has none
+    if (mine && r.status === "running") acts.push(`<a class="cz-btn gold sm" href="${esc(r.my_table ? "/casino/holdem/t/" + r.my_table : r.url)}">${esc(T("mtt_my_table", "Take me to my table"))}</a>`);
     if (r.final_table) acts.push(`<a class="cz-btn ghost sm" href="/casino/holdem/t/${esc(r.final_table)}">📺 ${esc(T("mtt_watch_final", "Watch the final table"))}</a>`);
     acts.push(`<a class="cz-btn ghost sm" href="${esc(r.url)}">${esc(T("mtt_details", "Details"))}</a>`);
     const startLine = r.status === "running" ? (r.late_open ? T("mtt_late_until", "Late reg until level {n}", { n: r.structure.late_levels }) : T("mtt_level_left", "Level {n} · {left} left", { n: r.level, left: fmt(r.players_left) }))
@@ -159,7 +160,8 @@
       if (me.can_register) acts.push(`<button type="button" class="cz-btn gold sm" data-pg="register">${esc(T("mtt_register_n", "Register · {n}", { n: buyinText(m) }))}</button>`);
       if (me.can_reenter) acts.push(`<button type="button" class="cz-btn gold sm" data-pg="register">${esc(T("mtt_reenter_n", "Re-enter · {n}", { n: buyinText(m) }))}</button>`);
       if (me.table_id) acts.push(`<a class="cz-btn gold sm" href="/casino/holdem/t/${esc(me.table_id)}">${esc(T("mtt_my_table_n", "Take me to my table (table {n})", { n: me.table_no }))}</a>`);
-      if (!me.registered || m.status === "registering") acts.push(`<button type="button" class="cz-btn ghost sm" data-pg="remind" data-on="${me.remind ? "0" : "1"}" aria-pressed="${!!me.remind}">🔔 ${esc(me.remind ? T("mtt_remind_off", "Reminder on") : T("mtt_remind", "Remind me"))}</button>`);
+      // (review) only before the start - a running / finished / cancelled one has nothing to remind of
+      if (m.status === "scheduled" || m.status === "registering") acts.push(`<button type="button" class="cz-btn ghost sm" data-pg="remind" data-on="${me.remind ? "0" : "1"}" aria-pressed="${!!me.remind}">🔔 ${esc(me.remind ? T("mtt_remind_off", "Reminder on") : T("mtt_remind", "Remind me"))}</button>`);
       if (me.telegram_linked && me.telegram_tourney === false && (m.status === "registering" || m.status === "scheduled")) acts.push(`<label class="mtt-tg"><input type="checkbox" id="mtt-tg"> ${esc(T("mtt_tg", "also on Telegram"))}</label>`);
       if (me.stack != null) acts.push(`<span class="mtt-me">${esc(T("mtt_me_line", "Your stack {s} · rank {r}", { s: fmt(me.stack), r: me.rank || "—" }))}</span>`);
       if (me.place) acts.push(`<span class="mtt-me">${esc(T("mtt_me_place", "You finished {p}", { p: "#" + me.place }))}${me.prize ? " · " + esc(fmt(me.prize)) + " PAT" : ""}</span>`);
@@ -255,7 +257,10 @@
     const tn = t.tourney;
     const mt = (me && me.tourney) || {};
     const stat = (label, val) => `<div class="sng-stat"><small>${esc(label)}</small><b>${val}</b></div>`;
-    let html = `<div class="sng-top"><a class="sng-badge mtt" href="${esc(tn.url)}">🏆 ${esc(tn.final ? T("mtt_final_table", "Final table") : T("mtt_table_of", "Tournament #{no} · Table {n} of {k}", { no: tn.no, n: tn.table_no, k: tn.tables_left }))}</a>` +
+    // (review) a table keeps its number while others break: "Table 6 · 3 tables left" (never "Table 6 of 3")
+    const where = tn.final ? T("mtt_final_table", "Final table") : tn.tables_left > 1 ? T("mtt_table_left", "Tournament #{no} · Table {n} · {k} tables left", { no: tn.no, n: tn.table_no, k: tn.tables_left })
+      : T("mtt_table_only", "Tournament #{no} · Table {n}", { no: tn.no, n: tn.table_no });
+    let html = `<div class="sng-top"><a class="sng-badge mtt" href="${esc(tn.url)}">🏆 ${esc(where)}</a>` +
       `<span class="tag">${esc(tn.name)}</span>${tn.guarantee ? `<span class="tag mtt-gtd">🛡 ${esc(fmt(tn.guarantee))}</span>` : ""}</div>`;
     html += '<div class="sng-stats">' + stat(T("mtt_level", "Level"), esc(tn.level)) + stat(T("mtt_blinds", "Blinds"), `${esc(fmt(tn.sb))}/${esc(fmt(tn.bb))}`) +
       stat(T("mtt_next_level", "Next level"), tn.next_level_at ? clockHTML(tn.next_level_at) : "—") + stat(T("mtt_left", "Players left"), `${esc(fmt(tn.players_left))}/${esc(fmt(tn.entries))}`) +
@@ -274,11 +279,23 @@
       if (mt.moved_to.id) setTimeout(() => location.replace("/casino/holdem/t/" + encodeURIComponent(mt.moved_to.id)), 1500);
     }
     if (headEl.dataset.v !== html) { headEl.dataset.v = html; headEl.innerHTML = html; }
-    resEl.hidden = true;
+    // (review) the results card for a busted / finished entrant (meView's result): out while it runs (and the way back in during late
+    // registration), the place and prize once it has settled - with the tournament page for the points
+    const r = !mt.registered ? mt.result : null;
+    let rh = "";
+    if (r) {
+      rh = `<h2>🏆 ${esc(T("mtt_res_h", "Your tournament"))}</h2>` + (r.final
+        ? `<p>${esc(T("mtt_me_place", "You finished {p}", { p: "#" + r.place }))}${r.prize ? ` · <b>${esc(fmt(r.prize))} PAT</b>` : ""}${r.tied ? ` <small>${esc(T("mtt_tied", "tied on chips"))}</small>` : ""}</p>`
+        : `<p>${esc(T("mtt_res_out", "You're out - your place and any prize are fixed when the tournament ends."))}</p>` +
+          (r.late_open ? `<p>${esc(T("mtt_res_reenter", "Late registration is still open - you can re-enter from the tournament page."))}</p>` : "")) +
+        `<p><a class="cz-btn ghost sm" href="${esc(tn.url)}">${esc(T("mtt_res_link", "Results and points on the tournament page"))}</a></p>`;
+    }
+    resEl.hidden = !rh;
+    if (resEl.dataset.v !== rh) { resEl.dataset.v = rh; resEl.innerHTML = rh; }
     tickClocks();
   }
 
-  window.CZMTT = { tableHead, board };
+  window.CZMTT = { tableHead, board, _card: card, _head: head };      // (_card / _head: test/casino-mtt-review-web.test.js)
   wireLobby();
   wirePage();
   wireBoard();

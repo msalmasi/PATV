@@ -123,7 +123,7 @@
   <section class="mtt-sec" id="cz-mtt" hidden aria-labelledby="cz-mtt-h">
     <h2 class="lob-h mtt" id="cz-mtt-h"><a id="mtt" class="mtt-anchor"></a><%- t('casino.mtt.h') %></h2>
     <p class="sng-note" id="cz-mtt-note"><%- t('casino.mtt.note') %></p>
-    <div class="lob-tabs mtt-tabs" role="tablist"><button type="button" role="tab" data-tab="list" aria-selected="true"><%- t('casino.mtt.tab_list') %></button><button type="button" role="tab" data-tab="board" aria-selected="false"><%- t('casino.mtt.tab_board') %></button></div>
+    <div class="mtt-tabs" role="tablist"><button type="button" role="tab" data-tab="list" aria-selected="true"><%- t('casino.mtt.tab_list') %></button><button type="button" role="tab" data-tab="board" aria-selected="false"><%- t('casino.mtt.tab_board') %></button></div>
     <div class="lob-grid" id="cz-mtts" aria-live="off"></div>
     <div id="cz-mtt-board" hidden></div>
   </section>
@@ -256,5 +256,5 @@
 <script src="/public/js/casino-ui.js?v=12"></script><%# h22: v10 (the Sit & Go lobby section + sheet); 1.99amf h20: v11 (CZ.theme, the lobby's theme picker - rebased on h22's v10); h22 phase 2: v12 (an MTT table polls every 2 s off-turn - one above both sides' v11) %>
 <% if (locals.theme && theme !== 'classic') { %><script src="/public/js/casino-sound.js?v=2"></script><% } %>
 <script src="/api/casino/sizing.js?v=1"></script>
-<script src="/public/js/casinomtt.js?v=1"></script><%# h22 phase 2 (1.99??): the 🏆 Tournaments block + an MTT table's header (before casinohm.js) %>
+<script src="/public/js/casinomtt.js?v=2"></script><%# h22 phase 2 (1.99??): the 🏆 Tournaments block + an MTT table's header (before casinohm.js); review: v2 (the table's results card, the own-table link) %>
 <script src="/public/js/casinohm.js?v=14"></script><%# h22: v11 (the Sit & Go header + results); 1.99amf h20: v12 (the theme), verify: v13 (the sign on the felt, out of the board's column - rebased on h22's v11); h22 phase 2: v14 (an MTT table's header is casinomtt.js's - one above themes' v13 / phase 2's v12) %>

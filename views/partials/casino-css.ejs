@@ -400,6 +400,12 @@
   .mtt-stat b small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
   .mtt-banner { padding: 8px 12px; border-radius: var(--ds-r-md); background: rgba(255,215,64,.12); border: 1px solid rgba(255,215,64,.35); color: #ffe9a3; font-size: var(--ds-fs-sm); }
   .mtt-banner.off { background: rgba(198,40,40,.18); border-color: rgba(255,138,128,.4); color: #ffd2cc; }
+  /* (review) the lobby block's Leaderboard / Schedule strip: its own class - a .lob-tabs strip is caught by casino-ui.js's lobby tab handlers */
+  .mtt-tabs { display: flex; gap: 2px; margin: var(--ds-sp-6) 0 var(--ds-sp-3); padding: 3px; border-radius: var(--ds-r-pill); background: rgba(0,0,0,.3); border: 1px solid var(--line); width: fit-content; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .mtt-tabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 40px; margin: 0; padding: 0 14px; border: 0; border-radius: var(--ds-r-pill); background: transparent; color: var(--mut); font: 700 14px/1 var(--ds-font); cursor: pointer; }
+  .mtt-tabs button:hover { color: #fff; }
+  .mtt-tabs button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .mtt-tabs button[aria-selected="true"] { background: var(--gold); color: var(--ds-on-gold); }
   .mtt-ptabs { margin-top: 0; }
   .mtt-body { min-width: 0; }
   .mtt-rules p { margin: 0 0 8px; color: #d6ead9; line-height: 1.5; }
@@ -417,6 +423,7 @@
   .mtt-note { color: #ffe9a3; }
   @media (max-width: 600px) {
     .mtt-ptabs { width: 100%; }
+    .mtt-tabs button { padding: 0 10px; font-size: 13px; }
     .mtt-acts .cz-btn { flex: 1 1 auto; }
     .mtt-page .mtt-head { padding: 12px; }
   }

@@ -544,10 +544,14 @@ function install(core) {
     const before = { title: M.title, rooms: M.rooms, start_at: M.start_at, max: M.structure.max_entries };
     if (M.status === "scheduled") {
       const gate = await BUD.createGate(now, st);
+      // (review) a form's blank field says nothing: it never replaces the stored value with the setting's default (the rooms excepted:
+      // an empty list there clears them, on purpose)
+      const said = Object.fromEntries(Object.entries(body || {}).filter(([k, v]) => k === "rooms" || !(v == null || v === "")));
       const merged = Object.assign({ title: M.title, start_at: M.start_at, reg_opens_at: M.reg_opens_at, buyin: M.money.buyin, structure: M.structure.kind,
                                      start_chips: M.structure.start_chips, table_size: M.structure.table_size, max_entries: M.structure.max_entries,
                                      min_entries: M.structure.min_entries, late_levels: M.structure.late_levels, reentry_max: M.structure.reentry_max,
-                                     guarantee: M.money.guarantee, rooms: M.rooms }, body || {}, { repeat: "none" });
+                                     guarantee: M.money.guarantee, rooms: M.rooms }, said, { repeat: "none" });
+      body = said;
       if (body && body.start) delete merged.start_at;
       if (body && body.reg_opens) delete merged.reg_opens_at;
       const d = parseForm(merged, st, now, gate);
@@ -1765,7 +1769,14 @@ function install(core) {
     await txn("overlay", M, async () => { ov.attempt += 1; ov.state = "pending"; ov.first_try_at = clock(); ov.tries = 0; ov.last_code = null; });
     await audit(admin, "overlay_retry", M.id, null, { attempt: ov.attempt });
     await payOverlay(M);
-    return { ok: true, state: ov.state };
+    // (review) a retry that didn't pay (the spend gate closed, short headroom, a transient error) goes back to owed at once: nothing ticks a
+    // pending overlay on a finished tournament (and its retry button only takes an owed one) - the owner retries again later (a new key)
+    if (ov.state === "pending") {
+      await txn("overlay", M, async () => { ov.state = "owed"; });
+      log(M, `overlay retry ${ov.attempt} not paid (${ov.last_code || "?"}) - owed`);
+      return { ok: false, status: 409, error: `Not paid (${ov.last_code || "not available"}) - it stays owed; retry later.`, state: ov.state };
+    }
+    return { ok: ov.state === "paid", status: ov.state === "paid" ? 200 : 409, state: ov.state, error: ov.state === "paid" ? undefined : `The budget service refused it (${ov.last_code}).` };
   }
 
   // ── post steps (each once: its own flag after its keyed work; a failing one never stops the others) ──
@@ -1935,6 +1946,9 @@ function install(core) {
       if (!M.said.soon && now >= M.start_at - 15 * 60e3 && now < M.start_at) {
         M.said.soon = true; await saveMtt(M);
         await say(M, `⏰ Tournament #${M.no} "${M.title}" starts in 15 minutes - ${fmt(M.reg_n)} registered. !mtt join ${M.no} · ${url(M)}`);
+        // (review) the Discord 'starting' post (its role ping) here, while there's still time to register - not once the tables deal (the
+        // start keeps a call for a start-now before this mark: once per key, so never twice)
+        await discord(M, "starting");
         for (const e of await entriesOf(M.id, "state = 'held' AND remind = 1 AND via = 'room'")) {
           await queueReminder(M, e.user_id, "pm_starting", "pepe", now, { text: `⏰ Tournament #${M.no} starts in 15 minutes. ${url(M)}` });
         }

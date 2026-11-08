@@ -280,7 +280,9 @@ async function handleCasinoTourney(client, body, res) {
     const r = available.find((x) => x.id === body.role_id && x.id !== PATV_GUILD_ID);
     if (r) roles = [r.id];
   }
-  const head = { reg_open: '🏆 Registration is open', starting: '🏆 Starting soon', final: '🏆 Final table', winner: '🏆 Winner' }[kind];
+  // (review) 'starting' goes out at the 15-minute mark (or at an admin's start-now): its words follow the clock
+  const due = Number(body.start_at) > 0 && Number(body.start_at) <= Date.now() + 30000;
+  const head = { reg_open: '🏆 Registration is open', starting: due ? '🏆 Starting now' : '🏆 Starting soon', final: '🏆 Final table', winner: '🏆 Winner' }[kind];
   const buyin = Number(body.buyin) > 0 ? `${fmtPat(body.buyin)} + ${fmtPat(body.fee)} PAT` : 'Freeroll';
   const lines = [`Buy-in: ${buyin}`];
   if (Number(body.guarantee) > 0) lines.push(`🛡 ${fmtPat(body.guarantee)} PAT guaranteed`);

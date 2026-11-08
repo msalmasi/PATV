@@ -101,6 +101,39 @@
     $("mttRooms").placeholder = (data.rooms || []).map((r) => r.id).join(", ") || "PepeLab";
     preview();
   }
+  // (review) Edit fills the WHOLE form from the tournament (its admin view) - it used to fill the title only, and the submit sent every field
+  // (the select's first buy-in, "standard", empty rooms...). Once registration is open only the title and the rooms can change: the rest is
+  // disabled (FormData leaves it out). An unchanged start goes back as start_at (the stored instant, not a re-parsed minute).
+  const FIXED = ["start", "reg_opens", "buyin", "structure", "start_chips", "table_size", "max_entries", "min_entries", "late_levels", "reentry_max", "guarantee", "repeat", "count"];
+  const etLocal = (ms) => {
+    try {
+      const p = {};
+      for (const x of new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms))) p[x.type] = x.value;
+      return `${p.year}-${p.month}-${p.day}T${p.hour === "24" ? "00" : p.hour}:${p.minute}`;
+    } catch (e) { return ""; }
+  };
+  function unlock() {
+    for (const n of FIXED) if (form.elements[n]) form.elements[n].disabled = false;
+    form.elements.start.required = true;
+    form.dataset.start0 = ""; form.dataset.startAt = ""; form.dataset.reg0 = "";
+  }
+  function fill(m) {
+    form.reset();
+    unlock();
+    const set = (k, v) => { const el = form.elements[k]; if (el) el.value = v == null ? "" : String(v); };
+    const s = m.structure || {};
+    set("id", m.id); set("title", m.title);
+    set("start", etLocal(m.start_at)); set("reg_opens", m.status === "scheduled" && m.reg_opens_at > Date.now() ? etLocal(m.reg_opens_at) : "");
+    set("buyin", m.buyin); set("structure", s.kind); set("start_chips", s.start_chips); set("table_size", s.table_size); set("max_entries", m.max_entries);
+    set("min_entries", m.min_entries); set("late_levels", s.late_levels); set("reentry_max", s.reentry_max); set("guarantee", m.guarantee || 0);
+    set("rooms", (m.rooms || []).join(", ")); set("repeat", "none"); set("count", "1");
+    form.dataset.start0 = form.elements.start.value; form.dataset.startAt = String(m.start_at); form.dataset.reg0 = form.elements.reg_opens.value;
+    const open = m.status !== "scheduled";
+    for (const n of FIXED) if (form.elements[n]) form.elements[n].disabled = open;
+    form.elements.start.required = !open;
+    $("mttSave").textContent = "Save changes";
+    preview();
+  }
   async function load() {
     const j = await api("/api/casino/admin/mtt");
     if (!j.ok) { $("mttList").textContent = j.error || "Couldn't load them."; return; }
@@ -111,15 +144,17 @@
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(form).entries());
-    const body = Object.assign({}, f, { start: f.start ? f.start.replace("T", "T") : "", rooms: String(f.rooms || "").split(",").map((x) => x.trim()).filter(Boolean) });
+    const body = Object.assign({}, f, { rooms: String(f.rooms || "").split(",").map((x) => x.trim()).filter(Boolean) });
     if (!body.id) delete body.id;
+    if (body.id && "start" in body && body.start === form.dataset.start0 && form.dataset.startAt) { delete body.start; body.start_at = Number(form.dataset.startAt); }
+    if (body.id && "reg_opens" in body && body.reg_opens === form.dataset.reg0) delete body.reg_opens;
     $("mttSave").disabled = true;
     const j = await api("/api/casino/admin/mtt", body);
     $("mttSave").disabled = false;
     $("mttStatus").textContent = j.ok ? (j.nos ? `Scheduled #${j.nos.join(", #")}` : "Saved") : j.error || "That didn't work.";
-    if (j.ok) { form.reset(); form.elements.id.value = ""; load(); }
+    if (j.ok) { form.reset(); unlock(); form.elements.id.value = ""; $("mttSave").textContent = "Schedule"; load(); }
   });
-  $("mttReset").addEventListener("click", () => { form.reset(); form.elements.id.value = ""; $("mttSave").textContent = "Schedule"; preview(); });
+  $("mttReset").addEventListener("click", () => { form.reset(); unlock(); form.elements.id.value = ""; $("mttSave").textContent = "Schedule"; preview(); });
   async function detail(id) {
     const j = await api(`/api/casino/admin/mtt/${encodeURIComponent(id)}`);
     if (!j.ok) return;
@@ -141,9 +176,9 @@
     if (act === "view") return detail(id);
     if (act === "log") { const j = await api(`/api/casino/admin/mtt/${encodeURIComponent(id)}/log`); alert((j.log || []).map((l) => `${new Date(l.ts).toISOString().slice(0, 19)} ${l.kind} ${JSON.stringify(l.data || {})}`).join("\n") || "Empty."); return; }
     if (act === "edit") {
-      const r = data.list.find((x) => x.id === id);
-      if (!r) return;
-      form.elements.id.value = id; form.elements.title.value = r.title; $("mttSave").textContent = "Save changes";
+      const j = await api(`/api/casino/admin/mtt/${encodeURIComponent(id)}`);
+      if (!j.ok || !j.mtt) { alert(j.error || "Couldn't load it."); return; }
+      fill(j.mtt);
       form.scrollIntoView({ behavior: "smooth" });
       return;
     }

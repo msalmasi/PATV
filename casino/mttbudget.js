@@ -120,9 +120,10 @@ async function payInTx({ key, group, legs, ref, why, no, now }) {
   return { ok: true, fallback: true };
 }
 /** what the admin card says about the gate */
+/** the gate's reason as text - no "Guarantees:" of its own (review: the callers say it once - the admin card's line, the create errors) */
 function gateText(why) {
-  return ({ before_h2b: "Guarantees: locked until 2026-12-01 14:00 UTC", budget_not_site: "the incentive budget is Pepe's", budget_paused: "budget paused",
-            no_budget_service: "budget service not installed", switch_off: "Guarantees are switched off" })[why] || (why ? String(why) : "available");
+  return ({ before_h2b: "locked until 2026-12-01 14:00 UTC", budget_not_site: "the incentive budget is Pepe's", budget_paused: "budget paused",
+            no_budget_service: "budget service not installed", switch_off: "switched off" })[why] || (why ? String(why) : "available");
 }
 
 module.exports = { H2B_AT, GROUPS, spendGate, createGate, headroom, weekOf, weekFallback, weeksTouched, groupBudget, payInTx, gateText, hasApi, _hooks: hooks };
