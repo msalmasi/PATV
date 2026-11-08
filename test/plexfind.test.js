@@ -854,3 +854,17 @@ test("clerkreq review follow-up: a kind word the bot cut off the END of a title 
   await run(f, { title: "far road", kind: "movie" }, { raw: "the movie far road" }, externalContext);
   assert.deepEqual(f.calls.filter((x) => x[0] === "seerr_search").map((x) => x[1]), ["far road"]);
 });
+
+test("clerkreq review follow-up: a bare title only a show's S00 special has is that special, offered plainly - a TV movie, never 'no show or film called'", async () => {
+  const f = fixture();
+  const special = f.rows.find((r) => r.key === "10001");          // Clockwork Orchard S0E1
+  special.title = "Big Score Movie"; special.duration = 5400;
+  f.external.search["big score movie"] = [{ type: "movie", tmdb: 7249, title: "Big Score Movie", year: 2007, availability: "unknown", media_status: 1 }];
+  const r = await run(f, { title: "Big Score Movie" }, { raw: "big score movie" }, externalContext);
+  assert.deepEqual(r.rows.map((x) => [x.key, x.why]), [["10001", "exact"]]); assert.equal(r.seerr, undefined); assert.equal(r.episode_named, undefined);
+  assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0, "it's here: nothing to look up");
+  // a regular episode (S1+) of that name is still only "an episode by that name"
+  special.season = 1;
+  const g = await run(f, { title: "Big Score Movie" }, { raw: "big score movie" }, externalContext);
+  assert.deepEqual(g.rows.map((x) => [x.key, x.why]), [["10001", "episode_named"]]);
+});
