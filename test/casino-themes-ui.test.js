@@ -180,13 +180,15 @@ function page(markup, api, opts) {
 const flush = () => new Promise((r) => setImmediate(r));
 
 // the table part of views/casino-hm.ejs (the elements CZ.theme and the sound toggle work with), checked against the view itself
+// (rebased on h22 1.99alz: a Sit & Go's header + results card sit between the back link and the wrap - hidden at a cash table)
 const HM_TABLE = `<section id="cz-table" hidden><a class="back" href="/casino/holdem">← All tables</a>
+  <div class="sng-head" id="cz-snghead" hidden aria-live="off"></div><div class="sng-res" id="cz-sngres" hidden></div>
   <div class="hm-wrap"><div class="felt hm" id="cz-felt"><div class="hm-center"><span class="hm-logo" aria-hidden="true">publicaccess.tv</span>
   <div class="board" id="cz-board"></div><div class="pot" id="cz-pot"></div><div class="felt-msg" id="cz-msg"></div></div>
   <div id="cz-bets"></div><div id="cz-seats"></div></div></div><div class="felt-meta" id="cz-meta"></div></section>`;
-test("the harness's Hold'em table matches views/casino-hm.ejs (the back link, then the wrap, the felt's centre, bets and seats)", () => {
+test("the harness's Hold'em table matches views/casino-hm.ejs (the back link, the Sit & Go header + results, then the wrap, the felt's centre, bets and seats)", () => {
   const v = rd("views", "casino-hm.ejs").replace(/<%[\s\S]*?%>/g, "");
-  assert.match(v, /<section id="cz-table" hidden>\s*<a class="back" href="\/casino\/holdem">[\s\S]*?<\/a>\s*<div class="hm-wrap">\s*<div class="felt hm" id="cz-felt">\s*<div class="hm-center">/);
+  assert.match(v, /<section id="cz-table" hidden>\s*<a class="back" href="\/casino\/holdem">[\s\S]*?<\/a>\s*<div class="sng-head" id="cz-snghead" hidden aria-live="off"><\/div>\s*<div class="sng-res" id="cz-sngres" hidden><\/div>\s*<div class="hm-wrap">\s*<div class="felt hm" id="cz-felt">\s*<div class="hm-center">/);
   assert.match(v, /<div id="cz-bets"><\/div>\s*<div id="cz-seats"><\/div>\s*<\/div>\s*<\/div>/);
   assert.match(rd("public", "js", "casinohm.js"), /CZ\.theme\(t, \{ scene: \$\("cz-felt"\)\.parentNode, sign: \$\("cz-seats"\) \}\)/,
                "review 3: the sign goes on the felt itself (before the seats), out of the board's column");
