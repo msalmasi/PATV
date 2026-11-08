@@ -3,7 +3,7 @@
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change,
    and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node).
    1.99?? micblock: + Block break / Self-unblock (switches) and Unblock code (the card's one text box - checked here like the site
-   and Pepe check it: 1-20 characters, never starting with / or !; empty = none). */
+   and Pepe check it: 1-20 characters, never starting with / or !, nothing his chat would change; empty = none). v3: that last check. */
 (function () {
   'use strict';
   var TOGGLES = ['on', 'contest', 'fair', 'web', 'chatty', 'blockbreak', 'selfunblock'];
@@ -25,8 +25,8 @@
     ['fairwait', 'Fairness wait times', ['ms hold, wait', 'ms'], 'With fair on: a drop after a hold under the first number waits the second.'],
     ['ceiling', 'Ceiling (every room)', ['grabs / min, all rooms'], "Pepe's fast grabs a minute across every room together - always every room's."],
     ['blockbreak', 'Block break', null, "Someone blocking Pepe's mic puts this room's mic on a 30-minute break (paid lines are refused before the charge meanwhile). Off = no break: Pepe tries again once the block is lifted."],
-    ['selfunblock', 'Self-unblock', null, "When someone blocks Pepe's mic here, he types the room's unblock code (below) a moment later - for a room bot that unblocks whoever types it. Once more 30 s later if no unblock comes; at most 3 in 10 min."],
-    ['unblockcode', 'Unblock code', null, 'What Pepe types to unblock himself (Players Lounge: 1). 1-20 characters, never starting with / or !; empty = none.']
+    ['selfunblock', 'Self-unblock', null, "When someone blocks Pepe's mic here, he types the room's unblock code (below) a moment later - for a room bot that unblocks whoever types it. Once more 30 s later if no unblock comes; at most 3 in 10 min; never when the room's own bot blocked him."],
+    ['unblockcode', 'Unblock code', null, 'What Pepe types to unblock himself (Players Lounge: 1). 1-20 characters, never starting with / or !, no * ` __ ~~ and no word starting with -; empty = none.']
   ];
   var FIELDS = ROWS.map(function (r) { return r[0]; });
   var LABELS = {}; ROWS.forEach(function (r) { LABELS[r[0]] = r[1]; });
@@ -43,6 +43,9 @@
     if ((Array.from ? Array.from(s).length : s.length) > CODE_MAX) return { code: '', err: 'at most ' + CODE_MAX + ' characters' };
     if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/.test(s)) return { code: '', err: 'printable characters only' };
     if (s.charAt(0) === '/' || s.charAt(0) === '!') return { code: '', err: "it can't start with / or ! (that would be a command)" };
+    // micblock review F8: nothing Pepe's chat would change (its markdown strip; a word starting with - is a chat flag)
+    if (/\*|`|__|~~/.test(s)) return { code: '', err: 'no * or ` and no __ or ~~ (the chat would strip them)' };
+    if (s.split(/\s+/).some(function (w) { return w.charAt(0) === '-'; })) return { code: '', err: 'no word may start with - (that is a chat flag)' };
     return { code: s, err: null };
   }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }

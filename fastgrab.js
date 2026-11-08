@@ -46,6 +46,7 @@ const ARITY = Object.freeze({ rate: 1, shots: 1, tries: 1, breaker: 3, pause: 4,
 const CAPS = Object.keys(ARITY);
 const TEXTS = ["unblockcode"];
 const CODE_MAX = 20;
+const CODE_MD = ["*", "`", "__", "~~"];                  // (review F8: Pepe's send_chat markdown strip)
 // (the card's order; Pepe applies contest first)
 const FIELDS = Object.freeze(["on", "contest", "fair", "claim", "web", "chatty", ...CAPS, "blockbreak", "selfunblock", "unblockcode"]);
 const FOLLOW = "follow";
@@ -73,7 +74,8 @@ const ints = (v, n) => {
 
 /** 1.99?? micblock: a room's unblock code -> {code, err} - Pepe's own check (pepe_fastgrabweb.unblock_code_clean): trimmed; "" / none /
     off = no code; else 1-CODE_MAX printable characters (no control, format or separator character but a plain space) that never start
-    with "/" or "!". */
+    with "/" or "!" - and (review F8) nothing his chat layer would change: no * or `, no __ or ~~ (send_chat's markdown strip sends "*1*"
+    as "1"), no word starting with "-" (a chat flag: "1 -global" sets "1" for every room). */
 function codeClean(v) {
   if (v != null && typeof v !== "string") return { code: "", err: "text" };
   const s = String(v == null ? "" : v).trim();
@@ -81,6 +83,8 @@ function codeClean(v) {
   if ([...s].length > CODE_MAX) return { code: "", err: `at most ${CODE_MAX} characters` };
   if (/[\p{C}\p{Z}]/u.test(s.replace(/ /g, ""))) return { code: "", err: "printable characters only" };
   if (s[0] === "/" || s[0] === "!") return { code: "", err: "it can't start with / or ! (that would be a command)" };
+  if (CODE_MD.some((m) => s.includes(m))) return { code: "", err: "no * or ` and no __ or ~~ (the chat would strip them)" };
+  if (s.split(/\s+/).some((w) => w.startsWith("-"))) return { code: "", err: "no word may start with - (that is a chat flag)" };
   return { code: s, err: null };
 }
 

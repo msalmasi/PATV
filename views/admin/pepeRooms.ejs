@@ -64,7 +64,7 @@
   <h2 id="fgT"><span class="ds-ic" aria-hidden="true">⚡</span> Fast mic grab <span class="adm-pill admin">admins</span> <span class="adm-pill" id="fgOnline"><%= FG.online ? (FG.fg ? 'live' : 'live (older Pepe)') : 'offline' %></span></h2>
   <p class="adm-help">How Pepe wins a mic people are fighting over while a soundboard clip, a paid <code>!say</code> or an alert waits for it: the switches and limits of <code>!mic fastgrab</code> (and Fast grab caps on his own panel). Pick a room to set its own values, or the global default that every room without its own follows (tick every room to also clear the rooms' own values, like <code>-all</code>). The values are what Pepe reports now; a save sends only what you changed, as one change, and he answers with what he stored - a number outside its range is clamped and the card says so.</p>
   <p class="adm-help">Looking for the <b>push-to-talk</b> (relayed mic) cooldown, clips per 10 minutes and max length? Those are on <a href="/admin/bridge#pttlimits">Bridge › Push-to-talk clips</a>.</p>
-  <p class="adm-help">When someone <b>blocks Pepe's mic</b> in a room: <b>Block break</b> (on by default) keeps him off that room's mic for 30 minutes; turn it off and he tries again as soon as the block is lifted. <b>Self-unblock</b> (off by default) makes him type the room's <b>Unblock code</b> in its chat a moment later, for a room bot that unblocks whoever types it (Players Lounge: <code>1</code>). Both are per room; a code is 1-20 characters and can't start with <code>/</code> or <code>!</code>.</p>
+  <p class="adm-help">When someone <b>blocks Pepe's mic</b> in a room: <b>Block break</b> (on by default) keeps him off that room's mic for 30 minutes; turn it off and he tries again as soon as the block is lifted. <b>Self-unblock</b> (off by default) makes him type the room's <b>Unblock code</b> in its chat a moment later, for a room bot that unblocks whoever types it (Players Lounge: <code>1</code>). Both are per room; a code is 1-20 characters, can't start with <code>/</code> or <code>!</code>, and has no <code>*</code> <code>`</code> <code>__</code> <code>~~</code> and no word starting with <code>-</code> (Pepe's chat would change it). He never types it when the room's own bot blocked him.</p>
   <div class="adm-form">
     <label>Where<select id="fgWhere" class="ds-in">
       <option value="global">Global default (every room without its own)</option>
@@ -91,7 +91,7 @@
   </ul>
 </section>
 <script type="application/json" id="fgData"><%- JSON.stringify(FG).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-fastgrab.js?v=2" defer></script>
+<script src="/public/js/admin-fastgrab.js?v=3" defer></script>
 
 <script>
 (function () {
