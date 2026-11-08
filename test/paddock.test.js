@@ -237,7 +237,7 @@ test("PTT marks only the idle helper as quiet; opening, recording and permission
   const status = host.querySelector(".rb-ptt-txt"), button = host.querySelector(".rb-talk");
   assert.equal(status.classList.contains("rb-ptt-idle"), true);
   button.fire("pointerdown"); assert.equal(status.classList.contains("rb-ptt-idle"), false); assert.match(status.textContent, /opening/);
-  b.doc.hidden = true; grant(b.stream); await b.flush(); assert.equal(status.classList.contains("rb-ptt-idle"), true); assert.match(status.textContent, /up to 20 s/);
+  b.doc.hidden = true; grant(b.stream); await b.flush(); assert.equal(status.classList.contains("rb-ptt-idle"), true); assert.match(status.textContent, /up to 30 s/);   // pttlimits: the site's max length (30 s by default; was a fixed 20 s)
   b.doc.hidden = false; button.fire("pointerdown"); grant(b.stream); await b.flush();
   assert.equal(status.classList.contains("rb-ptt-idle"), false); assert.equal(status.textContent, "recording…");
   b.advance(1000); button.fire("pointerup"); await b.flush(); assert.equal(status.classList.contains("rb-ptt-idle"), false); assert.match(status.textContent, /sent/);
