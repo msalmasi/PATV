@@ -44,8 +44,9 @@ function harness() {
         availability: d.mode === "gated" ? "available" : "unknown", overview: "NEVER-OVERVIEW", poster: "/NEVER-POSTER" }];
     },
     async details() { if (d.details) return structuredClone(d.details); throw new Error("This fixture offers only movies"); },
-    async request(user, body) {
+    async request(user, body, meta) {
       d.calls.push(["request", user.userId, body]);
+      if (meta !== undefined) d.calls.push(["request_meta", meta]);     // 1.99?? clerkreq S6: where a chat request came from
       if (d.pending) await d.pending;
       if (d.requestError) throw d.requestError;
       return { ...d.requestResult };
@@ -222,4 +223,113 @@ test("pre-model probes preserve exact library titles and defer all external work
   assert.equal(h.d.calls.filter((c) => c[0] === "search").length, 0);
   const answer = await h.offer(); assert.equal(answer.request.may, true);
   assert.equal(h.d.calls.filter((c) => c[0] === "search").length, 1);
+});
+
+// ── 1.99?? clerkreq S5: op request_offer - "pepe request <title>" from chat. The same gates as find (the speaker, the rate, the clerk's
+// access, the pad: no 18+ pads, a typed room line or the pad's web chat only, requests on, the chat-request rollout); a forced title-level
+// ask; the answer says what can happen: it's on the shelves (rows) | Seerr's one title + its request preview | Seerr's choices, each with
+// its own preview | why not (requested / unavailable) | nothing to request (seerr_state). op request stays the only write.
+const ask = (h, body = {}, user = "u1") => h.call("request_offer", { title: "Distant Lantern", kind: "movie", ...body }, user);
+const searches = (h) => h.d.calls.filter((c) => c[0] === "search").length;
+const requests = (h) => h.d.calls.filter((c) => c[0] === "request").length;
+
+test("request_offer: a title on the shelves is that title - no outside lookup, priced rows to play or queue", async () => {
+  const h = harness();
+  const out = await ask(h, { title: "Home Lantern", kind: null });
+  assert.equal(out.ok, true); assert.equal(out.answer, "on_shelves");
+  assert.deepEqual(out.rows.map((r) => r.key), ["101"]); assert.ok(out.rows[0].price > 0); assert.equal(out.pad.id, "pad");
+  assert.equal(searches(h), 0); assert.equal(out.seerr, undefined);
+  // a near title is not that title ("Lantern" is in four films' names): Seerr is asked for the one named
+  const near = await ask(h, { title: "Lantern", kind: "movie" });
+  assert.notEqual(near.answer, "on_shelves"); assert.equal(searches(h), 1);
+});
+
+test("request_offer: a verified missing title's offer is bound to the speaker, the pad and the title; the yes is from chat", async () => {
+  const h = harness();
+  const out = await ask(h);
+  assert.equal(out.answer, "seerr"); assert.equal(out.seerr.tmdb, 901); assert.equal(out.seerr_state, "ok");
+  assert.deepEqual(out.request, { may: true, cost: { with: "pat", price: 400 } });
+  assert.doesNotMatch(JSON.stringify(out), /NEVER/);
+  assert.equal(requests(h), 0, "an offer writes nothing");
+  for (const [body, user] of [[{}, "u2"], [{ room: "elsewhere" }, "u1"], [{ tmdb: 902 }, "u1"], [{ kind: "tv" }, "u1"]]) {
+    assert.equal((await h.send(body, user)).code, "request_stale");
+  }
+  h.d.requestResult = { ...h.d.requestResult, id: 77 };
+  const sent = await h.send();
+  assert.equal(sent.ok, true); assert.equal(sent.id, 77); assert.equal(sent.status, "pending");
+  assert.deepEqual(h.d.calls.find((c) => c[0] === "request"), ["request", "u1", { type: "movie", tmdb: 901 }]);
+  assert.deepEqual(h.d.calls.find((c) => c[0] === "request_meta"), ["request_meta", { origin: "chat", pad: "pad", anon: false }]);
+  assert.equal((await h.send()).code, "request_stale", "an offer is used once");
+  // a veiled speaker's request is never named when it lands
+  await ask(h); await h.send({ veiled: true });
+  assert.deepEqual(h.d.calls.filter((c) => c[0] === "request_meta").at(-1)[1], { origin: "chat", pad: "pad", anon: true });
+});
+
+test("request_offer: a stale offer or a changed cost is refused at the yes (409 request_stale) - nothing sent", async () => {
+  const h = harness();
+  await ask(h); h.d.credits = 1;
+  assert.equal((await h.send()).code, "request_stale");
+  await ask(h); h.d.now += 10 * 60000;
+  assert.equal((await h.send()).code, "request_stale");
+  assert.equal(requests(h), 0);
+});
+
+test("request_offer: an 18+ pad, a PM / Telegram line, requests off and the rollout off are refused or say why - no outside lookup there", async () => {
+  for (const mode of ["adult", "pm", "telegram"]) {
+    const h = harness(); const body = {};
+    if (mode === "adult") h.d.adult = true; else body.via = mode;
+    const out = await ask(h, body);
+    assert.equal(out.code, "request_off", mode); assert.equal(searches(h), 0, mode);
+    assert.equal((await h.send(body)).ok, false, mode); assert.equal(requests(h), 0, mode);
+  }
+  let h = harness(); h.d.on = false;
+  let out = await ask(h);
+  assert.equal(out.answer, "miss"); assert.equal(out.seerr_state, "off"); assert.equal(searches(h), 0);
+  h = harness(); h.d.settings.clerk_requests = "off";
+  out = await ask(h);
+  assert.equal(out.answer, "seerr"); assert.deepEqual(out.request, { may: false, reason: "clerk_off" });
+  assert.equal((await h.send()).code, "request_off"); assert.equal(requests(h), 0);
+  h = harness(); h.d.visible = false;
+  assert.equal((await ask(h)).code, "pad"); assert.equal(searches(h), 0);
+});
+
+test("request_offer: a double yes sends one request", async () => {
+  const h = harness(); await ask(h);
+  let release; h.d.pending = new Promise((resolve) => { release = resolve; });
+  const first = h.send();
+  for (let i = 0; i < 20 && !h.d.calls.some((c) => c[0] === "request"); i++) await Promise.resolve();
+  assert.equal((await h.send()).code, "request_stale"); release();
+  assert.equal((await first).ok, true); assert.equal(requests(h), 1);
+});
+
+test("request_offer and find: Seerr's choices each carry their own preview and offer; a pick's yes requests exactly that one", async () => {
+  const h = harness();
+  h.d.searchRows = [{ type: "movie", tmdb: 905, title: "Distant Lantern", year: 2020, media_status: 1, availability: "unknown" },
+    { type: "movie", tmdb: 906, title: "Distant Lantern", year: 1990, media_status: 1, availability: "unknown" }];
+  const out = await ask(h, { kind: null });
+  assert.equal(out.answer, "choices"); assert.equal(out.seerr, undefined);
+  assert.deepEqual(out.seerr_choices.map((c) => [c.tmdb, c.year, c.request.may, c.request.cost.price]), [[905, 2020, true, 400], [906, 1990, true, 400]]);
+  assert.equal((await h.send({ tmdb: 906 })).ok, true);
+  assert.deepEqual(h.d.calls.find((c) => c[0] === "request")[2], { type: "movie", tmdb: 906 });
+  const found = await h.call("find", { ask: { title: "Distant Lantern" } });
+  assert.equal(found.seerr, undefined); assert.equal(found.seerr_choices.length, 2); assert.equal(found.seerr_choices[0].request.may, true);
+  assert.equal((await h.send({ tmdb: 905 })).ok, true, "the play path's choices are offers too");
+});
+
+test("request_offer: already requested, already available elsewhere and nothing to request say so - never an offer", async () => {
+  let h = harness();
+  h.d.searchRows = [{ type: "movie", tmdb: 901, title: "Distant Lantern", year: 2020, media_status: 2, availability: "pending" }];
+  let out = await ask(h);
+  assert.equal(out.code, "requested"); assert.equal(out.label, "Distant Lantern (2020)"); assert.equal((await h.send()).code, "request_stale");
+  h = harness(); h.d.mode = "gated";
+  out = await ask(h);
+  assert.equal(out.code, "unavailable"); assert.doesNotMatch(JSON.stringify(out), /Distant|Lantern|901|NEVER/);
+  h = harness(); h.d.searchRows = [];
+  out = await ask(h);
+  assert.equal(out.ok, true); assert.equal(out.answer, "miss"); assert.equal(out.seerr_state, "none");
+  h = harness(); h.d.apiError = Object.assign(new Error("NEVER-PRIVATE-UPSTREAM"), { status: 502, refuse: true, upstream: true });
+  out = await ask(h);
+  assert.equal(out.answer, "miss"); assert.equal(out.seerr_state, "down"); assert.doesNotMatch(JSON.stringify(out), /NEVER/);
+  h = harness();
+  assert.equal((await h.call("request_offer", { title: "x" })).code, "bad", "a title is needed");
 });

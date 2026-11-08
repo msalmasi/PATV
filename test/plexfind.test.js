@@ -261,8 +261,14 @@ test("raw exact titles override selection words, including command forms; ordina
   const wrongKind = await run(f, { title: "hearts", select: "latest", kind: "show", year: 1980 }, { raw: "play Random Hearts" });
   assert.deepEqual(wrongKind.rows.map((x) => x.key), ["10"]); assert.equal(wrongKind.exact, true);
   const episode = f.rows.find((r) => r.key === "10023"); episode.title = "The Last Lantern";
+  // 1.99?? clerkreq: a film / show ask never takes an episode that only shares the name (it is kept aside: episode_named); a bare
+  // line that only an episode's title matches is that episode, but never "exact" (it may be a show or film we don't carry)
   const rawEpisode = await run(f, { title: "lantern", select: "latest", kind: "movie" }, { raw: "play The Last Lantern" });
-  assert.deepEqual(rawEpisode.rows.map((x) => x.key), ["10023"]); assert.equal(rawEpisode.exact, true);
+  assert.deepEqual(rawEpisode.rows, []); assert.equal(rawEpisode.exact, false); assert.deepEqual(rawEpisode.episode_named.map((x) => x.key), ["10023"]);
+  const bareEpisode = await run(f, { title: "lantern", select: "latest" }, { raw: "play The Last Lantern" });
+  assert.deepEqual(bareEpisode.rows.map((x) => [x.key, x.why]), [["10023", "episode_named"]]); assert.equal(bareEpisode.exact, false);
+  const askedEpisode = await run(f, { title: "lantern", select: "latest", kind: "episode" }, { raw: "play The Last Lantern" });
+  assert.deepEqual(askedEpisode.rows.map((x) => x.key), ["10023"]); assert.equal(askedEpisode.exact, true);
 });
 
 test("episodes: latest, missing dates, pilot, finale, specials, last N order and ambiguous shows", async () => {
@@ -636,4 +642,143 @@ test("Unicode titles remain distinct and empty folded names never verify a title
   f.rows.find((row) => row.key === "10023").title = "冬の便り";
   assert.deepEqual((await run(f, { title: "冬の便り", kind: "episode" })).rows.map((row) => row.key), ["10023"]);
   assert.deepEqual((await run(f, { title: "夏の便り", kind: "episode" })).rows, []);
+});
+
+// 1.99?? clerkreq (owner 2026-11-08 13:48 ET): "pepe play the tv series The Good Doctor" got another show's episode CALLED "The Good
+// Doctor" (prod has no 2017 series - only a crime show's S1E9 of that name). A show / film ask never takes an episode that only shares
+// the name; it is kept aside (episode_named) and the title goes to Seerr. A bare title that only an episode has is offered as that
+// episode, honestly (why episode_named, never exact), beside what Seerr knows. Seerr's state is said (ok / none / down / off).
+function goodDoctor(f, seerr = "single") {
+  const base = { section: "71", genres: ["Crime"], content_rating: "TV-14", shelves: [], server_plays: 1, pad_plays: 0, rating: 7, summary: "" };
+  f.rows.push({ ...base, key: "300", type: "show", title: "Crime Unit: Intent", year: 2001 });
+  f.rows.push({ ...base, key: "30019", type: "episode", show_key: "300", show: "Crime Unit: Intent", season: 1, episode: 9, title: "The Good Doctor",
+    year: 2001, aired: "2001-11-25", duration: 2646, summary: "A surgeon's wife disappears." });
+  f.rows.push({ ...base, key: "30011", type: "episode", show_key: "300", show: "Crime Unit: Intent", season: 1, episode: 1, title: "One",
+    year: 2001, aired: "2001-09-30", duration: 2646 });
+  const rows = {
+    single: [{ type: "tv", tmdb: 750001, title: "The Good Doctor", year: 2017, availability: "unknown", media_status: 1, overview: "NEVER-OVERVIEW" }],
+    ambiguous: [{ type: "tv", tmdb: 750001, title: "The Good Doctor", year: 2017, availability: "unknown", media_status: 1 },
+      { type: "tv", tmdb: 750002, title: "Good Doctor", year: 2013, availability: "unknown", media_status: 1 },
+      { type: "movie", tmdb: 750003, title: "The Good Doctor", year: 2011, availability: "unknown", media_status: 1 }],
+  }[seerr] || [];
+  f.external.search["the good doctor"] = rows;
+  f.external.search["good doctor"] = rows;
+  return f;
+}
+
+test("clerkreq S1: a show or film ask never takes another show's episode of that name - it goes to Seerr", async () => {
+  for (const [ask, raw] of [[{ title: "the good doctor", kind: "show" }, "the show the good doctor"],
+    [{ title: "The Good Doctor", kind: "show" }, "the tv series the good doctor"], [{ title: "The Good Doctor", kind: "show" }, "The Good Doctor"]]) {
+    const f = goodDoctor(fixture());
+    const r = await run(f, ask, { raw }, externalContext);
+    assert.deepEqual(r.rows, [], raw); assert.equal(r.exact, false, raw);
+    assert.equal(r.seerr && r.seerr.tmdb, 750001, raw); assert.equal(r.seerr_state, "ok", raw);
+    assert.deepEqual(r.episode_named, [{ key: "30019", label: 'Crime Unit: Intent S1E9 "The Good Doctor"', show: "Crime Unit: Intent" }], raw);
+    assert.doesNotMatch(JSON.stringify(r), /NEVER/);
+  }
+  const f = goodDoctor(fixture(), "ambiguous");
+  const film = await run(f, { title: "The Good Doctor", kind: "movie" }, { raw: "the movie the good doctor" }, externalContext);
+  assert.deepEqual(film.rows, []); assert.equal(film.seerr.tmdb, 750003); assert.equal(film.seerr.kind, "movie");
+  assert.equal(film.episode_named.length, 1);
+  // an episode ask keeps it (the episode IS what was asked for)
+  const episode = await run(f, { title: "The Good Doctor", kind: "episode" }, { raw: "the episode the good doctor" }, externalContext);
+  assert.deepEqual(episode.rows.map((x) => x.key), ["30019"]); assert.equal(episode.exact, true); assert.equal(episode.rows[0].why, "exact");
+  // the probe (no Seerr) of a show ask: nothing exact, so the bot asks its model - never the episode as the answer
+  f.calls.length = 0;
+  const probe = await run(f, { title: "the good doctor", kind: "show" }, { raw: "the show the good doctor", probe: true }, externalContext);
+  assert.deepEqual(probe.rows, []); assert.equal(probe.exact, false); assert.equal(probe.seerr, undefined);
+  assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0, "a probe never looks outside");
+});
+
+test("clerkreq S1/S2: a bare title only an episode has is that episode, honestly - episode_named, never exact - and Seerr is asked too", async () => {
+  const f = goodDoctor(fixture());
+  const r = await run(f, { title: "the good doctor" }, { raw: "the good doctor" }, externalContext);
+  assert.deepEqual(r.rows.map((x) => x.key), ["30019"]); assert.equal(r.rows[0].why, "episode_named"); assert.equal(r.rows[0].exact, false);
+  assert.equal(r.exact, false); assert.equal(r.seerr.tmdb, 750001); assert.equal(r.seerr_state, "ok");
+  assert.deepEqual(r.episode_named.map((x) => x.key), ["30019"]);
+  // the same bare line, Seerr has nothing: the episode alone, the state said
+  const g = goodDoctor(fixture(), "none");
+  const alone = await run(g, { title: "the good doctor" }, { raw: "pepe play the good doctor" }, externalContext);
+  assert.deepEqual(alone.rows.map((x) => x.key), ["30019"]); assert.equal(alone.seerr, undefined); assert.equal(alone.seerr_state, "none");
+  // a real show / film title is never "episode named" and asks nobody
+  g.calls.length = 0;
+  const show = await run(g, { title: "Clockwork Orchard" }, { raw: "Clockwork Orchard" }, externalContext);
+  assert.ok(show.rows.length && show.rows.every((x) => x.why !== "episode_named")); assert.equal(show.seerr_state, undefined);
+  assert.equal(g.calls.filter((x) => x[0] === "seerr_search").length, 0);
+  // the old 1.99amh rule for a kind the model got wrong still holds for real titles (a film named in full is the film)
+  const wrongKind = await run(g, { title: "hearts", select: "latest", kind: "show", year: 1980 }, { raw: "play Random Hearts" });
+  assert.deepEqual(wrongKind.rows.map((x) => x.key), ["10"]); assert.equal(wrongKind.exact, true);
+});
+
+test("clerkreq S3: Seerr ambiguity prefers the title with its article, then the year - else choices, never a silent null", async () => {
+  let f = goodDoctor(fixture(), "ambiguous");
+  let r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, externalContext);
+  assert.equal(r.seerr.tmdb, 750001, "'The Good Doctor' (2017) over 'Good Doctor' (2013)"); assert.equal(r.seerr_choices, undefined);
+  r = await run(f, { title: "Good Doctor", kind: "show" }, { raw: "the show good doctor" }, externalContext);
+  assert.equal(r.seerr.tmdb, 750002, "said without the article: the one without it");
+  // a bare title: the 2017 show and the 2011 film both read "The Good Doctor" - a choice for the speaker
+  r = await run(f, { title: "the good doctor" }, { raw: "the good doctor" }, externalContext);
+  assert.equal(r.seerr, undefined); assert.equal(r.seerr_state, "ok");
+  assert.deepEqual(r.seerr_choices, [{ title: "The Good Doctor", year: 2017, kind: "tv", tmdb: 750001, media_status: 1 },
+    { title: "The Good Doctor", year: 2011, kind: "movie", tmdb: 750003, media_status: 1 }]);
+  assert.deepEqual(r.rows.map((x) => x.why), ["episode_named"]);
+  // two shows with the very same name: the year settles it, else choices
+  f = goodDoctor(fixture(), "none");
+  f.external.search["good doctor"] = [{ type: "tv", tmdb: 760001, title: "Good Doctor", year: 2013, availability: "unknown", media_status: 1 },
+    { type: "tv", tmdb: 760002, title: "Good Doctor", year: 2020, availability: "unknown", media_status: 1 }];
+  r = await run(f, { title: "Good Doctor", kind: "show", year: 2020 }, { raw: "the show good doctor 2020" }, externalContext);
+  assert.equal(r.seerr.tmdb, 760002); assert.equal(r.seerr_choices, undefined);
+  r = await run(f, { title: "Good Doctor", kind: "show" }, { raw: "the show good doctor" }, externalContext);
+  assert.equal(r.seerr, undefined); assert.deepEqual(r.seerr_choices.map((c) => c.tmdb), [760001, 760002]);
+  // an already-available one is never a choice (it may be a title the library hides): one left is the offer, none left is unavailable
+  f.external.search["good doctor"][1].media_status = 5; f.external.search["good doctor"][1].availability = "available";
+  f.now += 24 * 3600 * 1000 + 1;
+  r = await run(f, { title: "Good Doctor", kind: "show" }, { raw: "the show good doctor" }, externalContext);
+  assert.equal(r.seerr.tmdb, 760001); assert.doesNotMatch(JSON.stringify(r), /760002/);
+  f.external.search["good doctor"][0].media_status = 6;
+  f.now += 24 * 3600 * 1000 + 1;
+  r = await run(f, { title: "Good Doctor", kind: "show" }, { raw: "the show good doctor" }, externalContext);
+  assert.equal(r.code, "unavailable"); assert.doesNotMatch(JSON.stringify(r), /Good Doctor|7600/);
+  // a film already requested (Seerr pending / processing): said, never offered again
+  f = fixture(); f.external.search["distant lantern"] = [{ type: "movie", tmdb: 601, title: "Distant Lantern", year: 2020, availability: "pending", media_status: 2 }];
+  r = await run(f, { title: "Distant Lantern", kind: "movie" }, { raw: "the movie distant lantern" }, externalContext);
+  assert.equal(r.seerr, undefined); assert.deepEqual(r.seerr_requested, { title: "Distant Lantern", year: 2020, kind: "movie" }); assert.equal(r.seerr_state, "ok");
+});
+
+test("clerkreq S4: Seerr's state is said - ok, none, down (a timeout or an error) and off - only when a lookup was due", async () => {
+  let f = goodDoctor(fixture(), "none");
+  let r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, externalContext);
+  assert.equal(r.seerr_state, "none"); assert.deepEqual(r.rows, []);
+  r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, { allowSeerr: false });
+  assert.equal(r.seerr_state, "off");
+  f = goodDoctor(fixture()); f.searchDelay = 2200;
+  r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, externalContext);
+  assert.equal(r.seerr_state, "down"); assert.equal(r.seerr, undefined);
+  f = goodDoctor(fixture()); f.requests.search = async () => { throw Object.assign(new Error("NEVER-UPSTREAM"), { status: 502, refuse: true, upstream: true }); };
+  r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, externalContext);
+  assert.equal(r.seerr_state, "down"); assert.doesNotMatch(JSON.stringify(r), /NEVER/);
+  f = goodDoctor(fixture()); f.requests.search = async () => { throw Object.assign(new Error("Requests aren't configured."), { status: 503, refuse: true }); };
+  r = await run(f, { title: "The Good Doctor", kind: "show" }, { raw: "the show the good doctor" }, externalContext);
+  assert.equal(r.seerr_state, "off");
+  // a title on the shelves: no lookup, no state
+  r = await run(fixture(), { title: "Harbour Signal", kind: "movie" }, { raw: "the movie harbour signal" }, externalContext);
+  assert.ok(r.rows.length); assert.equal(r.seerr_state, undefined);
+});
+
+test("clerkreq S5: a title-level ask (request_offer) never counts an episode or a near title as on the shelves, and finds a missing season", async () => {
+  const f = goodDoctor(fixture());
+  let r = await f.finder.find({ ask: { title: "The Good Doctor" }, raw: "", titleLevel: true }, externalContext);
+  assert.deepEqual(r.rows, []); assert.equal(r.seerr.tmdb, 750001); assert.deepEqual(r.episode_named.map((x) => x.key), ["30019"]);
+  // "Harbour Signal" is on the shelves; "Harbour" only nearly - Seerr is asked for the exact one
+  f.external.search["harbour"] = [{ type: "movie", tmdb: 701, title: "Harbour", year: 1999, availability: "unknown", media_status: 1 }];
+  r = await f.finder.find({ ask: { title: "Harbour", kind: "movie" }, raw: "", titleLevel: true }, externalContext);
+  assert.equal(r.seerr && r.seerr.tmdb, 701);
+  r = await f.finder.find({ ask: { title: "Harbour Signal", kind: "movie" }, raw: "", titleLevel: true }, externalContext);
+  assert.ok(r.rows.some((x) => x.key === "11")); assert.equal(r.seerr, undefined);
+  // a season the library lacks: Seerr's season
+  f.external.search["clockwork orchard"] = [{ type: "tv", tmdb: 501, title: "Clockwork Orchard", year: 2002, media_status: 4, availability: "partial" }];
+  f.external.details["tv:501"] = { type: "tv", tmdb: 501, title: "Clockwork Orchard", year: 2002, media_status: 4,
+    seasons: [{ n: 1, episodes: 3, status: 5 }, { n: 4, episodes: 8, status: 1 }] };
+  r = await f.finder.find({ ask: { title: "Clockwork Orchard", kind: "show", season: 4, year: 2002 }, raw: "", titleLevel: true }, externalContext);
+  assert.deepEqual(r.rows, []); assert.equal(r.seerr.tmdb, 501); assert.equal(r.seerr.season, 4);
 });
