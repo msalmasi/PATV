@@ -9,7 +9,7 @@
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip Pepe plays on the room's mic when it's free; shown only while
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
 //                              clips", 30 s by default) - the live view's room.pttMax (pttlimits)
-//   .useToast(fn)              (ptt and relay, ptttoast 1.99??) the Room Dock hands in its chat card's notices: every status
+//   .useToast(fn)              (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
 //                              line under the composer goes there instead (fn(text, {id, ms, bad, busy, sticky}); '' with the id =
 //                              take it down; busy = a step on the way, sticky = a state that lasts until '')
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
@@ -1035,11 +1035,11 @@
         headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().then(function (d) { return { s: r.status, d: d }; }, function () { return { s: r.status, d: null }; }); });
     }
-    // ptttoast 1.99?? (owner 11-08: no status lines under the Dock's tool row): useToast(fn) - the Room Dock's chat notices (pad-dock.js
+    // ptttoast 1.99ana (owner 11-08: no status lines under the Dock's tool row): useToast(fn) - the Room Dock's chat notices (pad-dock.js
     // chatToast: fn(text, {id, ms, bad, busy, sticky}); '' with the id takes one down). Then "Wait a moment…" is a notice for the 6 s the
     // line stayed, the offline bar one notice per outage, taken down when a send gets through, and an older page's message line (no chat
     // list: `mine`) one too. The character counter stays on the field (in the Dock beside it - pad-dock.css, ptttoast review F1).
-    // (ptttoast review F3 1.99??: the outage is a state, not news - its notice is sticky: no timer, never pushed out by newer notices, up
+    // (ptttoast review F3 1.99ana: the outage is a state, not news - its notice is sticky: no timer, never pushed out by newer notices, up
     // until the site answers again; it was an 8 s notice and then nothing said the page was offline)
     var toastFn = null, offOn = false, mineWords = null;
     var offText = _t('js.pad.relay.offline', 'You\'re offline — your messages will send when the connection is back.');
@@ -1303,7 +1303,7 @@
         dead = true; clearTimeout(retryTimer); clearTimeout(noteTimer); retryTimer = null;
         outbox.slice().forEach(drop); outbox.length = 0; local = []; inp.value = ''; inp.disabled = true; btn.disabled = true; closeAc();
       },
-      // ptttoast 1.99??: the Room Dock's chat notices (pad-dock.js) for the notes under the composer - null = the lines again
+      // ptttoast 1.99ana: the Room Dock's chat notices (pad-dock.js) for the notes under the composer - null = the lines again
       useToast: function (fn) {
         toastFn = typeof fn === 'function' ? fn : null;
         [offBar, note, mine].forEach(function (n) { n.classList.toggle('rb-hide', !!toastFn); });
@@ -1411,16 +1411,16 @@
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
     var opening = false, pressAt = 0, upAt = 0, tapMode = false, requestGen = 0;
     var recording = false, recordListeners = [], activeDoc = null, activeWin = null;
-    // ptttoast 1.99?? (owner 11-08, Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" sat under the Dock's tool row - "they
+    // ptttoast 1.99ana (owner 11-08, Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" sat under the Dock's tool row - "they
     // should show up the same way the other stuff does as the modal that auto-dismisses"): useToast(fn) - the Room Dock hands in its chat
     // card's notices (pad-dock.js chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then nothing is written under the
     // composer (both lines rb-hide): ONE notice per press, updated in place from "opening the microphone…" to the clip's "played" (the
     // upload's answer ties the clip's job to it - jobTid), with the command notices' timing: on its way 30 s, done 3 s, a refusal 8 s
     // (+ the refusal look). A clip from elsewhere (another tab, one on its way when the page opened) gets a notice of its own. Without a
     // Dock (the classic layout) the lines beside the button, as before.
-    // (ptttoast review F2 1.99??: a step on the way says so - busy - so a notice closed with its ✕ stays closed through the clip's later
+    // (ptttoast review F2 1.99ana: a step on the way says so - busy - so a notice closed with its ✕ stays closed through the clip's later
     // steps, only a refusal shows again - pad-dock.js chatToast)
-    // (ptttoast review F4 1.99??: a clip's own progress - waiting for Pepe / queued / waiting / playing - stays up until its next state,
+    // (ptttoast review F4 1.99ana: a clip's own progress - waiting for Pepe / queued / waiting / playing - stays up until its next state,
     // CLIP_OPEN_MS at most: Pepe can hold a clip minutes for the mic, and a 30 s notice left nothing on the screen while it waited; the
     // site settles every clip well inside it - bridge-relay.js clipOpenUntil: 75 s unclaimed, 8 min from Pepe's claim, playing + its
     // length + 90 s - so the next state, played or not, always replaces it)
@@ -1557,7 +1557,7 @@
       adopt: adopt,
       destroy: function () { gone = true; stop(); box.classList.add('hide'); if (pressTid) notice(pressTid, ''); },   // (ptttoast: and the press's notice)
       listMics: listMics,      // 1.99ajf dockclean: Audio settings re-reads the device names after it asked for them
-      // ptttoast 1.99??: the Room Dock's chat notices (pad-dock.js) - fn(text, {id, ms, bad}), null = the lines beside the button again
+      // ptttoast 1.99ana: the Room Dock's chat notices (pad-dock.js) - fn(text, {id, ms, bad}), null = the lines beside the button again
       useToast: function (fn) {
         toastFn = typeof fn === 'function' ? fn : null;
         txt.classList.toggle('rb-hide', !!toastFn); mine.classList.toggle('rb-hide', !!toastFn);

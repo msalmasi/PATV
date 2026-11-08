@@ -138,7 +138,7 @@
     // 3 s, a refusal with its reason after 8 s); a sticky one stays until ✕. Hover or focus holds the timer. Memory only: nothing beyond
     // what the command list under the composer showed. The reveal notice (item 2) and Copied (item 6) use it too.
     var toasts = [], toastSr = null, srTimer = null;
-    // (ptttoast review F2 1.99??: the ids closed with their ✕ - a push-to-talk clip's notice came back at each of its later states)
+    // (ptttoast review F2 1.99ana: the ids closed with their ✕ - a push-to-talk clip's notice came back at each of its later states)
     var closedToasts = {};
     // (the log's "New messages ↓" pill steps up over the stack - never under a notice)
     // (1.99ajq dockpol fix (review): and the log makes room for the stack - its end padding grows by the stack's height, so a log at its
@@ -182,10 +182,10 @@
     }
     function chatToast(text, opts) {
       opts = opts || {};
-      // (ptttoast 1.99??: '' with an id takes that notice down - a push-to-talk press that came to nothing, the relay back online; never an
+      // (ptttoast 1.99ana: '' with an id takes that notice down - a push-to-talk press that came to nothing, the relay back online; never an
       // empty notice, here or in the fallback)
       if (text == null || text === '') { if (opts.id) delete closedToasts[opts.id]; var was = opts.id ? toasts.filter(function (x) { return x.id === opts.id; })[0] : null; if (was) dropToast(was); return null; }
-      // (ptttoast review F2 1.99??: a notice closed with its ✕ stays closed - its later progress (opts.busy), its finished step and a sticky
+      // (ptttoast review F2 1.99ana: a notice closed with its ✕ stays closed - its later progress (opts.busy), its finished step and a sticky
       // one's repeat are quiet; only a refusal (opts.bad) shows again - something went wrong is still news. '' frees the id)
       if (opts.id && closedToasts[opts.id]) { if (!opts.bad) return null; delete closedToasts[opts.id]; }
       var host = toastBox(); if (!host) { toast(text); return null; }
@@ -220,7 +220,7 @@
       chatToast('› ' + row.text + (st ? ' · ' + st : ''), { id: 'cmd:' + row.id, ms: row.ok === false ? 8000 : pending ? 30000 : 3000, bad: row.ok === false, busy: pending });
       if (!rpmOn) replies.forEach(function (r, i) { chatToast('🔒 ' + r, { id: 'cmd:' + row.id + ':r' + i, sticky: true }); });
     }
-    // ptttoast 1.99??: a composer line (push-to-talk's / the relay's: room-bridge.js useToast) - {id, ms, bad, busy, sticky} like a command's
+    // ptttoast 1.99ana: a composer line (push-to-talk's / the relay's: room-bridge.js useToast) - {id, ms, bad, busy, sticky} like a command's
     // state (busy: a step on the way; sticky: the relay's offline notice - up until '' takes it down)
     function lineToast(text, opts) { return dead ? null : chatToast(text, opts); }
     function changed() {
@@ -1707,7 +1707,7 @@
         paintNow(); if (layer && layer.box && layer.box.classList.contains('rmd-audio-pop')) { var st = layer.box.querySelector('.rmd-audio-st'); if (st) st.textContent = audioStatus(); } }, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     }
     // ── the composer box (owner point 10): row 1 [＋][input][🎙️][Send], row 2 the tool row; nothing under it - push-to-talk's and the relay's
-    // status lines are the chat card's notices (ptttoast 1.99??: start() hands them lineToast), only the character counter stays on the field ──
+    // status lines are the chat card's notices (ptttoast 1.99ana: start() hands them lineToast), only the character counter stays on the field ──
     function decorateComposer() {
       if (!chat) return;
       decorateAudio();
@@ -2865,7 +2865,7 @@
       decoratePeople();
       if (strip && mode === 'pad') { observe(strip, decorateCams); decorateCams(); }
       decorateComposer(); attachDoc(D);
-      // ptttoast 1.99?? (owner 11-08: "slow down — one every 15s" and "🎙 your clip: played" under the tool row "should show up the same way
+      // ptttoast 1.99ana (owner 11-08: "slow down — one every 15s" and "🎙 your clip: played" under the tool row "should show up the same way
       // the other stuff does as the modal that auto-dismisses"): push-to-talk's and the relay's lines are this card's notices (room-bridge.js
       // useToast) - nothing is written under the composer
       if (o.ptt && o.ptt.useToast) o.ptt.useToast(lineToast);

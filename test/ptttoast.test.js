@@ -1,5 +1,5 @@
 "use strict";
-// 1.99?? ptttoast (owner 2026-11-08, a screenshot of Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" as plain text under
+// 1.99ana ptttoast (owner 2026-11-08, a screenshot of Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" as plain text under
 // the composer's tool row): "These mic related messages show up in this spot below the toolbar, they should show up the same way the other
 // stuff does as the modal that auto-dismisses. Make sure the other status messages like "recording is empty" also dont show up here."
 // In the Room Dock every push-to-talk line (the recorder's, the upload's refusals, the clip's progress) and the relay's own notes
