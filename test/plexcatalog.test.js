@@ -324,6 +324,9 @@ test("full passes with the same wall clock have distinct seen markers", async (t
 
 test("snapshot tool reads current custom rating policy read-only without initializing application state", async (t) => {
   const h = await setup(t);
+  // 1.99amq: the tool opens its own catalog on the real clock, and ready needs a full sync at most 3 days old - imported
+  // at the harness's fixed AT (11-05 12:00Z) this test started failing at 11-08 12:00Z, so the import is stamped now
+  h.setClock(Date.now());
   await h.catalog.importSnapshot(snapshot());
   const sqlite3 = require("sqlite3"), settingsFile = path.join(h.dir, "myapp.db");
   const db = await new Promise((resolve, reject) => { const d = new sqlite3.Database(settingsFile, (e) => e ? reject(e) : resolve(d)); });
