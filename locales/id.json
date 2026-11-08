@@ -10826,6 +10826,7 @@
   "js.media.catalog.embed_off": "Embedding ringkasan nonaktif.",
   "js.media.catalog.embed_progress": "Embedding ringkasan: {done} siap · {left} tersisa · {model} ({dim} dimensi).",
   "js.media.catalog.embed_waiting": "Embedding ringkasan: menunggu konfigurasi model bot.",
+  "js.media.catalog.embed_counting": "Embedding ringkasan: {model} ({dim} dimensi) · sedang menghitung katalog, coba cek lagi sebentar lagi.",
   "adm.media.lists.title": "Daftar luar",
   "adm.media.lists.help": "Tambahkan daftar pilihan untuk mencocokkan entrinya dengan perpustakaan yang sudah ditinjau. Hanya judul yang cocok yang muncul di obrolan.",
   "adm.media.lists.input": "ID atau URL MDBList",

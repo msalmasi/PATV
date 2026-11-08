@@ -11223,6 +11223,7 @@
   "js.media.catalog.embed_off": "Osadzenia podsumowań są wyłączone.",
   "js.media.catalog.embed_progress": "Osadzenia podsumowań: {done} gotowe · {left} pozostało · {model} ({dim} wymiarów).",
   "js.media.catalog.embed_waiting": "Osadzenia podsumowań: czekam na konfigurację modelu bota.",
+  "js.media.catalog.embed_counting": "Osadzenia podsumowań: {model} ({dim} wymiarów) · liczenie katalogu, zajrzyj za minutę.",
   "adm.media.lists.title": "Listy zewnętrzne",
   "adm.media.lists.help": "Dodaj wyselekcjonowaną listę, aby dopasować jej pozycje do sprawdzonej biblioteki. Na czacie pojawiają się tylko dopasowane tytuły.",
   "adm.media.lists.input": "ID lub URL MDBList",

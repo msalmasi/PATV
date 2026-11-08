@@ -10824,6 +10824,7 @@
   "js.media.catalog.embed_off": "摘要嵌入已關閉。",
   "js.media.catalog.embed_progress": "摘要嵌入：已完成 {done} 筆・剩餘 {left} 筆・{model}（{dim} 維）。",
   "js.media.catalog.embed_waiting": "摘要嵌入：等待機器人的模型設定。",
+  "js.media.catalog.embed_counting": "摘要嵌入：{model}（{dim} 維）· 正在統計目錄，請約一分鐘後再查看。",
   "adm.media.lists.title": "外部清單",
   "adm.media.lists.help": "新增精選清單，將其項目與已審核的片庫比對。只有比對成功的片名會出現在聊天室中。",
   "adm.media.lists.input": "MDBList ID 或網址",

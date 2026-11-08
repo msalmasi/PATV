@@ -10953,6 +10953,7 @@
   "js.media.catalog.embed_off": "جاسازی خلاصه‌ها خاموش است.",
   "js.media.catalog.embed_progress": "جاسازی خلاصه‌ها: {done} آماده · {left} باقی‌مانده · {model} ({dim} بُعد).",
   "js.media.catalog.embed_waiting": "جاسازی خلاصه‌ها: در انتظار پیکربندی مدل ربات.",
+  "js.media.catalog.embed_counting": "جاسازی خلاصه‌ها: {model} ({dim} بُعد) · در حال شمارش کاتالوگ، یک دقیقهٔ دیگر دوباره سر بزن.",
   "adm.media.lists.title": "فهرست‌های بیرونی",
   "adm.media.lists.help": "یک فهرست انتخابی اضافه کن تا ورودی‌هایش با کتابخانه بررسی‌شده تطبیق داده شود. فقط عنوان‌های تطبیق‌یافته در چت ظاهر می‌شوند.",
   "adm.media.lists.input": "شناسه یا نشانی MDBList",

@@ -10824,6 +10824,7 @@
   "js.media.catalog.embed_off": "Embedding tóm tắt đang tắt.",
   "js.media.catalog.embed_progress": "Embedding tóm tắt: {done} đã sẵn sàng · {left} còn lại · {model} ({dim} chiều).",
   "js.media.catalog.embed_waiting": "Embedding tóm tắt: đang chờ cấu hình mô hình của bot.",
+  "js.media.catalog.embed_counting": "Embedding tóm tắt: {model} ({dim} chiều) · đang đếm danh mục, hãy quay lại sau một phút.",
   "adm.media.lists.title": "Danh sách bên ngoài",
   "adm.media.lists.help": "Thêm một danh sách đã chọn lọc để ghép các mục với thư viện đã duyệt. Chỉ những tựa đã ghép mới xuất hiện trong chat.",
   "adm.media.lists.input": "ID hoặc URL MDBList",

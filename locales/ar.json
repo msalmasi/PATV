@@ -11489,6 +11489,7 @@
   "js.media.catalog.embed_off": "تضمينات الملخصات مُعطّلة.",
   "js.media.catalog.embed_progress": "تضمينات الملخصات: {done} جاهزة · {left} متبقية · {model} ({dim} بُعدًا).",
   "js.media.catalog.embed_waiting": "تضمينات الملخصات: في انتظار إعدادات نموذج البوت.",
+  "js.media.catalog.embed_counting": "تضمينات الملخصات: {model} ({dim} بُعدًا) · جارٍ عدّ الفهرس، تحقق بعد دقيقة.",
   "adm.media.lists.title": "قوائم خارجية",
   "adm.media.lists.help": "أضف قائمة منتقاة لمطابقة عناصرها مع المكتبة المُراجَعة. تظهر العناوين المطابقة فقط في الدردشة.",
   "adm.media.lists.input": "معرّف MDBList أو رابط",

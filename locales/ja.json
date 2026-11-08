@@ -10824,6 +10824,7 @@
   "js.media.catalog.embed_off": "サマリーの埋め込みはオフです。",
   "js.media.catalog.embed_progress": "サマリーの埋め込み: {done} 完了 · {left} 残り · {model} ({dim} 次元)。",
   "js.media.catalog.embed_waiting": "サマリーの埋め込み: ボットのモデル設定を待っています。",
+  "js.media.catalog.embed_counting": "サマリーの埋め込み: {model} ({dim} 次元) · カタログを集計中です。1分ほど待ってから再度ご確認ください。",
   "adm.media.lists.title": "外部リスト",
   "adm.media.lists.help": "キュレーションされたリストを追加すると、そのエントリをレビュー済みのライブラリと照合します。照合されたタイトルのみがチャットに表示されます。",
   "adm.media.lists.input": "MDBList IDまたはURL",

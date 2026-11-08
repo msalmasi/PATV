@@ -10824,6 +10824,7 @@
   "js.media.catalog.embed_off": "摘要嵌入已关闭。",
   "js.media.catalog.embed_progress": "摘要嵌入:已完成 {done} · 剩余 {left} · {model}(维度 {dim})。",
   "js.media.catalog.embed_waiting": "摘要嵌入:正在等待管理机器人的模型配置。",
+  "js.media.catalog.embed_counting": "摘要嵌入:{model}(维度 {dim})· 正在统计目录,请过一分钟再来查看。",
   "adm.media.lists.title": "外部列表",
   "adm.media.lists.help": "添加一个精选列表,以便将其条目与已审核的库匹配。只有匹配的标题会出现在聊天中。",
   "adm.media.lists.input": "MDBList ID 或网址",

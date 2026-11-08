@@ -11045,6 +11045,7 @@
   "js.media.catalog.embed_off": "Gli embedding dei riassunti sono disattivati.",
   "js.media.catalog.embed_progress": "Embedding dei riassunti: {done} pronti · {left} rimanenti · {model} ({dim} dimensioni).",
   "js.media.catalog.embed_waiting": "Embedding dei riassunti: in attesa della configurazione del modello del bot.",
+  "js.media.catalog.embed_counting": "Embedding dei riassunti: {model} ({dim} dimensioni) · conteggio del catalogo in corso, riprova tra un minuto.",
   "adm.media.lists.title": "Liste esterne",
   "adm.media.lists.help": "Aggiungi una lista curata per abbinare le sue voci alla libreria verificata. In chat compaiono solo i titoli abbinati.",
   "adm.media.lists.input": "ID o URL di MDBList",

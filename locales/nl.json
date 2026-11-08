@@ -10957,6 +10957,7 @@
   "js.media.catalog.embed_off": "Samenvatting-embeddings staan uit.",
   "js.media.catalog.embed_progress": "Samenvatting-embeddings: {done} klaar · {left} over · {model} ({dim} dimensies).",
   "js.media.catalog.embed_waiting": "Samenvatting-embeddings: wachten op de modelconfiguratie van de bot.",
+  "js.media.catalog.embed_counting": "Samenvatting-embeddings: {model} ({dim} dimensies) · catalogus wordt geteld, kom over een minuut terug.",
   "adm.media.lists.title": "Externe lijsten",
   "adm.media.lists.help": "Voeg een samengestelde lijst toe om de items ervan te koppelen aan de beoordeelde bibliotheek. Alleen gekoppelde titels verschijnen in de chat.",
   "adm.media.lists.input": "MDBList-ID of URL",

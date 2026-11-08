@@ -10959,6 +10959,7 @@
   "js.media.catalog.embed_off": "Özet gömmeleri kapalı.",
   "js.media.catalog.embed_progress": "Özet gömmeleri: {done} hazır · {left} kaldı · {model} ({dim} boyut).",
   "js.media.catalog.embed_waiting": "Özet gömmeleri: botun model yapılandırması bekleniyor.",
+  "js.media.catalog.embed_counting": "Özet gömmeleri: {model} ({dim} boyut) · katalog sayılıyor, bir dakika sonra tekrar bak.",
   "adm.media.lists.title": "Dış listeler",
   "adm.media.lists.help": "İncelenmiş kütüphaneyle eşleşmesi için kürate edilmiş bir liste ekle. Sohbette yalnızca eşleşen başlıklar görünür.",
   "adm.media.lists.input": "MDBList ID'si veya URL",

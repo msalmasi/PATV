@@ -10957,6 +10957,7 @@
   "js.media.catalog.embed_off": "Zusammenfassungs-Embeddings sind aus.",
   "js.media.catalog.embed_progress": "Zusammenfassungs-Embeddings: {done} fertig · {left} übrig · {model} ({dim} Dimensionen).",
   "js.media.catalog.embed_waiting": "Zusammenfassungs-Embeddings: warte auf die Modellkonfiguration des Bots.",
+  "js.media.catalog.embed_counting": "Zusammenfassungs-Embeddings: {model} ({dim} Dimensionen) · zähle den Katalog, schau in einer Minute wieder vorbei.",
   "adm.media.lists.title": "Externe Listen",
   "adm.media.lists.help": "Füge eine kuratierte Liste hinzu, um ihre Einträge mit der geprüften Bibliothek abzugleichen. Nur abgeglichene Titel erscheinen im Chat.",
   "adm.media.lists.input": "MDBList-ID oder URL",

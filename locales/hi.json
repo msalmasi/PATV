@@ -10957,6 +10957,7 @@
   "js.media.catalog.embed_off": "सारांश एम्बेडिंग बंद हैं।",
   "js.media.catalog.embed_progress": "सारांश एम्बेडिंग: {done} तैयार · {left} बाकी · {model} ({dim} आयाम)।",
   "js.media.catalog.embed_waiting": "सारांश एम्बेडिंग: बॉट के मॉडल कॉन्फ़िगरेशन का इंतज़ार है।",
+  "js.media.catalog.embed_counting": "सारांश एम्बेडिंग: {model} ({dim} आयाम) · कैटलॉग की गिनती हो रही है, एक मिनट बाद फिर देखें।",
   "adm.media.lists.title": "बाहरी सूचियाँ",
   "adm.media.lists.help": "किसी क्यूरेटेड सूची को जोड़ें ताकि उसकी प्रविष्टियाँ समीक्षित लाइब्रेरी से मेल खा सकें। केवल मेल खाने वाले शीर्षक चैट में दिखेंगे।",
   "adm.media.lists.input": "MDBList आईडी या URL",

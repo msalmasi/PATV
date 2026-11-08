@@ -10824,6 +10824,7 @@
   "js.media.catalog.embed_off": "요약 임베딩이 꺼져 있어요.",
   "js.media.catalog.embed_progress": "요약 임베딩: {done} 완료 · {left} 남음 · {model} ({dim}차원).",
   "js.media.catalog.embed_waiting": "요약 임베딩: 봇의 모델 설정을 기다리는 중이에요.",
+  "js.media.catalog.embed_counting": "요약 임베딩: {model} ({dim}차원) · 카탈로그를 세는 중이에요. 잠시 후 다시 확인해 주세요.",
   "adm.media.lists.title": "외부 목록",
   "adm.media.lists.help": "큐레이션된 목록을 추가하면 검토된 라이브러리와 항목을 맞춰요. 일치한 제목만 채팅에 나와요.",
   "adm.media.lists.input": "MDBList ID 또는 URL",

@@ -11090,6 +11090,7 @@
   "js.media.catalog.embed_off": "הטמעות הסיכומים כבויות.",
   "js.media.catalog.embed_progress": "הטמעות סיכומים: {done} מוכנים · {left} נותרו · {model} ({dim} מימדים).",
   "js.media.catalog.embed_waiting": "הטמעות סיכומים: ממתין להגדרות המודל של הבוט.",
+  "js.media.catalog.embed_counting": "הטמעות סיכומים: {model} ({dim} מימדים) · סופר את הקטלוג, בדקו שוב בעוד דקה.",
   "adm.media.lists.title": "רשימות חיצוניות",
   "adm.media.lists.help": "הוסיפו רשימה מובחרת כדי להתאים את הפריטים שלה לספרייה שנבדקה. בצ׳אט מופיעים רק כותרים שהותאמו.",
   "adm.media.lists.input": "מזהה MDBList או כתובת URL",

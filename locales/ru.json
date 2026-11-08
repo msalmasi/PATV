@@ -11223,6 +11223,7 @@
   "js.media.catalog.embed_off": "Эмбеддинги описаний выключены.",
   "js.media.catalog.embed_progress": "Эмбеддинги описаний: готово {done} · осталось {left} · {model} ({dim} измерений).",
   "js.media.catalog.embed_waiting": "Эмбеддинги описаний: ждём настройку модели у бота.",
+  "js.media.catalog.embed_counting": "Эмбеддинги описаний: {model} ({dim} измерений) · подсчитываем каталог, проверьте через минуту.",
   "adm.media.lists.title": "Внешние списки",
   "adm.media.lists.help": "Добавь подборку, чтобы сопоставить её записи с проверенной библиотекой. В чате появляются только совпавшие названия.",
   "adm.media.lists.input": "ID или ссылка MDBList",

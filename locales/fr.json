@@ -11045,6 +11045,7 @@
   "js.media.catalog.embed_off": "Les embeddings des résumés sont désactivés.",
   "js.media.catalog.embed_progress": "Embeddings des résumés : {done} prêts · {left} restants · {model} ({dim} dimensions).",
   "js.media.catalog.embed_waiting": "Embeddings des résumés : en attente de la configuration du modèle du bot.",
+  "js.media.catalog.embed_counting": "Embeddings des résumés : {model} ({dim} dimensions) · comptage du catalogue en cours, reviens dans une minute.",
   "adm.media.lists.title": "Listes externes",
   "adm.media.lists.help": "Ajoute une liste sélectionnée pour faire correspondre ses entrées avec la bibliothèque vérifiée. Seuls les titres correspondants apparaissent dans le chat.",
   "adm.media.lists.input": "ID ou URL MDBList",

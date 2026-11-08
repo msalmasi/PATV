@@ -10825,6 +10825,7 @@
   "js.media.catalog.embed_off": "การฝังข้อมูลสรุปถูกปิดอยู่",
   "js.media.catalog.embed_progress": "การฝังข้อมูลสรุป: พร้อมแล้ว {done} · เหลือ {left} · {model} ({dim} มิติ)",
   "js.media.catalog.embed_waiting": "การฝังข้อมูลสรุป: กำลังรอการตั้งค่าโมเดลของบอท",
+  "js.media.catalog.embed_counting": "การฝังข้อมูลสรุป: {model} ({dim} มิติ) · กำลังนับแคตตาล็อก กรุณากลับมาตรวจสอบในอีกหนึ่งนาที",
   "adm.media.lists.title": "รายการภายนอก",
   "adm.media.lists.help": "เพิ่มรายการที่คัดสรรเพื่อจับคู่รายการกับคลังที่ตรวจทานแล้ว เฉพาะชื่อที่จับคู่ได้เท่านั้นที่จะปรากฏในแชท",
   "adm.media.lists.input": "MDBList ID หรือ URL",

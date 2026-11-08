@@ -11223,6 +11223,7 @@
   "js.media.catalog.embed_off": "Вбудовування підсумків вимкнено.",
   "js.media.catalog.embed_progress": "Вбудовування підсумків: {done} готово · {left} лишилось · {model} ({dim} вимірів).",
   "js.media.catalog.embed_waiting": "Вбудовування підсумків: чекаємо на налаштування моделі бота.",
+  "js.media.catalog.embed_counting": "Вбудовування підсумків: {model} ({dim} вимірів) · підраховуємо каталог, перевірте за хвилину.",
   "adm.media.lists.title": "Зовнішні списки",
   "adm.media.lists.help": "Додай підібраний список, щоб зіставити його записи з перевіреною бібліотекою. У чаті з’являться лише знайдені назви.",
   "adm.media.lists.input": "ID або URL MDBList",

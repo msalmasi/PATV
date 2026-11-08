@@ -10957,6 +10957,7 @@
   "js.media.catalog.embed_off": "خلاصہ ایمبیڈنگز بند ہیں۔",
   "js.media.catalog.embed_progress": "خلاصہ ایمبیڈنگز: {done} تیار · {left} باقی · {model} ({dim} ڈائمینشنز)۔",
   "js.media.catalog.embed_waiting": "خلاصہ ایمبیڈنگز: بوٹ کے ماڈل کی ترتیب کا انتظار ہے۔",
+  "js.media.catalog.embed_counting": "خلاصہ ایمبیڈنگز: {model} ({dim} ڈائمینشنز) · کیٹلاگ کی گنتی جاری ہے، ایک منٹ بعد دوبارہ دیکھیں۔",
   "adm.media.lists.title": "بیرونی فہرستیں",
   "adm.media.lists.help": "کیوریٹڈ فہرست شامل کریں تاکہ اس کی اندراجات جائزہ شدہ لائبریری سے ملائی جا سکیں۔ صرف ملنے والے عنوانات چیٹ میں ظاہر ہوں گے۔",
   "adm.media.lists.input": "MDBList ID یا URL",
