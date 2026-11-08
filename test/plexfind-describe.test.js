@@ -131,3 +131,49 @@ test("clerkfast: the clear episode must pass every other filter, and two shows o
     assert.equal(got.clear, undefined, "two shows are called The Office: the model decides which");
   } finally { await r2.close(); }
 });
+
+// review (2026-11-08) F1: the word search's rank order is for a single pick only. A selection word with a description ("the newest
+// Simpsons Halloween episode", "in order", "the first 2") still orders the matching episodes by air date - in rank order "latest"
+// took the worst word hit and "in order" queued them by relevance.
+const HALLOWEEN = () => [
+  ep(21, "Treehouse of Horror", 2, 3, "1990-10-25", "Bart and Lisa tell scary stories in the treehouse on halloween night."),
+  ep(22, "Treehouse of Horror V", 6, 6, "1994-10-30", "A halloween special: halloween stories of a haunted hotel and halloween dinner, halloween again."),
+  ep(23, "Treehouse of Horror X", 11, 4, "1999-10-31", "Halloween halloween: the family gets superpowers on halloween."),
+  ep(24, "Bart vs. Australia", 6, 16, "1995-02-19", "A collect call sends the family to Australia."),
+  ep(25, "Lisa's Pony", 3, 8, "1991-11-07", "Homer takes a night job to pay for a pony."),
+  ep(26, "Homer at the Bat", 3, 17, "1992-02-20", "Homer joins the softball team."),
+];
+
+test("clerkfast review F1: a selection word with a description keeps air order; only a single pick is in rank order", async () => {
+  const r = await runner(HALLOWEEN());
+  try {
+    const [I, V, X] = ["Treehouse of Horror", "Treehouse of Horror V", "Treehouse of Horror X"].map((t) => key(HALLOWEEN(), t));
+    const pick = async (select, n) => find(r, { about: "halloween", select, ...(n ? { n } : {}) });
+    const plan = (got) => got.rows[0].keys;
+    assert.deepEqual(plan(await pick("in_order")), [I, V, X], "in order: by air date");
+    assert.deepEqual(plan(await pick("first_n", 1)), [I], "the first one: the oldest-aired match");
+    assert.deepEqual(plan(await pick("last_n", 1)), [X], "the last one: the newest-aired match");
+    assert.equal((await pick("latest")).rows[0].key, X, "the newest match, not the worst word hit");
+    assert.equal((await pick("finale")).rows[0].key, X);
+    assert.equal((await pick("pilot")).rows[0].key, I);
+    assert.equal((await pick("oldest")).rows[0].key, I);
+    const one = await pick("one");
+    const ranked = (await r.catalog.search("halloween", { kind: "episode", show_key: SHOW, limit: 500 })).map((row) => String(row.key));
+    assert.deepEqual(one.rows.map((row) => row.key), ranked.filter((k) => [I, V, X].includes(k)), "a single pick: the search's rank order");
+    assert.notEqual(one.rows[0].key, I, "fixture check: the best word hit is not the oldest-aired one");
+  } finally { await r.close(); }
+});
+
+// review F7: the description check reads every episode summary of the show; those must not go into the bounded name cache that
+// keeps the films' and shows' titles normalised (1.99amh) - at ~1 KB an entry a few asks fill it, and at its cap it is cleared.
+test("clerkfast review F7: the summaries never go into the titles' name cache", async () => {
+  const plexfind = require("../plexfind");
+  const episodes = IDEAL().map((row) => ({ ...row, summary: `${row.summary} (review F7 ${row.key})` }));
+  const r = await runner(episodes);
+  try {
+    const got = await find(r, { about: "homer wears a pink shirt" });
+    assert.equal(got.clear, true, "the description check ran");
+    for (const row of episodes) assert.equal(plexfind._normCached(`${row.title || ""} ${row.summary || ""}`), false, row.title);
+    assert.equal(plexfind._normCached("The Simpsons"), true, "fixture check: the titles' cache itself is used");
+  } finally { await r.close(); }
+});

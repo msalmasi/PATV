@@ -642,4 +642,5 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
 }
 let current;
 const singleton = () => current || (current = createFinder());
-module.exports = { createFinder, norm, askOf, ClerkError, episodeOrder, movieOrder, find: (...args) => singleton().find(...args), validateKeys: (...args) => singleton().validateKeys(...args), shelves: (...args) => singleton().shelves(...args) };
+// review F7 (test hook): is this text in the bounded name cache?
+module.exports = { createFinder, norm, askOf, ClerkError, episodeOrder, movieOrder, _normCached: (text) => normKept.has(String(text)), find: (...args) => singleton().find(...args), validateKeys: (...args) => singleton().validateKeys(...args), shelves: (...args) => singleton().shelves(...args) };
