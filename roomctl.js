@@ -11,6 +11,8 @@
 //          [verb, room, password?, "force"?] (actions.js); Pepe runs it on a worker (site_admin only), answers
 //          "joining X…" at once and follows up with the result (pepe_webact._webact_followup)
 //   admin  --GET  /api/admin/pepe/rooms--> {online, state, actions: the last room.ctl actions with their results}
+//   grabcard 1.99??: the same state push carries Pepe's !mic fastgrab settings (state.fastgrab, cleaned by fastgrab.js) for the
+//   page's ⚡ Fast mic grab card (/admin/pepe/rooms#fastgrab - its own API: GET / POST /api/admin/pepe/fastgrab, fastgrab.js)
 //
 // Guards: Admin class (page + API), same-site + X-Requested-With: fetch, 20 changes a minute per admin, room names
 // checked for shape; Pepe re-checks site_admin and does one change at a time. A join password is used once: it is
@@ -23,7 +25,7 @@ const guard = require("./middleware/authGuard");
 
 const VERBS = new Set(["join", "leave", "active", "mute", "unmute"]);
 const ROOM_RE = /^[^\u0000-\u001f<>]{1,64}$/;
-const STATE_MAX = 32 * 1024;
+const STATE_MAX = 64 * 1024;          // grabcard 1.99??: + the fastgrab block (fastgrab.js; ~4 KB for Pepe's rooms, at most 20)
 const ONLINE_MS = 90 * 1000;
 const RATE = { max: 20, windowMs: 60 * 1000 };
 const hits = guard.limiter(RATE);
@@ -66,8 +68,11 @@ function cleanState(s) {
   const bans = (Array.isArray(s.bans) ? s.bans : []).slice(0, 30).map((b) => ({ room: str(b && b.room, 128), by: str(b && b.by, 80),
     at: ms(b && b.at), since: ms(b && b.since), retry_at: ms(b && b.retry_at), tries: Math.max(0, Math.min(99, Math.floor(Number(b && b.tries) || 0))) }))
     .filter((b) => b.room);
+  // grabcard 1.99??: the !mic fastgrab settings Pepe has now (global + each room) for the Fast mic grab card (fastgrab.js) - only when
+  // he sends them (an older Pepe: no key, the card says so)
+  const fg = s.fastgrab ? require("./fastgrab").cleanState(s.fastgrab) : null;
   return { rooms, active_room: str(s.active_room, 128) || null, active_auto: str(s.active_auto, 128) || null, pinned: !!s.pinned,
-           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj, bans };
+           audio_room: str(s.audio_room, 128) || null, net_audio: !!s.net_audio, busy, log, autojoin: aj, bans, ...(fg ? { fastgrab: fg } : {}) };
 }
 
 async function setState(raw) {
@@ -164,7 +169,9 @@ function register(app, { isBotToken, addUser }) {
     try {
       await scrubPasswords();
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      res.render("admin/pepeRooms", { user: req.user.username, title: "Admin · Pepe's rooms", section: "pepe", isAdmin: true, v: await view() });
+      // grabcard 1.99??: + the Fast mic grab card's data (fastgrab.js)
+      res.render("admin/pepeRooms", { user: req.user.username, title: "Admin · Pepe's rooms", section: "pepe", isAdmin: true, v: await view(),
+                                      fg: await require("./fastgrab").view().catch(() => null) });
     } catch (e) { console.error("[roomctl] page:", e); res.status(500).send("Couldn't load the page."); }
   });
   app.get("/api/admin/pepe/rooms", addUser, admin(true), async (req, res) => {

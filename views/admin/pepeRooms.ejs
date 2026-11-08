@@ -34,6 +34,60 @@
   <ul id="rmLog" class="adm-help"></ul>
 </section>
 
+<%# grabcard 1.99?? (the owner 2026-11-08: "where do i set the mic relay cooldowns and adjustable grab limits on the site?"): ⚡ Fast mic grab -
+    Pepe's !mic fastgrab switches and caps for a room, the global default or every room (fastgrab.js: GET / POST /api/admin/pepe/fastgrab ->
+    website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py; the values are the ones Pepe reports with his rooms state). The card's
+    script: public/js/admin-fastgrab.js. Admins only (pepe.rooms_commands_audio), each change audited (admin_audit pepe.fastgrab). %>
+<% const FG = locals.fg || { online: !!v.online, at: v.at || null, fg: (v.state && v.state.fastgrab) || null, actions: [] };
+   const _fgFmt = (x) => (typeof x === 'boolean' ? (x ? 'on' : 'off') : Array.isArray(x) ? x.join('/') : x == null ? '–' : String(x));
+   const _fgKeys = ['on', 'contest', 'fair', 'claim', 'web', 'chatty', 'rate', 'shots', 'tries', 'breaker', 'pause', 'fairwait', 'ceiling']; %>
+<style>
+  #fastgrab .fg-num { width: 6.5em; display: inline-block; margin: 2px 4px 2px 0; }
+  #fastgrab tr.fg-edited td { background: var(--ds-gold-bg); }
+  #fastgrab .fg-follow { display: block; margin-top: 4px; }
+  #fastgrab .fg-unit { white-space: nowrap; }
+  #fastgrab td .adm-help { margin: 2px 0 0; }
+  #fastgrab table.adm-tbl { max-height: none; }   /* (13 settings: the page scrolls, not a box inside it) */
+  /* narrow screens (and the side panel): each setting is a block - name and what it does, then its value, where it comes from */
+  @media (max-width: 760px) {
+    #fastgrab table.adm-tbl, #fastgrab table.adm-tbl tbody, #fastgrab table.adm-tbl tr, #fastgrab table.adm-tbl td { display: block; width: auto; }
+    #fastgrab table.adm-tbl thead { display: none; }
+    #fastgrab table.adm-tbl tr { padding: 6px 0; border-bottom: 1px solid var(--ds-line); }
+    #fastgrab table.adm-tbl td { border: 0; padding: 4px 12px; }
+  }
+</style>
+<section class="adm-card" id="fastgrab" aria-labelledby="fgT">
+  <h2 id="fgT"><span class="ds-ic" aria-hidden="true">⚡</span> Fast mic grab <span class="adm-pill admin">admins</span> <span class="adm-pill" id="fgOnline"><%= FG.online ? (FG.fg ? 'live' : 'live (older Pepe)') : 'offline' %></span></h2>
+  <p class="adm-help">How Pepe wins a mic people are fighting over while a soundboard clip, a paid <code>!say</code> or an alert waits for it: the switches and limits of <code>!mic fastgrab</code> (and Fast grab caps on his own panel). Pick a room to set its own values, or the global default that every room without its own follows (tick every room to also clear the rooms' own values, like <code>-all</code>). The values are what Pepe reports now; a save sends only what you changed, as one change, and he answers with what he stored - a number outside its range is clamped and the card says so.</p>
+  <p class="adm-help">Looking for the <b>push-to-talk</b> (relayed mic) cooldown, clips per 10 minutes and max length? Those are on <a href="/admin/bridge#pttlimits">Bridge › Push-to-talk clips</a>.</p>
+  <div class="adm-form">
+    <label>Where<select id="fgWhere" class="ds-in">
+      <option value="global">Global default (every room without its own)</option>
+      <% ((FG.fg && FG.fg.rooms) || []).forEach((r) => { %><option value="room:<%= r.id %>"><%= r.name %><%= r.name !== r.id ? ' (' + r.id + ')' : '' %><%= r.joined ? '' : ' - Pepe is not in it now' %></option><% }) %>
+    </select></label>
+    <label id="fgAllL"><input type="checkbox" id="fgAll"> every room (also clears the rooms' own values)</label>
+    <label>Reason (optional)<input class="ds-in" id="fgReason" maxlength="200" autocomplete="off"></label>
+  </div>
+  <% if (FG.fg && FG.fg.global) { %>
+  <p class="adm-help" id="fgNow">Global now: <%= _fgKeys.map((k) => k + ' ' + _fgFmt(FG.fg.global[k])).join(' · ') %></p>
+  <ul class="adm-help" id="fgRoomsNow">
+    <% (FG.fg.rooms || []).forEach((r) => { const own = Object.keys(r.own || {}); %><li><b><%= r.name %></b><%= r.name !== r.id ? ' (' + r.id + ')' : '' %>: <%= own.length ? own.map((k) => k + ' ' + _fgFmt(r.values[k])).join(' · ') + ' (its own)' : 'follows the global' %></li><% }) %>
+  </ul>
+  <% } %>
+  <div class="adm-tbl-wrap"><table class="adm-tbl" data-filtered="1" aria-label="Fast mic grab settings"><thead><tr><th>Setting</th><th>Value</th><th>From</th><th>Range · default</th></tr></thead>
+    <tbody id="fgRows"><tr><td colspan="4" class="adm-help"><%= FG.fg ? 'Loading…' : (FG.online ? "This Pepe doesn't report his fast-grab settings yet - use !mic fastgrab in a room (or his own panel) until his update runs." : 'No report from Pepe right now (offline?).') %></td></tr></tbody></table></div>
+  <p class="adm-help" id="fgContest"></p>
+  <div class="adm-actions"><button type="button" id="fgSave"<%= FG.fg && FG.online ? '' : ' disabled' %>>Save</button>
+    <button type="button" id="fgUndo" class="adm-btn ghost">Undo my edits</button>
+    <span id="fgMsg" class="adm-msg" role="status" aria-live="polite"></span></div>
+  <h3>Recent fast-grab changes</h3>
+  <ul id="fgLog" class="adm-help">
+    <% (FG.actions || []).forEach((x) => { %><li><%= x.status === 'done' ? '✅' : x.status === 'failed' ? '❌' : '⏳' %> <%= x.username || '' %>: <%= x.label || '' %><%= x.message ? ' - ' + x.message : '' %></li><% }) %>
+  </ul>
+</section>
+<script type="application/json" id="fgData"><%- JSON.stringify(FG).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/admin-fastgrab.js?v=1" defer></script>
+
 <script>
 (function () {
   'use strict';

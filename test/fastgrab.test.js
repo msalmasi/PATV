@@ -138,6 +138,7 @@ test("Pepe's fastgrab block is cleaned: the card's fields, each its own type; ju
   assert.equal(roomctl.cleanState({ rooms: [] }).fastgrab, undefined, "an older Pepe: no fastgrab key at all");
   assert.deepEqual(roomctl.cleanState({ rooms: [], fastgrab: block() }).fastgrab.global, vals({ on: true }));
   assert.ok(require(path.join(repo, "weberrors")).NO_PAT_KINDS.includes("mic.fastgrab"), "an E_INTERNAL there says to check the page, not the balance");
+  assert.equal(require(path.join(repo, "actionttl")).TTL_DEFAULTS["mic.fastgrab"], 15, "a change Pepe never got to expires in 15 minutes (like room.ctl)");
 });
 
 // ── who may ──
