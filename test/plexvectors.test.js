@@ -162,7 +162,7 @@ test("filtered nearest uses only supplied movie keys or one named show; query mi
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec([1, 0, 0, 0], "old-model"), kind: "movie", keys: ["1"] }), []);
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec([1, 0, 0]), kind: "movie", keys: ["1"] }), []);
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "episode", show_key: "20", keys: Array(3001).fill("21") }), []);
-  assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "movie", keys: Array(MAX_MOVIES + 1).fill("1") }), []);   // 1.99??: 100,000 (was 20,000)
+  assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "movie", keys: Array(MAX_MOVIES + 1).fill("1") }), []);   // 1.99amo: 100,000 (was 20,000)
   let clock = 0;
   const slow = createVectors({ catalog: h.catalog, settings: () => h.cfg, now: () => AT, clock: () => clock += 500 });
   assert.deepEqual(await slow.nearest({ qvec: qvec(), kind: "movie", keys: ["1"], budgetMs: 400 }), []);
@@ -463,7 +463,7 @@ test("the card shows the model while the catalog is still being counted, and the
   }
 });
 
-// ── plexvectors 1.99?? (follow-up to 1.99amg): once vectors exist, a FILM vector search at prod's size fell back to word search
+// ── plexvectors 1.99amo (follow-up to 1.99amg): once vectors exist, a FILM vector search at prod's size fell back to word search
 // every time, silently. Prod has 30,682 films; MAX_MOVIES was 20,000. An ask over every film ("a film about ...") was refused
 // before any read (more keys than MAX_MOVIES) - and plexfind never even asked (its own 20,000 cap on the pool). A filtered ask
 // (one genre, under 20k keys) found more than 20,000 film vectors, took the "partial" path - the supplied keys 400 at a time,
@@ -743,7 +743,7 @@ test("a cache from before plex_vectors.rev (prod's) gets the column once; its ol
   assert.equal(vectors.stats().films, 2);
 });
 
-// plexvectors 1.99?? review: the bot sends its model and dims with EVERY embed_todo (pepe_plexembed EmbedJob.step: op
+// plexvectors 1.99amo review: the bot sends its model and dims with EVERY embed_todo (pepe_plexembed EmbedJob.step: op
 // "embed_todo", model, dim, limit, after - every ~1.6 s for hours during a backfill), and todo() hands them to configure().
 // configure() threw the films' index away (invalidate) even when the stored pair was the same - so on prod's one shared
 // instance every backfill step dropped every film's vector, the next person's ask found no index (cold: a whole re-read of
@@ -787,7 +787,7 @@ test("the bot's embed_todo (its model and dims on every call) keeps the films' i
   assert.equal(c.total(), 0, "past the cap: not read again on every ask between the bot's embed_todo calls: " + JSON.stringify(c.blobs));
 });
 
-// plexvectors 1.99?? review (finding 2): an ordinary sync moved policy_rev though nothing in Plex had changed - plexcatalog's
+// plexvectors 1.99amo review (finding 2): an ordinary sync moved policy_rev though nothing in Plex had changed - plexcatalog's
 // installSections replaced plex_sections whole (DELETE + every INSERT again) and each row fired a section trigger (+2 a section,
 // prod +6 every hour). The vectors were never lost (prod's 1.99amg path, probed: 36,882 vectors, an unchanged delta and full
 // sweep -> policy_rev 0 -> 6 -> 12, the purge deleted 0 rows, vec=1 kept), but every sync made the guard re-check every stored
@@ -913,7 +913,7 @@ test("the section trigger: a cache from before gets the conditional trigger; a t
   assert.equal(await sql(), once);
 });
 
-// plexvectors 1.99?? review (finding 3): a films build still reading when invalidate() ran (a model change, a policy change's
+// plexvectors 1.99amo review (finding 3): a films build still reading when invalidate() ran (a model change, a policy change's
 // purge) or when the switch went off installed its result anyway when it finished - the old model's index, or an index while
 // switched off - kept until the next rebuild (twice the memory during it) or the next status().
 test("a films build that finishes after a model change, an invalidate() or switching off is not installed", async (t) => {

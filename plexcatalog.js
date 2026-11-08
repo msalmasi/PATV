@@ -459,7 +459,7 @@ function createCatalog(options = {}) {
     await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
     await tx.run("DELETE FROM plex_shelves_next WHERE section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
   }
-  // plexvectors 1.99?? review: the sections are updated in place - a section no longer listed is deleted, a new one inserted, a
+  // plexvectors 1.99amo review: the sections are updated in place - a section no longer listed is deleted, a new one inserted, a
   // changed one updated, an unchanged one not written at all. Every sync used to replace the table whole (DELETE, then every
   // section INSERTed again), and each of those rows fired plexvectors' section triggers: policy_rev moved every hour though nothing
   // had changed (prod: +6 a sync), so the guard re-checked every stored vector and the films' index was read again. Two sections

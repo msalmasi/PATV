@@ -6,7 +6,7 @@ const { performance } = require("node:perf_hooks");
 
 const KEY = /^\d{1,12}$/, HASH = /^[a-f0-9]{64}$/;
 const DAY = 86400000, BUDGET = 400, MAX_EPISODES = 3000, MAX_BODY = 16384;
-// plexvectors 1.99?? (follow-up to 1.99amg): a film search at prod's size (30,682 films) fell back to word search every time -
+// plexvectors 1.99amo (follow-up to 1.99amg): a film search at prod's size (30,682 films) fell back to word search every time -
 // over MAX_MOVIES (20,000) an ask over every film was refused before any read, and a filtered one took an uncached "partial"
 // path (the keys 400 at a time on the chat lane: 405 ms, [] every time), and any cache died with each embed_put and catalog
 // write. The films' vectors now live in memory - int8 in typed-array blocks, read on the background lane once, then only what
@@ -85,7 +85,7 @@ function createVectors(options = {}) {
   let initialized = null, policyStamp = null, episodeCache = null;
   let purgeJob = null, census = null, censusJob = null, lastCounts = null, kicked = null;
   let films = null, filmJob = null, filmAgain = false, filmRefused = null;   // the films' index (see MAX_MOVIES), its one background job
-  // 1.99?? review: moves whenever the films' index is dropped (invalidate(), switched off) - a build that started before is not installed
+  // 1.99amo review: moves whenever the films' index is dropped (invalidate(), switched off) - a build that started before is not installed
   let filmGen = 0;
   const asks = new Set();   // nearest() calls still finishing after their answer went (idle() waits for them too)
   const on = () => settings().clerk_embed === true || settings().clerk_embed === "true" || settings().clerk_embed === "1" || settings().clerk_embed === 1;
@@ -145,7 +145,7 @@ function createVectors(options = {}) {
       await tx.run("CREATE TABLE IF NOT EXISTS plex_vectors (key TEXT PRIMARY KEY,model TEXT NOT NULL,dim INTEGER NOT NULL,hash TEXT NOT NULL,scale REAL NOT NULL,v BLOB NOT NULL,kind TEXT NOT NULL,show_key TEXT,rev INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vectors_kind ON plex_vectors(kind)");
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vectors_show ON plex_vectors(show_key)");
-      // plexvectors 1.99??: rev = the vector_rev of the write that stored the row (put() sets it; older rows 0) - the films' index
+      // plexvectors 1.99amo: rev = the vector_rev of the write that stored the row (put() sets it; older rows 0) - the films' index
       // reads only the rows written since it last looked, an index range. A cache from before the column gets it here (no rewrite).
       if (!(await tx.all("PRAGMA table_info(plex_vectors)")).some((col) => col.name === "rev"))
         await tx.run("ALTER TABLE plex_vectors ADD COLUMN rev INTEGER NOT NULL DEFAULT 0");
@@ -177,7 +177,7 @@ function createVectors(options = {}) {
       await tx.run(`CREATE TRIGGER IF NOT EXISTS plex_vectors_catalog_delete AFTER DELETE ON plex_catalog BEGIN
         DELETE FROM plex_vectors WHERE key=OLD.key; DELETE FROM plex_vector_docs WHERE key=OLD.key;
         UPDATE plex_vector_meta SET catalog_rev=catalog_rev+1,policy_rev=policy_rev+1 WHERE id=1; END`);
-      // plexvectors 1.99?? review: a section's UPDATE is a policy change only when its id, type or policy changes - not its title
+      // plexvectors 1.99amo review: a section's UPDATE is a policy change only when its id, type or policy changes - not its title
       // or Plex's count (plexcatalog now updates the sections in place). 1.99amg's trigger fired on every UPDATE: a cache that has
       // it gets this one here (once - the new one carries a WHEN). A section added or removed is always a policy change.
       const sectionUpdate = (await tx.all("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='plex_vectors_section_update'"))[0];
@@ -269,7 +269,7 @@ function createVectors(options = {}) {
       return !(done && typeof done.changes === "number") || done.changes > 0;   // a writer that can't say: as if it changed
     });
     if (lastCounts && lastCounts.pair !== selected.model + "|" + selected.dim) lastCounts = null;
-    // plexvectors 1.99?? review: the bot sends its pair with every embed_todo (todo() -> here, every ~1.6 s in a backfill) - the
+    // plexvectors 1.99amo review: the bot sends its pair with every embed_todo (todo() -> here, every ~1.6 s in a backfill) - the
     // same pair keeps the films' index and the memory cap's back-off (each is keyed by the model and dims anyway); a new one drops them
     if (changed) invalidate();
     return { ok: true, ...selected };
@@ -373,7 +373,7 @@ function createVectors(options = {}) {
   }
 
   async function status(opts = {}) {
-    if (!on()) { dropFilms(); return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 }; }   // 1.99??: switched off - the films' memory goes
+    if (!on()) { dropFilms(); return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 }; }   // 1.99amo: switched off - the films' memory goes
     if (opts && opts.quick) return quickStatus();
     let m = null;
     try {
@@ -481,7 +481,7 @@ function createVectors(options = {}) {
           const found = (await tx.all("SELECT c.key,c.data,c.type,c.show_key FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where + " AND c.key=?", args))[0];
           if (!found || textHash(documentText(parse(found.data, {}))) !== row.hash) continue;
           await tx.run("INSERT INTO plex_vector_docs(key,hash,dirty) VALUES(?,?,0) ON CONFLICT(key) DO UPDATE SET hash=excluded.hash,dirty=0", [row.key, row.hash]);
-          // plexvectors 1.99??: rev = the vector_rev this write makes (the change trigger adds 1 after the row) - always above
+          // plexvectors 1.99amo: rev = the vector_rev this write makes (the change trigger adds 1 after the row) - always above
           // anything the films' index has read
           await tx.run(`INSERT INTO plex_vectors(key,model,dim,hash,scale,v,kind,show_key,rev) VALUES(?,?,?,?,?,?,?,?,(SELECT vector_rev+1 FROM plex_vector_meta WHERE id=1))
             ON CONFLICT(key) DO UPDATE SET model=excluded.model,dim=excluded.dim,hash=excluded.hash,scale=excluded.scale,v=excluded.v,kind=excluded.kind,
@@ -503,7 +503,7 @@ function createVectors(options = {}) {
     }
   }
 
-  // ── plexvectors 1.99??: the films' index ──
+  // ── plexvectors 1.99amo: the films' index ──
   // The stored film vectors of the configured model that the policy showed when they were read: int8 in FILM_BLOCK-film typed
   // arrays (a slot a film; a newer write of a film replaces its slot) with their norms, hashes and revs. Built on the background
   // lane a page at a time; after that each refresh reads only the rows whose rev is past what it has read (an embed_put). `want`
@@ -572,7 +572,7 @@ function createVectors(options = {}) {
         filmAgain = false;
         const deadline = clock() + FILM_BUILD_MS;
         const m = await guard(deadline, bgLane("films"));
-        // 1.99?? review: an invalidate() (a model change, a policy change's purge) or the switch going off after this read makes
+        // 1.99amo review: an invalidate() (a model change, a policy change's purge) or the switch going off after this read makes
         // whatever this pass reads stale - it is not installed (it was: the old model's index, or one while switched off, kept
         // until the next rebuild - twice the memory during it - or the next status())
         const gen = filmGen, current = () => gen === filmGen && on();

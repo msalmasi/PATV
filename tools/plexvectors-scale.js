@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// plexvectors 1.99??: offline scale check for the clerk's MOVIE vector search. Builds a SYNTHETIC library shaped like the real
+// plexvectors 1.99amo: offline scale check for the clerk's MOVIE vector search. Builds a SYNTHETIC library shaped like the real
 // one (default 30,682 films / 4,257 shows / 220,896 episodes - the 2026-11-08 sync) in a temp dir, stores a 768-dim int8 vector
 // for every film, and times what a chat ask does: nearest() over every film (an unfiltered "a film about ..."), over a filtered
 // half (one genre), the clerk's whole find() with a query vector, and a backfill step (embed_put) between asks. Prints the

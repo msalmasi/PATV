@@ -916,7 +916,7 @@ test("catfix review: across a resume the stored tables hold nothing of a section
   assert.equal(JSON.stringify(await h.catalog.read("SELECT data FROM plex_catalog")).includes("Second Shift"), false);
 });
 
-// plexvectors 1.99?? review (finding 2): every sync - the hourly delta and the daily full sweep alike - replaced plex_sections
+// plexvectors 1.99amo review (finding 2): every sync - the hourly delta and the daily full sweep alike - replaced plex_sections
 // whole (DELETE FROM plex_sections, then every section INSERTed again) though nothing in Plex had changed. Each DELETE and INSERT
 // fires plexvectors' section triggers, so policy_rev moved by two a section every hour (prod: 3 sections, +6 a sync): the guard
 // then re-checked every stored vector (a write a page of 2,048) and threw the films' index away - 30,682 films read again.
