@@ -4,16 +4,39 @@ const crypto = require("crypto");
 const { performance } = require("node:perf_hooks");
 const KEY = /^\d{1,12}$/;
 const SELECT = new Set(["one", "random", "latest", "oldest", "first_n", "last_n", "pilot", "finale", "season", "series", "in_order"]);
-const norm = (s) => {
-  const value = String(s || "").toLowerCase().normalize("NFKD").replace(/([a-z])[\u0300-\u036f]+/g, "$1").normalize("NFC").replace(/&/g, " and ")
+const normOf = (text) => {
+  const value = text.toLowerCase().normalize("NFKD").replace(/([a-z])[\u0300-\u036f]+/g, "$1").normalize("NFC").replace(/&/g, " and ")
     .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ").trim().replace(/^(the|a|an) /, "");
   return /[\p{L}\p{N}]/u.test(value) ? value : "";
+};
+// 1.99?? plexclerk: a find compares the line with every film's and show's title (35k at the real library's size) several times;
+// the normalising was most of a find's CPU on the site's event loop. A pure function of the string: remembered (bounded).
+const normKept = new Map(), NORM_KEEP = 200000;
+const norm = (s) => {
+  const text = typeof s === "string" ? s : String(s || "");
+  let value = normKept.get(text);
+  if (value === undefined) {
+    value = normOf(text);
+    if (normKept.size >= NORM_KEEP) normKept.clear();
+    normKept.set(text, value);
+  }
+  return value;
 };
 const sameName = (left, right) => { const value = norm(left); return !!value && value === norm(right); };
 const clean = (s, n = 100) => typeof s === "string" ? s.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
 const integer = (v, lo, hi) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi ? v : null;
 const names = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => clean(x)).filter(Boolean).slice(0, 3) : [];
-const ratingNames = (s) => new Set(String(s == null ? "" : s).split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
+const ratingSets = new Map();   // 1.99?? plexclerk: allowed() asked for the block list's Set once per row; one per setting text
+const ratingNames = (s) => {
+  const text = String(s == null ? "" : s);
+  let set = ratingSets.get(text);
+  if (!set) {
+    set = new Set(text.split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
+    if (ratingSets.size >= 32) ratingSets.clear();
+    ratingSets.set(text, set);
+  }
+  return set;
+};
 const number = (v) => v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v);
 const rating = (r) => number(r.rating) != null ? number(r.rating) : number(r.audience_rating);
 const duration = (r) => Math.max(0, Number(r.duration) || 0);
@@ -53,16 +76,20 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     if (settings().clerk_lists !== true) outside = [];
     return { ...base, shelves: [...local, ...outside.filter((r) => r && r.source === "mdblist" && r.count > 0)] };
   }
+  // 1.99?? plexclerk: an Oscars list keeps its provider's name ("Oscar Best Picture Winners", "Academy Award Winners") - every
+  // such name is the one "oscars" shelf, so "an oscar winner" finds whichever the admin added
+  const OSCARS = /^(?:(?:oscars?|academy awards?)(?: best picture)?(?: winners?| winning(?: films?| movies?| pictures?)?)?|best picture(?: oscar| academy award)?(?: winners?)?)$/;
   function shelfName(value) {
     const n = norm(value).replace(/\s+(?:shelf|list)$/, "");
-    const aliases = { criterion: "criterion collection", "oscar winner": "oscars", "oscar winners": "oscars" };
+    if (OSCARS.test(n)) return "oscars";
+    const aliases = { criterion: "criterion collection" };
     return aliases[n] || n.replace(/^(imdb|letterboxd) top \d+$/, "$1 top 250");
   }
   async function shelfFilters(a, raw, roots, literal) {
     if (literal) return { filters: [], missing: false, suggestions: [] };
     let explicit = raw.match(/^(?:something|anything|a movie|a film|a show|an episode)\s+from\s+(?:(?:the|our)\s+)?(.+?)(?:\s+(?:shelf|list))?[.!?]*$/i);
     if (!explicit) explicit = raw.match(/^(?:(?:a|an|some|any|something|anything)\s+)?(?:the\s+)?((?:imdb|letterboxd|afi) top \d+)(?:\s+(?:pick|movie|film|list))?[.!?]*$/i);
-    if (!explicit && /^(?:(?:a|an|some|any)\s+)?(?:oscar|academy award)[ -]winners?(?:\s+(?:movie|film))?[.!?]*$/i.test(raw)) explicit = [raw, "Oscars"];
+    if (!explicit && /^(?:(?:a|an|some|any)\s+)?(?:oscar|academy award)[ -](?:winners?|winning)(?:\s+(?:movie|film|picture)s?)?[.!?]*$/i.test(raw)) explicit = [raw, "Oscars"];
     if (explicit) {
       const named = clean(explicit[1]);
       // A raw explicit list constraint survives even if interpretation dropped an unknown shelf name.
@@ -288,7 +315,14 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     const exclude = new Set((Array.isArray(request.exclude) ? request.exclude : []).slice(0, 40).map(String));
     const seen = new Set((context.seenKeys || []).map(String));
     const sections = new Set((state.sections || []).filter((x) => x.policy === "allowed").map((x) => String(x.id)));
-    const [movies, shows] = await Promise.all([catalog.rows({ kind: "movie" }), catalog.rows({ kind: "show" })]);
+    // 1.99?? plexclerk: the films and shows come from the catalog's kept roots (one indexed read per catalog version) - two
+    // whole-kind reads per find were each past the read budget at the real library's size (too_broad -> catalog_down)
+    const [movies, shows] = typeof catalog.roots === "function" ? await catalog.roots().then((r) => [r.movies, r.shows])
+      : await Promise.all([catalog.rows({ kind: "movie" }), catalog.rows({ kind: "show" })]);
+    // "is this whole line an episode's title?" - the title index when the catalog has one (an OR word search over every episode
+    // took 1.8 s on prod), else the word search filtered to whole-title matches
+    const episodesTitled = async (title) => safe(typeof catalog.byTitle === "function" ? await catalog.byTitle(title, { kind: "episode" })
+      : await catalog.search(title, { kind: "episode", limit: 500, budgetMs: 400 })).filter((r) => sameName(r.title, title));
     const parents = new Map(shows.map((r) => [String(r.key), r]));
     const safe = (rows) => rows.filter((r) => allowed(r, sections, s, parents) && !exclude.has(String(r.key)));
     const raw = clean(request.raw).replace(/^!(?:plex|watch)\s+/i, "").replace(/^(?:pepe[,!:]?\s+)?(?:please\s+)?(?:play|watch|put on|show me)\s+/i, "");
@@ -308,7 +342,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         + (reference.year && row.year && Math.floor(reference.year / 10) === Math.floor(row.year / 10) ? 1 : 0);
     };
     let exactRows = raw ? roots.filter((r) => sameName(r.title, raw)) : [];
-    if (!exactRows.length && raw) exactRows = safe(await catalog.search(raw, { kind: "episode", limit: 500, budgetMs: 400 })).filter((r) => sameName(r.title, raw));
+    if (!exactRows.length && raw) exactRows = await episodesTitled(raw);
     const literal = exactRows.length > 0;
     if (literal) {
       const kinds = [...new Set(exactRows.map((r) => r.type))];
@@ -320,7 +354,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     a._shelfFilters = shelfSelection.filters;
     a.shelves = shelfSelection.filters.map((f) => f.name);
     if (!exactRows.length && a.title) exactRows = roots.filter((r) => sameName(r.title, a.title));
-    if (!exactRows.length && a.title) exactRows = safe(await catalog.search(a.title, { kind: "episode", limit: 500, budgetMs: 400 })).filter((r) => sameName(r.title, a.title));
+    if (!exactRows.length && a.title) exactRows = await episodesTitled(a.title);
     const exact = literal || (exactRows.length > 0 && a.select === "one" && !a.about && !a.like);
     const verified = literal ? { records: [], candidates: [], missing: [] } : await verifyRecall(a.guesses, roots, safe);
     verified.candidates = verified.candidates.filter((x) => matches(x.r, { ...a, title: null, year: null, years: null, about: null, like: null,
@@ -388,7 +422,10 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     if (a.title) films = films.filter((r) => titleMatch(r.title, a.title) || (r.shelves || []).some((name) => titleMatch(name, a.title)));
     if (literal) films = films.filter((r) => exactRows.some((x) => x.key === r.key));
     else if (exact && exactRows.some((r) => r.type === "movie")) films = films.filter((r) => exactRows.some((x) => x.key === r.key));
-    if (a.about) {
+    const filmsWanted = a.kind !== "show" && a.kind !== "episode" && (!a.title || !wantedShows.length || a.kind === "movie" || exactRows.some((r) => r.type === "movie"));
+    // 1.99?? plexclerk: the films' word search only when films can be offered (a verified recall, an episode or a show ask
+    // never uses them - it was a whole-library search the answer threw away)
+    if (a.about && filmsWanted && films.length) {
       const hits = new Set((await catalog.search(a.about, { kind: "movie", limit: 500, budgetMs: 400 })).map((r) => String(r.key)));
       films = films.filter((r) => hits.has(String(r.key)));
     }
@@ -396,7 +433,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
       const eps = safe(await catalog.rows({ kind: "episode" })).filter((r) => (a.season === 0 || Number(r.season) !== 0) && matches(r, a, seen, parents));
       candidates.push(...eps.sort(episodeOrder).map((r) => ({ r, why: a.select === "random" ? "random" : "filter", exact: false })));
     }
-    if (a.kind !== "show" && a.kind !== "episode" && (!a.title || !wantedShows.length || a.kind === "movie" || exactRows.some((r) => r.type === "movie"))) {
+    if (filmsWanted) {
       films.sort(movieOrder);
       if (selectionList && films.length) {
         if (a.select === "first_n") films = films.slice(0, a.n || 1);

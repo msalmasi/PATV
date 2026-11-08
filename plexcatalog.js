@@ -21,6 +21,19 @@ const MAX_BUDGET_MS = Math.max(SHELVES_BUDGET_MS, ADMIN_BUDGET_MS);
 // summary-embedding backfill, which reads for hours (~255k docs at 20/s). Its reads wait behind any chat read already waiting
 // (one connection, chat first) and queue on their own (BACKGROUND_QUEUE), so a backfill never makes a chat search "busy".
 const BACKGROUND_QUEUE = 8;
+// 1.99?? plexclerk (prod 2026-11-08, "pepe says he is still shelving the library"): every clerk find read ALL films and ALL
+// shows - two reads with no index on the kind (a scan of all 255k rows), 1.1 s and 0.46 s at 30,682 films / 4,257 shows /
+// 220,894 episodes, each past the 400 ms read budget -> too_broad -> the route's catalog_down. roots() reads both kinds in ONE
+// read through plex_catalog_roots (a partial index only that read can use - the per-show / title / word reads keep their
+// plans) with the shelves' budget, and keeps the rows until they change (a write to the rows / sections / shelves, a sync's
+// stamps, the block list) or for ROOTS_MAX_AGE_MS at most. A candidate from them is always read again before it is offered.
+const ROOTS_BUDGET_MS = SHELVES_BUDGET_MS, ROOTS_MAX_AGE_MS = 10 * 60000;
+const ROW_WRITE = /^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+plex_(?:catalog|catalog_genres|catalog_fts|sections|shelves|shelf_members)\b/i;
+// English function words a word search skips when other words remain ("the episode of the simpsons where homer wears the pink
+// shirt" OR-matched almost every row: 1.8 s over the episodes on prod). Only a query made of nothing else keeps them.
+const STOPWORDS = new Set(("a an the of and or but in on at to for by with from into onto off over under about as is are was were be been being it its " +
+  "this that these those they them their there here where when which who whom whose what how why he she his her him we us our you your i me my " +
+  "do does did not no so than then too very can will just one some any all").split(" "));
 const DEFAULT_BLOCK = "X,XXX,AO,R18,R18+";
 const KEY = /^\d{1,12}$/;
 const text = (v, max = 200) => typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -134,7 +147,9 @@ function createCatalog(options = {}) {
   const sleep = options.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const log = options.log || console;
   let writer = null, initPromise = null, searchDb = null, tail = Promise.resolve(), fts = false, syncing = null, timer = null, closed = false;
-  let running = false, generation = 0, shelvesKept = null;
+  // rowsGeneration: writes that change catalog rows, sections or shelves only - the vectors' and lists' own writes (an embedding
+  // backfill writes all day) don't throw the kept roots away
+  let running = false, generation = 0, rowsGeneration = 0, shelvesKept = null, rootsKept = null;
   const queue = [], later = [];   // chat reads; background (admin lane) reads, served when no chat read waits
 
   async function connect(mode) {
@@ -174,6 +189,8 @@ function createCatalog(options = {}) {
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_section ON plex_catalog(section)");
       // Covers visibility/parent joins without loading the large JSON metadata payload for every episode.
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_visibility ON plex_catalog(key,section,content_rating,type,show_key)");
+      // 1.99?? plexclerk: roots() only (its WHERE carries this exact term) - films and shows without scanning the episodes
+      await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_roots ON plex_catalog(type,section) WHERE type IN ('movie','show')");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_catalog_genres (key TEXT,genre TEXT,PRIMARY KEY(key,genre),FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await run(writer, "CREATE INDEX IF NOT EXISTS plex_catalog_genre_name ON plex_catalog_genres(genre,key)");
       await run(writer, "CREATE TABLE IF NOT EXISTS plex_shelves (key TEXT PRIMARY KEY,name TEXT,kind TEXT,source TEXT,ranked INTEGER NOT NULL DEFAULT 0,section TEXT)");
@@ -220,8 +237,16 @@ function createCatalog(options = {}) {
     const job = tail.catch(() => {}).then(async () => {
       await init();
       await run(writer, "BEGIN IMMEDIATE");
-      const spy = (sql) => { if (options.onWrite) try { options.onWrite(sql); } catch (_) { /* a test's observer */ } };
-      try { const out = await fn({ run: (s, p) => { spy(s); return run(writer, s, p); }, all: (s, p) => { spy(s); return all(writer, s, p); } }); await run(writer, "COMMIT"); generation++; return out; }
+      let rowsTouched = false;
+      const spy = (sql) => {
+        if (ROW_WRITE.test(sql)) rowsTouched = true;
+        if (options.onWrite) try { options.onWrite(sql); } catch (_) { /* a test's observer */ }
+      };
+      try {
+        const out = await fn({ run: (s, p) => { spy(s); return run(writer, s, p); }, all: (s, p) => { spy(s); return all(writer, s, p); } });
+        await run(writer, "COMMIT"); generation++; if (rowsTouched) rowsGeneration++;
+        return out;
+      }
       catch (e) { await run(writer, "ROLLBACK").catch(() => {}); throw e; }
     });
     tail = job.catch(() => {});
@@ -338,7 +363,8 @@ function createCatalog(options = {}) {
   const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS, true);
   const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys) };
   async function search(query, filters = {}) {
-    const words = fold(query).split(" ").filter(Boolean).slice(0, 20);
+    const typed = fold(query).split(" ").filter(Boolean), meaningful = typed.filter((w) => !STOPWORDS.has(w));
+    const words = (meaningful.length ? meaningful : typed).slice(0, 20);
     if (!words.length) return [];
     const args = [], where = condition(filters, args), limit = Math.max(1, Math.min(500, Math.floor(number(filters.limit, 200))));
     if (fts) {
@@ -352,8 +378,40 @@ function createCatalog(options = {}) {
     args.push(limit);
     return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where + " AND (" + like + ") LIMIT ?", args, filters));
   }
+  /** 1.99?? plexclerk: the visible rows whose WHOLE title is `title` (a leading the/a/an either way) - the title index, never a
+   *  word search (the finder's "is this line a title?" check was an OR search over every episode). */
+  async function byTitle(title, filters = {}) {
+    const bare = fold(title).replace(/^(the|a|an) /, "");
+    if (!bare) return [];
+    const names = [...new Set([bare, "the " + bare, "a " + bare, "an " + bare])];
+    const args = [], where = condition(filters, args);
+    args.push(...names);
+    return safeRows(await read("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
+      " AND c.title_fold IN (" + names.map(() => "?").join(",") + ") LIMIT 500", args, filters));
+  }
+  /** 1.99?? plexclerk: every visible film and show, read once per catalog version (see ROOTS_BUDGET_MS) and shared: the rows
+   *  are frozen, each caller gets its own arrays. A failed read is not kept (the next caller tries again). */
+  async function roots() {
+    const s = await status();
+    if (!s.ready) return { movies: [], shows: [] };
+    const block = ratings(settings().clerk_block_ratings);
+    const key = JSON.stringify([rowsGeneration, [...block].sort(), s.at, s.full_at, s.v, s.count]);
+    if (!rootsKept || rootsKept.key !== key || now() - rootsKept.at > ROOTS_MAX_AGE_MS) {
+      const value = (async () => {
+        const args = [], where = condition({}, args, block);
+        const rows = await safeRows(await queued("SELECT c.* FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
+          " AND c.type IN ('movie','show')", args, ROOTS_BUDGET_MS));
+        for (const r of rows) Object.freeze(r);
+        return { movies: rows.filter((r) => r.type === "movie"), shows: rows.filter((r) => r.type === "show") };
+      })();
+      rootsKept = { key, value, at: now() };
+      value.catch(() => { if (rootsKept && rootsKept.value === value) rootsKept = null; });
+    }
+    const kept = await rootsKept.value;
+    return { movies: [...kept.movies], shows: [...kept.shows] };
+  }
   // A caller gets its own copy (a kept answer is never handed out to be changed).
-  const shelvesCopy = (v) => ({ ...v, genres: [...v.genres], shelves: v.shelves.map((r) => ({ ...r })), catalog: { ...v.catalog } });
+  const shelvesCopy =(v) => ({ ...v, genres: [...v.genres], shelves: v.shelves.map((r) => ({ ...r })), catalog: { ...v.catalog } });
   async function shelves() {
     const s = await status();
     if (!s.ready) return { ok: true, genres: [], shelves: [], v: s.v, catalog: { ready: false, at: s.at } };
@@ -831,7 +889,7 @@ function createCatalog(options = {}) {
     listsCache().register(app, { addUser, noTimers });
     if (!noTimers) start();
   }
-  return { init, sync, dryCount, status, shelves, rows, getByKeys, search, read, write, admin, importSnapshot, exportSnapshot, start, close, register, file, inUse };
+  return { init, sync, dryCount, status, shelves, rows, roots, byTitle, getByKeys, search, read, write, admin, importSnapshot, exportSnapshot, start, close, register, file, inUse };
 }
 
 let singleton;

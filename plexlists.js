@@ -195,7 +195,10 @@ function createLists(options = {}) {
     throw coded("list_too_large");
   }
   async function match(entries) {
-    const rows = [...await slow().rows({ kind: "movie" }), ...await slow().rows({ kind: "show" })];
+    // 1.99?? plexclerk: the catalog's kept films+shows (one indexed read) - two whole-kind reads were each past the read budget at
+    // the real library's size, so adding a list always failed (lists_unavailable)
+    const rows = typeof catalog.roots === "function" ? await catalog.roots().then((r) => [...r.movies, ...r.shows])
+      : [...await catalog.rows({ kind: "movie" }), ...await catalog.rows({ kind: "show" })];
     const index = new Map();
     for (const r of rows) for (const [field, value] of [["imdb", r.imdb], ["tmdb", r.tmdb], ["tvdb", r.type === "show" && r.tvdb], ["title", fold(r.title)]]) {
       if (!value) continue; const id = r.type + ":" + field + ":" + value;
@@ -243,11 +246,9 @@ function createLists(options = {}) {
       const conditions = [...where], values = [...args];
       let base = "SELECT m.key,m.rank,m.item_no,l.id,l.name,l.ranked";
       if (final) base += ",c.type AS current_type";
-      // plexlists 1.99amd (prod 2026-11-08): with no ANALYZE stats SQLite put plex_catalog in the outer loop ("SCAN c") - every
-      // row's JSON checked to find the members of no list at all: 651 ms over 255,833 rows, past the search budget. CROSS JOIN
-      // fixes the loop order (SQLite keeps a CROSS JOIN's left table outside): lists (at most 20) -> their members by
-      // list_id (or key + list_id for a key lookup) -> each member's catalog row by key. The cost follows the members.
-      base += " FROM plex_lists l CROSS JOIN plex_list_members m ON m.list_id=l.id";
+      // 1.99?? plexclerk: CROSS JOIN keeps the members as the outer loop (SQLite never reorders it) - left to the planner, the final
+      // read scanned the whole catalog first (json_valid on every row: 773 ms on prod, past the budget -> lists_unavailable)
+      base += final ? " FROM plex_list_members m CROSS JOIN plex_lists l ON l.id=m.list_id" : " FROM plex_list_members m JOIN plex_lists l ON l.id=m.list_id";
       if (final) {
         base += " CROSS JOIN plex_catalog c ON c.key=m.key CROSS JOIN plex_sections cs ON cs.id=c.section";
         // Membership contains only movie/show roots. Recheck both stored projections together with
