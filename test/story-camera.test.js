@@ -402,7 +402,8 @@ function camPage(options = {}) {
       if (url === "/api/feed/uploads") { const id = (++uploadN).toString(16).padStart(24, "0"); P.uploaded.push({ id, body }); return response(200, { ok: true, id, chunk: 4 }); }
       if (method === "PUT") { P.puts.push(opt.body); return response(200, { ok: true, received: Number(url.split("offset=")[1]) + opt.body.size }); }
       if (/\/finish$|\/discard$/.test(url)) return response(200, { ok: true });
-      if (/^\/api\/feed\/uploads\//.test(url)) return response(200, { ok: true, state: "ready" });
+      // storyprev verify: options.uploadState(id, P) is what the server says of an upload it is processing (default: ready)
+      if (/^\/api\/feed\/uploads\//.test(url)) return response(200, options.uploadState ? options.uploadState(url.split("/").pop(), P) : { ok: true, state: "ready" });
       if (url === "/api/stories/mine") return response(200, { ok: true, story: { id: "new-story", scope: "aurora.pad", href: "/media/new-story", circle: { id: "aurora.pad", title: "Aurora Workshop" }, item: { id: "new-story", kind: "photo", src: "/new.webp" } } });
       return response(404, { ok: false, error: "missing test route" });
     },
@@ -1344,4 +1345,144 @@ test("Story camera preview fix: ?storydebug=1 (or localStorage patv.storydebug=1
       assert.match(r.querySelector(".sst-debug").textContent, /loadedmetadata \+\d+ ms/); assert.match(r.querySelector(".sst-debug").textContent, /gallery/);
     }
   }
+});
+
+// ── storyprev verify (1.99??): the review of the preview fix. A poster that takes touches (iOS's image long-press menu); a wait
+//    for a size that never asks WebKit to decode (it decodes - and sizes - only once the video plays); the hand-over to the
+//    video pausing the user's own play; a late error after that hand-over leaving a blank preview; a gallery video's late
+//    metadata after the 10 s give-up thrown away; a poster-framed edit the server refuses with no way to post it as it is; the
+//    camera's full-size canvases kept until GC. ──
+// WebKit (as the 1.99aly notes read iOS): a <video> with no size at 'loadedmetadata' decodes a frame - and fires 'resize' - only once it plays
+function sizeOnPlay(node, w = 1080, h = 1920) {
+  if (node.sizeOnPlay) return; node.sizeOnPlay = true; const play = node.play;
+  node.play = () => { const p = play(); if (!node.videoWidth && !node.error) queueMicrotask(() => { node.videoWidth = w; node.videoHeight = h; node.readyState = 2; node.dispatchEvent(new Ev("resize")); }); return p; };
+}
+
+test("Story camera preview verify: the poster takes no touch - a press on the preview reaches the <video>, never the image's long-press menu", async () => {
+  const P = camPage({ ...IPHONE, sourceVideo: (node) => { zeroMeta(node); return true; } }), root = await openStudio(P);
+  await quickClip(P); await P.clock.tick(4100);
+  const still = root.querySelector("img.sst-still"); assert.ok(still && !still.hidden, "the poster is the preview");
+  assert.equal(still.style.pointerEvents, "none", "a touch goes through it (to the <video> and the preview's crop pan)");
+  assert.equal(still.style["-webkit-touch-callout"], "none", "no Save / Copy / Share menu on a long press");
+  assert.equal(still.style["-webkit-user-select"], "none", "no selection (Live Text) on it");
+});
+
+test("Story camera preview verify: a <video> with no size is asked to decode while it is waited for - the muted play - and after the plain try too", async () => {
+  for (const which of ["camera", "gallery"]) {
+    const P = camPage({ ...IPHONE, sourceVideo: (node) => { zeroMeta(node, 5); sizeOnPlay(node); return true; } }), root = await openStudio(P);
+    if (which === "camera") await quickClip(P); else { pickFile(P, "video/mp4", "clip.mp4"); await flush(16); }
+    await P.clock.tick(300); await flush(8);
+    const v = root.querySelector("video.sst-source");
+    assert.equal(status(P), "", which); assert.ok(root.querySelector(".sst-recovery").hidden, which);
+    assert.ok(!root.querySelector(".sst-post").disabled, which + ": open well inside the wait"); assert.ok(!root.querySelector('[data-tool="crop"]').disabled, which);
+    assert.equal(v.plays, 1, which + ": one muted play (the first frame), not two"); assert.equal(v.paused, true, which + ": paused on its first frame");
+    root.querySelector(".sst-post").click(); await flush(24);
+    assert.equal(P.uploaded[0].body.kind, "video"); assert.ok(P.uploaded[0].body.edit, which + ": with its edit");
+  }
+  // the fragment refused, the plain try has no size yet: it is asked too
+  for (const which of ["camera", "gallery"]) {
+    const P = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; zeroMeta(node, 5); sizeOnPlay(node); return true; } });
+    const root = await openStudio(P);
+    if (which === "camera") await quickClip(P); else { pickFile(P, "video/mp4", "clip.mp4"); await flush(16); }
+    await P.clock.tick(300); await flush(8);
+    assert.equal(P.srcs.length, 2, which); assert.equal(status(P), "", which); assert.ok(!root.querySelector(".sst-post").disabled, which + ": open after the plain try");
+    const v = root.querySelector("video.sst-source"); assert.equal(v.plays, 1, which); assert.equal(v.paused, true, which);
+  }
+});
+
+test("Story camera preview verify: a play started on the poster (Trim's play) is the user's - the hand-over to the video never pauses it, and the poster goes", async () => {
+  for (const rvfc of [false, true]) {
+    const label = rvfc ? "requestVideoFrameCallback" : "no requestVideoFrameCallback";
+    let node2 = null, paint = null;
+    const P = camPage({ ...IPHONE, sourceVideo: (node, src, file, Pg) => {
+      node2 = node; zeroMeta(node, 5);
+      if (rvfc) node.requestVideoFrameCallback = (cb) => { paint = cb; return 1; };
+      // Low Power Mode: no play without a touch (the muted first-frame play is refused); a play of a playing video just resolves;
+      // WebKit decodes - and sizes - only once it plays
+      node.play = () => {
+        node.plays = (node.plays || 0) + 1; if (!node.paused) return Promise.resolve();
+        if (!Pg.touch) return Promise.reject(Object.assign(new Error("not allowed"), { name: "NotAllowedError" }));
+        node.paused = false; queueMicrotask(() => { if (!node.videoWidth) { node.videoWidth = 1080; node.videoHeight = 1920; node.readyState = 3; node.dispatchEvent(new Ev("resize")); } });
+        return Promise.resolve();
+      };
+      return true;
+    } });
+    const root = await openStudio(P); await quickClip(P); await P.clock.tick(4100);
+    const still = root.querySelector("img.sst-still"); assert.ok(!still.hidden, label); assert.ok(!root.querySelector('[data-tool="trim"]').disabled, label + ": trim on the poster");
+    root.querySelector('[data-tool="trim"]').click(); await flush();
+    const play = root.querySelectorAll(".sst-sheet button").find((b) => /Play/.test(b.getAttribute("aria-label") || "")); assert.ok(play, label);
+    P.touch = true; play.click(); P.touch = false; await flush(8);
+    assert.equal(node2.paused, false, label + ": the user's playback goes on");
+    if (rvfc) { assert.equal(typeof paint, "function", label); paint(1, {}); await flush(); }
+    assert.ok(still.hidden, label + ": the video shows itself");
+    assert.equal(root.getAttribute("data-sheet"), "trim", label + ": still trimming");
+  }
+});
+
+test("Story camera preview verify: an error after the video took over from the poster brings the poster back - no blank preview", async () => {
+  let paint = null, node2 = null;
+  const P = camPage({ ...IPHONE, sourceVideo: (node) => { node2 = node; node.requestVideoFrameCallback = (cb) => { paint = cb; return 1; }; zeroMeta(node); return true; } }), root = await openStudio(P);
+  await quickClip(P); await P.clock.tick(4100);
+  const still = root.querySelector("img.sst-still"); assert.ok(!still.hidden);
+  node2.videoWidth = 1080; node2.videoHeight = 1920; node2.dispatchEvent(new Ev("resize")); await flush();
+  paint(1, {}); await flush(); assert.ok(still.hidden, "the video took over");
+  await addText(P, "still here");
+  mediaError(node2, 3); await flush();
+  assert.ok(!still.hidden, "the poster is back over the broken video");
+  assert.doesNotMatch(status(P), /preview/i); assert.ok(root.querySelector(".sst-recovery").hidden); assert.ok(!root.querySelector(".sst-post").disabled);
+  root.querySelector(".sst-post").click(); await flush(30);
+  assert.deepEqual(P.uploaded[1].body.edit.text, ["still here"], "the edits go with it");
+});
+
+test("Story camera preview verify: a gallery video whose metadata comes after the give-up opens after all - unless 'Post it as it is' was chosen", async () => {
+  const late = (node, w = 1080, h = 1920) => { node.videoWidth = w; node.videoHeight = h; node.duration = 8; node.readyState = 1; node.paused = true; node.dispatchEvent(new Ev("loadedmetadata")); };
+  let gv = null;
+  const P = camPage({ sourceVideo: (node) => { gv = node; return true; } }), root = await openStudio(P);
+  pickFile(P, "video/mp4", "big.mp4"); await flush(16); await P.clock.tick(10100);
+  assert.match(status(P), KIND); assert.ok(!root.querySelector(".sst-recovery").hidden);
+  late(gv); await flush(8);
+  assert.equal(status(P), "", "the recovery's words go"); assert.ok(root.querySelector(".sst-recovery").hidden, "and its buttons");
+  assert.ok(!root.querySelector('[data-tool="crop"]').disabled, "editable"); assert.ok(!root.querySelector(".sst-post").disabled);
+  assert.equal(gv.plays, 1, "its first frame is put up");
+  root.querySelector(".sst-post").click(); await flush(24); assert.ok(P.uploaded[0].body.edit, "posted with its edit");
+  // a size that comes after the 4 s wait (no size at loadedmetadata) opens it too
+  let hv = null;
+  const Q = camPage({ sourceVideo: (node) => { hv = node; zeroMeta(node, 6); return true; } }), root2 = await openStudio(Q);
+  pickFile(Q, "video/mp4", "clip.mp4"); await flush(16); await Q.clock.tick(4100); assert.match(status(Q), KIND);
+  hv.videoWidth = 720; hv.videoHeight = 1280; hv.dispatchEvent(new Ev("resize")); await flush(8);
+  assert.equal(status(Q), ""); assert.ok(root2.querySelector(".sst-recovery").hidden); assert.ok(!root2.querySelector('[data-tool="text"]').disabled);
+  // "Post it as it is" was chosen: it stays as it is
+  let iv = null;
+  const R = camPage({ sourceVideo: (node) => { iv = node; return true; } }), root3 = await openStudio(R);
+  pickFile(R, "video/mp4", "big.mp4"); await flush(16); await R.clock.tick(10100);
+  root3.querySelector(".sst-recovery").querySelectorAll("button").find((b) => b.textContent === "Post it as it is").click();
+  late(iv); await flush(8);
+  assert.match(status(R), /Ready to post without edits/); assert.ok(root3.querySelector('[data-tool="crop"]').disabled);
+  root3.querySelector(".sst-post").click(); await flush(24); assert.equal(R.uploaded[0].body.edit, undefined, "as it is");
+});
+
+test("Story camera preview verify: a camera clip framed on its poster that the server refuses can still go 'as it is'", async () => {
+  const refuse = (id, Pg) => { const up = Pg.uploaded.find((u) => u.id === id); return up && up.body.kind === "video" && up.body.edit ? { ok: true, state: "failed", error: "The crop must have the story's 9:16 shape." } : { ok: true, state: "ready" }; };
+  const P = camPage({ ...IPHONE, uploadState: refuse, sourceVideo: (node) => { zeroMeta(node); return true; } }), root = await openStudio(P);
+  await quickClip(P); await P.clock.tick(4100); assert.ok(!root.querySelector("img.sst-still").hidden);
+  root.querySelector(".sst-post").click(); await flush(30);
+  assert.match(status(P), /9:16 shape/); assert.ok(P.doc.querySelector(".sst"), "still open");
+  const rec = root.querySelector(".sst-recovery"); assert.ok(!rec.hidden, "a way out");
+  const asIs = rec.querySelectorAll("button").find((b) => b.textContent === "Post it as it is"); assert.ok(asIs, "Post it as it is");
+  asIs.click(); assert.ok(!root.querySelector(".sst-post").disabled); root.querySelector(".sst-post").click(); await flush(30);
+  const last = P.uploaded[P.uploaded.length - 1].body; assert.equal(last.kind, "video"); assert.equal(last.edit, undefined, "as it is");
+  assert.ok(P.doc.querySelector(".sst") === null, "posted");
+});
+
+test("Story camera preview verify: the camera empties its poster and frozen canvases once a clip is handed over (iOS counts canvas memory until GC)", async () => {
+  const P = camPage(IPHONE), infos = watchInfo(P); await openStudio(P);
+  await quickClip(P);
+  const poster = P.draws.find((d) => d.canvas.classList.contains("scam-poster")).canvas, frozen = P.draws.find((d) => d.canvas.classList.contains("scam-freeze")).canvas;
+  assert.equal(infos[0].width, 1080); assert.equal(infos[0].height, 1920, "the size read before it was emptied"); assert.ok(infos[0].poster.size > 0);
+  assert.equal(poster.width, 0); assert.equal(poster.height, 0); assert.equal(frozen.width, 0); assert.equal(frozen.height, 0);
+  // a recording the camera's close button throws away
+  const Q = camPage(IPHONE); await openStudio(Q);
+  fire(shutter(Q), "pointerdown"); await Q.clock.tick(600); assert.equal(Q.recorders.length, 1);
+  cam(Q).querySelector(".scam-close").click(); await flush();
+  const p2 = Q.draws.find((d) => d.canvas.classList.contains("scam-poster")).canvas; assert.equal(p2.width, 0); assert.equal(p2.height, 0);
 });
