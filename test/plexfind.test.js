@@ -403,6 +403,38 @@ test("recall checks show/name/SxE and treats IDs only as hints", async () => {
   assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0);
 });
 
+// 1.99?? plexfind recall (owner 2026-11-08: "the episode of star trek where they communicate by telling stories" - the model answered in
+// 6.4 s and its guess came back "unknown": "I'm not sure which one that is"). An episode guess's year is often the EPISODE's air year
+// (Darmok 1991, The Next Generation 1987) and its show the franchise's name; the right episode must still verify, a wrong one must not.
+test("an episode recall verifies with the episode's air year, and a franchise name finds its one show", async () => {
+  const f = fixture();     // Clockwork Orchard (2002): S2E3 "Chapter 2.3" aired 2005-01-03 (episode year 2002, the show's)
+  let r = await run(f, { kind: "episode", guesses: [episodeGuess({ year: 2005 })] });
+  assert.deepEqual(r.rows.map((x) => [x.key, x.why]), [["10023", "recall"]], "the air year");
+  assert.deepEqual(r.recall, [{ guess: 0, status: "in", key: "10023", match: "exact" }]);
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ year: 2002 })] });
+  assert.deepEqual(r.rows.map((x) => x.key), ["10023"], "the show's year still works");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ year: 1990 })] });
+  assert.deepEqual(r.rows, [], "a year that is neither"); assert.equal(r.recall[0].status, "unknown");
+  r = await run(f, { kind: "show", guesses: [{ kind: "show", title: "Clockwork Orchard", year: 2005, confidence: .9 }] });
+  assert.deepEqual(r.rows, [], "a SHOW guess still needs the show's own year"); assert.equal(r.recall[0].status, "unknown");
+  // the franchise's name ("Star Trek" for The Next Generation): one show of the family has that episode title (and numbers)
+  f.rows.find((x) => x.key === "20023").title = "The Pear Tree";
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork", episode_title: "The Pear Tree" })] });
+  assert.deepEqual(r.rows.map((x) => [x.key, x.why]), [["20023", "recall"]], "no show is called Clockwork: its family's one Pear Tree");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork Orchard", episode_title: "The Pear Tree", year: 2005 })] });
+  assert.deepEqual(r.rows.map((x) => x.key), ["20023"], "the named show's S2E3 is another episode: the family's exact match");
+  assert.equal(r.recall[0].status, "in");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork" })] });
+  assert.deepEqual(r.rows, [], "both shows have a Chapter 2.3 S2E3: never a guess between them"); assert.notEqual(r.recall[0].status, "in");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork", episode_title: "The Pear Tree", season: 1, episode: 1 })] });
+  assert.deepEqual(r.rows, [], "the title in the family but not those numbers"); assert.notEqual(r.recall[0].status, "in");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clock", episode_title: "The Pear Tree" })] });
+  assert.deepEqual(r.rows, [], "a family is whole words: Clock is not Clockwork");
+  r = await run(f, { kind: "episode", guesses: [episodeGuess({ show: "Clockwork", episode_title: "The Pear Tree", year: 1990 })] });
+  assert.deepEqual(r.rows, [], "the family's match still checks the year");
+  assert.equal(f.calls.filter((x) => x[0] === "seerr_search").length, 0);
+});
+
 test("movie recalls require title/year, ambiguous title-only recalls remain choices, and raw exact wins", async () => {
   const f = fixture(), guess = { kind: "movie", title: "Harbour Signal", year: 1985, confidence: .9 };
   let r = await run(f, { guesses: [guess] }); assert.equal(r.rows[0].key, "11"); assert.equal(r.recall[0].match, "exact");
