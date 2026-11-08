@@ -140,7 +140,9 @@ a guarantee (create gate), up to 6 announcement rooms, and a daily / weekly seri
 instances are validated one after another, each counting the earlier ones). Caps: `mtt_max_running` tournaments whose play windows
 `[start, start + min(12 h, 1.5 x estimate)]` overlap, `mtt_max_open_reg` registering at once (a later one waits as scheduled). The estimate:
 the first level whose big blind is at least the chips in play / 20 (180 x 1,500 = 18 levels). An on-air booking in the final-table window is
-a warning only. While registering: the title, the rooms, raise max entries, delay the start (6 h in all; reminders re-dated).
+a warning only. While registering: the title, the rooms, raise max entries, delay the start (6 h in all; reminders re-dated). The manager's
+Edit fills the whole form from the tournament; once registration is open only the title and the rooms are sent (the rest is disabled), and
+the server never lets a blank field replace a stored value.
 
 **Registration** (`POST /api/casino/mtt/:id/register`, `!mtt join <no>`) is ONE transaction: the gates in order (the switch, the status,
 the escrow live, an account not casino-banned, capacity, already in, the room cap `mtt_room_entrants_max`, the cash tables' anti-collusion
@@ -178,8 +180,9 @@ and gave last hand's big blind the big blind again going heads-up).
 **Balancing (TDA).** Only the table at its own boundary gives: while it has the most effective players (seated + inbound transit) and the
 tables differ by 2+, the player who would be big blind next (never one who just arrived) moves to the table with the fewest (ties: the
 lowest number). **Breaking.** When the live players fit one table fewer (`live <= (k - 1) x size - slack`, slack = `mtt_break_slack` only
-while late registration is open), the table with the fewest players (ties: the HIGHEST number; while late registration is open never one
-opened in the last 2 levels) is marked breaking - no longer a target, transit to it re-targeted - and broken at its own boundary if the
+while late registration is open), the table with the fewest players (ties: the HIGHEST number; while late registration is open never a
+late-registration table opened in the last 2 levels - the start tables are never protected) is marked breaking - no longer a target,
+transit to it re-targeted - and broken at its own boundary if the
 condition still holds (else un-marked): its players are drawn ("break:<no>:<n>") and each sent to the table with the fewest. **The final
 table.** Late registration closed, everyone left fits one table and more than one table is live: every table holds after its hand; when all
 are between hands a NEW table is drawn ("final") and the others closed. With one table left (or one table from the start) it becomes the
@@ -188,13 +191,18 @@ final table in place, no redraw.
 **Hand-for-hand** turns on when late registration is closed, 2+ tables are live and the players left = paid + 1; it turns off at <= paid,
 one table, or the final table. Every table holds after its hand; when all are between hands, a round starts: every table deals ONE hand,
 and that round's busts share one bust batch (one `bust_seq`), so they place together; hands already running when it turned on bust with
-their own batch. Its lines wait for the round and go out as one batch. With the curve defaults hand-for-hand only happens when paid >= the
+their own batch. The batch is picked by the hand's own round tag, so it is kept when the round's first bust bursts the bubble (and turns
+hand-for-hand off): the round's hands still running at the other tables bust into the same batch, ranked by starting stack (ties split) -
+never by which table finished first. The round's bust lines wait until every table of the round has finished its hand and go out once,
+with the final places. With the curve defaults hand-for-hand only happens when paid >= the
 table size (E >= 60 at 9-handed, E >= 40 at 6-handed); otherwise the bubble falls at the final table. Decision 7's clock is unchanged: a
 slow table stalls every table during a round (the banner and the admin page name it).
 
-**Presence** (`mtt_presence`, default on): at the start, a web entrant who hasn't polled the tournament / table pages in 5 minutes, or a room
-entrant who hasn't sent a casino command through Pepe in 30 minutes, starts sitting out (dealt in, checked / folded at once, blinded away).
-`!sitin` (or the table page's sit-in) brings them back. After a restart everyone counts as present (fail open).
+**Presence** (`mtt_presence`, default on): at the start, an entrant who hasn't been seen on the web in 5 minutes (the Hold'em lobby's
+Tournaments block, the tournament page / API, a tournament table, registering there) AND hasn't sent a casino command through Pepe in 30
+minutes - whichever way they registered - starts sitting out (dealt in, checked / folded at once, blinded away). `!sitin` (or the table
+page's sit-in) brings them back; a web entrant who starts out gets an inbox notice saying so (a room entrant: Pepe's start PM). After a
+restart everyone counts as present (fail open).
 
 **Moves keep your table life:** the time bank, hands, timeouts and sitting-out travel in the transit record; pre-moves are cleared; a moved
 player starts a new seat session at the new table (veil labels never carried across tables). A late entrant or a re-entry gets a fresh bank.
@@ -207,8 +215,11 @@ min(E - 1, max(`mtt_min_paid`, floor(E x `mtt_paid_pct` / 100))) places (default
 bp / 10000) each, the rest to 1st, P = buy-in x E (the fees are the House's). At the defaults the smallest paid prize is at least the entry
 for every E >= 10. Places come from bust batches: the winner 1st, a later batch higher, within a batch the bigger starting stack higher,
 equal = a tie group sharing its places' prizes (unpaid places count 0) - floor each, the odd PAT one each in odd-chip order (the table
-number, then the seat order after the button: phase 1's rule across tables). A DQ is its own batch with stack 0. Re-entries rank as their
-own entries. E = 27 at 6-handed and 25 %: 6 places, 38.05 / 20.38 / 14.14 / 10.92 / 8.93 / 7.58 %. E = 180 at the defaults: 27 places.
+number, then the seat order after the button: phase 1's rule across tables). A DQ is its own batch with stack 0 (during a hand-for-hand
+round: the round's batch with stack 0, below every bust of the round). Disqualifying is only before the money: a DQ queued during a hand is
+re-checked when it applies and dropped once the bubble has burst (casino_mtt_log "dq dropped", an ops alert - pause and decide). A
+disqualified player earns no leaderboard points or achievements from that tournament and can't re-enter it. Re-entries rank as their own
+entries. E = 27 at 6-handed and 25 %: 6 places, 38.05 / 20.38 / 14.14 / 10.92 / 8.93 / 7.58 %. E = 180 at the defaults: 27 places.
 
 ### Money
 
@@ -217,9 +228,9 @@ own entries. E = 27 at 6-handed and 25 %: 6 places, 38.05 / 20.38 / 14.14 / 10.9
 | register / late / re-entry | `tny:<id>:<user>:enter:<gen>` | wallet -> TNY hold (buy-in + fee; refused with nothing held when the wallet can't cover it); a freeroll entry: no hold, no escrow call | the hold, the entry, M and the answer (`casino_actions`) commit together; the same idem replays the answer, a new one says "You're already in." |
 | unregister (before the start) / an admin's refund | `tny:<id>:<user>:refund:<gen>` | hold -> wallet in full (fee too) | `seen` + the UNIQUE refund key: a hold is refunded at most once |
 | start | - | none (a casino-banned entrant is refunded first) | not committed: the restart starts it (within `mtt_start_grace_mins`, else cancelled "the site was down at the start time"); committed: the tables are released |
-| hands, moves, busts, breaks, the final table, a DQ | - | none (tournament chips only) | mid-hand: the hand resumes; a hand that ended before its wrap-up is wrapped up from its SAVED start record (same places; `bust_done` makes a second run a no-op); a move / break / final not committed changed nothing; committed transit is re-queued and seated once |
+| hands, moves, busts, breaks, the final table, a DQ | - | none (tournament chips only) | mid-hand: the hand resumes; a hand that ended before its wrap-up is wrapped up from its SAVED start record (same places; `bust_done` makes a second run a no-op) - also without a restart: a table between hands whose last hand has no `bust_done` (its wrap-up transaction threw) is wrapped up again by the tick before it deals again (at once, then once a minute); a move / break / final not committed changed nothing; committed transit is re-queued and seated once |
 | finish | `tny:<id>:finish` | ONE `settleInTx` of every hold: the escrow prizes + ONE fee leg `["jackpot", fee x E]` (a `jackpot_rakes` row, spinId `escrow:TNY-<id>`); `kept === 0` asserted. A freeroll: a journal row only | the plan is checked first (one player left, its chips = the total, every other entry busted, places 1..E, holds = P + F, no cancel seen); any failure settles nothing, retries every minute with an opsalert; the owner's void-and-refund is the way out. `seen` = settled |
-| guaranteed part (overlay) | `tny:<id>:overlay` (an owner's retry: `:a<n>`) | the incentive budget -> the winners' wallets through the budget service (`mttbudget.payInTx` -> PO-5 `spendInTx`, inside the MTT's transaction) | after the settle and separate from it; non-terminal (paused, not the site's, headroom, a throw) = pending, retried every 5 minutes under the SAME key; a terminal refusal = owed; 7 days pending = owed |
+| guaranteed part (overlay) | `tny:<id>:overlay` (an owner's retry: `:a<n>`) | the incentive budget -> the winners' wallets through the budget service (`mttbudget.payInTx` -> PO-5 `spendInTx`, inside the MTT's transaction) | after the settle and separate from it; non-terminal (paused, not the site's, headroom, a throw) = pending, retried every 5 minutes under the SAME key; a terminal refusal = owed; 7 days pending = owed; an owner's retry that doesn't pay goes straight back to owed (retry again later, the next `:a<n>`) |
 | cancel / void | each `tny:<id>:<user>:refund:<gen>` still held, then `tny:<id>:cancel` | every hold -> its wallet in full | refused once the finish is seen; per-hold keys skip what's done; a hand cut short has its seed revealed |
 
 No `money.house` / `money.credit` / `grantInTx` / `funding.*` / `pools.move` / Fed call exists in `casino/mtt*.js` (a test scans them).
@@ -257,8 +268,10 @@ only when it started with 2+ tables), Champion (`mtt_wins`). Notices: inbox kind
 'result' for every entrant; stale reminders are dropped (cancelled, started, re-dated). Room lines go to the announcement rooms with a
 per-room budget (`mtt_room_lines_per_min`; extra bust lines merge); a player's own lines only to their own room. Pepe PMs room players their
 hole cards, their turn prompts and the start / 15-minute notices (`private_mtt`, own fresh room only, `pmAllowed` for notices). Discord
-(`mtt_discord`, a channel, kinds `mtt_discord_kinds` default starting + winner, the role only on starting; once per (tournament, kind);
-never on staging - the bridge answers 409 `staging_disabled`).
+(`mtt_discord`, a channel, kinds `mtt_discord_kinds` default starting + winner, the role only on starting - posted at the 15-minute mark,
+"Starting soon", or at an admin's start-now, "Starting now"; once per (tournament, kind); never on staging - the bridge answers 409
+`staging_disabled`). In `staff` mode the room lines, Discord posts and the stream slot still follow the tournament's rooms and the
+settings: on prod, list staff rooms only and keep `mtt_discord` / `mtt_stream_final` as wanted while testing.
 
 ### Pepe's stream
 
@@ -282,26 +295,33 @@ steps by flag, the reminders). Tests: test/casino-mtt-crash.test.js (every `mtt:
 
 - `GET /api/casino/mtt` (and `/api/casino/lobby` -> `mtt`): `{mtt_on, audience, can_register, upcoming, registering, running, recent, mine}`,
   a row = `{id, no, title, status, start_at, est_ms, buyin, fee, guarantee, freeroll, registered, max_entries, structure: {kind, start_chips,
-  level_mins, reentry_max, late_levels}, late_open, level, players_left, entries, final_table, url, prize_pool, me}`.
+  level_mins, reentry_max, late_levels}, late_open, level, players_left, entries, final_table, url, prize_pool, me, my_table?}` (`my_table`:
+  a seated entrant's own table - "Take me to my table").
 - `GET /api/casino/mtt/:id` -> `{mtt, me, results}`; `/players?page=` (masked rows, no ids), `/tables`, `/me` (`{registered, state, gen,
   entries_used, can_register, can_reenter, table_id, table_no, stack, rank, moved_to, remind, watching, telegram_linked, telegram_tourney,
   place, prize, overlay, points}`); `GET /api/casino/mtt/leaderboard?period=YYYY-MM|all&page=n`.
 - `POST /api/casino/mtt/:id/register {idem, remind}` · `/unregister {idem}` · `/remind {idem, on, telegram}` - JSON + `X-Requested-With:
-  fetch`; 401 / 403 (the switch) / 404 / 409 / 429. Admin: `POST /api/casino/admin/mtt` (create / edit), `/api/casino/admin/mtt/:id/<cancel |
+  fetch`; 401 / 403 (the switch) / 404 / 409 / 429 (`remind` is refused once it has started). The leaderboard API is 403 while the switch
+  hides it, like its page. Admin: `POST /api/casino/admin/mtt` (create / edit), `/api/casino/admin/mtt/:id/<cancel |
   void | pause | resume | start | delay | max | stream | overlay-retry>`, `/api/casino/admin/mtt/:id/entry/:n/(refund | dq)`, `GET
   /api/casino/admin/mtt[/:id[/log]]`. Settings: `casino_mtt` + `mtt_*` through `/api/casino/admin/settings` (validated by `checkMttSetting`).
 - `GET /api/casino/t/:id` of an MTT table: `table.tourney` = `{kind: "mtt", id, no, name, table_no, tables_left, final, players_left,
   entries, avg_stack, level, sb, bb, next_level_at, level_secs_left (seconds left on the site's clock when the view was built), late_open, paid,
-  prize_pool, guarantee, h4h, h4h_waiting_table, hold, paused, dead_sb, status, url}`; `me.tourney` = `{registered, mtt_rank, moved_to: {no, id} | null}` (the page moves you after 1.5 s). The public part is
+  prize_pool, guarantee, h4h, h4h_waiting_table, hold, paused, dead_sb, status, url}`; `me.tourney` = `{registered, mtt_rank, moved_to: {no, id} | null,
+  result: {out, late_open} | {place, prize, tied, final} | null}` (the page moves you after 1.5 s; a busted / finished entrant gets the results card). The public part is
   cached a second per (table, rev); the page polls every 2 s off-turn.
 - Pepe: `POST /api/casino/bot/act` with `game: "mtt"` (`!mtt` / `!tourney`), `verb` `list` | `info` | `join` | `leave` | `remind` | `me` | `top`
   | `pause` | `resume` | `cancel` (`args` up to 2: `[no, "off"|"remind"|"confirm"]`; pause / resume / cancel need `casino.admin` on the
   linked account). A room player's bare Hold'em verb (check, call, fold, raise, bet, allin, pre, cards, sitout, sitin) resolves turn-first
-  (`svc.tourneyTableFor`): the table where it's their turn, their room's table if they sit there, the only tournament table they sit at; at
-  more than one: "You're at more than one table - use the web, or !mtt me." (`pm: true`). At an MTT table a bare verb's success is `quiet`.
-  The poll body may carry `scene: {held}`; the answer adds `mtt_on` and `private_mtt: [{kind: "cards"|"turn"|"notice", key, camfrog, room,
-  table, hand_no, cards?, text?}]` (dedupe by `key`: cards `<table>:<hand_no>:<camfrog_lower>`, turns `<table>:<hand_no>:<turn_token>`,
-  notices the reminder ref). Room lines are events of kind `mtt` (`table` = the tournament's id, `data: {text, rooms, tid, no, url}`).
+  (`svc.tourneyTableFor`), looking only at TOURNAMENT tables: the MTT table where it's their turn (at two at once: the one whose turn clock
+  runs out first), their room's table if they sit there, the only MTT table they sit at (seated at two with no turn: "You're at more than one
+  table - use the web, or !mtt me.", `pm: true`). A cash table or a Sit & Go elsewhere never takes a room's bare verb (a game-less `!bet`
+  stays with the room's blackjack table). At an MTT table a successful action (check, call, fold, raise, bet, allin) is `quiet`; `!cards`,
+  `!sitout`, `!sitin`, `!pre`, `!showhand` answer as a PM. The poll body carries `scene: {held}`; the answer adds `mtt_on` and
+  `private_mtt: [{kind: "cards"|"turn"|"notice", key, camfrog, room, table, hand_no, cards?, text?}]` (dedupe by `key`: cards
+  `<table>:<hand_no>:<camfrog_lower>`, turns `<table>:<hand_no>:<turn_token>`, notices the reminder ref). Room lines are events of kind
+  `mtt` (`table` = the tournament's id, `data: {text, rooms, tid, no, url}`). A poll WITHOUT `scene` (a Pepe from before phase 2) gets no
+  kind `mtt` events and no MTT table in `tables` (he would post the lines ungated and draw the final table as a Sit & Go).
 
 ## Own hands and show / muck (handoff 21, phase 2)
 
