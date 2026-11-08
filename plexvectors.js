@@ -85,11 +85,14 @@ function createVectors(options = {}) {
   let initialized = null, policyStamp = null, episodeCache = null;
   let purgeJob = null, census = null, censusJob = null, lastCounts = null, kicked = null;
   let films = null, filmJob = null, filmAgain = false, filmRefused = null;   // the films' index (see MAX_MOVIES), its one background job
+  // 1.99?? review: moves whenever the films' index is dropped (invalidate(), switched off) - a build that started before is not installed
+  let filmGen = 0;
   const asks = new Set();   // nearest() calls still finishing after their answer went (idle() waits for them too)
   const on = () => settings().clerk_embed === true || settings().clerk_embed === "true" || settings().clerk_embed === "1" || settings().clerk_embed === 1;
   // a model / policy change: nothing kept is usable. An embed_put or a re-hash changes one show's episodes at most - the films'
   // index reads what changed (plex_vectors.rev) on its own.
-  const invalidate = () => { films = null; filmRefused = null; episodeCache = null; };
+  const invalidate = () => { films = null; filmRefused = null; episodeCache = null; filmGen++; };
+  const dropFilms = () => { films = null; filmGen++; };
   const episodesChanged = () => { episodeCache = null; };
   const remaining = (deadline) => { const ms = deadline - clock(); if (ms <= 0) throw error("slow"); return Math.max(1, Math.min(BUDGET, ms)); };
   // Two lanes. chat: nearest() and the clerk's quick look, on the 400 ms search budget. bg: the backfill and the card, on the
@@ -174,8 +177,14 @@ function createVectors(options = {}) {
       await tx.run(`CREATE TRIGGER IF NOT EXISTS plex_vectors_catalog_delete AFTER DELETE ON plex_catalog BEGIN
         DELETE FROM plex_vectors WHERE key=OLD.key; DELETE FROM plex_vector_docs WHERE key=OLD.key;
         UPDATE plex_vector_meta SET catalog_rev=catalog_rev+1,policy_rev=policy_rev+1 WHERE id=1; END`);
+      // plexvectors 1.99?? review: a section's UPDATE is a policy change only when its id, type or policy changes - not its title
+      // or Plex's count (plexcatalog now updates the sections in place). 1.99amg's trigger fired on every UPDATE: a cache that has
+      // it gets this one here (once - the new one carries a WHEN). A section added or removed is always a policy change.
+      const sectionUpdate = (await tx.all("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='plex_vectors_section_update'"))[0];
+      if (sectionUpdate && !/\bWHEN\b/i.test(String(sectionUpdate.sql))) await tx.run("DROP TRIGGER plex_vectors_section_update");
       for (const operation of ["INSERT", "UPDATE", "DELETE"]) {
-        await tx.run(`CREATE TRIGGER IF NOT EXISTS plex_vectors_section_${operation.toLowerCase()} AFTER ${operation} ON plex_sections BEGIN
+        await tx.run(`CREATE TRIGGER IF NOT EXISTS plex_vectors_section_${operation.toLowerCase()} AFTER ${operation} ON plex_sections ` +
+          (operation === "UPDATE" ? "WHEN OLD.id IS NOT NEW.id OR OLD.type IS NOT NEW.type OR OLD.policy IS NOT NEW.policy " : "") + `BEGIN
           UPDATE plex_vector_meta SET policy_rev=policy_rev+1 WHERE id=1; END`);
         await tx.run(`CREATE TRIGGER IF NOT EXISTS plex_vectors_change_${operation.toLowerCase()} AFTER ${operation} ON plex_vectors BEGIN
           UPDATE plex_vector_meta SET vector_rev=vector_rev+1 WHERE id=1; END`);
@@ -364,7 +373,7 @@ function createVectors(options = {}) {
   }
 
   async function status(opts = {}) {
-    if (!on()) { films = null; return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 }; }   // 1.99??: switched off - the films' memory goes
+    if (!on()) { dropFilms(); return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 }; }   // 1.99??: switched off - the films' memory goes
     if (opts && opts.quick) return quickStatus();
     let m = null;
     try {
@@ -563,15 +572,19 @@ function createVectors(options = {}) {
         filmAgain = false;
         const deadline = clock() + FILM_BUILD_MS;
         const m = await guard(deadline, bgLane("films"));
+        // 1.99?? review: an invalidate() (a model change, a policy change's purge) or the switch going off after this read makes
+        // whatever this pass reads stale - it is not installed (it was: the old model's index, or one while switched off, kept
+        // until the next rebuild - twice the memory during it - or the next status())
+        const gen = filmGen, current = () => gen === filmGen && on();
         if (!on() || !m.ready || !m.model || !m.dim) { films = null; break; }
         const want = policyOf(m);
         try {
           if (films && films.want === want) { if (Number(m.vector_rev) > films.rev) await refreshFilms(films, m, deadline); }
           else if (filmRefused && filmRefused.want === want && now() - filmRefused.at < FILM_RETRY_MS) return;   // still past the cap
-          else { films = await buildFilms(m, deadline); filmRefused = null; }
+          else { const built = await buildFilms(m, deadline); if (current()) { films = built; filmRefused = null; } }
         } catch (e) {
           // past the cap (a build, or a refresh that grew it there): no index - films answer from words until it's tried again
-          if (e && e.code === "films_too_many") { films = null; filmRefused = { want, at: now() }; }
+          if (e && e.code === "films_too_many" && current()) { films = null; filmRefused = { want, at: now() }; }
           throw e;
         }
       } while (filmAgain);

@@ -459,9 +459,21 @@ function createCatalog(options = {}) {
     await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
     await tx.run("DELETE FROM plex_shelves_next WHERE section NOT IN (SELECT id FROM plex_sections WHERE policy='allowed')");
   }
+  // plexvectors 1.99?? review: the sections are updated in place - a section no longer listed is deleted, a new one inserted, a
+  // changed one updated, an unchanged one not written at all. Every sync used to replace the table whole (DELETE, then every
+  // section INSERTed again), and each of those rows fired plexvectors' section triggers: policy_rev moved every hour though nothing
+  // had changed (prod: +6 a sync), so the guard re-checked every stored vector and the films' index was read again. Two sections
+  // with one id (a broken answer) still fail the write on the plain INSERT's PRIMARY KEY, as before.
   async function installSections(tx, sections, allow, block) {
-    await tx.run("DELETE FROM plex_sections");
-    for (const s of sections) await tx.run("INSERT INTO plex_sections(id,title,type,count,policy) VALUES (?,?,?,?,?)", [s.id, allow ? s.title : "(hidden)", s.type, s.count, allow ? s.policy : "off"]);
+    const want = sections.map((s) => [String(s.id), allow ? s.title : "(hidden)", s.type, s.count, allow ? s.policy : "off"]);
+    const ids = new Set(want.map((s) => s[0])), written = new Set();
+    for (const r of await tx.all("SELECT id FROM plex_sections")) if (!ids.has(String(r.id))) await tx.run("DELETE FROM plex_sections WHERE id=?", [r.id]);
+    for (const s of want) {
+      await tx.run("INSERT INTO plex_sections(id,title,type,count,policy) VALUES (?,?,?,?,?)" + (written.has(s[0]) ? "" : " ON CONFLICT(id) DO UPDATE SET " +
+        "title=excluded.title,type=excluded.type,count=excluded.count,policy=excluded.policy WHERE plex_sections.title IS NOT excluded.title " +
+        "OR plex_sections.type IS NOT excluded.type OR plex_sections.count IS NOT excluded.count OR plex_sections.policy IS NOT excluded.policy"), s);
+      written.add(s[0]);
+    }
     await removeUnsafe(tx, allow ? sections : [], block);
     await putState(tx, "allow_list_set", allow);
   }
