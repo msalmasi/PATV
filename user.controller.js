@@ -534,16 +534,18 @@ async function updateTwitchId(req, res) {
 // dbUtils' write gate for whatever other transaction was open, one after another (~12-18 s on the real schema with other
 // transactions back to back; 0.4 s idle). Nothing in it waits on Pepe. Now it is two steps, recorded in camfrog_link_jobs:
 //   1. _linkNow - ONE transaction, committed before anything slow: the code is spent, the login leaves the auto / other
-//      account (the other account's records re-keyed, its Camfrog badges copied) and lands on this one, and the job row
-//      holds the answer (the auto account's PAT and cumulative XP, read here).
+//      account (the other account's records re-keyed, its Camfrog badges copied) and lands on this one, this account's
+//      records re-keyed onto it (once per change - it ran twice: login_changes #45 + #46), and the job row holds the
+//      answer (the auto account's PAT and cumulative XP, read here).
 //   2. runCamfrogLinkJob - the auto account's merge in ONE transaction of its own (1.99gi: under both accounts' level locks,
 //      through its afterMerge settle): it moves exactly once or not at all - a failure rolls ALL of it back (the old path
 //      could add the PAT and then fail, leaving it on both accounts) and the job tick retries it. Then the after-steps,
-//      in the old order: this account's login re-key (once per change - it ran twice: login_changes #45 + #46), notices
-//      waiting for the login, blocks / bans / frog-name gifts on it, the site class (staffroles.reconcile). Each is
-//      idempotent, so a retry after a crash repeats nothing.
+//      in the old order: notices waiting for the login, blocks / bans / frog-name gifts on it - only while the account
+//      still holds the login (a late job's login may have moved on) - and the site class (staffroles.reconcile). Each is
+//      idempotent, so a retry after a crash repeats nothing. The merge itself lands even when the login moved on: the
+//      account proved the login first (the old path merged at link time).
 // The !verify answer waits for step 2 at most CF_LINK_WAIT_MS (600 ms); a repeat !verify of the code that login just used
-// gets the same answer again (verifyCamfrogLink). completeCamfrogLink (the !signup claim page) still waits for all of it.
+// answers "already linked" (verifyCamfrogLink). completeCamfrogLink (the !signup claim page) still waits for all of it.
 const LINK_WAIT_MS = (() => { const n = Number(process.env.CF_LINK_WAIT_MS); return Number.isFinite(n) && n >= 0 ? n : 600; })();
 const LINK_REPLAY_MS = 15 * 60 * 1000;        // a repeat !verify of a used code: "already linked" for this long (the code's own life)
 const LINK_RETRY_MAX_MS = 60 * 60 * 1000;     // a failed merge is retried after 1, 2, 4 ... minutes, at most hourly
@@ -556,7 +558,11 @@ function _linkReady() {
       await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_link_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, user_id TEXT NOT NULL, login TEXT NOT NULL, before_login TEXT,
         auto_ids TEXT NOT NULL DEFAULT '[]', state TEXT NOT NULL, result TEXT, tries INTEGER NOT NULL DEFAULT 0, error TEXT,
-        next_at INTEGER, created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
+        next_at INTEGER, created INTEGER NOT NULL, updated INTEGER NOT NULL, note TEXT)`);
+      // note: what a done job skipped (the login had moved on) - a table made before the column had it added
+      if (!(await getQuery("PRAGMA table_info(camfrog_link_jobs)")).some((c) => c.name === 'note')) {
+        await runQuery("ALTER TABLE camfrog_link_jobs ADD COLUMN note TEXT");
+      }
       await runQuery("CREATE INDEX IF NOT EXISTS camfrog_link_jobs_code ON camfrog_link_jobs (code)");
       await runQuery("CREATE INDEX IF NOT EXISTS camfrog_link_jobs_due ON camfrog_link_jobs (state, next_at)");
       // the one-time setups the link's transactions use run BEFORE them (a first CREATE inside one would roll back with it)
@@ -620,6 +626,11 @@ async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
     // 1.99bs: the login is unique (users_camfrog_login) - free it on the auto account first
     for (const a of autoAccounts) await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [a.userId]);
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
+    // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js) - once per change
+    // (verifyfix: it ran twice), a savepoint of THIS transaction (review: as a job after-step it could run after the login
+    // had moved on - onto another account, or this one relinked again - and re-key the records onto a login that wasn't
+    // this account's any more, out of order in login_changes)
+    await LR.changedSafe(userId, before, cfLower, 'camfrog:relink');
 
     const auto = autoAccounts[0] || null;
     const result = { websiteUsername: me.username, camfrogUsername: cfLower, merged: !!auto,
@@ -709,26 +720,31 @@ async function _mergeLinkJob(job) {
   });
 }
 
-/** Step 2's after-steps (each idempotent, each never throws), in the order the old path ran them. */
+/** Step 2's after-steps (each idempotent, each never throws), in the order the old path ran them (the login re-key is in
+ *  the link's own transaction, _linkNow). -> a note for the job when the login-specific ones were skipped, else null */
 async function _afterLinkJob(job) {
   const userId = String(job.user_id), cfLower = String(job.login);
-  const LR = require('./loginrekey');
-  // 1.99tj: this account's records keyed by its previous login move to the new one (loginrekey.js) - once per change
-  // (verifyfix: it ran twice; a retried job doesn't record it again)
-  const oldKey = LR.keyOf(job.before_login, userId), newKey = LR.keyOf(cfLower, userId);
-  if (oldKey !== newKey) {
-    const had = (await getQuery('SELECT 1 FROM login_changes WHERE userId = ? AND old_key = ? AND new_key = ? AND at >= ? LIMIT 1',
-                                [userId, oldKey, newKey, Number(job.created) || 0]))[0];
-    if (!had) await LR.changedSafe(userId, job.before_login || null, cfLower, 'camfrog:relink');
+  // review: a job runs late after a failed merge (its retry) or a restart - by then the login may have moved on (another
+  // account proved it, this one relinked or unlinked). The login's notices / blocks / bans / gifts are then its holder's
+  // (that link's own after-steps attach them), never this account's.
+  const now = (await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]))[0];
+  const holds = !!now && String(now.camfrogUsername || '').toLowerCase().trim() === cfLower;
+  let note = null;
+  if (holds) {
+    await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
+    // 1.99ajn padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
+    try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
+    try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
+    try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }
+  } else {
+    note = 'the login moved on before the after-steps ran - its notices / blocks / bans / gifts left for its holder';
+    console.log(`[CF-LINK] job #${job.id}: ${userId} no longer holds this login - ${note.split(' - ')[1]}`);
   }
-  await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
-  // 1.99ajn padppl: blocks / website bans made on this login before it had an account follow it onto the account (never throws)
-  try { await require("./blocks").linked(userId, cfLower); } catch (e) { /* blocks.js logs */ }
-  try { await require("./padbans").linked(userId, cfLower); } catch (e) { /* padbans.js logs */ }
-  try { await require("./veilgift").linked(userId, cfLower); } catch (e) { /* veilgift.js logs */ }
   // D11-site-roles: the site class follows this login's role now (staffroles.reconcile - not 5 minutes later): a relink
-  // from a login with a role dropped the class it gave (staffroles' unlink trigger), and this one gives its own back
+  // from a login with a role dropped the class it gave (staffroles' unlink trigger), and this one gives its own back.
+  // State-based (whoever holds the login now), so it runs either way.
   await require('./staffroles').reconcile([cfLower]).catch((e) => console.error('[CF-VERIFY] roles:', e.message));
+  return note;
 }
 
 const _linkRuns = new Map();       // job id -> its run (one at a time per job; the site runs in one process)
@@ -754,8 +770,9 @@ async function _runLinkJob(id) {
     }
     if (job && job.state === 'after') {
       step = 'after-steps';
-      await _afterLinkJob(job);
-      await runQuery("UPDATE camfrog_link_jobs SET state = 'done', error = NULL, next_at = NULL, updated = ? WHERE id = ? AND state = 'after'", [Date.now(), id]);
+      const note = await _afterLinkJob(job);
+      await runQuery("UPDATE camfrog_link_jobs SET state = 'done', error = NULL, next_at = NULL, note = ?, updated = ? WHERE id = ? AND state = 'after'",
+                     [note, Date.now(), id]);
       job = await _linkJob(id);
       console.log(`[CF-LINK] job #${id} done in ${Date.now() - t0} ms`);
     }
@@ -872,8 +889,9 @@ async function updateCamfrogUsername(req, res) {
 // Verifies the chat author's username matches the pending link, then completes it.
 // verifyfix: the answer is the link's (committed first) and comes at once - the auto account's merge is waited for at most
 // CF_LINK_WAIT_MS (see completeCamfrogLink above); a repeat !verify of the code that login just used (Pepe's retry after
-// his 10 s timeout) answers 200 again with the same payload + already: true (frida-bot.py handle_verify reads success,
-// websiteUsername, unlinkedFrom, merged, addedBalance, addedXp).
+// his 10 s timeout, or the user typing it again) answers 200 "already linked" in the same payload (frida-bot.py
+// handle_verify reads success, websiteUsername, unlinkedFrom, merged, addedBalance, addedXp) with nothing merged or
+// unlinked this time, already: true, and what the link did in `earlier`.
 function _verifyPayload(r, extra = {}) {
   return Object.assign({
     success: true,
@@ -892,7 +910,13 @@ async function _linkReplay(code, login) {
   if (!j || String(j.login) !== login || Date.now() - Number(j.created) > LINK_REPLAY_MS) return null;
   const u = (await getQuery('SELECT username, camfrogUsername FROM users WHERE userId = ?', [j.user_id]))[0];
   if (!u || String(u.camfrogUsername || '').toLowerCase().trim() !== login) return null;     // unlinked / moved on since
-  return _verifyPayload(Object.assign(_jobAnswer(j), { websiteUsername: u.username }), { already: true });
+  // review: nothing is merged or unlinked by THIS request - today's Pepe (frida-bot.py handle_verify) ignores `already` and
+  // says "Merged PAT X and Y XP" whenever merged is true, which read like a second credit. What the link did is in `earlier`.
+  const first = _jobAnswer(j);
+  const earlier = Object.assign({ merged: !!first.merged, addedBalance: first.addedBalance || 0, addedXp: first.addedXp || 0,
+                                  unlinkedFrom: first.unlinkedFrom || null }, first.pending ? { pending: true } : {});
+  return _verifyPayload({ websiteUsername: u.username, camfrogUsername: first.camfrogUsername || login,
+                          merged: false, addedBalance: 0, addedXp: 0, unlinkedFrom: null }, { already: true, earlier });
 }
 const _within = (p, ms) => {
   let t = null;
