@@ -564,3 +564,84 @@ test("sound: remembered on - still nothing until the viewer clicks the page; sto
   bad.S.update("saloon", view(100, []));
   assert.doesNotThrow(() => { bad.bar.children[0].click(); bad.S.update("saloon", view(100, ["As", "Kd", "2c"])); });
 });
+
+// ── H (phase 2): the saloon on blackjack ──
+const BJ = (who, verb, args, opts) => { svc.S.rate.clear(); return svc.act(who, verb, args || [], Object.assign({ game: "bj" }, opts || {}), key()); };
+test("blackjack: !bj start with the theme word (hr, any order), the view and lobby say it, one open line, an unknown word refused", async () => {
+  assert.ok(themes.THEMES.saloon.games.includes("bj"), "the saloon is drawn for blackjack");
+  assert.ok(themes.THEMES.saloon.lines.bj_open.length >= 3 && themes.THEMES.saloon.lines.bj_open.length <= 4);
+  for (const kk of themes.THEMES.saloon.lines.bj_open) assert.match(EN[kk], /\{min\}.*\{max\} PAT/, kk);
+  await fresh("everyone");
+  for (const [who, args, hr] of [[ann, ["saloon"], false], [hil, ["hr", "saloon"], true], [hil, ["SALOON", "hr"], true]]) {
+    const r = await BJ(who, "start", args, { room: null });
+    assert.ok(r.ok, JSON.stringify(r));
+    const T = svc.getTable(r.table);
+    assert.deepEqual([T.theme, !!T.high_stakes], ["saloon", hr], args.join(" "));
+    assert.equal(svc.publicView(T).theme, "saloon");
+    assert.equal(svc.lobby().find((x) => x.id === T.id).theme, "saloon");
+    const evs = await events(r.table);
+    const lines = cowboy(evs);
+    assert.equal(lines.length, 1, "one flavour line");
+    assert.equal(evs[evs.findIndex((e) => e.kind === "opened") + 1].text, lines[0].text, "right after the opened line");
+    assert.ok(variants("bj_open", { min: fmt(T.eng.min_bet), max: fmt(T.eng.max_bet) }).includes(lines[0].text), lines[0].text);
+    await BJ(who, "end", [], { table: r.table });
+  }
+  const c = await BJ(ann, "start", [], { room: null });
+  assert.equal(svc.getTable(c.table).theme, "classic");
+  assert.equal(svc.publicView(svc.getTable(c.table)).theme, "classic");
+  assert.equal(cowboy(await events(c.table)).length, 0, "classic: no flavour");
+  await BJ(ann, "end", [], { table: c.table });
+  const bad = await BJ(ann, "start", ["vegas"], { room: null });
+  assert.equal(bad.ok, false);
+  assert.match(bad.reply, /no table theme called "vegas" - themes: classic, saloon\./);
+  assert.match((await BJ(ann, "start", ["hr", "saloon"], { room: null })).reply, /High Roller tables are for High Rollers/);
+  assert.match((await BJ(ann, "start", ["500"], { room: null })).reply, /^usage: !blackjack start/, "the old usage answer");
+  // the switch off: the word is dropped with the note, the table classic; a saloon table reads classic until it's back on
+  const s = await BJ(ann, "start", ["saloon"], { room: null });
+  await svc.setSetting("casino_themes", "off", "test");
+  assert.equal(svc.publicView(svc.getTable(s.table)).theme, "classic");
+  await BJ(ann, "end", [], { table: s.table });
+  const o = await BJ(ann, "start", ["saloon"], { room: null });
+  assert.equal(o.reply, "themes aren't on yet - opening a classic table.");
+  assert.equal(svc.getTable(o.table).theme, "classic");
+  // restart-safe
+  await svc.setSetting("casino_themes", "everyone", "test");
+  await BJ(ann, "end", [], { table: o.table });
+  const k2 = await BJ(bob, "start", ["saloon"], { room: null });
+  svc.stop();
+  await svc.boot({ tick: false });
+  assert.equal(svc.publicView(svc.getTable(k2.table)).theme, "saloon");
+});
+const fmt = (n) => Math.trunc(Number(n) || 0).toLocaleString("en-US");
+
+test("blackjack page: the theme files only for a themed table; casinobj.js dresses it through CZ.theme; the saloon CSS covers .felt.bj", async () => {
+  await fresh("everyone");
+  const express = require("express");
+  const routes = require(path.join(repo, "casino", "routes"));
+  const app = express();
+  app.use(express.json());
+  app.set("views", path.join(repo, "views"));
+  app.set("view engine", "ejs");
+  app.use((req, res, next) => { res.locals.ogBase = "http://test"; const u = req.get("x-test-user"); req.user = u ? { userId: u } : null; next(); });
+  routes.register(app, { isBotToken: () => false, addUser: (req, res, next) => next() });
+  const server = app.listen(0);
+  const base = "http://127.0.0.1:" + server.address().port;
+  const hd = (uid) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, uid ? { "x-test-user": uid } : {});
+  try {
+    const o = await (await fetch(base + "/api/casino/open", { method: "POST", headers: hd("u1"), body: JSON.stringify({ game: "bj", theme: "saloon", idem: "th-open-bj-0001" }) })).json();
+    assert.ok(o.ok, JSON.stringify(o));
+    assert.equal(svc.getTable(o.table).theme, "saloon", "the web opens a saloon blackjack table");
+    const c = await (await fetch(base + "/api/casino/open", { method: "POST", headers: hd("u2"), body: JSON.stringify({ game: "bj", idem: "th-open-bj-0002" }) })).json();
+    const THEMED = ["/public/css/casino-themes.css?v=", 'id="cz-theme-saloon"', "/public/js/casino-sound.js?v="];
+    let html = await (await fetch(base + `/casino/blackjack/t/${o.table}`, { headers: hd("u2") })).text();
+    for (const s of THEMED) assert.ok(html.includes(s), "saloon page: " + s);
+    html = await (await fetch(base + `/casino/blackjack/t/${c.table}`, { headers: hd("u2") })).text();
+    for (const s of THEMED) assert.ok(!html.includes(s), "classic page: no " + s);
+  } finally { server.close(); }
+  const bjs = rd("public", "js", "casinobj.js"), view = rd("views", "casino-bj.ejs");
+  assert.equal((bjs.match(/CZ\.theme\(/g) || []).length, 1, "one call in render");
+  assert.match(view, /<% if \(locals\.theme && theme !== 'classic'\) \{ %>/);
+  assert.match(view, /casinobj\.js\?v=9/);
+  const css = rd("public", "css", "casino-themes.css");
+  for (const s of [".cz-theme-saloon .felt.bj {", ".cz-theme-saloon .felt.bj::after", ".cz-theme-saloon .bj-shoe", ".cz-theme-saloon .felt.bj .cz-scene"]) assert.ok(css.includes(s), s);
+});
