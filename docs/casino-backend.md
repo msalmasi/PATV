@@ -114,6 +114,13 @@ rules) and `casino/mttpay.js` (the curve, places, ties, points, the estimate) ar
 the budget service. Everything ships dark behind `casino_mtt` (`off` | `staff` | `everyone`, default `off`); Hold'em on the site
 (`hm_enabled`) must be on too. PAT is points.
 
+**The table theme (hand-off 20's themes, site 1.99amf).** A tournament table is classic, exactly like a Sit & Go table: the themes brief
+keeps tournaments out of its scope, and hand-off 20's rebase made a Sit & Go table classic (built with no theme). `newTableInTx` builds an
+MTT table the same way (`HM.newTable(..., { tourney: true })`, no `opts.theme`), so `T.theme` is `classic` at every `casino_themes` value,
+and publicView, the table API, Pepe's board (the bot poll's `tables`), the table page's theme files and `casinohm.js` (the one `CZ.theme`
+call in render, after the header) treat it as they treat a Sit & Go table - no tournament branch of their own; no dealer flavour line.
+`test/casino-mtt-theme.test.js`.
+
 **The switch.** `staff` = phase 1's predicate (`siteperms.atLeast(u, "staff") || can(u, "casino.admin")`). Whoever the switch excludes gets
 no new registration or re-entry and "Tournaments aren't open yet."; the pages answer 302 to `/casino/holdem`. Anyone with an ACTIVE entry
 (held / playing, or a result under 15 minutes old) keeps the tournament page, `/me`, Unregister (while registering), the table link and
