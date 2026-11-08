@@ -261,7 +261,7 @@ test("raw exact titles override selection words, including command forms; ordina
   const wrongKind = await run(f, { title: "hearts", select: "latest", kind: "show", year: 1980 }, { raw: "play Random Hearts" });
   assert.deepEqual(wrongKind.rows.map((x) => x.key), ["10"]); assert.equal(wrongKind.exact, true);
   const episode = f.rows.find((r) => r.key === "10023"); episode.title = "The Last Lantern";
-  // 1.99?? clerkreq: a film / show ask never takes an episode that only shares the name (it is kept aside: episode_named); a bare
+  // 1.99and clerkreq: a film / show ask never takes an episode that only shares the name (it is kept aside: episode_named); a bare
   // line that only an episode's title matches is that episode, but never "exact" (it may be a show or film we don't carry)
   const rawEpisode = await run(f, { title: "lantern", select: "latest", kind: "movie" }, { raw: "play The Last Lantern" });
   assert.ok(!rawEpisode.rows.some((x) => x.key === "10023"), "a film ask's films ('lantern'), never the episode"); assert.equal(rawEpisode.exact, false);
@@ -646,7 +646,7 @@ test("Unicode titles remain distinct and empty folded names never verify a title
   assert.deepEqual((await run(f, { title: "夏の便り", kind: "episode" })).rows, []);
 });
 
-// 1.99?? clerkreq (owner 2026-11-08 13:48 ET): "pepe play the tv series The Good Doctor" got another show's episode CALLED "The Good
+// 1.99and clerkreq (owner 2026-11-08 13:48 ET): "pepe play the tv series The Good Doctor" got another show's episode CALLED "The Good
 // Doctor" (prod has no 2017 series - only a crime show's S1E9 of that name). A show / film ask never takes an episode that only shares
 // the name; it is kept aside (episode_named) and the title goes to Seerr. A bare title that only an episode has is offered as that
 // episode, honestly (why episode_named, never exact), beside what Seerr knows. Seerr's state is said (ok / none / down / off).
@@ -785,7 +785,7 @@ test("clerkreq S5: a title-level ask (request_offer) never counts an episode or 
   assert.deepEqual(r.rows, []); assert.equal(r.seerr.tmdb, 501); assert.equal(r.seerr.season, 4);
 });
 
-// ── 1.99?? clerkreq review (2026-11-08) ──
+// ── 1.99and clerkreq review (2026-11-08) ──
 test("clerkreq review F5: a bare title only an episode has stays that episode when Seerr's same-named title is one the clerk can't offer", async () => {
   const f = goodDoctor(fixture(), "none");
   // a film of that name IS on Plex, in a section the clerk doesn't serve (Seerr: available) - the bare line still gets the episode

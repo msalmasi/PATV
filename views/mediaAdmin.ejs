@@ -113,7 +113,7 @@
         <select name="clerk_requests"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>" <%= (S.clerk_requests || 'off') === v ? 'selected' : '' %>><%= t('adm.media.catalog.mode_' + v) %></option><% }) %></select>
       </label>
       <p class="muted" style="grid-column:1/-1"><%= t('adm.media.catalog.request_help') %></p>
-      <%# 1.99?? clerkreq S6: a request from chat that lands on Plex is said in its pad's Camfrog room %>
+      <%# 1.99and clerkreq S6: a request from chat that lands on Plex is said in its pad's Camfrog room %>
       <label class="chk"><input type="checkbox" name="request_landed_relay" <%= S.request_landed_relay !== false ? 'checked' : '' %>> <%= t('adm.media.catalog.landed') %></label>
       <label><%= t('adm.media.lists.enabled') %>
         <select name="clerk_lists"><option value="false" <%= !S.clerk_lists ? 'selected' : '' %>><%= t('adm.media.catalog.mode_off') %></option><option value="true" <%= S.clerk_lists ? 'selected' : '' %>><%= t('adm.media.catalog.embed_on') %></option></select>

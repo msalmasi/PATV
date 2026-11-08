@@ -1,4 +1,4 @@
-// 📼 1.99?? clerkreq S6: a request made from chat landed on Plex -> a "request_landed" relay job, so Pepe says it in the pad's Camfrog
+// 📼 1.99and clerkreq S6: a request made from chat landed on Plex -> a "request_landed" relay job, so Pepe says it in the pad's Camfrog
 // room: "📼 <title> just landed - requested by <name> - say "pepe play <title>"" (camfrog-bot pepe_plexchat._relay_request_landed).
 // Only for a live (bridged) room; offered to Pepe ONCE (a re-offer could say it twice); a veiled (anon) or incognito / hidden requester
 // is never named and no login is sent.

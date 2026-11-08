@@ -1742,7 +1742,7 @@ async function boostAnnounce({ roomId, userId, amount, pad, link } = {}) {
   }
 }
 
-// ── 1.99?? clerkreq S6: 📼 a request made from chat ("pepe request X" in this pad's Camfrog room / web chat) landed on Plex - Pepe says it in
+// ── 1.99and clerkreq S6: 📼 a request made from chat ("pepe request X" in this pad's Camfrog room / web chat) landed on Plex - Pepe says it in
 // the pad's Camfrog room (relay job "request_landed", camfrog-bot pepe_plexchat._relay_request_landed): "📼 X (2017) just landed - requested
 // by <name> - say "pepe play X"". Only for a live (bridged) room; offered once (bridge-relay takeJobs). A veiled requester (anon: the bot said
 // they were incognito / hidden when they asked) or one on Pepe's hidden list now is never named: no login, no name, no account on the job.

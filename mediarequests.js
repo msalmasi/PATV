@@ -81,7 +81,7 @@ function init() {
         refunded_at INTEGER, notified_at INTEGER, error TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, checked INTEGER)`);
       const columns = await getQuery("PRAGMA table_info(media_requests)");
       if (!columns.some((c) => c.name === "missing_since")) await runQuery("ALTER TABLE media_requests ADD COLUMN missing_since INTEGER");
-      // 1.99?? clerkreq S6: where a request came from - "chat" (Pepe's "pepe request X" in a pad's Camfrog room / web chat) + that pad,
+      // 1.99and clerkreq S6: where a request came from - "chat" (Pepe's "pepe request X" in a pad's Camfrog room / web chat) + that pad,
       // and anon = the speaker was veiled (incognito / hidden): its "just landed" line in the pad's room never names them
       if (!columns.some((c) => c.name === "origin")) await runQuery("ALTER TABLE media_requests ADD COLUMN origin TEXT");
       if (!columns.some((c) => c.name === "pad_id")) await runQuery("ALTER TABLE media_requests ADD COLUMN pad_id TEXT");
@@ -211,7 +211,7 @@ async function canRequest(user, type) {
   const price = Math.max(0, Math.floor(Number(type === "tv" ? S.request_price_tv : S.request_price_movie) || 0));
   return { ok: true, reason: null, cost: { with: price ? "pat" : "free", price } };
 }
-/** meta (1.99?? clerkreq S6, plexchat opRequest only): {origin: "chat", pad: <pad id>, anon: bool} - kept on the row for its landing line */
+/** meta (1.99and clerkreq S6, plexchat opRequest only): {origin: "chat", pad: <pad id>, anon: bool} - kept on the row for its landing line */
 async function request(user, b = {}, meta = null) {
   await init();
   const origin = meta && meta.origin === "chat" && typeof meta.pad === "string" && /^[A-Za-z0-9_.:-]{1,100}$/.test(meta.pad) ? meta : null;
@@ -270,7 +270,7 @@ async function request(user, b = {}, meta = null) {
       throw Object.assign(new Refuse(r.status === 403 || r.status === 409 ? 409 : 502,
         r.status === 403 ? `The request server refused it (${String(msg).slice(0, 120)}). Nothing was charged.`
         : r.status === 409 ? "That's already been requested. Nothing was charged." : "The request server couldn't take it right now. Nothing was charged."),
-        // 1.99?? clerkreq review F10: refused (a quota, a rule) is its own thing - Pepe never says "already requested - on its way" for it
+        // 1.99and clerkreq review F10: refused (a quota, a rule) is its own thing - Pepe never says "already requested - on its way" for it
         { upstream: true, ...(r.status === 403 ? { refused: true } : {}) });
     }
     const q = r.json || {};
@@ -361,7 +361,7 @@ async function sync(row) {
   if (st !== row.status) await notifyChange({ ...row, status: st });
   return st;
 }
-let landedFn = null;     // (test hook) 1.99?? clerkreq S6
+let landedFn = null;     // (test hook) 1.99and clerkreq S6
 const landed = (o) => (landedFn ? landedFn(o) : require("./bridge").requestLanded(o));
 async function notifyChange(row) {
   const inbox = require("./inbox");
@@ -373,7 +373,7 @@ async function notifyChange(row) {
     await inbox.addSafe(row.user_id, { kind: "media", title: row.status === "available" ? `🎬 ${name} is on Plex — enjoy!` : `🎬 ${name} is partly on Plex`,
       body: row.status === "available" ? "The title you requested is ready to watch." : "Some of what you requested is ready; the rest is on its way.",
       link: "/requests", ref: `mreq-${row.status}:${row.id}` });
-    // 1.99?? clerkreq S6: a request made from chat - its pad's Camfrog room hears it landed (once: this block runs once per request, the
+    // 1.99and clerkreq S6: a request made from chat - its pad's Camfrog room hears it landed (once: this block runs once per request, the
     // notified_at claim above), unless the admin switched it off; a veiled requester is never named (bridge.requestLanded checks hidden too)
     if (row.status === "available" && row.origin === "chat" && row.pad_id && conf.get().request_landed_relay !== false) {
       try { await landed({ roomId: row.pad_id, userId: row.user_id, title: row.title, year: row.year || null, anon: !!row.anon }); }

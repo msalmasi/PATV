@@ -329,7 +329,7 @@ test("removal requires spaced JSON 404s and an explicit title confirmation; reco
   } finally { global.fetch=realFetch; R._setClock(null); }
 });
 
-// 1.99?? clerkreq S6: a request made from chat ("pepe request X", typed in a pad's Camfrog room or its web chat) remembers the pad and
+// 1.99and clerkreq S6: a request made from chat ("pepe request X", typed in a pad's Camfrog room or its web chat) remembers the pad and
 // whether the speaker was veiled; when it lands on Plex, the pad's room hears "📼 <title> just landed - requested by <name>" (relay job
 // request_landed, behind the request_landed_relay switch - on by default) - once, never naming a veiled or incognito requester.
 test("clerkreq S6: a chat request remembers its pad; landing tells that pad's room once (veiled: unnamed); web requests and the switch off never", async () => {

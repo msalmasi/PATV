@@ -481,7 +481,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     // wave 2 WP-5: an evidence clip request too (evidence.js)
     // 1.99il: a tip announcement too (a re-offer could say it twice)
     // 1.99kp: a stream-start announcement too (golive.js); 1.99lr: a 📼 queue's "now playing" too; 1.99nk: a boost too;
-    // 1.99?? clerkreq S6: a chat request's "just landed" too
+    // 1.99and clerkreq S6: a chat request's "just landed" too
     // 1.99ye: a say too - it carries a client id now, and "unconfirmed" (SAY_CLAIM_TTL) is safer than a double post
     const due = j.state === "pending" || (j.kind !== "say" && j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "micevidence" && j.kind !== "tipnote" && j.kind !== "golive" && j.kind !== "nowplaying" && j.kind !== "boostnote" && j.kind !== "request_landed" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
@@ -533,7 +533,7 @@ function takeJobs(liveRoomIds, via = "sync") {
     if (j.kind === "golive" || j.kind === "nowplaying") { base.streamer = j.streamer; base.pad = j.pad; base.what = j.what || ""; base.link = j.link || ""; }   // 1.99kp / 1.99lr
     // 1.99nk: 🚀 a website boost of this pad (bridge.boostAnnounce) - Pepe coalesces them per room
     if (j.kind === "boostnote") { base.amount = j.amount; base.pad = j.pad; base.link = j.link || ""; if (j.display) base.display = j.display; }
-    // 1.99?? clerkreq S6: 📼 a chat request landed on Plex (bridge.requestLanded) - no name / login / account for a veiled or hidden requester
+    // 1.99and clerkreq S6: 📼 a chat request landed on Plex (bridge.requestLanded) - no name / login / account for a veiled or hidden requester
     if (j.kind === "request_landed") { base.what = j.what; base.title = j.title; base.pad = j.pad || ""; if (j.display) base.display = j.display; }
     out.push(base);
     if (out.length >= 10) break;

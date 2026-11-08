@@ -25,10 +25,10 @@
 //               Clerk confirms send play {clerk:true}; this forces a fresh catalog/rating check for single keys too.
 //               probe:true checks catalog titles before interpretation without an external Seerr lookup.
 //     browse    find with limit 3; request {kind,tmdb,season?,target,veiled?} consumes this speaker/pad's verified 10-minute offer
-//               (1.99?? clerkreq: -> + id; the request remembers origin chat + the pad, anon when veiled - S6).
-//     request_offer {title, kind?, year?, season?, target} (1.99?? clerkreq S5) -> answer on_shelves (rows) | seerr (+ request) |
+//               (1.99and clerkreq: -> + id; the request remembers origin chat + the pad, anon when veiled - S6).
+//     request_offer {title, kind?, year?, season?, target} (1.99and clerkreq S5) -> answer on_shelves (rows) | seerr (+ request) |
 //               choices (seerr_choices, each + request) | miss (seerr_state); refusals requested (+ label) / unavailable / request_off.
-//               find's answer also says (1.99?? clerkreq S1-S4): episode_named [{key,label,show}], seerr_state ok|none|down|off,
+//               find's answer also says (1.99and clerkreq S1-S4): episode_named [{key,label,show}], seerr_state ok|none|down|off,
 //               seerr_choices (each + request), seerr_requested {title,year,kind}.
 //     embed_todo {model?,dim?,limit?,after?}; embed_put {model,dim,vecs} are authenticated bot-only operations with no speaker/room.
 //               find accepts qvec:{model,dim,v,scale}; malformed/mismatched vectors silently retain ordinary word search.
@@ -72,10 +72,10 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after",
   // ... review F8: what a line-up was to wait for isn't on any more (Pepe asks again, naming what is)
   "behind_changed",
-  // 1.99?? clerkreq review: request_offer's own - no title said (F13: "bad" stays an older site's unknown op), the request server
+  // 1.99and clerkreq review: request_offer's own - no title said (F13: "bad" stays an older site's unknown op), the request server
   // refusing at the yes (F10: a quota - never "already requested")
   "bad_title", "refused"];
-// (1.99?? clerkreq S5: + request_offer - "pepe request <title>": what can happen for that title, opRequest still the only write)
+// (1.99and clerkreq S5: + request_offer - "pepe request <title>": what can happen for that title, opRequest still the only write)
 const OPS = new Set(["search", "find", "browse", "request", "request_offer", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
@@ -211,7 +211,7 @@ const labelOf = (it) => (it.type === "episode" && it.show
   ? `${it.show} S${it.season == null ? 0 : it.season}E${it.episode == null ? 0 : it.episode}${it.title ? ` "${it.title}"` : ""}`
   : `${it.title}${it.year ? ` (${it.year})` : ""}`).slice(0, 120);
 
-/** 1.99?? clerkreq review F16 (the clerk off: !plex / the legacy path): a show / film ask ("the show X", "X the movie") and an
+/** 1.99and clerkreq review F16 (the clerk off: !plex / the legacy path): a show / film ask ("the show X", "X the movie") and an
  *  episode of ANOTHER show that only shares the name - never offered for it (the 11-08 "The Good Doctor" -> a crime show's S1E9). */
 function nameOnlyEpisode(it, q, want) {
   const n = norm(q);
@@ -355,7 +355,7 @@ async function opFind(user, b) {
   }
   if (out.code === "unavailable") throw new Fail("unavailable", "That one isn't available here.", 404);
   if (out.seerr) out.request = await requestPreview(user, b, R, origin, out.seerr);
-  // 1.99?? clerkreq S3/S5: Seerr's choices (the speaker picks one) - each with its own preview and offer, as the one title's
+  // 1.99and clerkreq S3/S5: Seerr's choices (the speaker picks one) - each with its own preview and offer, as the one title's
   if (Array.isArray(out.seerr_choices)) for (const c of out.seerr_choices) c.request = await requestPreview(user, b, R, origin, { kind: c.kind, tmdb: c.tmdb, title: c.title, year: c.year });
   await priceRows(user, R, A, target, out);
   return { ok: true, ...out, clerk: conf().get().clerk_enabled, free: !!A.free, how: A.how || null, per_hour: perHour(A), state: out.state, target, pad: { id: R.id, title: R.title || R.id } };
@@ -377,7 +377,7 @@ async function priceRows(user, R, A, target, out) {
   }
   out.state = state;
 }
-/** 1.99?? clerkreq S5 (owner 2026-11-08: "pepe request the series The Good Doctor" got a made-up "Request logged" and nothing was asked for):
+/** 1.99and clerkreq S5 (owner 2026-11-08: "pepe request the series The Good Doctor" got a made-up "Request logged" and nothing was asked for):
  *  "pepe request <title>" / "!plex request <title> [year] [season N]". The same gates as find (the speaker, the rate, the clerk's access,
  *  the pad: an 18+ pad / a PM / a Telegram line refused request_off; requests off -> answer miss + seerr_state off), a forced title-level
  *  ask ({title, kind?, year?, season?}: an episode or a near title is never "on the shelves"), then ONE answer:
@@ -473,7 +473,7 @@ async function opRequest(user, b) {
   }
   if (JSON.stringify(costOf(rights.cost)) !== JSON.stringify(offer.cost)) throw new Fail("request_stale", "The request cost changed. Ask for a fresh offer.", 409);
   try {
-    // 1.99?? clerkreq S6: a request from chat remembers where it came from - the pad (its Camfrog room hears "<title> just landed" when it's
+    // 1.99and clerkreq S6: a request from chat remembers where it came from - the pad (its Camfrog room hears "<title> just landed" when it's
     // on Plex) and whether the speaker was veiled (incognito / hidden: never named there)
     const result = await MR().request(user, { type: kind, tmdb, ...(season != null ? { seasons: [season] } : {}) },
       { origin: "chat", pad: origin.id, anon: b.veiled === true });

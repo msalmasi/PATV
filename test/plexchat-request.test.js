@@ -46,7 +46,7 @@ function harness() {
     async details() { if (d.details) return structuredClone(d.details); throw new Error("This fixture offers only movies"); },
     async request(user, body, meta) {
       d.calls.push(["request", user.userId, body]);
-      if (meta !== undefined) d.calls.push(["request_meta", meta]);     // 1.99?? clerkreq S6: where a chat request came from
+      if (meta !== undefined) d.calls.push(["request_meta", meta]);     // 1.99and clerkreq S6: where a chat request came from
       if (d.pending) await d.pending;
       if (d.requestError) throw d.requestError;
       return { ...d.requestResult };
@@ -225,7 +225,7 @@ test("pre-model probes preserve exact library titles and defer all external work
   assert.equal(h.d.calls.filter((c) => c[0] === "search").length, 1);
 });
 
-// ── 1.99?? clerkreq S5: op request_offer - "pepe request <title>" from chat. The same gates as find (the speaker, the rate, the clerk's
+// ── 1.99and clerkreq S5: op request_offer - "pepe request <title>" from chat. The same gates as find (the speaker, the rate, the clerk's
 // access, the pad: no 18+ pads, a typed room line or the pad's web chat only, requests on, the chat-request rollout); a forced title-level
 // ask; the answer says what can happen: it's on the shelves (rows) | Seerr's one title + its request preview | Seerr's choices, each with
 // its own preview | why not (requested / unavailable) | nothing to request (seerr_state). op request stays the only write.
@@ -334,7 +334,7 @@ test("request_offer: already requested, already available elsewhere and nothing 
   assert.equal((await h.call("request_offer", { title: "" })).code, "bad_title", "a title is needed (review F13: bad_title - 'bad' is an older site's unknown op)");
 });
 
-// ── 1.99?? clerkreq review (2026-11-08) ──
+// ── 1.99and clerkreq review (2026-11-08) ──
 test("clerkreq review F1: request_offer tries the line's own words (raw) first - a title is never cut down to a word of it", async () => {
   let h = harness();
   h.d.searchRows = [{ type: "movie", tmdb: 910, title: "Before You", year: 2019, media_status: 1, availability: "unknown" },
