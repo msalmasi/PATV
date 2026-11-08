@@ -3,7 +3,7 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const { performance } = require("node:perf_hooks");
 const { createCatalog } = require(process.env.PATV_SITE_DIR ? path.join(process.env.PATV_SITE_DIR, "plexcatalog") : "../plexcatalog");
-const { createVectors, documentText, textHash, quantize, decodeVector } = require("../plexvectors");
+const { createVectors, documentText, textHash, quantize, decodeVector, MAX_MOVIES } = require("../plexvectors");
 const AT = Date.UTC(2026, 10, 5, 12), MODEL = "fixture-embedding-v1";
 const row = (key, title, extra = {}) => ({ key: String(key), type: "movie", title, section: "1", content_rating: "PG", year: 2001,
   genres: ["Comedy"], summary: "Original fixture prose about a rainy afternoon.", duration: 5400, ...extra });
@@ -162,7 +162,7 @@ test("filtered nearest uses only supplied movie keys or one named show; query mi
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec([1, 0, 0, 0], "old-model"), kind: "movie", keys: ["1"] }), []);
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec([1, 0, 0]), kind: "movie", keys: ["1"] }), []);
   assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "episode", show_key: "20", keys: Array(3001).fill("21") }), []);
-  assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "movie", keys: Array(20001).fill("1") }), []);
+  assert.deepEqual(await h.vectors.nearest({ qvec: qvec(), kind: "movie", keys: Array(MAX_MOVIES + 1).fill("1") }), []);   // 1.99??: 100,000 (was 20,000)
   let clock = 0;
   const slow = createVectors({ catalog: h.catalog, settings: () => h.cfg, now: () => AT, clock: () => clock += 500 });
   assert.deepEqual(await slow.nearest({ qvec: qvec(), kind: "movie", keys: ["1"], budgetMs: 400 }), []);
@@ -513,7 +513,7 @@ const median = (list) => list.slice().sort((a, b) => a - b)[Math.floor(list.leng
 test("the film index follows each embed_put without reading every film again, and the chat lane never reads film vectors", async (t) => {
   const snapshot = fixture();
   for (let i = 0; i < 500; i++) snapshot.rows.push(row(5000 + i, "Synthetic film " + i));
-  const h = await setup(t, snapshot), c = counting(h);
+  const armed = [], h = await setup(t, snapshot, {}, { onRead: (job) => armed.push(job) }), c = counting(h);
   const vectors = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT });
   const films = Array.from({ length: 500 }, (_, i) => String(5000 + i)), current = await h.catalog.getByKeys(films);
   for (let i = 0; i < current.length; i += 64)
@@ -541,15 +541,108 @@ test("the film index follows each embed_put without reading every film again, an
   await change(h, "2", { summary: "A newly written space mission." });
   c.reset();
   assert.equal((await ask([0, 0, 1, 0])).some((r) => r.key === "2"), false);
-  await change(h, "5003", { rating: 8 });
-  assert.equal((await ask([1, 0, 0, 0])).some((r) => r.key === "5003"), false, "a dirty doc stays out until it's hashed again");
   await vectors.idle();
   assert.equal(c.total(), 0, "a catalog write is no reason to read the films again: " + JSON.stringify(c.blobs));
+  // a play count (not the text): the doc is dirty - left out until it's hashed again, then back without reading its vector
+  await store(h, "5003", [0, 0, 0, 1]);
+  assert.equal((await ask([0, 0, 0, 1]))[0].key, "5003");
+  await change(h, "5003", { rating: 8 });
+  c.reset();
+  assert.equal((await ask([0, 0, 0, 1])).some((r) => r.key === "5003"), false, "a dirty doc stays out until it's hashed again");
+  assert.equal((await h.vectors.todo()).rows.some((r) => r.key === "5003"), false, "unchanged text needs no provider call");
+  assert.equal((await ask([0, 0, 0, 1]))[0].key, "5003", "hashed again: offered again");
+  await vectors.idle();
+  assert.equal(c.total(), 0, "... without reading any vector: " + JSON.stringify(c.blobs));
+  // every read the index made: an index range (kind + rowid, kind + rev) and lookups by key - never a walk or a sort
+  const reads = armed.filter((j) => /plex_vectors_(kind|rev)\b/.test(j.sql));
+  assert.ok(reads.some((j) => /plex_vectors_kind/.test(j.sql)) && reads.some((j) => /plex_vectors_rev/.test(j.sql)), "a build and a refresh were read");
+  assert.deepEqual([...new Set(reads.map((j) => j.budgetMs))], [require("../plexcatalog").ADMIN_BUDGET_MS], "on the background lane");
+  await bounded(h, reads, "the films' index");
   // a policy change: the index is built again from what is still visible
   h.cfg.clerk_block_ratings += ",PG";
   assert.deepEqual(await ask([1, 0, 0, 0]), []);
   await vectors.idle();
+  assert.equal(vectors.stats().films, 0, "nothing the policy hides is kept");
   assert.equal(c.blobs.chat, 0);
+});
+
+test("a cold film ask while the index loads answers on time from words, the asks after it have the films, and the clerk's quick look starts the load", async (t) => {
+  const snapshot = fixture();
+  for (let i = 0; i < 200; i++) snapshot.rows.push(row(5000 + i, "Synthetic film " + i));
+  const h = await setup(t, snapshot), films = Array.from({ length: 200 }, (_, i) => String(5000 + i));
+  for (let i = 0; i < films.length; i += 64) {
+    const part = await h.catalog.getByKeys(films.slice(i, i + 64));
+    assert.equal((await h.vectors.put({ model: MODEL, dim: 4, vecs: part.map((x) => ({ key: x.key, hash: textHash(documentText(x)), ...quantize([1, 0, 0, 0]) })) })).stored, part.length);
+  }
+  // the background lane is slow (a long backfill read ahead of it): every read there takes 300 ms
+  const slow = { ...h.catalog, admin: { ...h.catalog.admin, read: async (...args) => { await new Promise((resolve) => setTimeout(resolve, 300)); return h.catalog.admin.read(...args); } } };
+  const make = () => createVectors({ catalog: slow, settings: () => h.cfg, now: () => AT });
+  let vectors = make();
+  let started = performance.now();
+  assert.deepEqual(await vectors.nearest({ qvec: qvec(), kind: "movie", keys: films }), [], "nothing to scan yet: the clerk keeps its word search");
+  assert.ok(performance.now() - started < BUDGET + 100, "on time: " + (performance.now() - started).toFixed(0) + " ms");
+  await vectors.idle();
+  assert.equal(vectors.stats().films, 200, "the load finished in the background");
+  started = performance.now();
+  assert.equal((await vectors.nearest({ qvec: qvec(), kind: "movie", keys: films })).length, 30);
+  assert.ok(performance.now() - started < 300, "a warm ask doesn't wait for the background lane");
+  // a restart: the clerk's quick look (a person's ask, before the find) starts the load
+  vectors = make();
+  assert.equal((await vectors.status({ quick: true })).ready, true);
+  await vectors.idle();
+  assert.equal(vectors.stats().films, 200, "loaded before the first find");
+  assert.equal((await vectors.nearest({ qvec: qvec(), kind: "movie", keys: films })).length, 30);
+  // switched off: the films' memory goes
+  h.cfg.clerk_embed = false;
+  await vectors.status();
+  assert.equal(vectors.stats().films, 0);
+});
+
+test("a library past the films' memory cap answers from words, says so once, and is not read again on every ask", async (t) => {
+  const h = await setup(t), logs = [], c = counting(h);
+  // 4,200 films with a 4-dim vector each; a cap of one block (4,096 films x 4 dims)
+  await h.catalog.write(async (tx) => {
+    await tx.run(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<4200)
+      INSERT INTO plex_catalog(key,type,title,title_fold,show_key,show_fold,section,content_rating,data,seen_at,server_plays,pad_plays)
+      SELECT CAST(600000+x AS TEXT),'movie','Synthetic film '||x,'synthetic',NULL,'',1,'PG',
+        json_object('key',CAST(600000+x AS TEXT),'type','movie','section','1','title','Synthetic film '||x,'content_rating','PG','summary','Original synthetic prose.'),1,0,0 FROM n`);
+    const rows = await tx.all("SELECT key,data FROM plex_catalog WHERE key>'600000' AND type='movie'");
+    for (let i = 0; i < rows.length; i += 64) {
+      const batch = rows.slice(i, i + 64), params = [];
+      for (const r of batch) params.push(r.key, MODEL, 4, textHash(documentText(JSON.parse(r.data))), 1, Buffer.from(Int8Array.from([100, 1, 1, 1]).buffer), "movie", null);
+      await tx.run("INSERT INTO plex_vectors(key,model,dim,hash,scale,v,kind,show_key) VALUES " + batch.map(() => "(?,?,?,?,?,?,?,?)").join(","), params);
+    }
+    await tx.run("UPDATE plex_vector_docs SET hash=(SELECT hash FROM plex_vectors v WHERE v.key=plex_vector_docs.key),dirty=0 WHERE key IN (SELECT key FROM plex_vectors)");
+  });
+  const vectors = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT, filmMaxBytes: 4096 * 4,
+    log: { log: (l) => logs.push(String(l)), error: (l) => logs.push(String(l)) } });
+  const keys = Array.from({ length: 4200 }, (_, i) => String(600001 + i));
+  assert.deepEqual(await vectors.nearest({ qvec: qvec(), kind: "movie", keys }), []);
+  await vectors.idle();
+  assert.equal(logs.length, 1, logs.join(" / ")); assert.match(logs[0], /films refused/); assert.match(logs[0], /answer from words/);
+  const read = c.total();
+  assert.ok(read > 4000 && read <= 4200, "the films were read once: " + read);
+  for (let i = 0; i < 3; i++) assert.deepEqual(await vectors.nearest({ qvec: qvec(), kind: "movie", keys }), []);
+  await vectors.idle();
+  assert.equal(c.total(), read, "not read again on every ask");
+  assert.equal(logs.length, 1, "said once");
+  assert.deepEqual(vectors.stats(), { films: 0, dim: null, bytes: 0, rev: null, building: false });
+  // the episodes of one show are unaffected (their own per-show read)
+  await store(h, "21", [1, 0, 0, 0]);
+  assert.deepEqual((await vectors.nearest({ qvec: qvec(), kind: "episode", show_key: "20", keys: ["21"] })).map((r) => r.key), ["21"]);
+  // a library that grows past the cap through the backfill: exactly the cap loads; the embed_put past it drops the index
+  await h.catalog.write((tx) => tx.run("DELETE FROM plex_vectors WHERE key>'604096' AND key<'700000'"));
+  const fits = createVectors({ catalog: c.catalog, settings: () => h.cfg, now: () => AT, filmMaxBytes: 4096 * 4,
+    log: { log: (l) => logs.push(String(l)), error: (l) => logs.push(String(l)) } });
+  assert.equal((await fits.nearest({ qvec: qvec(), kind: "movie", keys })).length, 30);
+  await fits.idle();
+  assert.equal(fits.stats().films, 4096);
+  const extra = (await h.catalog.getByKeys(["604097"]))[0];
+  assert.equal((await fits.put({ model: MODEL, dim: 4, vecs: [{ key: "604097", hash: textHash(documentText(extra)), ...quantize([1, 0, 0, 0]) }] })).stored, 1);
+  await fits.idle();
+  assert.equal(fits.stats().films, 0, "past the cap: no index");
+  assert.deepEqual(await fits.nearest({ qvec: qvec(), kind: "movie", keys }), []);
+  assert.ok(logs.some((l) => /films refused/.test(l) && /4096\+ films/.test(l)), logs.join(" / "));
 });
 
 test("prod size (30,682 films with 768-dim vectors): every film or one genre answers from vectors inside the 400 ms budget, warm; the clerk's find() uses them", { timeout: 300000 }, async (t) => {
@@ -576,7 +669,7 @@ test("prod size (30,682 films with 768-dim vectors): every film or one genre ans
     started = performance.now();
     const hits = await ask(everyFilm);
     warm.push(performance.now() - started);
-    assert.equal(hits.length, 30, "an ask over all " + everyFilm.length + " films answers from vectors (it was [] - more keys than MAX_MOVIES)");
+    assert.equal(hits.length, 30, "an ask over all " + everyFilm.length + " films answers from vectors (it was [] - more keys than MAX_MOVIES): " + warm.at(-1).toFixed(1) + " ms, " + JSON.stringify(vectors.stats()));
     assert.equal(hits[0].key, planted);
     assert.ok(hits[0].score > .99 && hits.every((r) => r.why === "vector"));
   }
@@ -612,7 +705,7 @@ test("prod size (30,682 films with 768-dim vectors): every film or one genre ans
   assert.ok(c.total() <= 24 * 2, "the puts were read on their own, not with every film again: " + JSON.stringify(c.blobs));
   // the clerk's find(): an unfiltered "a film about ..." and a one-genre ask both offer films by their vectors
   const { createFinder } = require("../plexfind");
-  const finder = createFinder({ catalog: h.catalog, settings: () => h.cfg, now: () => AT, rng: () => 0, vectors,
+  const finder = createFinder({ catalog: h.catalog, settings: () => h.cfg, now: () => AT, rng: () => 0, vectors, deepMax: { movie: 2, show: 10 },
     lists: { shelves: async () => [], members: async () => [] }, requests: { search: async () => [], details: async () => null } });
   const ctx = { seenKeys: [], maxSec: 4 * 3600, allowSeerr: false }, raw = "a film about a lighthouse keeper";
   for (const want of [{ kind: "movie", about: "a lighthouse keeper who forgets the sea" }, { kind: "movie", genres: ["Drama"], about: "a lighthouse keeper who forgets the sea" }]) {
@@ -630,4 +723,22 @@ test("prod size (30,682 films with 768-dim vectors): every film or one genre ans
   assert.equal(stats.films, PROD.films);
   assert.ok(stats.bytes >= PROD.films * 768 && stats.bytes <= PROD.films * 768 * 1.25, "about one byte per dimension per film: " + stats.bytes);
   await vectors.idle();
+});
+
+test("a cache from before plex_vectors.rev (prod's) gets the column once; its old vectors are read by a build, a put after it by a refresh", async (t) => {
+  const h = await setup(t);
+  await store(h, "1", [1, 0, 0, 0]);
+  await h.catalog.write(async (tx) => { await tx.run("DROP INDEX plex_vectors_rev"); await tx.run("ALTER TABLE plex_vectors DROP COLUMN rev"); });
+  assert.equal((await h.catalog.read("SELECT name FROM pragma_table_info('plex_vectors') WHERE name='rev'")).length, 0);
+  const vectors = createVectors({ catalog: h.catalog, settings: () => h.cfg, now: () => AT });   // a restart on the new code
+  assert.deepEqual((await vectors.nearest({ qvec: qvec(), kind: "movie", keys: ["1", "2"] })).map((r) => r.key), ["1"]);
+  assert.equal((await h.catalog.read("SELECT rev FROM plex_vectors WHERE key='1'"))[0].rev, 0, "an old row keeps rev 0 (no rewrite)");
+  assert.equal((await h.catalog.read("SELECT name FROM sqlite_master WHERE name='plex_vectors_rev'")).length, 1);
+  const two = (await h.catalog.getByKeys(["2"]))[0];
+  assert.equal((await vectors.put({ model: MODEL, dim: 4, vecs: [{ key: "2", hash: textHash(documentText(two)), ...quantize([0, 1, 0, 0]) }] })).stored, 1);
+  const meta = (await h.catalog.read("SELECT vector_rev FROM plex_vector_meta"))[0], rev = (await h.catalog.read("SELECT rev FROM plex_vectors WHERE key='2'"))[0].rev;
+  assert.ok(rev > 0 && rev <= meta.vector_rev, "a put stores the vector_rev it made: " + rev + " / " + meta.vector_rev);
+  assert.deepEqual((await vectors.nearest({ qvec: qvec([0, 1, 0, 0]), kind: "movie", keys: ["1", "2"] })).map((r) => r.key), ["2", "1"]);
+  await vectors.idle();
+  assert.equal(vectors.stats().films, 2);
 });

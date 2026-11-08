@@ -2,6 +2,8 @@
 "use strict";
 const crypto = require("crypto");
 const { performance } = require("node:perf_hooks");
+// plexvectors 1.99??: the pool a vector search may score - the vectors module's own caps (films 100,000: prod has 30,682)
+const { MAX_MOVIES, MAX_EPISODES } = require("./plexvectors");
 const KEY = /^\d{1,12}$/;
 const SELECT = new Set(["one", "random", "latest", "oldest", "first_n", "last_n", "pilot", "finale", "season", "series", "in_order"]);
 const normOf = (text) => {
@@ -483,7 +485,8 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         pool = safe(movies).filter((row) => (!reference || similarity(row) > 0) && matches(row, a, seen, parents)
           && (!a.title || titleMatch(row.title, a.title) || (row.shelves || []).some((name) => titleMatch(name, a.title))));
       }
-      if (pool.length && pool.length <= (kind === "episode" ? 3000 : 20000)) {
+      // plexvectors 1.99??: was 20,000 films - every film that passes the filters at prod's size (30,682) skipped the vectors
+      if (pool.length && pool.length <= (kind === "episode" ? MAX_EPISODES : MAX_MOVIES)) {
         const byKey = new Map(pool.map((row) => [String(row.key), row]));
         try {
           let wordHits = candidates.filter((candidate) => candidate.why === "fts" && byKey.has(String(candidate.r.key))).map((candidate) => String(candidate.r.key));

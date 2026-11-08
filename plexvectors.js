@@ -5,7 +5,22 @@ const crypto = require("node:crypto");
 const { performance } = require("node:perf_hooks");
 
 const KEY = /^\d{1,12}$/, HASH = /^[a-f0-9]{64}$/;
-const DAY = 86400000, BUDGET = 400, MAX_MOVIES = 20000, MAX_EPISODES = 3000, MAX_BODY = 16384;
+const DAY = 86400000, BUDGET = 400, MAX_EPISODES = 3000, MAX_BODY = 16384;
+// plexvectors 1.99?? (follow-up to 1.99amg): a film search at prod's size (30,682 films) fell back to word search every time -
+// over MAX_MOVIES (20,000) an ask over every film was refused before any read, and a filtered one took an uncached "partial"
+// path (the keys 400 at a time on the chat lane: 405 ms, [] every time), and any cache died with each embed_put and catalog
+// write. The films' vectors now live in memory - int8 in typed-array blocks, read on the background lane once, then only what
+// changed (plex_vectors.rev), never on the chat lane - and an ask scans them (giving the event loop a turn every block): 30,682
+// films x 768 dims ~19 ms on a dev machine, ~72 ms median on prod's CPU (61,364: ~39 / ~172 ms); about 24 MB of typed arrays
+// + ~5 MB of heap at 30,682 films. Kept until the model or the policy changes; a catalog write (a sync, a play) keeps it.
+const MAX_MOVIES = 100000;          // film keys one ask may score (plexfind sends every film that passes its filters)
+const FILM_BLOCK_BITS = 12, FILM_BLOCK = 1 << FILM_BLOCK_BITS;  // films a block (3 MiB at 768 dims): grows a block at a time, never copies
+const FILM_PAGE = 2048;             // film vectors per background read (a build, a refresh)
+const FILM_MAX_BYTES = 96 * 1048576;  // film vectors kept in memory at most (100,000 films x 768 dims = 73 MiB); past it films answer from words
+const FILM_BUILD_MS = 60000;        // one build or refresh, end to end (each read has the admin lane's own bound)
+const FILM_RETRY_MS = 10 * 60000;   // a library past FILM_MAX_BYTES is tried again after this (or when the model / policy changes)
+const FILM_WAIT_MS = 50;            // a warm ask waits this long at most for the vectors an embed_put just stored
+const FILM_RESERVE_MS = 100;        // a cold ask keeps this much of its budget for the scan and the final read
 // plexvectors 1.99amg (prod 2026-11-08: every embed_todo refused "catalog_down", /admin/media "waiting for the bot's model
 // configuration"; 255,835 rows, every doc dirty, 0 vectors, the bot's model already stored). prepare() read every dirty doc
 // joined with the catalog and sorted it (565-713 ms) and the card's count walked the whole catalog (1.2-1.4 s) - both on the
@@ -66,10 +81,16 @@ function createVectors(options = {}) {
   const settings = options.settings || (() => require("./mediaconf").get());
   const now = options.now || Date.now, clock = options.clock || (() => performance.now());
   const log = options.log || console;
-  let initialized = null, policyStamp = null, movieCache = null, episodeCache = null;
+  const filmMaxBytes = Number(options.filmMaxBytes) > 0 ? Number(options.filmMaxBytes) : FILM_MAX_BYTES;   // a test sets a small one
+  let initialized = null, policyStamp = null, episodeCache = null;
   let purgeJob = null, census = null, censusJob = null, lastCounts = null, kicked = null;
+  let films = null, filmJob = null, filmAgain = false, filmRefused = null;   // the films' index (see MAX_MOVIES), its one background job
+  const asks = new Set();   // nearest() calls still finishing after their answer went (idle() waits for them too)
   const on = () => settings().clerk_embed === true || settings().clerk_embed === "true" || settings().clerk_embed === "1" || settings().clerk_embed === 1;
-  const invalidate = () => { movieCache = null; episodeCache = null; };
+  // a model / policy change: nothing kept is usable. An embed_put or a re-hash changes one show's episodes at most - the films'
+  // index reads what changed (plex_vectors.rev) on its own.
+  const invalidate = () => { films = null; filmRefused = null; episodeCache = null; };
+  const episodesChanged = () => { episodeCache = null; };
   const remaining = (deadline) => { const ms = deadline - clock(); if (ms <= 0) throw error("slow"); return Math.max(1, Math.min(BUDGET, ms)); };
   // Two lanes. chat: nearest() and the clerk's quick look, on the 400 ms search budget. bg: the backfill and the card, on the
   // catalog's admin lane (plexcatalog ADMIN_BUDGET_MS a read, behind any waiting chat read); a read that fails says which step.
@@ -118,9 +139,14 @@ function createVectors(options = {}) {
 
   async function init() {
     if (!initialized) initialized = catalog.write(async (tx) => {
-      await tx.run("CREATE TABLE IF NOT EXISTS plex_vectors (key TEXT PRIMARY KEY,model TEXT NOT NULL,dim INTEGER NOT NULL,hash TEXT NOT NULL,scale REAL NOT NULL,v BLOB NOT NULL,kind TEXT NOT NULL,show_key TEXT,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
+      await tx.run("CREATE TABLE IF NOT EXISTS plex_vectors (key TEXT PRIMARY KEY,model TEXT NOT NULL,dim INTEGER NOT NULL,hash TEXT NOT NULL,scale REAL NOT NULL,v BLOB NOT NULL,kind TEXT NOT NULL,show_key TEXT,rev INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vectors_kind ON plex_vectors(kind)");
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vectors_show ON plex_vectors(show_key)");
+      // plexvectors 1.99??: rev = the vector_rev of the write that stored the row (put() sets it; older rows 0) - the films' index
+      // reads only the rows written since it last looked, an index range. A cache from before the column gets it here (no rewrite).
+      if (!(await tx.all("PRAGMA table_info(plex_vectors)")).some((col) => col.name === "rev"))
+        await tx.run("ALTER TABLE plex_vectors ADD COLUMN rev INTEGER NOT NULL DEFAULT 0");
+      await tx.run("CREATE INDEX IF NOT EXISTS plex_vectors_rev ON plex_vectors(kind,rev)");
       // Dirty hashes make metadata changes immediately unusable without hashing 200k summaries per request.
       await tx.run("CREATE TABLE IF NOT EXISTS plex_vector_docs (key TEXT PRIMARY KEY,hash TEXT,dirty INTEGER NOT NULL DEFAULT 1,vec INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(key) REFERENCES plex_catalog(key) ON DELETE CASCADE)");
       await tx.run("CREATE INDEX IF NOT EXISTS plex_vector_docs_dirty ON plex_vector_docs(dirty,key)");
@@ -251,7 +277,7 @@ function createVectors(options = {}) {
       for (const r of changed) await tx.run("UPDATE plex_vector_docs SET hash=?,dirty=0 WHERE key=? AND dirty=1 AND EXISTS (SELECT 1 FROM plex_catalog c WHERE c.key=? AND c.data=?)", [r.hash, r.key, r.key, r.data]);
       await tx.run("UPDATE plex_vector_meta SET vector_rev=vector_rev+1 WHERE id=1");
     });
-    invalidate();
+    episodesChanged();
     return pending.length;
   }
   // The docs that need a vector (hashed, no current vector) the policy shows, in key order after the cursor, then - the bot's
@@ -330,12 +356,12 @@ function createVectors(options = {}) {
     })().catch((e) => { refused("count", e); }).finally(() => { kicked = null; });
   }
   async function idle() {
-    for (let i = 0; i < 20 && (kicked || censusJob || purgeJob); i++)
-      await Promise.all([kicked, censusJob, purgeJob && purgeJob.done].filter(Boolean).map((p) => p.catch(() => {})));
+    for (let i = 0; i < 20 && (kicked || censusJob || purgeJob || filmJob || asks.size); i++)
+      await Promise.all([kicked, censusJob, purgeJob && purgeJob.done, filmJob, ...asks].filter(Boolean).map((p) => p.catch(() => {})));
   }
 
   async function status(opts = {}) {
-    if (!on()) return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 };
+    if (!on()) { films = null; return { enabled: false, ready: false, model: null, dim: null, done: 0, left: 0 }; }   // 1.99??: switched off - the films' memory goes
     if (opts && opts.quick) return quickStatus();
     let m = null;
     try {
@@ -363,10 +389,12 @@ function createVectors(options = {}) {
     if (!m.ready || !m.model || !m.dim) return { ...base, ready: false, done: 0, left: 0, counted: true };
     if (lastCounts && lastCounts.pair === m.model + "|" + m.dim) {
       if (now() - lastCounts.at >= QUICK_REFRESH_MS) kick();
+      if (lastCounts.done > 0) warmFilms(m);
       return { ...base, ready: lastCounts.done > 0, total: lastCounts.total, done: lastCounts.done, left: lastCounts.left, counted: true };
     }
     const any = (await chat("SELECT 1 AS x FROM plex_vector_docs INDEXED BY plex_vector_docs_todo WHERE dirty=0 AND vec=1 LIMIT 1", [], deadline)).length > 0;
     kick();
+    if (any) warmFilms(m);
     return { ...base, ready: any, done: 0, left: null, counted: false };
   }
 
@@ -435,20 +463,27 @@ function createVectors(options = {}) {
       const answer = await catalog.write(async (tx) => {
         const active = (await tx.all("SELECT model,dim FROM plex_vector_meta WHERE id=1"))[0];
         if (!on() || active.model !== request.model || active.dim !== request.dim) return { ok: false, code: "embed_model" };
-        let stored = 0;
+        let stored = 0, storedFilms = 0;
         for (const row of input) {
           const args = [], where = visible(args); args.push(row.key);
           const found = (await tx.all("SELECT c.key,c.data,c.type,c.show_key FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where + " AND c.key=?", args))[0];
           if (!found || textHash(documentText(parse(found.data, {}))) !== row.hash) continue;
           await tx.run("INSERT INTO plex_vector_docs(key,hash,dirty) VALUES(?,?,0) ON CONFLICT(key) DO UPDATE SET hash=excluded.hash,dirty=0", [row.key, row.hash]);
-          await tx.run(`INSERT INTO plex_vectors(key,model,dim,hash,scale,v,kind,show_key) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET
-            model=excluded.model,dim=excluded.dim,hash=excluded.hash,scale=excluded.scale,v=excluded.v,kind=excluded.kind,show_key=excluded.show_key`,
+          // plexvectors 1.99??: rev = the vector_rev this write makes (the change trigger adds 1 after the row) - always above
+          // anything the films' index has read
+          await tx.run(`INSERT INTO plex_vectors(key,model,dim,hash,scale,v,kind,show_key,rev) VALUES(?,?,?,?,?,?,?,?,(SELECT vector_rev+1 FROM plex_vector_meta WHERE id=1))
+            ON CONFLICT(key) DO UPDATE SET model=excluded.model,dim=excluded.dim,hash=excluded.hash,scale=excluded.scale,v=excluded.v,kind=excluded.kind,
+            show_key=excluded.show_key,rev=excluded.rev`,
           [row.key, request.model, request.dim, row.hash, row.scale, row.bytes, found.type, found.show_key]);
           stored++;
+          if (found.type === "movie") storedFilms++;
         }
-        return { ok: true, stored, rejected: input.length - stored };
+        return { ok: true, stored, rejected: input.length - stored, storedFilms };
       });
-      invalidate();
+      episodesChanged();
+      // the films' index (once an ask has built it) reads the films just stored now, not on the next ask
+      if (answer.storedFilms && (films || filmJob)) kickFilms();
+      delete answer.storedFilms;
       if (answer.ok) fine("put");
       return answer;
     } catch (e) {
@@ -456,20 +491,111 @@ function createVectors(options = {}) {
     }
   }
 
-  async function load(kind, show, keys, m, deadline) {
-    const old = kind === "movie" ? movieCache : episodeCache, version = stamp(m);
+  // ── plexvectors 1.99??: the films' index ──
+  // The stored film vectors of the configured model that the policy showed when they were read: int8 in FILM_BLOCK-film typed
+  // arrays (a slot a film; a newer write of a film replaces its slot) with their norms, hashes and revs. Built on the background
+  // lane a page at a time; after that each refresh reads only the rows whose rev is past what it has read (an embed_put). `want`
+  // is the policy it was read under (policyOf): a model or policy change makes it unusable and it is built again; a catalog
+  // write (a sync, a play count) doesn't - every answer is checked against the current row, its doc and the policy (nearest()).
+  function filmIndex(m) {
+    return { want: policyOf(m), dim: m.dim, rev: Number(m.vector_rev) || 0, size: 0, slots: new Map(), hashes: [], revs: [], blocks: [], norms: [] };
+  }
+  function filmPut(index, row) {
+    const rev = Number(row.rev) || 0;
+    let slot = index.slots.get(row.key);
+    if (slot !== undefined && index.revs[slot] > rev) return;   // a read older than what the slot holds
+    const vector = Buffer.isBuffer(row.v) && row.v.byteLength === index.dim && Number.isFinite(row.scale) && row.scale > 0
+      ? new Int8Array(row.v.buffer, row.v.byteOffset, row.v.byteLength) : null;
+    let sum = 0;
+    if (vector) for (let i = 0; i < vector.length; i++) sum += vector[i] * vector[i];
+    if (slot === undefined) {
+      if (!sum) return;
+      if (index.size === index.blocks.length * FILM_BLOCK) {
+        if ((index.blocks.length + 1) * FILM_BLOCK * index.dim > filmMaxBytes)
+          throw error("films_too_many", "more film vectors than " + (filmMaxBytes / 1048576).toFixed(1) + " MB holds (" + index.size + "+ films x " + index.dim + " dims) - films answer from words");
+        index.blocks.push(new Int8Array(FILM_BLOCK * index.dim)); index.norms.push(new Float32Array(FILM_BLOCK));
+      }
+      slot = index.size++;
+      index.slots.set(row.key, slot);
+    }
+    const b = slot >>> FILM_BLOCK_BITS, at = slot & (FILM_BLOCK - 1);
+    if (sum) index.blocks[b].set(vector, at * index.dim);
+    index.norms[b][at] = sum ? Math.sqrt(sum) : 0;   // a row that cannot be used is never a match
+    index.hashes[slot] = sum ? row.hash : null; index.revs[slot] = rev;
+  }
+  // the policy checked for every row read (the covering visibility index; a film never takes the parent-show EXISTS)
+  const FILM_COLUMNS = "v.key AS key,v.hash AS hash,v.scale AS scale,v.v AS v,v.rev AS rev";
+  const FILM_JOIN = " CROSS JOIN plex_catalog c INDEXED BY plex_catalog_visibility ON c.key=v.key CROSS JOIN plex_sections s ON s.id=c.section";
+  async function buildFilms(m, deadline) {
+    const index = filmIndex(m);   // its rev is the meta just read: anything written after it has a higher rev (the next refresh)
+    for (let after = -1; ;) {
+      const args = [after, m.model, m.dim], where = visible(args);
+      args.push(FILM_PAGE);
+      const rows = await bg("films", "SELECT v.rowid AS rid," + FILM_COLUMNS + " FROM plex_vectors v INDEXED BY plex_vectors_kind" + FILM_JOIN +
+        " WHERE v.kind='movie' AND v.rowid>? AND v.model=? AND v.dim=? AND " + where + " ORDER BY v.rowid LIMIT ?", args, deadline);
+      for (const r of rows) filmPut(index, r);
+      if (rows.length < FILM_PAGE) return index;
+      after = rows[rows.length - 1].rid;
+    }
+  }
+  async function refreshFilms(index, m, deadline) {
+    const upTo = Number(m.vector_rev) || 0;
+    for (let from = index.rev; ;) {
+      const args = [from, m.model, m.dim], where = visible(args);
+      args.push(FILM_PAGE);
+      const rows = await bg("films", "SELECT " + FILM_COLUMNS + " FROM plex_vectors v INDEXED BY plex_vectors_rev" + FILM_JOIN +
+        " WHERE v.kind='movie' AND v.rev>? AND v.model=? AND v.dim=? AND " + where + " ORDER BY v.rev LIMIT ?", args, deadline);
+      for (const r of rows) filmPut(index, r);
+      if (rows.length < FILM_PAGE) break;
+      from = rows[rows.length - 1].rev;
+    }
+    if (upTo > index.rev) index.rev = upTo;
+  }
+  // One job at a time (a promise, no timer): build when there is no index for the current model and policy, else read what
+  // changed. A call while it runs asks for one more pass. A library past FILM_MAX_BYTES is said once and tried again later.
+  function kickFilms() {
+    if (filmJob) { filmAgain = true; return filmJob; }
+    const job = filmJob = (async () => {
+      do {
+        filmAgain = false;
+        const deadline = clock() + FILM_BUILD_MS;
+        const m = await guard(deadline, bgLane("films"));
+        if (!on() || !m.ready || !m.model || !m.dim) { films = null; break; }
+        const want = policyOf(m);
+        try {
+          if (films && films.want === want) { if (Number(m.vector_rev) > films.rev) await refreshFilms(films, m, deadline); }
+          else if (filmRefused && filmRefused.want === want && now() - filmRefused.at < FILM_RETRY_MS) return;   // still past the cap
+          else { films = await buildFilms(m, deadline); filmRefused = null; }
+        } catch (e) {
+          // past the cap (a build, or a refresh that grew it there): no index - films answer from words until it's tried again
+          if (e && e.code === "films_too_many") { films = null; filmRefused = { want, at: now() }; }
+          throw e;
+        }
+      } while (filmAgain);
+      fine("films");
+    })().catch((e) => { refused("films", e); }).finally(() => { if (filmJob === job) filmJob = null; });
+    return job;
+  }
+  // the clerk's quick look (a person is about to ask): have the films ready
+  function warmFilms(m) { if (on() && !filmJob && !(films && films.want === policyOf(m))) kickFilms(); }
+  const settle = (promise, ms) => { let timer; return Promise.race([promise, new Promise((resolve) => { timer = setTimeout(resolve, ms); })]).finally(() => clearTimeout(timer)); };
+  function stats() {
+    const index = films;
+    if (!index) return { films: 0, dim: null, bytes: 0, rev: null, building: !!filmJob };
+    return { films: index.size, dim: index.dim, bytes: index.blocks.length * FILM_BLOCK * (index.dim + 4), rev: index.rev, building: !!filmJob };
+  }
+
+  // One show's episodes (<= MAX_EPISODES), read on the chat lane through the show index and kept for the next ask about it.
+  async function loadEpisodes(show, keys, m, deadline) {
+    const old = episodeCache, version = stamp(m);
     if (old && old.version === version && old.show === show && !old.partial) return old;
     const args = [], where = visible(args);
-    args.push(m.model, m.dim, kind);
-    const showSql = kind === "episode" ? " AND v.show_key=?" : "";
-    if (showSql) args.push(show);
-    const cap = kind === "movie" ? MAX_MOVIES : MAX_EPISODES;
-    args.push(cap + 1);
-    const sql = `SELECT v.key,v.hash,v.scale,v.v FROM plex_vectors v INDEXED BY ${kind === "episode" ? "plex_vectors_show" : "plex_vectors_kind"} JOIN plex_vector_docs d ON d.key=v.key JOIN plex_catalog c ON c.key=v.key JOIN plex_sections s ON s.id=c.section
-      WHERE d.dirty=0 AND d.hash=v.hash AND ` + where + " AND v.model=? AND v.dim=? AND v.kind=?" + showSql;
-    let rows = await chat(sql + " LIMIT ?", args, deadline), partial = rows.length > cap;
+    args.push(m.model, m.dim, "episode", show, MAX_EPISODES + 1);
+    const sql = `SELECT v.key,v.hash,v.scale,v.v FROM plex_vectors v INDEXED BY plex_vectors_show JOIN plex_vector_docs d ON d.key=v.key JOIN plex_catalog c ON c.key=v.key JOIN plex_sections s ON s.id=c.section
+      WHERE d.dirty=0 AND d.hash=v.hash AND ` + where + " AND v.model=? AND v.dim=? AND v.kind=? AND v.show_key=?";
+    let rows = await chat(sql + " LIMIT ?", args, deadline), partial = rows.length > MAX_EPISODES;
     if (partial) {
-      // Very large movie libraries still allow an explicitly filtered <=20k pool; no arbitrary truncation.
+      // a show with more episodes than MAX_EPISODES: only the (<= MAX_EPISODES) keys asked about; no arbitrary truncation
       rows = []; args.pop();
       for (let start = 0; start < keys.length; start += 400) {
         const chunk = keys.slice(start, start + 400);
@@ -483,9 +609,8 @@ function createVectors(options = {}) {
       let sum = 0; for (let i = 0; i < vector.length; i++) sum += vector[i] * vector[i];
       if (sum) by.set(row.key, { key: row.key, hash: row.hash, vector, norm: Math.sqrt(sum) });
     }
-    const cache = { version, show, by, partial };
-    if (kind === "movie") movieCache = cache; else episodeCache = cache;
-    return cache;
+    episodeCache = { version, show, by, partial };
+    return episodeCache;
   }
   async function nearest(request = {}) {
     if (!on()) return [];
@@ -500,45 +625,85 @@ function createVectors(options = {}) {
     const work = async () => { try {
       const m = await guard(deadline);
       if (!m.ready || q.model !== m.model || q.dim !== m.dim) return [];
-      const version = stamp(m); // capture current settings before awaits; don't recompute both sides after a change
-      const cache = await load(kind, show, keys, m, deadline), top = [];
+      // capture the policy before any await; the answer is checked against it at the end (a model / policy change -> [])
+      const version = policyOf(m);
+      let index = null;
+      if (kind === "movie") {
+        // the films' index: none yet (or behind an embed_put) -> the background job; a cold ask waits for it while its budget
+        // lasts, a warm one a moment (FILM_WAIT_MS) and then answers from what it has
+        index = films && films.want === version ? films : null;
+        if (!index || Number(m.vector_rev) > index.rev) {
+          const job = kickFilms(), wait = Math.min(index ? FILM_WAIT_MS : budget, deadline - clock() - FILM_RESERVE_MS);
+          if (wait > 0) await settle(job, wait);
+          if (films && films.want === version) index = films;
+          if (!index) return [];
+        }
+      }
+      const cache = index ? null : await loadEpisodes(show, keys, m, deadline);
       const limit = Math.max(1, Math.min(50, Math.floor(Number(request.limit) || Number(settings().clerk_embed_k) || 30)));
-      const query = decoded.vector, norm = decoded.norm, dim = m.dim;
-      for (let index = 0; index < keys.length; index++) {
-        if (!(index & 127)) remaining(deadline);
-        const row = cache.by.get(keys[index]); if (!row) continue;
-        let dot = 0; const vector = row.vector;
-        for (let i = 0; i < dim; i++) dot += vector[i] * query[i];
-        const score = dot / (row.norm * norm);
-        if (top.length === limit && score <= top[top.length - 1].score) continue;
+      // a few more than asked for: a title whose summary changed since its vector (or not hashed again yet) drops out at the end
+      const keep = Math.min(100, limit * 2), top = [], query = decoded.vector, norm = decoded.norm, dim = m.dim;
+      const offer = (key, hash, score) => {
         let pos = top.length;
         while (pos > 0 && top[pos - 1].score < score) pos--;
-        top.splice(pos, 0, { key: row.key, hash: row.hash, score, why: "vector" });
-        if (top.length > limit) top.pop();
+        top.splice(pos, 0, { key, hash, score, why: "vector" });
+        if (top.length > keep) top.pop();
+      };
+      if (index) {
+        // the site's event loop gets a turn every FILM_BLOCK films (prod's CPU: ~72 ms for 30,682 films x 768 dims in all, ~10 ms a
+        // turn); a refresh landing in a turn changes a slot whole (vector, norm, hash together)
+        const { slots, blocks, norms, hashes } = index;
+        for (let k = 0; k < keys.length; k++) {
+          if (!(k & (FILM_BLOCK - 1)) && k) await new Promise((resolve) => setImmediate(resolve));
+          if (!(k & 255)) remaining(deadline);
+          const slot = slots.get(keys[k]); if (slot === undefined) continue;
+          const b = slot >>> FILM_BLOCK_BITS, at = slot & (FILM_BLOCK - 1), length = norms[b][at];
+          if (!length) continue;
+          const data = blocks[b];
+          let off = at * dim, d0 = 0, d1 = 0, d2 = 0, d3 = 0, i = 0;
+          for (; i + 3 < dim; i += 4, off += 4) { d0 += data[off] * query[i]; d1 += data[off + 1] * query[i + 1]; d2 += data[off + 2] * query[i + 2]; d3 += data[off + 3] * query[i + 3]; }
+          for (; i < dim; i++, off++) d0 += data[off] * query[i];
+          const score = (d0 + d1 + d2 + d3) / (length * norm);
+          if (top.length === keep && score <= top[keep - 1].score) continue;
+          offer(keys[k], hashes[slot], score);
+        }
+      } else {
+        for (let k = 0; k < keys.length; k++) {
+          if (!(k & 127)) remaining(deadline);
+          const row = cache.by.get(keys[k]); if (!row) continue;
+          let dot = 0; const vector = row.vector;
+          for (let i = 0; i < dim; i++) dot += vector[i] * query[i];
+          const score = dot / (row.norm * norm);
+          if (top.length === keep && score <= top[keep - 1].score) continue;
+          offer(row.key, row.hash, score);
+        }
       }
       remaining(deadline);
       if (!top.length) return [];
+      // the output boundary: the current row, shown by the current policy, its doc hashed (not dirty) to the vector's text
       const args = [], where = visible(args); args.push(...top.map((r) => r.key));
-      const currentRows = await chat("SELECT c.key,c.data FROM plex_catalog c JOIN plex_sections s ON s.id=c.section WHERE " + where +
+      const currentRows = await chat("SELECT c.key,c.data,d.hash AS doc_hash FROM plex_catalog c JOIN plex_sections s ON s.id=c.section JOIN plex_vector_docs d ON d.key=c.key WHERE d.dirty=0 AND " + where +
         " AND c.key IN (" + top.map(() => "?").join(",") + ")", args, deadline);
-      const fresh = new Map(currentRows.map((r) => [r.key, parse(r.data, {})]));
+      const fresh = new Map(currentRows.map((r) => [r.key, { item: parse(r.data, {}), doc: r.doc_hash }]));
       const current = await meta(deadline);
-      if (!on() || !current.ready || stamp(current) !== version) return [];
+      if (!on() || !current.ready || policyOf(current) !== version) return [];
       remaining(deadline);
-      return top.filter((r) => { const item = fresh.get(r.key); return item && item.type === kind
+      return top.filter((r) => { const found = fresh.get(r.key), item = found && found.item; return item && found.doc === r.hash && item.type === kind
         && (kind !== "episode" || String(item.show_key) === show) && textHash(documentText(item)) === r.hash; })
-        .map(({ key, score, why }) => ({ key, score, why }));
+        .slice(0, limit).map(({ key, score, why }) => ({ key, score, why }));
     } catch (_) { return []; } }; // busy, corrupt/stale cache or deadline -> word search, without provider text.
     // A queued writer/init cannot be interrupted safely; return on time and let it finish silently.
     // Every subsequent read/loop checks the original deadline, so no late result is ever emitted.
     let timer;
-    try { return await Promise.race([work(), new Promise((resolve) => { timer = setTimeout(() => resolve([]), budget); })]); }
+    const job = work();
+    asks.add(job); job.then(() => asks.delete(job), () => asks.delete(job));
+    try { return await Promise.race([job, new Promise((resolve) => { timer = setTimeout(() => resolve([]), budget); })]); }
     finally { clearTimeout(timer); }
   }
-  return { init, configure, todo, put, status, nearest, invalidate, idle };
+  return { init, configure, todo, put, status, nearest, invalidate, idle, stats };
 }
 
 let singleton;
 const current = () => singleton || (singleton = createVectors());
-module.exports = { createVectors, documentText, textHash, decodeVector, quantize, BUDGET, MAX_MOVIES, MAX_EPISODES, MAX_BODY, BG_BUDGET_MS, PAGE, CENSUS_PAGE };
-for (const name of ["init", "configure", "todo", "put", "status", "nearest", "invalidate", "idle"]) module.exports[name] = (...args) => current()[name](...args);
+module.exports = { createVectors, documentText, textHash, decodeVector, quantize, BUDGET, MAX_MOVIES, MAX_EPISODES, MAX_BODY, BG_BUDGET_MS, PAGE, CENSUS_PAGE, FILM_MAX_BYTES };
+for (const name of ["init", "configure", "todo", "put", "status", "nearest", "invalidate", "idle", "stats"]) module.exports[name] = (...args) => current()[name](...args);

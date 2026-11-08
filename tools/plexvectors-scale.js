@@ -116,7 +116,7 @@ async function build(catalog) {
         const hits = await vectors.nearest({ qvec: unit, kind: "movie", keys, budgetMs: 400, limit: 50 });
         return hits.filter((h) => fresh.some((r) => r.key === h.key)).length + " of 32 new films in the top 50"; });
     }
-    const finder = createFinder({ catalog, settings: () => SETTINGS, now: () => AT, rng: () => 0, lists: { shelves: async () => [], members: async () => [] },
+    const finder = createFinder({ catalog, settings: () => SETTINGS, now: () => AT, rng: () => 0, deepMax: { movie: 2, show: 10 }, lists: { shelves: async () => [], members: async () => [] },
       requests: { search: async () => [], details: async () => null }, vectors });
     const ctx = { seenKeys: [], maxSec: 4 * 3600, allowSeerr: false };
     for (const [label, want] of [["find(): a film about ... (every film)", { kind: "movie", about: "a lighthouse keeper who forgets the sea" }],
