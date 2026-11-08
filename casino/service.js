@@ -706,8 +706,10 @@ async function cmdStart(actor, room, game, blinds) {
   const open = Array.from(S.tables.values()).filter((t) => t.status === "open");
   const here = room ? open.find((t) => roomsOf(t).includes(room)) : null;      // one table per room (either game; 1.99ox: any attached room)
   if (here) {
-    return R(false, here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
-                                           : "a blackjack table is already open — !bet to play.");
+    // (h22 review: a sit & go here isn't "!sit to join" - a buy-in amount is no entry there)
+    return R(false, here.tourney ? "a 🏁 Sit & Go is open here (one table per room) — !sng info shows it."
+                    : here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
+                                             : "a blackjack table is already open — !bet to play.");
   }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
   if (game === "holdem") return HM.start(actor, room, blinds);
@@ -948,7 +950,7 @@ async function run(actor, verb, args, opts) {
   // a Hold'em table here (or "!holdem ..."): its own verbs - the shared ones (!bet !stand !leave) mean the Hold'em ones
   if ((live && live.game === "holdem") || (!live && game === "holdem")) {
     if (live && game === "bj") return R(false, "a Hold'em table is running here — !holdem status.");
-    if (["help", "rules", "how"].includes(verb)) return R(true, HM.HELP);
+    if (["help", "rules", "how"].includes(verb)) return R(true, live && live.tourney ? TN.HELP : HM.HELP);    // (h22 review: a sit & go's own help)
     if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
     if (["start", "open", "new", "sit", "buyin", "buy", "join"].includes(verb)) {
       const u = await userRow(actor.uid);
@@ -1008,7 +1010,9 @@ async function act(actor, verb, args, opts, key) {
       out = await run(actor, verb, Array.isArray(args) ? args : [], opts);
     } catch (e) {
       console.error("[casino] act:", e);
-      out = R(false, "something went wrong — nothing was charged.");
+      // (h22 review) a sit & go's entry commits before its lines and its start: after a failure there it may have gone through
+      const tn = opts && (opts.game === "sng" || (opts.table && S.tables.get(opts.table) && S.tables.get(opts.table).tourney));
+      out = R(false, tn ? "something went wrong — !sng shows whether you're registered." : "something went wrong — nothing was charged.");
     }
     const tid = out.table || (opts && opts.table) || null;
     // 1.99ajw casino2 rework (casino/veil.js): a reply that names others (!bj status, "waiting on X") names a masked player by their

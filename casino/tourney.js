@@ -20,10 +20,18 @@
 //   * BUST-OUTS: a player out of chips is placed - several on one hand: the bigger stack at the start of that hand places higher; equal
 //     starting stacks share their places' prizes, rounded down, the odd PAT one each to the higher places in the hand's odd-chip order
 //     (clockwise from the button: the engine's own rule for a split pot) - stood up with no cash-out, and gets a room line.
-//   * SITTING OUT = being blinded away: a sitting-out seat is dealt in and checks or folds at once; a tournament seat is never stood up
-//     (the cash tables' sit-out limit and idle close never reach it).
+//   * SITTING OUT = being blinded away: a seat sitting out when a hand is dealt is dealt in and checks or folds at once; a tournament seat
+//     is never stood up (the cash tables' sit-out limit and idle close never reach it). !sitout during a hand starts with the next one
+//     (that hand is still the player's, as at a cash table), and a seat that is out never spends its time bank (review).
+//   * THE BUTTON moves on clockwise when the button busts (afterHand moves it back to the nearest seat still in before the busted seat
+//     goes; hmengine.stand drops a stood-up button and startHand would give it to the first seat - the blinds would jump back).
 //   * A RESTART resumes from the saved state (recover): a hand's bust-outs are placed again from the start stacks saved when it was
-//     dealt (the places are idempotent), a pending payout re-runs under its one key (seen = done: nothing pays twice).
+//     dealt (the places are idempotent), a pending payout re-runs under its one key (seen = done: nothing pays twice). A running
+//     sit & go between hands with nothing scheduled, or with one stack left (a hand's wrap-up threw part-way), is wrapped up again by
+//     the tick (tick -> "wrap": holdem.js wrapUp; once a minute while it keeps failing) - restart or not.
+//   * CREATE is idempotent per act key (casino_actions) and, past that, a create by the same account for the same sit & go within
+//     DUP_MS of opening one (a reply lost to a restart, a double click) answers with that one instead of opening a second.
+//   * SWITCHED OFF (or staff only, for a member): !sng / help / info say so (an entrant still sees theirs; leaving always works).
 // Rewards: a sit & go hand earns no casino achievements / drops / win XP / gang rep (service.js hmRewards) - tournament prizes are the
 // payout. Ships dark: casino_settings casino_sng off | staff | everyone (default off); Hold'em on the site (hm_enabled) must be on too.
 // Phase 2 (scheduled multi-table tournaments, guarantees after H2b) is not here.
@@ -33,7 +41,7 @@ const V = require("./veil");
 const { amt } = require("./holdem");
 
 const SNG = Object.freeze({ STACK: 1500, MIN_SEATS: 2, MAX_SEATS: 9, COUNTDOWN_SECS: 60, REG_MINS: 60, LINGER_MS: 15 * 60e3, MAX_OPEN_PER: 3,
-                            RETRY_MS: 60e3, BANDS: Object.freeze([[2, 3], [4, 6], [7, 9]]) });
+                            RETRY_MS: 60e3, DUP_MS: 120e3, BANDS: Object.freeze([[2, 3], [4, 6], [7, 9]]) });
 const AUDIENCES = Object.freeze(["off", "staff", "everyone"]);
 const DEFAULTS = Object.freeze({
   casino_sng: "off", sng_fee_pct: 10, sng_buyins: "1000,5000,25000,100000", sng_payouts: "100|65,35|50,30,20",
@@ -160,6 +168,15 @@ function install(core) {
   const prizeText = (prizes) => prizes.map((p, i) => `${ord(i + 1)} ${fmt(p)}`).join(" · ") + " PAT";
   /** registrations of `uid` in sit & gos that haven't started */
   const openFor = (uid) => open().filter((T) => T.tourney.status === "registering" && entrantOf(T, uid)).length;
+  // (review) a start-at-N countdown that is running (N are in) finishes before the registration hour's call-off
+  const counting = (t) => !!(t.countdown_at && t.start_at && t.entrants.length >= t.start_at);
+  // (review) a running sit & go between hands with nothing scheduled - or one stack left - is wrapped up again (a hand's wrap-up threw
+  // part-way: a failed write after its proof). wrapAt: not before (ms) - once a minute while it keeps failing; never saved.
+  const wrapAt = new Map();
+  const stalled = (T, now) => {
+    const e = T.eng;
+    return !e.hand_active && !T.dl.turn && (!T.dl.next || H.seatedWithChips(e).length <= 1) && !((wrapAt.get(T.id) || 0) > now);
+  };
   async function prep() { await ESC().init(); await require("../ledger").ensure(); }
   function closeState(T) {
     T.status = "closed";
@@ -179,6 +196,19 @@ function install(core) {
     if (!u) return "no account found";
     if (u.casino_banned) return "🚫 you're banned from the casino.";
     if (st.casino_sng === "staff" && !isStaff(u)) return "🏁 Sit & Gos are open to staff only for now.";
+    return null;
+  }
+
+  /** (review) null = Sit & Gos are on for this actor; else why not - the switch, staff only, Hold'em off (list / help / info say so) */
+  async function shut(actor) {
+    const st = await loadSettings();
+    if (!st.hm_enabled) return "🃏 Hold'em on the site is switched off right now.";
+    const aud = st.casino_sng || "off";
+    if (aud === "off") return "🏁 Sit & Gos are switched off right now.";
+    if (aud === "staff") {
+      const u = actor && actor.uid ? await userRow(actor.uid) : null;
+      if (!u || !isStaff(u)) return "🏁 Sit & Gos are open to staff only for now.";
+    }
     return null;
   }
 
@@ -253,6 +283,12 @@ function install(core) {
     const c = config(st);
     const p = parseNew(args, c);
     if (p.error) return R(false, p.error);
+    // (review) the same create again by the same account within DUP_MS (its reply lost to a restart, a double click - under a new key
+    // casino_actions can't see it) is the one just opened: never a second sit & go, never a second hold
+    const dup = open().find((x) => x.tourney.status === "registering" && String(x.host.uid) === String(actor.uid) && entrantOf(x, actor.uid) &&
+                                   x.tourney.size === p.size && x.tourney.buyin === p.buyin && !!x.tourney.turbo === !!p.turbo &&
+                                   (x.tourney.start_at || null) === (p.at || null) && clock() - x.tourney.created < SNG.DUP_MS);
+    if (dup) return R(true, `🏁 you opened this Sit & Go a moment ago — you're registered (#${short(dup)}): ${link(dup)}`, { table: dup.id });
     const tables = Array.from(S.tables.values()).filter((x) => x.status === "open");
     if (room && tables.some((x) => roomsOf(x).includes(room))) return R(false, "a table is already open here — finish it first, or open the sit & go on the web.");
     if (st.max_tables > 0 && tables.length >= st.max_tables) return R(false, `the casino has ${tables.length} tables open already.`);
@@ -295,7 +331,8 @@ function install(core) {
     await save(T);
     const here = actor.via === "room" && actor.room && roomsOf(T).includes(actor.room);
     const where = actor.via === "room" && !here ? ` It plays ${roomsOf(T).length ? "in another room and " : ""}on the web: ${link(T)}` : "";
-    return R(true, `you're registered — ${fmt(tt.buyin + tt.fee)} PAT held (all of it back if you leave before it starts).${where}`, { table: T.id, quiet: !!here });
+    // (review) never quiet: the room's line doesn't say what was held - the player hears it (an entry can be a bare !sit at its table)
+    return R(true, `you're registered — ${fmt(tt.buyin + tt.fee)} PAT held (all of it back if you leave before it starts).${where}`, { table: T.id });
   }
 
   async function afterEntry(T) {
@@ -348,6 +385,7 @@ function install(core) {
 
   // ── the start ──
   async function start(T) {
+    if (S.hooks.crash === "sng:start") throw new Error("test crash before the start");     // tests only
     const t = T.tourney, e = T.eng;
     const n = t.entrants.length;
     t.status = "running";
@@ -372,7 +410,16 @@ function install(core) {
   function beforeHand(T) {
     const t = T.tourney, e = T.eng;
     [e.sb, e.bb] = levelAt(t, t.level || 0);
-    t.hand_start = { no: e.hand_no + 1, stacks: Object.fromEntries(H.seatedWithChips(e).map((k) => [k, e.chips[k]])) };
+    t.hand_start = { no: e.hand_no + 1, stacks: Object.fromEntries(H.seatedWithChips(e).map((k) => [k, e.chips[k]])),
+                     // (review) the seats sitting out as it's dealt: only they check / fold at once this hand (!sitout mid-hand = the next one)
+                     out: H.seatedWithChips(e).filter((k) => !!(T.qol && T.qol[k] && T.qol[k].out)) };
+  }
+  /** (review) whether `uid` checks / folds at once in the hand being played: out when it was dealt (or timed out twice since) */
+  const outAtDeal = (T, uid) => !!(T.tourney.hand_start && (T.tourney.hand_start.out || []).includes(uid));
+  /** (review) two timeouts in a row sat `uid` out mid-hand: away - the rest of this hand checks / folds at once too */
+  function outNow(T, uid) {
+    const hs = T.tourney.hand_start;
+    if (hs && !(hs.out || []).includes(uid)) hs.out = (hs.out || []).concat([uid]);
   }
 
   /** the busted seats of the hand that just ended -> places (+ their lines); `out` is placed together */
@@ -411,11 +458,21 @@ function install(core) {
     if (t.status !== "running") return save(T);
     const out = e.seats.filter((k) => !((e.chips[k] || 0) > 0) && !placedOf(T, k));
     const lines = out.length ? placeBatch(T, out) : [];
+    // (review) a busted button: the button goes back to the nearest seat before it that's still in, so the next hand moves it on
+    // clockwise (hmengine.stand drops a stood-up button, and startHand would then give it to the first seat: the blinds jump back)
+    if (out.includes(e.button)) {
+      const n = e.seats.length, i = e.seats.indexOf(e.button);
+      for (let s = 1; s < n; s++) {
+        const k = e.seats[(i - s + n) % n];
+        if (!out.includes(k) && (e.chips[k] || 0) > 0) { e.button = k; break; }
+      }
+    }
     for (const k of out) {
       try { H.stand(e, k); } catch (err) { /* not seated */ }
       HM.forgetSeat(T, k);
     }
     t.hand_start = null;
+    wrapAt.delete(T.id);
     if (H.seatedWithChips(e).length <= 1) {
       for (const l of lines) await emit(T, "sng", l, { sng: "bust" });
       return finish(T);
@@ -558,7 +615,7 @@ function install(core) {
   async function tick(T) {
     const t = T.tourney, now = clock();
     if (t.status === "registering") {
-      if (t.expires_at && now >= t.expires_at) {
+      if (t.expires_at && now >= t.expires_at && !counting(t)) {
         if (!(await refundAll(T, "expired", null))) T.tourney.expires_at = clock() + SNG.RETRY_MS;   // (tried again in a minute, not every tick)
         return "done";
       }
@@ -581,13 +638,18 @@ function install(core) {
       await emit(T, "line", `⬆️ Blinds up — level ${t.level + 1}: ${fmt(sb)}/${fmt(bb)}${T.eng.hand_active ? " from the next hand" : ""}.`, { sng: "level" });
       await save(T);
     }
+    if (stalled(T, now)) {        // (review) holdem.js wrapUp: the last hand's wrap-up again (the places, then the next hand or the finish)
+      wrapAt.set(T.id, now + SNG.RETRY_MS);
+      console.log(`[casino] sit & go ${T.id}: between hands with nothing scheduled - wrapping the last hand up again`);
+      return "wrap";
+    }
     return null;
   }
   function due(T) {
     const t = T.tourney, now = clock();
-    if (t.status === "registering") return !!((t.expires_at && now >= t.expires_at) || (t.countdown_at && now >= t.countdown_at));
+    if (t.status === "registering") return !!((t.expires_at && now >= t.expires_at && !counting(t)) || (t.countdown_at && now >= t.countdown_at));
     if (t.status === "settling") return !t.settle || !t.settle.retry_at || now >= t.settle.retry_at;
-    return t.status === "running" && !!t.level_ends_at && now >= t.level_ends_at;
+    return t.status === "running" && ((!!t.level_ends_at && now >= t.level_ends_at) || stalled(T, now));
   }
 
   /** after a restart (holdem.js recover): "done" = handled here; null = a running sit & go - holdem.js resumes its hand / turn / next */
@@ -615,11 +677,20 @@ function install(core) {
   }
 
   // ── the table's own verbs (holdem.js run, before the cash-table verbs) ──
-  async function tableVerb(T, actor, verb) {
+  async function tableVerb(T, actor, verb, args) {
     const t = T.tourney;
     switch (verb) {
-      case "sit": case "buyin": case "buy": case "join": case "register":
-        return t.status === "registering" ? register(T, actor) : R(false, "🏁 this sit & go is under way — you can watch.", { table: T.id });
+      case "sit": case "buyin": case "buy": case "join": case "register": {
+        if (t.status !== "registering") return R(false, "🏁 this sit & go is under way — you can watch.", { table: T.id });
+        // (review) an amount typed out of cash-table habit (!sit 2000) never becomes an entry: only the buy-in or the whole entry does
+        const typed = args && args[0] != null ? String(args[0]).trim() : "";
+        const a = typed ? amt(typed) : null;
+        if (a !== null && a !== t.buyin && a !== t.buyin + t.fee) {
+          return R(false, `🏁 this table is a Sit & Go: the entry is ${fmt(t.buyin + t.fee)} PAT (${fmt(t.buyin)} + a ${fmt(t.fee)} fee to the House), the same for ` +
+                          `everyone — !sit with no amount (or !sng join ${short(T)}) registers you.`, { table: T.id });
+        }
+        return register(T, actor);
+      }
       case "stand": case "leave": case "cashout": case "unregister":
         return t.status === "registering" ? unregister(T, actor)
           : R(false, "🏁 tournament chips aren't PAT — they can't be cashed out. !sitout to sit out (you'll be blinded until you're back).", { table: T.id });
@@ -641,8 +712,8 @@ function install(core) {
                "!sng leave [id] (a full refund before it starts); !sng info [id]. Everyone pays the same entry (buy-in + a fee to the House) and gets " +
                `${fmt(SNG.STACK)} tournament chips (not PAT); the blinds go up every few minutes; a bust-out is out; the top finishers share the prize pool. ` +
                "At the table: !check !call !bet !raise !allin !fold, !sitout / !sitin (sitting out = blinded, never cashed out).";
-  function listText() {
-    const all = open();
+  function listText(only) {
+    const all = only || open();
     if (!all.length) return "🏁 No Sit & Go is open. Start one: !sng new <seats 2-9> <buy-in> [turbo] [at N] — e.g. !sng new 6 1k.";
     return "🏁 Sit & Gos: " + all.slice(0, 8).map((T) => {
       const t = T.tourney;
@@ -692,6 +763,8 @@ function install(core) {
       // names only, each as the table's veil shows them (casino/veil.js) - never an account id or a hold id
       entrants: t.entrants.map((x) => ({ name: V.nameOf(T, x.uid, realName(T, x.uid, x.name)) })),
       countdown_at: t.status === "registering" ? t.countdown_at : null, expires_at: t.status === "registering" ? t.expires_at : null,
+      // (review) the countdown in seconds on the site's clock (Pepe's OBS board counts from this, not from his own clock)
+      countdown_secs_left: t.status === "registering" && t.countdown_at ? Math.max(0, Math.ceil((t.countdown_at - now) / 1000)) : null,
       level: lvl + 1, sb, bb, next_sb: nsb, next_bb: nbb, level_ends_at: running ? t.level_ends_at : null,
       level_secs_left: running && t.level_ends_at ? Math.max(0, Math.ceil((t.level_ends_at - now) / 1000)) : null,
       players_left: running || t.status === "settling" ? H.seatedWithChips(e).length : t.status === "finished" ? 1 : null,
@@ -701,9 +774,14 @@ function install(core) {
       cancelled: t.status === "cancelled" ? (t.cancelled && t.cancelled.why) || "cancelled" : null,     // "cancelled" (an admin) | "expired" | "empty"
     };
   }
-  function meView(T, uid) {
-    const p = uid ? placedOf(T, uid) : null;
-    return { registered: !!(uid && entrantOf(T, uid)), place: p ? p.place : null, prize: p ? p.prize : null };
+  /** `u` = the viewer's user row (service.js meView). can_register (review): the table page offers Register only to who may enter now
+   *  (the switch + staff only + a casino ban, as gate() - the cash tables' entry rule still decides at the click) */
+  function meView(T, uid, u) {
+    const t = T.tourney, p = uid ? placedOf(T, uid) : null, reg = !!(uid && entrantOf(T, uid));
+    const st = S.settings || {}, aud = st.casino_sng || "off";
+    const can = !!(uid && u && !reg && t.status === "registering" && t.entrants.length < t.size && st.hm_enabled && aud !== "off" &&
+                   !u.casino_banned && (aud === "everyone" || isStaff(u)));
+    return { registered: reg, can_register: can, place: p ? p.place : null, prize: p ? p.prize : null };
   }
   function row(T, uid) {
     const v = view(T);
@@ -745,6 +823,16 @@ function install(core) {
       return { err: hits.length ? "more than one sit & go starts with that — give more of its id." : "no open sit & go with that id — !sng lists them." };
     }
     const here = (opts.table && all.find((T) => T.id === opts.table)) || (opts.room && all.find((T) => roomsOf(T).includes(opts.room))) || null;
+    if (verb === "leave") {
+      // (review) your own registration first: the room's sit & go only when you're in it (or aren't in any)
+      const mine = all.filter((T) => entrantOf(T, actor.uid));
+      if (here && mine.includes(here)) return { T: here };
+      const reg = mine.filter((T) => T.tourney.status === "registering");
+      if (reg.length === 1) return { T: reg[0] };
+      if (reg.length > 1) return { err: "which one? " + reg.slice(0, 6).map((T) => `!sng leave ${short(T)}`).join(" · ") };
+      if (here) return { T: here };
+      return { err: "you're not registered for a sit & go that hasn't started." };
+    }
     if (here) return { T: here };
     let pool = all;
     if (verb === "join") pool = all.filter((T) => T.tourney.status === "registering");
@@ -758,14 +846,21 @@ function install(core) {
     verb = String(verb || "").toLowerCase();
     verb = ALIAS[verb] !== undefined ? ALIAS[verb] : verb;
     args = (Array.isArray(args) ? args : []).map((x) => String(x == null ? "" : x));
-    if (verb === "help") return R(true, HELP);
+    // (review) switched off (or staff only, for a member): help / the list / info say so - an entrant still sees theirs (and can leave)
+    if (verb === "help") { const no = await shut(actor); return no ? R(false, no) : R(true, HELP); }
     if (verb === "" || verb === "list") {
       if (args[0] && /^#?[0-9a-f]{4,10}$/i.test(args[0])) verb = "info";
-      else return R(true, listText());
+      else {
+        const no = await shut(actor);
+        if (!no) return R(true, listText());
+        const mine = open().filter((T) => entrantOf(T, actor.uid));
+        return mine.length ? R(true, listText(mine)) : R(false, no);
+      }
     }
     if (verb === "new") return create(actor, args, opts.room || null);
     if (!["join", "leave", "info", "cancel"].includes(verb)) return R(false, "unknown !sng option — try: !sng, !sng new, !sng join, !sng leave, !sng info.");
     const f = find(args[0], opts, actor, verb);
+    if ((verb === "join" || verb === "info") && !(f.T && entrantOf(f.T, actor.uid))) { const no = await shut(actor); if (no) return R(false, no); }
     if (f.err) return R(false, f.err);
     if (verb === "join") return register(f.T, actor);
     if (verb === "leave") return unregister(f.T, actor);
@@ -773,7 +868,8 @@ function install(core) {
     return cancel(f.T, actor, args.slice(1).join(" "));
   }
 
-  return { SNG, run, tableVerb, beforeHand, afterHand, tick, due, recover, view, meView, lobby, openList, howText, infoText, settlePlan, settleNow, isSng, levelAt: (t, i) => levelAt(t, i) };
+  return { SNG, HELP, run, tableVerb, beforeHand, afterHand, tick, due, recover, view, meView, lobby, openList, howText, infoText, settlePlan, settleNow, isSng,
+           outAtDeal, outNow, levelAt: (t, i) => levelAt(t, i) };
 }
 
 module.exports = { install, SNG, DEFAULTS, SETTING_KEYS, AUDIENCES, checkSetting, readSettings, parseBuyins, parsePayouts, parseLevels, prizeTable, levelAt, niceUp };

@@ -16,8 +16,10 @@
 // (100K/200K up to 5M/10M; nothing between the normal cap and the ladder) - only High Rollers open them or sit, anyone
 // watches.
 // h22 (1.99??): a 🏁 SIT & GO is a table of this file with a `tourney` block (casino/tourney.js owns it - core.tny()): no rake, no
-// buy-in / cash-out / close / idle close / sit-out limit for its seats, the level's blinds set just before each hand, a sitting-out
-// seat dealt in and checking / folding at once (blinded away), and its bust-outs placed by tourney.js after each hand's proof.
+// buy-in / cash-out / close / idle close / sit-out limit for its seats, the level's blinds set just before each hand, a seat sitting
+// out when a hand is dealt checking / folding at once (blinded away; !sitout mid-hand starts with the next hand, and an out seat never
+// spends its time bank), its bust-outs placed by tourney.js after each hand's proof, and a wrap-up that threw part-way run again by the
+// tick (wrapUp).
 "use strict";
 const H = require("./hmengine");
 const fair = require("./fair");
@@ -91,7 +93,7 @@ function install(core) {
     }
     qos(T, actor.uid);
     await save(T);
-    if (T.tourney) return R(true, back ? "you're back in." : "sitting out — you'll be blinded until you're back (!sitin).");
+    if (T.tourney) return R(true, back ? "you're back in." : "sitting out from the next hand — you'll be blinded until you're back (!sitin).");
     return R(true, back ? (post ? "you'll post the big blind next hand." : "waiting for the big blind.") : "sitting out from the next hand.");
   }
 
@@ -417,7 +419,8 @@ function install(core) {
           await action(T, { uid: ev.who }, verb, null);
           continue;
         }
-        if (T.tourney && qos(T, ev.who).out) {        // h22: a sitting-out sit & go seat is blinded away - it checks or folds at once
+        // h22: a sit & go seat sitting out since the deal is blinded away - it checks or folds at once (review: !sitout mid-hand = next hand)
+        if (T.tourney && qos(T, ev.who).out && TN().outAtDeal(T, ev.who)) {
           await action(T, { uid: ev.who }, ev.to_call ? "fold" : "check", null);
           continue;
         }
@@ -534,6 +537,15 @@ function install(core) {
     await save(T);
   }
 
+  // h22 review: a running sit & go between hands with nothing scheduled (its last hand's wrap-up threw part-way - a failed write after
+  // the proof) - the wrap-up again: the proof first if it never went out (as recover does), else tourney.js places the busted and deals
+  // on or finishes (TN.tick answers "wrap", at most once a minute while it keeps failing)
+  async function wrapUp(T) {
+    const e = T.eng;
+    if (T.hand) return afterHand(T, { busted: e.seats.filter((k) => (e.chips[k] || 0) === 0) });
+    return TN().afterHand(T, {});
+  }
+
   async function closeTable(T, reason) {
     if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
@@ -639,7 +651,11 @@ function install(core) {
 
   // ── deadlines ──
   async function tick(T) {
-    if (T.tourney && (await TN().tick(T)) === "done") return;     // h22: registration / countdown / the level clock / a payout retry
+    if (T.tourney) {                                 // h22: registration / countdown / the level clock / a payout retry / a stalled wrap-up
+      const r = await TN().tick(T);
+      if (r === "done") return;
+      if (r === "wrap") return wrapUp(T);
+    }
     const t = clock(), e = T.eng;
     for (const uid of e.seats.slice()) {
       const q = qos(T, uid);
@@ -652,7 +668,7 @@ function install(core) {
       const k = H.currentActor(e);
       if (!k || !T.turn || T.turn.uid !== k || T.turn.hand !== e.hand_no) return;
       const q = qos(T, k);
-      if (!T.turn.bank_started && q.bank > 0) {
+      if (!T.turn.bank_started && q.bank > 0 && !(T.tourney && q.out)) {   // (h22 review: a sit & go seat that is out keeps its bank)
         T.turn.bank_started = T.dl.turn;
         T.dl.turn += q.bank * 1000;
         await emit(T, "line", `⏰ ${e.names[k]} used their time bank`);
@@ -662,7 +678,10 @@ function install(core) {
       stopBank(T, k);
       T.dl.turn = null;
       q.timeouts += 1;
-      if (q.timeouts >= 2) await sitout(T, { uid: k }, false, false);
+      if (q.timeouts >= 2) {
+        await sitout(T, { uid: k }, false, false);
+        if (T.tourney) TN().outNow(T, k);          // (h22 review: away - the rest of this hand checks / folds at once too)
+      }
       const act = H.toCall(e, k) === 0 ? "check" : "fold";
       await emit(T, "line", `⏰ ${e.names[k]} timed out — ${act === "check" ? "checks" : "folds"}.`);
       T.turn = null;
@@ -794,7 +813,7 @@ function install(core) {
       show_hand: !!(T.show || {})[uid],
       sitting_out: !!(T.qol && T.qol[uid] && T.qol[uid].out), waiting_bb: !!(T.qol && T.qol[uid] && T.qol[uid].back === "wait"), to_call: e.hand_active ? H.toCall(e, uid) : 0,
       host: T.host.uid === uid, high_roller: await isHighRoller(uid),
-      ...(T.tourney ? { tourney: TN().meView(T, uid) } : {}),
+      ...(T.tourney ? { tourney: TN().meView(T, uid, u) } : {}),
     };
   }
 

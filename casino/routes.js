@@ -32,7 +32,8 @@
 //                                            ach_want: [camfrog]} - the casino's gang rep for Pepe + his achievement counts (rewards.js)
 //   POST /api/casino/bot/act                {room|table, username, camfrog, name, game?, verb, args, idem, channel, admin}
 //                                            h22: game "sng" = !sng (verbs "" / list, new, join, leave, info, cancel, help; up to 5 args);
-//                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`
+//                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`;
+//                                            review: + `sng_on` (the switch: off | staff | everyone; "off" while Hold'em is off)
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
 "use strict";
@@ -436,6 +437,9 @@ function register(app, { isBotToken, addUser }) {
       out.open = svc.openList();
       out.lobby = { bj: base + svc.frontPath(st, "bj"), holdem: base + svc.frontPath(st, "holdem") };
       out.sng = svc.TN.openList();           // h22: the open sit & gos (each one's table in `tables` carries its `tourney` block)
+      // h22 review: the Sit & Go switch as it stands for everyone (off | staff | everyone; "off" while Hold'em on the site is off) - Pepe's
+      // answer in a room whose casino runs on his own tables (no pointer to a web lobby that shows no Sit & Go section)
+      out.sng_on = st.hm_enabled ? st.casino_sng || "off" : "off";
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {
       console.error("[casino] poll:", e);

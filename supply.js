@@ -13,6 +13,7 @@
 //   room_vault_escrow boosts.js (held for the pads)                        casino:tables  PAT at the casino backend's tables:
 //   auto_escrow       autoescrow.js (auto accounts' free rewards, 6 months)
 //                                                                                          blackjack stakes in a round, hold'em stacks
+//                                                                                          (never a Sit & Go's tournament chips)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -40,6 +41,7 @@ async function casinoHeld() {
     try { T = JSON.parse(r.state); } catch (e) { T = null; }
     if (!T) continue;
     if (r.game === "holdem") {
+      if (T.tourney) continue;          // h22 (1.99??): a 🏁 Sit & Go's stacks are tournament chips - its PAT is the TNY escrow holds (escrow rows)
       const e = T.eng || {};
       for (const v of Object.values(e.chips || {})) n += Math.max(0, Math.floor(Number(v) || 0));
       for (const v of Object.values(e.contrib || {})) n += Math.max(0, Math.floor(Number(v) || 0));
