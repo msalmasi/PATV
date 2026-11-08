@@ -115,9 +115,10 @@ test("catalog: 101 new achievements, badge art for each, tiers + rewards in line
   const list = A.list();
   const fresh = list.filter((a) => NEW_PREFIXES.some((p) => a.id.startsWith(p)) || /^cf_(bj|holdem)_/.test(a.id) && !["cf_bj_natural", "cf_bj_100", "cf_bj_1000",
     "cf_holdem_pot", "cf_holdem_25"].includes(a.id) || ["cf_reroll_10"].includes(a.id))
-    .filter((a) => a.id !== "cf_voice_clone")           // 1.99wn: 🦜 voice clone (voiceclone-achievement.test.js), its own metric
-    .filter((a) => !a.id.startsWith("cf_holdem_mtt_")); // h22 phase 2: the 4 🏆 tournament ones (casino-mtt.test.js; feature-achievements counts them)
-  assert.equal(fresh.length, 102, fresh.length);
+    .filter((a) => a.id !== "cf_voice_clone");          // 1.99wn: 🦜 voice clone (voiceclone-achievement.test.js), its own metric
+  // h22 phase 2 review: the 4 🏆 tournament ones (cf_holdem_mtt_*) stay in - badge art, tiers / reward bands and the side checked like the rest
+  assert.equal(fresh.length, 106, fresh.length);
+  assert.equal(fresh.filter((a) => a.id.startsWith("cf_holdem_mtt_")).length, 4);
   const band = { common: [500, 2000, 5000, 20000], uncommon: [2000, 5000, 20000, 50000], rare: [8000, 15000, 80000, 150000], legendary: [20000, 30000, 250000, 500000] };
   for (const a of fresh) {
     assert.ok(fs.existsSync(path.join(repo, a.icon.replace(/^\//, ""))), "badge art: " + a.icon);

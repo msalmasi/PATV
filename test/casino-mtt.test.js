@@ -212,6 +212,11 @@ test("start: fewer than min = cancelled (every hold refunded once); otherwise th
   await svc.setSetting("max_tables", "1", "test");
   const open = await h.act(P()[30], "start", ["25/50"], { game: "holdem", room: null });
   assert.ok(open.ok, "a cash table opens - the 3 MTT tables aren't counted");
+  // (review) a Sit & Go's max_tables count skips them too (tourney.js): 3 MTT tables + 1 cash table open, max 2 - a Sit & Go still opens
+  await svc.setSetting("max_tables", "2", "test");
+  await svc.setSetting("casino_sng", "everyone", "test");
+  const sng = await h.act(P()[31], "new", ["3", "1k"], { game: "sng", room: null });
+  assert.ok(sng.ok, `a sit & go opens - the MTT tables aren't counted: ${sng.reply}`);
   await svc.setSetting("max_tables", "0", "test");
   // push / advertise / host verbs refused at an MTT table; an MTT table never reaches tourney.js
   assert.match((await svc.push(T1.id, "PepeLab", Object.assign({}, h.admin, { admin: true }), "add")).reply, /run by the tournament/);
@@ -291,23 +296,26 @@ test("re-entry: only after busting, only while late registration is open, at mos
   await h.reg(M, [a, b, c, d, e, f]);
   await h.toStart(M);
   assert.equal((await h.M(a, "join", [String(M.no)])).reply, "You're already in.", "not busted: no re-entry");
+  // (review) the refunded pre-start entry (gen 1) never counts as one of a's entries
+  assert.equal((await h.entries(M, "user_id = ? AND entry_no IS NOT NULL", [a.uid])).length, 1, "a's refunded gen 1 isn't an entry");
+  assert.equal((await MT.meFor(M, a.uid)).entries_used, 1);
   await h.drive(M, { policy: h.policy(0.5, 0.9), until: (m) => m.live_n <= 5 });
   const busted = (await h.entries(M, "state = 'busted'")).map((x) => x.user_id);
   assert.ok(busted.length >= 1, "someone busted");
   const who = h.byUid[busted[0]];
   h.NOW += 2500;
+  assert.ok(M.late_open, "6 entries pay 2: late registration stays open until 3 are left (level < 10)");
   let r = await h.M(who, "join", [String(M.no)]);
-  if (M.late_open) {
-    assert.ok(r.ok, r.reply);
-    assert.match(r.reply, /back in/);
-    const rows = await h.entries(M, "user_id = ?", [who.uid]);
-    assert.equal(rows.filter((x) => x.entry_no != null).length, 2);
-    // bust again -> no re-entries left
-    await h.drive(M, { policy: h.allIn(), until: (m) => m.status !== "running" || (m.transit[who.uid] == null && !MT.whereIs(m, who.uid)) });
-    h.NOW += 2500;
-    r = await h.M(who, "join", [String(M.no)]);
-    if (M.status === "running") assert.equal(r.ok, false);
-  }
+  assert.ok(r.ok, r.reply);
+  assert.match(r.reply, /back in/);
+  const rows = await h.entries(M, "user_id = ?", [who.uid]);
+  assert.equal(rows.filter((x) => x.entry_no != null).length, 2);
+  // bust again -> no re-entries left (refused whether it still runs or not)
+  await h.drive(M, { policy: h.allIn(), until: (m) => m.status !== "running" || (m.transit[who.uid] == null && !MT.whereIs(m, who.uid)) });
+  h.NOW += 2500;
+  r = await h.M(who, "join", [String(M.no)]);
+  assert.equal(r.ok, false);
+  if (M.status === "running") assert.match(r.reply, /No re-entries left|Registration is closed/);
 });
 
 test("the level clock: one clock for every table, blinds change only between hands, deterministic catch-up", async () => {
@@ -405,21 +413,24 @@ test("hand-for-hand: busts of a round share one batch (one bust_seq), announceme
   await h.reg(M, P().slice(100, 127));
   await h.toStart(M);
   const roundBusts = new Map();
-  let sawOn = false;
+  let sawOn = false, clockStopped = false;
   await h.drive(M, {
     policy: h.policy(0.3, 0.75),
     each: async (m) => {
-      if (m.h4h.on) sawOn = true;
+      if (m.h4h.on) { sawOn = true; if (m.clock.paused_at) clockStopped = true; }
       if (m.h4h.on && m.h4h.started) roundBusts.set(m.h4h.round, m.h4h.batch);
     },
   });
   assert.ok(sawOn);
   const ent = await h.entries(M);
-  for (const [, batch] of roundBusts) {
-    const inBatch = ent.filter((x) => x.bust_seq === batch);
-    const tables = new Set(inBatch.map((x) => x.bust_table_no));
-    assert.ok(inBatch.length === 0 || tables.size >= 1, "a round's busts share the round's batch");
+  // (review) the bubble round ends with a bust INTO its batch (hand-for-hand only stops at a bust: 7 left at 6-max can't form a final
+  // table); the cross-table batch and the held lines: casino-mtt-review.test.js
+  // (a bubble can also burst in a hand already running when hand-for-hand switched on - before any round: no batch then)
+  if (roundBusts.size) {
+    const last = Math.max(...roundBusts.keys());
+    assert.ok(ent.filter((x) => x.bust_seq === roundBusts.get(last)).length >= 1, "the bubble round's bust is in its batch");
   }
+  assert.ok(!clockStopped, "the level clock runs on during hand-for-hand");
   assert.equal(M.status, "done");
 });
 
@@ -570,17 +581,33 @@ test("admin: cancel while registering and while running (busts + transit) refund
   for (const x of rows) assert.equal(await h.bal(x.user_id), 1000000, "the entry back in full (fee included)");
   assert.ok(M.tables.every((t) => t.state === "closed"));
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_moves WHERE key LIKE ?", [`tny:${M.id}:%:refund:%`]))[0].n, 17);
-  // a cancel racing the last bust: finishing refuses a plain cancel
+  // (review) a cancel after the last bust (the tournament is finishing - its finish refused here by a real chip mismatch) is refused, by
+  // the admin page and in chat; once the chips add up the finish settles on its own
   M = await h.schedule({ max_entries: 6, min_entries: 2, late_levels: 0 });
   await h.reg(M, P().slice(30, 32));
-  await h.toStart(M);
-  svc.S.hooks.crash = "mtt:post:ach";
-  await svc.setSetting("mtt_ach_min_field", "2", "test");
-  M.paused = { by: "system", at: h.NOW, why: "test hold" };
-  await h.drive(M, { policy: h.allIn(), until: (m) => m.status !== "running" || m.paused });
-  M.paused = null;
-  svc.S.hooks.crash = null;
+  await finishingWithChipMismatch(M);
+  r = await svc.locked(() => MT.admin("cancel", h.admin, M, { confirm: true, reason: "too late" }));
+  assert.equal(r.status, 409, "a plain cancel is refused once the last bust is in");
+  assert.match(r.error, /finishing/);
+  r = await h.M(h.admin, "cancel", [String(M.no), "confirm"]);
+  assert.equal(r.ok, false, "and in chat");
+  assert.equal(M.status, "finishing");
+  M.total_chips -= 1;                                          // the chips add up again: the next retry settles
+  h.NOW += 61e3; await svc.tickOnce();
+  assert.ok(["settled", "done"].includes(M.status), M.status);
+  assert.equal(await h.held(), 0);
 });
+
+/** (review) 2 entrants, equal stacks, both all in on the first hand - the total is made one chip off DURING that hand (after the boundary's
+ *  chip check), so the last bust leaves a winner whose chips don't match: the finish refuses E_CHIPS and the tournament stays finishing */
+async function finishingWithChipMismatch(M) {
+  await h.toStart(M);
+  await h.drive(M, { policy: h.allIn(), until: (m) => MT.liveTables(m).some((T) => T.eng.hand_active) });
+  M.total_chips += 1;
+  await h.drive(M, { policy: h.allIn(), until: (m) => m.status !== "running" || !!m.paused });
+  assert.equal(M.status, "finishing", "the first hand busted the loser (equal stacks, both all in)");
+  assert.equal(M.finish.last_code, "E_CHIPS", "the real comparison: the winner's chips vs total_chips");
+}
 
 test("void and refund: only the owner, only while finishing, never once settled; delay + raise max; refund an entry; a DQ before the money (chips out, ranked), refused after the bubble", async () => {
   await h.fresh();
@@ -589,16 +616,12 @@ test("void and refund: only the owner, only while finishing, never once settled;
   staffroles.ownerOf = async (u) => (u && u.userId === "ad" ? { userId: "ad", username: "ada" } : null);
   try {
     let M = await h.schedule({ max_entries: 6, min_entries: 2, late_levels: 0 });
-    await h.reg(M, P().slice(0, 3));
+    await h.reg(M, P().slice(0, 2));
     await h.toStart(M);
     let r = await svc.locked(() => MT.admin("void", h.admin, M, { confirm: true, reason: "test" }));
     assert.equal(r.status, 409, "not finishing yet");
-    // stop the finish: an injected chip mismatch makes the plan refuse, so it stays "finishing"
-    svc.S.hooks.crash = "mtt:finish:invariant";
-    await h.drive(M, { policy: h.allIn(), until: (m) => m.status !== "running" });
-    svc.S.hooks.crash = null;
-    assert.equal(M.status, "finishing");
-    assert.equal(M.finish.last_code, "E_CHIPS");
+    // stop the finish: a REAL chip mismatch (review: no test-only flag in the plan) makes it refuse, so it stays "finishing"
+    await finishingWithChipMismatch(M);
     r = await svc.locked(() => MT.admin("cancel", h.admin, M, { confirm: true, reason: "x" }));
     assert.equal(r.status, 409, "a plain cancel is refused while finishing");
     r = await svc.locked(() => MT.admin("void", h.staff, M, { confirm: true, reason: "x" }));
@@ -607,6 +630,16 @@ test("void and refund: only the owner, only while finishing, never once settled;
     assert.ok(r.ok, JSON.stringify(r));
     assert.equal(M.status, "cancelled");
     assert.equal(await h.held(), 0);
+    for (const e of await h.entries(M)) assert.equal(await h.bal(e.user_id), 1000000, "the void refunded the entry in full");
+    // (review) never once settled: a finished tournament can't be voided
+    const Ms = await h.schedule({ max_entries: 6, min_entries: 2, late_levels: 0 });
+    await h.reg(Ms, P().slice(40, 42));
+    await h.toStart(Ms);
+    await h.drive(Ms, { policy: h.allIn() });
+    assert.equal(Ms.status, "done");
+    r = await svc.locked(() => MT.admin("void", h.admin, Ms, { confirm: true, reason: "after the fact" }));
+    assert.equal(r.status, 409);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_moves WHERE key LIKE ?", [`tny:${Ms.id}:%:refund:%`]))[0].n, 0, "nothing refunded");
     // delay + raise max while registering; refund an entry
     M = await h.schedule({ max_entries: 6, min_entries: 2 });
     await h.reg(M, P().slice(10, 13), { remind: true });
@@ -619,9 +652,14 @@ test("void and refund: only the owner, only while finishing, never once settled;
     r = await svc.locked(() => MT.admin("max", h.admin, M, { max_entries: 9 }));
     assert.ok(r.ok);
     assert.equal(M.structure.max_entries, 9);
+    const first = (await h.entries(M))[0];
     r = await svc.locked(() => MT.admin("refund", h.admin, M, { n: 1 }));
     assert.ok(r.ok, JSON.stringify(r));
     assert.equal(M.reg_n, 2);
+    // (review) the refunded entry: its hold refunded once, the wallet whole again, the entry refunded
+    assert.equal((await getQuery("SELECT state FROM escrow_holds WHERE id = ?", [first.hold_id]))[0].state, "refunded");
+    assert.equal(await h.bal(first.user_id), 1000000);
+    assert.equal((await h.entries(M, "user_id = ?", [first.user_id]))[0].state, "refunded");
     // DQ before the money
     M = await h.schedule({ max_entries: 30, min_entries: 2, table_size: 9, late_levels: 0 });
     await h.reg(M, P().slice(20, 30));
@@ -672,33 +710,89 @@ test("pause / resume: the tables hold after their hand, the clock moves by the p
 
 test("timeouts / sitting out: never stood up, blinded away, an out seat acts at once; a moved player keeps bank / hands / timeouts / out; pre-moves cleared; a late entrant gets a fresh bank", async () => {
   await h.fresh();
+  const st = await svc.loadSettings();
   const M = await h.schedule({ max_entries: 30, min_entries: 2, table_size: 6, late_levels: 4 });
   await h.reg(M, P().slice(0, 12));
   await h.toStart(M);
   await h.later(7);
   const T = MT.liveTables(M)[0];
   const a = H.currentActor(T.eng);
-  // two timeouts: sits out, still seated (never stood up)
-  for (let i = 0; i < 2 && T.eng.hand_active; i++) {
-    const k = H.currentActor(T.eng);
-    if (k !== a) break;
-    h.NOW = T.dl.turn + 1 + (T.turn && T.turn.bank_started ? 0 : 0);
-    await svc.tickOnce();
-    if (T.dl.turn) { h.NOW = T.dl.turn + 1; await svc.tickOnce(); }
+  // (review) two timeouts (two hands - one per turn): out, still seated (never stood up); the others act at once
+  const quick = (TT, k) => (H.toCall(TT.eng, k) ? "fold" : "check");
+  for (let i = 0; i < 4000 && !(T.qol[a] && T.qol[a].timeouts >= 2); i++) {
+    const e = T.eng;
+    const k = e.hand_active ? H.currentActor(e) : null;
+    if (k && T.turn && T.turn.uid === k) {
+      if (k === a) { h.NOW = T.dl.turn + 1; await svc.tickOnce(); }
+      else await h.A(h.byUid[k], quick(T, k), T.id);
+    } else { h.NOW += 1000; await svc.tickOnce(); }
+    for (const L of MT.liveTables(M)) if (L !== T && L.eng.hand_active && L.turn) { const kk = H.currentActor(L.eng); if (kk === L.turn.uid) await h.A(h.byUid[kk], quick(L, kk), L.id); }
   }
+  assert.ok(T.qol[a].timeouts >= 2, "two timeouts");
+  assert.equal(T.qol[a].out, true, "two timeouts: sitting out");
   assert.ok(T.eng.seats.includes(a), "never stood up");
+  // an out seat acts at once: over the next hands nobody waits for a's clock (no timeout added) and a stays dealt in (blinded away)
+  const t0 = T.qol[a].timeouts, hand0 = T.eng.hand_no;
+  let dealtA = 0;
+  for (let i = 0; i < 4000 && T.eng.hand_no < hand0 + 3; i++) {
+    const e = T.eng;
+    if (e.hand_active && e.players.includes(a) && !dealtA) dealtA = e.hand_no;
+    const k = e.hand_active ? H.currentActor(e) : null;
+    assert.ok(!(T.turn && T.turn.uid === a), "an out seat never gets a turn clock");
+    if (k && T.turn && T.turn.uid === k) await h.A(h.byUid[k], quick(T, k), T.id);
+    else { h.NOW += 1000; await svc.tickOnce(); }
+    for (const L of MT.liveTables(M)) if (L !== T && L.eng.hand_active && L.turn) { const kk = H.currentActor(L.eng); if (kk === L.turn.uid) await h.A(h.byUid[kk], quick(L, kk), L.id); }
+  }
+  assert.ok(dealtA > 0, "still dealt in while out");
+  assert.ok(T.qol[a].timeouts <= t0, "no more timeouts: an out seat acts at once (its auto-actions never wait for its clock)");
+  assert.equal(T.qol[a].out, true, "still sitting out (blinded away until !sitin)");
   for (let i = 0; i < 30; i++) await h.later(60);
   assert.ok(T.eng.seats.includes(a) || MT.whereIs(M, a), "still in after 30 minutes away");
+  // a moved player keeps bank / hands / timeouts / out: every seat gets a distinctive QoL; the next move (busts at table 1 only: the
+  // others give players) must carry it to the new table
+  await h.fresh({ deckSeed: 3 });
+  const M2 = await h.schedule({ max_entries: 40, min_entries: 2, table_size: 6, late_levels: 0 });
+  await h.reg(M2, P().slice(20, 37));
+  await h.toStart(M2);
+  // (the giving tables' seats all sit out - an action resets timeouts, sitting out stays; banks and hands are distinctive)
+  MT.liveTables(M2).forEach((L) => L.eng.seats.forEach((uid, j) => { L.qol[uid] = Object.assign(L.qol[uid] || {}, { bank: 7 + j, hands: 3 + j, out: L.tourney.no !== 1 }); }));
+  const agg = h.policy(0.5, 0.9);
+  const last = new Map();                                   // uid -> {table, q}: the QoL last seen at the table they sat at
+  let moved = null;
+  await h.drive(M2, {
+    policy: (TT, k) => (TT.tourney.no === 1 ? agg(TT, k) : H.toCall(TT.eng, k) ? "fold" : "check"),
+    each: async (m) => {
+      if (moved) return;
+      for (const L of MT.liveTables(m)) for (const u of L.eng.seats) {
+        const prev = last.get(u);
+        if (prev && prev.table !== L.id) { moved = { u, L, w: prev.q }; return; }
+        last.set(u, { table: L.id, q: Object.assign({}, L.qol[u]) });
+      }
+    },
+    until: (m) => !!moved || m.status !== "running",
+  });
+  assert.ok(moved, "a move happened");
+  const q = moved.L.qol[moved.u], w = moved.w;
+  assert.equal(w.out, true, "(the mover sat out at their old table)");
+  assert.equal(q.out, true, "out carried");
+  assert.equal(q.timeouts, w.timeouts, "timeouts carried");
+  assert.ok(q.hands >= w.hands && q.hands <= w.hands + 1, `hands carried (${q.hands} vs ${w.hands})`);
+  assert.ok(q.bank >= w.bank && q.bank <= w.bank + 5, `the bank carried (${q.bank} vs ${w.bank}), not a fresh one`);
+  // (pre-moves: hand-scoped - holdem.js clearInvalidPre drops any from another hand; the move's forgetSeat drops them at once too)
   // a late entrant: a fresh bank
-  const late = P()[20];
-  const r = await h.M(late, "join", [String(M.no)]);
-  if (r.ok && M.transit[late.uid]) {
-    const st = await svc.loadSettings();
-    assert.equal(M.transit[late.uid].qol.bank, Math.min(st.hm_timebank_secs, st.hm_timebank_max));
-  }
+  await h.fresh();
+  const M3 = await h.schedule({ max_entries: 30, min_entries: 2, table_size: 6, late_levels: 4 });
+  await h.reg(M3, P().slice(40, 52));
+  await h.toStart(M3);
+  const late = P()[60];
+  const r = await h.M(late, "join", [String(M3.no)]);
+  assert.ok(r.ok, r.reply);
+  assert.ok(M3.transit[late.uid], "in transit to a table");
+  assert.equal(M3.transit[late.uid].qol.bank, Math.min(st.hm_timebank_secs, st.hm_timebank_max));
 });
 
 test("property: random MTTs (E 20..80, random play, late entries + re-entries) - tables within one player or converging, never over the size; the final table forms exactly once; conservation", async () => {
+  let reentries = 0, reentries0 = 0;
   for (const [E, size, seed] of [[23, 6, 31], [41, 9, 32], [58, 6, 33]]) {
     await h.fresh({ settings: { mtt_paid_pct: 20 }, deckSeed: seed });
     const before = await h.total();
@@ -706,23 +800,47 @@ test("property: random MTTs (E 20..80, random play, late entries + re-entries) -
     await h.reg(M, P().slice(0, E));
     await h.toStart(M);
     let late = E, finals = new Set();
+    const lonely = new Map();                                 // table id -> since when it has < 2 players, nothing inbound, not breaking
+    let worstLonely = 0;
     await h.drive(M, {
       policy: h.policy(0.25, 0.7),
       each: async (m) => {
         h.chipsOk(m);
         if (m.final) finals.add(m.final.table_id);
         for (const T of MT.liveTables(m)) assert.ok(T.eng.seats.length <= m.structure.table_size);
+        // (review) a table left with fewer than 2 players gets company (an inbound player, a break, the final) within a bounded time
+        for (const r of m.tables) {
+          const x = MT.layout(m).find((y) => y.no === r.no);
+          const alone = m.status === "running" && r.state === "live" && !r.final && x && x.seated < 2 && !x.inbound && m.tables.filter((t) => t.state !== "closed").length > 1;
+          if (alone) { if (!lonely.has(r.id)) lonely.set(r.id, h.NOW); worstLonely = Math.max(worstLonely, h.NOW - lonely.get(r.id)); } else lonely.delete(r.id);
+        }
         if (m.late_open && late < E + 15 && h.rng() < 0.02) {
           const p = P()[late++];
           h.NOW += 2100;
           const r = await h.M(p, "join", [String(m.no)]);
           assert.ok(r.ok || /closed|full/.test(r.reply), r.reply);
         }
+        // (review) re-entries too: a busted player with an entry left re-enters while late registration is open
+        if (m.late_open && h.rng() < 0.05) {
+          const out = (await h.entries(m, "state = 'busted' AND dq = 0")).map((e) => e.user_id).filter((u) => !MT.whereIs(m, u));
+          for (const u of out.slice(0, 1)) {
+            const used = (await h.entries(m, "user_id = ? AND entry_no IS NOT NULL", [u])).length;
+            if (used > m.structure.reentry_max) continue;
+            h.NOW += 2100;
+            const r = await h.M(h.byUid[u], "join", [String(m.no)]);
+            assert.ok(r.ok || /closed|full/.test(r.reply), r.reply);
+            if (r.ok) reentries++;
+          }
+        }
       },
     });
     assert.equal(M.status, "done");
-    assert.ok(finals.size <= 1, "the final table forms once");
+    assert.equal(finals.size, 1, "the final table forms exactly once (E > table size)");
+    assert.ok(worstLonely <= 2 * M.structure.level_ms + 120e3, `E=${E}: a lone player waited ${Math.round(worstLonely / 1000)} s for company`);
+    assert.ok(M.tables.length <= Math.ceil(E / size) + (late - E) + (reentries - reentries0) + 1, `E=${E}: bounded table openings (${M.tables.length})`);
+    reentries0 = reentries;
     assert.equal(await h.total(), before, `E=${E}: conservation`);
     await h.holdsEnded(M);
   }
+  assert.ok(reentries >= 1, `re-entries happened in the random runs (${reentries})`);
 });

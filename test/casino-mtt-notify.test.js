@@ -95,9 +95,31 @@ test("the result notice to every entrant; room lines only in the announce rooms,
   const ev = await getQuery("SELECT room, data FROM casino_events WHERE table_id = ? AND kind = 'mtt'", [M.id]);
   const rooms = new Set(ev.map((r) => r.room));
   assert.ok(!rooms.has("Elsewhere"), "never a room that isn't announced or a player's own");
-  for (const r of ev.filter((x) => x.room === "Lounge")) assert.match(JSON.parse(r.data).text, /LoungeGuy|you're moving/, "only the player's own lines in their room");
-  assert.ok(ev.some((r) => /more players out/.test(JSON.parse(r.data).text)) || ev.length <= 2 * 6 + 4, "bust lines over the budget are merged");
+  const lounge = ev.filter((x) => x.room === "Lounge");
+  assert.ok(lounge.length >= 1, "(review) the room player's own line reached their room");
+  for (const r of lounge) assert.match(JSON.parse(r.data).text, /LoungeGuy|you're moving/, "only the player's own lines in their room");
+  // (the per-room budget and the merged bust lines: the next test - here, during late registration, bust lines go to the player's own room only)
   for (const p of P().slice(20, 28)) assert.equal((await notices(p.uid, `mtt:${M.id}:%:result%`)).length, 1, `${p.uid}: the result notice`);
+});
+
+test("review: the per-room budget - at most mtt_room_lines_per_min lines in any minute in an announce room; the bust lines over it merged into one ('N more players out')", async () => {
+  await h.fresh({ settings: { mtt_room_lines_per_min: 2 }, deckSeed: 5 });
+  const refresh = () => svc.noteRooms([{ id: "PepeLab", name: "PepeLab" }]);
+  refresh();
+  const M = await h.schedule({ max_entries: 30, min_entries: 2, table_size: 6, late_levels: 0, rooms: ["PepeLab"] });
+  await h.reg(M, P().slice(0, 18));
+  h.NOW = M.start_at - 5e3; refresh();
+  await h.toStart(M);
+  await h.drive(M, { policy: h.allIn(), each: () => refresh() });
+  for (let i = 0; i < 12; i++) { h.NOW += 61e3; refresh(); await svc.tickOnce(); }
+  const ev = (await getQuery("SELECT ts, data FROM casino_events WHERE table_id = ? AND kind = 'mtt' AND room = 'PepeLab' ORDER BY seq", [M.id])).map((r) => ({ ts: r.ts, text: JSON.parse(r.data).text }));
+  assert.ok(ev.length >= 4, `lines were said (${ev.length})`);
+  for (const x of ev) {
+    const n = ev.filter((y) => y.ts >= x.ts && y.ts < x.ts + 60e3).length;
+    assert.ok(n <= 2, `at most 2 lines in the minute from ${new Date(x.ts).toISOString()}: ${n}`);
+  }
+  assert.ok(ev.some((x) => /more players out/.test(x.text)), `bust lines over the budget merged: ${ev.map((x) => x.text).join(" | ")}`);
+  assert.ok(ev.some((x) => /wins tournament/.test(x.text)), "the winner line still came");
 });
 
 test("Pepe's notice PMs (the start, 15 minutes) go to room players only, in their own room, only where they allow Pepe's PMs for tournaments", async () => {

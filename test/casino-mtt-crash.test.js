@@ -44,15 +44,37 @@ async function untilCrash(M, name, policy, max = 20000) {
     return false;
   } finally { svc.S.hooks.crash = null; }
 }
-/** the pre-tx snapshots the failed transaction restored: M and every touched table equal them, no new table in S.tables */
+/** (review) the restore is checked against the TEST's own snapshots, taken when the failed transaction began (S.hooks.txnStart) and compared
+ *  the moment the restore is done (S.hooks.onRestore - before anything else runs: tickOnce goes on with the other tables): M and EVERY
+ *  table of the tournament, touched or not (a body that changed a table it never ctx.touch'ed is caught), and the stream slot */
+const tablesOf = (id) => Array.from(svc.S.tables.values()).filter((T) => T.tourney && T.tourney.id === id);
+const begun = [];
+svc.S.hooks.txnStart = (label, M) => {
+  if (!M) return;
+  begun.push({ label, id: M.id, m: JSON.stringify(M), t: tablesOf(M.id).map((T) => [T, JSON.stringify(T)]), stream: JSON.stringify(svc.S.stream) });
+  if (begun.length > 40) begun.shift();
+};
+let verdict = null;
+svc.S.hooks.onRestore = (label, M) => {
+  const s = begun.filter((x) => x.label === label && x.id === (M && M.id)).pop();
+  const bad = [];
+  if (!s) bad.push(`no snapshot of ${label}`);
+  else {
+    if (JSON.stringify(M) !== s.m) bad.push(`${label}: M differs from when the transaction began`);
+    for (const [T, snap] of s.t) if (JSON.stringify(T) !== snap) bad.push(`${label}: table ${T.tourney && T.tourney.no} (${T.id}) differs from when the transaction began`);
+    if (JSON.stringify(svc.S.stream) !== s.stream) bad.push(`${label}: the stream slot changed`);
+  }
+  verdict = { label, bad };
+};
 function restoredExactly(M) {
   const r = svc.S.hooks.lastRestore;
   assert.ok(r && r.after, "a transaction was rolled back");
-  assert.equal(r.after.m, r.m, `${r.label}: M deep-equals its pre-tx snapshot`);
-  r.t.forEach(([T, snap], i) => assert.equal(r.after.t[i], snap, `${r.label}: table ${T.id} deep-equals its pre-tx snapshot`));
+  assert.ok(verdict && verdict.label === r.label, `the restore of ${r.label} was checked`);
+  assert.deepEqual(verdict.bad, [], `${r.label}: M, every table of the tournament and the stream slot are what they were when it began`);
   assert.ok(svc.S.mtts.get(M.id) === live(M), "the same object stays in S.mtts");
   for (const id of r.created) assert.ok(!svc.S.tables.has(id), "no table created in the failed transaction reached S.tables");
   svc.S.hooks.lastRestore = null;
+  verdict = null;
 }
 async function play(M, opts) { await h.drive(M, Object.assign({ policy: h.policy(0.35, 0.8) }, opts || {})); }
 
@@ -227,19 +249,36 @@ test("move / break / final / arrival / DQ / cancel inside their transactions: ev
   await h.reg(M, P().slice(0, 17));
   await h.toStart(M);
   const agg2 = h.policy(0.5, 0.9);
-  if (await untilCrash(M, "mtt:move:after-commit", (T, a) => (T.tourney.no === 1 ? agg2(T, a) : H.toCall(T.eng, a) ? "fold" : "check"))) {
-    const inTransit = Object.keys(live(M).transit);
-    await h.restart();
-    M = live(M);
-    await h.later(2);
-    await h.later(8);
-    for (const uid of inTransit) {
-      const seats = MT.liveTables(M).filter((T) => T.eng.seats.includes(uid)).length;
-      assert.ok(seats <= 1 && (seats === 1 || M.transit[uid] || !(MT.whereIs(M, uid))), `${uid} seated once`);
-    }
+  // (review) the cut point must fire, and every player it left in transit must land - seated exactly once, out of transit
+  assert.ok(await untilCrash(M, "mtt:move:after-commit", (T, a) => (T.tourney.no === 1 ? agg2(T, a) : H.toCall(T.eng, a) ? "fold" : "check")), "the move's after-commit cut point fired");
+  const inTransit = Object.keys(live(M).transit);
+  assert.ok(inTransit.length >= 1, "the move's kick was lost with a player in transit");
+  await h.restart();
+  M = live(M);
+  const quiet = (T, a) => (H.toCall(T.eng, a) ? "fold" : "check");
+  await h.drive(M, { policy: quiet, until: (m) => m.status !== "running" || inTransit.every((u) => !m.transit[u] && MT.liveTables(m).some((T) => T.eng.seats.includes(u))) });
+  for (const uid of inTransit) {
+    assert.equal(MT.liveTables(M).filter((T) => T.eng.seats.includes(uid)).length, 1, `${uid} seated exactly once`);
+    assert.ok(!M.transit[uid], `${uid} out of transit`);
   }
   await play(M);
   assert.equal(live(M).status, "done");
+  // (review) the break's and the final's after-commit work lost (kicks, lines, the stream): the restart still plays it out, once
+  for (const op of ["break", "final"]) {
+    await h.fresh({ deckSeed: 3 });
+    const total0 = await h.total();
+    let M2 = await h.schedule({ max_entries: 40, min_entries: 2, table_size: 6, late_levels: 0 });
+    await h.reg(M2, P().slice(0, 17));
+    await h.toStart(M2);
+    assert.ok(await untilCrash(M2, `mtt:${op}:after-commit`, h.policy(0.5, 0.9)), `the ${op} after-commit cut point fired`);
+    await h.restart();
+    M2 = live(M2);
+    h.chipsOk(M2);
+    await play(M2);
+    assert.equal(live(M2).status, "done", op);
+    assert.equal(await h.total(), total0, `${op}: conservation`);
+    await h.holdsEnded(M2);
+  }
 });
 
 test("hand-for-hand across a restart mid-round: the round is released once, its batch kept", async () => {
@@ -249,7 +288,8 @@ test("hand-for-hand across a restart mid-round: the round is released once, its 
   await h.reg(M, P().slice(0, 27));
   await h.toStart(M);
   await h.drive(M, { until: (m) => m.status !== "running" || (m.h4h.on && m.h4h.started && MT.liveTables(m).some((T) => T.tourney.h4h_dealt === m.h4h.round)) });
-  if (live(M).status === "running" && live(M).h4h.on) {
+  assert.ok(live(M).status === "running" && live(M).h4h.on, "(review) the seed reaches a hand-for-hand round mid-way");
+  {
     const round = live(M).h4h.round, batch = live(M).h4h.batch;
     const handsAt = Object.fromEntries(MT.liveTables(live(M)).map((T) => [T.id, { no: T.eng.hand_no, dealt: T.tourney.h4h_dealt === round, active: T.eng.hand_active }]));
     await h.restart();
@@ -306,12 +346,14 @@ test("the finish: a crash in the settle's tx (the restart settles once, same key
   assert.equal(M2.post.notices, false, "interrupted at the notices");
   await h.later(1);
   M2 = live(M2) || M2;
-  const n1 = (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref LIKE ?", [`mtt:${M2.id}:%:result%`]).catch(() => [{ n: 0 }]))[0].n;
+  const n1 = (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref LIKE ?", [`mtt:${M2.id}:%:result%`]))[0].n;
+  assert.equal(n1, 4, "(review) the interrupted notices step ran after the restart: one result notice per entrant");
   await svc.locked(() => MT.postSteps(M2));
-  const n2 = (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref LIKE ?", [`mtt:${M2.id}:%:result%`]).catch(() => [{ n: 0 }]))[0].n;
+  const n2 = (await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE ref LIKE ?", [`mtt:${M2.id}:%:result%`]))[0].n;
   assert.equal(n2, n1, "notices once");
-  const ach = (await getQuery("SELECT COUNT(*) AS n FROM casino_reward_done WHERE key LIKE ?", [`mtt:${M2.id}:%`]).catch(() => [{ n: -1 }]))[0].n;
-  assert.ok(ach !== 0, "achievement keys once");
+  const achKeys = await getQuery("SELECT key FROM casino_reward_done WHERE key LIKE ?", [`mtt:${M2.id}:%`]);
+  assert.ok(achKeys.length >= 1, "(review) the achievement counts were made");
+  assert.equal(new Set(achKeys.map((r) => r.key)).size, achKeys.length, "achievement keys once");
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_moves WHERE key = ?", [`tny:${M2.id}:finish`]))[0].n, 1, "no second settle");
   assert.equal(await h.total(), total0);
 });
@@ -335,10 +377,13 @@ test("cancel and DQ inside their transactions: all or nothing", async () => {
   const n = list.findIndex((x) => x.state === "playing") + 1;
   await svc.locked(() => MT.admin("dq", h.admin, live(M), { n, reason: "x" })).catch(() => null);
   const uid = list[n - 1].user_id;
+  svc.S.hooks.crashed = [];
   svc.S.hooks.crash = "mtt:dq:in-tx";
   await h.drive(M, { policy: (T, a) => (H.toCall(T.eng, a) ? "fold" : "check"), until: (m) => (svc.S.hooks.crashed || []).includes("mtt:dq:in-tx") || (m.dq[uid] || {}).applied, max: 4000 });
   svc.S.hooks.crash = null;
-  if ((svc.S.hooks.crashed || []).includes("mtt:dq:in-tx") && svc.S.hooks.lastRestore) restoredExactly(M);
+  assert.ok((svc.S.hooks.crashed || []).includes("mtt:dq:in-tx"), "(review) the DQ's transaction cut point fired");
+  restoredExactly(M);
+  assert.equal((await h.entries(M, "user_id = ?", [uid]))[0].state, "playing", "nothing applied");
   h.chipsOk(live(M));
   await h.drive(M, { policy: h.allIn() });
   assert.equal(live(M).status, "done");

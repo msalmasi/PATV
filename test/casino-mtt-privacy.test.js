@@ -113,3 +113,31 @@ test("a moved player starts a new seat session at the new table; hole cards / tu
   svc.S.rooms.clear();
   assert.equal((await MT.privateMtt()).length, 0);
 });
+
+test("review: a veiled player moved to another table gets a NEW seat session there - masked at the new table (balancing, a break)", async () => {
+  await h.fresh({ deckSeed: 3 });
+  V._reset();
+  veiled = new Map();
+  const M = await h.schedule({ max_entries: 40, min_entries: 2, table_size: 6, late_levels: 0 });
+  await h.reg(M, P().slice(0, 17));
+  await h.toStart(M);
+  // everyone away from table 1 is incognito from now on: whoever is moved to table 1 (busts there only) arrives veiled
+  for (const T of MT.liveTables(M)) if (T.tourney.no !== 1) for (const u of T.eng.seats) veiled.set(u, "incognito");
+  V._reset();
+  const where0 = new Map(MT.liveTables(M).flatMap((T) => T.eng.seats.map((u) => [u, T.id])));
+  const agg = h.policy(0.5, 0.9);
+  let moved = null;
+  await h.drive(M, {
+    policy: (T, a) => (T.tourney.no === 1 ? agg(T, a) : H.toCall(T.eng, a) ? "fold" : "check"),
+    each: async (m) => { if (moved) return; for (const T of MT.liveTables(m)) for (const u of T.eng.seats) if (veiled.has(u) && where0.get(u) !== T.id) moved = { u, T }; },
+    until: (m) => !!moved || m.status !== "running",
+  });
+  assert.ok(moved, "a veiled player was moved");
+  const pub = svc.publicView(moved.T);
+  const seat = pub.seats[moved.T.eng.seats.indexOf(moved.u)];
+  assert.ok(seat && seat.veil, `masked at the new table: ${JSON.stringify(seat)}`);
+  assert.notEqual(seat.name, h.byUid[moved.u].name, "never their name");
+  assert.ok(!JSON.stringify(pub).includes(h.byUid[moved.u].name), "nowhere in the new table's view");
+  veiled = new Map();
+});
+

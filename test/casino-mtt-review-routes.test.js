@@ -46,11 +46,16 @@ test("start presence (mtt_presence on): the lobby block's poll, the lobby, regis
   await h.fresh({ presence: "on" });
   const M = await h.schedule({ max_entries: 20, min_entries: 2, table_size: 9, late_levels: 0 }, { startIn: 90 });
   const pl = h.players;
-  const [lobbyOnly, lobbyApi, webReg, roomReg, away] = [pl[1], pl[2], pl[3], pl[4], pl[5]];
+  const [lobbyOnly, lobbyApi, webReg, roomReg, away, roomActive, roomQuiet] = [pl[1], pl[2], pl[3], pl[4], pl[5], pl[6], pl[7]];
   await h.reg(M, [lobbyOnly, lobbyApi, away]);
   lab();
-  const rr = await bot({ username: roomReg.username, camfrog: "RoomRegCF", game: "mtt", verb: "join", args: [String(M.no)] });
-  assert.ok(rr.j.ok, rr.j.reply);
+  for (const [p, cf] of [[roomReg, "RoomRegCF"], [roomActive, "RoomActiveCF"], [roomQuiet, "RoomQuietCF"]]) {
+    const rr = await bot({ username: p.username, camfrog: cf, game: "mtt", verb: "join", args: [String(M.no)] });
+    assert.ok(rr.j.ok, rr.j.reply);
+  }
+  h.NOW = M.start_at - 10 * 60e3;
+  const me = await bot({ username: roomActive.username, camfrog: "RoomActiveCF", game: "mtt", verb: "me", args: [] });   // any casino command through Pepe
+  assert.ok(me.j.ok, me.j.reply);
   h.NOW = M.start_at - 3 * 60e3;
   const w = await post(`/api/casino/mtt/${M.id}/register`, { idem: idem() }, webReg.uid);
   assert.equal(w.status, 200, JSON.stringify(w.j));
@@ -61,8 +66,9 @@ test("start presence (mtt_presence on): the lobby block's poll, the lobby, regis
   await h.toStart(M);
   assert.equal(M.status, "running");
   const T = MT.liveTables(M)[0];
-  for (const p of [lobbyOnly, lobbyApi, webReg, roomReg]) assert.equal(T.qol[p.uid].out, false, `${p.uid}: present`);
+  for (const p of [lobbyOnly, lobbyApi, webReg, roomReg, roomActive]) assert.equal(T.qol[p.uid].out, false, `${p.uid}: present`);
   assert.equal(T.qol[away.uid].out, true, "nobody heard from: sitting out");
+  assert.equal(T.qol[roomQuiet.uid].out, true, "a room registrant quiet for 30+ minutes: sitting out (Pepe's start PM tells them)");
   await new Promise((r) => setTimeout(r, 10));
   const told = await getQuery("SELECT title, body FROM inbox WHERE user_id = ? AND ref LIKE ?", [away.uid, `mtt:${M.id}:%`]);
   assert.ok(told.some((n) => /sitting out/i.test(n.title + " " + n.body)), `the absent web entrant is told: ${JSON.stringify(told)}`);

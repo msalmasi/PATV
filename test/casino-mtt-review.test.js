@@ -312,3 +312,90 @@ test("the lobby row carries the viewer's own table (\"Take me to my table\"); a 
   assert.ok(!JSON.stringify(mv).includes(`"${out}"`), "no account id");
   void runQuery;
 });
+
+test("the blind planner at real MTT tables (27 entries, 6-max: moves, breaks, arrivals, the final): the big blind moves forward one seat, an arrival posts it first, heads-up never twice in a row, a dead small blind posts 0 and shows the level's; a player who just arrived is never moved before a hand there", async () => {
+  const TNCFG = require(path.join(h.repo, "casino", "tourney"));
+  let checked = 0, arrivals = 0, dead = 0, moves = 0;
+  for (const seed of [11, 4]) {
+    await h.fresh({ settings: { mtt_paid_pct: 25 }, deckSeed: seed });
+    const M = await h.schedule({ max_entries: 40, min_entries: 4, table_size: 6, late_levels: 0 });
+    await h.reg(M, P().slice(0, 27));
+    await h.toStart(M);
+    const prev = new Map();                // table id -> the last hand looked at {hand_no, order, bb_key, sb_key}
+    const dealt = new Map();               // `${uid}@${table id}` -> hands dealt to them there
+    const seenMove = new Set();
+    const each = async (m) => {
+      for (const T of MT.liveTables(m)) {
+        const e = T.eng;
+        if (!e.hand_active) continue;
+        const p = prev.get(T.id);
+        if (p && p.hand_no === e.hand_no) continue;
+        // a new hand, seen right after its deal (deals only happen in ticks, and drive() looks after every tick, before anyone acts)
+        const st = T.tourney.start || {};
+        if (p) {
+          const order = e.players, n = order.length;
+          const came = order.filter((k) => !p.order.includes(k));
+          if (came.length) { assert.ok(came.includes(e.bb_key), `seed ${seed} table ${T.tourney.no} hand ${e.hand_no}: an arrival posts the big blind first (${e.bb_key}; arrived ${came})`); arrivals++; }
+          else {
+            const bi = p.order.indexOf(p.bb_key);
+            let nbb = null;
+            for (let o = 1; o <= p.order.length && nbb === null; o++) { const k = p.order[(bi + o) % p.order.length]; if (order.includes(k)) nbb = k; }
+            let want = nbb;
+            if (n === 2 && want === p.bb_key) want = order.find((k) => k !== want);
+            assert.equal(e.bb_key, want, `seed ${seed} table ${T.tourney.no} hand ${e.hand_no}: the big blind moves forward one seat`);
+          }
+          if (n === 2) assert.notEqual(e.bb_key, p.bb_key, "heads-up: never the big blind twice in a row");
+          if (st.dead_sb) {
+            dead++;
+            assert.equal(e.contrib[e.sb_key] || 0, 0, "a dead small blind posts nothing");
+            const lv = Array.from({ length: 60 }, (_, i) => TNCFG.levelAt({ levels: m.structure.levels }, i)).find((l) => l[1] === e.bb);
+            assert.equal(e.sb, lv[0], "the level's small blind is shown");
+            assert.equal(e.sb_key, p.sb_key, "dead: it would have been last hand's small blind again");
+          }
+          checked++;
+        }
+        prev.set(T.id, { hand_no: e.hand_no, order: e.players.slice(), bb_key: e.bb_key, sb_key: e.sb_key });
+        for (const k of e.players) dealt.set(`${k}@${T.id}`, (dealt.get(`${k}@${T.id}`) || 0) + 1);
+      }
+      for (const [uid, x] of Object.entries(m.transit || {})) {
+        if (x.why !== "balance" || seenMove.has(`${uid}:${x.since}`)) continue;
+        seenMove.add(`${uid}:${x.since}`);
+        const rec = m.tables.find((r) => r.no === x.from_no);
+        assert.ok((dealt.get(`${uid}@${rec.id}`) || 0) >= 1, `seed ${seed}: ${uid} was dealt a hand at table ${x.from_no} before being moved`);
+        moves++;
+      }
+    };
+    await h.drive(M, { policy: h.policy(0.3, 0.75), each });
+    assert.equal(live(M).status, "done");
+  }
+  console.log(`[blinds] hands ${checked}, arrivals ${arrivals}, moves ${moves}, dead small blinds ${dead}`);
+  assert.ok(checked > 100, `hands checked: ${checked}`);
+  assert.ok(arrivals >= 3, `arrivals checked: ${arrivals}`);
+  assert.ok(moves >= 2, `balance moves checked: ${moves}`);
+  assert.ok(dead >= 1, `dead small blinds seen: ${dead}`);
+  // a player who just arrived (seated at a boundary that didn't deal) is never the one moved - the next big blind after them is
+  await h.fresh({ deckSeed: 6 });
+  const M = await h.schedule({ max_entries: 40, min_entries: 2, table_size: 6, late_levels: 0 });
+  await h.reg(M, P().slice(0, 12));
+  await h.toStart(M);
+  const [T1, T2] = MT.liveTables(M).sort((a, b) => a.tourney.no - b.tourney.no);
+  let marked = null, mover = null;
+  const from1 = new Set(T1.eng.seats);
+  const quiet = (T, a) => (H.toCall(T.eng, a) ? "fold" : "check");
+  await h.drive(M, {
+    policy: (T, a) => (T === T2 ? h.allIn()(T, a) : quiet(T, a)),
+    each: async (m) => {
+      if (mover) return;
+      // (a move lands within the same tick - the target is kicked - so it is seen as a table 1 player now seated at table 2)
+      const x = T2.eng.seats.find((u) => from1.has(u)) || Object.entries(m.transit || {}).filter(([, t]) => t.from_no === T1.tourney.no).map(([u]) => u)[0];
+      if (x) { mover = x; return; }
+      if (!T1.eng.hand_active && H.seatedWithChips(T2.eng).length <= 4) {
+        marked = SEAT.bbOrder(H.seatedWithChips(T1.eng), T1.tourney.last)[0];
+        T1.tourney.arrived[marked] = T1.eng.hand_no;              // as if seated at this boundary (no hand dealt to them here yet)
+      }
+    },
+    until: (m) => !!mover || m.status !== "running",
+  });
+  assert.ok(mover && marked, "table 1 gave a player to the short table");
+  assert.notEqual(mover, marked, "never the player who just arrived");
+});
