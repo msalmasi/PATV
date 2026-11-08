@@ -16,8 +16,8 @@
 //   admin  --GET  /api/admin/pepe/mictiming-->  {online, at, mt, actions (the last mic.timing actions + Pepe's answers), audit}
 //
 // Fields (all global - one mic, one set of timings): grabconfirm | leadin | tailout | websettle (seconds), talkplay (on / off - the Talk
-// check runs during the clip), confirm | clickretry | ttspoll (milliseconds: the fast grab's confirm window, the hook's second-click
-// wait, the TTS ready poll), yieldlist (Camfrog logins, at most 20 - !mic yield on [minutes] | off | status in a room turns it on).
+// check runs during the clip), confirm | clickretry | ttspoll (milliseconds: the fast grab's confirm window - a contest shot keeps at
+// least 350 ms - the hook's second-click wait - for turning Talk on only - the TTS ready poll), yieldlist (Camfrog logins, at most 20 - !mic yield on [minutes] | off | status in a room turns it on).
 // The site checks the SHAPE (a known field, a number with at most 2 decimals / a whole number, on / off, a list of logins); the RANGES are
 // Pepe's - a number outside one is clamped by him and the card shows "asked -> stored".
 // Guards: the Admin class (pepe.rooms_commands_audio, from the account's row in the database), a same-site fetch (X-Requested-With:

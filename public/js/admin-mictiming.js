@@ -13,8 +13,8 @@
     ['tailout', 'Tail-out', 's', 'Silence held on the mic after the clip ends, before Pepe lets go - so the last word is not cut off.'],
     ['websettle', 'Web clip settle', 's', 'Push-to-talk web clips: how long a free mic must stay free before Pepe goes for it (a room with fast grab for web clips skips it).'],
     ['talkplay', 'Talk check during the clip', null, 'On: the clip starts as soon as Talk is on and Talk is read again while it plays; if it switched itself off (a muted win) the clip stops, Pepe gives the mic back, clicks once more and plays it again from the start - never charged twice. Off: Talk is read first, then the clip (0.5 s later).'],
-    ['confirm', 'Fast-grab confirm window', 'ms', "After the fast grab's own grab request, how long Pepe waits for proof someone else got the mic before he clicks Talk. Shorter = sooner; a loss is then found after the click."],
-    ['clickretry', 'Second-click retry', 'ms', 'After a room-tab switch Camfrog often swallows the first Talk click: how long Pepe waits for it before clicking once more (clicks that land show in 60-160 ms).'],
+    ['confirm', 'Fast-grab confirm window', 'ms', "After the fast grab's own grab request, how long Pepe waits for proof someone else got the mic before he clicks Talk. Shorter = sooner; a loss is then found after the click. In a contest room each shot keeps at least 350 ms (racers there come in later)."],
+    ['clickretry', 'Second-click retry', 'ms', 'After a room-tab switch Camfrog often swallows the first Talk click: how long Pepe waits for it before clicking once more (clicks that land show in 60-160 ms). Only when turning Talk on - letting go always waits the full 1 s.'],
     ['ttspoll', 'TTS ready poll', 'ms', 'How often Pepe asks VoiceBox whether a spoken line is ready.'],
     ['yieldlist', 'Yield list', null, 'Camfrog logins (up to 20, comma-separated). With !mic yield on, in a room where one of them is Pepe never races them for the mic: no fast grab, contest, regrab or bump; his clips there wait for a quiet mic or are refunded ("Pepe is giving <name> the mic").']
   ];
