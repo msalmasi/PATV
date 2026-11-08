@@ -71,7 +71,10 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   // 1.99amw plexqueue: the line's own refusals (mediaqueue.after / preflight) - Pepe words each one
   "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after",
   // ... review F8: what a line-up was to wait for isn't on any more (Pepe asks again, naming what is)
-  "behind_changed"];
+  "behind_changed",
+  // 1.99?? clerkreq review: request_offer's own - no title said (F13: "bad" stays an older site's unknown op), the request server
+  // refusing at the yes (F10: a quota - never "already requested")
+  "bad_title", "refused"];
 // (1.99?? clerkreq S5: + request_offer - "pepe request <title>": what can happen for that title, opRequest still the only write)
 const OPS = new Set(["search", "find", "browse", "request", "request_offer", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
@@ -208,6 +211,13 @@ const labelOf = (it) => (it.type === "episode" && it.show
   ? `${it.show} S${it.season == null ? 0 : it.season}E${it.episode == null ? 0 : it.episode}${it.title ? ` "${it.title}"` : ""}`
   : `${it.title}${it.year ? ` (${it.year})` : ""}`).slice(0, 120);
 
+/** 1.99?? clerkreq review F16 (the clerk off: !plex / the legacy path): a show / film ask ("the show X", "X the movie") and an
+ *  episode of ANOTHER show that only shares the name - never offered for it (the 11-08 "The Good Doctor" -> a crime show's S1E9). */
+function nameOnlyEpisode(it, q, want) {
+  const n = norm(q);
+  return !!(want && (want.hint === "show" || want.hint === "movie") && it && it.type === "episode" && n && norm(it.title) === n
+    && norm(it.show || "") !== n);
+}
 /** How well a search brief matches what was asked (higher = better). */
 function score(it, q, want) {
   const t = norm(it.type === "episode" ? it.show || it.title : it.title), n = norm(q);
@@ -218,7 +228,8 @@ function score(it, q, want) {
   else if (n.split(" ").every((w) => (" " + t + " ").includes(" " + w + " "))) s = 60;
   else if (t.includes(n)) s = 50;
   else s = 30;
-  if (it.type === "episode" && norm(it.title) === n) s = Math.max(s, 70);       // an episode asked for by its own title
+  if (it.type === "episode" && norm(it.title) === n && !nameOnlyEpisode(it, q, want)) s = Math.max(s, 70);   // an episode asked for by its own title
+  if (nameOnlyEpisode(it, q, want)) s -= 60;                                       // (review F16: not for "the show X")
   if (want.year) s += Number(it.year) === want.year ? 30 : -40;
   if (want.season != null || want.episode != null) s += it.type === "show" ? 25 : it.type === "episode" ? 10 : -30;
   else if (it.type === "episode" && norm(it.title) !== n) s -= 20;
@@ -378,7 +389,11 @@ async function priceRows(user, R, A, target, out) {
  *  opRequest stays the only write. An older site has no such op: "bad" (Unknown op.) - the bot says it can't request from chat yet. */
 async function opRequestOffer(user, b) {
   const title = clean(b.title, 100);
-  if (title.length < 2) throw new Fail("bad", "Say a title.", 400);
+  // review F13: one character is a title ("M", "9"); none at all is bad_title - "bad" is what an older site says of this op (Unknown op.)
+  if (!norm(title)) throw new Fail("bad_title", "Say a title.", 400);
+  // review F1 (the bot trimmed "Me Before You" to "Before You", "Scary Movie" to "Scary"): the line's own words, `raw` (only the year
+  // and a season taken off), are tried FIRST - as said, with no kind (a kind word may be the title's own) - then the title the bot trimmed
+  const raw = clean(b.raw, 100);
   const { target, R, A } = await clerkAccess(user, b);
   const origin = requestsOn() ? await requestRoom(user, b, R) : null;
   if (requestsOn() && !origin) throw new Fail("request_off", "Requests from chat aren't available here.", 403);
@@ -389,26 +404,43 @@ async function opRequestOffer(user, b) {
     const limits = await require("./mainstage").limitsFor(R.id);
     maxSec = Math.max(60, (limits.library_max - ML()._q.SLACK_MIN) * 60);
   }
-  let out;
-  try {
-    out = await CF().find({ ask: { title, kind, year, ...(season != null ? { season } : {}) }, raw: "", exclude: [], limit: 5, target, titleLevel: true },
-      { seenKeys: [], maxSec, user, allowSeerr: !!origin && requestsOn() });
-  } catch (e) {
-    if (e && e.refuse) throw e;
-    throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+  const look = async (t, k, seerrOk) => {
+    try {
+      return await CF().find({ ask: { title: t, kind: k, year, ...(season != null ? { season } : {}) }, raw: "", exclude: [], limit: 5, target, titleLevel: true },
+        { seenKeys: [], maxSec, user, allowSeerr: seerrOk && !!origin && requestsOn() });
+    } catch (e) {
+      if (e && e.refuse) throw e;
+      throw new Fail("catalog_down", "The library shelves are slow right now.", 503);
+    }
+  };
+  // a row IS the title asked for (review F6: a film kept as a show's S00 special is that film)
+  const sameAs = (t) => (row) => (row.kind === "movie" ? norm(row.title) === norm(t)
+      : ["episode", "season", "show"].includes(row.kind) && norm(row.show) === norm(t)
+        || season == null && row.kind === "episode" && (Number(row.season) || 0) === 0 && norm(row.title) === norm(t))
+    && (season == null || row.kind === "season" && Number(row.season) === season);
+  const answered = (o, t) => o.code === "unavailable" || (o.rows || []).some(sameAs(t)) || !!o.seerr || !!o.seerr_requested
+    || Array.isArray(o.seerr_choices) && o.seerr_choices.length > 0;
+  const tries = raw && norm(raw) !== norm(title) ? [[raw, season != null ? "show" : null], [title, kind]] : [[title, kind]];
+  let out = null, said = title, down = false;
+  for (const [i, [t, k]] of tries.entries()) {
+    out = await look(t, k, !down);
+    said = t;
+    if (out.seerr_state === "down") down = true;                         // (Seerr isn't asked twice when it isn't answering)
+    if (answered(out, t) || i === tries.length - 1) break;
   }
+  if (down && (!out.seerr_state || out.seerr_state === "off")) out.seerr_state = "down";
   if (out.code === "unavailable") throw new Fail("unavailable", "That one isn't available here.", 404);
   const pad = { id: R.id, title: R.title || R.id };
-  const same = (row) => (row.kind === "movie" ? norm(row.title) === norm(title) : ["episode", "season", "show"].includes(row.kind) && norm(row.show) === norm(title))
-    && (season == null || row.kind === "season" && Number(row.season) === season);
-  const have = (out.rows || []).filter(same);
+  const have = (out.rows || []).filter(sameAs(said));
   if (have.length) {
     const shelf = { rows: have.slice(0, 3), alternatives: [] };
     await priceRows(user, R, A, target, shelf);
     return { ok: true, answer: "on_shelves", rows: shelf.rows, exact: true, catalog: out.catalog, free: !!A.free, how: A.how || null, per_hour: perHour(A),
              state: shelf.state, target, pad };
   }
-  const base = { ok: true, title, ...(out.seerr_state ? { seerr_state: out.seerr_state } : {}), catalog: out.catalog, target, pad };
+  // review F11: on the shelves as the other kind / without the season asked (shelf_title) - the bot says so, never "isn't on our shelves"
+  const base = { ok: true, title: said, ...(out.seerr_state ? { seerr_state: out.seerr_state } : {}), ...(out.shelf_title ? { shelf_title: out.shelf_title } : {}),
+                 catalog: out.catalog, target, pad };
   if (out.seerr_requested) {
     const r = out.seerr_requested;
     throw Object.assign(new Fail("requested", "That's already been requested - it's on its way.", 409), { label: `${r.title}${r.year ? ` (${r.year})` : ""}` });
@@ -454,7 +486,8 @@ async function opRequest(user, b) {
       if (e.status === 401) code = "signin";
       else if (e.status === 403) code = requestsOn() ? "level" : "request_off";
       else if (e.status === 429) code = "limit";
-      else if (e.status === 409) code = /already on Plex|already available/i.test(String(e.message || "")) ? "available" : "requested";
+      // review F10: Overseerr refusing it (a quota) is "refused" - nothing was requested, nothing is on its way
+      else if (e.status === 409) code = e.refused === true ? "refused" : /already on Plex|already available/i.test(String(e.message || "")) ? "available" : "requested";
       else if (e.status === 402) code = "pat";
     }
     throw new Fail(code, "The request could not be sent.", e && e.status || 502);
@@ -479,6 +512,7 @@ async function opSearch(user, b) {
   let shows = 0;
   for (const { it, s } of ranked) {
     if (rows.length >= 5) break;
+    if (nameOnlyEpisode(it, q, want)) continue;                          // review F16
     const exact = s >= 100;
     if (it.type === "movie") {
       rows.push(slim({ key: String(it.key), type: "movie", title: it.title, year: it.year, duration: it.duration, scope: "title", exact,
@@ -802,5 +836,5 @@ function register(app, { isBotToken } = {}) {
   });
 }
 
-module.exports = { register, handle, resolve, codeOf, failBody, score, norm, asKey, CODES, RATE_MAX,
+module.exports = { register, handle, resolve, codeOf, failBody, score, nameOnlyEpisode, norm, asKey, CODES, RATE_MAX,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); }, _hits: hits };

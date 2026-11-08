@@ -269,7 +269,9 @@ async function request(user, b = {}, meta = null) {
       const msg = (r.json && (r.json.message || r.json.error)) || `answered ${r.status}`;
       throw Object.assign(new Refuse(r.status === 403 || r.status === 409 ? 409 : 502,
         r.status === 403 ? `The request server refused it (${String(msg).slice(0, 120)}). Nothing was charged.`
-        : r.status === 409 ? "That's already been requested. Nothing was charged." : "The request server couldn't take it right now. Nothing was charged."), { upstream: true });
+        : r.status === 409 ? "That's already been requested. Nothing was charged." : "The request server couldn't take it right now. Nothing was charged."),
+        // 1.99?? clerkreq review F10: refused (a quota, a rule) is its own thing - Pepe never says "already requested - on its way" for it
+        { upstream: true, ...(r.status === 403 ? { refused: true } : {}) });
     }
     const q = r.json || {};
     const st = statusOf(q.status, q.media && q.media.status);

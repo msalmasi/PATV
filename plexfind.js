@@ -444,9 +444,17 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     const askedKind = a.kind, titleLevel = request.titleLevel === true;
     const titleKind = askedKind === "show" || askedKind === "movie" || titleLevel;
     let namedEpisodes = [], episodeNamed = false;
+    // 1.99?? clerkreq review F6: a film Plex keeps as a show's special (S00 "Big Score Movie") IS that film for a film ask or a
+    // title-level one (the request) - offered as itself, never kept aside and never a request for something already here
+    const filmSpecials = new Set();
     const episodesFor = async (title) => {
       const eps = await episodesTitled(title);
-      if (titleKind) { if (!namedEpisodes.length) namedEpisodes = eps; return []; }
+      if (titleKind) {
+        const films = askedKind === "show" ? [] : eps.filter((r) => (Number(r.season) || 0) === 0);
+        for (const r of films) filmSpecials.add(String(r.key));
+        if (!namedEpisodes.length) namedEpisodes = eps.filter((r) => !filmSpecials.has(String(r.key)));
+        return films;
+      }
       if (eps.length && askedKind == null) episodeNamed = true;
       return eps;
     };
@@ -486,7 +494,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     }
     let clearKey = null;   // 1.99amq clerkfast: the one episode the description singles out (describedOnce), if any
     // (1.99?? clerkreq S1: an episode only its own title named - a bare line - is offered as episode_named, never exact)
-    let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && !titleKind && matches(r, a, seen, parents))
+    let candidates = recalled ? verified.candidates : exactRows.filter((r) => r.type === "episode" && (!titleKind || filmSpecials.has(String(r.key))) && matches(r, a, seen, parents))
       .map((r) => ({ r, why: episodeNamed ? "episode_named" : "exact", exact })), plans = [], alternatives = [];
     const selectionList = ["first_n", "last_n", "season", "series", "in_order"].includes(a.select) || (a.select === "one" && a.season != null && a.episode == null);
     const makePlan = (rows, why, show, scope = "list", alternative = false) => {
@@ -688,14 +696,30 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     // 1.99?? clerkreq S2: a named title failed = nothing offered, OR all that's offered is an episode only its title named (a bare line:
     // the show / film of that name may exist elsewhere), OR (a title-level ask) nothing offered IS that title - a near title isn't it
     const allNamed = offered.length > 0 && offered.every((r) => r.why === "episode_named");
-    const isTitle = (r) => (r.kind === "movie" ? sameName(r.title, a.title) : ["episode", "season", "show"].includes(r.kind) && sameName(r.show, a.title));
+    const isTitle = (r) => (r.kind === "movie" ? sameName(r.title, a.title) : ["episode", "season", "show"].includes(r.kind) && sameName(r.show, a.title))
+      || filmSpecials.has(String(r.key));          // (review F6: the film kept as a special is that title)
     if (!recalled && (!offered.length || allNamed || titleLevel && !offered.some(isTitle)) && !shelfSelection.filters.length && a.title && !a.about && !a.like) {
-      const k = episodeNamed ? askedKind : a.kind;
+      const k = episodeNamed ? askedKind : (filmSpecials.size ? askedKind : a.kind);
       const found = await missingTitle({ kind: k === "show" || k === "episode" ? "show" : k, title: a.title, year: a.year,
         ...(a.season != null && a.episode == null ? { season: a.season } : {}) }, context, Date.now() + SEERR_MS);
-      if (found && found.unavailable) return { ...base, code: "unavailable" };
-      took(found);
+      // review F5: the episode already offered stays offered - a same-named title Seerr says is on Plex (in a section the clerk doesn't
+      // serve) is no reason to refuse it ("that one isn't available here" for an episode on the shelves); nothing of it is said
+      if (found && found.unavailable) { if (!allNamed) return { ...base, code: "unavailable" }; }
+      else took(found);
       if (found && found.tmdb) seerr = found;
+    }
+    // review F11: the title IS on the shelves - as the other kind ("the movie <a show's name>") or without the season asked - said, never
+    // "isn't on our shelves" (a title the clerk may show: roots are the allowed sections only)
+    let shelfTitle = null;
+    if (!recalled && a.title && !a.about && !a.like && !shelfSelection.filters.length) {
+      const seasonAsk = a.season != null && a.episode == null && askedKind !== "movie";
+      const show = seasonAsk ? roots.find((r) => r.type === "show" && sameName(r.title, a.title)) : null;
+      if (show && !offered.some((r) => sameName(r.show, a.title) && Number(r.season) === a.season)) {
+        shelfTitle = { kind: "show", title: show.title, year: integer(Number(show.year), 1880, 2200), season: a.season };
+      } else if (["show", "movie"].includes(askedKind) && !offered.some(isTitle)) {
+        const other = roots.find((r) => r.type !== askedKind && sameName(r.title, a.title));
+        if (other) shelfTitle = { kind: other.type, title: other.title, year: integer(Number(other.year), 1880, 2200) };
+      }
     }
     if (!recalled && offered.length && !shelfSelection.filters.length && a.select === "latest" && a.title && offered.every((r) => r.kind === "movie") && context.allowSeerr) {
       const entry = await seerrSearch(a.title, context, Date.now() + SEERR_MS), currentYear = new Date(now()).getUTCFullYear();
@@ -729,6 +753,7 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
     return { ...base, rows: offered, exact: !!exact && rows.length > 0, recall, ...(seerr ? { seerr } : {}), ...(ambiguous ? { ambiguous: true } : {}), ...(cut ? { cut } : {}),
       ...(seerrState ? { seerr_state: seerrState } : {}), ...(seerrChoices && !seerr ? { seerr_choices: seerrChoices } : {}),
       ...(seerrRequested && !seerr ? { seerr_requested: seerrRequested } : {}), ...(named.length ? { episode_named: named } : {}),
+      ...(shelfTitle ? { shelf_title: shelfTitle } : {}),
       ...(clear ? { clear: true } : {}),
       ...(shelfSelection.filters.some((f) => f.no_rank) ? { no_rank: true } : {}),
       ...(!rows.length && alternativeRows.length ? { alternatives: alternativeRows.map((row) => provenance(row, shelfSelection.filters)) } : {}), catalog: { ready: true, at: chosen.state.at || null } };

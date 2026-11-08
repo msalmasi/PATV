@@ -1760,7 +1760,9 @@ async function requestLanded({ roomId, userId, title, year, anon } = {}) {
     if (anon !== true) {
       const u = (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [String(userId || "")]))[0];
       const cf = u && u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
-      const hidden = !!(cf && require("./quotes").isHidden(cf));
+      // (review F7: a web-only account's chat key u:<id> too - incognito / hidden there is never named either)
+      const Q = require("./quotes");
+      const hidden = !!(cf && Q.isHidden(cf)) || !!(u && Q.isHidden("u:" + String(u.userId)));
       if (u && !hidden) {
         uid = String(u.userId);
         camfrog = LOGIN_RE.test(cf) ? cf : "";
