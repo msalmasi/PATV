@@ -915,3 +915,56 @@ test("catfix review: across a resume the stored tables hold nothing of a section
   assert.deepEqual(await keys("SELECT key AS k FROM plex_shelves_next UNION ALL SELECT key FROM plex_shelf_members_next"), [], "no staged shelves left");
   assert.equal(JSON.stringify(await h.catalog.read("SELECT data FROM plex_catalog")).includes("Second Shift"), false);
 });
+
+// plexvectors 1.99?? review (finding 2): every sync - the hourly delta and the daily full sweep alike - replaced plex_sections
+// whole (DELETE FROM plex_sections, then every section INSERTed again) though nothing in Plex had changed. Each DELETE and INSERT
+// fires plexvectors' section triggers, so policy_rev moved by two a section every hour (prod: 3 sections, +6 a sync): the guard
+// then re-checked every stored vector (a write a page of 2,048) and threw the films' index away - 30,682 films read again.
+// installSections now updates the sections in place: a section no longer listed is deleted, a new one inserted, a changed one
+// updated (only the columns that changed), and an unchanged one not written at all.
+test("installSections updates the sections in place: an unchanged sync writes no section row; a removed / new / changed section is deleted / inserted / updated", async (t) => {
+  const sqls = [];
+  const h = await setup(t, { onWrite: (sql) => sqls.push(sql) });
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  const sectionRows = () => h.catalog.read("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
+  const sectionWrites = () => sqls.filter((s) => /^\s*(INSERT(\s+OR\s+\w+)?\s+INTO|UPDATE|DELETE\s+FROM)\s+plex_sections\b/i.test(s));
+  const before = await sectionRows();
+  assert.deepEqual(before.map((s) => [s.id, s.policy]), [["1", "allowed"], ["2", "allowed"], ["3", "adult"], ["4", "off"]]);
+  // a delta and a full sweep (the next day's first sync) with nothing new: the sections are not replaced whole
+  for (const [at, opts] of [[AT + 3600000, {}], [AT + 86400000 + 3600000, {}]]) {
+    sqls.length = 0;
+    h.setClock(at);
+    const out = await h.catalog.sync(opts);
+    assert.equal(out.ok, true, JSON.stringify(out));
+    assert.deepEqual(await sectionRows(), before);
+    assert.deepEqual(sectionWrites().filter((s) => /^\s*DELETE\s+FROM\s+plex_sections\s*$/i.test(s)), [], (out.full ? "full sweep" : "delta") + ": the sections are not replaced whole");
+  }
+  // Plex's count and a title change: updated in place
+  h.api.sections = h.api.sections.map((s) => s.id === "1" ? { ...s, count: 6, title: "Fixture Cinema II" } : s);
+  h.setClock(AT + 86400000 + 7200000);
+  assert.equal((await h.catalog.sync()).ok, true);
+  assert.deepEqual((await sectionRows()).find((s) => s.id === "1"), { id: "1", title: "Fixture Cinema II", type: "movie", count: 6, policy: "allowed" });
+  // a section gone from Plex's list: deleted (and its titles with it, as before); a new one: inserted
+  h.api.sections = h.api.sections.filter((s) => s.id !== "4").concat([{ id: "9", title: "New Fixture Shelf", type: "movie", count: 0, policy: "allowed" }]);
+  h.setClock(AT + 86400000 + 10800000);
+  assert.equal((await h.catalog.sync()).ok, true);
+  assert.deepEqual((await sectionRows()).map((s) => s.id), ["1", "2", "3", "9"]);
+  // a section switched to adult in Plex's allow-list: updated, its titles removed exactly as before
+  h.api.sections = h.api.sections.map((s) => s.id === "2" ? { ...s, policy: "adult" } : s);
+  h.setClock(AT + 86400000 + 14400000);
+  assert.equal((await h.catalog.sync()).ok, true);
+  assert.deepEqual((await sectionRows()).find((s) => s.id === "2"), { id: "2", title: "(hidden)", type: "show", count: 1, policy: "adult" });
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog WHERE section='2'"))[0].n, 0, "the hidden section's titles are gone");
+  // the allow-list unset: every section off and hidden, every title removed (as before)
+  h.api.allowed = false;
+  h.setClock(AT + 86400000 + 18000000);
+  await h.catalog.sync();
+  assert.ok((await sectionRows()).every((s) => s.policy === "off" && s.title === "(hidden)"));
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n, 0);
+  // two sections with one id (a broken answer) still fail the write, as the whole-table INSERTs did
+  h.api.allowed = true;
+  h.api.sections = [...sections, { ...sections[0], title: "Twin" }];
+  h.setClock(AT + 86400000 + 21600000);
+  const twin = await h.catalog.sync();
+  assert.equal(twin.ok, false, JSON.stringify(twin));
+});

@@ -786,3 +786,167 @@ test("the bot's embed_todo (its model and dims on every call) keeps the films' i
   for (let i = 0; i < 3; i++) { await capped.todo({ model: MODEL, dim: 4, limit: 32 }); assert.deepEqual(await cappedAsk(), []); await capped.idle(); }
   assert.equal(c.total(), 0, "past the cap: not read again on every ask between the bot's embed_todo calls: " + JSON.stringify(c.blobs));
 });
+
+// plexvectors 1.99?? review (finding 2): an ordinary sync moved policy_rev though nothing in Plex had changed - plexcatalog's
+// installSections replaced plex_sections whole (DELETE + every INSERT again) and each row fired a section trigger (+2 a section,
+// prod +6 every hour). The vectors were never lost (prod's 1.99amg path, probed: 36,882 vectors, an unchanged delta and full
+// sweep -> policy_rev 0 -> 6 -> 12, the purge deleted 0 rows, vec=1 kept), but every sync made the guard re-check every stored
+// vector (a write a page) and drop the films' index: 30,682 films read again and the asks meanwhile answered from words.
+// Now the sections are updated in place, and an UPDATE of a section moves policy_rev only when its id, type or policy changes.
+function syncedCatalog(t, cfg) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plexvectors-test-"));
+  const api = { sections: [{ id: "1", title: "Films A", type: "movie", policy: "allowed", count: 300 }, { id: "4", title: "Films B", type: "movie", policy: "allowed", count: 100 },
+    { id: "2", title: "Series", type: "show", policy: "allowed", count: 1 }, { id: "3", title: "Adult", type: "movie", policy: "adult", count: 1 }], rows: [] };
+  for (let i = 0; i < 300; i++) api.rows.push({ ...row(5000 + i, "Synthetic film " + i), type: 1, added: 100, updated: 100 });
+  for (let i = 0; i < 100; i++) api.rows.push({ ...row(6000 + i, "Other film " + i, { section: "4" }), type: 1, added: 100, updated: 100 });
+  api.rows.push({ ...row(20, "Sky Office", { section: "2", content_rating: "TV-14" }), type: 2, added: 100, updated: 100 });
+  for (let i = 0; i < 20; i++) api.rows.push({ ...row(7000 + i, "Launch Day " + i, { section: "2", show_key: "20", show: "Sky Office", season: 1, episode: i + 1 }), type: 4, added: 100, updated: 100 });
+  const mediactl = async (method, route) => {
+    const u = new URL(route, "http://fixture.local");
+    if (route === "/sections") return { status: 200, json: { ok: true, allow_list_set: true, sections: api.sections } };
+    if (route === "/health") return { status: 200, json: { ok: true, version: "1.7.1" } };
+    if (u.pathname === "/collections") return { status: 200, json: { ok: true, collections: [], total: 0, next: null } };
+    if (u.pathname === "/catalog") {
+      const type = Number(u.searchParams.get("type")), sec = u.searchParams.get("section");
+      let list = api.rows.filter((r) => r.type === type && r.section === sec);
+      if (u.searchParams.has("since")) list = list.filter((r) => r.updated >= Number(u.searchParams.get("since")));
+      const start = Number(u.searchParams.get("start")), page = list.slice(start, start + 500);
+      return { status: 200, json: { ok: true, rows: page, total: list.length, next: start + page.length < list.length ? start + page.length : null } };
+    }
+    return { status: 404, json: { ok: false } };
+  };
+  const clock = { at: AT };
+  const catalog = createCatalog({ file: path.join(dir, "catalog.db"), now: () => clock.at, settings: () => cfg, noFts: true, mediactl, sleep: async () => {},
+    mainRead: async () => [], tautulli: { configured: () => false }, lists: { enabled: () => false, close: async () => {} }, log: { log() {}, error() {} } });
+  t.after(async () => {
+    await catalog.close();
+    const resolved = fs.realpathSync(dir);
+    assert.ok(path.basename(resolved).startsWith("plexvectors-test-") && path.dirname(resolved) === fs.realpathSync(os.tmpdir()));
+    fs.rmSync(resolved, { recursive: true, force: true });
+  });
+  return { catalog, api, clock };
+}
+test("an unchanged sync (the hourly delta, the daily full sweep) keeps every stored vector, the docs' vec and the films' index; a section hidden in Plex still drops its titles' vectors", async (t) => {
+  const cfg = { clerk_embed: true, clerk_embed_k: 30, clerk_block_ratings: "X,XXX,AO,R18,R18+", catalog_sync_min: 60 };
+  const { catalog, api, clock } = syncedCatalog(t, cfg);
+  assert.equal((await catalog.sync({ full: true })).ok, true);
+  const counted = { blobs: 0 };
+  const lane = { ...catalog, admin: { ...catalog.admin, read: async (...args) => { const rows = await catalog.admin.read(...args); for (const r of rows || []) if (r && Buffer.isBuffer(r.v)) counted.blobs++; return rows; } } };
+  const vectors = createVectors({ catalog: lane, settings: () => cfg, now: () => clock.at });
+  t.after(() => vectors.idle());
+  await vectors.configure({ model: MODEL, dim: 4 });
+  const all = await catalog.getByKeys(api.rows.map((r) => r.key));
+  assert.equal(all.length, api.rows.length);
+  for (let i = 0; i < all.length; i += 64)
+    assert.equal((await vectors.put({ model: MODEL, dim: 4, vecs: all.slice(i, i + 64).map((r) => ({ key: r.key, hash: textHash(documentText(r)), ...quantize([1, (Number(r.key) % 7) / 7, 0, 0]) })) })).stored, Math.min(64, all.length - i));
+  const films = api.rows.filter((r) => r.type === 1).map((r) => r.key), ask = (limit = 30) => vectors.nearest({ qvec: qvec([1, 0, 0, 0]), kind: "movie", keys: films, limit });
+  await ask(); await vectors.idle();
+  assert.equal((await ask()).length, 30);
+  assert.equal(vectors.stats().films, 400);
+  const state = async () => (await catalog.read("SELECT (SELECT COUNT(*) FROM plex_vectors) AS vectors,(SELECT COUNT(*) FROM plex_vector_docs WHERE vec=1) AS vec,(SELECT policy_rev FROM plex_vector_meta) AS policy_rev"))[0];
+  const before = await state();
+  assert.deepEqual([before.vectors, before.vec], [421, 421]);
+  for (const [label, at] of [["the hourly delta", AT + 3600000], ["the next day's full sweep", AT + 86400000 + 3600000], ["a count and a title changed in Plex", AT + 86400000 + 7200000]]) {
+    if (label.startsWith("a count")) api.sections = api.sections.map((s) => s.id === "1" ? { ...s, count: 301, title: "Films A (4K)" } : s);
+    clock.at = at;
+    const out = await catalog.sync();
+    assert.equal(out.ok, true, label + ": " + JSON.stringify(out));
+    counted.blobs = 0;
+    assert.equal((await ask()).length, 30, label);
+    await vectors.idle();
+    assert.deepEqual(await state(), before, label + ": policy_rev, the stored vectors and docs.vec unchanged");
+    assert.equal(vectors.stats().films, 400, label + ": the films' index kept");
+    assert.equal(counted.blobs, 0, label + ": no film vector read again");
+  }
+  // a real policy change: section 4 switched to adult in Plex's allow-list - its titles and their vectors go (as before), the
+  // policy moves, the index is built again without them, and none of them is ever offered
+  api.sections = api.sections.map((s) => s.id === "4" ? { ...s, policy: "adult" } : s);
+  clock.at = AT + 86400000 + 10800000;
+  assert.equal((await catalog.sync()).ok, true);
+  const hidden = await state();
+  assert.ok(hidden.policy_rev > before.policy_rev, "the policy moved");
+  assert.deepEqual([hidden.vectors, hidden.vec], [321, 321], "section 4's 100 films' vectors are gone");
+  const offered = await ask(50);
+  await vectors.idle();
+  assert.equal(offered.some((r) => r.key >= "6000" && r.key < "6100"), false);
+  assert.equal(vectors.stats().films, 300, "built again from what is still visible");
+});
+
+test("the section trigger: a cache from before gets the conditional trigger; a title or count update leaves policy_rev, a policy update moves it and the stored vectors are re-checked as before", async (t) => {
+  const h = await setup(t);
+  await store(h, "1", [1, 0, 0, 0]); await store(h, "2", [0, 1, 0, 0]);
+  // prod's 1.99amg trigger: every UPDATE of a section moved policy_rev
+  await h.catalog.write(async (tx) => {
+    await tx.run("DROP TRIGGER plex_vectors_section_update");
+    await tx.run("CREATE TRIGGER plex_vectors_section_update AFTER UPDATE ON plex_sections BEGIN UPDATE plex_vector_meta SET policy_rev=policy_rev+1 WHERE id=1; END");
+  });
+  const vectors = createVectors({ catalog: h.catalog, settings: () => h.cfg, now: () => AT });   // a restart on the new code
+  await vectors.init();
+  const rev = async () => (await h.catalog.read("SELECT policy_rev FROM plex_vector_meta"))[0].policy_rev;
+  const r0 = await rev();
+  await h.catalog.write((tx) => tx.run("UPDATE plex_sections SET count=COALESCE(count,0)+1,title=title||' (4K)'"));
+  assert.equal(await rev(), r0, "a title / count update is not a policy change");
+  await h.catalog.write((tx) => tx.run("UPDATE plex_sections SET policy=policy"));
+  assert.equal(await rev(), r0, "a policy written unchanged is not a policy change");
+  assert.deepEqual((await vectors.nearest({ qvec: qvec(), kind: "movie", keys: ["1", "2"] })).map((r) => r.key), ["1", "2"]);
+  await vectors.idle();
+  // section 1 switched off in place (no catalog delete): the policy moves, the guard re-checks the stored vectors, and both
+  // films' vectors (section 1) are deleted by the purge and never offered
+  await h.catalog.write((tx) => tx.run("UPDATE plex_sections SET policy='off' WHERE id='1'"));
+  assert.equal(await rev(), r0 + 1);
+  assert.deepEqual(await vectors.nearest({ qvec: qvec(), kind: "movie", keys: ["1", "2"] }), []);
+  await vectors.idle();
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_vectors WHERE key IN ('1','2')"))[0].n, 0, "re-checked and purged");
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_vector_docs WHERE key IN ('1','2') AND vec=1"))[0].n, 0);
+  // a section's id or type changing, a section added or removed: policy changes
+  await h.catalog.write((tx) => tx.run("UPDATE plex_sections SET type='show' WHERE id='3'"));
+  assert.equal(await rev(), r0 + 2);
+  await h.catalog.write((tx) => tx.run("INSERT INTO plex_sections(id,title,type,count,policy) VALUES ('9','New','movie',0,'allowed')"));
+  assert.equal(await rev(), r0 + 3);
+  await h.catalog.write((tx) => tx.run("DELETE FROM plex_sections WHERE id='9'"));
+  assert.equal(await rev(), r0 + 4);
+  // the trigger is replaced once: a second start leaves it as it is
+  const sql = async () => (await h.catalog.read("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='plex_vectors_section_update'"))[0].sql;
+  const once = await sql();
+  assert.match(once, /\bWHEN\b/);
+  await createVectors({ catalog: h.catalog, settings: () => h.cfg, now: () => AT }).init();
+  assert.equal(await sql(), once);
+});
+
+// plexvectors 1.99?? review (finding 3): a films build still reading when invalidate() ran (a model change, a policy change's
+// purge) or when the switch went off installed its result anyway when it finished - the old model's index, or an index while
+// switched off - kept until the next rebuild (twice the memory during it) or the next status().
+test("a films build that finishes after a model change, an invalidate() or switching off is not installed", async (t) => {
+  const snapshot = fixture();
+  for (let i = 0; i < 100; i++) snapshot.rows.push(row(5000 + i, "Synthetic film " + i));
+  const h = await setup(t, snapshot), films = Array.from({ length: 100 }, (_, i) => String(5000 + i));
+  const current = await h.catalog.getByKeys(films);
+  for (let i = 0; i < current.length; i += 64)
+    await h.vectors.put({ model: MODEL, dim: 4, vecs: current.slice(i, i + 64).map((r) => ({ key: r.key, hash: textHash(documentText(r)), ...quantize([1, 0, 0, 0]) })) });
+  // the films' first page read waits until the test lets it go
+  let release = null;
+  const held = { ...h.catalog, admin: { ...h.catalog.admin, read: async (sql, args) => {
+    if (/FROM plex_vectors v INDEXED BY plex_vectors_kind/.test(sql) && release === null) await new Promise((resolve) => { release = resolve; });
+    return h.catalog.admin.read(sql, args);
+  } } };
+  const until = async (fn) => { for (let i = 0; i < 400 && !fn(); i++) await new Promise((resolve) => setTimeout(resolve, 5)); assert.ok(fn()); };
+  for (const [label, during] of [
+    ["a model change", (v) => v.configure({ model: "fixture-embedding-v2", dim: 4 })],
+    ["invalidate()", async (v) => { v.invalidate(); }],
+    ["switching off", async (v) => { h.cfg.clerk_embed = false; await v.status(); }]]) {
+    h.cfg.clerk_embed = true; release = null;
+    await h.vectors.configure({ model: MODEL, dim: 4 });
+    const vectors = createVectors({ catalog: held, settings: () => h.cfg, now: () => AT });
+    const cold = vectors.nearest({ qvec: qvec(), kind: "movie", keys: films, budgetMs: 50 });
+    await until(() => typeof release === "function");   // the build is reading its first page
+    await during(vectors);
+    release();
+    await cold; await vectors.idle();
+    assert.equal(vectors.stats().films, 0, label + " during the build: its result is not installed - " + JSON.stringify(vectors.stats()));
+    if (label === "invalidate()") {
+      assert.equal((await vectors.nearest({ qvec: qvec(), kind: "movie", keys: films })).length, 30, "the next ask builds it again");
+      await vectors.idle();
+      assert.equal(vectors.stats().films, 100);
+    }
+  }
+});
