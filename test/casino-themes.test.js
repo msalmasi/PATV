@@ -552,6 +552,12 @@ test("review 6/7/12: a 💎 saloon table's rail turns gold; the rack's chips kee
   assert.ok(hr, "💎: --sl-wood overridden on .felt.hr (Hold'em and blackjack)");
   assert.notEqual(hr.decl["--sl-wood"], root.decl["--sl-wood"]);
   assert.match(hr.decl["--sl-wood"], /#e8c45a/i, "gold in the 💎 rail (classic High Roller's --rail2)");
+  // an empty seat's "Open seat" (cream #efe3c4, no plate) can sit on the rail at the oval's ends - on the gilded rail it needs its
+  // own dark plate to stay AA (found while verifying the gold rail)
+  const open = R.find((x) => x.sel === ".cz-theme-saloon .felt.hr .seat.empty .plate" && x.decl.background);
+  assert.ok(open, "💎: the open seat's label gets a plate");
+  const a = /rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)/.exec(open.decl.background);
+  assert.ok(a && Number(a[1]) + Number(a[2]) + Number(a[3]) < 90 && Number(a[4]) >= 0.75, "a dark plate: " + open.decl.background);
   // the bet rack: every clay chip its own colour (25K and Max were both black-and-gold)
   const faces = {};
   for (const r of R.filter((x) => /\.chip(\.\w+)?:not\(\.hrc\)$/.test(x.sel) && x.decl["--c"])) {
