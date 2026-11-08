@@ -56,7 +56,7 @@ async function fresh(opts = {}) {
   svc.S.hooks.crash = null;
   svc.S.rate.clear();
   for (const t of ["casino_tables", "casino_events", "casino_rounds", "casino_actions", "transactions", "reserve_claims", "casino_settings",
-                   "escrow_holds", "escrow_moves", "escrow_meta"]) {
+                   "escrow_holds", "escrow_moves", "escrow_meta", "admin_audit"]) {
     await runQuery(`DELETE FROM ${t}`).catch(() => {});
   }
   await runQuery("UPDATE users SET points_balance = 100000, casino_banned = 0");
@@ -500,6 +500,13 @@ test("cancel: an admin with the casino capability refunds every entry in full (f
   assert.equal(await total(), t0);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_holds WHERE ref = ? AND state = 'refunded'", [`TNY-${t2}`]))[0].n, 3);
   assert.equal(svc.getTable(t2).status, "closed");
+  // (review) each cancel is in the admin log: who, which sit & go, how many entries, how much went back, the reason
+  const audit = await getQuery("SELECT admin_id, action, detail, reason FROM admin_audit WHERE action = 'casino_sng_cancel' ORDER BY id");
+  assert.equal(audit.length, 2);
+  assert.deepEqual(audit.map((a) => a.admin_id), ["ad", "ad"]);
+  assert.deepEqual(audit.map((a) => JSON.parse(a.detail)), [{ sng: tid, status: "registering", entrants: 2, refunded: 2200 },
+                                                            { sng: t2, status: "running", entrants: 3, refunded: 3300 }]);
+  assert.deepEqual(audit.map((a) => a.reason), [null, "test"]);
 });
 
 test("tournament chips never become PAT: no buy-in, cash-out, close or idle close; sitting out = blinded, never stood up; no rake", async () => {
@@ -589,6 +596,9 @@ test("the web and Pepe: lobby block, create / register / unregister / cancel rou
     const tb = poll.tables[rid].tourney;
     assert.ok(tb && tb.level === 1 && tb.sb === 10 && tb.bb === 20 && tb.players_left === 2 && tb.level_secs_left === 180 && tb.next_sb === 15, JSON.stringify(tb));
     assert.ok(Array.isArray(poll.sng) && poll.sng.some((x) => x.id === rid), "the poll lists the open sit & gos");
+    // (review) ... never as a cash table in `open` (Pepe would list it twice), and the switch rides along (Pepe's off-site answer)
+    assert.ok(Array.isArray(poll.open) && !poll.open.some((x) => x.id === rid || x.id === tid), "no sit & go in the poll's open cash tables");
+    assert.equal(poll.sng_on, "everyone", "the poll carries the Sit & Go switch");
     // the admin's cancel route
     assert.equal((await post(`/api/casino/sng/${tid}/cancel`, { idem: "sng-web-can-01" }, "u2")).ok, false);
     j = await post(`/api/casino/sng/${tid}/cancel`, { idem: "sng-web-can-02", reason: "test" }, "ad");
@@ -659,4 +669,380 @@ test("a call-off whose refunds fail is tried again a minute later (not on every 
   await later(61);
   assert.equal(T.tourney.status, "cancelled");
   assert.equal(await bal("u1"), 100000);
+});
+
+// ── h22 review (1.99??): what the review found, each pinned ──
+const roomP = (p, r) => Object.assign({}, p, { via: "room", room: r || "Lab" });
+const eventsOf = async (tid) => (await getQuery("SELECT kind, data FROM casino_events WHERE table_id = ? ORDER BY seq", [tid]))
+  .map((r) => Object.assign({ kind: r.kind }, JSON.parse(r.data)));
+const QUADS3 = ["As", "Ad", "7c", "2d", "8h", "3s", "Ah", "Ac", "Kd", "Qs", "Jh"];       // hand 1 of three: Ann (u1) holds quad aces
+/** play the hand in progress to its end (the replies aren't checked - a test crash may answer "something went wrong") */
+async function playHand(tid, policy) {
+  const T = svc.getTable(tid);
+  for (let i = 0; i < 60 && T.eng.hand_active; i++) {
+    const a = H.currentActor(T.eng);
+    let verb = policy ? policy(T, a) : null;
+    if (!verb) verb = (T.eng.street_paid[a] || 0) + (T.eng.chips[a] || 0) > T.eng.current_bet ? "allin" : "call";
+    await A(byUid[a], verb, [], tid);
+  }
+}
+
+test("review: at a registering sit & go's table !sit registers (an amount that isn't the entry is refused), !stand unregisters, !holdem status / help / start are the sit & go's; a room player hears what's held", async () => {
+  await fresh();
+  const r0 = await S(roomP(ann), "new", ["3", "1k"], { room: "Lab" });
+  assert.ok(r0.ok, r0.reply);
+  const tid = r0.table, T = svc.getTable(tid);
+  assert.equal(T.room, "Lab");
+  const bobR = roomP(bob);
+  let r = await A(bobR, "sit", ["2000"], tid);
+  assert.equal(r.ok, false, "a cash-table buy-in isn't a sit & go entry");
+  assert.match(r.reply, /Sit & Go/);
+  assert.match(r.reply, /1,100 PAT/);
+  for (const v of ["buyin", "buy", "join"]) assert.equal((await A(bobR, v, ["5000"], tid)).ok, false, `${v} 5000 refused`);
+  assert.equal(await bal("u2"), 100000, "nothing held");
+  assert.equal(T.tourney.entrants.length, 1);
+  r = await A(bobR, "sit", ["1,000"], tid);          // the buy-in itself (or the whole entry) means the entry
+  assert.ok(r.ok, r.reply);
+  assert.ok(!r.quiet, "a room player is told what was held (the room line doesn't say it)");
+  assert.match(r.reply, /1,100 PAT held/);
+  assert.equal(await bal("u2"), 98900);
+  r = await A(bobR, "stand", [], tid);
+  assert.ok(r.ok, r.reply);
+  assert.equal(await bal("u2"), 100000, "!stand before the start = the whole entry back");
+  r = await A(bobR, "sit", [], tid);
+  assert.ok(r.ok && !r.quiet && /1,100 PAT held/.test(r.reply), r.reply);
+  r = await A(roomP(cat), "sit", ["1100"], tid);       // the whole entry typed out: also the entry - and it's full: it starts
+  assert.ok(r.ok, r.reply);
+  assert.equal(T.tourney.status, "running");
+  const t2 = await sng(dan, ["4", "1k"]);
+  r = await A(eve, "status", [], t2);
+  assert.ok(r.ok);
+  assert.match(r.reply, /Sit & Go #/);
+  assert.match(r.reply, /Registered 1\/4/);
+  r = await A(eve, "help", [], t2);
+  assert.match(r.reply, /^🏁 Sit & Go/, "!holdem help at a sit & go's table is the sit & go's help");
+  r = await svc.act(roomP(eve), "start", [], { game: "holdem", room: "Lab", table: tid }, key());
+  assert.equal(r.ok, false);
+  assert.match(r.reply, /Sit & Go/, "!holdem start in its room points at the sit & go, not '!sit to join'");
+  assert.equal((await A(eve, "leave", [], t2)).ok, false, "not registered: nothing to leave");
+});
+
+test("review: a hand's wrap-up that throws after the last bust-out doesn't leave the sit & go running forever - in memory, and after a restart", async () => {
+  for (const restart of [false, true]) {
+    await fresh();
+    const tid = await sng(ann, ["3", "1k"]);
+    await fill(tid, [bob, cat]);
+    let T = svc.getTable(tid);
+    Object.assign(T.eng.chips, { u1: 2500, u2: 1000, u3: 1000 });
+    deck(QUADS3);
+    await later(16);
+    assert.ok(T.eng.hand_active);
+    svc.S.hooks.crash = "sng:place";                  // the hand's wrap-up throws (a failed write) after its proof, before the places
+    await playHand(tid, (TT, a) => (a === "u1" ? "call" : null));
+    assert.equal(T.eng.hand_active, false);
+    assert.equal(T.tourney.status, "running");
+    assert.equal(T.tourney.places.length, 0);
+    if (restart) {
+      await later(301);                               // a level goes up: the table is saved as it stands (hand over, nobody placed)
+      svc.stop();
+      svc.S.hooks.crash = null;
+      await svc.boot({ tick: false });
+      T = svc.getTable(tid);
+      assert.ok(T && T.tourney.status === "running" && !T.hand, "the saved state: running, no hand, nobody placed");
+    } else {
+      svc.S.hooks.crash = null;
+    }
+    for (let i = 0; i < 8 && T.tourney.status !== "finished"; i++) await later(16);
+    assert.equal(T.tourney.status, "finished", `${restart ? "after a restart" : "without a restart"}: the next tick places them and pays out`);
+    await checkFinished(tid, 3, 1000, 100, [3000]);
+  }
+});
+
+test("review: a create retried under a new key (a lost reply, a restart, a double click) doesn't open a second sit & go or hold the entry twice", async () => {
+  await fresh();
+  const tid = await sng(ann, ["6", "1k"]);
+  let r = await S(ann, "new", ["6", "1k"]);
+  assert.ok(r.ok, r.reply);
+  assert.equal(r.table, tid, "the one just opened");
+  assert.equal(await bal("u1"), 98900, "the entry is held once");
+  assert.equal(svc.TN.openList().length, 1);
+  svc.stop();
+  await svc.boot({ tick: false });                    // the reply was lost to a restart
+  r = await S(ann, "new", ["6", "1k"]);
+  assert.equal(r.table, tid);
+  assert.equal(await bal("u1"), 98900);
+  const t2 = await sng(ann, ["6", "5k"]);             // a different sit & go is a new one
+  assert.notEqual(t2, tid);
+  await later(121);
+  const t3 = await sng(ann, ["6", "1k"]);             // and the same one again a while later too
+  assert.notEqual(t3, tid);
+  assert.equal(await bal("u1"), 100000 - 1100 - 5500 - 1100);
+});
+
+test("review: when the button busts, the button moves on clockwise - the blinds never jump back to the first seat", async () => {
+  await fresh();
+  const tid = await sng(ann, ["4", "1k"]);
+  await fill(tid, [bob, cat, dan]);
+  const T = svc.getTable(tid);
+  for (let h = 1; h <= 2; h++) {
+    await later(16);
+    assert.equal(T.eng.hand_no, h);
+    await playHand(tid, foldPolicy);
+  }
+  // hand 3: Cat (u3) on the button goes all-in and loses to Ann (u1) in the big blind
+  Object.assign(T.eng.chips, { u1: 2000, u2: 1500, u3: 500, u4: 2000 });
+  deck(["As", "Ad", "7c", "2d", "8h", "3s", "9d", "4c", "Ah", "Kc", "Qd", "Js", "5h"]);
+  await later(16);
+  assert.deepEqual([T.eng.hand_no, T.eng.button, T.eng.sb_key, T.eng.bb_key], [3, "u3", "u4", "u1"]);
+  await playHand(tid, (TT, a) => (a === "u3" ? "allin" : a === "u1" ? "call" : "fold"));
+  assert.deepEqual(T.eng.seats, ["u1", "u2", "u4"], "Cat is out");
+  svc.S.hooks.deck = null;
+  await later(16);
+  assert.deepEqual([T.eng.hand_no, T.eng.button, T.eng.sb_key, T.eng.bb_key], [4, "u4", "u1", "u2"],
+                   "Dan has the button, Ann the small blind, Bob the big blind");
+});
+
+test("review: the odd PAT among tied bust-outs follows the hand's odd-chip order (clockwise from the button), not the seat order", async () => {
+  await fresh();
+  const tid = await sng(ann, ["4", "1k"]);
+  await fill(tid, [bob, cat, dan]);
+  const T = svc.getTable(tid);
+  for (let h = 1; h <= 2; h++) { await later(16); await playHand(tid, foldPolicy); }
+  // hand 3, Cat (u3) on the button with quad aces: Dan, Ann and Bob are all in with 1,000 each and all out
+  Object.assign(T.eng.chips, { u1: 1000, u2: 1000, u3: 3000, u4: 1000 });
+  deck(["7c", "2d", "8h", "3s", "As", "Ad", "9d", "4c", "Ah", "Ac", "Kd", "Qs", "Jh"]);
+  await later(16);
+  assert.equal(T.eng.button, "u3");
+  await playOut(tid, { policy: (TT, a) => (a === "u3" ? "call" : null) });
+  const got = Object.fromEntries(T.tourney.places.map((p) => [p.uid, [p.place, p.prize]]));
+  assert.deepEqual(got, { u3: [1, 2600], u4: [2, 467], u1: [3, 467], u2: [4, 466] }, "Dan, Ann, Bob: after the button, clockwise");
+  await checkFinished(tid, 4, 1000, 100, [2600]);
+});
+
+test("review: a start-at-N countdown running when the registration hour ends runs out - it starts, it isn't called off", async () => {
+  await fresh();
+  const tid = await sng(ann, ["6", "1k", "at", "4"]);
+  const T = svc.getTable(tid);
+  await fill(tid, [bob, cat]);
+  await later(59 * 60 + 30);
+  await fill(tid, [dan]);
+  assert.equal(T.tourney.countdown_at, NOW + 60000);
+  await later(31);                                    // the hour is up; the countdown has 29 s to go
+  assert.equal(T.tourney.status, "registering", "not called off: its start rule is met");
+  assert.equal(await held(), 4400);
+  await later(30);
+  assert.equal(T.tourney.status, "running");
+  assert.equal(T.tourney.field, 4);
+});
+
+test("review: !sitout at a sit & go starts with the next hand (this hand is still yours); a seat that is out never burns its time bank", async () => {
+  await fresh();
+  let tid = await sng(ann, ["3", "1k"]);
+  await fill(tid, [bob, cat]);
+  let T = svc.getTable(tid);
+  await later(16);
+  assert.equal(H.currentActor(T.eng), "u1");
+  let r = await A(cat, "sitout", [], tid);            // Cat, the big blind, sits out while Ann is to act
+  assert.ok(r.ok);
+  assert.match(r.reply, /next hand/);
+  assert.ok((await A(ann, "raise", ["60"], tid)).ok);
+  assert.ok((await A(bob, "fold", [], tid)).ok);
+  assert.equal(H.currentActor(T.eng), "u3", "Cat still plays this hand: Ann's raise is hers to answer");
+  assert.ok(!T.eng.folded.includes("u3"));
+  assert.ok((await A(cat, "call", [], tid)).ok);
+  for (let i = 0; i < 20 && T.eng.hand_active; i++) assert.ok((await A(byUid[H.currentActor(T.eng)], "check", [], tid)).ok);
+  assert.equal(T.eng.hand_active, false);
+  await later(16);
+  assert.equal(T.eng.hand_no, 2);
+  assert.equal(H.currentActor(T.eng), "u2");
+  assert.ok((await A(bob, "call", [], tid)).ok);
+  assert.ok(T.eng.folded.includes("u3"), "the next hand: sitting out, Cat's small blind folds at once");
+  assert.equal(H.currentActor(T.eng), "u1");
+  // sitting out on your own turn: the 60 s run out, then a check / fold - the time bank is kept for when you're back
+  await fresh();
+  tid = await sng(ann, ["3", "1k"]);
+  await fill(tid, [bob, cat]);
+  T = svc.getTable(tid);
+  await later(16);
+  assert.equal(H.currentActor(T.eng), "u1");
+  const bank0 = T.qol.u1.bank;
+  assert.ok(bank0 > 0);
+  assert.ok((await A(ann, "sitout", [], tid)).ok);
+  await later(61);
+  assert.ok(T.eng.folded.includes("u1"), "Ann's clock ran out: she folds");
+  assert.equal(T.qol.u1.bank, bank0, "her time bank is untouched");
+  assert.ok(!(await eventsOf(tid)).some((ev) => /time bank/.test(ev.text || "")), "no time bank was used");
+});
+
+test("review: the view's countdown is also given in seconds on the site's clock (Pepe's board doesn't depend on his own clock)", async () => {
+  await fresh();
+  const tid = await sng(ann, ["6", "1k", "at", "2"]);
+  await fill(tid, [bob]);
+  await later(20);
+  const v = svc.publicView(svc.getTable(tid)).tourney;
+  assert.equal(v.countdown_at, NOW - 20000 + 60000);
+  assert.equal(v.countdown_secs_left, 40);
+  const v2 = svc.publicView(svc.getTable(await sng(cat, ["6", "1k"]))).tourney;
+  assert.equal(v2.countdown_secs_left, null, "no countdown: null");
+});
+
+test("review: switched off (or staff only for a member), !sng / help / info say so - an entrant still sees theirs and can leave", async () => {
+  await fresh();
+  const tid = await sng(ann, ["3", "1k"]);
+  await svc.setSetting("casino_sng", "off", "test");
+  for (const [verb, args] of [["", []], ["list", []], ["help", []], ["info", [tid]], ["", [tid.slice(0, 6)]]]) {
+    const r = await S(bob, verb, args);
+    assert.match(r.reply, /switched off/, `${verb || "(none)"} ${args.join(" ")}: ${r.reply}`);
+    assert.ok(!/!sng new/.test(r.reply), "no invitation to open one: " + r.reply);
+  }
+  let r = await S(ann, "info", [tid]);
+  assert.ok(r.ok && /Sit & Go #/.test(r.reply), "an entrant sees theirs: " + r.reply);
+  r = await S(ann, "", []);
+  assert.ok(r.reply.includes(tid.slice(0, 6)), "...in the list too: " + r.reply);
+  await svc.setSetting("casino_sng", "staff", "test");
+  for (const verb of ["", "help"]) assert.match((await S(bob, verb, [])).reply, /staff/);
+  assert.match((await S(sam, "", [])).reply, /Sit & Gos: #/);
+  assert.match((await S(sam, "help", [])).reply, /^🏁 Sit & Go —/);
+  await svc.setSetting("hm_enabled", "0", "test");
+  assert.match((await S(sam, "", [])).reply, /Hold'em on the site is switched off/);
+  await svc.setSetting("hm_enabled", "1", "test");
+  await svc.setSetting("casino_sng", "off", "test");
+  assert.ok((await S(ann, "leave", [tid])).ok, "leaving (a full refund) always works");
+  assert.equal(await bal("u1"), 100000);
+});
+
+test("review: the table page offers Register only to who may enter (me.tourney.can_register); the lobby's Create only to who may open one", async () => {
+  await fresh({ sng: "staff" });
+  const tid = await sng(sam, ["3", "1k"]);
+  const T = svc.getTable(tid);
+  const mv = async (T2, uid) => (await svc.meView(T2, uid)).tourney;
+  assert.equal((await mv(T, "u1")).can_register, false, "staff only: a member isn't offered Register");
+  assert.equal((await mv(T, "ad")).can_register, true);
+  assert.equal((await mv(T, "st")).can_register, false, "already registered");
+  assert.equal((await svc.TN.lobby("u1")).can_create, false);
+  assert.equal((await svc.TN.lobby("st")).can_create, true);
+  assert.equal((await svc.TN.lobby(null)).can_create, false);
+  await svc.setSetting("casino_sng", "everyone", "test");
+  assert.equal((await mv(T, "u1")).can_register, true);
+  await runQuery("UPDATE users SET casino_banned = 1 WHERE userId = 'u4'");
+  assert.equal((await mv(T, "u4")).can_register, false, "casino-banned");
+  const t2 = await sng(cat, ["3", "1k"]);
+  await fill(tid, [ann, bob]);
+  assert.equal(T.tourney.status, "running");
+  assert.equal((await mv(T, "u5")).can_register, false, "it has started");
+  await svc.setSetting("casino_sng", "off", "test");
+  assert.equal((await mv(svc.getTable(t2), "u5")).can_register, false, "switched off");
+});
+
+test("review: a full field whose start wasn't saved (the site died) starts after the restart; the reply never says nothing was charged", async () => {
+  await fresh();
+  const tid = await sng(ann, ["3", "1k"]);
+  await fill(tid, [bob]);
+  svc.S.hooks.crash = "sng:start";                  // the last entry commits, the site dies before the start is saved
+  const r = await S(cat, "join", [tid]);
+  svc.S.hooks.crash = null;
+  assert.equal(r.ok, false);
+  assert.ok(!/nothing was charged/.test(r.reply), "the entry went through - the reply doesn't say otherwise: " + r.reply);
+  assert.equal(svc.getTable(tid).tourney.status, "registering");
+  assert.equal(await bal("u3"), 98900);
+  svc.stop();
+  await svc.boot({ tick: false });
+  const T = svc.getTable(tid);
+  assert.equal(T.tourney.status, "running", "recover: a full field starts");
+  assert.deepEqual(T.eng.seats, ["u1", "u2", "u3"]);
+});
+
+test("review: !sng leave with no id leaves your own sit & go when you aren't in the room's", async () => {
+  await fresh();
+  const r0 = await S(roomP(ann), "new", ["6", "1k"], { room: "Lab" });
+  assert.ok(r0.ok, r0.reply);
+  const tb = await sng(cat, ["6", "1k"]);
+  assert.ok((await S(bob, "join", [tb])).ok);
+  let r = await S(roomP(bob), "leave", [], { room: "Lab" });
+  assert.ok(r.ok, r.reply);
+  assert.equal(await bal("u2"), 100000);
+  assert.equal(svc.getTable(tb).tourney.entrants.length, 1);
+  assert.ok((await S(roomP(dan), "join", [], { room: "Lab" })).ok, "no id in the room = the room's");
+  r = await S(roomP(dan), "leave", [], { room: "Lab" });
+  assert.ok(r.ok, r.reply);
+  assert.equal(svc.getTable(r0.table).tourney.entrants.length, 1);
+});
+
+test("review: one table per room - !sng new is refused in a room with an open cash table, nothing held", async () => {
+  await fresh();
+  svc.S.rate.clear();
+  const r1 = await svc.act(roomP(dan), "start", ["25/50"], { game: "holdem", room: "Lab" }, key());
+  assert.ok(r1.ok, r1.reply);
+  const r = await S(roomP(ann), "new", ["3", "1k"], { room: "Lab" });
+  assert.equal(r.ok, false);
+  assert.match(r.reply, /already open here/);
+  assert.equal(await bal("u1"), 100000);
+  assert.equal(svc.TN.openList().length, 0);
+});
+
+test("review: no casino rewards on tournament chips - no achievement counts, reward rows or gang rep after a sit & go", async () => {
+  await fresh();
+  const count = async (t) => (await getQuery(`SELECT COUNT(*) AS n FROM ${t}`).catch(() => [{ n: 0 }]))[0].n;
+  for (const t of ["casino_ach_counts", "casino_reward_done", "casino_rep_queue"]) await runQuery(`DELETE FROM ${t}`).catch(() => {});
+  const tid = await sng(ann, ["3", "1k"]);
+  await fill(tid, [bob, cat]);
+  await playOut(tid, { gap: 60 });
+  await checkFinished(tid, 3, 1000, 100, [3000]);
+  for (const t of ["casino_ach_counts", "casino_reward_done", "casino_rep_queue"]) assert.equal(await count(t), 0, t);
+});
+
+test("review: !sng new takes the forms Pepe passes through (6max, 9-seats, 1,000, 25K, @4, at=3) and refuses broken ones", async () => {
+  await fresh();
+  let tid = await sng(ann, ["6max", "25K", "@4"]);
+  let t = svc.getTable(tid).tourney;
+  assert.deepEqual([t.size, t.buyin, t.start_at, t.turbo], [6, 25000, 4, false]);
+  tid = await sng(bob, ["9-seats", "1,000", "at=3", "turbo"]);
+  t = svc.getTable(tid).tourney;
+  assert.deepEqual([t.size, t.buyin, t.start_at, t.turbo], [9, 1000, 3, true]);
+  tid = await sng(cat, ["3", "1k", "at", "3"]);
+  assert.equal(svc.getTable(tid).tourney.start_at, null, "at N = the size: starts when full");
+  for (const bad of [["6max", "1k", "@1"], ["6", "1k", "at"], ["6", "1k", "at=x"], ["10max", "1k"], ["6", "1k", "6"]]) {
+    assert.equal((await S(dan, "new", bad)).ok, false, "refused: " + bad.join(" "));
+  }
+});
+
+test("review: at most 3 sit & gos an account is in before they start; results stay in the lobby 15 minutes", async () => {
+  await fresh();
+  for (const b of ["1k", "5k", "25k"]) await sng(ann, ["6", b]);
+  let r = await S(ann, "new", ["6", "100k"]);
+  assert.equal(r.ok, false);
+  assert.match(r.reply, /3 sit & gos/);
+  const t4 = await sng(bob, ["6", "1k"]);
+  r = await S(ann, "join", [t4]);
+  assert.equal(r.ok, false);
+  assert.match(r.reply, /3 sit & gos/);
+  assert.equal(await bal("u1"), 100000 - 1100 - 5500 - 27500);
+  assert.ok((await S(ada, "cancel", [t4])).ok);
+  let lb = await svc.TN.lobby(null);
+  assert.ok(lb.list.some((x) => x.id === t4 && x.status === "cancelled"));
+  await later(14 * 60);
+  lb = await svc.TN.lobby(null);
+  assert.ok(lb.list.some((x) => x.id === t4), "its result is still up after 14 minutes");
+  await later(2 * 60);
+  lb = await svc.TN.lobby(null);
+  assert.ok(!lb.list.some((x) => x.id === t4), "gone after 15");
+});
+
+test("review: the admin Sit & Go card says when the Hold'em web front is Pepe's (the web lobby then redirects there)", async () => {
+  const ejs = require("ejs");
+  const casino = { hm_enabled: true, casino_sng: "staff", sng_fee_pct: 10, sng_buyins: "1000,5000", sng_payouts: "100|65,35|50,30,20", sng_levels: "10/20,15/30",
+                   sng_level_mins: 5, sng_turbo_mins: 3 };
+  const render = (front) => ejs.renderFile(path.join(repo, "views", "admin", "games.ejs"), { title: "Games", user: { username: "ada" }, isAdmin: true,
+                                                                                             can: () => true, casino: Object.assign({ hm_front: front }, casino) });
+  assert.ok((await render("pepe")).includes('id="sngFront"'), "front = pepe: the warning");
+  for (const f of ["auto", "patv"]) assert.ok(!(await render(f)).includes('id="sngFront"'), `front = ${f}: no warning`);
+});
+
+test("review: the pages - no 'Post big blind now' at a sit & go, Register follows can_register / can_create, the Create button stays off while its request is out", () => {
+  const hm = fs.readFileSync(path.join(repo, "public", "js", "casinohm.js"), "utf8");
+  const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8");
+  assert.ok(/if \(t\.tourney\) for \(const id of \[[^\]]*"cz-postnow"[^\]]*\]\) \$\(id\)\.hidden = true/.test(hm), "cz-postnow hidden at a sit & go");
+  assert.ok(/mt\.can_register/.test(hm), "the header's Register follows me.tourney.can_register");
+  assert.ok(/sg\.can_create \? `<button type="button" class="cz-btn gold sm" data-sngact="register"/.test(ui), "the lobby card's Register follows can_create");
+  assert.ok(/sngBusy/.test(ui) && /go\.disabled = sngBusy \|\|/.test(ui), "sngSheet keeps the Create button off while its POST is out");
 });

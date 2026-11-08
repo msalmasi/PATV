@@ -72,3 +72,16 @@ test("casino tables: stakes in a blackjack round and hold'em stacks + pot count;
   assert.equal(s.rows.find((r) => r.key === "casino:tables").amount, 1350);
   assert.equal(s.total, WANT + 1350);
 });
+
+// h22 review (1.99??): a 🏁 Sit & Go is a Hold'em table row too, but its stacks are TOURNAMENT CHIPS (casino/tourney.js) - the PAT
+// behind them is the entries' TNY escrow holds, already counted with the escrow (escrow:holds / escrow:service). Counting the chips
+// as well would add a fake mint while it runs and a fake burn when it ends (supply history, issuance %, the econ page).
+test("casino tables: a sit & go's tournament chips are not PAT - never counted (its entries are escrow holds)", async () => {
+  const before = await SUP.casinoHeld();
+  for (const status of ["registering", "running", "settling"]) {
+    await runQuery("INSERT INTO casino_tables (id, game, status, state) VALUES (?, 'holdem', 'open', ?)",
+                   ["sng-" + status, JSON.stringify({ eng: { chips: { u1: 1500, u2: 1300 }, contrib: { u2: 200 } }, tourney: { v: 1, status } })]);
+  }
+  assert.equal(await SUP.casinoHeld(), before, "three sit & gos' tournament chips change nothing");
+  assert.equal((await SUP.patSupply()).total, WANT + 1350);
+});
