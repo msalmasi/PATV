@@ -10,7 +10,7 @@ const DAY = 86400000, SEARCH_BUDGET_MS = 400, SEARCH_QUEUE = 4;
 // budget of their own (internal only: a caller's read() is still capped at the search budget), and shelves() keeps its
 // answer until the catalog changes (any write) or the block list does.
 const SHELVES_BUDGET_MS = 2000;
-// plexlists 1.99?? (prod 2026-11-08, /admin/media "Outside lists": "Could not read the outside lists"): admin and background
+// plexlists 1.99amd (prod 2026-11-08, /admin/media "Outside lists": "Could not read the outside lists"): admin and background
 // reads - the outside-lists card, a list's add / refresh / rematch matching every film and show - are not chat searches.
 // They get the admin lane (catalog.admin: the same queue and connection, this bound, never a caller's choice). Chat paths
 // keep read() and its search budget. Measured on prod (read-only, 255,833 rows): a list's match reads every film (30,682 in
@@ -329,7 +329,7 @@ function createCatalog(options = {}) {
   }
   async function rows(filters = {}) { return rowsOn(read, filters); }
   async function getByKeys(keys) { return getByKeysOn(read, keys); }
-  // plexlists 1.99??: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
+  // plexlists 1.99amd: the admin lane (ADMIN_BUDGET_MS) - the same queue and connection, and no budget option a caller could raise
   const adminRead = (sql, params = []) => queued(sql, params, ADMIN_BUDGET_MS);
   const admin = { read: adminRead, rows: (filters = {}) => rowsOn(adminRead, filters), getByKeys: (keys) => getByKeysOn(adminRead, keys) };
   async function search(query, filters = {}) {
@@ -836,5 +836,5 @@ const current = () => {
 };
 module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
-// plexlists 1.99??: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
+// plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
 module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args) };

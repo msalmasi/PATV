@@ -10,7 +10,7 @@ const integer = (v) => v !== null && v !== "" && Number.isSafeInteger(Number(v))
 const quiet = (at) => { const d = new Date(at), m = d.getUTCHours() * 60 + d.getUTCMinutes(); return m >= 220 && m < 260; };
 const coded = (code) => Object.assign(new Error(code), { code });
 const CODES = new Set(["needs_key", "invalid_list", "ambiguous_list", "not_found", "list_limit", "invalid_query", "quiet", "rate_limited", "daily_budget", "provider_auth", "provider_unavailable", "provider_invalid", "provider_timeout", "list_too_large", "lists_busy", "lists_unavailable", "closed"]);
-// plexlists 1.99??: a catalog read past its budget (too_broad) or a full read queue (busy) passes - the card says "busy, try
+// plexlists 1.99amd: a catalog read past its budget (too_broad) or a full read queue (busy) passes - the card says "busy, try
 // again", not "unavailable". Every other unknown failure is still lists_unavailable.
 const BUSY = new Set(["too_broad", "busy"]);
 const failure = (e) => ({ ok: false, code: CODES.has(e && e.code) ? e.code : BUSY.has(e && e.code) ? "lists_busy" : "lists_unavailable" });
@@ -59,7 +59,7 @@ function createLists(options = {}) {
   const enabled = () => keyed() && settings().clerk_lists === true;
   const clean = (value, max) => { const s = txt(value, max), key = getKey(); return key && (s.includes(key) || s.includes(encodeURIComponent(key))) ? "" : s; };
   const listId = (id) => { const v = String(id || "").replace(/^mdblist:/, ""); if (!ID.test(v)) throw coded("invalid_list"); return v; };
-  // plexlists 1.99?? (prod 2026-11-08: the card's every load failed on a read past the 400 ms chat search budget): the card's
+  // plexlists 1.99amd (prod 2026-11-08: the card's every load failed on a read past the 400 ms chat search budget): the card's
   // reads and a list's add / refresh / rematch run on the catalog's admin lane (its own bound). Chat reads keep catalog.read.
   const slow = () => catalog.admin || catalog;
   // ...and the real reason a read failed goes to the server log, once a streak per place (failure() hands the card only a
@@ -243,7 +243,7 @@ function createLists(options = {}) {
       const conditions = [...where], values = [...args];
       let base = "SELECT m.key,m.rank,m.item_no,l.id,l.name,l.ranked";
       if (final) base += ",c.type AS current_type";
-      // plexlists 1.99?? (prod 2026-11-08): with no ANALYZE stats SQLite put plex_catalog in the outer loop ("SCAN c") - every
+      // plexlists 1.99amd (prod 2026-11-08): with no ANALYZE stats SQLite put plex_catalog in the outer loop ("SCAN c") - every
       // row's JSON checked to find the members of no list at all: 651 ms over 255,833 rows, past the search budget. CROSS JOIN
       // fixes the loop order (SQLite keeps a CROSS JOIN's left table outside): lists (at most 20) -> their members by
       // list_id (or key + list_id for a key lookup) -> each member's catalog row by key. The cost follows the members.

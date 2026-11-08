@@ -6,7 +6,7 @@
     if (body) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
     return fetch(url, o).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: "HTTP " + r.status }; }).then(function (j) {
-        // plexlists 1.99??: the server's reason code rides along (the outside-lists card says why)
+        // plexlists 1.99amd: the server's reason code rides along (the outside-lists card says why)
         if (!r.ok || j.ok === false) { var err = new Error(j.error || ("HTTP " + r.status)); err.code = j.code; throw err; }
         return j;
       });
@@ -107,7 +107,7 @@
   function clClear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function clText(parent, tag, value) { var node = document.createElement(tag); node.textContent = value; parent.appendChild(node); return node; }
   function clStatus(value) { var node = document.getElementById("clStatus"); if (node) node.textContent = value; }
-  // plexlists 1.99??: why an add / refresh / search was refused (the server's code), or the caller's generic line
+  // plexlists 1.99amd: why an add / refresh / search was refused (the server's code), or the caller's generic line
   function clWhy(e, otherwise) {
     switch (e && e.code) {
       case "lists_busy": return lt("busy", "The catalog is busy right now. Try again in a minute.");
