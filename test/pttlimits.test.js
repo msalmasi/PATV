@@ -620,6 +620,6 @@ test("the wording: one string with {n} (js.pad.ptt.upto_n), the old fixed '20 s'
   assert.doesNotMatch(src, /setTimeout\(stop, 20000\)/, "no fixed 20 s stop");
   assert.doesNotMatch(src, /'js\.pad\.ptt\.upto'/);
   for (const v of ["room.ejs", "home.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=32/, v + " loads the new recorder");   // v32 (v31 = the story camera 1.99alu)
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=33/, v + " loads the new recorder");   // v32 (v31 = the story camera 1.99alu); v33: ptttoast (the same recorder - its lines are the Dock's notices)
   }
 });

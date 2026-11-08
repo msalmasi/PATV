@@ -246,15 +246,15 @@ test("pausebars: a paused bar with a holder keeps its chip, ring and 'on the mic
   assert.match(js, /var wasOn = row\.classList\.contains\('on'\);\n\s+observe\(row, function \(\) \{\n\s+var on = row\.classList\.contains\('on'\); if \(on !== wasOn\) \{ wasOn = on; if \(holderBox\) fitSoon\(holderBox\); \}/);
 });
 
-test("pausebars: cache-busters - pad-dock.css v11 on the pad, the homepage and both casino tables; pad-dock.js v11+ on the pad and the homepage (plexreplace: v12)", () => {
+test("pausebars: cache-busters - pad-dock.css v11 on the pad, the homepage and both casino tables; pad-dock.js v11+ on the pad and the homepage (plexreplace: v12; ptttoast: v13)", () => {
   const room = read("views", "room.ejs"), home = read("views", "home.ejs");
   assert.match(room, /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=11">/);
-  assert.match(room, /<script src="\/public\/js\/pad-dock\.js\?v=12"><\/script>/);
+  assert.match(room, /<script src="\/public\/js\/pad-dock\.js\?v=13"><\/script>/);
   assert.match(home, /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=11">/);
-  assert.match(home, /<script src="\/public\/js\/pad-dock\.js\?v=12"><\/script>/);
+  assert.match(home, /<script src="\/public\/js\/pad-dock\.js\?v=13"><\/script>/);
   for (const f of ["casino-bj.ejs", "casino-hm.ejs"]) assert.match(read("views", f), /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=11">/, f);
   for (const f of ["room.ejs", "home.ejs", "casino-bj.ejs", "casino-hm.ejs"]) {
     assert.doesNotMatch(read("views", f), /pad-dock\.css\?v=(?!11")\d+/, f + ": one css version everywhere");
-    assert.doesNotMatch(read("views", f), /pad-dock\.js\?v=(?!12")\d+/, f + ": one js version everywhere (plexreplace: v12)");
+    assert.doesNotMatch(read("views", f), /pad-dock\.js\?v=(?!13")\d+/, f + ": one js version everywhere (plexreplace: v12; ptttoast: v13)");
   }
 });
