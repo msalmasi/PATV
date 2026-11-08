@@ -683,6 +683,44 @@ test("catfix: the timer looks again sooner after a run that failed for a passing
   assert.equal(nextTickMin({ catalog_sync_min: 5 }, true, { ok: true }), 10, "never more often than every 10 minutes");
 });
 
+// 1.99?? catfix review: every client-side failure but "not configured" read as "can't be reached" and was tried 4 times - a
+// certificate pin that no longer matches said "media-control can't be reached (4 tries)" and its real cause appeared nowhere;
+// and the timer came back every 10 minutes even for failures asking again can't fix.
+test("catfix review: a failure asking again can't fix is named and tried once; an unreachable service says why", async (t) => {
+  const once = async (err, route = "/sections") => {
+    const slept = [];
+    const h = await setup(t, { sleep: async (ms) => { slept.push(ms); } });
+    h.api.hook = (r) => r === route ? Promise.reject(err()) : undefined;
+    const r = await h.catalog.sync();
+    return { r, tries: h.calls.filter((c) => c === route).length, slept, logs: h.logs, st: await h.catalog.status() };
+  };
+  const pin = await once(() => Object.assign(new Error("media-control certificate doesn't match MEDIACTL_TLS_SHA256"), { status: 502 }));
+  assert.equal(pin.r.error, "catalog source unavailable: the section list - media-control's certificate doesn't match MEDIACTL_TLS_SHA256");
+  assert.deepEqual([pin.tries, pin.slept, pin.r.retry], [1, [], false], "one try, no sooner look");
+  assert.equal(pin.st.error, pin.r.error, "the card says it too");
+  const url = await once(() => Object.assign(new TypeError("Invalid URL"), { code: "ERR_INVALID_URL" }));
+  assert.equal(url.r.error, "catalog source unavailable: the section list - MEDIACTL_URL isn't a usable address");
+  assert.deepEqual([url.tries, url.r.retry], [1, false]);
+  const unset = await once(() => Object.assign(new Error("The media-control service isn't configured."), { status: 503, extra: { code: "encoder_down" } }));
+  assert.equal(unset.r.error, "catalog source unavailable: the section list - media-control isn't configured on the site");
+  assert.deepEqual([unset.tries, unset.r.retry], [1, false]);
+  // passing reasons: tried again, and the cause is named (the error code only - never an address)
+  for (const [err, why] of [
+    [() => Object.assign(new Error("connect ECONNREFUSED 192.0.2.10:8443"), { code: "ECONNREFUSED" }), "ECONNREFUSED"],                   // the pinned TLS connect
+    [() => Object.assign(new Error("The media-control service can't be reached (read ECONNRESET)."), { status: 502, refuse: true }), "ECONNRESET"],
+    [() => Object.assign(new Error("The media-control service can't be reached (socket hang up)."), { status: 502, refuse: true }), "connection closed"],
+    [() => Object.assign(new Error("The media-control service can't be reached (something new)."), { status: 502, refuse: true }), null],
+  ]) {
+    const x = await once(err);
+    assert.equal(x.r.error, "catalog source unavailable: the section list - media-control can't be reached" + (why ? " (" + why + ")" : "") + " (4 tries)");
+    assert.deepEqual([x.tries, x.r.retry], [4, true]);
+    assert.equal(/192\.0\.2\.10|8443/.test(x.r.error + x.logs.join("\n")), false, "no address in the error or the log");
+  }
+  const late = await once(() => Object.assign(new Error("The media-control service can't be reached (timeout)."), { status: 502, refuse: true }));
+  assert.match(late.r.error, /^catalog source unavailable: the section list - no answer within \d+ s \(4 tries\)$/);
+  assert.equal(late.r.retry, true);
+});
+
 // 1.99?? catfix, the next wall after the collections one: the search index's key is an UNINDEXED FTS5 column, so every
 // "DELETE FROM plex_catalog_fts WHERE key=?" (one per row written, per revoked key, per shelf member) scans the whole index.
 // Measured (synthetic, this box): 5.8 ms a delete at 16k rows, 85 ms at 240k - a 500-row episode page spent ~42 s deleting,

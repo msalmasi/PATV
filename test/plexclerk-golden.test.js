@@ -205,5 +205,22 @@ test("catalog admin card renders translated labels and treats provider metadata 
   assert.match(text(nodes.get("pcOut")), /sync is running/);
   assert.equal(nodes.get("pcSync").disabled, false);
   assert.equal(timers.size, 1, "one status poll during sync");
+  // 1.99?? catfix review: the card's catfix lines - an unfinished sweep's progress, when the last error happened, the sections
+  // whose collections the last full sync left as they were - come from en.json keys and render as text
+  status = { ...status, syncing: false, ready: false,
+    error: "catalog source unavailable: episode page from 0 of section 73 (shows) - no answer within 60 s (4 tries) <b>bold</b>", error_at: 1793876400000,
+    progress: { started: 1793872800000, done: 2, total: 6, received: 15859 },
+    shelves_skipped: [{ section: "71", why: "no answer within 120 s" }, { section: "73", why: '<img src=y onerror="unsafe()">' }] };
+  nodes.get("pcRefresh").handlers.click(); await flush();
+  const out = text(nodes.get("pcOut"));
+  assert.match(out, /Full sync in progress since \S.*: 2 of 6 sections read, 15859 titles so far\. The next run carries on from there\./);
+  assert.match(out, /Last sync error \(\S[^)]*\): catalog source unavailable: episode page from 0 of section 73 \(shows\) - no answer within 60 s \(4 tries\) <b>bold<\/b>/);
+  assert.match(out, /Collections not refreshed by the last full sync, kept as they were: section 71 \(no answer within 120 s\), 73 \(<img src=y onerror="unsafe\(\)">\)\./);
+  assert.doesNotMatch(out, /NaN|undefined|\[object Object\]|Never/);
+  status = { ...status, error_at: null, progress: null, shelves_skipped: [] };
+  nodes.get("pcRefresh").handlers.click(); await flush();
+  const plain = text(nodes.get("pcOut"));
+  assert.match(plain, /Last sync error: catalog source unavailable/);
+  assert.doesNotMatch(plain, /in progress|not refreshed/);
   assert.ok(calls.every(([, options]) => options.credentials === "same-origin"));
 });
