@@ -615,6 +615,9 @@ function install(core) {
     const rref = `mtt:${M.id}:${uid}:${kind}${extra && extra.rev != null ? ":" + extra.rev : ""}${channel === "pepe" ? ":pm" : ""}`;
     await runQuery(`INSERT OR IGNORE INTO casino_mtt_reminders (ref, tid, user_id, kind, channel, due_at, sent_at, dropped, data, created) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
                    [rref, M.id, String(uid), kind, channel, due, JSON.stringify(extra || {}), clock()]);
+    // (review) one turned off ("remind off") and on again is re-armed - INSERT OR IGNORE alone kept the dropped row and queued nothing
+    await runQuery("UPDATE casino_mtt_reminders SET dropped = NULL, due_at = ?, data = ? WHERE ref = ? AND sent_at IS NULL AND dropped = 'off'",
+                   [due, JSON.stringify(extra || {}), rref]);
     return rref;
   }
   function noticeText(M, kind, data) {
@@ -698,6 +701,7 @@ function install(core) {
     const mine = await getQuery("SELECT * FROM casino_mtt_entries WHERE tid = ? AND user_id = ? ORDER BY gen DESC", [M.id, uid]);
     const cur = mine.find((r) => r.state === "held" || r.state === "playing");
     if (cur) return R(true, "You're already in.");
+    if (mine.some((r) => r.dq)) return R(false, "You were disqualified from this tournament.");          // (review: never a re-entry after a DQ)
     const used = mine.filter((r) => r.entry_no != null).length;
     if (late && used > 0 && used - 1 >= M.structure.reentry_max) return R(false, M.structure.reentry_max ? "No re-entries left." : "This one has no re-entries.");
     if (late ? M.entries_n >= M.structure.max_entries : M.reg_n >= M.structure.max_entries) return R(false, "It's full.");
@@ -837,6 +841,8 @@ function install(core) {
   }
   async function remind(actor, M, on, opts) {
     const uid = String(actor.uid);
+    // (review) only before the start: a running / finished one has nothing to remind of (its watch row answered "we'll tell you when it opens")
+    if (!["scheduled", "registering"].includes(M.status)) return R(false, M.status === "running" ? `#${M.no} has already started - nothing to remind you of.` : `#${M.no} is over.`);
     if (opts && opts.telegram != null) {
       try { const TG = require("../telegram"); if (await TG.linkOf(uid)) await TG.setPrefs(uid, { tourney: !!opts.telegram }); } catch (e) { console.error("[mtt] telegram pref:", e && e.message); }
     }
@@ -902,13 +908,16 @@ function install(core) {
   function h4hCheck(M, c) {
     const k = liveRecs(M).length;
     if (!M.h4h.on && !M.late_open && M.paid != null && k >= 2 && M.live_n === M.paid + 1) {
-      M.h4h = { on: true, round: 0, batch: null, started: false, lines: [], since: clock() };
+      M.h4h = { on: true, round: M.h4h.round || 0, batch: null, started: false, lines: [], since: clock(), pend: [] };
       if (c) c.h4h = "on";
       return "on";
     }
     if (M.h4h.on && (M.live_n <= M.paid || k === 1 || M.final)) {
       const lines = M.h4h.lines || [];
-      M.h4h = { on: false, round: M.h4h.round, batch: null, started: false, lines: [] };
+      // (review) the round's batch is KEPT: the first bust of a bubble round turns hand-for-hand off, and the round's hands still running at
+      // the other tables bust into the same batch (handEnd picks it by the hand's h4h_round) - ranked by their starting stacks, not by
+      // which table finished first; pend = the round's busted, announced once every table of the round has finished its hand
+      M.h4h = { on: false, round: M.h4h.round, batch: M.h4h.started ? M.h4h.batch : null, started: false, lines: [], pend: M.h4h.pend || [] };
       if (c) { c.h4h = "off"; c.h4hLines = (c.h4hLines || []).concat(lines); }
       for (const T of liveTables(M)) if (T.tourney.hold === "h4h") { if (c) c.kicks.add(T); }
       return "off";
@@ -1119,6 +1128,7 @@ function install(core) {
       return hold(T, "stopped");
     }
     if (T.status !== "open") return { deal: false, hold: "closed" };
+    if (wrapPending(T)) return hold(T, "wait");               // (review) the last hand's wrap-up first (tableTick "wrap")
     const now = clock();
     advanceClock(M, now);
     if (M.status !== "running") return hold(T, "stopped");
@@ -1422,11 +1432,14 @@ function install(core) {
     const rows = {};
     for (const uid of busted) rows[uid] = await entryOf(M.id, uid, ["playing"]);
     let seq = null;
+    // (review) a hand dealt in a hand-for-hand round busts into the round's batch - also after the round's first bust turned it off
+    const roundHand = st.h4h_round != null && st.h4h_round === M.h4h.round && !!M.h4h.batch;
     const ctx = await txn("handend", M, async (c) => {
       c.touch(T);
       advanceClock(M, now);
       if (busted.length) {
-        seq = M.h4h.on && M.h4h.started && st.h4h_round === M.h4h.round && M.h4h.batch ? M.h4h.batch : ++M.bust_seq;
+        seq = roundHand ? M.h4h.batch : ++M.bust_seq;
+        if (roundHand) M.h4h.pend = (M.h4h.pend || []).concat(busted);
         const order = st.order || e.players || [];
         const n = order.length, bi = order.indexOf(st.button);
         for (const uid of busted) {
@@ -1455,13 +1468,26 @@ function install(core) {
       T.tourney.hold = null;
     });
     for (const l of ctx.lines) log(M, l);
+    wrapAt.delete(T.id);
     await afterCommit("handend", async () => {
-      if (busted.length) await bustLines(M, busted, seq);
+      // (review) a round's bust lines wait until every table of the round has finished its hand (the places are known only then)
+      if (roundHand) { if (!roundOpen(M, st.h4h_round)) await flushRound(M); }
+      else if (busted.length) await bustLines(M, busted, seq);
       await afterLateClose(M, ctx);
       if (ctx.h4h && !ctx.lateClosed) await h4hLines(M, ctx.h4h, ctx);
       for (const K of ctx.kicks) kick(K);
     });
     if (ctx.finishing) await finish(M);
+  }
+  /** a hand of round `round` still running at some live table */
+  const roundOpen = (M, round) => liveTables(M).some((L) => L.eng.hand_active && L.tourney.start && L.tourney.start.h4h_round === round);
+  /** the round is over everywhere: its busted (M.h4h.pend) announced with their places, once */
+  async function flushRound(M) {
+    const uids = (M.h4h && M.h4h.pend) || [];
+    if (!uids.length) return;
+    M.h4h.pend = [];
+    await saveMtt(M);
+    await bustLines(M, uids, M.h4h.batch);
   }
   async function bustLines(M, uids, seq) {
     const t = clock();
@@ -1476,6 +1502,7 @@ function install(core) {
     // places are known: the batch is complete
     const pr = await projectedPlaces(M, seq);
     for (const g of pr) {
+      if (g.dq) continue;                                         // (review) a disqualified entry in the batch keeps its place, no line
       const names = [];
       for (const uid of g.uids) names.push(await nameFor(M, uid));
       const range = g.from === g.to ? ord(g.from) : `${ord(g.from)}-${ord(g.to)}`;
@@ -1503,7 +1530,7 @@ function install(core) {
     for (const k of Array.from(groups.keys()).sort((a, b) => b - a)) {
       const g = groups.get(k).sort(PAY.ocCmp);
       const pot = g.reduce((s, _r, i) => s + (amounts[place + i - 1] || 0), 0);
-      out.push({ uids: g.map((r) => r.user_id), from: place, to: place + g.length - 1, amount: Math.floor(pot / g.length) });
+      out.push({ uids: g.map((r) => r.user_id), from: place, to: place + g.length - 1, amount: Math.floor(pot / g.length), dq: g.every((r) => !!r.dq) });
       place += g.length;
     }
     return out;
@@ -1516,6 +1543,16 @@ function install(core) {
     if (!r) { await txn("dq", M, async () => { delete M.dq[uid]; }); return; }
     const w = whereIs(M, uid);
     if (w && w.T && w.T.eng.hand_active && w.T.eng.seats.includes(uid)) return;     // at the next boundary of their table
+    // (review) re-checked when it is applied: a DQ queued during a hand is never applied once the bubble has burst (the admin decides)
+    if (!M.late_open && M.paid != null && M.live_n <= M.paid) {
+      const q = M.dq[uid] || {};
+      await txn("dq", M, async () => { delete M.dq[uid]; });
+      log(M, `dq ${uid} dropped (past the bubble)`);
+      await mlog(M, "dq dropped", { uid, by: q.by || null, reason: q.reason || null });
+      await alert(M, "dq_dropped", `Tournament #${M.no}: a disqualification was NOT applied - the bubble burst first`,
+                  `Queued by ${q.by || "?"} (${String(q.reason || "")}) during a hand; the player is in the money now and keeps playing. Pause the tournament and decide.`);
+      return;
+    }
     const ctx = await txn("dq", M, async (c) => {
       let chips = 0;
       if (w && w.T && w.T.eng.seats.includes(uid)) {
@@ -1525,7 +1562,8 @@ function install(core) {
         try { H.stand(w.T.eng, uid); } catch (e) { /* not seated */ }
       } else if (M.transit[uid]) { chips = M.transit[uid].chips; delete M.transit[uid]; }
       M.total_chips -= chips;
-      const seq = ++M.bust_seq;
+      // (review) during a hand-for-hand round: the round's batch with stack 0 - below every bust of that round (never the bubble prize)
+      const seq = M.h4h.on && M.h4h.started && M.h4h.batch ? M.h4h.batch : ++M.bust_seq;
       await runQuery("UPDATE casino_mtt_entries SET state = 'busted', dq = 1, bust_seq = ?, bust_stack = 0, bust_table_no = ?, bust_oc = 0, updated = ? WHERE tid = ? AND user_id = ? AND gen = ? AND state = 'playing'",
                      [seq, w ? w.no : 0, now, M.id, uid, r.gen]);
       M.live_n -= 1;
@@ -1608,6 +1646,8 @@ function install(core) {
     const ptsOk = plan.E >= st.mtt_points_min_field;
     const best = new Map();                         // uid -> the best row (points: the best entry per player)
     for (const r of plan.rows) { const b = best.get(r.user_id); if (!b || r.place < b.place) best.set(r.user_id, r); }
+    // (review) a player disqualified from this tournament earns no leaderboard points (no points row) for any of their entries
+    for (const r of plan.rows) if (r.e.dq) best.delete(r.user_id);
     let fresh = false;
     try {
       const ctx = await txn("finish", M, async (c) => {
@@ -1730,6 +1770,7 @@ function install(core) {
         const rows = await entriesOf(M.id, "state = 'spent'");
         const best = new Map();
         for (const r of rows) { const b = best.get(r.user_id); if (!b || r.place < b.place) best.set(r.user_id, r); }
+        for (const r of rows) if (r.dq) best.delete(r.user_id);                  // (review) no achievements from a tournament you were disqualified from
         const R2 = require("./rewards");
         const twoTables = M.entries_n > M.structure.table_size;
         for (const r of best.values()) {
@@ -1910,7 +1951,7 @@ function install(core) {
       if (M.final) { const F = S.tables.get(M.final.table_id); if (F && F.status === "open" && F.tourney.hold) F.last_activity = now; }
       // a safety re-check: a held table with nothing scheduled gets its boundary again every RECHECK_MS (the pipeline is idempotent)
       for (const T of liveTables(M)) {
-        if (!T.eng.hand_active && !T.dl.turn && !T.dl.next && T.status === "open") T.dl.next = now + MTT.RECHECK_MS;
+        if (!T.eng.hand_active && !T.dl.turn && !T.dl.next && T.status === "open") T.dl.next = now + (wrapPending(T) ? 0 : MTT.RECHECK_MS);
       }
       return;
     }
@@ -1954,10 +1995,23 @@ function install(core) {
   }
 
   // ── table hooks (the router) ──
+  // (review) a hand that ended but whose wrap-up (handEnd) never committed - its transaction threw (a transient database error) after
+  // holdem.js had revealed the hand - is wrapped up again by the tick (holdem.js wrapUp: "wrap"), at once and then once a minute while it
+  // keeps failing; beforeDeal never deals that table on first (a 0-chip seat placed later would outrank the busts in between)
+  const wrapAt = new Map();                                   // table id -> not before (ms); in memory
+  const wrapPending = (T) => { const e = T.eng; return !e.hand_active && e.hand_no > 0 && T.tourney.bust_done !== e.hand_no; };
   function tableTick(T) {
     if (T.status !== "open") return "done";
     const M = S.mtts.get(T.tourney.id);
     if (!M) return "done";
+    if ((M.status === "running" || M.status === "finishing") && wrapPending(T)) {
+      const now = clock();
+      if ((wrapAt.get(T.id) || 0) <= now) {
+        wrapAt.set(T.id, now + MTT.RETRY_MS);
+        console.log(`[mtt] ${M.id} #${M.no} table ${T.tourney.no}: hand #${T.eng.hand_no} ended without its wrap-up - wrapping it up again`);
+        return "wrap";
+      }
+    }
     return null;
   }
   const tableDue = () => false;
@@ -2198,7 +2252,9 @@ function install(core) {
       }
     }
     const show = (M) => aud.ok || mine.includes(M.id);
-    const rows = (l) => l.filter(show).sort((a, b) => a.start_at - b.start_at).map((M) => Object.assign(lobbyRow(M), { me: mine.includes(M.id) }));
+    // (review) "Take me to my table": a seated entrant's own table (or the one they're moving to)
+    const myTable = (M) => { if (!mine.includes(M.id)) return {}; const w = whereIs(M, uid); return w && w.T && w.T.status === "open" ? { my_table: w.T.id } : {}; };
+    const rows = (l) => l.filter(show).sort((a, b) => a.start_at - b.start_at).map((M) => Object.assign(lobbyRow(M), { me: mine.includes(M.id) }, myTable(M)));
     const recent = (await getQuery("SELECT state FROM casino_mtt WHERE status = 'done' ORDER BY updated DESC LIMIT 10")).map((r) => { try { return JSON.parse(r.state); } catch (e) { return null; } }).filter(Boolean);
     return { mtt_on: aud.ok, audience: st.casino_mtt || "off", can_register: aud.ok && !!uid,
              upcoming: rows(all.filter((M) => M.status === "scheduled" && M.start_at < now + 7 * 86400e3)),
@@ -2265,7 +2321,14 @@ function install(core) {
       if (!T.eng.seats.includes(uid)) moved = w.T && w.T.id !== T.id && w.T.status === "open" ? { no: w.no, id: w.T.id } : { no: w.no, id: null };
     }
     S.mttSeen.set(uid, clock());
-    return { registered: !!w, mtt_rank: rank, moved_to: moved };
+    // (review) a busted / finished entrant's result (the table page's results card): the place and prize once it has settled, else "out"
+    let result = null;
+    if (!w && M.people[uid]) {
+      const ps = ((M.finish && M.finish.payouts) || []).filter((p) => p.user_id === uid).sort((a, b) => a.place - b.place);
+      if (ps.length) result = { place: ps[0].place, prize: (ps[0].escrow || 0) + (ps[0].overlay || 0), tied: !!ps[0].tied, final: true };
+      else if (M.status === "running" || M.status === "finishing") result = { out: true, late_open: !!M.late_open };
+    }
+    return { registered: !!w, mtt_rank: rank, moved_to: moved, result };
   }
 
   // ── Pepe: the private part (hole cards, turn prompts, notice PMs for room players seated at MTT tables, in their own room) ──

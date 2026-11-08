@@ -146,12 +146,12 @@ function shouldBreak(liveN, tables, size, slack) {
   return k > 1 && liveN <= (k - 1) * size - (slack || 0);
 }
 /** the table to break: the fewest effective players, ties the highest number; while late registration is open never one opened within
- *  the last 2 levels; never the final table -> its no | null */
+ *  the last 2 levels (a late table - the start tables, opened_level null, never count as opened then); never the final table -> its no | null */
 function breaker(tables, { lateOpen, level } = {}) {
   let best = null;
   for (const t of tables) {
     if (t.state !== "live" || t.final) continue;
-    if (lateOpen && level - (t.opened_level || 0) < 2) continue;
+    if (lateOpen && t.opened_level != null && level - t.opened_level < 2) continue;   // (review: a start table, opened_level null, isn't protected)
     if (!best || eff(t) < eff(best) || (eff(t) === eff(best) && t.no > best.no)) best = t;
   }
   return best ? best.no : null;
