@@ -32,9 +32,9 @@ function harness() {
   const vectors = {
     decodeVector: require("../plexvectors").decodeVector,
     async nearest(body) { d.calls.push(["nearest", body]); return d.vectors; },
-    async status() { d.calls.push(["embed_status"]); if (d.embedError) throw d.embedError; return { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
-    async todo(body) { d.calls.push(["embed_todo", body]); if (d.embedError) throw d.embedError; return { ok: true, rows: [{ key: "901", text: "Lantern at Midnight", hash: "a".repeat(64) }], model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
-    async put(body) { d.calls.push(["embed_put", body]); if (d.embedError) throw d.embedError; return { ok: true, stored: 1, rejected: 2 }; },
+    async status(opts) { d.calls.push(["embed_status", opts]); if (d.embedError) throw d.embedError; return { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
+    async todo(body) { d.calls.push(["embed_todo", body]); if (d.embedError) throw d.embedError; if (d.embedAnswer) return d.embedAnswer; return { ok: true, rows: [{ key: "901", text: "Lantern at Midnight", hash: "a".repeat(64) }], model: "fixture-embed", dim: 2, done: 5, left: 2 }; },
+    async put(body) { d.calls.push(["embed_put", body]); if (d.embedError) throw d.embedError; if (d.embedAnswer) return d.embedAnswer; return { ok: true, stored: 1, rejected: 2 }; },
   };
   const lists = {
     async shelves() { d.calls.push(["list_shelves"]); return [{ id: "mdblist:8001", name: "Lantern Top 250", count: 1, source: "mdblist", ranked: true }]; },
@@ -112,11 +112,40 @@ test("embed switches and fixed refusal codes never echo metadata or provider err
   for (const op of ["embed_todo", "embed_put"]) assert.equal((await h.pc.handle({ op })).code, "embed_off");
   assert.equal(h.data.calls.length, 0);
   h.s.clerk_embed = true;
-  for (const [code, expected] of [["bad_vectors", "bad"], ["bad_cursor", "bad"], ["bad_embed_model", "embed_model"], ["embed_model", "embed_model"], ["catalog_down", "catalog_down"], ["SQLITE_BUSY", "catalog_down"], ["embed_off", "embed_off"]]) {
+  // plexvectors 1.99??: a read past its budget, a full read queue or a locked database is "busy" (the bot backs off and asks again),
+  // not "catalog down" - prod answered every backfill call catalog_down while the catalog was ready and the read only slow
+  for (const [code, expected] of [["bad_vectors", "bad"], ["bad_cursor", "bad"], ["bad_embed_model", "embed_model"], ["embed_model", "embed_model"], ["catalog_down", "catalog_down"],
+    ["SQLITE_BUSY", "embed_busy"], ["too_broad", "embed_busy"], ["busy", "embed_busy"], ["slow", "embed_busy"], ["SQLITE_IOERR", "catalog_down"], ["embed_off", "embed_off"]]) {
     h.data.embedError = Object.assign(new Error("Synthetic private filename and provider token"), { code, label: "Do not return this" });
     const result = await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [] });
-    assert.equal(result.code, expected); assert.doesNotMatch(JSON.stringify(result), /filename|token|return this|SQLITE/);
+    assert.equal(result.code, expected, code); assert.doesNotMatch(JSON.stringify(result), /filename|token|return this|SQLITE/);
   }
+});
+
+// plexvectors 1.99?? (prod 2026-11-08: "[plexchat] embed_todo: refused catalog_down" on every call, never why): plexvectors logs a
+// refusal's real reason once a streak; plexchat answers its code and adds no line of its own. A crash it wasn't told about is said
+// once a streak too (its code, never its message).
+test("a refused embed call is answered with its code and logged once a streak, not on every call", async () => {
+  const h = harness(); h.s.clerk_embed = true;
+  const lines = [], log = console.log, error = console.error;
+  console.log = (...a) => lines.push(a.join(" ")); console.error = (...a) => lines.push(a.join(" "));
+  try {
+    h.data.embedAnswer = { ok: false, code: "embed_busy", logged: true };
+    for (let i = 0; i < 3; i++) assert.equal((await h.pc.handle({ op: "embed_todo", model: "fixture-embed", dim: 2 })).code, "embed_busy");
+    assert.deepEqual(lines, [], "plexvectors already said why");
+    h.data.embedAnswer = { ok: false, code: "catalog_down", logged: true };
+    assert.equal((await h.pc.handle({ op: "embed_todo", model: "fixture-embed", dim: 2 })).code, "catalog_down");
+    assert.deepEqual(lines, []);
+    h.data.embedAnswer = null;
+    h.data.embedError = Object.assign(new Error("Synthetic private filename"), { code: "SQLITE_IOERR" });
+    for (let i = 0; i < 3; i++) assert.equal((await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [] })).code, "catalog_down");
+    assert.equal(lines.length, 1, lines.join(" / ")); assert.match(lines[0], /embed_put/); assert.match(lines[0], /SQLITE_IOERR/); assert.doesNotMatch(lines[0], /filename/);
+    h.data.embedError = null;
+    assert.equal((await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [] })).ok, true);
+    h.data.embedError = Object.assign(new Error("x"), { code: "SQLITE_IOERR" });
+    await h.pc.handle({ op: "embed_put", model: "fixture-embed", dim: 2, vecs: [] });
+    assert.equal(lines.length, 2, "a new streak is said again");
+  } finally { console.log = log; console.error = error; }
 });
 
 test("embed operations retain the original bot-token gate and body limit", async () => {
@@ -154,6 +183,8 @@ test("shelves exposes vector readiness only after clerk access and fails softly"
   assert.equal((await h.call("shelves")).embed, undefined);
   h.s.clerk_embed = true;
   assert.deepEqual((await h.call("shelves")).embed, { ready: true, model: "fixture-embed", dim: 2, done: 5, left: 2 });
+  // plexvectors 1.99??: a person's ask takes the quick look (no count of the catalog on the chat path)
+  assert.deepEqual(h.data.calls.filter((row) => row[0] === "embed_status").map((row) => row[1]), [{ quick: true }]);
   h.data.embedError = new Error("Synthetic private error");
   const fallback = await h.call("shelves"); assert.equal(fallback.ok, true); assert.equal(fallback.embed.ready, false);
   assert.doesNotMatch(JSON.stringify(fallback), /private error/);
