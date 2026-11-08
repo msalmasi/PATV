@@ -1,0 +1,45 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: true }) %>
+<%# h22 phase 2 (1.99??): the 🏆 tournament schedule manager (casino.admin) - public/js/admin-mtt.js draws it from GET /api/casino/admin/mtt:
+    the lists (upcoming / registering / running / finished / cancelled), the create / edit form with live previews (the fee, the late-entry depth,
+    the estimated length, the projected payouts at max entries, the guarantee's gate, the on-air warning) and every row's actions (edit, delay,
+    raise max, cancel, void and refund, pause, resume, start now, stream, retry the guarantee, refund an entry, disqualify, the log).
+    Every action is audited (admin_audit casino_mtt_<action>). %>
+<div class="adm-head">
+  <h1>🏆 Tournaments</h1>
+  <p>Scheduled multi-table Hold'em tournaments. Everyone pays the same entry (buy-in + the fee, held in escrow), plays tournament chips, and the finish pays the prizes and the fee to the House in one move. Times are Eastern (America/New_York). <a href="/admin/games#casino-mtt">Settings ›</a></p>
+</div>
+<section class="adm-card" id="mttGate"><h2>Guarantees</h2><p class="adm-help" id="mttGateText">Loading…</p></section>
+<section class="adm-card" id="mttCreate" aria-labelledby="mttCreateT">
+  <h2 id="mttCreateT">Schedule a tournament</h2>
+  <form id="mttForm" class="adm-form">
+    <input type="hidden" name="id" value="">
+    <label>Title<input name="title" required minlength="3" maxlength="60" autocomplete="off" placeholder="Sunday Stack"></label>
+    <label>Start (ET)<input name="start" type="datetime-local" required></label>
+    <label>Registration opens (ET, optional)<input name="reg_opens" type="datetime-local"></label>
+    <label>Buy-in<select name="buyin" id="mttBuyin"></select></label>
+    <label>Structure<select name="structure"><option value="standard">standard</option><option value="turbo">turbo</option></select></label>
+    <label>Starting chips<input name="start_chips" type="number" min="500" max="100000" step="100"></label>
+    <label>Table size<select name="table_size"><option value="9">9-handed</option><option value="6">6-handed</option></select></label>
+    <label>Max entries<input name="max_entries" type="number" min="2" max="500"></label>
+    <label>Min entries<input name="min_entries" type="number" min="2" max="500"></label>
+    <label>Late registration (levels)<input name="late_levels" type="number" min="0" max="20"></label>
+    <label>Re-entries<input name="reentry_max" type="number" min="0" max="3" value="0"></label>
+    <label>Guarantee (PAT)<input name="guarantee" type="number" min="0" step="1000" value="0" id="mttGtd"></label>
+    <label>Announce in rooms (ids, comma-separated, up to 6)<input name="rooms" autocomplete="off" id="mttRooms"></label>
+    <label>Repeat<select name="repeat"><option value="none">no</option><option value="daily">daily</option><option value="weekly">weekly</option></select></label>
+    <label>Times<input name="count" type="number" min="1" max="8" value="1"></label>
+    <div class="adm-help" id="mttPreview" aria-live="polite"></div>
+    <div class="adm-actions"><button type="submit" id="mttSave">Schedule</button><button type="button" class="adm-btn ghost" id="mttReset">New</button><span id="mttStatus" class="adm-msg" role="status"></span></div>
+  </form>
+</section>
+<section class="adm-card" id="mttLists" aria-labelledby="mttListsT">
+  <h2 id="mttListsT">Schedule</h2>
+  <div id="mttList" class="adm-help">Loading…</div>
+</section>
+<section class="adm-card" id="mttDetail" hidden aria-labelledby="mttDetailT">
+  <h2 id="mttDetailT">Tournament</h2>
+  <div id="mttDetailBody"></div>
+</section>
+<script src="/public/js/admin-mtt.js?v=1"></script>
+<%- include('../partials/admin-close') %>

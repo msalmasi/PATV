@@ -1,0 +1,30 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: view === 'board' ? t('casino.mtt.board_title') : t('casino.mtt.page_title'), user: user}) %>
+<%# views/casino-mtt.ejs - h22 phase 2 (1.99??): 🏆 a scheduled tournament's page (/casino/holdem/mtt/<id>: the header with the level, the blinds,
+    the next level, players left, the average stack, the prize pool, the paid places and the hand-for-hand / paused banners; the Info, Players,
+    Tables, Prizes and Results tabs; Register / Unregister / Re-enter / Remind me) and the leaderboard (/casino/holdem/leaderboard). Drawn by
+    public/js/casinomtt.js from /api/casino/mtt/<id> (3 s while it runs, 15 s otherwise). %>
+<%- include('partials/casino-css') %>
+<main class="ds-page flow cz mtt-page" id="cbm" data-game="holdem" data-signed="<%= signedIn ? '1' : '' %>">
+  <div class="cz-bar">
+    <div class="cz-brand"><span class="ic" aria-hidden="true">🏆</span><div><div class="h1"><%- view === 'board' ? t('casino.mtt.board_title') : t('casino.mtt.page_title') %></div><small><%- t('casino.mtt.sub') %></small></div></div>
+    <a class="cz-pill" href="/casino/holdem#mtt">← <%- t('casino.mtt.back') %></a>
+  </div>
+  <div class="cz-toast" id="mtt-toast" role="status"></div>
+  <% if (view === 'board') { %>
+  <section class="mtt-boardpage">
+    <label class="lbl" for="mtt-period"><%- t('casino.mtt.period') %></label>
+    <select id="mtt-period"><option value="all"><%- t('casino.mtt.all_time') %></option><% for (let i = 0; i < 6; i++) { const d = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - i, 1)); const v = d.toISOString().slice(0, 7); %><option value="<%= v %>"><%= v %></option><% } %></select>
+    <div id="mtt-board" aria-live="polite"></div>
+  </section>
+  <% } else { %>
+  <section id="mtt-page" data-mtt="<%= mttId %>">
+    <div class="mtt-head" id="mtt-head" aria-live="off"></div>
+    <div class="lob-tabs mtt-ptabs" id="mtt-tabs" role="tablist">
+      <% [['info', 'casino.mtt.tab_info'], ['players', 'casino.mtt.tab_players'], ['tables', 'casino.mtt.tab_tables'], ['prizes', 'casino.mtt.tab_prizes'], ['results', 'casino.mtt.tab_results']].forEach(([k, l], i) => { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= i === 0 %>"><%- t(l) %></button><% }) %>
+    </div>
+    <div class="mtt-body" id="mtt-body" aria-live="polite"></div>
+  </section>
+  <% } %>
+</main>
+<script src="/public/js/casinomtt.js?v=1"></script>

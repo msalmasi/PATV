@@ -9,6 +9,8 @@
 // the players left and the prize table (while it registers: who's in, the countdown, Register / Unregister), the results card the end;
 // there is no buy-in, top-up, stand-up or deal button there (tournament chips aren't PAT).
 // 1.99amf h20: a themed table (t.theme) is dressed by CZ.theme (casino-ui.js) - the look only.
+// h22 phase 2 (1.99??): at a 🏆 scheduled tournament's table (table.tourney.kind "mtt") the header is casinomtt.js's (window.CZMTT.tableHead:
+// tournament + table number, players left, average stack, your rank, the next level, holds, the move to your new table).
 (function () {
   "use strict";
   const CZ = window.CZ;
@@ -193,7 +195,7 @@
     const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Chat rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Chat room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
     const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
                   t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "",
-                  tn ? `🏁 ${esc(T("sng_badge", "Sit & Go"))}` : esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),
+                  tn ? (tn.kind === "mtt" ? `🏆 ${esc(T("mtt_badge", "Tournament"))}` : `🏁 ${esc(T("sng_badge", "Sit & Go"))}`) : esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),   // (h22 phase 2: + 🏆)
                   t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
       .filter(Boolean).map((x, i) => `<span class="tag${i === 0 && t.high_stakes ? " hr" : ""}">${x}</span>`).join("");
     if ($("cz-meta").dataset.v !== meta) { $("cz-meta").dataset.v = meta; $("cz-meta").innerHTML = meta; }
@@ -201,6 +203,7 @@
     const wb = $("cz-watchbar");
     let wtxt = "";
     if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_hm", "You're watching. Hole cards stay hidden until a showdown."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    else if (open && tn && tn.kind === "mtt" && me && !me.seat) wtxt = `👁 ${esc(T("mtt_watching", "You're watching a tournament table."))}`;    // (h22 phase 2)
     else if (open && tn && me && !me.seat) {
       wtxt = me.tourney && me.tourney.place ? `🏁 ${esc(T("sng_out_note", "You're out — thanks for playing."))}`
            : tn.status === "registering" ? (me.tourney && me.tourney.registered ? ""     // (review: the invitation only for who may enter)
@@ -230,6 +233,13 @@
     head.hidden = !tn;
     if (!tn) { res.hidden = true; return; }
     const sub = document.querySelector(".cz-brand small");          // (the top bar's cash-table line: chips = PAT, the rake - not here)
+    // ── h22 phase 2 (1.99??): a 🏆 scheduled tournament's table - its header is casinomtt.js's (CZMTT.tableHead) ──
+    if (tn.kind === "mtt") {
+      if (sub) sub.textContent = T("mtt_sub", "Tournament · tournament chips (not PAT) · no rake");
+      if (window.CZMTT) window.CZMTT.tableHead(t, me, head, res);
+      return;
+    }
+    // ── /h22 phase 2 ──
     if (sub) sub.textContent = T("sng_sub", "Sit & Go · tournament chips (not PAT) · no rake");
     const SG = CZ.sng, mt = (me && me.tourney) || {};
     const stat = (label, val) => `<div class="sng-stat"><small>${esc(label)}</small><b>${val}</b></div>`;

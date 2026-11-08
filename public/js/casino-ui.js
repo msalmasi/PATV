@@ -5,6 +5,7 @@
 // English default) - the defaults equal locales/en.json.
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
+// h22 phase 2 (1.99??): a scheduled tournament's table polls every 2 s while it isn't your turn (1 s on your turn, 5 s hidden).
 (function () {
   "use strict";
   const root = document.getElementById("cb");
@@ -916,7 +917,7 @@
   /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it */
   function startTable(render) {
     $("cz-table").hidden = false;
-    let stopped = false, busy = false, timer = null;
+    let stopped = false, busy = false, timer = null, lastD = null;
     async function refresh() {
       if (busy) return;
       busy = true;
@@ -933,6 +934,7 @@
         }
         const d = await r.json();
         if (!d.ok) return;
+        lastD = d;
         setSkew(d.now);
         peopleSync(d);                 // 1.99ajw casino2 (before render: a seat drawn now knows whether it is a button)
         render(d);
@@ -943,7 +945,9 @@
       } catch (e) { /* the next tick tries again */ }
       finally { busy = false; }
     }
-    const loop = () => { clearTimeout(timer); if (!stopped) timer = setTimeout(async () => { await refresh(); loop(); }, document.hidden ? 5000 : 1000); };
+    // (h22 phase 2: a scheduled tournament's table polls every 2 s while it isn't your turn - many players poll the same tables)
+    const slow = () => !!(lastD && lastD.table && lastD.table.tourney && lastD.table.tourney.kind === "mtt" && !(lastD.me && lastD.me.my_turn));
+    const loop = () => { clearTimeout(timer); if (!stopped) timer = setTimeout(async () => { await refresh(); loop(); }, document.hidden ? 5000 : slow() ? 2000 : 1000); };
     document.addEventListener("visibilitychange", () => { if (!document.hidden) { refresh(); loop(); } });
     refresh().then(loop);
     return refresh;

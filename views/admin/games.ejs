@@ -156,6 +156,63 @@
   </script>
   <% } %>
 </section>
+<%# ── h22 phase 2 (1.99??): 🏆 Tournaments (MTT) - casino_mtt (off | staff | everyone, default off; Hold'em on the site must be on), mtt_guarantees
+    (off | on) with the live gate (locked until 2026-12-01 14:00 UTC; the incentive budget must be the site's, not paused, with its budget service
+    installed), the mtt_* settings (validated by casino/mtt.js checkMttSetting; a tournament keeps what it froze at its registration) and the
+    schedule manager (/admin/casino/mtt). Saved through /api/casino/admin/settings like the other casino settings (audited: casino_settings.actor). ── %>
+<section class="adm-card" id="casino-mtt" aria-labelledby="casinoMttT">
+  <h2 id="casinoMttT">🏆 Tournaments (MTT) <span class="adm-pill admin">admins</span></h2>
+  <% if (!_can('casino.admin') || !locals.casino) { %><p class="adm-help">Admins only.</p><% } else { const _m = locals.casino; %>
+  <p class="adm-help">Scheduled multi-table Hold'em tournaments: the same entry for everyone (held in escrow), tournament chips, one clock for every table, the tables balanced and broken as players bust, the prizes and the House fee paid in one move at the end. Needs Hold'em on the site (now <b><%= _m.hm_enabled ? 'on' : 'off' %></b>). <a href="/admin/casino/mtt">Schedule manager ›</a></p>
+  <form id="mttSetForm" class="adm-form">
+    <label>Who can play
+      <select name="casino_mtt"><% ['off', 'staff', 'everyone'].forEach((v) => { %><option value="<%= v %>"<%= _m.casino_mtt === v ? ' selected' : '' %>><%= v %></option><% }) %></select>
+    </label>
+    <label>Guarantees and freerolls
+      <select name="mtt_guarantees"><% ['off', 'on'].forEach((v) => { %><option value="<%= v %>"<%= _m.mtt_guarantees === v ? ' selected' : '' %>><%= v %></option><% }) %></select>
+      <span class="adm-help" style="margin:0" id="mttGateLine">Guarantees: locked until 2026-12-01 14:00 UTC</span>
+    </label>
+    <% [['mtt_fee_pct', 'Fee (% of the buy-in, to the House)'], ['mtt_buyins', 'Buy-ins (PAT, comma-separated)'], ['mtt_table_size', 'Table size (6 or 9)'],
+        ['mtt_start_chips', 'Starting chips'], ['mtt_level_mins', 'Level length (minutes)'], ['mtt_turbo_mins', 'Turbo level length (minutes)'],
+        ['mtt_levels', 'Blind levels (sb/bb, comma-separated; then x1.5)'], ['mtt_next_secs', 'Seconds between hands'], ['mtt_late_levels', 'Late registration (levels)'],
+        ['mtt_break_slack', 'Break slack while late reg is open (players)'], ['mtt_reentry_cap', 'Most re-entries a tournament may allow'], ['mtt_max_field', 'Largest field'],
+        ['mtt_min_entries', 'Default min entries'], ['mtt_max_running', 'Most tournaments playing at once'], ['mtt_max_open_reg', 'Most registering at once'],
+        ['mtt_reg_open_hours', 'Registration opens (hours before)'], ['mtt_start_grace_mins', 'Start grace after downtime (minutes)'],
+        ['mtt_payouts_small', 'Payouts % for 2-3 | 4-6 | 7-9 entries'], ['mtt_paid_pct', 'Paid places (% of entries, 10+)'], ['mtt_curve_exp', 'Payout curve exponent'],
+        ['mtt_min_paid', 'Fewest paid places (10+)'], ['mtt_overlay_cap', 'Overlay cap per tournament (PAT)'], ['mtt_overlay_week_cap', 'Overlay cap per budget week (PAT)'],
+        ['mtt_budget_group', 'Budget group (roomgames or misc)'], ['mtt_freeroll_min_level', 'Freeroll: minimum level'], ['mtt_freeroll_min_age_days', 'Freeroll: account age (days)'],
+        ['mtt_remind_mins', 'Reminder (minutes before)'], ['mtt_points_min_field', 'Leaderboard points from (entries)'], ['mtt_ach_min_field', 'Achievements from (entries)'],
+        ['mtt_stream_final', 'Final table on the stream (take / queue / off)'], ['mtt_presence', 'Absent at the start = sitting out (on / off)'],
+        ['mtt_room_entrants_max', 'Most Camfrog entrants per tournament'], ['mtt_room_lines_per_min', 'Room lines per minute'],
+        ['mtt_discord', 'Discord posts (on / off)'], ['mtt_discord_channel', 'Discord channel id'], ['mtt_discord_role', 'Discord role to ping at the start'],
+        ['mtt_discord_kinds', 'Discord posts (reg_open, starting, final, winner)']].forEach(([key, label]) => { %>
+    <label><%= label %><input name="<%= key %>" value="<%= _m[key] %>" autocomplete="off" spellcheck="false"></label>
+    <% }) %>
+    <button type="submit">Save tournament settings</button><span id="mttSetStatus" role="status"></span>
+  </form>
+  <script>
+  (function () {
+    var form = document.getElementById('mttSetForm');
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var status = document.getElementById('mttSetStatus');
+      try {
+        for (var input of form.querySelectorAll('[name]')) {
+          var r = await fetch('/api/casino/admin/settings', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'}, body:JSON.stringify({key:input.name,value:input.value})});
+          var j = await r.json(); if (!j.ok) throw new Error(input.name + ': ' + (j.error || 'Save failed'));
+          if (j.settings && j.settings[input.name] !== undefined) input.value = j.settings[input.name];
+        }
+        status.textContent = 'Saved';
+      } catch (err) { status.textContent = err.message || 'Save failed'; }
+    });
+    fetch('/api/casino/admin/mtt', {credentials:'same-origin', cache:'no-store'}).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.gate) document.getElementById('mttGateLine').textContent = 'Guarantees: ' + j.gate.text;
+    }).catch(function () {});
+  })();
+  </script>
+  <% } %>
+</section>
+<%# ── /h22 phase 2 ── %>
 <%- include('../partials/admin-heistmarket', { t, isAdmin: _can('games.config'), hm: locals.hm }) %>
 <%- include('../partials/admin-pvpcfg', { isAdmin: _can('games.config') }) %>
 <%- include('../partials/admin-spincfg', { isAdmin: _can('games.config') }) %>
