@@ -58,3 +58,11 @@ test("only the configured role, only on 'starting'; never @everyone / @here; esc
   assert.equal(messages[0].content, "<@&111111>");
   assert.ok(!messages[0].embeds[0].title.includes("**"), "markdown escaped");
 });
+
+test("review: a 'starting' post reads 'Starting soon' before the start and 'Starting now' once it's due (the site posts it at the 15-minute mark, or at a start-now)", async () => {
+  await post({ ...valid, start_at: Date.now() + 15 * 60e3 });
+  assert.match(messages[0].embeds[0].title, /^🏆 Starting soon: #12 /);
+  messages = [];
+  await post({ ...valid, start_at: Date.now() - 1000 });
+  assert.match(messages[0].embeds[0].title, /^🏆 Starting now: #12 /);
+});

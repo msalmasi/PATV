@@ -355,3 +355,40 @@ test("static guard: no casino/mtt*.js file moves PAT any other way (money.house,
     assert.doesNotMatch(fs.readFileSync(path.join(h.repo, "casino", f), "utf8"), /require\(["']\.\.\/policy\/budget["']\)/, f);
   }
 });
+
+test("review: an owner retry that doesn't pay (the budget paused) goes back to owed - the retry button keeps working and the next one pays under a new key; a casino admin who isn't the owner can't void or retry", async () => {
+  await base();
+  stub.terminal = "E_BUDGET_REFUSED";
+  const M = await h.schedule({ buyin: 1000, guarantee: 20000, min_entries: 2, max_entries: 20 });
+  await h.reg(M, P().slice(0, 3));
+  await h.toStart(M);
+  await h.drive(M, { policy: h.allIn() });
+  assert.equal(M.finish.overlay.state, "owed");
+  stub.terminal = null;
+  // a second casino admin (class Admin: casino.admin) who isn't the owner: refused by the OWNER check (not by casino.admin)
+  await runQuery("INSERT OR IGNORE INTO users (userId, username, displayname, password, class, points_balance) VALUES ('ad2', 'ada2', 'Ada2', 'x', 'Admin', 1000000)");
+  const ad2 = h.mk("ad2", "Ada2");
+  let r = await svc.locked(() => MT.admin("overlay-retry", ad2, M, {}));
+  assert.equal(r.status, 403, "overlay retry: the owner only");
+  assert.equal(r.error, staffroles.OWNER_ONLY);
+  r = await svc.locked(() => MT.admin("void", ad2, M, { confirm: true, reason: "x" }));
+  assert.equal(r.status, 403, "void: the owner only");
+  assert.equal(r.error, staffroles.OWNER_ONLY);
+  assert.ok((await svc.locked(() => MT.admin("pause", ad2, M, {}))).status !== 403, "(ad2 is a casino admin: other actions aren't refused as non-admin)");
+  // the owner retries while the budget is paused: nothing paid, the overlay goes back to owed (never a pending one no tick looks at)
+  await own("site", true);
+  r = await svc.locked(() => MT.admin("overlay-retry", h.admin, M, {}));
+  assert.equal(r.ok, false, JSON.stringify(r));
+  assert.equal(M.finish.overlay.state, "owed");
+  assert.equal(M.finish.overlay.last_code, "budget_paused");
+  assert.equal(stub.calls.length, 1, "the budget service wasn't called while paused");
+  for (let i = 0; i < 3; i++) { h.NOW += 10 * 60e3; await svc.tickOnce(); }
+  assert.equal(M.finish.overlay.state, "owed");
+  await own("site", false);
+  r = await svc.locked(() => MT.admin("overlay-retry", h.admin, M, {}));
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.equal(M.finish.overlay.state, "paid");
+  assert.equal(stub.calls[stub.calls.length - 1].key, `tny:${M.id}:overlay:a2`, "a new key per retry");
+  const ent = await h.entries(M, "state = 'spent'");
+  assert.equal(ent.reduce((s, e) => s + e.overlay_due, 0), 0, "nothing owed any more (account merges unblocked)");
+});
