@@ -27,11 +27,14 @@
 //     inside the gesture that ends a capture (a let-go stops every track at once). On a pad page room-bridge.js owns the
 //     session (PATVRoom.session: its playback / auto, the room player's volume and resume); elsewhere the old type returns
 //   * a desktop webcam that names no facing faces you: its preview is mirrored too (the saved file still isn't)
+// storyprev (1.99??): a capture tells the studio its size (info.width / height), and a clip brings a poster (info.poster, a
+// JPEG of the live preview's frame as the recording starts - else its last frame) and its recorder type (info.mime): an
+// iPhone may not show its own MediaRecorder MP4 in a <video> at all, and the editor shows the poster instead
 (function () {
   'use strict';
   if (window.patvStoryCamera) return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-  var HOLD_MS = 250, MIN_MS = 1200, EARLY_MS = 250, JPEG_Q = 0.92, MEMO = 'patv.storycam', MEMO_MIC = 'patv.storycam.mic';
+  var HOLD_MS = 250, MIN_MS = 1200, EARLY_MS = 250, JPEG_Q = 0.92, POSTER_Q = 0.85, POSTER_MS = 2000, MEMO = 'patv.storycam', MEMO_MIC = 'patv.storycam.mic';
   var WEBM = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'], MP4 = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
   var WEBM_SILENT = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'], MP4_SILENT = ['video/mp4;codecs=avc1', 'video/mp4'];
   var SVG = 'http://www.w3.org/2000/svg', RING = 238.76, current = null, refused = false, micRefused = false, serial = 0;
@@ -266,15 +269,28 @@
     if (!keep) sessionAfter(c);
     paint(c);
   }
-  // the last frame stays on screen (over the released camera) while a capture is encoded
-  function freeze(c) {
-    if (c.frozen) return c.frozen;
+  // the live preview's current frame on a canvas of the stream's own size (never mirrored), or null
+  function snap(c, cls) {
     var v = c.video, w = v && v.videoWidth, h = v && v.videoHeight; if (!w || !h) return null;
     var canvas = document.createElement('canvas'), ctx = canvas.getContext && canvas.getContext('2d'); if (!ctx) return null;
     canvas.width = w; canvas.height = h;
     try { ctx.drawImage(v, 0, 0, w, h); } catch (e) { return null; }
-    canvas.className = 'scam-freeze'; canvas.setAttribute('aria-hidden', 'true'); c.view.insertBefore(canvas, c.video.nextSibling || null);
+    canvas.className = cls; canvas.setAttribute('aria-hidden', 'true'); return canvas;
+  }
+  // the last frame stays on screen (over the released camera) while a capture is encoded
+  function freeze(c) {
+    if (c.frozen) return c.frozen;
+    var canvas = snap(c, 'scam-freeze'); if (!canvas) return null;
+    c.view.insertBefore(canvas, c.video.nextSibling || null);
     return (c.frozen = canvas);
+  }
+  // storyprev: a clip's poster as a JPEG (null when this browser can't make one)
+  function jpeg(canvas) {
+    if (!canvas || typeof canvas.toBlob !== 'function') return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var t = setTimeout(function () { resolve(null); }, POSTER_MS);
+      try { canvas.toBlob(function (b) { clearTimeout(t); resolve(b && b.size ? b : null); }, 'image/jpeg', POSTER_Q); } catch (e) { clearTimeout(t); resolve(null); }
+    });
   }
   function thaw(c) { if (c.frozen) { c.frozen.remove(); c.frozen = null; } if (c.view) c.view.classList.remove('scam-snap'); }
   function away(c) {
@@ -320,7 +336,7 @@
     canvas.toBlob(function (blob) {
       c.busy = false; if (c.closed) return;
       if (!blob || !blob.size) { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); start(c); return; }
-      hand(c, blob, 'image/jpeg', 0);
+      hand(c, blob, 'image/jpeg', 0, { width: canvas.width, height: canvas.height });
     }, 'image/jpeg', JPEG_Q);
   }
   function limitMs(c) { var secs = Number(c.o.secs && c.o.secs()) || 30; return Math.max(2, Math.min(secs, 600)) * 1000; }
@@ -331,6 +347,9 @@
     if (type) options.mimeType = type; if (!c.noMic) options.audioBitsPerSecond = 128000;
     try { r = new MR(c.stream, options); } catch (e) { try { r = new MR(c.stream); } catch (e2) { return; } }
     var rec = c.rec = { r: r, chunks: [], type: type || '', began: now(), limit: limitMs(c) };
+    // storyprev: the clip's size and poster - the live preview's frame as the recording starts, for the editor to show
+    // whenever this browser can't show the recording itself (iOS: a fragmented MP4 with an empty moov)
+    rec.w = c.video.videoWidth; rec.h = c.video.videoHeight; rec.poster = snap(c, 'scam-poster');
     r.ondataavailable = function (e) { if (e.data && e.data.size) rec.chunks.push(e.data); };
     r.onstart = function () { if (rec.stopping) return; rec.began = now(); clearTimeout(rec.timer); rec.timer = setTimeout(function () { stopRec(c, 'limit'); }, rec.limit - EARLY_MS); };
     r.onstop = function () { done(c, rec); };
@@ -366,14 +385,20 @@
     if (rec.failed || !rec.chunks.length) { thaw(c); note(c, _t('js.feed.cam.failed', 'That didn\'t work. Try again.'), 'error'); if (!c.paused) start(c); return; }
     var blob = new Blob(rec.chunks, { type: type });
     c.busy = true; paint(c);
-    (/webm/.test(type) ? webmDuration(blob, secs).catch(function () { return blob; }) : Promise.resolve(blob)).then(function (b) { c.busy = false; hand(c, b, type, secs); });
+    // storyprev: the poster grabbed as it started (else the last frame, still on screen) goes along as a JPEG
+    var still = rec.poster || c.frozen || null, mime = String(rec.r.mimeType || rec.type || type);
+    Promise.all([/webm/.test(type) ? webmDuration(blob, secs).catch(function () { return blob; }) : Promise.resolve(blob), jpeg(still)]).then(function (r) {
+      c.busy = false; hand(c, r[0], type, secs, { width: still ? still.width : rec.w, height: still ? still.height : rec.h, poster: r[1], mime: mime });
+    });
   }
-  function hand(c, blob, type, secs) {
+  // more (storyprev): what the camera knows of the capture - its size, and a clip's poster (a JPEG Blob or null) and recorder type
+  function hand(c, blob, type, secs, more) {
     if (c.closed) return;
     var kind = /^image\//.test(type) ? 'image' : 'video', ext = kind === 'image' ? 'jpg' : /mp4/.test(type) ? 'mp4' : 'webm';
     var name = 'story-' + (kind === 'image' ? 'photo' : 'video') + '-' + stamp() + '.' + ext, file = blob;
     try { file = new File([blob], name, { type: type, lastModified: Date.now() }); } catch (e) { try { file.name = name; } catch (e2) { /* read-only */ } }
     var o = c.o, info = { camera: true, kind: kind, secs: kind === 'video' ? secs : 0, facing: c.facing, sound: kind === 'video' && !c.noMic };
+    if (more) Object.keys(more).forEach(function (k) { info[k] = more[k]; });
     close(c); o.file(file, info);
   }
   function close(c) {

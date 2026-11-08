@@ -1180,7 +1180,7 @@ test("Story camera preview fix: a capture tells the editor its size, and a clip 
   const v = root.querySelector("video.sst-source"), still = root.querySelector("img.sst-still");
   assert.ok(still, "the editor has the clip's still"); assert.ok(P.blobs.get(still.getAttribute("src")) === info.poster, "it is the poster");
   assert.equal(v.getAttribute("poster"), still.getAttribute("src"), "and the <video> shows it until it has a frame of its own");
-  assert.equal(still.getAttribute("aria-hidden"), "true"); assert.equal(still.style.objectFit, "contain");
+  assert.equal(still.getAttribute("aria-hidden"), "true"); assert.equal(still.style.objectFit, v.style.objectFit, "framed like its video"); assert.equal(still.style.inlineSize, v.style.inlineSize);
   // no poster could be made (toBlob fails): the clip still opens from its own <video>, with the size
   const Q = camPage({ toBlobFails: true }), qi = watchInfo(Q), root2 = await openStudio(Q), t = shutter(Q);
   fire(t, "pointerdown"); await Q.clock.tick(2500); fire(t, "pointerup"); await flush(16);
@@ -1216,6 +1216,7 @@ test("Story camera preview fix: no size within the wait - a camera clip shows it
   const P = camPage({ ...IPHONE, sourceVideo: (node) => { zeroMeta(node); return true; } }), root = await openStudio(P);
   await quickClip(P);
   const still = root.querySelector("img.sst-still"); assert.ok(still && !still.hidden, "the poster is up at once");
+  assert.equal(still.style.objectFit, "contain", "letterboxed like a <video> until it is framed");
   await P.clock.tick(3900);
   assert.ok(root.querySelector(".sst-post").disabled, "still waiting for the <video>"); assert.doesNotMatch(status(P), /preview/i);
   await P.clock.tick(200);
@@ -1308,6 +1309,19 @@ test("Story camera preview fix: the poster stays over a <video> that has its siz
   const st = root2.querySelector("img.sst-still"), v = root2.querySelector("video.sst-source");
   assert.ok(!st.hidden, "the first-frame play alone leaves it");
   v.dispatchEvent(new Ev("playing")); assert.ok(st.hidden, "playing after the first frame was put up");
+  // the poster stood in (no size in the wait) and the video gets one after all: it takes over once it paints a frame
+  let paint2 = null, node2 = null;
+  const R = camPage({ ...IPHONE, sourceVideo: (node) => { node2 = node; node.requestVideoFrameCallback = (cb) => { paint2 = cb; return 1; }; zeroMeta(node); return true; } }), root3 = await openStudio(R);
+  await quickClip(R); await R.clock.tick(4100);
+  const st3 = root3.querySelector("img.sst-still"); assert.ok(!st3.hidden); assert.ok(!root3.querySelector(".sst-post").disabled); assert.equal(paint2, null);
+  root3.querySelector('[data-tool="text"]').click(); assert.equal(root3.getAttribute("data-sheet"), "text", "editing on the poster");
+  node2.videoWidth = 1080; node2.videoHeight = 1920; node2.dispatchEvent(new Ev("resize")); await flush();
+  assert.equal(node2.plays, 1, "its first frame is put up"); assert.equal(typeof paint2, "function"); assert.ok(!st3.hidden, "not before it paints");
+  paint2(1, {}); await flush(); assert.ok(st3.hidden, "painted: the video shows itself"); assert.equal(root3.getAttribute("data-sheet"), "text", "the edit goes on");
+  // a camera clip whose media fragment alone is refused opens as a video (under its poster until it paints)
+  const S = camPage({ ...IPHONE, sourceVideo: (node, src) => { if (/#t=/.test(src)) { mediaError(node, 4); return true; } node.error = null; return false; } }), root4 = await openStudio(S);
+  await quickClip(S); assert.equal(S.srcs.length, 2); assert.equal(status(S), ""); assert.ok(!root4.querySelector(".sst-post").disabled);
+  assert.equal(root4.querySelector("video.sst-source").plays, 1); assert.ok(!root4.querySelector("img.sst-still").hidden);
 });
 
 test("Story camera preview fix: ?storydebug=1 (or localStorage patv.storydebug=1) shows what the browser made of the file over the preview; off by default, no network", async () => {

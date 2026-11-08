@@ -297,6 +297,60 @@
       else use(s, file, found.kind, !!found.gif, n, info);
     }, function () { if (live(s) && id === s.sniffId) refuse(s, _t('js.feed.ss.unreadable', 'That file couldn\'t be read. Try again, or choose another one.'), n); });
   }
+  // storyprev (1.99??): the owner's iPhone (iOS 26) said "This browser cannot preview that file" for clips just taken with the
+  // story camera (they posted fine). The editor now waits WAIT_MS for a <video> with no size yet, tries a refused media
+  // fragment once without it, and shows a camera clip's poster (story-camera.js: the live preview's frame as it started)
+  // whenever the video can't show a frame - see use(). LOAD_MS: a file that says nothing at all.
+  var WAIT_MS = 4000, LOAD_MS = 10000;
+  function coarse() { try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } }
+  // a camera clip's poster as the preview's still: the <video>'s poster until it has a frame of its own, and an <img> over it
+  // (framed like the video by render()) that stays wherever this browser can't show the recording at all
+  function stillOf(s, m, poster) {
+    var st = s.still = el('img', 'sst-source sst-still'); st.alt = ''; st.setAttribute('aria-hidden', 'true'); st.setAttribute('draggable', 'false'); st.style.objectFit = 'contain';
+    st.addEventListener('error', function () { st.bad = true; st.hidden = true; m.removeAttribute('poster'); });
+    st.src = objectURL(s, poster); m.setAttribute('poster', st.src); s.preview.insertBefore(st, s.canvas); return st;
+  }
+  // ?storydebug=1 on the page (or patv.storydebug = 1 in local storage): a small read-out over the preview of what this browser made
+  // of the picked file - type and size, the element's readyState / networkState / error, its size and length, which events
+  // fired and when, whether the poster stood in - for a screenshot. Off by default; it only reads the page (no network).
+  var MEDIA_EVENTS = ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'resize', 'play', 'playing', 'pause', 'seeked', 'waiting', 'stalled', 'suspend', 'abort', 'emptied', 'error', 'ended', 'load'];
+  var MEDIA_ERRORS = { 1: 'MEDIA_ERR_ABORTED', 2: 'MEDIA_ERR_NETWORK', 3: 'MEDIA_ERR_DECODE', 4: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
+  function debugOn() {
+    try { if (/(?:^|&)storydebug=1(?:&|$)/.test(String(location.search || '').replace(/^\?/, ''))) return true; } catch (e) { /* no location */ }
+    try { return !!window.localStorage && window.localStorage.getItem('patv.storydebug') === '1'; } catch (e) { return false; }
+  }
+  function bytes(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(2) + ' MB' : n >= 10240 ? Math.round(n / 1024) + ' KB' : n + ' bytes'; }
+  function debugFor(s, file, m, info, st) {
+    if (s.debug) { s.debug.remove(); s.debug = null; }
+    if (!debugOn()) return null;
+    var box = s.debug = el('pre', 'sst-debug'), t0 = Date.now(), log = [], counts = {}, last = null, view = 'loading', camera = !!(info && info.camera);
+    var look = { position: 'absolute', insetBlockStart: '0', insetInlineStart: '0', insetInlineEnd: '0', maxBlockSize: '80%', overflow: 'hidden', margin: '0', padding: '4px 6px', zIndex: '5',
+      font: '10px/1.35 ui-monospace, Menlo, Consolas, monospace', color: '#e6ffe6', background: 'rgba(0, 0, 0, .74)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'start', pointerEvents: 'none' };
+    Object.keys(look).forEach(function (k) { box.style[k] = look[k]; }); add(s.preview, box);
+    function px(w, h) { return (w || 0) + '×' + (h || 0); }
+    function num(x) { return typeof x === 'number' && isFinite(x) ? x.toFixed(3) : String(x); }
+    function paint() {
+      var video = m.localName === 'video', e = m.error && m.error.code ? { code: m.error.code, message: m.error.message || '' } : null, src = String(m.getAttribute('src') || ''), hash = src.indexOf('#'), nav = window.navigator || {};
+      var lines = ['story debug', 'file ' + (file.type || '(no type)') + ' · ' + bytes(file.size) + ' · ' + (file.name || '(no name)') + ' · ' + (camera ? 'camera' : 'gallery')];
+      if (camera) lines.push('camera ' + px(info.width, info.height) + ' · ' + num(info.secs) + ' s' + (info.mime ? ' · ' + info.mime : '') + (info.facing ? ' · ' + info.facing : '') + (info.sound === false && info.kind === 'video' ? ' · silent' : ''));
+      lines.push('poster ' + (st ? px(info.width, info.height) + ' · ' + bytes(info.poster.size) + (st.naturalWidth ? ' · decoded ' + px(st.naturalWidth, st.naturalHeight) : '') + (st.bad ? ' · failed' : st.hidden ? ' · hidden' : ' · shown') : camera && info.kind === 'video' ? 'none came' : 'none'));
+      lines.push('src ' + (!src ? '-' : hash >= 0 ? 'blob ' + src.slice(hash) : 'blob (no fragment)'));
+      lines.push(video ? 'element readyState ' + m.readyState + ' · networkState ' + m.networkState + ' · ' + px(m.videoWidth, m.videoHeight) + ' · duration ' + num(m.duration) + ' · ' + (m.paused === false ? 'playing' : 'paused') + ' at ' + num(m.currentTime)
+        : 'element ' + px(m.naturalWidth, m.naturalHeight));
+      if (e) last = e;
+      lines.push('error ' + (last ? last.code + ' ' + (MEDIA_ERRORS[last.code] || '?') + (last.message ? ' · ' + last.message : '') + (e ? '' : ' (earlier)') : 'none'));
+      lines.push('preview ' + view, 'events ' + (log.join(', ') || '-'));
+      if (nav.userAgent) lines.push('ua ' + nav.userAgent);
+      box.textContent = lines.join('\n');
+    }
+    function note(what) { log.push(what + ' +' + (Date.now() - t0) + ' ms'); if (log.length > 40) log.splice(0, log.length - 40); paint(); }
+    // a chatty event is listed three times; an error is read at once (a second try clears the element's own)
+    MEDIA_EVENTS.forEach(function (type) { m.addEventListener(type, function () { counts[type] = (counts[type] || 0) + 1; if (type === 'error') paint(); if (counts[type] <= 3) note(type); else paint(); }); });
+    m.addEventListener('timeupdate', function once() { m.removeEventListener('timeupdate', once); note('timeupdate ' + num(m.currentTime)); });
+    if (st) { st.addEventListener('load', function () { note('poster loaded'); }); st.addEventListener('error', function () { note('poster failed'); }); }
+    paint();
+    return { note: note, view: function (what) { view = what; note('preview: ' + what); } };
+  }
   function use(s, file, kind, gif, n, info) {
     s.sniffId = (s.sniffId || 0) + 1;     // a typed pick after an untyped one wins
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
@@ -305,51 +359,109 @@
     // after a capture Retake takes 📷 Camera's place (one way back to the camera, not two)
     var captured = !!(info && info.camera); s.retake.hidden = !captured; s.picks.querySelector('[data-picker="camera"]').hidden = captured; s.camWhy = '';
     if (s.ready) discard([s.ready.id]); s.ready = null; closeSheet(s); revoke(s); if (s.media) { if (s.media.pause) s.media.pause(); s.media.remove(); }
+    if (s.still) { s.still.remove(); s.still = null; }
     var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, zoom: 1, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
     s.selected = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     var m = s.media = el(kind === 'video' ? 'video' : 'img', 'sst-source'); s.preview.insertBefore(m, s.canvas);
     m.setAttribute('aria-label', _t('js.feed.ss.source', 'Selected story media')); if (kind === 'image') m.alt = _t('js.feed.sc.pic_alt', 'Your story picture');
     // storyfix2: muted + inline (attributes too, as iOS reads them) and preload auto, for the first frame below
     if (kind === 'video') { m.muted = true; m.defaultMuted = true; m.playsInline = true; ['playsinline', 'webkit-playsinline', 'muted'].forEach(function (a) { m.setAttribute(a, ''); }); m.preload = 'auto'; m.addEventListener('timeupdate', function () { if (d.trim && m.currentTime >= d.trim.end) { m.currentTime = d.trim.start; } }); m.addEventListener('ended', function () { if (d.trim && live(s)) { m.currentTime = d.trim.start; m.play().catch(function () {}); } }); }
-    function loaded() {
+    // storyprev: a camera clip's poster stands by (its size came with it); the read-out is there only with ?storydebug=1
+    var st = kind === 'video' && captured && info.poster && info.poster.size && info.width > 0 && info.height > 0 ? stillOf(s, m, info.poster) : null;
+    var dbg = debugFor(s, file, m, info, st), url = objectURL(s, file), frag = kind === 'video', phase = 'loading', waiting = false, late = false, timer = 0;
+    // storyprev: a <video> counts as open once it has a size. WebKit can have none yet at 'loadedmetadata' (a MediaRecorder MP4
+    // is fragmented, its moov empty) and bring it with 'resize' once a frame decodes - so a missing size is waited for (WAIT_MS),
+    // never refused at once, and a file that says nothing at all is given LOAD_MS (a camera clip with its poster: WAIT_MS)
+    function sized() { return kind === 'video' ? !!(m.videoWidth && m.videoHeight) : !!(m.naturalWidth && m.naturalHeight); }
+    function arm(ms) { clearTimeout(timer); timer = setTimeout(function () { failed(waiting ? 'no size' : 'no metadata'); }, ms); }
+    function meta() {
       if (!live(s) || id !== s.pickId) return;
+      // the poster stood in, and the video has a size after all: it takes over once it paints (playback in the editor)
+      if (phase === 'still' && !late && sized()) { late = true; cover(); firstFrame(s, m, id); return; }
+      if (phase !== 'loading') return;
+      if (sized()) loaded(); else if (!waiting) { waiting = true; arm(WAIT_MS); }
+    }
+    function loaded() {
+      if (!live(s) || id !== s.pickId || phase !== 'loading') return;
       d.w = kind === 'video' ? m.videoWidth : m.naturalWidth; d.h = kind === 'video' ? m.videoHeight : m.naturalHeight;
-      if (!d.w || !d.h) return failed();
+      if (!d.w || !d.h) return failed('no size');
+      phase = 'ready'; clearTimeout(timer);
       d.decoded = true; d.legacy = d.gif; resetFrame(d);
       if (kind === 'video') {
         // a fresh recording can report no length (Infinity, NaN, 0): the camera's measured hold stands in
-        d.duration = isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs;
-        // storyfix2: no 1 s minimum here - a video kept whole goes with no trim (editFor) and posts whatever the file holds (an
-        // iPhone recording can hold less than the hold; a quick clip from the phone's capture input is short too); only a trim
-        // needs a second (the Trim tool is off under one)
-        if (!isFinite(d.duration) || !(d.duration > 0) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
-        else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
+        length(isFinite(m.duration) && m.duration > 0 ? m.duration : info && info.secs);
+        if (st) cover();      // before the first-frame play: that play is not the video showing itself
         firstFrame(s, m, id);
       }
+      if (dbg) dbg.view(st ? 'video, under its poster until it paints a frame' : 'video');
+      opened();
+    }
+    function length(secs) {
+      d.duration = secs;
+      // storyfix2: no 1 s minimum here - a video kept whole goes with no trim (editFor) and posts whatever the file holds (an
+      // iPhone recording can hold less than the hold; a quick clip from the phone's capture input is short too); only a trim
+      // needs a second (the Trim tool is off under one)
+      if (!isFinite(d.duration) || !(d.duration > 0) || d.duration > (s.caps.srcSecs || 180)) { d.valid = false; say(s, _t('js.feed.ss.source_long', 'Choose a video between 1 and {n} seconds.', { n: s.caps.srcSecs || 180 }), true); }
+      else { d.trim = { start: 0, end: Math.min(d.duration, s.caps.secs || 30) }; if (d.duration > (s.caps.secs || 30)) { say(s, _t('js.feed.ss.trim_needed', 'Choose up to {n} seconds to keep.', { n: s.caps.secs || 30 })); tool(s, 'trim'); } }
+    }
+    function opened() {
       render(s); paintControls(s);
       // ssfix2: the note goes once the picture has been painted (two frames on), not at 'load': the paint decode is the peak
       var frame = window.requestAnimationFrame ? function (f) { window.requestAnimationFrame(f); } : function (f) { setTimeout(f, 16); };
       frame(function () { frame(function () { pickDone(s, n); }); });
     }
-    function failed() {
-      if (!live(s) || id !== s.pickId) return; d.decoded = false; d.legacy = false; pickDone(s, n);
-      say(s, _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.'), true);
+    // storyprev: an error while loading gets one more try without the media fragment (WebKit may refuse one on a blob: URL;
+    // the muted play still puts the first frame up)
+    function broke() {
+      if (!live(s) || id !== s.pickId) return;
+      if (phase === 'loading' && frag) { frag = false; waiting = false; arm(st ? WAIT_MS : LOAD_MS); if (dbg) dbg.note('retry without the fragment #t=0.001'); m.src = url; return; }
+      failed('error');
+    }
+    // storyprev: when this browser can't show the video (an error, no size, nothing at all), a camera clip's poster is the preview
+    // - its size frames it, so crop, text and stickers work and the clip posts with its edits; a gallery video (no poster)
+    // keeps the old recovery, in kinder words. A video that had opened and fails later keeps its edits under its poster.
+    function failed(why) {
+      if (!live(s) || id !== s.pickId || phase === 'still' || phase === 'failed') return;
+      clearTimeout(timer); if (dbg) dbg.note('no preview from the element: ' + why);
+      if (st && !st.bad && phase === 'ready') { st.hidden = false; if (dbg) dbg.view('poster (a late ' + why + ')'); return; }
+      if (st && !st.bad) {
+        phase = 'still'; d.w = info.width; d.h = info.height; d.decoded = true; d.legacy = false; resetFrame(d);
+        length(isFinite(m.duration) && m.duration > 0 ? m.duration : info.secs);
+        if (dbg) dbg.view('poster (' + why + ')');
+        return opened();
+      }
+      phase = 'failed'; d.decoded = false; d.legacy = false; pickDone(s, n);
+      say(s, kind !== 'video' ? _t('js.feed.ss.decode', 'This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.')
+        : coarse() ? _t('js.feed.ss.no_preview_phone', 'Your phone can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 })
+        : _t('js.feed.ss.no_preview', 'This browser can\'t preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.', { n: s.caps.secs || 30 }), true);
+      if (dbg) dbg.view('none: "Post it as it is"');
       s.recovery.textContent = ''; s.recovery.hidden = false;
       add(s.recovery, button(_t('js.feed.ss.as_is', 'Post it as it is'), function () { asIs(s); }));
       add(s.recovery, button(_t('js.feed.ss.pick_another', 'Pick another'), function () { choose(s, 'gallery'); })); paintControls(s);
     }
+    // storyprev: the poster stays over the <video> until the video has painted a frame of its own (requestVideoFrameCallback) or,
+    // in an engine without that, until it plays after its first-frame pause (Trim's play): over a blank or broken video it stays
+    function cover() {
+      function off(why) { if (live(s) && id === s.pickId && (phase === 'ready' || phase === 'still') && !st.hidden) { st.hidden = true; if (dbg) dbg.view('video (' + why + ')'); } }
+      if (typeof m.requestVideoFrameCallback === 'function') { try { m.requestVideoFrameCallback(function () { off('a frame painted'); }); return; } catch (e) { /* the event below */ } }
+      m.addEventListener('playing', function () { if (m.primed) off('playing'); });
+    }
+    if (st) st.addEventListener('error', function () { if (live(s) && id === s.pickId && phase === 'still') { phase = 'loading'; failed('poster'); } });
+    if (kind === 'video') { ['loadedmetadata', 'resize', 'loadeddata', 'canplay'].forEach(function (t) { m.addEventListener(t, meta); }); arm(st ? WAIT_MS : LOAD_MS); }
+    else m.addEventListener('load', loaded);
     // storyfix2: a video starts at 0.001 s (a media fragment): iOS then puts its first frame up without playing it
-    m.addEventListener(kind === 'video' ? 'loadedmetadata' : 'load', loaded); m.addEventListener('error', failed); m.src = objectURL(s, file) + (kind === 'video' ? '#t=0.001' : '');
+    m.addEventListener('error', broke); m.src = url + (frag ? '#t=0.001' : '');
     say(s, ''); render(s); paintControls(s);
   }
   // storyfix2 (1.99aly): the preview's first frame. WebKit (every iPhone browser) paints nothing for a <video> that has never
   // played - preload is only ever 'metadata' there - so a clip just taken (or chosen) stayed blank; a seek this early leaves it
   // black (WebKit bug 225963), so there is none. The media fragment (#t=0.001 on the src) is one way up; a muted inline play,
   // paused as soon as it starts, is the other. Where even that is refused (Low Power Mode), the fragment alone shows it.
+  // (storyprev: m.primed once that play is over - a later play is the user's)
   function firstFrame(s, m, id) {
     var played; try { played = m.play(); } catch (e) { played = null; }
-    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); }, function () { /* refused: the media fragment shows the frame */ });
-    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); });
+    if (played && typeof played.then === 'function') played.then(function () { if (live(s) && id === s.pickId) m.pause(); m.primed = true; }, function () { m.primed = true; /* refused: the media fragment shows the frame */ });
+    else m.addEventListener('playing', function once() { m.removeEventListener('playing', once); if (live(s) && id === s.pickId) m.pause(); m.primed = true; });
   }
   function asIs(s) {
     var d = s.d;
@@ -365,6 +477,7 @@
       if (d.fit === 'fill' && !d.legacy) { m.style.objectFit = 'fill'; m.style.inlineSize = 100 / d.crop.w + '%'; m.style.blockSize = 100 / d.crop.h + '%'; m.style.insetInlineStart = -d.crop.x / d.crop.w * 100 + '%'; m.style.insetBlockStart = -d.crop.y / d.crop.h * 100 + '%'; }
       else m.style.objectFit = 'contain';
     }
+    if (m && d.decoded && s.still) ['objectFit', 'inlineSize', 'blockSize', 'insetInlineStart', 'insetBlockStart', 'transform'].forEach(function (k) { s.still.style[k] = m.style[k]; });   // storyprev: the poster frames like its video
     var n = ++s.drawId;
     fonts(d).then(function () { if (!live(s) || n !== s.drawId) return; draw(s.canvas, d); layoutHandles(s); }).catch(function () { if (live(s)) say(s, _t('js.feed.ss.font_failed', 'The text font could not load. Try again before posting.'), true); });
   }

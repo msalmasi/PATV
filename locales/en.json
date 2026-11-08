@@ -2537,6 +2537,8 @@
   "js.feed.ss.source_long": "Choose a video between 1 and {n} seconds.",
   "js.feed.ss.trim_needed": "Choose up to {n} seconds to keep.",
   "js.feed.ss.decode": "This browser cannot preview that file. You can post it without edits; videos must be up to 30 seconds.",
+  "js.feed.ss.no_preview_phone": "Your phone can't preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.",
+  "js.feed.ss.no_preview": "This browser can't preview this video here, but it will still post. Post it as it is (up to {n} seconds), or pick another.",
   "js.feed.ss.as_is": "Post it as it is",
   "js.feed.ss.pick_another": "Pick another",
   "js.feed.ss.legacy": "Ready to post without edits.",

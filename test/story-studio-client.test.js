@@ -461,7 +461,10 @@ test('Studio: CSS uses scoped ds tokens, shared accent mapping and the server in
   const mapping = css.match(/\.sst\.pad-acc\s*\{([^}]+)\}/g); assert.equal(mapping.length, 1);
   const props = (s) => Object.fromEntries([...s.matchAll(/(--ds-(?:ac(?:-2|-bg|-line)?|on-ac|focus(?:-ring)?|glow)):\s*([^;]+);/g)].map((m) => [m[1], m[2].replace(/\s+/g, ' ')]));
   const dock = fs.readFileSync(path.join(repo, 'public/css/pad-dock.css'), 'utf8'); const dockRule = [...dock.matchAll(/\{([^{}]+)\}/g)].find((m) => Object.keys(props(m[1])).length === 8); assert.deepEqual(props(mapping[0]), props(dockRule[1]));
-  assert.doesNotMatch(js, /localStorage|<svg|location\.reload|DESIGN STUDY|PATV STORY|Make a little scene|state=/);
+  // storyprev: the one localStorage use is reading the opt-in debug flag (patv.storydebug) - drafts never go there
+  const debugFlag = "!!window.localStorage && window.localStorage.getItem('patv.storydebug') === '1'";
+  assert.equal(js.split(debugFlag).length, 2, 'the debug flag is read once');
+  assert.doesNotMatch(js.replace(debugFlag, ''), /localStorage|<svg|location\.reload|DESIGN STUDY|PATV STORY|Make a little scene|state=/);
   const paletteSource = fs.readFileSync(path.join(repo, 'padlook.js'), 'utf8').match(/const PALETTE = Object\.freeze\(\[([\s\S]*?)\]\);/)[1];
   const expected = paletteSource.match(/#[a-f0-9]{6}/g).concat(['#ffffff', '#000000']).sort();
   const actual = js.match(/var COLORS = \[([^\]]+)\]/)[1].match(/#[a-f0-9]{6}/g).sort(); assert.deepEqual(actual, expected);
