@@ -1791,6 +1791,13 @@ test('Studio storywide verify: the header\'s 24 h pill is no place for a grip ei
   const sticker = await studioSticker(Q); await drag(Q, sticker, [150, 250], [100, 110]);
   const q = gripsOf(Q), RD = geometry().GRIP.del; assert.equal(q.del.corner, 'tr', 'the delete grip is not put under the pill');
   assert.ok(Math.hypot(Math.max(8 - q.del.x, 0, q.del.x - 52), Math.max(8 - q.del.y, 0, q.del.y - 38)) >= RD, 'clear of the pill');
+  // with room nowhere (a 169 px stage - the keyboard up on an SE - a sticker dragged under the header): not the first place inside
+  // the stage, under the X, but the one that covers the least of any button - seen, and the X keeps its tap
+  const G = geometry(), stageBox = { w: 169, h: 300 }, covers = [{ x0: 8, y0: 8, x1: 52, y1: 52 }, { x0: 117, y0: 8, x1: 161, y1: 52 }, { x0: 113, y0: 68, x1: 157, y1: 112 }];
+  const g = G.grips({ x: 92.5, y: 19 }, 18.5, 22, 0, stageBox, covers, true);
+  const into = (p) => Math.max(...covers.map((c) => p.r - Math.hypot(Math.max(c.x0 - p.x, 0, p.x - c.x1), Math.max(c.y0 - p.y, 0, p.y - c.y1))));
+  assert.equal(g.del.at, 'b', 'below the layer, between the X and ⚙️'); assert.ok(into(g.del) < 4, 'at most a sliver of a button\'s corner: ' + into(g.del).toFixed(1));
+  assert.ok(g.del.y - g.del.r >= 0 && g.del.x + g.del.r <= 169, 'inside the stage');
 });
 
 test('Studio storywide verify: the safe area\'s side insets are written for the CSS (--sst-is / --sst-ie, mirrored right to left) - beside a narrow stage the post row\'s ends, "Posted as" and the header keep clear of a notch and of the stage', async () => {
