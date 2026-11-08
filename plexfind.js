@@ -455,7 +455,8 @@ function createFinder({ catalog, settings, requests, vectors, lists, now = Date.
         if (!namedEpisodes.length) namedEpisodes = eps.filter((r) => !filmSpecials.has(String(r.key)));
         return films;
       }
-      if (eps.length && askedKind == null) episodeNamed = true;
+      // (review follow-up 2: a show's S00 special of that very name is a TV movie - the title itself, offered plainly)
+      if (eps.length && askedKind == null && !eps.some((r) => (Number(r.season) || 0) === 0)) episodeNamed = true;
       return eps;
     };
     let exactRows = raw ? roots.filter((r) => sameName(r.title, raw)) : [];
