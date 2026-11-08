@@ -794,12 +794,12 @@ test("catfix review: paged shelves swap in when the section's last page lands - 
   assert.equal((await h.catalog.sync({ full: true })).ok, true);
   const before = await shelfNames(h);
   h.setClock(Date.UTC(2026, 10, 6, 3, 30));
-  shelves = shelfSet("New Shelf", 950); stopAt = 5;
+  shelves = shelfSet("Novel Rack", 950); stopAt = 5;
   const r = await h.catalog.sync();
   assert.deepEqual([r.ok, r.error], [false, "maintenance window"]);
   assert.deepEqual(await shelfNames(h), before, "two of three pages read: the clerk still sees the old shelves, all of them");
   assert.deepEqual((await h.catalog.getByKeys(["1"]))[0].shelves.sort(), before, "...and so does a title's shelf list");
-  assert.deepEqual(await h.catalog.search("New Shelf"), [], "the pages read so far are not searchable yet");
+  assert.deepEqual(await h.catalog.search("Novel"), [], "the pages read so far are not searchable yet");
   h.setClock(Date.UTC(2026, 10, 6, 4, 30)); h.calls.length = 0;
   const again = await h.catalog.sync();
   assert.deepEqual([again.ok, again.resumed], [true, true], JSON.stringify(again));
@@ -822,9 +822,13 @@ test("catfix review: a resumed sweep re-reads the page before its cursor - a tit
   const again = await h.catalog.sync();
   assert.deepEqual([again.ok, again.resumed], [true, true]);
   assert.equal(h.calls.find((c) => c.startsWith("/catalog")), "/catalog?section=1&type=1&start=2&size=500");
-  assert.deepEqual((await h.catalog.read("SELECT key FROM plex_catalog ORDER BY CAST(key AS INTEGER)")).map((x) => x.key), ["2", "3", "4", "5", "6"],
-    "title 5 moved from 4 to 3 - still read - and the dropped title 1 is gone");
-  assert.equal(again.received, 5, "the page read twice is counted once");
+  assert.deepEqual((await h.catalog.read("SELECT key FROM plex_catalog ORDER BY CAST(key AS INTEGER)")).map((x) => x.key), ["1", "2", "3", "4", "5", "6"],
+    "title 5 moved from 4 to 3 and is still read (title 1 was read before Plex dropped it: this sweep saw it)");
+  assert.equal(again.received, 5, "the page read again counts once (its first count is taken back): page 0's 2, then 2 + 1 from page 2 on");
+  assert.equal((await h.catalog.search("Reel 5")).some((x) => x.key === "5"), true);
+  h.setClock(Date.UTC(2026, 10, 7, 12));   // the next day's sweep: title 1 goes
+  assert.equal((await h.catalog.sync()).full, true);
+  assert.deepEqual((await h.catalog.read("SELECT key FROM plex_catalog ORDER BY CAST(key AS INTEGER)")).map((x) => x.key), ["2", "3", "4", "5", "6"]);
 });
 
 test("catfix review: a snapshot import ends an unfinished sweep - the next sync doesn't carry it on and keeps the imported rows", async (t) => {
