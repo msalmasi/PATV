@@ -40,13 +40,16 @@ const FIELDS = Object.freeze(Object.keys(SPEC));
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((k) => [k, SPEC[k].def])));
 const LIMITS = Object.freeze(Object.fromEntries(FIELDS.map((k) => [k, [SPEC[k].lo, SPEC[k].hi]])));
 // The body cap: the recorder asks for 32 kbit/s Opus (4 KB a second); a browser that ignores the bitrate (Safari's AAC) runs well above
-// it. BYTES_PER_SEC = 160 kbit/s (5x) for max_secs + 1 s, never below the old 600 KB, never above BYTES_CEIL.
-// Review fix 2: BYTES_CEIL stays under nginx's client_max_body_size 1m in front of publicaccess.tv and staging (botupload.js) - nginx
-// answers a bigger body itself with an HTML 413, so a cap above it could never be reached. 960 KB = 64 kbit/s for a 120 s clip, 2x the
-// recorder's 32 kbit/s; past ~47 s a browser far above that bitrate (Safari AAC) can hit it - the page says "too big" for any 413.
-const BYTES_PER_SEC = 20 * 1024;
+// it. BYTES_PER_SEC = 24 KB/s (192 kbit/s, 6x) for max_secs + 1 s, never below the old 600 KB, never above BYTES_CEIL: 744 KB at 30 s,
+// about 2.8 MB at 120 s.
+// Review fix 2 kept the cap under nginx's client_max_body_size 1m in front of publicaccess.tv and staging (botupload.js; nginx answers
+// a bigger body itself with an HTML 413 - the page says "too big" for any 413). Since 2026-11-08 nginx takes 4 MB on POST
+// /api/rooms/<slug>/clip only, so BYTES_CEIL is 3.5 MB - well under it - and every cap stays under PEPE's own cap for the same max
+// length (pepe_relay.clip_max_bytes: 1.5 MB, 32 kB/s above ~47 s, 4 MB ceiling - 3.84 MB at 120 s): he never refuses a clip the site
+// took as "too big". The upload route re-checks the body against the length its job carries (maxBytes(job's max_secs)).
+const BYTES_PER_SEC = 24 * 1024;
 const BYTES_FLOOR = 600 * 1024;
-const BYTES_CEIL = 960 * 1024;
+const BYTES_CEIL = Math.round(3.5 * 1024 * 1024);
 // Review fix 1: what an older Pepe enforces on his own (pepe_relay.py CLIP_MAX_SECS / CLIP_LIMIT), and how long his word lasts
 const OLD_PEPE = Object.freeze({ gap_s: 30, burst: 3, max_secs: 30 });
 const PEPE_TTL = 2 * 60 * 1000;

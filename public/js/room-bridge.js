@@ -1420,7 +1420,7 @@
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
       txt.textContent = _t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) });
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
-        // pttlimits review fix 2: any 413 is "too big" - the site's JSON one, and nginx's own HTML page for a body over its 1 MB
+        // pttlimits review fix 2: any 413 is "too big" - the site's JSON one, and nginx's own HTML page for a body over its limit (4 MB on the clip upload since 11-08)
         .then(function (r) { return r.status === 413 ? { ok: false, error: _t('js.pad.ptt.too_big', 'that recording is too big — try a shorter one') } : r.json(); })
         .then(function (d) { txt.textContent = d.ok ? _t('js.pad.ptt.sent', 'sent — Pepe plays it when the mic is free') : (d.error || _t('js.pad.relay.not_sent', 'not sent')); })
         .catch(function () { txt.textContent = _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });

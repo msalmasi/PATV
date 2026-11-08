@@ -239,6 +239,7 @@ function clipLimits() {
 }
 /** pttlimits: the clip body parser for the max length in force (cached per cap) - over the cap is a JSON 413 the page can show. */
 const clipParsers = new Map();
+const CLIP_TOO_BIG = Object.freeze({ ok: false, code: "too_big", error: "That recording is too big - try a shorter one." });
 function clipBody(req, res, next) {
   const cap = PTT.maxBytes();
   let p = clipParsers.get(cap);
@@ -246,7 +247,7 @@ function clipBody(req, res, next) {
   p(req, res, (err) => {
     if (!err) return next();
     if (err.type === "entity.too.large" || err.status === 413) {
-      return res.status(413).json({ ok: false, code: "too_big", error: "That recording is too big - try a shorter one." });
+      return res.status(413).json(CLIP_TOO_BIG);
     }
     return next(err);
   });
@@ -977,6 +978,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
     const L = clipLimits();
     // (+1 s: the recorder's stop lands a little after its timer)
     if (secs > L.maxSecs + 1) return res.status(400).json({ ok: false, code: "too_long", max: L.maxSecs, error: `Keep it under ${L.maxSecs} seconds.` });
+    // pttlimits (nginx 4 MB on this upload, 11-08): the body against the cap for the length THIS job carries - clipBody read the cap
+    // before the awaits above, and Pepe refuses a body over his own cap for the job's max_secs (an admin lowered it mid-upload)
+    if (buf.length > PTT.maxBytes(L.maxSecs)) return res.status(413).json(CLIP_TOO_BIG);
     const mime = String(req.get("content-type") || "audio/webm").split(";")[0].slice(0, 40);
     // pttclip: the play limit (given back if the clip doesn't play) first - a refusal there costs no upload - then the flood guard
     // (every upload, never given back); both checked before either is counted
