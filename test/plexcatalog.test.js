@@ -706,7 +706,7 @@ test("catfix review: a failure asking again can't fix is named and tried once; a
   assert.deepEqual([unset.tries, unset.r.retry], [1, false]);
   // passing reasons: tried again, and the cause is named (the error code only - never an address)
   for (const [err, why] of [
-    [() => Object.assign(new Error("connect ECONNREFUSED 192.0.2.10:8443"), { code: "ECONNREFUSED" }), "ECONNREFUSED"],                   // the pinned TLS connect
+    [() => Object.assign(new Error("connect ECONNREFUSED 192.0.2.10:65011"), { code: "ECONNREFUSED" }), "ECONNREFUSED"],                   // the pinned TLS connect
     [() => Object.assign(new Error("The media-control service can't be reached (read ECONNRESET)."), { status: 502, refuse: true }), "ECONNRESET"],
     [() => Object.assign(new Error("The media-control service can't be reached (socket hang up)."), { status: 502, refuse: true }), "connection closed"],
     [() => Object.assign(new Error("The media-control service can't be reached (something new)."), { status: 502, refuse: true }), null],
@@ -714,7 +714,7 @@ test("catfix review: a failure asking again can't fix is named and tried once; a
     const x = await once(err);
     assert.equal(x.r.error, "catalog source unavailable: the section list - media-control can't be reached" + (why ? " (" + why + ")" : "") + " (4 tries)");
     assert.deepEqual([x.tries, x.r.retry], [4, true]);
-    assert.equal(/192\.0\.2\.10|8443/.test(x.r.error + x.logs.join("\n")), false, "no address in the error or the log");
+    assert.equal(/192\.0\.2\.10|65011/.test(x.r.error + x.logs.join("\n")), false, "no address in the error or the log");
   }
   const late = await once(() => Object.assign(new Error("The media-control service can't be reached (timeout)."), { status: 502, refuse: true }));
   assert.match(late.r.error, /^catalog source unavailable: the section list - no answer within \d+ s \(4 tries\)$/);
