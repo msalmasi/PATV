@@ -254,12 +254,15 @@ function createVectors(options = {}) {
     const selected = modelPair(pair);
     if (!selected) throw error("bad_embed_model");
     await init();
-    await catalog.write(async (tx) => {
-      await tx.run("UPDATE plex_vector_meta SET model=?,dim=?,vector_rev=vector_rev+1 WHERE id=1 AND (model<>? OR dim<>?)",
+    const changed = await catalog.write(async (tx) => {
+      const done = await tx.run("UPDATE plex_vector_meta SET model=?,dim=?,vector_rev=vector_rev+1 WHERE id=1 AND (model<>? OR dim<>?)",
         [selected.model, selected.dim, selected.model, selected.dim]);
+      return !(done && typeof done.changes === "number") || done.changes > 0;   // a writer that can't say: as if it changed
     });
     if (lastCounts && lastCounts.pair !== selected.model + "|" + selected.dim) lastCounts = null;
-    invalidate();
+    // plexvectors 1.99?? review: the bot sends its pair with every embed_todo (todo() -> here, every ~1.6 s in a backfill) - the
+    // same pair keeps the films' index and the memory cap's back-off (each is keyed by the model and dims anyway); a new one drops them
+    if (changed) invalidate();
     return { ok: true, ...selected };
   }
 
