@@ -329,18 +329,22 @@ function camPage(options = {}) {
         queueMicrotask(() => { if (object !== v) return; const [w, h] = options.frame || [1080, 1920]; node.videoWidth = w; node.videoHeight = h; node.readyState = 4;
           node.dispatchEvent(new Ev("loadedmetadata")); node.dispatchEvent(new Ev("playing")); });
       } });
+      // every seek is kept (node.seeks): on iOS a seek before the first frame is painted leaves the preview black (WebKit bug 225963)
+      let at = 0; node.seeks = [];
+      Object.defineProperty(node, "currentTime", { configurable: true, get: () => at, set: (v) => { at = Number(v); node.seeks.push(at); } });
       Object.defineProperty(node, "src", { configurable: true, get: () => node.getAttribute("src"), set: (v) => {
         node.setAttribute("src", v); if (!String(v).startsWith("blob:")) return;
-        const file = P.blobs.get(v);
+        const file = P.blobs.get(String(v).split("#")[0]);          // a media fragment (#t=...) names the same blob
         queueMicrotask(() => {
-          node.naturalWidth = 1080; node.naturalHeight = 1920; node.videoWidth = 1080; node.videoHeight = 1920; node.currentTime = 0; node.paused = true;
+          node.naturalWidth = 1080; node.naturalHeight = 1920; node.videoWidth = 1080; node.videoHeight = 1920; at = 0; node.seeks = []; node.paused = true;
           // a fresh browser recording reports no length (Chrome WebM before the header fix, some MP4s): the studio uses the measured one
           node.duration = file && /^story-video-/.test(file.name || "") ? (options.recordedDuration != null ? options.recordedDuration : Infinity) : (options.duration || 12);
           if (node.onload) node.onload(); node.dispatchEvent(new Ev(tag === "video" ? "loadedmetadata" : "load"));
         });
       } });
-      node.play = () => { node.paused = false; node.plays = (node.plays || 0) + 1; return Promise.resolve(); };
-      node.pause = () => { node.paused = true; };
+      // options.playRefused: the studio's preview may not play by itself (iOS Low Power Mode refuses even a muted inline play)
+      node.play = () => { node.plays = (node.plays || 0) + 1; if (options.playRefused && node.classList.contains("sst-source")) return Promise.reject(Object.assign(new Error("not allowed"), { name: "NotAllowedError" })); node.paused = false; return Promise.resolve(); };
+      node.pause = () => { node.paused = true; node.pauses = (node.pauses || 0) + 1; };
     }
     if (tag === "input") node.addEventListener("click", () => { const k = node.getAttribute("data-pick"); if (k) P.pickClicks[k]++; });
     return node;
@@ -500,7 +504,9 @@ test("Story camera: press and hold records WebM with sound while held, stops on 
   assert.ok(root.classList.contains("sst-video")); assert.match(root.querySelector(".sst-filename").textContent, /^story-video-\d{8}-\d{6}\.webm$/);
   assert.ok(!root.querySelector(".sst-post").disabled, "valid although the element reports no length (the measured one is used)");
   root.querySelector(".sst-post").click(); await flush(24);
-  const up = P.uploaded[0].body; assert.equal(up.kind, "video"); assert.deepEqual(up.edit.trim, { start: 0, end: 4.05 });
+  const up = P.uploaded[0].body; assert.equal(up.kind, "video");
+  // storyfix2: a camera clip kept whole goes with no trim (the server encodes all the file holds), marked as the camera's
+  assert.equal(up.edit.camera, true); assert.equal(up.edit.trim, undefined, "no trim for a clip kept whole");
   const bytes = await sent(P); assert.equal(bytes.length, up.size);
   const info = webmInfo(bytes); assert.equal(info.scale, 1e6); assert.ok(Math.abs(info.duration - 4050) < 1e-6, "the WebM header says how long it is: " + info.duration);
 });
@@ -518,7 +524,7 @@ test("Story camera: an iPhone records MP4, and a hold stops itself just inside t
   fire(s, "pointerup"); await flush(); assert.equal(P.recorders.length, 1, "letting go later does nothing");
   assert.equal(root.getAttribute("data-sheet"), null, "inside the limit: no trim needed");
   root.querySelector(".sst-post").click(); await flush(24);
-  const up = P.uploaded[0].body; assert.equal(up.kind, "video"); assert.ok(up.edit.trim.end <= 15 && up.edit.trim.end > 14.5);
+  const up = P.uploaded[0].body; assert.equal(up.kind, "video"); assert.equal(up.edit.camera, true); assert.equal(up.edit.trim, undefined, "kept whole: no trim");
   assert.equal((await sent(P)).subarray(4, 8).toString(), "ftyp", "the MP4 goes as recorded");
 });
 
@@ -527,7 +533,8 @@ test("Story camera: a quick press-and-hold still makes a clip of at least 1.2 s;
   fire(s, "pointerdown"); await P.clock.tick(300); fire(s, "pointerup");
   assert.equal(P.recorders[0].stops, 0, "keeps going to the shortest clip");
   await P.clock.tick(1200); assert.equal(P.recorders[0].stops, 1); await flush(16);
-  root.querySelector(".sst-post").click(); await flush(24); assert.deepEqual(P.uploaded[0].body.edit.trim, { start: 0, end: 1.2 });
+  root.querySelector(".sst-post").click(); await flush(24);
+  assert.equal(P.uploaded[0].body.edit.camera, true); assert.equal(P.uploaded[0].body.edit.trim, undefined, "the shortest clip, kept whole: no trim");
   const Q = camPage({ noRecorder: true }), root2 = await openStudio(Q);
   assert.match(cam(Q).querySelector(".scam-hint").textContent, /photo/i); assert.doesNotMatch(cam(Q).querySelector(".scam-hint").textContent, /hold/i);
   const t = shutter(Q); fire(t, "pointerdown"); await Q.clock.tick(900); fire(t, "pointerup"); await flush(12);
@@ -699,7 +706,7 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
   const render = (extra) => ejs.render(source, Object.assign({}, locals, extra), { filename: stripFile });
   const on = render({ storyStudioOn: () => true, storyCameraOn: () => true });
-  assert.match(on, /story-camera\.js\?v=1/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=4/);
+  assert.match(on, /story-camera\.js\?v=1/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=5/);   // storyfix2: v=5
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);
@@ -916,4 +923,148 @@ test("Story camera review: with the camera loaded (the default), Tab stays on th
   fire(first, "keydown", { key: "Tab", shiftKey: true }); assert.ok(P.doc.activeElement === shutter(P), "P.doc.activeElement should be shutter(P)");
   for (let i = 0; i < 6; i++) { fire(P.doc.activeElement, "keydown", { key: "Tab" }); assert.ok(view.contains(P.doc.activeElement), "focus stays on the camera"); }
   assert.ok(!root.querySelector(".sst-card").contains(P.doc.activeElement));
+});
+
+// ── storyfix2 (1.99??): the owner's iPhone (iOS 26, 2026-11-08 ~02:00Z) - super short clips refused with "The trim goes past
+//    the end of the video.", and no preview of a clip just taken ──
+// What the site kept of his uploads (feed_attachments, his own rows): the page sent trim.end = the <video>'s own length for the
+// whole clip - 1.2146666 s and 1.5986666 s (58304 and 76736 samples at 48 kHz: WebKit's audio length), and the server's
+// measure of the file was over 0.5 s shorter, so the edit was refused; 1.236 s and 4.585 s clips posted. An iPhone recording's
+// length as the browser shows it can run past the media the file holds (WebKit bug 299164: iOS 26.0/26.1 MP4 recordings lose
+// their last samples; bug 315091: the picture stops while the sound goes on). So a camera clip kept whole goes with no trim and
+// the server encodes all the file holds; a camera clip's own trim is clamped to the file; only a chosen file's trim past its end,
+// or a trim starting after the end, is still refused. The length is measured over every stream's packets, not only the video's.
+/** An iPhone recording as WebKit's MediaRecorder writes it (AVAssetWriter segments): H.264 + AAC 48 kHz in a fragmented MP4 - an
+ *  empty moov (no length in its header), a moof + mdat per second, no mfra index. video / audio: the seconds of each it holds. */
+const iphoneMp4 = (file, video, audio = video) => fs.writeFileSync(file, execFileSync("ffmpeg", ["-hide_banner", "-nostdin", "-v", "error",
+  "-f", "lavfi", "-i", `testsrc2=s=360x640:r=30:d=${video}`, "-f", "lavfi", "-i", `sine=frequency=440:sample_rate=48000:duration=${audio}`,
+  "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-profile:v", "main", "-bf", "0", "-g", "60", "-pix_fmt", "yuv420p", "-b:v", "400k",
+  "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-ac", "1", "-movflags", "empty_moov+default_base_moof+skip_trailer", "-frag_duration", "1000000",
+  "-f", "mp4", "pipe:1"], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }));
+/** The real compose path (storycompose.process) with a Story Studio edit, as the page sends it for a camera clip (9:16, fill). */
+async function composeClip(file, extra, fit = "fill") {
+  const M = require(path.join(repo, "feedmedia")), C = require(path.join(repo, "storycompose")); M.dir();
+  const edit = Object.assign({ v: 1, pad: "u/pb", fit, text: [], stickers: [] }, fit === "fill" ? { crop: { x: 0, y: 0, w: 1, h: 1 } } : {}, extra);
+  const out = await C.process(file, M.sniff(fs.readFileSync(file).subarray(0, 4096)), { owner_id: "u_camera", kind: "video", edit: JSON.stringify(edit) }, { max_video_secs: 180 });
+  M.removeFiles([out.file, out.thumb, out.poster]); return out;
+}
+const IPHONE = { vendor: "Apple Computer, Inc.", types: ["video/mp4"], ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0 Mobile/15E148 Safari/604.1" };
+/** A quick hold on the shutter: the camera keeps going to the shortest clip (1.2 s), then the clip opens in the editor. */
+async function quickClip(P) { const s = shutter(P); fire(s, "pointerdown"); await P.clock.tick(300); fire(s, "pointerup"); await P.clock.tick(1200); await flush(16); }
+
+test("Story camera fix: an edit can say it is the camera's own clip (camera: true, videos only); anything else there is refused", () => {
+  const C = require(path.join(repo, "storycompose")), base = { v: 1, pad: "u/pb", fit: "fit" };
+  assert.equal(C.cleanEdit({ ...base, camera: true }, { kind: "video" }).camera, true);
+  assert.equal(C.cleanEdit({ ...base, camera: true, trim: { start: 0, end: 1.2146666666666666 } }, { kind: "video" }).trim.end, 1.2146666666666666);
+  assert.equal(C.cleanEdit(base, { kind: "video" }).camera, undefined, "a chosen file is not the camera's");
+  for (const camera of [false, "yes", 1, null]) assert.throws(() => C.cleanEdit({ ...base, camera }, { kind: "video" }), C.Refuse);
+  assert.throws(() => C.cleanEdit({ ...base, camera: true }, { kind: "image" }), C.Refuse);
+});
+
+test("Story camera fix: the owner's refused iPhone clip - kept whole it goes with no trim and posts all the file holds, down to a fraction of a second", videoOptions, async () => {
+  for (const [secs, lo, hi] of [[0.6, 0.5, 0.8], [0.4, 0.3, 0.6], [3, 2.9, 3.2]]) {
+    const file = path.join(tmp, `iphone-${secs}.mp4`); iphoneMp4(file, secs);
+    // what the page sent then: the element's length (1.2146666 s) as a trim - over 0.5 s past the 0.6 s the file holds: refused
+    if (secs === 0.6) await assert.rejects(composeClip(file, { trim: { start: 0, end: 1.2146666666666666 } }), /past the end/);
+    const out = await composeClip(file, { camera: true });
+    assert.ok(out.secs >= lo && out.secs <= hi, `${secs} s held -> ${out.secs} s posted`); assert.equal(out.w, 720); assert.equal(out.h, 1280);
+  }
+});
+
+test("Story camera fix: a camera clip's own trim is clamped to what the file holds; a trim starting after its end, or a chosen file's trim past its end, is still refused", videoOptions, async () => {
+  const file = path.join(tmp, "iphone-1.05.mp4"); iphoneMp4(file, 1.05);
+  const whole = await composeClip(file, { camera: true, trim: { start: 0, end: 1.5986666666666667 } });     // the owner's other refused clip (twice)
+  assert.ok(whole.secs >= 0.95 && whole.secs <= 1.25, String(whole.secs));
+  const part = await composeClip(file, { camera: true, trim: { start: 0.5, end: 1.5 } });
+  assert.ok(part.secs >= 0.45 && part.secs <= 0.75, String(part.secs));
+  await assert.rejects(composeClip(file, { camera: true, trim: { start: 1.5, end: 3 } }), /starts after the end/);
+  await assert.rejects(composeClip(file, { trim: { start: 0, end: 2.5 } }), /past the end/, "a chosen file's impossible trim");
+});
+
+test("Story camera fix: a recording's length is measured over every stream - a header-less WebM whose picture stops before its sound keeps all its sound", videoOptions, async () => {
+  const M = require(path.join(repo, "feedmedia")), file = path.join(tmp, "short-picture.webm");
+  fs.writeFileSync(file, execFileSync("ffmpeg", ["-hide_banner", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=c=green:s=360x640:r=10:d=1",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=2.5", "-c:v", "libvpx", "-b:v", "300k", "-c:a", "libopus", "-f", "webm", "pipe:1"], { maxBuffer: 64 * 1024 * 1024, windowsHide: true }));
+  assert.ok(!((await M.probe(file, "matroska")).secs > 0), "no length in the header");
+  const out = await composeClip(file, { trim: { start: 0, end: 2.5 } }, "fit");
+  assert.ok(out.secs >= 2.3 && out.secs <= 2.7, String(out.secs));
+});
+
+test("Story camera fix: a trim past a header length that says less than the packets gets a second look before it is refused", videoOptions, async () => {
+  const M = require(path.join(repo, "feedmedia")), file = path.join(tmp, "iphone-1.2.mp4"); iphoneMp4(file, 1.2);
+  const real = M.probe;
+  M.probe = async (...a) => Object.assign(await real(...a), { secs: 0.6 });     // a header claiming 0.6 s of a 1.2 s file
+  try {
+    const out = await composeClip(file, { trim: { start: 0, end: 1.2 } });
+    assert.ok(out.secs >= 1.1 && out.secs <= 1.35, String(out.secs));
+    await assert.rejects(composeClip(file, { trim: { start: 0, end: 3 } }), /past the end/, "still refused past the packets' end");
+  } finally { M.probe = real; }
+});
+
+test("Story camera fix: packetSpan reads every stream's packet times with only what ffprobe 4.2 understands", async () => {
+  const media = require(path.join(repo, "feedmedia")), compose = require(path.join(repo, "storycompose")), calls = [], oldRun = media.run;
+  media.run = async (cmd, args) => { calls.push(args); return { out: "-0.044000,0.021333\n0.000000,0.033333\nN/A,N/A\n\n1.188000,0.033333\n1.193333,0.021333\n" }; };
+  try { assert.deepEqual(await compose.packetSpan("x.mp4", "mov"), { start: -0.044, end: 1.221 }); } finally { media.run = oldRun; }
+  const args = calls[0];
+  assert.ok(!args.includes("-select_streams"), "every stream"); assert.equal(args[args.indexOf("-f") + 1], "mov");
+  assert.equal(args[args.indexOf("-protocol_whitelist") + 1], "file"); assert.equal(args[args.indexOf("-show_entries") + 1], "packet=pts_time,duration_time");
+  assert.equal(args[args.indexOf("-of") + 1], "csv=p=0"); assert.ok(!args.some((a) => /side_data/.test(a)));
+  media.run = async () => ({ out: "N/A,N/A\n\n" });
+  try { assert.equal(await compose.packetSpan("x.mp4", "mov"), null, "no packet with a time"); } finally { media.run = oldRun; }
+});
+
+test("Story camera fix: an iPhone clip the browser says is 1.215 s goes marked as the camera's with no trim; trimmed in the editor it keeps its trim", async () => {
+  const P = camPage({ ...IPHONE, recordedDuration: 1.2146666666666666 }), root = await openStudio(P);
+  await quickClip(P);
+  assert.ok(!root.querySelector(".sst-post").disabled); assert.doesNotMatch(status(P), /between 1 and/);
+  root.querySelector(".sst-post").click(); await flush(24);
+  const up = P.uploaded[0].body; assert.equal(up.kind, "video"); assert.equal(up.edit.camera, true); assert.equal(up.edit.trim, undefined);
+  const Q = camPage({ ...IPHONE, recordedDuration: 4.585333333333334 }), root2 = await openStudio(Q), s = shutter(Q);
+  fire(s, "pointerdown"); await Q.clock.tick(4900); fire(s, "pointerup"); await flush(16);
+  root2.querySelector('[data-tool="trim"]').click(); await flush();
+  const start = root2.querySelector(".sst-trim-start"); start.value = 1; start.dispatchEvent(new Ev("input"));
+  root2.querySelector(".sst-post").click(); await flush(24);
+  const up2 = Q.uploaded[0].body; assert.equal(up2.edit.camera, true); assert.deepEqual(up2.edit.trim, { start: 1, end: 4.585333333333334 });
+});
+
+test("Story camera fix: an iPhone recording under a second, or one whose length the element can't read, still opens and posts; under a second there is nothing to trim", async () => {
+  const P = camPage({ ...IPHONE, recordedDuration: 0.8 }), root = await openStudio(P);
+  await quickClip(P);
+  assert.ok(!root.querySelector(".sst-post").disabled, "a 0.8 s camera clip can post"); assert.doesNotMatch(status(P), /between 1 and/);
+  assert.ok(root.querySelector('[data-tool="trim"]').disabled, "no 1 s window to trim in 0.8 s");
+  root.querySelector(".sst-post").click(); await flush(24);
+  assert.equal(P.uploaded[0].body.edit.camera, true); assert.equal(P.uploaded[0].body.edit.trim, undefined);
+  for (const recordedDuration of [NaN, Infinity, 0]) {
+    const Q = camPage({ ...IPHONE, recordedDuration }), root2 = await openStudio(Q);
+    await quickClip(Q);
+    assert.ok(!root2.querySelector(".sst-post").disabled, "the measured hold stands in for " + recordedDuration);
+    root2.querySelector(".sst-post").click(); await flush(24);
+    assert.equal(Q.uploaded[0].body.edit.camera, true); assert.equal(Q.uploaded[0].body.edit.trim, undefined);
+  }
+  // a chosen file still needs a second (the server's rule for a trim)
+  const R = camPage({ duration: 0.8 }), root3 = await openStudio(R); pickFile(R, "video/mp4", "short.mp4"); await flush(16);
+  assert.match(status(R), /between 1 and/); assert.ok(root3.querySelector(".sst-post").disabled);
+});
+
+test("Story camera fix: the editor puts a video's first frame on screen - #t=0.001, preload auto, a muted inline play paused at once, and never a seek", async () => {
+  // iOS paints nothing for a <video> that has never played (preload is only ever 'metadata' there) and a seek on loadedmetadata
+  // leaves it black (WebKit bug 225963): the media fragment and a play paused at once each put the first frame up
+  const P = camPage(IPHONE), root = await openStudio(P);
+  await quickClip(P);
+  const m = root.querySelector("video.sst-source"); assert.ok(m, "the clip's preview");
+  assert.match(m.getAttribute("src"), /^blob:[^#]+#t=0\.001$/); assert.equal(m.preload, "auto");
+  assert.equal(m.muted, true); assert.ok(m.hasAttribute("playsinline")); assert.ok(m.hasAttribute("muted"));
+  assert.equal(m.plays, 1, "played once, by itself"); assert.equal(m.paused, true, "and paused at once: a still preview"); assert.deepEqual(m.seeks, [], "no seek");
+  // Low Power Mode: no play by itself - the media fragment alone shows the frame; nothing else is tried
+  const Q = camPage({ ...IPHONE, playRefused: true }), root2 = await openStudio(Q);
+  await quickClip(Q); await flush(8);
+  const n = root2.querySelector("video.sst-source");
+  assert.match(n.getAttribute("src"), /#t=0\.001$/); assert.equal(n.plays, 1); assert.equal(n.paused, true); assert.deepEqual(n.seeks, []);
+  assert.ok(!root2.querySelector(".sst-post").disabled, "a refused play is not a broken file");
+  // a chosen video gets the same first frame
+  pickFile(Q, "video/mp4", "clip.mp4"); await flush(16);
+  const g = root2.querySelector("video.sst-source"); assert.ok(g !== n); assert.match(g.getAttribute("src"), /#t=0\.001$/); assert.equal(g.plays, 1);
+  // a picture is no video: no fragment
+  const R = camPage(), root3 = await openStudio(R); await tap(R);
+  assert.doesNotMatch(root3.querySelector("img.sst-source").getAttribute("src"), /#/);
 });
