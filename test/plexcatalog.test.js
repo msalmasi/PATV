@@ -653,3 +653,56 @@ test("catfix: the timer looks again sooner after a run that failed for a passing
   assert.equal(nextTickMin({ catalog_sync_min: 10 }, true, { ok: false, retry: true }), 10);
   assert.equal(nextTickMin({ catalog_sync_min: 5 }, true, { ok: true }), 10, "never more often than every 10 minutes");
 });
+
+// 1.99?? catfix, the next wall after the collections one: the search index's key is an UNINDEXED FTS5 column, so every
+// "DELETE FROM plex_catalog_fts WHERE key=?" (one per row written, per revoked key, per shelf member) scans the whole index.
+// Measured (synthetic, this box): 5.8 ms a delete at 16k rows, 85 ms at 240k - a 500-row episode page spent ~42 s deleting,
+// a full sweep hours; on prod the second sweep read the same section 2.4x slower than the first (8.5 vs 3.5 minutes) as the
+// index filled. The index row's rowid is now the Plex key itself, so each write finds its row directly; the end of a sync
+// rewrites only the rows whose shelves changed.
+const ftsScans = (sqls) => sqls.filter((s) => /plex_catalog_fts\b[^;]*\bWHERE\s+key\b/i.test(s) || /UPDATE plex_catalog_fts SET shelves=''/.test(s));
+test("catfix: the search index is keyed by the Plex key (rowid) - writing a page never scans it, a quiet sync rewrites nothing", async (t) => {
+  const sqls = [];
+  const h = await setup(t, { onWrite: (sql) => sqls.push(sql) });
+  h.api.rows.push(...Array.from({ length: 40 }, (_, i) => row(5000 + i, "Synthetic reel " + i)));
+  assert.equal((await h.catalog.sync({ full: true })).ok, true);
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog_fts WHERE rowid<>CAST(key AS INTEGER)"))[0].n, 0, "rowid = key");
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog_fts"))[0].n, (await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n);
+  assert.deepEqual(ftsScans(sqls), [], "no statement finds an index row by its key column (a whole-index scan each)");
+  assert.deepEqual((await h.catalog.search("Synthetic reel 7")).map((r) => r.key).slice(0, 1), ["5007"]);
+  assert.deepEqual((await h.catalog.search("Comedies")).map((r) => r.key).sort(), ["1", "2"], "shelf names are searchable");
+  // a delta with nothing new: no index row rewritten
+  sqls.length = 0;
+  h.setClock(AT + 3600000);
+  assert.equal((await h.catalog.sync()).full, false);
+  assert.deepEqual(sqls.filter((s) => /^\s*(UPDATE|INSERT INTO|DELETE FROM) plex_catalog_fts/.test(s)), [], "nothing changed, nothing rewritten");
+  // a revoked row leaves the index by its rowid
+  sqls.length = 0;
+  h.setClock(AT + 7200000);
+  Object.assign(h.api.rows.find((r) => r.key === "5003"), { content_rating: "X", updated: Math.floor((AT + 5400000) / 1000) });
+  await h.catalog.sync();
+  assert.equal((await h.catalog.search("Synthetic reel 3")).some((r) => r.key === "5003"), false);
+  assert.equal(ftsScans(sqls).length, 0, "a delta never scans the index");
+  assert.equal((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog_fts WHERE rowid=5003"))[0].n, 0);
+});
+
+test("catfix: an index built before (rowids not the keys) is rebuilt on open, inside one transaction, and still finds everything", async (t) => {
+  const h = await setup(t);
+  await h.catalog.importSnapshot(snapshot());
+  // the 1.99alq layout: rows inserted without a rowid (1, 2, 3, ...)
+  await h.catalog.write(async (tx) => {
+    const rows = await tx.all("SELECT key,title,show,summary,genres,shelves,people FROM plex_catalog_fts ORDER BY key DESC");
+    await tx.run("DELETE FROM plex_catalog_fts");
+    for (const r of rows) await tx.run("INSERT INTO plex_catalog_fts(key,title,show,summary,genres,shelves,people) VALUES (?,?,?,?,?,?,?)", [r.key, r.title, r.show, r.summary, r.genres, r.shelves, r.people]);
+  });
+  assert.ok((await h.catalog.read("SELECT COUNT(*) AS n FROM plex_catalog_fts WHERE rowid<>CAST(key AS INTEGER)"))[0].n > 0, "the old layout");
+  await h.catalog.close();
+  const again = createCatalog({ file: h.catalog.file, settings: () => h.cfg, now: () => AT, log: { log: () => {} } });
+  try {
+  await again.init();
+  assert.equal((await again.read("SELECT COUNT(*) AS n FROM plex_catalog_fts WHERE rowid<>CAST(key AS INTEGER)"))[0].n, 0);
+  assert.equal((await again.read("SELECT COUNT(*) AS n FROM plex_catalog_fts"))[0].n, 5);
+  assert.deepEqual((await again.search("sunrise", { kind: "episode" })).map((r) => r.key), ["21"]);
+  assert.deepEqual((await again.search("Comedies")).map((r) => r.key).sort(), ["1", "2"], "the shelf names come back too");
+  } finally { await again.close(); }
+});
