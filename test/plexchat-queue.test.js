@@ -327,6 +327,20 @@ test("privacy: a chat line-up's audit row (pepe_after) is hidden from a plain st
   assert.ok(theirs.includes("pepe_after") && theirs.includes("queue_after"), "the pad's owner: " + JSON.stringify(theirs));
 });
 
+test("\"the next episode\" (op continue) is a pick like any other: its row carries queue_cost and the pad's state, so Pepe offers queue or replace", async () => {
+  await conf.set({ library_price: 50000 }, "test");
+  const bob = await mkUser("pleb", 2000000);
+  const r0 = await call({ op: "play", as: asU(bob), room: OTHER, key: "911", scope: "episode", estimate: 50000 });
+  assert.equal(r0.ok, true, JSON.stringify(r0));
+  await L.stop(bob, OTHER).catch(() => {});
+  await Q.stop(bob, await Q.activeFor(OTHER)).catch(() => {});
+  await L.playFor(admin, { room: ROOM, key: "500" });
+  await goLive();
+  const c = await call({ op: "continue", as: asU(bob), room: ROOM, show: "the show" });
+  assert.equal(c.ok, true, JSON.stringify(c));
+  assert.deepEqual([c.row && c.row.key, c.row && c.row.queue_cost, c.state.library.queue_as, c.how, c.pad && c.pad.id], ["912", 50000, "after", "paid", ROOM]);
+});
+
 test("an older bot: mode next / replace and plain plays answer as before; the new refusal codes are documented", async () => {
   for (const c of ["queue_on", "queue_held", "line_full", "line_next", "booking_next", "slot_taken"]) assert.ok(PC.CODES.includes(c), c);
   const starter = await mkUser();
