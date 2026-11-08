@@ -21,6 +21,49 @@ const number = (v, fallback = 0) => Number.isFinite(Number(v)) && v !== null && 
 const strings = (v, n = 20, max = 80) => Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === "string").map((x) => text(x, max)).filter(Boolean))].slice(0, n) : [];
 const parsed = (v, d = []) => { try { return JSON.parse(v); } catch (_) { return d; } };
 const IDLE_CHECK_MIN = 5;      // 1.99alq train3 verify: minutes between looks while every clerk switch is off (start())
+// 1.99?? catfix (prod 2026-11-08, "Last sync: Never" / "catalog source unavailable"): every read had the client's 15 s, and
+// mediactl 1.7.0 answers a section's /collections only after walking every collection's members at its four Plex reads a
+// second - one section's shelves took longer than that, so each run read the whole section, gave up on its collections and
+// threw the run away (no "at", no "full_at"), and the next run started over. Now: a page gets PAGE_TIMEOUT_MS (the slowest
+// real page measured ~3.6 s); /collections is paged on mediactl 1.7.1+ (COLLECTIONS_PAGE shelves an answer) and 1.7.0's one
+// whole-section answer gets COLLECTIONS_WALK_TIMEOUT_MS; a read that fails for a passing reason (no answer, 429/5xx) is tried
+// again after RETRY_WAITS_MS; a full sweep that still stops keeps its place ("progress") and the next run carries on from
+// that page; the last error says which read failed and how; and the timer tries again after RETRY_MIN, not a whole interval.
+const PAGE_TIMEOUT_MS = 60000;
+const COLLECTIONS_PAGE = 10;
+const COLLECTIONS_PAGE_TIMEOUT_MS = 120000;
+const COLLECTIONS_WALK_TIMEOUT_MS = 20 * 60000;
+const RETRY_WAITS_MS = [2000, 10000, 30000];
+const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
+const PROGRESS_MAX_AGE_MS = 26 * 3600000;
+const RETRY_MIN = 10;
+const TYPE_NAME = { 1: "movie", 2: "show", 4: "episode" };
+const semver = (v) => { const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v || ""); return m ? Number(m[1]) * 1e6 + Number(m[2]) * 1e3 + Number(m[3]) : 0; };
+/** mediactl 1.7.1+ answers /collections?start=&size= one page of shelves at a time (1.7.0 ignores both: the whole section). */
+const pagedCollections = (version) => semver(version) >= 1007001;
+/** Which read a sync was making - section ids only, never a title. */
+function describeRead(w) {
+  if (!w || w.step === "sections") return "the section list";
+  const sec = "section " + w.section + (w.kind ? " (" + (w.kind === "show" ? "shows" : "movies") + ")" : "");
+  if (w.step === "collections") return "collections of " + sec + (w.start ? " from " + w.start : "");
+  return TYPE_NAME[w.type] + " page from " + (w.start || 0) + " of " + sec + (w.since ? ", changes only" : "");
+}
+function describeWhy(f) {
+  if (f.unusable) return "media-control's answer wasn't usable";
+  if (f.unconfigured) return "media-control isn't configured on the site";
+  if (f.timeout) return "no answer within " + Math.round((f.timeout_ms || 0) / 1000) + " s";
+  if (f.status == null) return "media-control can't be reached";
+  return "media-control answered " + f.status;
+}
+/** The admin card's "Last sync error": what was being read and why it failed, e.g. "catalog source unavailable: collections of
+ *  section 7 (movies) - no answer within 60 s (4 tries)". */
+const sourceError = (d) => "catalog source unavailable" + (d ? ": " + describeRead(d) + " - " + describeWhy(d) + (d.attempts > 1 ? " (" + d.attempts + " tries)" : "") : "");
+/** Minutes to the timer's next look: the setting while in use, sooner after a run that failed for a passing reason. */
+function nextTickMin(cfg, on, last) {
+  if (!on) return IDLE_CHECK_MIN;
+  const every = Math.max(10, Math.min(1440, number((cfg || {}).catalog_sync_min, 60)));
+  return last && last.ok === false && last.retry ? Math.min(every, RETRY_MIN) : every;
+}
 const ratings = (v) => new Set(String(v == null ? DEFAULT_BLOCK : v).split(",").map((s) => s.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter(Boolean));
 /** 1.99alq train3 verify: a certification without Plex's country prefix ("gb/R18" -> "R18", "au/R18+" -> "R18+"); every rating
  *  check (the block list in SQL and in code, the warn list) compares exact names, so a prefixed adult rating slipped through. */
@@ -184,10 +227,14 @@ function createCatalog(options = {}) {
     try {
       const s = await state(), sections = await read("SELECT id,title,type,count,policy FROM plex_sections ORDER BY id");
       const count = (await read("SELECT COUNT(*) AS n FROM plex_catalog"))[0].n;
+      // 1.99?? catfix: an unfinished full sweep - how far it got (the next run carries on from there)
+      const p = s.progress && typeof s.progress === "object" ? s.progress : null;
+      const progress = p ? { started: number(p.at, null), done: Array.isArray(p.done) ? p.done.length : 0,
+        total: sections.filter((x) => x.policy === "allowed").length, received: Math.max(0, number(p.received)) } : null;
       return { ready: s.allow_list_set === true && !!s.full_at && now() - s.full_at <= 3 * DAY && s.supported === true,
         at: s.at || null, full_at: s.full_at || null, version: s.version || null, allow_list_set: s.allow_list_set === true,
         requires_1_7: s.supported === false, sections, count, blocked: s.blocked || {}, dropped: s.dropped || 0,
-        error: s.error || null, fts, syncing: !!syncing, v: s.v || 0 };
+        error: s.error || null, error_at: s.error ? number(s.error_at, null) : null, progress, fts, syncing: !!syncing, v: s.v || 0 };
     } catch (_) { return { ready: false, at: null, full_at: null, version: null, sections: [], count: 0, error: "catalog unavailable", fts: false, v: 0 }; }
   }
   function condition({ kind, show_key, keys } = {}, args = [], blockSet = ratings(settings().clerk_block_ratings)) {
@@ -315,8 +362,10 @@ function createCatalog(options = {}) {
         r.genres.join(" "), names.map((s) => s.name).join(" "), [...r.directors, ...r.cast].join(" ")]);
     }
   }
-  async function storeShelves(tx, section, list) {
-    await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section=?", [section]);
+  // 1.99?? catfix: paged collections (mediactl 1.7.1+) arrive a page at a time - the first page replaces the section's shelves,
+  // later pages add to them, and a shelf a page repeats (Plex's list moved between two pages) is kept once
+  async function storeShelves(tx, section, list, { replace = true } = {}) {
+    if (replace) await tx.run("DELETE FROM plex_shelves WHERE source='kometa' AND section=?", [section]);
     for (const s of list || []) {
       const name = text(s.name || s.title), prefix = "kometa:" + section + ":", rawKey = text(String(s.key || ""), 160);
       const key = rawKey.startsWith(prefix) ? rawKey : prefix + rawKey;
@@ -325,8 +374,8 @@ function createCatalog(options = {}) {
       const found = members.length ? await tx.all("SELECT key,type FROM plex_catalog WHERE section=? AND key IN (" + members.map(() => "?").join(",") + ")", [section, ...members]) : [];
       if (!found.length) continue;
       const kind = s.kind || (found.every((r) => r.type === "movie") ? "movie" : "show");
-      await tx.run("INSERT INTO plex_shelves(key,name,kind,source,ranked,section) VALUES (?,?,?,'kometa',0,?)", [key, name, kind, section]);
-      for (const r of found) await tx.run("INSERT INTO plex_shelf_members(shelf,key,rank) VALUES (?,?,NULL)", [key, r.key]);
+      if ((await tx.run("INSERT OR IGNORE INTO plex_shelves(key,name,kind,source,ranked,section) VALUES (?,?,?,'kometa',0,?)", [key, name, kind, section])).changes !== 1) continue;
+      for (const r of found) await tx.run("INSERT OR IGNORE INTO plex_shelf_members(shelf,key,rank) VALUES (?,?,NULL)", [key, r.key]);
     }
   }
   async function rebuildShelfFts(tx) {
@@ -335,12 +384,39 @@ function createCatalog(options = {}) {
     await tx.run("UPDATE plex_catalog_fts SET shelves=''");
     for (const r of joined) await tx.run("UPDATE plex_catalog_fts SET shelves=? WHERE key=?", [r.names, r.key]);
   }
-  async function provider(route) {
-    if (quiet(now())) throw coded("quiet", "catalog maintenance window");
-    const r = await mediactl("GET", route, null, { timeout: 15000 });
-    if (r.status === 404 && route === "/sections") throw coded("old", "needs media-control 1.7.0");
-    if (r.status !== 200 || !r.json || r.json.ok === false) throw coded("upstream", "catalog source unavailable");
-    return r.json;
+  /** One read from media-control, tried again (RETRY_WAITS_MS) when it fails for a passing reason: no answer, the service
+   *  unreachable, 408/425/429/5xx. Any other answer fails at once. A failure carries `detail` (which read, why, how many tries). */
+  async function provider(route, { timeout = PAGE_TIMEOUT_MS, where = null, waits = RETRY_WAITS_MS } = {}) {
+    for (let attempt = 1; ; attempt++) {
+      if (quiet(now())) throw coded("quiet", "catalog maintenance window");
+      let r = null, failure;
+      try { r = await mediactl("GET", route, null, { timeout }); }
+      catch (e) {
+        const unconfigured = !!(e && e.extra && e.extra.code === "encoder_down");
+        failure = { status: null, timeout: /\btime(?:d ?)?out\b/i.test(String((e && e.message) || "")), unconfigured, transient: !unconfigured };
+      }
+      if (r) {
+        if (r.status === 404 && route === "/sections") throw coded("old", "needs media-control 1.7.0");
+        if (r.status === 200 && r.json && r.json.ok !== false) return r.json;
+        failure = { status: Number(r.status) || null, transient: TRANSIENT.has(Number(r.status)) };
+      }
+      const detail = { ...(where || { step: "sections" }), status: failure.status, timeout: !!failure.timeout, timeout_ms: timeout,
+        unconfigured: !!failure.unconfigured, attempts: attempt };
+      if (!failure.transient || attempt > waits.length) throw Object.assign(coded("upstream", "catalog source unavailable"), { detail });
+      log.log("[plexcatalog] " + describeRead(detail) + ": " + describeWhy(detail) + " - trying again in " + Math.round(waits[attempt - 1] / 1000) + " s");
+      await sleep(waits[attempt - 1]);
+    }
+  }
+  const unusable = (where) => Object.assign(coded("upstream", "catalog source unavailable"), { detail: { ...where, unusable: true, attempts: 1 } });
+  /** An unfinished full sweep worth carrying on: same block list, not too old, well formed. */
+  function resumable(p, at, fingerprint) {
+    if (!p || typeof p !== "object" || p.v !== 1 || p.fingerprint !== fingerprint || !Number.isFinite(p.seen) || !Number.isFinite(p.at)) return null;
+    if (at - p.at > PROGRESS_MAX_AGE_MS || p.at > at || !Array.isArray(p.done)) return null;
+    const c = p.cursor;
+    if (c != null && (typeof c !== "object" || !/^[A-Za-z0-9_-]{1,64}$/.test(String(c.section)) || ![2, 4, 1, "collections"].includes(c.type) ||
+      !Number.isInteger(c.start) || c.start < 0)) return null;
+    return { v: 1, at: p.at, seen: p.seen, fingerprint, done: p.done.map(String), cursor: c || null,
+      received: Math.max(0, number(p.received)), dropped: Math.max(0, number(p.dropped)), blocked: p.blocked && typeof p.blocked === "object" ? { ...p.blocked } : {} };
   }
   async function counts(sections, dry) {
     if (dry) return;
@@ -374,34 +450,60 @@ function createCatalog(options = {}) {
     await init();
     const previous = await state(), cfg = settings(), block = ratings(cfg.clerk_block_ratings), fingerprint = [...block].sort().join(",");
     const at = now();
-    full = !!full || !previous.full_at || new Date(previous.full_at).toISOString().slice(0, 10) !== new Date(at).toISOString().slice(0, 10) || previous.block_fingerprint !== fingerprint;
-    let received = 0, dropped = 0, blocked = {}, sections = [];
+    // 1.99?? catfix: an unfinished full sweep (a read that kept failing, the maintenance window, a restart) is carried on from
+    // the page it stopped at - with its own start time and seen marker, so its end still removes what Plex no longer has.
+    // Any run while one is unfinished is that sweep (a delta in between would stamp rows with another marker).
+    const resume = dry ? null : resumable(previous.progress, at, fingerprint);
+    full = !!resume || !!full || !previous.full_at || new Date(previous.full_at).toISOString().slice(0, 10) !== new Date(at).toISOString().slice(0, 10) || previous.block_fingerprint !== fingerprint;
+    const keep = full && !dry;   // only a full sweep keeps its place; a failed delta is simply read again from the last "at"
+    const run = resume || { v: 1, at, seen: null, fingerprint, done: [], cursor: null, received: 0, dropped: 0, blocked: {} };
+    let received = run.received, dropped = run.dropped, sections = [];
+    const blocked = { ...run.blocked };
     const revokedInRun = new Set();
+    const saveRun = (tx, cursor, doneSection) => {
+      if (!keep) return null;
+      run.cursor = cursor;
+      if (doneSection != null && !run.done.includes(doneSection)) run.done.push(doneSection);
+      Object.assign(run, { received, dropped, blocked: { ...blocked } });
+      return putState(tx, "progress", run);
+    };
     try {
       const source = await provider("/sections");
       sections = sectionRows(source.sections);
       const allow = source.allow_list_set === true;
       if (!dry) await write(async (tx) => { await installSections(tx, sections, allow, block); await putState(tx, "supported", true); });
       if (!allow) {
-        if (!dry) await write((tx) => putState(tx, "error", "set MEDIACTL_SECTIONS"));
+        if (!dry) await write(async (tx) => { await putState(tx, "error", "set MEDIACTL_SECTIONS"); await putState(tx, "error_at", at); });
         return { ok: false, dry, error: "set MEDIACTL_SECTIONS", sections, received: 0, dropped: 0 };
       }
       let version = null;
-      try { const h = await provider("/health"); version = /^\d+\.\d+\.\d+$/.test(h.version || "") ? h.version : null; } catch (_) {}
+      try { const h = await provider("/health", { waits: [] }); version = /^\d+\.\d+\.\d+$/.test(h.version || "") ? h.version : null; } catch (e) { if (e.code === "quiet") throw e; }
       const allowed = new Set(sections.filter((s) => s.policy === "allowed").map((s) => s.id));
-      const seen = dry ? at : await write(async (tx) => {
+      if (resume) log.log("[plexcatalog] carrying on the full sweep from " + new Date(run.at).toISOString() + ": " + run.done.length + " of " + allowed.size + " sections done");
+      const seen = dry ? at : resume ? run.seen : await write(async (tx) => {
         const prior = await tx.all("SELECT value FROM plex_catalog_state WHERE key='seen_generation'");
         const next = Math.max(at, number(prior[0] && parsed(prior[0].value, 0)) + 1);
         await putState(tx, "seen_generation", next);
+        run.seen = next;
+        await saveRun(tx, null, null);
         return next;
       });
+      const since = !full && previous.at ? Math.max(0, Math.floor(previous.at / 1000) - 1) : null;
       for (const s of sections.filter((r) => r.policy === "allowed")) {
-        for (const type of s.type === "show" ? [2, 4] : [1]) {
-          let start = 0;
+        if (run.done.includes(s.id)) continue;
+        const here = run.cursor && String(run.cursor.section) === s.id ? run.cursor : null;
+        const types = s.type === "show" ? [2, 4] : [1];
+        const from = here ? (here.type === "collections" ? types.length : Math.max(0, types.indexOf(here.type))) : 0;
+        for (let ti = from; ti < types.length; ti++) {
+          const type = types[ti];
+          let start = here && here.type === type ? here.start : 0;
           for (;;) {
-            const route = "/catalog?section=" + encodeURIComponent(s.id) + "&type=" + type + "&start=" + start + "&size=500" + (!full && previous.at ? "&since=" + Math.max(0, Math.floor(previous.at / 1000) - 1) : "");
-            const page = await provider(route), clean = [], revoked = [];
-            if (!Array.isArray(page.rows)) throw coded("upstream");
+            const where = { step: "catalog", section: s.id, kind: s.type, type, start, since: since != null };
+            const route = "/catalog?section=" + encodeURIComponent(s.id) + "&type=" + type + "&start=" + start + "&size=500" + (since != null ? "&since=" + since : "");
+            const page = await provider(route, { where }), clean = [], revoked = [];
+            if (!Array.isArray(page.rows)) throw unusable(where);
+            const next = page.next == null ? null : Number(page.next);
+            if (next != null && (!Number.isInteger(next) || next <= start || next > 10000000)) throw unusable(where);
             for (const input of page.rows) {
               const row = crow(input);
               if (!row || row.section !== s.id || !allowed.has(row.section)) { dropped++; if (input && KEY.test(String(input.key))) { revoked.push(String(input.key)); revokedInRun.add(String(input.key)); } continue; }
@@ -415,16 +517,32 @@ function createCatalog(options = {}) {
                 if (r.type === "episode" && !(await tx.all("SELECT key FROM plex_catalog WHERE key=? AND type='show' AND section=?", [r.show_key, r.section])).length) { dropped++; continue; }
                 await upsert(tx, r, seen);
               }
+              // the rows and the place after them, in one transaction
+              await saveRun(tx, next != null ? { section: s.id, type, start: next }
+                : { section: s.id, type: ti + 1 < types.length ? types[ti + 1] : "collections", start: 0 }, null);
             });
-            if (page.next == null) break;
-            const next = Number(page.next);
-            if (!Number.isInteger(next) || next <= start || next > 10000000) throw coded("upstream");
+            if (next == null) break;
             start = next;
           }
         }
-        const collections = await provider("/collections?section=" + encodeURIComponent(s.id));
-        if (!Array.isArray(collections.collections)) throw coded("upstream");
-        if (!dry) await write((tx) => storeShelves(tx, s.id, collections.collections));
+        // mediactl 1.7.1+: a page of shelves per answer; 1.7.0 ignores start/size and answers the whole section at once
+        const paged = pagedCollections(version);
+        let cstart = here && here.type === "collections" ? here.start : 0;
+        for (;;) {
+          const where = { step: "collections", section: s.id, kind: s.type, start: cstart };
+          const c = await provider("/collections?section=" + encodeURIComponent(s.id) + "&start=" + cstart + "&size=" + COLLECTIONS_PAGE,
+            paged ? { where, timeout: COLLECTIONS_PAGE_TIMEOUT_MS } : { where, timeout: COLLECTIONS_WALK_TIMEOUT_MS, waits: RETRY_WAITS_MS.slice(0, 1) });
+          if (!Array.isArray(c.collections)) throw unusable(where);
+          const pagedAnswer = Object.prototype.hasOwnProperty.call(c, "next");
+          const next = pagedAnswer && c.next != null ? Number(c.next) : null;
+          if (next != null && (!Number.isInteger(next) || next <= cstart || next > 10000000)) throw unusable(where);
+          if (!dry) await write(async (tx) => {
+            await storeShelves(tx, s.id, c.collections, { replace: cstart === 0 || !pagedAnswer });
+            await saveRun(tx, next != null ? { section: s.id, type: "collections", start: next } : null, next != null ? null : s.id);
+          });
+          if (next == null) break;
+          cstart = next;
+        }
       }
       if (!dry) {
         await counts(sections, false);
@@ -433,19 +551,25 @@ function createCatalog(options = {}) {
             if (fts) await tx.run("DELETE FROM plex_catalog_fts WHERE key IN (SELECT key FROM plex_catalog WHERE seen_at<>?)", [seen]);
             await tx.run("DELETE FROM plex_catalog WHERE seen_at<>?", [seen]);
             await purgeOrphans(tx);
-            await putState(tx, "full_at", at);
+            await putState(tx, "full_at", run.at);
           }
           await rebuildShelfFts(tx);
-          for (const [key, value] of Object.entries({ at, version, block_fingerprint: fingerprint, blocked, dropped, error: null, v: (previous.v || 0) + 1 })) await putState(tx, key, value);
+          for (const [key, value] of Object.entries({ at: run.at, version, block_fingerprint: fingerprint, blocked, dropped, error: null, error_at: null,
+            error_detail: null, progress: null, v: (previous.v || 0) + 1 })) await putState(tx, key, value);
         });
       }
-      log.log("[plexcatalog] " + (dry ? "dry " : "") + (full ? "full" : "delta") + " received=" + received + " dropped=" + dropped + " blocked=" + Object.values(blocked).reduce((a, b) => a + b, 0));
-      return { ok: true, dry, full, received, dropped, blocked, sections, version };
+      log.log("[plexcatalog] " + (dry ? "dry " : "") + (full ? "full" : "delta") + (resume ? " (carried on)" : "") + " received=" + received + " dropped=" + dropped + " blocked=" + Object.values(blocked).reduce((a, b) => a + b, 0));
+      return { ok: true, dry, full, received, dropped, blocked, sections, version, resumed: !!resume };
     } catch (e) {
-      const error = e.code === "old" ? "needs media-control 1.7.0" : e.code === "quiet" ? "maintenance window" : "catalog source unavailable";
-      if (!dry) await write(async (tx) => { await putState(tx, "error", error); if (e.code === "old") await putState(tx, "supported", false); }).catch(() => {});
-      log.log("[plexcatalog] sync failed: " + error);
-      return { ok: false, dry, error, received, dropped };
+      const error = e.code === "old" ? "needs media-control 1.7.0" : e.code === "quiet" ? "maintenance window"
+        : e.code === "upstream" ? sourceError(e.detail) : "catalog sync failed: " + text(String((e && e.message) || e), 120).replace(/https?:\/\/\S+/g, "<url>");
+      if (!dry) await write(async (tx) => {
+        await putState(tx, "error", error); await putState(tx, "error_at", now()); await putState(tx, "error_detail", e.detail || null);
+        if (e.code === "old") await putState(tx, "supported", false);
+      }).catch(() => {});
+      const kept = keep && run.seen != null ? " - kept: " + run.done.length + " of " + sections.filter((r) => r.policy === "allowed").length + " sections done, the next run carries on" : "";
+      log.log("[plexcatalog] sync failed: " + error + kept);
+      return { ok: false, dry, error, received, dropped, retry: e.code !== "old" };
     }
   }
   let outsideLists;
@@ -524,8 +648,10 @@ function createCatalog(options = {}) {
     const tick = async () => {
       if (!options.settings) { try { await require("./mediaconf").init(); } catch (_) { /* a standalone tool */ } }
       const on = inUse(settings() || {});
-      if (!closed && on && !quiet(now())) await sync();
-      if (!closed) { timer = setTimeout(tick, (on ? Math.max(10, Math.min(1440, number(settings().catalog_sync_min, 60))) : IDLE_CHECK_MIN) * 60000); if (timer.unref) timer.unref(); }
+      let last = null;
+      if (!closed && on && !quiet(now())) last = await sync();
+      // 1.99?? catfix: a run that failed for a passing reason is tried again after RETRY_MIN (an unfinished sweep carries on)
+      if (!closed) { timer = setTimeout(tick, nextTickMin(settings() || {}, on, last) * 60000); if (timer.unref) timer.unref(); }
     };
     timer = setTimeout(tick, 0);
     if (timer.unref) timer.unref();
@@ -585,5 +711,5 @@ const current = () => {
   }
   return singleton;
 };
-module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, SEARCH_QUEUE };
+module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, SEARCH_QUEUE };
 for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);

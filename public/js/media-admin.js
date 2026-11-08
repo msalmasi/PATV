@@ -46,7 +46,12 @@
           done: Number(j.embed.done) || 0, left: Number(j.embed.left) || 0, model: j.embed.model, dim: Number(j.embed.dim) || 0
         }));
       if (j.syncing) pcText(out, "p", ct("syncing", "Catalog sync is running. You can leave this page."));
-      if (j.error) pcText(out, "p", ct("last_error", "Last sync error: {error}", { error: j.error }));
+      // 1.99?? catfix: an unfinished full sync (it carries on from where it stopped) and when the last error happened
+      if (j.progress) pcText(out, "p", ct("progress", "Full sync in progress since {at}: {done} of {total} sections read, {n} titles so far. The next run carries on from there.", {
+        at: pcDate(j.progress.started), done: Number(j.progress.done) || 0, total: Number(j.progress.total) || 0, n: Number(j.progress.received) || 0
+      }));
+      if (j.error) pcText(out, "p", j.error_at ? ct("last_error_at", "Last sync error ({at}): {error}", { at: pcDate(j.error_at), error: j.error })
+        : ct("last_error", "Last sync error: {error}", { error: j.error }));
     }
     var wrap = pcText(out, "div", ""); wrap.className = "tblwrap";
     var table = pcText(wrap, "table", ""), head = pcText(pcText(table, "thead", ""), "tr", "");
