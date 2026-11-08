@@ -10,7 +10,7 @@
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
 //                              clips", 30 s by default) - the live view's room.pttMax (pttlimits). Letting go keeps recording
 //                              room.pttTail ms more (relaymic 1.99??: the release tail, so the last word is in the clip)
-//   .useToast(fn)             (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
+//   .useToast(fn)              (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
 //                              line under the composer goes there instead (fn(text, {id, ms, bad, busy, sticky}); '' with the id =
 //                              take it down; busy = a step on the way, sticky = a state that lasts until '')
 //   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
@@ -1428,6 +1428,7 @@
     var opening = false, pressAt = 0, upAt = 0, tapMode = false, requestGen = 0;
     var recording = false, recordListeners = [], activeDoc = null, activeWin = null;
     var tailMs = 0, tailIos = false, tailTimer = null, ending = false;   // relaymic: the release tail (update() reads room.pttTail / pttTailIos)
+    var relRec = null, relAt = 0;      // relaymic self-review: which recording was let go, and when ("too short" is about the press)
     // ptttoast 1.99ana (owner 11-08, Pepe's Pad: "slow down — one every 15s" and "🎙 your clip: played" sat under the Dock's tool row - "they
     // should show up the same way the other stuff does as the modal that auto-dismisses"): useToast(fn) - the Room Dock hands in its chat
     // card's notices (pad-dock.js chatToast: fn(text, {id, ms, bad}); '' with the id takes one down). Then nothing is written under the
@@ -1504,6 +1505,7 @@
       btn.setAttribute('aria-pressed', 'false');
       btn.textContent = _t('js.pad.ptt.rec_sending', '🎙 Sending…');
       var r = rec;
+      relRec = r; relAt = Date.now();
       tailTimer = setTimeout(function () {
         tailTimer = null;
         if (rec !== r || r.state !== 'recording') return;     // (stopped some other way meanwhile)
@@ -1513,10 +1515,12 @@
       }, ms);
     }
     var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
-    function send(chunks, mimeType, secs, capS, tid) {
+    // relaymic self-review: `pressed` = how long the button was held (the release tail left out) - "too short" is about the press; the
+    // upload's x-clip-secs stays `secs`, the wall time to onstop (the tail included)
+    function send(chunks, mimeType, secs, capS, tid, pressed) {
       if (gone) return;
       var say = sayFor(tid);          // (ptttoast: the press's own notice in the Dock)
-      if (secs < 0.7) { say(_t('js.pad.ptt.too_short', 'too short — hold the button while you talk'), 'bad'); return; }
+      if ((pressed != null ? pressed : secs) < 0.7) { say(_t('js.pad.ptt.too_short', 'too short — hold the button while you talk'), 'bad'); return; }
       // pttlimits review fix 3: longer than the max it was recorded under allows (+0.5 s, Pepe's own check) - never sent
       if (capS && secs > capS + PTT_OVER_S) { say(_t('js.pad.ptt.too_long', 'too long — keep it under {n} s', { n: capS }), 'bad'); return; }
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
@@ -1568,9 +1572,10 @@
         rec = r; recAt = t0;
         r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
         r.onstop = function () {
-          if (stream === s) release();           // stopped some other way (track ended, page hidden)
+          if (stream === s) release();           // stopped some other way (track ended, page hidden); relaymic: after a tail, here
           idle();
-          send(chunks, r.mimeType, (Date.now() - t0) / 1000, capS, tid);
+          var secs = (Date.now() - t0) / 1000;
+          send(chunks, r.mimeType, secs, capS, tid, relRec === r && relAt ? Math.min(secs, (relAt - t0) / 1000) : secs);
         };
         r.start(250); recordState(true);
         tapMode = !!upAt;                        // a quick tap started it: tap again to send
