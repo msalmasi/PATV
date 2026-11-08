@@ -142,7 +142,7 @@ test("pages: the lobby and a table render from the shared partials; a Hold'em pa
 test("strings: every js.casino.* default in the page scripts equals locales/en.json; every view key exists", () => {
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   const seen = new Map();
-  for (const f of ["casino-ui.js", "casinobj.js", "casinohm.js"]) {
+  for (const f of ["casino-ui.js", "casinobj.js", "casinohm.js", "casinomtt.js"]) {     // (h22 phase 2: + casinomtt.js, the 🏆 tournaments)
     const src = fs.readFileSync(path.join(repo, "public", "js", f), "utf8");
     for (const m of src.matchAll(/\bT\("([a-z0-9_]+)",\s*"((?:[^"\\]|\\.)*)"/g)) {
       const key = "js.casino." + m[1], def = JSON.parse('"' + m[2] + '"');
@@ -153,8 +153,8 @@ test("strings: every js.casino.* default in the page scripts equals locales/en.j
     assert.doesNotMatch(src, /\bT\((?!")/, f + ": T() keys are literals (the i18n sync finds them)");
   }
   assert.ok(seen.size > 100);
-  for (const f of ["casino-bj.ejs", "casino-hm.ejs", "partials/casino-top.ejs", "partials/casino-lobby.ejs", "partials/casino-sheets.ejs"]) {
+  for (const f of ["casino-bj.ejs", "casino-hm.ejs", "casino-mtt.ejs", "partials/casino-top.ejs", "partials/casino-lobby.ejs", "partials/casino-sheets.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
-    for (const m of src.matchAll(/t\('(casino\.[a-z0-9_]+)'\)/g)) assert.ok(typeof en[m[1]] === "string", f + ": " + m[1]);
+    for (const m of src.matchAll(/t\('(casino\.[a-z0-9_.]+)'\)/g)) assert.ok(typeof en[m[1]] === "string", f + ": " + m[1]);   // (h22 phase 2: + casino.mtt.* keys)
   }
 });

@@ -153,3 +153,17 @@ test("emailCategory never needs the address back", () => {
   assert.strictEqual(stale.emailCategory("a@gmail.com"), "major");
   assert.strictEqual(stale.emailCategory("a@example.com"), "placeholder");
 });
+
+test("h22 phase 2: a poker tournament entry in play (held / playing - a freeroll's has no escrow hold) or an owed guaranteed part holds the account", async () => {
+  await setup;
+  await stale.ensure();
+  await runQuery(`CREATE TABLE IF NOT EXISTS casino_mtt_entries (tid TEXT NOT NULL, user_id TEXT NOT NULL, gen INTEGER NOT NULL, state TEXT NOT NULL,
+                  overlay_due INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (tid, user_id, gen))`);
+  await user("mttq1", { username: "tourney1", bal: 10, created: 400 });
+  await user("mttq2", { username: "tourney2", bal: 10, created: 400 });
+  await user("mttq3", { username: "tourney3", bal: 10, created: 400 });
+  await runQuery("INSERT INTO casino_mtt_entries (tid, user_id, gen, state, overlay_due) VALUES ('m012345678', 'mttq1', 1, 'playing', 0), ('m012345678', 'mttq2', 1, 'spent', 700), ('m012345678', 'mttq3', 1, 'spent', 0)");
+  assert.ok((await stale.holdsFor("mttq1", { now: NOW })).includes("tournament entry"));
+  assert.ok((await stale.holdsFor("mttq2", { now: NOW })).includes("tournament entry"), "a guaranteed part still owed");
+  assert.ok(!(await stale.holdsFor("mttq3", { now: NOW })).includes("tournament entry"), "over and paid: no hold");
+});

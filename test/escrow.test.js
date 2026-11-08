@@ -334,3 +334,20 @@ test("h22: a TNY hold (a Sit & Go entry) is a site service's: never in Pepe's mi
   assert.ok(!rb.body.holds.some((x) => x.id === h.hid), "a rollback never hands it to Pepe");
   assert.equal((await getQuery("SELECT state FROM escrow_holds WHERE id = ?", [h.hid]))[0].state, "held");
 });
+
+test("h22 phase 2: a scheduled tournament's TNY hold (ref TNY-m<9 hex>) is a site service's too: not in Pepe's mirror or export, his keyed calls refused, untouched by a rollback", async () => {
+  const { tx } = require(path.join(repo, "dbUtils"));
+  const wasLive = (await getQuery("SELECT value FROM escrow_meta WHERE key = 'live'"))[0];
+  await runQuery("INSERT OR REPLACE INTO escrow_meta (key, value) VALUES ('live', 'true')");     // (the test above rolled the escrow back to Pepe)
+  L._forgetLive();
+  const h = await tx(async () => L.holdInTx({ key: "tny:m012345678:u5:enter:1", hid: null, account: await L.accountFor({ userId: "u5" }), amount: 5500,
+                                              ref: "TNY-m012345678", reason: "tournament entry", cp: "tournament #12", via: "site", casino: true }));
+  assert.equal((await getQuery("SELECT kind, ref FROM escrow_holds WHERE id = ?", [h.hid]))[0].kind, "TNY");
+  assert.ok(!(await L.holdsHeld()).some((x) => x.id === h.hid), "not in Pepe's mirror (nor the export built from it)");
+  assert.equal((await post("/api/escrow/bot/refund", { key: "refund:" + h.hid, hid: h.hid, reason: "x" })).body.code, "E_SITE_HOLD");
+  assert.equal((await post("/api/escrow/bot/settle", { key: "settle:x-" + h.hid, hids: [h.hid], payouts: [], fees: [] })).body.code, "E_SITE_HOLD");
+  const rb = await post("/api/escrow/admin/rollback", { key: "er-tny-mtt-0001" });
+  assert.ok(!(rb.body.holds || []).some((x) => x.id === h.hid), "a rollback never hands it to Pepe");
+  assert.equal((await getQuery("SELECT state FROM escrow_holds WHERE id = ?", [h.hid]))[0].state, "held");
+  if (!wasLive) { await runQuery("DELETE FROM escrow_meta WHERE key = 'live'"); L._forgetLive(); }
+});

@@ -607,8 +607,8 @@ test("wiring: casinohm.js sets the theme in render through CZ.theme; the Hold'em
   assert.match(ui, /window\.CZ = \{[^}]*\btheme\b/);
   assert.equal((hm.match(/CZ\.theme\(/g) || []).length, 1, "one call in render");
   assert.match(view, /<% if \(locals\.theme && theme !== 'classic'\) \{ %>/);
-  assert.match(view, /casino-ui\.js\?v=11/);      // (rebased on h22 Sit & Go's casino-ui v10 / casinohm v11)
-  assert.match(view, /casinohm\.js\?v=13/, "v13: the sign anchored on the felt (h20 verify review 3; v12 before the rebase on h22's v11)");
+  assert.match(view, /casino-ui\.js\?v=12/);      // (rebased on h22 Sit & Go's casino-ui v10 / casinohm v11; h22 phase 2: v12, one above both sides' v11)
+  assert.match(view, /casinohm\.js\?v=14/, "v13: the sign anchored on the felt (h20 verify review 3; v12 before the rebase on h22's v11); h22 phase 2: v14, one above themes' v13 / phase 2's v12");
   for (const v of ["casino-hm.ejs", "casino-bj.ejs"]) {
     assert.match(rd("views", v), /casino-themes\.css\?v=3/, v + ": the review's layout fixes");
     assert.match(rd("views", v), /casino-sound\.js\?v=2/, v + ": the toggle in the table's top row");

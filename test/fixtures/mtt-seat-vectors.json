@@ -1,0 +1,831 @@
+{
+ "about": "h22 phase 2 (casino/mttseat.js): pinned seating draws and blind plans",
+ "draws": [
+  {
+   "seed": "0000000000000000000000000000000000000000000000000000000000000000",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u8:1",
+    "u3:1",
+    "u5:1",
+    "u2:1",
+    "u1:1",
+    "u6:1",
+    "u4:1",
+    "u7:1",
+    "u9:1"
+   ]
+  },
+  {
+   "seed": "0000000000000000000000000000000000000000000000000000000000000000",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1",
+    "u10:1",
+    "u11:1",
+    "u12:1",
+    "u13:1",
+    "u14:1",
+    "u15:1",
+    "u16:1",
+    "u17:1",
+    "u18:1",
+    "u19:1",
+    "u20:1",
+    "u21:1",
+    "u22:1",
+    "u23:1",
+    "u24:1",
+    "u25:1",
+    "u26:1",
+    "u27:1"
+   ],
+   "order": [
+    "u17:1",
+    "u7:1",
+    "u23:1",
+    "u25:1",
+    "u21:1",
+    "u27:1",
+    "u13:1",
+    "u5:1",
+    "u18:1",
+    "u24:1",
+    "u3:1",
+    "u19:1",
+    "u10:1",
+    "u1:1",
+    "u9:1",
+    "u6:1",
+    "u11:1",
+    "u4:1",
+    "u2:1",
+    "u22:1",
+    "u8:1",
+    "u12:1",
+    "u16:1",
+    "u15:1",
+    "u26:1",
+    "u20:1",
+    "u14:1"
+   ]
+  },
+  {
+   "seed": "0000000000000000000000000000000000000000000000000000000000000000",
+   "label": "break:3:5",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1"
+   ],
+   "order": [
+    "u2:1",
+    "u5:1",
+    "u4:1",
+    "u3:1",
+    "u1:1"
+   ]
+  },
+  {
+   "seed": "0000000000000000000000000000000000000000000000000000000000000000",
+   "label": "final",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u4:1",
+    "u7:1",
+    "u3:1",
+    "u5:1",
+    "u8:1",
+    "u9:1",
+    "u1:1",
+    "u2:1",
+    "u6:1"
+   ]
+  },
+  {
+   "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u3:1",
+    "u2:1",
+    "u1:1",
+    "u5:1",
+    "u9:1",
+    "u4:1",
+    "u7:1",
+    "u8:1",
+    "u6:1"
+   ]
+  },
+  {
+   "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1",
+    "u10:1",
+    "u11:1",
+    "u12:1",
+    "u13:1",
+    "u14:1",
+    "u15:1",
+    "u16:1",
+    "u17:1",
+    "u18:1",
+    "u19:1",
+    "u20:1",
+    "u21:1",
+    "u22:1",
+    "u23:1",
+    "u24:1",
+    "u25:1",
+    "u26:1",
+    "u27:1"
+   ],
+   "order": [
+    "u12:1",
+    "u11:1",
+    "u10:1",
+    "u22:1",
+    "u1:1",
+    "u23:1",
+    "u2:1",
+    "u6:1",
+    "u21:1",
+    "u9:1",
+    "u24:1",
+    "u25:1",
+    "u5:1",
+    "u8:1",
+    "u20:1",
+    "u18:1",
+    "u13:1",
+    "u27:1",
+    "u16:1",
+    "u4:1",
+    "u3:1",
+    "u26:1",
+    "u15:1",
+    "u19:1",
+    "u14:1",
+    "u7:1",
+    "u17:1"
+   ]
+  },
+  {
+   "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "label": "break:3:5",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1"
+   ],
+   "order": [
+    "u4:1",
+    "u2:1",
+    "u5:1",
+    "u1:1",
+    "u3:1"
+   ]
+  },
+  {
+   "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "label": "final",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u6:1",
+    "u3:1",
+    "u9:1",
+    "u1:1",
+    "u7:1",
+    "u5:1",
+    "u8:1",
+    "u4:1",
+    "u2:1"
+   ]
+  },
+  {
+   "seed": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u8:1",
+    "u3:1",
+    "u4:1",
+    "u1:1",
+    "u6:1",
+    "u7:1",
+    "u5:1",
+    "u2:1",
+    "u9:1"
+   ]
+  },
+  {
+   "seed": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1",
+    "u10:1",
+    "u11:1",
+    "u12:1",
+    "u13:1",
+    "u14:1",
+    "u15:1",
+    "u16:1",
+    "u17:1",
+    "u18:1",
+    "u19:1",
+    "u20:1",
+    "u21:1",
+    "u22:1",
+    "u23:1",
+    "u24:1",
+    "u25:1",
+    "u26:1",
+    "u27:1"
+   ],
+   "order": [
+    "u17:1",
+    "u12:1",
+    "u13:1",
+    "u8:1",
+    "u3:1",
+    "u16:1",
+    "u1:1",
+    "u11:1",
+    "u18:1",
+    "u9:1",
+    "u2:1",
+    "u6:1",
+    "u5:1",
+    "u15:1",
+    "u14:1",
+    "u20:1",
+    "u10:1",
+    "u26:1",
+    "u19:1",
+    "u7:1",
+    "u22:1",
+    "u4:1",
+    "u27:1",
+    "u23:1",
+    "u24:1",
+    "u25:1",
+    "u21:1"
+   ]
+  },
+  {
+   "seed": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "label": "break:3:5",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1"
+   ],
+   "order": [
+    "u5:1",
+    "u4:1",
+    "u1:1",
+    "u3:1",
+    "u2:1"
+   ]
+  },
+  {
+   "seed": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "label": "final",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u6:1",
+    "u3:1",
+    "u9:1",
+    "u7:1",
+    "u4:1",
+    "u2:1",
+    "u5:1",
+    "u1:1",
+    "u8:1"
+   ]
+  },
+  {
+   "seed": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u6:1",
+    "u9:1",
+    "u8:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u7:1",
+    "u1:1",
+    "u5:1"
+   ]
+  },
+  {
+   "seed": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+   "label": "start",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1",
+    "u10:1",
+    "u11:1",
+    "u12:1",
+    "u13:1",
+    "u14:1",
+    "u15:1",
+    "u16:1",
+    "u17:1",
+    "u18:1",
+    "u19:1",
+    "u20:1",
+    "u21:1",
+    "u22:1",
+    "u23:1",
+    "u24:1",
+    "u25:1",
+    "u26:1",
+    "u27:1"
+   ],
+   "order": [
+    "u4:1",
+    "u8:1",
+    "u17:1",
+    "u11:1",
+    "u25:1",
+    "u23:1",
+    "u19:1",
+    "u26:1",
+    "u22:1",
+    "u21:1",
+    "u20:1",
+    "u13:1",
+    "u6:1",
+    "u14:1",
+    "u5:1",
+    "u2:1",
+    "u12:1",
+    "u9:1",
+    "u27:1",
+    "u15:1",
+    "u18:1",
+    "u24:1",
+    "u1:1",
+    "u7:1",
+    "u16:1",
+    "u3:1",
+    "u10:1"
+   ]
+  },
+  {
+   "seed": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+   "label": "break:3:5",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1"
+   ],
+   "order": [
+    "u1:1",
+    "u5:1",
+    "u4:1",
+    "u3:1",
+    "u2:1"
+   ]
+  },
+  {
+   "seed": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+   "label": "final",
+   "ids": [
+    "u1:1",
+    "u2:1",
+    "u3:1",
+    "u4:1",
+    "u5:1",
+    "u6:1",
+    "u7:1",
+    "u8:1",
+    "u9:1"
+   ],
+   "order": [
+    "u7:1",
+    "u5:1",
+    "u3:1",
+    "u4:1",
+    "u6:1",
+    "u9:1",
+    "u2:1",
+    "u8:1",
+    "u1:1"
+   ]
+  }
+ ],
+ "plans": [
+  {
+   "name": "new table",
+   "ring": [
+    "A",
+    "B",
+    "C"
+   ],
+   "last": null,
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "A",
+     "B",
+     "C"
+    ],
+    "button": null,
+    "deadSb": false,
+    "bbUid": null,
+    "fresh": true
+   }
+  },
+  {
+   "name": "bb busts 6-max",
+   "ring": [
+    "A",
+    "B",
+    "D",
+    "E",
+    "F"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A"
+   },
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "A",
+     "B",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "F",
+    "deadSb": true,
+    "bbUid": "D"
+   }
+  },
+  {
+   "name": "sb busts 6-max",
+   "ring": [
+    "A",
+    "C",
+    "D",
+    "E",
+    "F"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A"
+   },
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "A",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "F",
+    "deadSb": false,
+    "bbUid": "D"
+   }
+  },
+  {
+   "name": "button busts 6-max",
+   "ring": [
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A"
+   },
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "F",
+    "deadSb": false,
+    "bbUid": "D"
+   }
+  },
+  {
+   "name": "one arrival",
+   "ring": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A"
+   },
+   "arrivals": [
+    "X"
+   ],
+   "plan": {
+    "ring": [
+     "A",
+     "B",
+     "C",
+     "X",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A",
+    "deadSb": false,
+    "bbUid": "X"
+   }
+  },
+  {
+   "name": "two arrivals",
+   "ring": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A"
+   },
+   "arrivals": [
+    "X",
+    "Y"
+   ],
+   "plan": {
+    "ring": [
+     "A",
+     "B",
+     "C",
+     "X",
+     "Y",
+     "D",
+     "E",
+     "F"
+    ],
+    "button": "A",
+    "deadSb": false,
+    "bbUid": "X"
+   }
+  },
+  {
+   "name": "3 -> 2 button busts",
+   "ring": [
+    "B",
+    "C"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C"
+    ],
+    "button": "A"
+   },
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "B",
+     "C"
+    ],
+    "button": "B",
+    "deadSb": false,
+    "bbUid": "B"
+   }
+  },
+  {
+   "name": "3 -> 2 bb busts",
+   "ring": [
+    "A",
+    "B"
+   ],
+   "last": {
+    "bb_key": "C",
+    "sb_key": "B",
+    "order": [
+     "A",
+     "B",
+     "C"
+    ],
+    "button": "A"
+   },
+   "arrivals": [],
+   "plan": {
+    "ring": [
+     "A",
+     "B"
+    ],
+    "button": "A",
+    "deadSb": false,
+    "bbUid": "A"
+   }
+  },
+  {
+   "name": "heads-up arrival",
+   "ring": [
+    "A",
+    "B"
+   ],
+   "last": {
+    "bb_key": "B",
+    "sb_key": "A",
+    "order": [
+     "A",
+     "B"
+    ],
+    "button": "A"
+   },
+   "arrivals": [
+    "X"
+   ],
+   "plan": {
+    "ring": [
+     "X",
+     "A",
+     "B"
+    ],
+    "button": "X",
+    "deadSb": false,
+    "bbUid": "X"
+   }
+  }
+ ]
+}

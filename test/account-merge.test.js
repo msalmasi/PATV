@@ -93,6 +93,9 @@ test("a merge moves a row from EVERY user-linked table, folds collisions, and le
   }
   assert.deepStrictEqual(failed, [], "every user column could be seeded");
   assert.ok(seeded.length > 120, `seeded ${seeded.length} user columns`);
+  // (h22 phase 2) the seeded tournament entry is a finished one: an entry in play / an owed guarantee refuses the merge
+  // (E_TOURNEY_ACTIVE - test/casino-mtt-accounts.test.js)
+  await runQuery("UPDATE casino_mtt_entries SET state = 'spent', overlay_due = 0").catch(() => {});
   // room columns: the old account's profile pad
   await runQuery(`INSERT INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id, platform, created, updated)
                   VALUES (?, 'u-oldie', 'u/oldie', 'user', ?, 'profile', 1, 1)`, ["user:" + OLD, OLD]);
