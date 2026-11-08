@@ -1,10 +1,11 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# views/partials/casino-theme-saloon.ejs - hand-off 20 (owner 2026-11-04, NL-5): the western saloon's art, original and drawn (inline SVG,
     no image, no font download, nothing fetched). casino-ui.js CZ.theme clones it into a saloon table: .cz-scene behind the felt (a
     dim saloon in silhouette - the back bar with its bottles and mirror, a wagon-wheel lamp, the swinging half-doors, the floor;
     low contrast so the table stays the focus; on phones a wood-panel background instead - public/css/casino-themes.css) and
     .cz-sign, the "Pepe's Saloon" sign in place of the felt's lettering (on phones the scene's .cz-wallsign above the felt instead -
     the top seats leave no room on a narrow felt). Decoration only: aria-hidden, no pointer events.
-    Locals: t. %>
+    Locals: t (or the English prelude above). %>
 <template id="cz-theme-saloon">
 <div class="cz-scene" aria-hidden="true"><svg class="cz-scene-art" viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid slice" focusable="false" xmlns="http://www.w3.org/2000/svg">
 <defs>

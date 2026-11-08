@@ -645,3 +645,34 @@ test("blackjack page: the theme files only for a themed table; casinobj.js dress
   const css = rd("public", "css", "casino-themes.css");
   for (const s of [".cz-theme-saloon .felt.bj {", ".cz-theme-saloon .felt.bj::after", ".cz-theme-saloon .bj-shoe", ".cz-theme-saloon .felt.bj .cz-scene"]) assert.ok(css.includes(s), s);
 });
+
+// ── privacy: the flavour line names a winner the way the award lines do - a veiled (incognito) website player is masked ──
+test("privacy: a veiled winner's big-pot line is masked like the award lines (the Camfrog line and the table log)", async () => {
+  const V = require(path.join(repo, "casino", "veil"));
+  const was = V._hooks.kind;
+  V._hooks.kind = async (keys) => (keys.includes("u:u2") ? "incognito" : null);
+  if (V._reset) V._reset();
+  try {
+    await fresh("everyone");
+    // (fresh actor objects: svc.act remembers an actor's veil on the object, and the shared ones were read unveiled above)
+    const ann2 = Object.assign({}, ann, { veil: undefined }), bob2 = Object.assign({}, bob, { veil: undefined });
+    const { table: tid } = await open(ann2, ["25/50", "saloon"]);
+    for (const p of [ann2, bob2]) assert.ok((await A(Object.assign({}, p), "sit", ["2000"], { table: tid })).ok);
+    deck(["Ks", "Kh", "As", "Ah", "2c", "7d", "9h", "3s", "4c"]);           // Bob (the second seat) holds the aces and wins
+    assert.ok((await A(Object.assign({}, ann2), "deal", [], { table: tid })).ok);
+    const T = svc.getTable(tid);
+    let first = true;
+    while (T.eng.hand_active) {
+      const k2 = H.currentActor(T.eng);
+      assert.ok((await A(Object.assign({}, k2 === "u1" ? ann2 : bob2), first ? "allin" : "call", [], { table: tid })).ok);
+      first = false;
+    }
+    const evs = await events(tid);
+    const pot = cowboy(evs).filter((e) => /PAT pot/.test(e.text));
+    assert.equal(pot.length, 1, "the big pot's line");
+    const award = evs.find((e) => e.kind === "line" && /^🏆 .* wins /.test(e.text || ""));
+    assert.ok(award && !/\bBob\b/.test(award.text), "the award line is masked: " + (award && award.text));
+    assert.ok(!/\bBob\b/.test(pot[0].text), "and so is the flavour line: " + pot[0].text);
+    assert.ok(!svc.getTable(tid).log.some((l) => /\bBob\b/.test(l.text)), "nothing in the table's log names him");
+  } finally { V._hooks.kind = was; if (V._reset) V._reset(); }
+});
