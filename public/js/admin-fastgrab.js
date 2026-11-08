@@ -1,5 +1,5 @@
 /* ⚡ Fast mic grab - Pepe's !mic fastgrab switches and caps for one room, the global default or every room
-   (grabcard 1.99??; /admin/pepe/rooms#fastgrab - fastgrab.js -> website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py).
+   (grabcard 1.99amm; /admin/pepe/rooms#fastgrab - fastgrab.js -> website action mic.fastgrab -> camfrog-bot pepe_fastgrabweb.py).
    The values shown are the ones Pepe reports (his rooms state push); a save sends only the fields you changed, as ONE change,
    and shows what Pepe stored (and clamped) when he answers. window.PatvFastGrab = the pure part (the tests run it in node). */
 (function () {

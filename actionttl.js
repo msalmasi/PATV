@@ -38,7 +38,7 @@ const TTL_DEFAULTS = Object.freeze({
   "privacy.export": 3 * 1440,         // mic retention: Pepe's part of "Download my data" (accountexport.js asks again every 6 h, 72 h at most)
   "dj": 10, "pepe.look": 10, "room.ctl": 15, "room.visit": 30, "room.bridge": 30, "econ.burn": 30, "econ.routes": 30, "econ.cmd": 30,
   "roomvault.admin": 30,               // 1.99yx: /pads/admin pad vault fines / transfers (padfines.js)
-  "mic.fastgrab": 15,                  // grabcard 1.99??: ⚡ Fast mic grab (fastgrab.js) - a settings change Pepe never got to isn't applied late
+  "mic.fastgrab": 15,                  // grabcard 1.99amm: ⚡ Fast mic grab (fastgrab.js) - a settings change Pepe never got to isn't applied late
   "aigen": 15,                         // = aigen.js QUEUE_TTL (its job is timed out by aigen's own sweep)
   "snap.save": 15, "camclip.save": 15, "micclip.save": 15, "stagecap.save": 30,
   "notify": 1440,                      // a Camfrog PM copy of a notice that is already in the inbox

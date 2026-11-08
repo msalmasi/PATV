@@ -1,4 +1,4 @@
-// fastgrab.js — ⚡ Pepe's fast mic grab (!mic fastgrab) from the site (grabcard, 1.99??). Site Admins only.
+// fastgrab.js — ⚡ Pepe's fast mic grab (!mic fastgrab) from the site (grabcard, 1.99amm). Site Admins only.
 //
 // The owner, 2026-11-08: "where do i set the mic relay cooldowns and adjustable grab limits on the site?". The push-to-talk clip
 // limits are the Bridge page's card (/admin/bridge#pttlimits, pttlimits.js); the fast-grab switches and caps - until now chat only

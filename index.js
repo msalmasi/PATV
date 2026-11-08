@@ -1446,7 +1446,7 @@ require("./privacystate").register(app, { addUser });
 require("./camevidence").register(app, { addUser, bySlug: (s) => require("./bridge").bySlug(s) });
 require("./pepecontrol").register(app, { isBotToken, addUser });
 require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
-require("./fastgrab").register(app, { addUser });   // grabcard 1.99??: ⚡ /admin/pepe/rooms#fastgrab - Pepe's !mic fastgrab switches + caps (website action mic.fastgrab)
+require("./fastgrab").register(app, { addUser });   // grabcard 1.99amm: ⚡ /admin/pepe/rooms#fastgrab - Pepe's !mic fastgrab switches + caps (website action mic.fastgrab)
 require("./cmdswitch").register(app, { isBotToken, addUser }); // 1.99vc: 🎛️ /admin/pepe/commands - master switch + global default per command
 require("./roomaudiocfg").register(app, { isBotToken, addUser }); // 1.99yd: 🔊 /admin/pepe/audio - room-audio settings Pepe streams pads with
 require("./paddock").register(app, { addUser });
