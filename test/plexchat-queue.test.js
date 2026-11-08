@@ -381,17 +381,18 @@ test("review F6: adding to your OWN row already waiting in the line - about when
   const bob = await mkUser();
   let r = await queueIt(bob, "501");
   assert.equal(r.ok, true, JSON.stringify(r));
-  assert.ok(near(r.eta_sec, 6700, 6780), "the first one starts when Charade ends: " + r.eta_sec);
+  const first = r.eta_sec;                                  // (when Charade ends - the shared test clock may have moved on: relative from here)
+  assert.ok(near(first, 1, 6780), "the first one starts when Charade ends: " + first);
   const st = await search(bob, "carnival");
   assert.deepEqual([st.state.library.queue_as, st.state.library.line.place, st.state.library.line.mine], ["after", 1, 1]);
-  assert.ok(near(st.state.library.eta_sec, 6700 + 5760, 6780 + 5760), "padState: after Charade AND his Night of the Living Dead: " + st.state.library.eta_sec);
+  assert.ok(near(st.state.library.eta_sec, first + 5760 - 60, first + 5760 + 60), "padState: after Charade AND his Night of the Living Dead: " + st.state.library.eta_sec);
   r = await queueIt(bob, "502");
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.deepEqual([r.how, r.place, r.items], ["after", 1, 2]);
-  assert.ok(near(r.eta_sec, 6700 + 5760, 6780 + 5760), "after(): Carnival of Souls starts after both: " + r.eta_sec);
+  assert.ok(near(r.eta_sec, first + 5760 - 60, first + 5760 + 60), "after(): Carnival of Souls starts after both: " + r.eta_sec);
   const carol = await mkUser();
   const st2 = await search(carol, "night");
-  assert.ok(near(st2.state.library.eta_sec, 6700 + 5760 + 4680, 6780 + 5760 + 4680), "someone new: after Charade and bob's two: " + st2.state.library.eta_sec);
+  assert.ok(near(st2.state.library.eta_sec, first + 5760 + 4680 - 60, first + 5760 + 4680 + 60), "someone new: after Charade and bob's two: " + st2.state.library.eta_sec);
 });
 
 test("review F8: a line-up is tied to the title the confirm named - padState says behind_slot, play mode queue sends it back; something else on by the yes -> behind_changed with what's on now (and its slot), nothing lined up", async () => {

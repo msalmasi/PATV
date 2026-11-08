@@ -1582,6 +1582,14 @@ async function after(user, b = {}) {
     if (cur.q && (await mayGrow(user, cur.q))) throw refuse(409, "Your queue is playing on this pad - add to it.", { code: "queue_on" });
     const behind = String(cur.slot_id);
     const nowTitle = cur.title || null;
+    // 1.99?? plexqueue review F8: b.behind_slot = the slot the person's confirm named ("queue it after <title>" - padState library.behind_slot):
+    // something else on by the yes -> behind_changed with what's on now (Pepe asks again, naming it) - a line-up never goes behind a title nobody
+    // agreed to wait for. An older caller (none): behind whatever is on, as before
+    const wantBehind = typeof b.behind_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(b.behind_slot) ? b.behind_slot : null;
+    if (wantBehind && wantBehind !== behind) {
+      throw refuse(409, `What's on this pad's stage has just changed - it's "${nowTitle || "?"}" now. Confirm again to line yours up after it.`,
+                   { code: "behind_changed", playing: nowTitle, playing_queue: !!cur.q, playing_left: cur.q ? cur.left || 0 : 0, behind_slot: behind });
+    }
     const rows = await lineRows(R.id);
     const wait = rows.find((x) => x.user_id === user.userId && x.resume == null) || null;
     if (!wait && rows.some((x) => x.user_id === user.userId)) throw refuse(409, "Your queue is paused on this pad - it carries on after the booked stream.", { code: "queue_held" });
@@ -1608,6 +1616,10 @@ async function after(user, b = {}) {
         if (b.estimate == null || b.estimate === "") throw refuse(400, `That adds about ${I().fmtPat(cost)} PAT, charged as it plays - confirm it to add it.`, { estimate: cost, code: "estimate" });
         if (Math.floor(Number(b.estimate)) !== cost) throw refuse(409, `It adds about ${I().fmtPat(cost)} PAT now - confirm it again.`, { estimate: cost, code: "estimate" });
       }
+      // 1.99?? plexqueue review F6: about when the titles added now start - after everyone ahead AND this row's own titles already waiting (the line
+      // as it stands before they go on: lineEta up to and including this row), not when the row itself starts
+      const ln0 = await lineFor(R.id);
+      const eta_sec = await lineEta(R.id, cur, ln0, ln0.findIndex((h) => h.row && h.row.id === wait.id) + 1);
       wait.items.push(...put);
       await saveItems(wait);
       await runQuery("UPDATE media_queues SET prefs = ? WHERE id = ?", [JSON.stringify({ ...wait.prefs, est: (wait.prefs.est || 0) + cost }), wait.id]);
@@ -1616,7 +1628,7 @@ async function after(user, b = {}) {
       const at = ln.findIndex((h) => h.row && h.row.id === wait.id) + 1;
       // 1.99?? plexqueue: + about when it starts and its rate (Pepe says where it landed)
       return { ok: true, after: true, queue_id: wait.id, added: put.length, items: wait.items.length, cost, behind: nowTitle, behind_queue: !!cur.q, behind_left: cur.q ? cur.left || 0 : 0,
-               place: at, line: ln.length, eta_sec: await lineEta(R.id, cur, ln, Math.max(0, at - 1)), per_hour: Number(wait.per_hour) || 0 };
+               place: at, line: ln.length, eta_sec, per_hour: Number(wait.per_hour) || 0 };
     }
     if (rows.filter((x) => x.resume == null).length >= AFTER_MAX) {
       throw refuse(409, `${AFTER_MAX} people are lined up after what's on already - try again when one has started.`, { code: "line_full", max: AFTER_MAX });
@@ -1664,7 +1676,8 @@ async function after(user, b = {}) {
  *   * anything else from Plex on (a single title, someone else's running queue): a queue of their OWN lined up after it (after(): the line's
  *     rules - who may ▶ Play here, AFTER_MAX people, their own row grows, the points for its first title at the press, billed as it plays);
  *   * nothing on: nothing_on (Pepe asks a plain play); a live stream holding the pad's every slot: slot_taken; a queue starting: busy_queue.
- * b = {key, scope?, keys?, estimate?}. -> addNext's / after()'s answer + how ("append" | "after"), place, eta_sec.
+ * b = {key, scope?, keys?, estimate?, behind_slot? (review F8: the slot the confirm named - a line-up only: the END of your own queue names no
+ * title)}. -> addNext's / after()'s answer + how ("append" | "after"), place, eta_sec.
  */
 async function queueFor(user, room, b = {}) {
   await L().init();
@@ -1682,7 +1695,8 @@ async function queueFor(user, room, b = {}) {
     catch (e) { if (!(e && e.extra && e.extra.code === "nothing_on")) throw e; }   // (it ended meanwhile: lined up / nothing on, below)
   }
   try {
-    return { how: "after", ...(await after(user, { room: R.id, ...(keys ? { keys } : { key: String(b.key), ...(scope ? { scope } : {}) }), estimate: b.estimate })) };
+    return { how: "after", ...(await after(user, { room: R.id, ...(keys ? { keys } : { key: String(b.key), ...(scope ? { scope } : {}) }), estimate: b.estimate,
+                                                  ...(b.behind_slot ? { behind_slot: b.behind_slot } : {}) })) };
   } catch (e) {
     if (e && e.extra && e.extra.code === "queue_on") return append();             // (a queue of theirs started meanwhile: it grows)
     throw e;

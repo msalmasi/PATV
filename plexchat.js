@@ -33,6 +33,9 @@
 //                grow, else a queue of their OWN lined up after what's on; estimate = the row's queue_cost they said yes to;
 //                -> {queued, how: append | after, title, added, items, cost, per_hour, place, line, eta_sec, behind, behind_queue, behind_left}.
 //                A site that answers padState without library.queue_as doesn't know it: an older one reads it as a plain play - Pepe checks first)
+//               (1.99?? plexqueue review: mode queue + behind_slot = padState library.behind_slot, the title the confirm named - something else
+//                on by the yes: behind_changed {playing, behind_slot}; a plain play may send secs = its length: refused busy_library / busy_queue
+//                it carries the speaker's padState as state + queue_cost for those secs, so Pepe can offer queue / replace there)
 //               (plexreplace: target stage + mode replace = ▶ "Play this instead" - ONE request: what's on the pad comes off, the new title
 //                goes on with its feature and card - medialib.playFor / mediaqueue.startFor {replace: true}; -> + replaced {title, queue})
 //     control   {action: pause | resume | stop | seek | seek_rel | next | prev, value}
@@ -61,7 +64,9 @@ const CODES = ["signin", "off", "cap", "pad", "banned", "has_slot", "busy_librar
   "not_found", "error", "replace_gone", "replace_changed", "play_changed", "clerk_off", "catalog_down", "unavailable",
   "request_off", "request_stale", "unlinked", "level", "limit", "requested", "available", "upstream", "embed_off", "embed_model", "embed_busy",
   // 1.99?? plexqueue: the line's own refusals (mediaqueue.after / preflight) - Pepe words each one
-  "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after"];
+  "queue_on", "queue_held", "line_full", "line_next", "booking_next", "nothing_after",
+  // ... review F8: what a line-up was to wait for isn't on any more (Pepe asks again, naming what is)
+  "behind_changed"];
 const OPS = new Set(["search", "find", "browse", "request", "shelves", "play", "control", "np", "continue", "rpm", "embed_todo", "embed_put"]);
 const SCOPES = new Set(["title", "episode", "season", "season_rest", "series_from", "list", "series"]);
 const RATE_MAX = 30, RATE_MS = 60 * 1000;
@@ -140,6 +145,11 @@ function failBody(e) {
   // 1.99?? plexqueue: a refusal's own figures (the line's "Lining it up takes X points ... and you have Y": need + balance; where it stands)
   for (const k of ["need", "place", "line"]) if (x[k] != null && Number.isFinite(Number(x[k]))) out[k] = Math.max(0, Math.floor(Number(x[k])));
   if (x.balance != null && Number.isFinite(Number(x.balance))) out.have = Math.max(0, Math.floor(Number(x.balance)));
+  // ... review F8: the slot a line-up would go behind now (behind_changed); review F2: a busy plain play's padState for the speaker and what
+  // queueing the title costs them - Pepe offers queue / replace on the spot (padState is titles only: never a file)
+  if (typeof x.behind_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(x.behind_slot)) out.behind_slot = x.behind_slot;
+  if (x.state && typeof x.state === "object" && !Array.isArray(x.state)) out.state = x.state;
+  if (x.queue_cost != null && Number.isFinite(Number(x.queue_cost))) out.queue_cost = Math.max(0, Math.floor(Number(x.queue_cost)));
   if (code === "pat" && (out.need == null || out.have == null)) {   // shop.chargeService: "That costs X PAT and you have Y."
     const m = /costs\s+([\d,.]+)\s+PAT\s+and\s+you\s+have\s+([\d,.]+)/i.exec(out.error);
     if (m) { out.need = num(m[1]); out.have = num(m[2]); }
@@ -495,7 +505,10 @@ async function opPlay(user, b, ctx) {
     // 1.99?? plexqueue (owner 2026-11-08): Pepe's "queue it" = /stage's "+ Add to the queue" on this pad (mediaqueue.queueFor - its rules, its
     // billing: the speaker's own, as it plays; estimate = the queue_cost they said yes to, 400 / 409 otherwise)
     const est = b.estimate == null || b.estimate === "" ? undefined : Math.floor(Number(b.estimate));
-    const r = await MQ().queueFor(user, R.id, listed ? { keys, estimate: est } : { key, scope: scope === "title" || scope === "episode" ? null : scope, estimate: est });
+    // (review F8: behind_slot = the slot the confirm named - padState library.behind_slot; behind_changed if something else is on by the yes)
+    const behind_slot = typeof b.behind_slot === "string" && /^[A-Za-z0-9-]{8,64}$/.test(b.behind_slot) ? b.behind_slot : null;
+    const r = await MQ().queueFor(user, R.id, { ...(listed ? { keys } : { key, scope: scope === "title" || scope === "episode" ? null : scope }), estimate: est,
+                                                ...(behind_slot ? { behind_slot } : {}) });
     const cost = r.cost != null ? r.cost : r.estimate || 0;
     return { ok: true, target: "stage", queued: true, how: r.how, title: r.title || r.next || null, added: r.added || 0, items: r.items || 0, cost, free: !(cost > 0),
              per_hour: r.per_hour || 0, place: r.place || null, line: r.line || null, eta_sec: r.eta_sec != null ? r.eta_sec : null, behind: r.behind || null,
@@ -507,6 +520,31 @@ async function opPlay(user, b, ctx) {
     const r = await MQ().addNext(user, R.id, listed ? keys : [key], { estimate: est, scope: listed || scope === "title" || scope === "episode" ? null : scope });
     return { ok: true, target: "stage", queued: true, title: r.next, added: r.added, cost: r.cost || 0, pad: { id: R.id, title: R.title || R.id } };
   }
+  // 1.99?? plexqueue review F2: something from Plex started between Pepe's question and a plain yes (busy_library / busy_queue): the refusal says
+  // what THIS speaker may do about it now (padState) and what queueing the title costs them (b.secs - its length as the row said; only a figure
+  // to confirm: the queue yes is checked against the site's own, 400 / 409) - Pepe offers queue / replace right there. An older Pepe reads
+  // can_replace / playing* as before
+  try { return await plainPlay(user, b, R, { listed, keys, key, scope, price }); }
+  catch (e) {
+    if (b.mode !== "replace" && e && e.refuse && e.extra && ["busy_library", "busy_queue"].includes(e.extra.code)) await busyState(user, R, b, e);
+    throw e;
+  }
+}
+/** (review F2) a busy refusal of a plain play + the speaker's padState and queue_cost for b.secs. Never throws. */
+async function busyState(user, R, b, e) {
+  try {
+    const state = await ML().padState(user, R.id);
+    if (!state) return;
+    e.extra.state = state;
+    const secs = intOr(b.secs, 1, 7 * 24 * 3600);
+    if (secs != null && state.library && state.library.queue_as) {
+      const A = await ML()._q.mustAccess(user).catch(() => null);
+      const qc = A ? await queueCost(user, R, state, A, secs) : null;
+      if (qc != null) e.extra.queue_cost = qc;
+    }
+  } catch (err) { /* the refusal goes out as it was */ }
+}
+async function plainPlay(user, b, R, { listed, keys, key, scope, price }) {
   const S = conf().get();
   // plexreplace: Pepe's "play X instead?" + yes. Review fix: replace_slot = the slot his question named (padState library.slot_id / a busy
   // refusal's playing_slot) - the site refuses replace_changed if something else is on by the yes; an older Pepe without it: whatever is on

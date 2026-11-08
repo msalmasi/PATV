@@ -1057,7 +1057,8 @@ async function padState(user, room) {
     library.booking_due = li && li.booking ? li.booking : null;
     if (li && li.booking) library.can_replace = false;
     library.eta_sec = null;
-    if (library.queue_as === "after") library.eta_sec = await MQ.lineEta(R.id, on, li.line, li.mineH ? li.line.indexOf(li.mineH) : Infinity).catch(() => null);
+    // (1.99?? plexqueue review F6: a row of theirs already waiting - what they add goes on its end: after everyone ahead AND that row's titles)
+    if (library.queue_as === "after") library.eta_sec = await MQ.lineEta(R.id, on, li.line, li.mineH ? li.line.indexOf(li.mineH) + 1 : Infinity).catch(() => null);
     else if (library.queue_as === "append") {
       const brk = await breakSec(R.id).catch(() => 0), rest = on.q.items.slice(on.q.pos + 1);
       library.eta_sec = Math.round((on.s && Number(on.s.queue_id) === Number(on.q.id) ? MQ.liveLeft(on.s) : Number((on.q.items[on.q.pos] || {}).duration) || 0)
@@ -1065,6 +1066,9 @@ async function padState(user, room) {
     }
     // plexreplace review fix: the slot a replace names (Pepe sends it back with the yes - replace_changed if it isn't what's on by then)
     if (library.can_replace) library.slot_id = q ? q.slot_id : s.slot_id;
+    // 1.99?? plexqueue review F8: ... and the slot a line-up goes behind ("queue it after <title>" - Pepe sends it back: behind_changed if it isn't
+    // what's on by then); the end of their own queue names no title
+    if (library.queue_as === "after" && on && on.slot_id) library.behind_slot = String(on.slot_id);
   }
   const open = await safeQuery(`SELECT id, source FROM stage_slots WHERE room_id = ? AND status IN ${OPEN_STATES}`, [R.id]);
   const RS = await rooms.stageSettings(R.id).catch(() => null);
