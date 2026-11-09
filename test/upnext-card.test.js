@@ -359,7 +359,7 @@ test("views + strings + styles: the css is linked, stage-room.js v23, the poster
   assert.match(read("views", "room.ejs"), /posters: <%= signedIn_ \? 'true' : 'false' %>/);
   assert.match(read("views", "home.ejs"), /posters: <%= typeof me !== 'undefined' && me \? 'true' : 'false' %>/);
   assert.match(read("public", "js", "home-dock.js"), /posters: !!I\.signed/);
-  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=7/);   // (upnext2: v7)
+  assert.match(read("views", "home.ejs"), /home-dock\.js\?v=8/);   // (upnext2: v7; relaymic review F1: v8)
   // upnext review V2 / V3: the homepage draws its stage ON while a 📼 title is starting (no 44 px collapsed stage / OFF AIR slate first); the
   // capture bar's pending row (stage-capture.js v4 on both surfaces)
   assert.match(read("views", "home.ejs"), /const live = \(!!st\.active && pepeHere_\) \|\| paid\.length > 0 \|\| !!\(locals\.stageFeatured && locals\.stageFeatured\.next\);/);

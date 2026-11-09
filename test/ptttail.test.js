@@ -306,3 +306,77 @@ test("ptttail: cache-busters - room-bridge.js v34 wherever it loads", () => {
     assert.doesNotMatch(s, /room-bridge\.js\?v=(?!34\b)\d+/, v + ": one version");
   }
 });
+
+test("ptttail review F1: the release tail keeps the talk button busy (rb-sending) - the homepage dock's busy() never swaps the front pad away from a clip the user already let go of", async () => {
+  // home-dock.js busy(): the front pad's swap (frontChanged / the 4 s idle poll) tears the block down - ptt.destroy() - only while the
+  // viewer isn't busy; before the tail the button stayed aria-pressed until onstop (the upload already started by then). With the tail
+  // the button reads "Sending…" (aria-pressed false) for 400 ms - a swap then destroyed the clip and its notice without a word.
+  const hd = read("public", "js", "home-dock.js");
+  const m = /var talk = \$\('rmPtt'\) && \$\('rmPtt'\)\.querySelector\('([^']+)'\); if \(talk\) return true;/.exec(hd);
+  assert.ok(m, "home-dock.js busy(): the talk button's selector");
+  const sel = m[1];
+  assert.match(sel, /\.rb-talk\[aria-pressed="true"\]/, "held: busy, as before");
+  assert.match(sel, /\.rb-talk\.rb-sending/, "the release tail: busy too");
+  // a swap poll at every step: when busy() says idle, the block is torn down (ptt.destroy())
+  const r = rig({ room: { pttTail: 400 } });
+  let swapped = false;
+  const poll = () => { if (!swapped && !r.host.querySelector(sel)) { swapped = true; r.p.destroy(); } };
+  await r.down(); poll();
+  assert.ok(!swapped, "recording: busy");
+  r.clock.t += 3000; r.up(); poll();
+  assert.ok(r.btn.classList.contains("rb-sending"), "the tail: the button is rb-sending");
+  assert.equal(r.btn.getAttribute("aria-pressed"), "false");
+  assert.ok(!swapped, "the tail: busy - no swap");
+  r.run(r.timer(400)); poll();
+  assert.ok(!swapped, "rec.stop() -> onstop: still busy until onstop");
+  await flush();
+  assert.equal(r.fetches.length, 1, "uploaded");
+  assert.ok(!r.btn.classList.contains("rb-sending"), "idle again after onstop");
+  poll();
+  assert.ok(swapped, "then the swap may happen - the upload had started");
+  assert.equal(r.fetches.length, 1, "the clip was sent once");
+  // a tail stopped some other way (pagehide, a hidden page, the max timer, the mic switched off) leaves no rb-sending behind
+  for (const how of ["pagehide", "hidden", "max", "micoff"]) {
+    const s = rig({ room: { pttTail: 400 } });
+    await hold(s, 3);
+    assert.ok(s.btn.classList.contains("rb-sending"), how);
+    if (how === "pagehide") s.win.fire("pagehide");
+    else if (how === "hidden") { s.doc.hidden = true; s.doc.dispatchEvent(new Event("visibilitychange")); }
+    else if (how === "max") { const t = s.timer(29500); t.ran = true; t.fn(); }
+    else s.p.update({ room: { micRelay: false }, mine: [] });
+    await flush();
+    assert.ok(!s.btn.classList.contains("rb-sending") && !s.host.querySelector(sel), how + ": not busy once it stopped");
+  }
+  // a recorder whose stop() throws at the end of the tail: the mic is let go and the button is idle - never busy for good
+  const x = rig({ room: { pttTail: 400 } });
+  await hold(x, 3);
+  x.rec().stop = () => { throw new Error("InvalidStateError"); };
+  x.run(x.timer(400));
+  await flush();
+  assert.ok(x.log.includes("track.stop"), "the mic let go");
+  assert.ok(!x.btn.classList.contains("rb-sending") && !x.host.querySelector(sel), "not busy for good");
+  assert.equal(x.btn.textContent, "🎙 Hold to talk");
+  // without a tail (0 / iOS by default) nothing changes: aria-pressed until onstop, no rb-sending
+  const z = rig({ room: { pttTail: 0 } });
+  await hold(z, 3);
+  assert.ok(!z.btn.classList.contains("rb-sending"), "no tail: no rb-sending");
+});
+
+test("ptttail review F2: the icon-only talk button (a phone / narrow pad Dock, the homepage's card) shows ⏳ during the release tail - not the idle 🎙️", () => {
+  const pd = read("public", "css", "pad-dock.css"), hd = read("public", "css", "home-dock.css");
+  const blk = /@media \(max-width: 1023px\) \{([\s\S]*?)\n\}/.exec(pd);
+  assert.ok(blk, "pad-dock.css: the narrow block");
+  assert.match(blk[1], /main\.rm\.rm-dock \.rmd-composer \.rb-talk\[aria-pressed="true"\]::before \{ content: "⏺"; \}\n\s*main\.rm\.rm-dock \.rmd-composer \.rb-talk\.rb-sending::before \{ content: "⏳"; \}/,
+    "pad-dock.css: ⏳ while sending, after the held ⏺");
+  assert.match(hd, /main\.rm\.rm-dock\.rmd-home \.rmd-composer \.rb-talk\[aria-pressed="true"\]::before \{ content: "⏺"; \}\nmain\.rm\.rm-dock\.rmd-home \.rmd-composer \.rb-talk\.rb-sending::before \{ content: "⏳"; \}/,
+    "home-dock.css: the same on the homepage's card (its own icon rules outrank pad-dock.css's)");
+  // cache-busters: pad-dock.css v13 (every page that loads it), home-dock.css v8, home-dock.js v8
+  for (const v of ["room.ejs", "home.ejs", "casino-bj.ejs", "casino-hm.ejs"]) {
+    const s = read("views", v);
+    assert.match(s, /pad-dock\.css\?v=13"/, v);
+    assert.doesNotMatch(s, /pad-dock\.css\?v=(?!13")\d+/, v + ": one css version");
+  }
+  const home = read("views", "home.ejs");
+  assert.match(home, /home-dock\.css\?v=8"/);
+  assert.match(home, /home-dock\.js\?v=8"/);
+});

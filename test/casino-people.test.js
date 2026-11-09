@@ -245,7 +245,7 @@ test("the table pages: the person menu, the Pepe menu and the 💬 Chat panel ar
   for (const [f, js] of [["casino-hm.ejs", "casinohm.js?v=14"], ["casino-bj.ejs", "casinobj.js?v=9"]]) {
     const src = fs.readFileSync(path.join(repo, "views", f), "utf8");
     // (1.99ajw casino2 rework: room-mod v16 - 1.99ajn padppl's 🚫 Block / ✅ Unblock in the menu - with its sheet + look for signed-in viewers)
-    for (const s of ["casino-ui.js?v=12", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=12", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9; pausebars: v11 - the pad's current file; ptttoast review F1: v12; flairfix: casino-ui v8; train3 table notice: casino-ui v9, casinohm v10; h22 Sit & Go: casino-ui v10, casinohm v11; h20 themes: casino-ui v11, casinohm v13; h22 phase 2: casino-ui v12, casinohm v14 - one above both sides)
+    for (const s of ["casino-ui.js?v=12", js, "room-mod.js?v=16", "pad-tip.js?v=1", "room-mod.css?v=10", "pad-dock.css?v=13", "person-sheet.css?v=3",   // (1.99ajy dockmedia: pad-dock.css v9; pausebars: v11 - the pad's current file; ptttoast review F1: v12; relaymic review F2: v13; flairfix: casino-ui v8; train3 table notice: casino-ui v9, casinohm v10; h22 Sit & Go: casino-ui v10, casinohm v11; h20 themes: casino-ui v11, casinohm v13; h22 phase 2: casino-ui v12, casinohm v14 - one above both sides)
                      "<% if (signedIn) { %><script src=\"/public/js/block-sheet.js?v=3\"></script><% } %>", "include('partials/casino-chat'", 'data-user="']) assert.ok(src.includes(s), f + ": " + s);
   }
   const chat = fs.readFileSync(path.join(repo, "views", "partials", "casino-chat.ejs"), "utf8");

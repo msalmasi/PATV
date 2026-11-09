@@ -383,7 +383,7 @@ test("ptttoast review F1: the character counter sits in the input's row beside t
   assert.match(read("public", "js", "room-bridge.js"), /COUNT_FROM = 240/);
 });
 
-test("ptttoast: cache-busters - room-bridge.js v34 (relaymic; v33 ptttoast) and pad-dock.js v13 wherever they load, pad-dock.css v12 (review F1); the hidden line rule is room-bridge.css's", () => {
+test("ptttoast: cache-busters - room-bridge.js v34 (relaymic; v33 ptttoast) and pad-dock.js v13 wherever they load, pad-dock.css v13 (relaymic review F2; v12 review F1); the hidden line rule is room-bridge.css's", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = read("views", v);
     assert.match(s, /room-bridge\.js\?v=34/, v);   // (relaymic: v34 - the release tail)
@@ -396,7 +396,7 @@ test("ptttoast: cache-busters - room-bridge.js v34 (relaymic; v33 ptttoast) and 
   // (review F1: pad-dock.css v12 - the counter beside the field - on the pad, the homepage and both casino tables)
   for (const v of ["room.ejs", "home.ejs", "casino-bj.ejs", "casino-hm.ejs"]) {
     const s = read("views", v);
-    assert.match(s, /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=12">/, v);
-    assert.doesNotMatch(s, /pad-dock\.css\?v=(?!12")\d+/, v + ": one css version");
+    assert.match(s, /<link rel="stylesheet" href="\/public\/css\/pad-dock\.css\?v=13">/, v);
+    assert.doesNotMatch(s, /pad-dock\.css\?v=(?!13")\d+/, v + ": one css version");
   }
 });
