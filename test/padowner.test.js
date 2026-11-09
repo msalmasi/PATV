@@ -600,7 +600,7 @@ test("automod controls show reported values, validate decimals and queue only th
   assert.ok(p.text.includes(en["owner.grp_mic_etiquette_why"].replace("{seconds}", "12")));
   assert.ok(p.text.includes(en["owner.seconds_default"].replace("{n}", "1.5")));
   assert.ok(p.text.includes(en["owner.mic_rules_admin_off"]));
-  assert.ok(en["owner.set_automod.etiquette.wait_why"].includes("previous turn ended before the intervening speaker began"));
+  assert.ok(en["owner.set_automod.etiquette.wait_why"].includes("exactly one other person has taken the mic since their last turn began"));
   assert.ok(!p.text.includes('data-po-set="automod.etiquette.wanted_s"'));
   for (const row of PO.AUTOMOD_OWNER) {
     PO._reset();
