@@ -5194,6 +5194,7 @@
   "js.pad.ptt.hold": "🎙 Przytrzymaj, by mówić",
   "js.pad.ptt.upto_n": "do {n} s · Pepe odtwarza to w mikrofonie, gdy jest wolny",
   "js.pad.ptt.rec_tap": "⏺ Nagrywanie — dotknij, by wysłać",
+  "js.pad.ptt.rec_sending": "🎙 Wysyłanie…",
   "js.pad.audio.volume": "Głośność",
   "js.pad.audio.jump": "Przejdź do na żywo",
   "js.pad.audio.mode_rtc": "⚡ na żywo",

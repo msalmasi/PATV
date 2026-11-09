@@ -4981,6 +4981,7 @@
   "js.pad.ptt.hold": "🎙 Tahan untuk bicara",
   "js.pad.ptt.upto_n": "hingga {n} d · Pepe memutarnya di mic saat kosong",
   "js.pad.ptt.rec_tap": "⏺ Merekam — ketuk untuk kirim",
+  "js.pad.ptt.rec_sending": "🎙 Mengirim…",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Lompat ke live",
   "js.pad.audio.mode_rtc": "⚡ live",

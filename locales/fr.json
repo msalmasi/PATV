@@ -5086,6 +5086,7 @@
   "js.pad.ptt.hold": "🎙 Maintiens pour parler",
   "js.pad.ptt.upto_n": "jusqu'à {n} s · Pepe la joue dans le micro quand il est libre",
   "js.pad.ptt.rec_tap": "⏺ Enregistrement — touche pour envoyer",
+  "js.pad.ptt.rec_sending": "🎙 Envoi…",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Revenir au direct",
   "js.pad.audio.mode_rtc": "⚡ direct",

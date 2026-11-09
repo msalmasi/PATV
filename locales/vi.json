@@ -4981,6 +4981,7 @@
   "js.pad.ptt.hold": "🎙 Giữ để nói",
   "js.pad.ptt.upto_n": "tối đa {n} giây · Pepe sẽ phát trên micro khi rảnh",
   "js.pad.ptt.rec_tap": "⏺ Đang ghi — chạm để gửi",
+  "js.pad.ptt.rec_sending": "🎙 Đang gửi…",
   "js.pad.audio.volume": "Âm lượng",
   "js.pad.audio.jump": "Nhảy tới trực tiếp",
   "js.pad.audio.mode_rtc": "⚡ trực tiếp",

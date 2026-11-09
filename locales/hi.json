@@ -5052,6 +5052,7 @@
   "js.pad.ptt.hold": "🎙 बोलने के लिए दबाकर रखें",
   "js.pad.ptt.upto_n": "{n} सेकंड तक · खाली होने पर Pepe इसे माइक पर चलाता है",
   "js.pad.ptt.rec_tap": "⏺ रिकॉर्ड हो रहा है — भेजने के लिए टैप करें",
+  "js.pad.ptt.rec_sending": "🎙 भेजा जा रहा है…",
   "js.pad.audio.volume": "वॉल्यूम",
   "js.pad.audio.jump": "लाइव पर जाएँ",
   "js.pad.audio.mode_rtc": "⚡ लाइव",

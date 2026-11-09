@@ -5050,6 +5050,7 @@
   "js.pad.ptt.hold": "🎙 برای حرف زدن نگه دار",
   "js.pad.ptt.upto_n": "تا {n} ثانیه · Pepe وقتی میکروفون آزاد باشه، روی آن پخشش می‌کنه",
   "js.pad.ptt.rec_tap": "⏺ در حال ضبط — برای ارسال بزن",
+  "js.pad.ptt.rec_sending": "🎙 در حال ارسال…",
   "js.pad.audio.volume": "صدا",
   "js.pad.audio.jump": "پرش به زنده",
   "js.pad.audio.mode_rtc": "⚡ زنده",

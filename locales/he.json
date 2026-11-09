@@ -5123,6 +5123,7 @@
   "js.pad.ptt.hold": "🎙 החזיקו כדי לדבר",
   "js.pad.ptt.upto_n": "עד {n} שנ׳ · Pepe מנגן את זה במיקרופון כשהוא פנוי",
   "js.pad.ptt.rec_tap": "⏺ מקליט — הקישו לשליחה",
+  "js.pad.ptt.rec_sending": "🎙 שולח…",
   "js.pad.audio.volume": "עוצמה",
   "js.pad.audio.jump": "קפיצה לשידור החי",
   "js.pad.audio.mode_rtc": "⚡ חי",

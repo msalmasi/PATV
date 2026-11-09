@@ -4981,6 +4981,7 @@
   "js.pad.ptt.hold": "🎙 눌러서 말하기",
   "js.pad.ptt.upto_n": "최대 {n}초 · 마이크가 비어 있을 때 Pepe가 재생해요",
   "js.pad.ptt.rec_tap": "⏺ 녹음 중 — 탭해서 보내기",
+  "js.pad.ptt.rec_sending": "🎙 전송 중…",
   "js.pad.audio.volume": "볼륨",
   "js.pad.audio.jump": "라이브로 이동",
   "js.pad.audio.mode_rtc": "⚡ 라이브",

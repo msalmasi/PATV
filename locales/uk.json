@@ -5194,6 +5194,7 @@
   "js.pad.ptt.hold": "🎙 Утримуй, щоб говорити",
   "js.pad.ptt.upto_n": "до {n} с · Pepe відтворює це в мікрофон, коли той вільний",
   "js.pad.ptt.rec_tap": "⏺ Запис — торкнися, щоб надіслати",
+  "js.pad.ptt.rec_sending": "🎙 Надсилаємо…",
   "js.pad.audio.volume": "Гучність",
   "js.pad.audio.jump": "Перейти до прямого ефіру",
   "js.pad.audio.mode_rtc": "⚡ наживо",

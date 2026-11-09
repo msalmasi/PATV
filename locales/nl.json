@@ -5052,6 +5052,7 @@
   "js.pad.ptt.hold": "🎙 Vasthouden om te praten",
   "js.pad.ptt.upto_n": "tot {n} s · Pepe speelt het af via de microfoon zodra die vrij is",
   "js.pad.ptt.rec_tap": "⏺ Opnemen — tik om te versturen",
+  "js.pad.ptt.rec_sending": "🎙 Versturen…",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Naar live springen",
   "js.pad.audio.mode_rtc": "⚡ live",

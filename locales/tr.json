@@ -5054,6 +5054,7 @@
   "js.pad.ptt.hold": "🎙 Konuşmak için basılı tut",
   "js.pad.ptt.upto_n": "En fazla {n} sn · Sahne boşken Pepe bunu mikrofonda çalar",
   "js.pad.ptt.rec_tap": "⏺ Kaydediliyor — göndermek için dokun",
+  "js.pad.ptt.rec_sending": "🎙 Gönderiliyor…",
   "js.pad.audio.volume": "Ses düzeyi",
   "js.pad.audio.jump": "Canlıya geç",
   "js.pad.audio.mode_rtc": "⚡ canlı",

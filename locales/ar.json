@@ -5336,6 +5336,7 @@
   "js.pad.ptt.hold": "🎙 اضغط مطولًا للتحدث",
   "js.pad.ptt.upto_n": "حتى {n} ث · يشغّله Pepe على الميكروفون عندما يكون متاحًا",
   "js.pad.ptt.rec_tap": "⏺ جارٍ التسجيل — اضغط للإرسال",
+  "js.pad.ptt.rec_sending": "🎙 جارٍ الإرسال…",
   "js.pad.audio.volume": "مستوى الصوت",
   "js.pad.audio.jump": "انتقل إلى المباشر",
   "js.pad.audio.mode_rtc": "⚡ مباشر",

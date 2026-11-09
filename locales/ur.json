@@ -5052,6 +5052,7 @@
   "js.pad.ptt.hold": "🎙 بولنے کے لیے دبائے رکھیں",
   "js.pad.ptt.upto_n": "{n} سیکنڈ تک · جب مائیک خالی ہو تو Pepe اسے چلائے گا",
   "js.pad.ptt.rec_tap": "⏺ ریکارڈنگ — بھیجنے کے لیے ٹیپ کریں",
+  "js.pad.ptt.rec_sending": "🎙 بھیجا جا رہا ہے…",
   "js.pad.audio.volume": "آواز",
   "js.pad.audio.jump": "لائیو پر جائیں",
   "js.pad.audio.mode_rtc": "⚡ لائیو",

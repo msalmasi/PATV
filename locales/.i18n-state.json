@@ -4836,6 +4836,7 @@
     "js.pad.ptt.hold": "f5b208d69ea8",
     "js.pad.ptt.upto_n": "d287ed6c84d1",
     "js.pad.ptt.rec_tap": "d3180be52dd0",
+    "js.pad.ptt.rec_sending": "a8cfc2fd4783",
     "js.pad.audio.volume": "b5ac6b7ce1ee",
     "js.pad.audio.jump": "6b7bd5e89f0d",
     "js.pad.audio.mode_rtc": "eb766eafe2e6",

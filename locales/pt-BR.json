@@ -5086,6 +5086,7 @@
   "js.pad.ptt.hold": "🎙 Segure para falar",
   "js.pad.ptt.upto_n": "até {n} s · o Pepe toca no microfone quando estiver livre",
   "js.pad.ptt.rec_tap": "⏺ Gravando — toque para enviar",
+  "js.pad.ptt.rec_sending": "🎙 Enviando…",
   "js.pad.audio.volume": "Volume",
   "js.pad.audio.jump": "Ir para o ao vivo",
   "js.pad.audio.mode_rtc": "⚡ ao vivo",

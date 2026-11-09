@@ -4981,6 +4981,7 @@
   "js.pad.ptt.hold": "🎙 按住说话",
   "js.pad.ptt.upto_n": "最长 {n} 秒 · 空闲时 Pepe 会通过麦克风播放",
   "js.pad.ptt.rec_tap": "⏺ 录音中——点按发送",
+  "js.pad.ptt.rec_sending": "🎙 发送中…",
   "js.pad.audio.volume": "音量",
   "js.pad.audio.jump": "跳到实时",
   "js.pad.audio.mode_rtc": "⚡ 实时",

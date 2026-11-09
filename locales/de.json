@@ -5052,6 +5052,7 @@
   "js.pad.ptt.hold": "🎙 Halten zum Sprechen",
   "js.pad.ptt.upto_n": "bis zu {n} s · Pepe spielt es über das Mikro ab, wenn es frei ist",
   "js.pad.ptt.rec_tap": "⏺ Aufnahme — tippen zum Senden",
+  "js.pad.ptt.rec_sending": "🎙 Wird gesendet…",
   "js.pad.audio.volume": "Lautstärke",
   "js.pad.audio.jump": "Zu live springen",
   "js.pad.audio.mode_rtc": "⚡ live",

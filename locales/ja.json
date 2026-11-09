@@ -4981,6 +4981,7 @@
   "js.pad.ptt.hold": "🎙 押して話す",
   "js.pad.ptt.upto_n": "最大{n}秒 · 空いているときにPepeがマイクで再生します",
   "js.pad.ptt.rec_tap": "⏺ 録音中 — タップで送信",
+  "js.pad.ptt.rec_sending": "🎙 送信中…",
   "js.pad.audio.volume": "音量",
   "js.pad.audio.jump": "ライブに移動",
   "js.pad.audio.mode_rtc": "⚡ ライブ",
