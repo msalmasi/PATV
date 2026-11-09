@@ -9954,7 +9954,7 @@
   "owner.set_automod.etiquette.doubleclick": "快速重新搶麥",
   "owner.set_automod.etiquette.doubleclick_why": "放下麥克風後立即重新搶麥，而當另一人想要發言時，視為封鎖的正當理由。",
   "owner.set_automod.etiquette.wait": "輪次之間等待",
-  "owner.set_automod.etiquette.wait_why": "只有當回來的發言者在他的上一段發言結束後、另一人發言開始前就快速搶麥，並且另一位人士想要發言時，才視為正當的封鎖理由。",
+  "owner.set_automod.etiquette.wait_why": "只有在恰好有一位其他人自該發言者上一輪開始後搶過麥克風，且另一人想要發言時，才將發言者的快速重新搶麥視為正當的封鎖理由。若中間有兩人或以上，則不設等待。",
   "owner.set_automod.etiquette.doubleclick_s": "快速重新搶麥時間窗（秒）",
   "owner.set_automod.etiquette.doubleclick_s_why": "在你自己放下麥克風後的這個秒數內重新搶麥，會計為連點兩下。範圍：0–10 秒。",
   "owner.set_automod.etiquette.wait_s": "他人發言後的間隔（秒）",

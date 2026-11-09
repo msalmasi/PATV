@@ -9954,7 +9954,7 @@
   "owner.set_automod.etiquette.doubleclick": "Giành lại nhanh",
   "owner.set_automod.etiquette.doubleclick_why": "Coi việc giành lại micro nhanh sau khi buông micro là lý do chính đáng để chặn khi có người khác muốn nói.",
   "owner.set_automod.etiquette.wait": "Chờ giữa các lượt",
-  "owner.set_automod.etiquette.wait_why": "Chỉ coi việc người phát biểu quay lại giành micro nhanh là lý do chính đáng để chặn nếu lượt trước của họ kết thúc trước khi người nói xen vào bắt đầu, và có người khác muốn nói.",
+  "owner.set_automod.etiquette.wait_why": "Chỉ coi việc người phát biểu quay lại giành micro nhanh là lý do chính đáng để chặn khi đúng một người khác đã nhận micro kể từ khi lượt trước của họ bắt đầu, và có người khác muốn nói. Khi có từ hai người trở lên xen giữa, sẽ không có thời gian chờ.",
   "owner.set_automod.etiquette.doubleclick_s": "Thời gian giành lại nhanh (giây)",
   "owner.set_automod.etiquette.doubleclick_s_why": "Giành lại trong vòng bấy nhiêu giây sau khi bạn buông micro được tính là nhấp đúp. Phạm vi: 0–10 giây.",
   "owner.set_automod.etiquette.wait_s": "Khoảng cách sau người nói khác (giây)",
