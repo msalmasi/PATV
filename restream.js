@@ -80,7 +80,9 @@ function cleanKey(v) {
   if (k.length < 8 || k.length > 200 || !/^[A-Za-z0-9_\-.?=&]+$/.test(k)) throw new Refuse(400, "That doesn't look like a stream key (letters, digits and _ - only).");
   return k;
 }
-const TWITCH_HOST = /^([a-z0-9-]+\.)*(twitch\.tv|contribute\.live-video\.net)$/i;
+// 1.99anj: + *.global-contribute.live-video.net = Twitch's own "Default" ingest (ingest.twitch.tv/ingests lists
+// ingest.global-contribute.live-video.net) and Kick's per-account <id>.global-contribute.live-video.net (owner 2026-11-09: Kick is fine)
+const TWITCH_HOST = /^([a-z0-9-]+\.)*(twitch\.tv|contribute\.live-video\.net|global-contribute\.live-video\.net)$/i;
 const LOOP_HOST = /^(127\.0\.0\.1|localhost)$/i;
 /** rtmp(s)://<Twitch ingest>/app[/] -> normalised, or a Refuse. Blank / "auto" = Twitch's own nearest ingest. */
 function cleanServer(v) {
@@ -91,7 +93,7 @@ function cleanServer(v) {
   if (!/^rtmps?:$/.test(u.protocol)) throw new Refuse(400, "The server must start with rtmp:// or rtmps://.");
   if (u.username || u.password || u.search || u.hash) throw new Refuse(400, "Just the ingest server - the key goes in its own field.");
   const host = u.hostname;
-  if (!TWITCH_HOST.test(host) && !(allowLoopback() && LOOP_HOST.test(host))) throw new Refuse(400, "Only Twitch ingest servers (…twitch.tv or …contribute.live-video.net).");
+  if (!TWITCH_HOST.test(host) && !(allowLoopback() && LOOP_HOST.test(host))) throw new Refuse(400, "Only Twitch or Kick ingest servers (…twitch.tv, …contribute.live-video.net or …global-contribute.live-video.net).");
   const path = u.pathname.replace(/\/+$/, "");
   if (!/^\/[A-Za-z0-9_-]{1,32}$/.test(path)) throw new Refuse(400, "The server path should be /app.");
   return `${u.protocol}//${u.host}${path}`;

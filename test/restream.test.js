@@ -75,8 +75,12 @@ test("input checks: key shape, Twitch-only servers (loopback only when allowed)"
   assert.equal(R.cleanServer("auto"), R.DEFAULT_SERVER);
   assert.equal(R.cleanServer("rtmp://live-jfk.twitch.tv/app/"), "rtmp://live-jfk.twitch.tv/app");
   assert.equal(R.cleanServer("rtmps://lhr03.contribute.live-video.net/app"), "rtmps://lhr03.contribute.live-video.net/app");
+  // 1.99anj: Twitch's own "Default" ingest (ingest.twitch.tv/ingests) and Kick's per-account host are accepted
+  assert.equal(R.cleanServer("rtmps://ingest.global-contribute.live-video.net/app"), "rtmps://ingest.global-contribute.live-video.net/app");
+  assert.equal(R.cleanServer("rtmps://fa723fc1b171.global-contribute.live-video.net:443/app"), "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app");
   for (const bad of ["http://live.twitch.tv/app", "rtmp://evil.example/app", "rtmp://twitch.tv.evil.example/app", "rtmp://u:p@live.twitch.tv/app",
-                     "rtmp://live.twitch.tv/app?x=1", "rtmp://127.0.0.1/live", "nonsense"]) {
+                     "rtmp://live.twitch.tv/app?x=1", "rtmp://127.0.0.1/live", "nonsense",
+                     "rtmps://evilglobal-contribute.live-video.net/app", "rtmps://ingest.global-contribute.live-video.net.evil.example/app"]) {
     assert.throws(() => R.cleanServer(bad), (e) => e.status === 400, bad);
   }
   process.env.RESTREAM_ALLOW_LOOPBACK = "1";

@@ -66,7 +66,8 @@ function allowed(target, mode) {
   try { u = new URL(target); } catch (e) { return false; }
   if (!/^rtmps?:$/.test(u.protocol)) return false;
   const loop = /^(127\.0\.0\.1|localhost)$/i.test(u.hostname);
-  const twitch = /^([a-z0-9-]+\.)*(twitch\.tv|contribute\.live-video\.net)$/i.test(u.hostname);
+  // 1.99anj: + *.global-contribute.live-video.net (Twitch's "Default" ingest and Kick's per-account hosts), as restream.js TWITCH_HOST
+  const twitch = /^([a-z0-9-]+\.)*(twitch\.tv|contribute\.live-video\.net|global-contribute\.live-video\.net)$/i.test(u.hostname);
   if (mode === "loopback") return loop;
   if (mode === "any") return true;
   return twitch;              // "twitch" (default)

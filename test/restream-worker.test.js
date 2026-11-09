@@ -69,6 +69,9 @@ test("legacy argv args (RELAY_MODE=argv): loopback source, copy only, progress o
 test("targets: twitch only by default, loopback mode for staging; sources must be loopback rtmp", () => {
   assert.equal(W.allowed(TGT, "twitch"), true);
   assert.equal(W.allowed("rtmps://lhr03.contribute.live-video.net/app/x", "twitch"), true);
+  assert.equal(W.allowed("rtmps://ingest.global-contribute.live-video.net/app/x", "twitch"), true, "1.99anj: Twitch's Default ingest");
+  assert.equal(W.allowed("rtmps://fa723fc1b171.global-contribute.live-video.net:443/app/x", "twitch"), true, "Kick's per-account host (owner: fine)");
+  assert.equal(W.allowed("rtmps://evilglobal-contribute.live-video.net/app/x", "twitch"), false);
   assert.equal(W.allowed("rtmp://evil.example/app/x", "twitch"), false);
   assert.equal(W.allowed("rtmp://127.0.0.1:19350/sink/x", "twitch"), false);
   assert.equal(W.allowed("rtmp://127.0.0.1:19350/sink/x", "loopback"), true);
