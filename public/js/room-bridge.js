@@ -1473,7 +1473,8 @@
     }
     host.addEventListener('patv:surfacechange', function () { adopt(host.ownerDocument); });
     adopt(host.ownerDocument || document);
-    function idle() { ending = false; btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
+    // (relaymic review F1 1.99??: rb-sending = the release tail - still busy for the homepage dock's front-pad swap, home-dock.js busy())
+    function idle() { ending = false; btn.classList.remove('rb-sending'); btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
     // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
     // track is alive), then the room player gets its playback session + the user's volume back.
     function release() {
@@ -1502,6 +1503,9 @@
       if (!(ms > 0) || !rec || rec.state !== 'recording') return stop();
       if (ending) return;
       ending = true;
+      // (relaymic review F1 1.99??: rb-sending until onstop's idle() - the homepage dock's busy() swaps the front pad only once it's gone,
+      // so a clip already let go of is never torn down unsent; F2: the icon-only button shows ⏳ by it - pad-dock.css / home-dock.css)
+      btn.classList.add('rb-sending');
       btn.setAttribute('aria-pressed', 'false');
       btn.textContent = _t('js.pad.ptt.rec_sending', '🎙 Sending…');
       var r = rec;
@@ -1511,7 +1515,7 @@
         if (rec !== r || r.state !== 'recording') return;     // (stopped some other way meanwhile)
         requestGen++;
         clearTimeout(recTimer);
-        try { r.stop(); } catch (e) { stop(); }                // the mic tracks go in onstop (release)
+        try { r.stop(); } catch (e) { stop(); idle(); }        // the mic tracks go in onstop (release); a stop() that threw: no onstop - idle here (review F1)
       }, ms);
     }
     var gone = false;       // 1.99ajh dockpop review: destroy() - a clip being recorded when the chat window wiped itself is never uploaded
