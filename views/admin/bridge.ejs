@@ -20,7 +20,7 @@
     <label>Cooldown between a person's clips (seconds; 0 = none)<input class="ds-in" type="number" inputmode="numeric" name="gap_s" min="<%= P.limits.gap_s[0] %>" max="<%= P.limits.gap_s[1] %>" step="1" required value="<%= P.cfg.gap_s %>"></label>
     <label>Clips per 10 minutes per person<input class="ds-in" type="number" inputmode="numeric" name="burst" min="<%= P.limits.burst[0] %>" max="<%= P.limits.burst[1] %>" step="1" required value="<%= P.cfg.burst %>"></label>
     <label>Max clip length (seconds)<input class="ds-in" type="number" inputmode="numeric" name="max_secs" min="<%= P.limits.max_secs[0] %>" max="<%= P.limits.max_secs[1] %>" step="1" required value="<%= P.cfg.max_secs %>"></label>
-    <%# relaymic 1.99??: the recorder's release tail (room-bridge.js) - and whether it applies on iPhone / iPad (off until tested there) %>
+    <%# relaymic 1.99anh: the recorder's release tail (room-bridge.js) - and whether it applies on iPhone / iPad (off until tested there) %>
     <label>Release tail (milliseconds; 0 = none)<input class="ds-in" type="number" inputmode="numeric" name="tail_ms" min="<%= P.limits.tail_ms[0] %>" max="<%= P.limits.tail_ms[1] %>" step="1" required value="<%= P.cfg.tail_ms %>"></label>
     <label><input type="checkbox" name="tail_ios" value="1"<%= P.cfg.tail_ios ? ' checked' : '' %>> Release tail on iPhone / iPad too</label>
     <label>Reason (optional)<input class="ds-in" name="reason" maxlength="200" autocomplete="off"></label>
@@ -40,7 +40,7 @@
 </section>
 <script>
 // pttlimits: the Push-to-talk clips card (pttlimits.js: GET / POST /api/admin/pttlimits {gap_s, burst, max_secs, tail_ms, tail_ios, reason} |
-// {reset: true}) - relaymic 1.99??: + the release tail (tail_ms) and its iPhone / iPad switch (tail_ios: the checkbox, sent as 1 / 0)
+// {reset: true}) - relaymic 1.99anh: + the release tail (tail_ms) and its iPhone / iPad switch (tail_ios: the checkbox, sent as 1 / 0)
 (function () {
   'use strict';
   var form = document.getElementById('ptForm');

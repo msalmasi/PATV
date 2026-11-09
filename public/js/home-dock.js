@@ -374,7 +374,7 @@
           if (input && String(input.value || '').trim()) return true;
           if (hmd && a && a !== D.body && hmd.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && Date.now() - typedAt < 15000) return true;
           if (D.querySelector('.rmd-menu, .rmd-layer, .pm-pop')) return true;
-          // (relaymic review F1 1.99??: and the release tail - .rb-sending, "Sending…" until the clip's upload has started: a swap then tore
+          // (relaymic review F1 1.99anh: and the release tail - .rb-sending, "Sending…" until the clip's upload has started: a swap then tore
           // down - ptt.destroy() - a clip the viewer had already let go of, without a word)
           var talk = $('rmPtt') && $('rmPtt').querySelector('.rb-talk[aria-pressed="true"], .rb-talk.rb-sending'); if (talk) return true;
           return !!(dock && dock.popped && dock.popped());

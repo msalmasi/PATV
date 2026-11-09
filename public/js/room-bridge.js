@@ -9,7 +9,7 @@
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip Pepe plays on the room's mic when it's free; shown only while
 //                              the room's bridge_mic switch is on. Its max length is the site's (/admin/bridge "Push-to-talk
 //                              clips", 30 s by default) - the live view's room.pttMax (pttlimits). Letting go keeps recording
-//                              room.pttTail ms more (relaymic 1.99??: the release tail, so the last word is in the clip)
+//                              room.pttTail ms more (relaymic 1.99anh: the release tail, so the last word is in the clip)
 //   .useToast(fn)              (ptt and relay, ptttoast 1.99ana) the Room Dock hands in its chat card's notices: every status
 //                              line under the composer goes there instead (fn(text, {id, ms, bad, busy, sticky}); '' with the id =
 //                              take it down; busy = a step on the way, sticky = a state that lasts until '')
@@ -1341,7 +1341,7 @@
     var n = Number(d && d.room && d.room.pttMax);
     return isFinite(n) && n >= PTT_LO && n <= PTT_HI ? Math.floor(n) : PTT_DEF;
   }
-  // relaymic 1.99?? (owner 11-08: "Pepe cuts out the last word or so of web relay mic ups if the speaker doesn't leave a gap before
+  // relaymic 1.99anh (owner 11-08: "Pepe cuts out the last word or so of web relay mic ups if the speaker doesn't leave a gap before
   // hitting button to end the mic up"): the end was lost HERE - the recorder and the mic tracks stopped in the handler that ended the
   // press, so what was said as the finger lifted was never recorded (+ 30-60 ms Chrome's Opus encoder drops). The release tail, like
   // Discord's "release delay": letting go (or the tap / Enter that sends) keeps the recorder running room.pttTail ms more (pttlimits
@@ -1473,7 +1473,7 @@
     }
     host.addEventListener('patv:surfacechange', function () { adopt(host.ownerDocument); });
     adopt(host.ownerDocument || document);
-    // (relaymic review F1 1.99??: rb-sending = the release tail - still busy for the homepage dock's front-pad swap, home-dock.js busy())
+    // (relaymic review F1 1.99anh: rb-sending = the release tail - still busy for the homepage dock's front-pad swap, home-dock.js busy())
     function idle() { ending = false; btn.classList.remove('rb-sending'); btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
     // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
     // track is alive), then the room player gets its playback session + the user's volume back.
@@ -1495,7 +1495,7 @@
       if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
       if (stream) release();
     }
-    // relaymic 1.99??: the end of a press - pointerup, the tap that sends, Enter. With a tail (pttTailOf; on iOS only with tail_ios) the
+    // relaymic 1.99anh: the end of a press - pointerup, the tap that sends, Enter. With a tail (pttTailOf; on iOS only with tail_ios) the
     // recorder runs on: Sending at once, the mic open, and after the tail rec.stop() - its onstop releases the mic and uploads. Without
     // one: stop() inside the gesture, as before.
     function finish() {
@@ -1503,7 +1503,7 @@
       if (!(ms > 0) || !rec || rec.state !== 'recording') return stop();
       if (ending) return;
       ending = true;
-      // (relaymic review F1 1.99??: rb-sending until onstop's idle() - the homepage dock's busy() swaps the front pad only once it's gone,
+      // (relaymic review F1 1.99anh: rb-sending until onstop's idle() - the homepage dock's busy() swaps the front pad only once it's gone,
       // so a clip already let go of is never torn down unsent; F2: the icon-only button shows ⏳ by it - pad-dock.css / home-dock.css)
       btn.classList.add('rb-sending');
       btn.setAttribute('aria-pressed', 'false');

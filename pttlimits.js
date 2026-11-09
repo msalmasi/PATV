@@ -5,7 +5,7 @@
 //   gap_s     the cooldown between one person's clips, seconds (0-600; default 30; 0 = none)
 //   burst     clips per 10 minutes per person (1-30; default 3) - the play limit's window stays WINDOW_S
 //   max_secs  a clip's longest length, seconds (3-120; default 30)
-//   tail_ms   relaymic 1.99?? - the release tail: the recorder keeps going this long after the button is let go, so the word said as
+//   tail_ms   relaymic 1.99anh - the release tail: the recorder keeps going this long after the button is let go, so the word said as
 //             the finger lifts is in the clip (0-1000 ms; default 400; 0 = none) - the live view's room.pttTail (room-bridge.js)
 //   tail_ios  relaymic: the tail on iPhone / iPad too (0 / 1; default 0 = off - there the release stays inside the gesture until it's
 //             tested on the owner's iPhone) - room.pttTailIos
@@ -39,7 +39,7 @@ const SPEC = Object.freeze({
   gap_s: Object.freeze({ def: 30, lo: 0, hi: 600, label: "Cooldown between a person's clips (seconds)" }),
   burst: Object.freeze({ def: 3, lo: 1, hi: 30, label: "Clips per 10 minutes per person" }),
   max_secs: Object.freeze({ def: 30, lo: 3, hi: 120, label: "Max clip length (seconds)" }),
-  // relaymic 1.99??: the recorder's release tail (the page only - Pepe never sees it) and whether it applies on iOS (a 0 / 1 switch:
+  // relaymic 1.99anh: the recorder's release tail (the page only - Pepe never sees it) and whether it applies on iOS (a 0 / 1 switch:
   // true / false from the card's checkbox are taken too)
   tail_ms: Object.freeze({ def: 400, lo: 0, hi: 1000, label: "Release tail (milliseconds)" }),
   tail_ios: Object.freeze({ def: 0, lo: 0, hi: 1, label: "Release tail on iPhone / iPad (0 = off, 1 = on)", bool: true }),

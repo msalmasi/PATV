@@ -1,5 +1,5 @@
 "use strict";
-// relaymic 1.99?? (owner 2026-11-08: "It seems like Pepe cuts out the last word or so of web relay mic ups if the speaker doesn't leave
+// relaymic 1.99anh (owner 2026-11-08: "It seems like Pepe cuts out the last word or so of web relay mic ups if the speaker doesn't leave
 // a gap before hitting button to end the mic up"). The diagnosis found the end lost on the PAGE: the recorder stopped in the very
 // handler that ended the press (room-bridge.js up() -> stop() -> rec.stop() + the mic tracks), so whatever was said as the finger
 // lifted was never recorded - Chrome's Opus encoder drops its last partial frame on top (30-60 ms, measured in Chromium 156 with the

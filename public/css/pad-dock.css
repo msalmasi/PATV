@@ -483,7 +483,7 @@ body:is(.pad-dock-live, .rmd-afloat, .rmd-pop, .cz-pm) .pm-pop.rmd-pm .pm-pop-wh
   main.rm.rm-dock .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; gap: 0; justify-content: center; place-items: center; }
   main.rm.rm-dock .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; display: block; }
   main.rm.rm-dock .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
-  main.rm.rm-dock .rmd-composer .rb-talk.rb-sending::before { content: "⏳"; }   /* relaymic review F2 1.99??: the release tail (Sending…) */
+  main.rm.rm-dock .rmd-composer .rb-talk.rb-sending::before { content: "⏳"; }   /* relaymic review F2 1.99anh: the release tail (Sending…) */
 }
 @media (max-width: 760px) {
   body.pad-dock-live { min-block-size: 440px; }

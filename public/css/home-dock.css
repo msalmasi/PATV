@@ -187,7 +187,7 @@ main.rm.rm-dock.rmd-home .rmd-input-row.rmd-input-slim { grid-template-columns: 
 main.rm.rm-dock.rmd-home .rmd-composer .rb-talk { inline-size: 40px; min-inline-size: 40px; padding: 0; font-size: 0; gap: 0; justify-content: center; place-items: center; }
 main.rm.rm-dock.rmd-home .rmd-composer .rb-talk::before { content: "🎙️"; font-size: var(--ds-fs-lead); line-height: 1; display: block; }
 main.rm.rm-dock.rmd-home .rmd-composer .rb-talk[aria-pressed="true"]::before { content: "⏺"; }
-main.rm.rm-dock.rmd-home .rmd-composer .rb-talk.rb-sending::before { content: "⏳"; }   /* relaymic review F2 1.99??: the release tail (Sending…) */
+main.rm.rm-dock.rmd-home .rmd-composer .rb-talk.rb-sending::before { content: "⏳"; }   /* relaymic review F2 1.99anh: the release tail (Sending…) */
 /* the people sheet (👥): avatar, name + flair, veil tag, 🎙 - no cam or ⋯ here: ONE fixed 24px trailing column on every row, so the 🎙
    discs line up at the row's end */
 main.rm.rm-dock.rmd-home #rmPeople { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; overflow-x: hidden; }

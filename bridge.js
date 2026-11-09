@@ -1929,7 +1929,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
             // pttlimits: the 🎙 recorder stops here (/admin/bridge "Push-to-talk clips"; review fix 1: at most 30 s until Pepe follows them)
             pttMax: require("./pttlimits").effective().max_secs,
-            // relaymic 1.99??: the recorder's release tail (ms) and whether it applies on iPhone / iPad (pttlimits tail_ms / tail_ios)
+            // relaymic 1.99anh: the recorder's release tail (ms) and whether it applies on iPhone / iPad (pttlimits tail_ms / tail_ios)
             pttTail: require("./pttlimits").current().tail_ms, pttTailIos: require("./pttlimits").current().tail_ios === 1,
             stickers: R.stickers === true,
             cfstickerPicker, gifPicker,
