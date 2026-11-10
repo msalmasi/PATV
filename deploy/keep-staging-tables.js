@@ -60,7 +60,12 @@ const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_sett
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)
               "chat_switches",   // S1 Q4 (ADR 0007 D3): staging's own CHAT_HUB (a prod value would switch the staging pilot on or off)
               "micrec_meta",     // mic retention: staging's own mic-recordings policy switch (micrec.js - staging tries it before prod)
+              "house_rotations", // 1.99?? (review S10): staging's own house-pad rotation journal (houserotate.js) - prod's would refuse staging's
               ...CHATLOG, ...LIVE_FEED, ...VEIL];
+// 1.99?? (review S10): rooms_kv keys that belong to the ENVIRONMENT (rooms_kv itself is data): the house room (houserotate.js; prod's
+// "The_Swamp" would make staging's house pad prod's room, and staging Pepe's rotations would be refused not_house) and Pepe's logins
+// (pepelogins.js). Prod's go; staging's own come back (none: rooms.js / pepelogins.js fall back to staging's defaults).
+const KV_KEEP = [["rooms_kv", "house_room"], ["rooms_kv", "pepe_logins"]];
 // hub_outbox LAST: the copy carries prod's triggers (huboutbox.init creates them on prod whatever the switches say), and with
 // staging's switches already restored a DELETE of a source table (hub_hidden_h's hh trigger) would write a row of prod's
 // data into the outbox just emptied - so every source table is emptied first, the outbox after them.
@@ -156,6 +161,19 @@ async function scrub(db) {
   return out;
 }
 
+/** review S10: the KV_KEEP keys - prod's rows go from the copy; with `restore`, staging's own come back. -> [{table, kept | cleared}] */
+async function keepKv(db, restore) {
+  const out = [];
+  for (const [t, k] of KV_KEEP) {
+    if (!(await tableSql(db, "main", t))) continue;
+    const r = await run(db, `DELETE FROM main.${q(t)} WHERE key = ?`, [k]);
+    if (!restore || !(await tableSql(db, "old", t))) { out.push({ table: `${t}.${k}`, cleared: r.changes || 0 }); continue; }
+    const b = await run(db, `INSERT INTO main.${q(t)} (key, value) SELECT key, value FROM old.${q(t)} WHERE key = ?`, [k]);
+    out.push({ table: `${t}.${k}`, kept: b.changes || 0 });
+  }
+  return out;
+}
+
 /** Keep staging's own rows of the per-environment tables in the copy. -> [{table, kept | cleared}] */
 async function keep(db) {
   const out = [];
@@ -180,6 +198,7 @@ async function keep(db) {
       const r = await run(db, `INSERT INTO main.${q(t)} (${cols}) SELECT ${cols} FROM old.${q(t)}`);
       out.push({ table: t, kept: r.changes || 0 });
     }
+    out.push(...(await keepKv(db, true)));                                   // review S10: staging's own house room + Pepe's logins
     const fts = await reindexChatlog(db);                                    // CL2: the index follows staging's own rows
     if (fts) out.push(fts);
     out.push(...(await scrub(db)));                                          // wave2: no frog-name <-> login pairing of prod's
@@ -217,6 +236,7 @@ async function clearOnly(db) {
       out.push({ table: t, cleared: r.changes || 0 });
     }
     if (await tableSql(db, "main", "chat_log_fts")) await run(db, "INSERT INTO main.chat_log_fts (chat_log_fts) VALUES ('delete-all')");
+    out.push(...(await keepKv(db, false)));                                  // review S10: prod's house room + logins go
     out.push(...(await scrub(db)));                                          // wave2: the fallback scrubs them too
     await exec(db, "COMMIT");
   } catch (e) {
@@ -259,4 +279,4 @@ if (require.main === module) {
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 
-module.exports = { main, keep, clearOnly, scrub, KEEP, EMPTY, SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };
+module.exports = { main, keep, clearOnly, scrub, keepKv, KEEP, KV_KEEP, EMPTY, SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };

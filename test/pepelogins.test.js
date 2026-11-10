@@ -106,3 +106,18 @@ test("readers: the stale-account sweep (logins + house room ids), the policy dig
   const src = fs.readFileSync(path.join(repo, "escrow", "pools.js"), "utf8") + fs.readFileSync(path.join(repo, "escrow", "wagers.js"), "utf8");
   assert.equal((src.match(/isAiWord\(low\(jword\)\)/g) || []).length, 2, "both judge parsers read the list");
 });
+
+// review S5: an admin's way to take a typo off the recorded list (tools/house-rotate.js --forget-login); never a built-in or the current login
+test("forget(): a former login comes off the record; built-ins and the current login can't", async () => {
+  await tx(() => PL.save({ current: "pepe_frog", former: ["pepe_frogg"] }));
+  await PL.refresh();
+  assert.ok(PL.has("pepe_frogg"));
+  await assert.rejects(PL.forget("pepefrog"), /built in/);
+  await assert.rejects(PL.forget("pepe_frog"), /current login/);
+  await assert.rejects(PL.forget("not a login"), /not a Camfrog login/);
+  const r = await tx(() => PL.forget("Pepe_Frogg"));
+  assert.equal(r.removed, true);
+  await PL.refresh();
+  assert.ok(!PL.has("pepe_frogg") && PL.has("pepe_frog") && PL.has("pepefrog"));
+  assert.equal((await tx(() => PL.forget("pepe_frogg"))).removed, false, "again: nothing to remove");
+});

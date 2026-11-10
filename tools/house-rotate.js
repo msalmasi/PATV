@@ -11,6 +11,7 @@
 //                              [--dir <folder with myapp.db> | --db <path to a myapp.db>] [--backup-dir <dir>] [--apply] [--json]
 //   node tools/house-rotate.js --status [--dir ...]
 //   node tools/house-rotate.js --restore <key> --login-to <Pepe's login now> [--dir ...] [--apply]
+//   node tools/house-rotate.js --forget-login <login> [--dir ...] [--apply]     (review S5: a typo off Pepe's login list)
 //
 //   --dir / --db   the database: a folder holding myapp.db (the site's code always opens ./myapp.db), or a path to such a
 //                  file (its name must be myapp.db - put a rehearsal copy in a folder of its own:
@@ -18,6 +19,8 @@
 //   --apply        a VACUUM INTO backup first (<backup dir>/myapp-pre-house-rotate-<time>.db; refused when it fails or the
 //                  disk has less than twice the database's size free), then the rotation in one transaction
 //   --backup-dir   default $DB_BACKUP_DIR, else <dir>/backups
+//   --chatlog-db   a REHEARSAL (a database that isn't this checkout's own ./myapp.db) never attaches the live archive database
+//                  ($CHATLOG_DB from the site's .env) - pass a copy of it here to include it (review S13)
 // Exit codes: 0 done / dry run / already, 2 usage, 3 refused, 1 error. Never prints a secret (the bot token isn't used here).
 "use strict";
 const fs = require("fs");
@@ -46,6 +49,12 @@ try {
   const env = [path.join(DIR, ".env"), path.join(ROOT, ".env")].find((f) => fs.existsSync(f));
   if (env) require("dotenv").config({ path: env });
 } catch (e) { /* no dotenv: the shell's environment */ }
+// review S13: the site's .env names the LIVE archive database - a rehearsal on a copy never attaches it (the archive row it moves is in
+// myapp.db; only the line counts would read the live file)
+if (path.resolve(DIR) !== ROOT) {
+  if (args["chatlog-db"] && args["chatlog-db"] !== true) process.env.CHATLOG_DB = path.resolve(String(args["chatlog-db"]));
+  else if (process.env.CHATLOG_DB) { console.error(`rehearsal on ${DIR}: the archive database (CHATLOG_DB) is NOT attached (--chatlog-db <a copy> to include it)`); delete process.env.CHATLOG_DB; }
+}
 const M = (n) => require(path.join(ROOT, n));
 const APPLY = !!args.apply;
 
@@ -69,6 +78,19 @@ async function backup() {
   try { await M("chatlog").attach(); } catch (e) { /* no separate archive database (CHATLOG_DB unset) */ }
   const out = (x) => console.log(JSON.stringify(x, null, args.json ? 1 : 2));
   if (args.status) { out(await H.status()); return 0; }
+  if (args["forget-login"] !== undefined) {
+    const PL = M("pepelogins");
+    const l = PL.clean(args["forget-login"] === true ? "" : args["forget-login"]);
+    if (!l) usage("--forget-login <the login to take off Pepe's list>");
+    const before = PL.parseRecord(((await M("dbUtils").getQuery("SELECT value FROM rooms_kv WHERE key = ?", [PL.KV_KEY]).catch(() => []))[0] || {}).value);
+    out({ forget: l, record: before });
+    if (!APPLY) { console.log("dry run - nothing written (add --apply)"); return 0; }
+    console.log(`backup: ${await backup()}`);
+    const r = await M("dbUtils").tx(() => PL.forget(l));
+    out(r);
+    console.log(r.removed ? `${l} is off Pepe's login list (fix his config too: !identity set forget=${l})` : `${l} wasn't on the recorded list`);
+    return 0;
+  }
   const s = (k) => (args[k] === undefined || args[k] === true ? undefined : String(args[k]));
   const body = {
     key: s("key"), restore_of: s("restore"), merge: !!args.merge, archive: s("archive") || "move",

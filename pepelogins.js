@@ -111,6 +111,25 @@ async function save({ current, former } = {}, now = Date.now()) {
 }
 
 /**
+ * 1.99?? (review S5): take a login OFF the recorded list - an admin's fix for a typo a rotation recorded (tools/house-rotate.js
+ * --forget-login). Never a built-in (they're in the code) and never the current login (rotate to the right one first; then the typo
+ * is a former login and can go). Fix Pepe's own config too (!identity set forget=<login>), or his next owner sync adds it back.
+ * In the caller's transaction when there is one; refresh() after. -> {removed, record}
+ */
+async function forget(login, now = Date.now()) {
+  const l = clean(login);
+  if (!l) throw new Error("not a Camfrog login");
+  if (BUILTIN.includes(l)) throw new Error(`${l} is built in (it stays on the list)`);
+  const r = (await getQuery("SELECT value FROM rooms_kv WHERE key = ?", [KV_KEY]).catch(() => []))[0];
+  const rec = parseRecord(r && r.value);
+  if (rec.current === l) throw new Error(`${l} is Pepe's current login - rotate to the right login first, then forget this one`);
+  if (!rec.former.includes(l)) return { removed: false, record: rec };
+  const next = { current: rec.current, former: rec.former.filter((x) => x !== l) };
+  await runQuery("UPDATE rooms_kv SET value = ? WHERE key = ?", [JSON.stringify({ ...next, at: now }), KV_KEY]);
+  return { removed: true, record: next };
+}
+
+/**
  * Pepe's owner sync (roomsweb.js POST /api/rooms/owners): identity = {login, former_logins}. Recorded only when it adds something
  * (a new current login or a former one the record doesn't have). Never moves the house room. -> true when it changed the record
  */
@@ -128,5 +147,5 @@ async function noteIdentity(identity) {
   return true;
 }
 
-module.exports = { init, refresh, list, has, current, record, sqlIn, save, merge, parseRecord, noteIdentity, clean, BUILTIN, KV_KEY,
+module.exports = { init, refresh, list, has, current, record, sqlIn, save, forget, merge, parseRecord, noteIdentity, clean, BUILTIN, KV_KEY,
                    _reset: () => { REC = { current: null, former: [], at: null }; LEARNED = []; SET = build(); AT = 0; } };

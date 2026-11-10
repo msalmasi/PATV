@@ -9,6 +9,8 @@
 //     house_room, Pepe's logins, the rules intro + welcome post, the event / audit / journal; a stray pad folds in
 //   - re-apply = already; seed() makes no ghost house pad; the HTTP route + the owner sync's identity / house_room
 //   - restore_of: the round trip (and what it refuses after); a case-only fix
+//   - review fixes: the room's privacy audit (seethrough_log) and where an on-air consent was asked (onair_consent.room) stay with
+//     the Camfrog room (S11); a bot key of another caller is refused (S9); a SEEDS id gets its marker even without a seeded: row (F8)
 //   TZ=UTC NODE_PATH=G:/PATV/node_modules node --test test/houserotate.test.js
 "use strict";
 const test = require("node:test");
@@ -31,7 +33,7 @@ process.env.MEDIA_DIR = path.join(tmp, "mediafiles");
 process.env.HLS_PLAYLIST_PATH = path.join(tmp, "no-hls", "broadcast.m3u8");
 fs.mkdirSync(process.env.MEDIA_DIR, { recursive: true });
 const express = require("express");
-const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
+const { runQuery, getQuery, tx: dbTx } = require(path.join(repo, "dbUtils"));
 const rooms = require(path.join(repo, "rooms"));
 const H = require(path.join(repo, "houserotate"));
 const PL = require(path.join(repo, "pepelogins"));
@@ -111,6 +113,9 @@ test.before(async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS escrow_meta (key TEXT PRIMARY KEY, value TEXT)");
   await runQuery("CREATE TABLE IF NOT EXISTS oracle_meta (key TEXT PRIMARY KEY, value TEXT)");
   await runQuery("CREATE TABLE test_pad_rows (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT, note TEXT)");
+  // review S11: minimal shapes of seethrough.js / onairconsent.js
+  await runQuery("CREATE TABLE IF NOT EXISTS seethrough_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, scope TEXT NOT NULL, room_id TEXT)");
+  await runQuery("CREATE TABLE IF NOT EXISTS onair_consent (id TEXT PRIMARY KEY, kind TEXT NOT NULL, pad TEXT, room TEXT, status TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL)");
   const app = express();
   app.use(express.json());
   const addUser = (req, res, next) => { const id = req.get("x-test-user"); req.user = id ? users.get(id) || null : null; next(); };
@@ -137,6 +142,8 @@ test.before(async () => {
   await runQuery("INSERT INTO test_pad_rows (room_id, note) VALUES ('Other.Room', 'not ours')");
   for (let i = 0; i < 2; i++) await runQuery("INSERT INTO bridge_spans (room_id, session, opened_at, last_seen, closed_at) VALUES (?, ?, ?, ?, ?)", [OLD, "s" + i, t, t, t + 1]);
   await runQuery("INSERT INTO livecam_audit (room_id, target, at) VALUES (?, 'cam', ?)", [OLD, t]);
+  await runQuery("INSERT INTO seethrough_log (at, user_id, role, scope, room_id) VALUES (?, 'u_siteadmin', 'admin', 'room', ?)", [t, OLD]);
+  await runQuery("INSERT INTO onair_consent (id, kind, pad, room, status, created, expires) VALUES ('oc1', 'cam', ?, ?, 'allowed', ?, ?)", [OLD, OLD, t, t + 1]);
   await runQuery("INSERT INTO sb_clips (id, board, label) VALUES ('c1', ?, 'Ribbit')", ["room:" + OLD]);
   await runQuery("INSERT INTO backend_wants (feature, want, at) VALUES (?, 1, ?)", ["casino:" + OLD, t]);
   await runQuery("INSERT INTO media_requests (title, pad_id) VALUES ('Charade', ?)", [OLD]);
@@ -204,7 +211,8 @@ test("plan is read-only and counts what would move", async () => {
   assert.equal(p.counts.move["test_pad_rows.room_id"], 4);
   assert.equal(p.counts.move["pepe_modlog.room_id"], 3);
   assert.equal(p.counts.extra["pepe_modlog.room_l"], 3);
-  assert.deepEqual(p.counts.keep, { "bridge_spans.room_id": 2, "livecam_audit.room_id": 1 });
+  assert.deepEqual(p.counts.keep, { "bridge_spans.room_id": 2, "livecam_audit.room_id": 1, "seethrough_log.room_id": 1, "onair_consent.room": 1 });
+  assert.equal(p.counts.move["onair_consent.pad"], 1, "the consent ask's pad column moves with the pad (S11)");
   for (const k of ["sb_clips.board", "backend_wants.feature", "media_requests.pad_id", "feed_kv.aigen_prices", "rooms_kv.pepespad:art:",
                    "rooms_kv.seeded", "follows.target_id", "feed_seen.scope", "premium_subs.target", "feed_kv.rules:", "feed_kv.mention_at:"]) {
     assert.equal(p.counts.extra[k], 1, k);
@@ -281,6 +289,24 @@ test("one transaction: a throw midway (the address step) leaves everything as it
 });
 
 let KEY = null;
+test("review S9: only Pepe's own bot key may rotate the house pad (another caller's key is refused; the shared token still works)", async () => {
+  const BK = require(path.join(repo, "botkeys"));
+  const real = BK.current;
+  const before = await snapshot();
+  try {
+    BK.current = () => ({ caller: "pepe-vm", mode: "enforce", scopes: ["/api/pepe"] });
+    const r = await call("POST", "/api/pepe/identity/rotate", { password: "bot", action: "apply", ...FWD });
+    assert.deepEqual([r.status, r.d.code], [403, "caller"]);
+    BK.current = () => ({ caller: "pepe", mode: "enforce", scopes: [] });
+    const p = await call("POST", "/api/pepe/identity/rotate", { password: "bot", action: "plan", ...FWD });
+    assert.equal(p.status, 200, "Pepe's own key plans");
+    BK.current = () => ({ caller: "pepe-staging", mode: "enforce", scopes: [] });
+    assert.equal((await call("POST", "/api/pepe/identity/rotate", { password: "bot", action: "plan", ...FWD })).status, 200, "staging Pepe's too");
+  } finally { BK.current = real; }
+  assert.deepEqual(await snapshot(), before, "nothing written");
+  assert.deepEqual([...H.PEPE_CALLERS].sort(), ["pepe", "pepe-staging"]);
+});
+
 test("apply (the API): the house pad becomes The_Swamp - rows, evidence kept, gaps, archive, title, address, house room, logins, text", async () => {
   // the bot token is needed; JSON over 8 kB is refused
   assert.equal((await call("POST", "/api/pepe/identity/rotate", { password: "nope", action: "plan", ...FWD })).status, 403);
@@ -306,6 +332,8 @@ test("apply (the API): the house pad becomes The_Swamp - rows, evidence kept, ga
   assert.equal(await n("SELECT COUNT(*) AS n FROM pepe_modlog WHERE room_id = ? AND room_l = ?", [NEW, NEW.toLowerCase()]), 3, "modlog: room_id AND room_l");
   assert.equal(await n("SELECT COUNT(*) AS n FROM bridge_spans WHERE room_id = ?", [OLD]), 2, "bridge spans stay with the Camfrog room");
   assert.equal(await n("SELECT COUNT(*) AS n FROM livecam_audit WHERE room_id = ?", [OLD]), 1, "the live-cam audit stays too");
+  assert.equal(await n("SELECT COUNT(*) AS n FROM seethrough_log WHERE room_id = ?", [OLD]), 1, "review S11: the see-through audit stays with the room");
+  assert.deepEqual(await one("SELECT pad, room FROM onair_consent WHERE id = 'oc1'"), { pad: NEW, room: OLD }, "review S11: the consent ask: pad moves, room stays");
   // the gaps padrekey didn't reach before
   assert.equal((await one("SELECT board FROM sb_clips WHERE id = 'c1'")).board, "room:" + NEW);
   assert.ok(await one("SELECT 1 AS x FROM backend_wants WHERE feature = ?", ["casino:" + NEW]));
@@ -390,6 +418,24 @@ test("the owner sync: Pepe's identity joins the login list; the answer carries t
   const s = await call("POST", "/api/pepe/identity/rotate", { password: "bot", action: "status" });
   assert.equal(s.d.house_room.id, NEW);
   assert.deepEqual(s.d.rotations.map((x) => [x.key, x.from, x.to, x.mode]), [[KEY, OLD, NEW, "move"]]);
+});
+
+test("review F8: a SEEDS id that moves away is marked even when its seeded: row is missing (no ghost on the next seed)", async () => {
+  // a seed whose marker was lost (prod's PepeFrog.Room marker is there; the guarantee mustn't depend on it): PepeBeta.Room is a seed too
+  const PB = "PepeBeta.Room";
+  await runQuery("DELETE FROM rooms_kv WHERE key = ?", ["seeded:" + PB]);
+  await dbTx(async () => { await RK.rekey(PB, "PepeBeta2.Room"); });
+  assert.equal(await kv("seeded:" + PB), "rekeyed:PepeBeta2.Room", "the marker is written anyway");
+  // put it back as it was (the registry row never moved: this calls padrekey alone)
+  await dbTx(async () => { await RK.rekey("PepeBeta2.Room", PB); });
+  await runQuery("DELETE FROM pad_vault_rekeys WHERE from_id IN (?, ?) OR to_id IN (?, ?)", [PB, "PepeBeta2.Room", PB, "PepeBeta2.Room"]);
+  await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) VALUES (?, 'house')", ["seeded:" + PB]);
+  await runQuery("DELETE FROM rooms_kv WHERE key = ?", ["seeded:PepeBeta2.Room"]);
+  // a non-seed id without a marker gets none (nothing to guard)
+  await dbTx(async () => { await RK.rekey("Other.Room", "Other2.Room"); });
+  assert.equal(await kv("seeded:Other.Room"), null);
+  await dbTx(async () => { await RK.rekey("Other2.Room", "Other.Room"); });
+  await runQuery("DELETE FROM pad_vault_rekeys WHERE from_id IN ('Other.Room', 'Other2.Room')");
 });
 
 test("restore_of: the undo puts the house pad back (the login stays); a later undo / the old key are refused", async () => {

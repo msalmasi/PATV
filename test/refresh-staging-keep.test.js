@@ -149,7 +149,9 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          // S1 Q4: staging's own CHAT_HUB
                                          "chat_switches",
                                          // mic retention: staging's own mic-recordings policy switch (micrec.js)
-                                         "micrec_meta"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
+                                         "micrec_meta",
+                                         // 1.99?? (review S10): staging's own house-pad rotation journal
+                                         "house_rotations"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
@@ -420,4 +422,55 @@ test("owner 11-02: a frog-name clip on a room soundboard (sb_clips.subject_alias
   assert.equal((await K.main(stg, p32, sqlite3)).mode, "kept");
   const e32 = db(p32);
   try { assert.deepEqual(await all(e32, "SELECT subject_login FROM sb_clips"), [{ subject_login: "bobcf" }], "a prod a release behind: nothing scrubbed"); } finally { await close(e32); }
+});
+
+// 1.99?? (review S10): prod's house room (The_Swamp after the 2026-11-10 rotation), Pepe's logins and the rotation journal never become
+// staging's - staging's house pad stays its own (PepeBeta.Room by default), so its Pepe isn't refused not_house
+test("review S10: rooms_kv house_room / pepe_logins and house_rotations stay staging's own (both paths)", async () => {
+  assert.deepEqual(K.KV_KEEP, [["rooms_kv", "house_room"], ["rooms_kv", "pepe_logins"]]);
+  const mk = async (file, house, logins, rotation) => {
+    const d = db(file);
+    await run(d, "CREATE TABLE rooms_kv (key TEXT PRIMARY KEY, value TEXT)");
+    await run(d, "CREATE TABLE house_rotations (id INTEGER PRIMARY KEY, key TEXT UNIQUE, from_id TEXT, to_id TEXT, at INTEGER, actor TEXT, before TEXT, result TEXT, restored_by INTEGER)");
+    await run(d, "INSERT INTO rooms_kv (key, value) VALUES ('seeded:PepeFrog.Room', 'rekeyed:The_Swamp'), ('front_room', 'auto')");
+    if (house) await run(d, "INSERT INTO rooms_kv (key, value) VALUES ('house_room', ?)", [house]);
+    if (logins) await run(d, "INSERT INTO rooms_kv (key, value) VALUES ('pepe_logins', ?)", [logins]);
+    if (rotation) await run(d, "INSERT INTO house_rotations (key, from_id, to_id, at) VALUES (?, ?, ?, 1)", rotation);
+    await close(d);
+  };
+  const prodHouse = JSON.stringify({ id: "The_Swamp", title: "The Swamp", slug: "the-swamp", since: 1, prev: [{ id: "PepeFrog.Room" }] });
+  const prodLogins = JSON.stringify({ current: "pepe_frog", former: ["pepefrog"] });
+  // staging never rotated: no house_room / pepe_logins of its own -> the copy has none (rooms.js falls back to PepeBeta.Room)
+  const p1 = path.join(dir, "kv-copy1.db"), s1 = path.join(dir, "kv-staging1.db");
+  await mk(p1, prodHouse, prodLogins, ["rot-20261110-the_swamp", "PepeFrog.Room", "The_Swamp"]);
+  await mk(s1, null, null, null);
+  assert.equal((await K.main(s1, p1, sqlite3)).mode, "kept");
+  let d = db(p1);
+  try {
+    assert.deepEqual(await all(d, "SELECT key, value FROM rooms_kv ORDER BY key"),
+                     [{ key: "front_room", value: "auto" }, { key: "seeded:PepeFrog.Room", value: "rekeyed:The_Swamp" }], "prod's house room + logins gone; the data stays");
+    assert.deepEqual(await all(d, "SELECT * FROM house_rotations"), [], "prod's rotation journal gone");
+  } finally { await close(d); }
+  // staging has its own: they come back
+  const p2 = path.join(dir, "kv-copy2.db"), s2 = path.join(dir, "kv-staging2.db");
+  const stgHouse = JSON.stringify({ id: "PepeBeta2.Room", title: "PepeLab", slug: "pepelab", since: 2, prev: [] });
+  await mk(p2, prodHouse, prodLogins, ["rot-20261110-the_swamp", "PepeFrog.Room", "The_Swamp"]);
+  await mk(s2, stgHouse, JSON.stringify({ current: "pepebeta", former: [] }), ["rot-stg", "PepeBeta.Room", "PepeBeta2.Room"]);
+  await K.main(s2, p2, sqlite3);
+  d = db(p2);
+  try {
+    const kv = Object.fromEntries((await all(d, "SELECT key, value FROM rooms_kv")).map((r) => [r.key, r.value]));
+    assert.equal(kv.house_room, stgHouse);
+    assert.equal(JSON.parse(kv.pepe_logins).current, "pepebeta");
+    assert.deepEqual((await all(d, "SELECT key FROM house_rotations")).map((r) => r.key), ["rot-stg"]);
+  } finally { await close(d); }
+  // the fallback (keeping failed): prod's go, nothing comes back
+  const p3 = path.join(dir, "kv-copy3.db");
+  await mk(p3, prodHouse, prodLogins, null);
+  assert.equal((await K.main(path.join(dir, "no-such-dir", "missing.db"), p3, sqlite3)).mode, "cleared");
+  const d3 = db(p3);
+  try {
+    assert.deepEqual((await all(d3, "SELECT key FROM rooms_kv ORDER BY key")).map((r) => r.key), ["front_room", "seeded:PepeFrog.Room"],
+                     "the fallback: prod's house room + logins cleared too");
+  } finally { await close(d3); }
 });

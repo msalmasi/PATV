@@ -48,7 +48,14 @@ const { runQuery, getQuery, tx } = require("./dbUtils");
 const rooms = require("./rooms");
 const PL = require("./pepelogins");
 
-const KEEP = Object.freeze(["bridge_spans", "livecam_audit"]);      // D4: the Camfrog room's evidence stays with its id
+// D4: the Camfrog room's evidence stays with its id. 1.99?? (review S11): so do the room's privacy audit (seethrough_log: which
+// logins an admin revealed IN that room) and where an on-air consent was asked (onair_consent.room - its pad column moves with
+// the pad; the consent itself never carried over: session allows live in memory, "always" is per pad / per cam owner)
+const KEEP = Object.freeze(["bridge_spans", "livecam_audit", "seethrough_log", "onair_consent.room"]);
+const kept = (t, c) => KEEP.includes(t) || KEEP.includes(`${t}.${c}`);
+// 1.99?? (review S9): the bot keys allowed to rotate the house pad - Pepe's own (prod / staging). A key of any other caller
+// (the shared /api/pepe family covers the VM supervisor's) is refused; the shared legacy token still works (counted by botkeys)
+const PEPE_CALLERS = new Set(["pepe", "pepe-staging"]);
 const TITLE_MAX = 60;
 const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:\-]{0,79}$/;
 const LOGIN_RE = /^[A-Za-z0-9][A-Za-z0-9_.@\-]{0,59}$/;
@@ -129,7 +136,7 @@ async function survey(id, { tables } = {}) {
     if (t === "follows" && c !== "target_id") continue;
     const n = await cnt(`SELECT COUNT(*) AS n FROM ${q(t)} WHERE ${q(c)} = ?`, [id]);
     if (!n) continue;
-    (KEEP.includes(t) ? keep : move)[`${t}.${c}`] = n;
+    (kept(t, c) ? keep : move)[`${t}.${c}`] = n;
   }
   const put = (k, n) => { if (n) extra[k] = n; };
   if (T.has("follows")) put("follows.target_id", await cnt("SELECT COUNT(*) AS n FROM follows WHERE target_kind = 'room' AND target_id = ?", [id]));
@@ -197,7 +204,7 @@ async function rowIds(id) {
   const out = {};
   let total = 0, truncated = false;
   for (const [t, c] of await RK.padColumns()) {
-    if ((t === "follows" && c !== "target_id") || KEEP.includes(t)) continue;
+    if ((t === "follows" && c !== "target_id") || kept(t, c)) continue;
     let ids = null;
     try { ids = (await getQuery(`SELECT rowid AS r FROM ${q(t)} WHERE ${q(c)} = ?`, [id])).map((x) => x.r); }
     catch (e) {
@@ -614,6 +621,13 @@ function register(app, { isBotToken }) {
     res.set("Cache-Control", "no-store");
     const b = req.body && typeof req.body === "object" ? req.body : null;
     if (!b || !isBotToken(b.password)) return res.status(403).json({ ok: false, code: "unauthorized", error: "unauthorized" });
+    let key = null;
+    try { key = require("./botkeys").current(); } catch (e) { key = null; }
+    if (key && !PEPE_CALLERS.has(key.caller)) {
+      console.warn(`[houserotate] refused: bot key caller ${key.caller} isn't Pepe's`);
+      return res.status(403).json({ ok: false, code: "caller", error: "Only Pepe's own key can rotate the house pad." });
+    }
+    if (!key && b.action === "apply") console.warn("[houserotate] apply on the shared bot token (no per-caller key) - botkeys counts it");
     if (Number(req.get("content-length") || 0) > 8192 || JSON.stringify(b).length > 8192) return res.status(413).json({ ok: false, code: "too_large", error: "At most 8 kB." });
     try {
       const { password, ...rest } = b;
@@ -626,4 +640,4 @@ function register(app, { isBotToken }) {
   });
 }
 
-module.exports = { register, handle, plan, apply, status, cleanChange, survey, relink, KEEP, Refuse };
+module.exports = { register, handle, plan, apply, status, cleanChange, survey, relink, KEEP, PEPE_CALLERS, Refuse };

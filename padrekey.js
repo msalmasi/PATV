@@ -93,6 +93,10 @@ async function rekey(from, to, opts = {}) {
   if (tables.has("rooms_kv")) {
     note("rooms_kv.seeded", await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) SELECT ?, value FROM rooms_kv WHERE key = ?", ["seeded:" + to, "seeded:" + from]));
     await runQuery("UPDATE rooms_kv SET value = ? WHERE key = ?", ["rekeyed:" + to, "seeded:" + from]);
+    // review F8: a SEEDS id moving away gets the marker even when its seeded: row is missing (seed() would re-create the pad there)
+    let seeds = [];
+    try { seeds = require("./rooms").SEEDS || []; } catch (e) { seeds = []; }
+    if (seeds.some((x) => x && x.room_id === from)) await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) VALUES (?, ?)", ["seeded:" + from, "rekeyed:" + to]);
     for (const p of ROOMS_KV_PREFIXES) note("rooms_kv." + p, await runQuery("UPDATE OR REPLACE rooms_kv SET key = ? WHERE key = ?", [p + to, p + from]));
   }
   // 1.99??: the pad's ids the generic column scan can't see (each was left behind before):
