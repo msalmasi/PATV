@@ -36,7 +36,7 @@ const LIVE = ["open", "closed"];
 const RECENT = ["settled", "void"];
 const VOID_WORDS = new Set(["void", "refund", "draw", "push", "cancel", "nobody", "none", "tie"]);
 const AI_WORDS = new Set(["pepe", "ai", "pepefrog", "pepebot", "robot", "🤖"]);
-// 1.99?? (account rotation): + every Camfrog login Pepe has had (pepelogins.js) - "judge: Pepe_Frog" means the AI judge too
+// 1.99ano (account rotation): + every Camfrog login Pepe has had (pepelogins.js) - "judge: Pepe_Frog" means the AI judge too
 const isAiWord = (w) => AI_WORDS.has(w) || require("../pepelogins").has(w);
 
 const G = () => require("./games");

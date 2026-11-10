@@ -354,7 +354,7 @@ async function backfilled() {
 let pepeIds = null;
 function isPepeId(id) { return String(id) === "pepe-bot" || !!(pepeIds && pepeIds.has(String(id))); }
 async function loadPepeIds() {
-  // 1.99?? (account rotation): every Camfrog login Pepe has had (pepelogins.js) - pepefrog was missing here
+  // 1.99ano (account rotation): every Camfrog login Pepe has had (pepelogins.js) - pepefrog was missing here
   const cf = require("./pepelogins").sqlIn(["pepe", "pepebot"]);
   const r = await getQuery(`SELECT userId FROM users WHERE LOWER(username) IN ('pepe', 'pepebot', 'pepebeta') OR LOWER(camfrogUsername) IN ${cf.sql}`, cf.params).catch(() => []);
   pepeIds = new Set(["pepe-bot", ...r.map((x) => String(x.userId))]);       // feedstore.js PEPE_ID = "pepe-bot"

@@ -1,4 +1,4 @@
-// pepelogins.js — 1.99?? (Pepe account rotation): the ONE list of Pepe's Camfrog logins on the site.
+// pepelogins.js — 1.99ano (Pepe account rotation): the ONE list of Pepe's Camfrog logins on the site.
 //
 // Pepe's Camfrog account can be rotated (the owner signs him into a new account and moves his home room: houserotate.js). Code
 // that has to recognise him by his Camfrog login - "never a streak / a launch grant / a stale-account sweep for Pepe", "a
@@ -111,7 +111,7 @@ async function save({ current, former } = {}, now = Date.now()) {
 }
 
 /**
- * 1.99?? (review S5): take a login OFF the recorded list - an admin's fix for a typo a rotation recorded (tools/house-rotate.js
+ * 1.99ano (review S5): take a login OFF the recorded list - an admin's fix for a typo a rotation recorded (tools/house-rotate.js
  * --forget-login). Never a built-in (they're in the code) and never the current login (rotate to the right one first; then the typo
  * is a former login and can go). Fix Pepe's own config too (!identity set forget=<login>), or his next owner sync adds it back.
  * In the caller's transaction when there is one; refresh() after. -> {removed, record}

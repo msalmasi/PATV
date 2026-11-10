@@ -46,7 +46,7 @@ const SHADOW_WAIT_S = 600;                  // Pepe's notices are pushed async: 
 const SHADOW_FINAL_S = 2 * 3600;            // ...and final this long after it (a row still missing = he sent none)
 const SHADOW_EVERY_S = 60;                  // review of PO-4: a pending audit is rebuilt at most this often (not on every 15 s pass)
 const RETRY_DAYS = 7;                       // the live retry: a site-run record with no audit, within 7 days (Pepe's rule)
-// notify_user to his own login sends nothing but counts as sent. 1.99?? (account rotation): every login Pepe has had (pepelogins.js) -
+// notify_user to his own login sends nothing but counts as sent. 1.99ano (account rotation): every login Pepe has had (pepelogins.js) -
 // the same set as the bot's _pepe_accounts() (known accounts + configured + former logins), so the shadow compares agree
 const PL = require("../pepelogins");
 const ALINE_MARK = " 🔎 Staking audit: ";

@@ -60,9 +60,9 @@ const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_sett
               "pad_hub",         // S1-D1: the staging hub knows staging's hub pad ids (padhub.js mints the new pads' after the copy)
               "chat_switches",   // S1 Q4 (ADR 0007 D3): staging's own CHAT_HUB (a prod value would switch the staging pilot on or off)
               "micrec_meta",     // mic retention: staging's own mic-recordings policy switch (micrec.js - staging tries it before prod)
-              "house_rotations", // 1.99?? (review S10): staging's own house-pad rotation journal (houserotate.js) - prod's would refuse staging's
+              "house_rotations", // 1.99ano (review S10): staging's own house-pad rotation journal (houserotate.js) - prod's would refuse staging's
               ...CHATLOG, ...LIVE_FEED, ...VEIL];
-// 1.99?? (review S10): rooms_kv keys that belong to the ENVIRONMENT (rooms_kv itself is data): the house room (houserotate.js; prod's
+// 1.99ano (review S10): rooms_kv keys that belong to the ENVIRONMENT (rooms_kv itself is data): the house room (houserotate.js; prod's
 // "The_Swamp" would make staging's house pad prod's room, and staging Pepe's rotations would be refused not_house) and Pepe's logins
 // (pepelogins.js). Prod's go; staging's own come back (none: rooms.js / pepelogins.js fall back to staging's defaults).
 const KV_KEEP = [["rooms_kv", "house_room"], ["rooms_kv", "pepe_logins"]];

@@ -28,7 +28,7 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const STAGING = !!process.env.STAGING;
-// 1.99?? (Pepe account rotation): the HOUSE ROOM - Pepe's own home pad - is a per-instance setting now. In order: rooms_kv
+// 1.99ano (Pepe account rotation): the HOUSE ROOM - Pepe's own home pad - is a per-instance setting now. In order: rooms_kv
 // house_room (written only by houserotate.js, the rotation; loaded with the cache), env STAGE_DEFAULT_ROOM, then the literal
 // (PepeBeta.Room on staging, else PepeFrog.Room). rooms.HOUSE_ROOM is a getter over houseRoom() (bottom of the file), so its ~40
 // call sites read the current one at call time. house_room = {id, title, slug, since, prev: [{id, title, slug, until}]}.
@@ -39,9 +39,9 @@ let HOUSE = null;                 // the parsed rooms_kv house_room, or null (un
 let HOUSE_WARNED = false;
 /** The house room's id (Pepe's own home pad) - see HOUSE_DEFAULT. Sync; the kv value arrives with the cache (init / loadCache). */
 function houseRoom() { return (HOUSE && HOUSE.id) || HOUSE_DEFAULT; }
-/** 1.99??: the rotation's record {id, title, slug, since, prev} (a copy), or null while unset. */
+/** 1.99ano: the rotation's record {id, title, slug, since, prev} (a copy), or null while unset. */
 function houseRecord() { return HOUSE ? JSON.parse(JSON.stringify(HOUSE)) : null; }
-/** 1.99??: Pepe's earlier house rooms (the record's prev[] + the two built-in homes), minus the current one. */
+/** 1.99ano: Pepe's earlier house rooms (the record's prev[] + the two built-in homes), minus the current one. */
 function retiredHouseRooms() {
   const cur = houseRoom().toLowerCase();
   const out = [];
@@ -50,7 +50,7 @@ function retiredHouseRooms() {
   }
   return out;
 }
-/** 1.99??: is this id Pepe's house room or one of his earlier ones (case-insensitive)? */
+/** 1.99ano: is this id Pepe's house room or one of his earlier ones (case-insensitive)? */
 function isPepeHome(roomId) {
   const id = String(roomId || "").toLowerCase();
   return !!id && (id === houseRoom().toLowerCase() || retiredHouseRooms().some((x) => x.toLowerCase() === id));
@@ -206,7 +206,7 @@ async function loadCache() {
   // 1.99iy: retired slugs -> the pad that had them (only for pads that still exist)
   const aliases = new Map();
   for (const a of await getQuery("SELECT slug, room_id FROM pad_slug_aliases")) if (byId.has(a.room_id)) aliases.set(a.slug, a.room_id);
-  // 1.99??: the house room the rotation set (houserotate.js) - the kv is the later, deliberate act, so it wins over the env
+  // 1.99ano: the house room the rotation set (houserotate.js) - the kv is the later, deliberate act, so it wins over the env
   const h = (await getQuery("SELECT value FROM rooms_kv WHERE key = 'house_room'"))[0];
   HOUSE = parseHouse(h && h.value);
   if (HOUSE && process.env.STAGE_DEFAULT_ROOM && process.env.STAGE_DEFAULT_ROOM !== HOUSE.id && !HOUSE_WARNED) {
@@ -509,7 +509,7 @@ async function noteBridged(roomId, name) {
   }
   await init();
   if (CACHE.byId.has(roomId)) return;
-  // 1.99?? (account rotation): a home Pepe moved away from never gets a new unowned pad - its old addresses are the house pad's now
+  // 1.99ano (account rotation): a home Pepe moved away from never gets a new unowned pad - its old addresses are the house pad's now
   // (pad_slug_aliases), and a fresh pad at the old id would take /p/<old id slug> back from it
   if (HOUSE && (HOUSE.prev || []).some((p) => p && p.id === roomId)) return;
   const want = await inheritableSlug(roomId, name);
@@ -958,9 +958,9 @@ module.exports = {
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
   aliasTarget,                                                        // 1.99iy: pad addresses (padaddress.js)
   listAll, listAllCached, isListed, setListed, cleanPlatform, seedAccess,   // S1 Q4: unlisted pads (ADR 0007 D1)
-  houseRoom, houseRecord, retiredHouseRooms, isPepeHome, HOUSE_DEFAULT, BUILTIN_HOUSE_ROOMS, ROOM_ID_RE,   // 1.99?? account rotation
+  houseRoom, houseRecord, retiredHouseRooms, isPepeHome, HOUSE_DEFAULT, BUILTIN_HOUSE_ROOMS, ROOM_ID_RE,   // 1.99ano account rotation
   _seed: seed,                                                        // tests: the seeds again (what a restart runs)
 };
-// 1.99??: rooms.HOUSE_ROOM reads the CURRENT house room (a getter: the rotation can change it while the site runs). Nothing
+// 1.99ano: rooms.HOUSE_ROOM reads the CURRENT house room (a getter: the rotation can change it while the site runs). Nothing
 // destructures it - every caller reads the property when it needs it.
 Object.defineProperty(module.exports, "HOUSE_ROOM", { get: houseRoom, enumerable: true });

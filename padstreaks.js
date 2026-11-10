@@ -34,7 +34,7 @@ const BACKFILL_FLAG = "padstreak_backfill_1";       // the history import
 const QUIET_FLAG = "padstreak_quiet_2";             // 1.99zx: the quiet badge pass - again for the 60-day tier (+ PAT from then on)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ROOM_RE = /^[A-Za-z0-9_.:\-]{1,120}$/;
-// 1.99?? (account rotation): Pepe's Camfrog logins (pepelogins.js: every one he has had) + the names his site accounts use
+// 1.99ano (account rotation): Pepe's Camfrog logins (pepelogins.js: every one he has had) + the names his site accounts use
 const PL = require("./pepelogins");
 const PEPE_NAMES = ["pepe", "pepebot"];
 const isPepeLogin = (l) => PL.has(l) || PEPE_NAMES.includes(String(l || "").toLowerCase());

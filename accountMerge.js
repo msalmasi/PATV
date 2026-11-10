@@ -204,7 +204,7 @@ const RULES = {
   "premium_plus_holds.user_id": M(), "premium_plus_holds.target": { deny: "a pad (room) id, not a userId" },
   "pad_vault_rekeys.from_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
   "pad_vault_rekeys.to_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
-  // 1.99?? (account rotation, houserotate.js): the house pad's moves - room ids, an actor label (pepe / cli:<user>) and a journal row id
+  // 1.99ano (account rotation, houserotate.js): the house pad's moves - room ids, an actor label (pepe / cli:<user>) and a journal row id
   "house_rotations.from_id": { deny: "a Camfrog room id (the house pad's old id), not a userId" },
   "house_rotations.to_id": { deny: "a Camfrog room id (the house pad's new id), not a userId" },
   "house_rotations.actor": { deny: "an actor label (pepe / cli:<user>), not a userId" },

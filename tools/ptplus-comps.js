@@ -48,7 +48,7 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
   const since = Date.now() - BRIDGED_DAYS * 86400000;
   const bridged = await getQuery("SELECT id, name, updated FROM bridge_rooms WHERE updated >= ? ORDER BY updated DESC", [since]).catch(() => []);
   const TARGETS = [
-    // 1.99?? (account rotation): Pepe's own room is the house room, whatever it is called now
+    // 1.99ano (account rotation): Pepe's own room is the house room, whatever it is called now
     { pad: rooms.houseRoom(), mode: "lifetime", label: ((rooms.getCached(rooms.houseRoom()) || {}).title) || "Pepe's home pad" },
     ...(rooms.houseRoom() !== "PepeBeta.Room" && bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
     // 1.99rl / 1.99ru: the user (2026-10-11) - Houseplants gets Plus for 3 months, like players-lounge and DRAMA_CENTRAL

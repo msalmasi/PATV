@@ -168,7 +168,7 @@ async function loadPrices() {
   if (!PRICES || typeof PRICES !== "object") PRICES = { global: {}, rooms: {}, at: 0 };
   return PRICES;
 }
-/** 1.99??: re-read the prices (padrekey.js moved a room key in feed_kv aigen_prices). */
+/** 1.99ano: re-read the prices (padrekey.js moved a room key in feed_kv aigen_prices). */
 async function reloadPrices() { PRICES = null; return loadPrices(); }
 const cleanPrice = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : null);
 let roomCmds = (roomId) => { try { const B = require("./bridge")._rooms.get(roomId); return (B && B.cmds) || {}; } catch (e) { return {}; } };

@@ -75,7 +75,7 @@ const SYSTEM_USERNAMES = new Set(["wheel_of_misfortune", "publicaccess_ttv"]);
 
 // Badges every account gets without doing anything.
 const AUTO_BADGES = new Set(["fresh_meat", "twitch-user", "discord-user", "cf_linked"]);
-// Pepe's own Camfrog logins (and the staging bot) - never classified. 1.99?? (account rotation): every login he has had
+// Pepe's own Camfrog logins (and the staging bot) - never classified. 1.99ano (account rotation): every login he has had
 // (pepelogins.js) + his house room ids, the current one and the earlier ones (rooms.js; rooms_kv house_room is read here
 // directly - a dry run never initialises the registry, which writes), lower case - read when classifying
 async function systemLogins() {
@@ -242,7 +242,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
   // only: one userId (holdsFor) - its own row and ledger, not the whole database (cpRefs / Camfrog
   // "seen" times are then incomplete; the holds are not)
   // read-only: works on a database that has never had the archive column (dry runs write nothing)
-  const SYS_LOGINS = await systemLogins();                       // 1.99??: Pepe's logins + house rooms as recorded now
+  const SYS_LOGINS = await systemLogins();                       // 1.99ano: Pepe's logins + house rooms as recorded now
   const arch = (await hasColumn("users", "archived_at")) ? "archived_at" : "NULL AS archived_at";
   const hasNames = (await hasColumn("users", "twitchDisplayname")) && (await hasColumn("users", "discordUsername"));
   const users = await getQuery(`SELECT userId, username, class, email, isEmailVerified, discordId, twitchId, camfrogUsername,

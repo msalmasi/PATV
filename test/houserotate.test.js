@@ -1,4 +1,4 @@
-// 1.99?? Pepe account rotation, the SITE half (houserotate.js, rooms.js house room, padrekey.js, padaddress.renameInTx,
+// 1.99ano Pepe account rotation, the SITE half (houserotate.js, rooms.js house room, padrekey.js, padaddress.renameInTx,
 // tools/house-rotate.js): Pepe's house pad PepeFrog.Room "Pepe's Pad" (p/pepes-pad) moves to The_Swamp "The Swamp" (p/the-swamp).
 //   - rooms.HOUSE_ROOM is a getter over rooms_kv house_room; retired house rooms; padconnect refuses them
 //   - plan is read-only and counts what would move

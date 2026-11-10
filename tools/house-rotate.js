@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/house-rotate.js — 1.99?? (Pepe account rotation): move Pepe's house pad to his new Camfrog home room from the command line
+// tools/house-rotate.js — 1.99ano (Pepe account rotation): move Pepe's house pad to his new Camfrog home room from the command line
 // (houserotate.js does the work). DRY RUN BY DEFAULT.
 //
 // The normal path is Pepe's `!identity rotate` (he calls POST /api/pepe/identity/rotate and the site reloads its caches in-process).

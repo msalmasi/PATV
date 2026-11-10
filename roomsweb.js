@@ -128,7 +128,7 @@ function register(app, { addUser, isBotToken }) {
   require("./vwm").register(app, { isBotToken, addUser });          // economy v2 E-5: verified watch-minutes, the daily stage_watch rollup
   require("./padowner").register(app, { addUser });               // 1.99qr: the room owner's Pepe control panel (/p/<slug>/owner)
   require("./launchpad").register(app, { addUser, isBotToken });     // the pad launchpad: momentum, launch grants review, welcomes, boost credit     // economy v2 E-3: room vaults (Pepe's sync, the pad card, the owner's rate)
-  require("./houserotate").register(app, { isBotToken });            // 1.99??: Pepe's account rotation - the house pad moves (POST /api/pepe/identity/rotate)
+  require("./houserotate").register(app, { isBotToken });            // 1.99ano: Pepe's account rotation - the house pad moves (POST /api/pepe/identity/rotate)
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
     if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
@@ -142,7 +142,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       // 1.99br: Pepe's live room_owner % per room flow rides along (shown to owners / admins)
       if (Array.isArray((req.body || {}).owner_shares)) await royalties.setOwnerShares(req.body.owner_shares).catch(() => {});
-      // 1.99?? (account rotation): Pepe's identity {login, former_logins} - his logins join the site's list (pepelogins.js, deny-only);
+      // 1.99ano (account rotation): Pepe's identity {login, former_logins} - his logins join the site's list (pepelogins.js, deny-only);
       // the house room never moves from here (only the rotation moves it: houserotate.js)
       if ((req.body || {}).identity) await require("./pepelogins").noteIdentity(req.body.identity).catch((e) => console.error("[rooms] identity:", e.message));
       // 1.99bv: Pepe's relay refusals (restricted logins) in, the room feed mentions out
@@ -184,7 +184,7 @@ function register(app, { addUser, isBotToken }) {
       try { retentionKeep = await require("./micrec").keepBlock(); } catch (e) { console.error("[rooms] retention keep:", e.message); }
       // Train 3 review: chatlog_known - this site HAS the chat archive, so rooms without a block mean a failing read (above), and
       // Pepe keeps his last blocks for good instead of dropping them after 7 days (pepe_chatlog BLOCK_HOLD_S)
-      // 1.99??: the house room as the site has it - Pepe's !identity shows it and alerts when it isn't his configured home
+      // 1.99ano: the house room as the site has it - Pepe's !identity shows it and alerts when it isn't his configured home
       const hr = rooms.getCached(rooms.houseRoom());
       const houseRoom = { id: rooms.houseRoom(), slug: hr ? hr.slug : null, title: hr ? hr.title : null };
       res.json({ ok: true, house_room: houseRoom, rooms: ownerRooms, chatlog_known: true, prime_known: true, plus_known: true, ...(plusRooms ? { plus_rooms: plusRooms } : {}), vault_rekeys: vaultRekeys, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify, ...(ownerVoices ? { owner_voices: ownerVoices } : {}), ...(retentionKeep ? { retention_keep: retentionKeep } : {}) });

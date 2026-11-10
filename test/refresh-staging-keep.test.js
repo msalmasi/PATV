@@ -150,7 +150,7 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          "chat_switches",
                                          // mic retention: staging's own mic-recordings policy switch (micrec.js)
                                          "micrec_meta",
-                                         // 1.99?? (review S10): staging's own house-pad rotation journal
+                                         // 1.99ano (review S10): staging's own house-pad rotation journal
                                          "house_rotations"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
@@ -424,7 +424,7 @@ test("owner 11-02: a frog-name clip on a room soundboard (sb_clips.subject_alias
   try { assert.deepEqual(await all(e32, "SELECT subject_login FROM sb_clips"), [{ subject_login: "bobcf" }], "a prod a release behind: nothing scrubbed"); } finally { await close(e32); }
 });
 
-// 1.99?? (review S10): prod's house room (The_Swamp after the 2026-11-10 rotation), Pepe's logins and the rotation journal never become
+// 1.99ano (review S10): prod's house room (The_Swamp after the 2026-11-10 rotation), Pepe's logins and the rotation journal never become
 // staging's - staging's house pad stays its own (PepeBeta.Room by default), so its Pepe isn't refused not_house
 test("review S10: rooms_kv house_room / pepe_logins and house_rotations stay staging's own (both paths)", async () => {
   assert.deepEqual(K.KV_KEEP, [["rooms_kv", "house_room"], ["rooms_kv", "pepe_logins"]]);

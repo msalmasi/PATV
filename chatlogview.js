@@ -775,7 +775,7 @@ function inputsOf(padId) {
            pad: reg && reg.created ? "p" + reg.created : null,
            owner: reg && reg.owner && reg.owner.userId ? String(reg.owner.userId) : null, tier: padTier(id), cfg: c, reg, level };
 }
-/** 1.99?? (account rotation): houserotate.js moved a room's archive row (chatlog_rooms.room_id + chatlog_meta tier:<id>) to the
+/** 1.99ano (account rotation): houserotate.js moved a room's archive row (chatlog_rooms.room_id + chatlog_meta tier:<id>) to the
  *  house pad's new Camfrog room id in its transaction - the caches follow (the row, its tier, a pending opening, the archive's
  *  room -> rk map), and the per-viewer answer caches start again. Nothing is written. */
 function moveRoom(from, to) {
@@ -1779,5 +1779,5 @@ module.exports = {
   _setAttested: (f) => { attestedFn = f || null; CACHE.att.clear(); },
   _bumpNames: () => { NAMES_V++; },
   _clearCaches: () => { for (const m of Object.values(CACHE)) m.clear(); },
-  moveRoom,                                           // 1.99?? account rotation (houserotate.js)
+  moveRoom,                                           // 1.99ano account rotation (houserotate.js)
 };

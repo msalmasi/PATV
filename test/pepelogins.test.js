@@ -1,4 +1,4 @@
-// 1.99?? Pepe account rotation: pepelogins.js - the site's ONE list of Pepe's Camfrog logins (deny-only), and the places that
+// 1.99ano Pepe account rotation: pepelogins.js - the site's ONE list of Pepe's Camfrog logins (deny-only), and the places that
 // read it instead of a hard-coded {pepefrog, pepebeta}: the stale-account sweep (+ his house room ids), the pad streaks, the
 // policy digest, the AI-judge words.
 //   TZ=UTC NODE_PATH=G:/PATV/node_modules node --test test/pepelogins.test.js

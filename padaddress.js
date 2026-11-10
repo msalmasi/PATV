@@ -111,7 +111,7 @@ async function nextRenameAt(user, R) {
   return last ? last + C.rename_days * DAY : 0;
 }
 
-/** 1.99??: a slug some OTHER pad holds in the database (its address or one it gave up) -> why not, or null. Unlike takenProblem
+/** 1.99ano: a slug some OTHER pad holds in the database (its address or one it gave up) -> why not, or null. Unlike takenProblem
  *  it never reads the registry cache - renameInTx runs inside transactions that re-keyed rows the cache doesn't know yet. */
 async function takenInDb(s, roomId) {
   const a = (await getQuery("SELECT room_id FROM pad_slug_aliases WHERE slug = ?", [s]))[0];
@@ -125,7 +125,7 @@ function loadedBridge() {
 }
 
 /**
- * 1.99?? (account rotation): the address change's writes, inside a transaction the CALLER holds - rename() below, and
+ * 1.99ano (account rotation): the address change's writes, inside a transaction the CALLER holds - rename() below, and
  * houserotate.js inside the rotation's own (after it re-keyed the pad: the pad's row is read from the database, not the cache).
  * `raw` is folded here. The old slug becomes an alias (and the live bridge room's display-name slug, when it shows another one),
  * one of the pad's own old slugs is taken back, slug_set = 1 + slug_changed_at = now, the per-account feed views move. The slug

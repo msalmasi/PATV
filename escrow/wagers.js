@@ -25,7 +25,7 @@ const LIVE = ["offered", "active"];
 const RECENT = ["won", "void", "expired", "declined", "cancelled"];
 const VOID_WORDS = new Set(["void", "refund", "draw", "push", "cancel", "nobody", "none", "tie"]);
 const AI_WORDS = new Set(["pepe", "@pepe", "ai", "pepefrog", "bot"]);
-// 1.99?? (account rotation): + every Camfrog login Pepe has had (pepelogins.js), with or without the @
+// 1.99ano (account rotation): + every Camfrog login Pepe has had (pepelogins.js), with or without the @
 const isAiWord = (w) => AI_WORDS.has(w) || require("../pepelogins").has(String(w || "").replace(/^@/, ""));
 
 const G = () => require("./games");

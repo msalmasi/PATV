@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // tools/setup-pepes-pad.js — 1.99wq: dress Pepe's own pad as the SHOWCASE pad - every pad feature, set up the way we'd tell an
 // owner to - so other owners have an example to copy. The house pad: prod The_Swamp ("The Swamp"; PepeFrog.Room "Pepe's Pad" until
-// the 2026-11-10 account rotation), staging PepeBeta.Room (PepeLab). 1.99??: the pad's NAME comes from its registry title (the
+// the 2026-11-10 account rotation), staging PepeBeta.Room (PepeLab). 1.99ano: the pad's NAME comes from its registry title (the
 // rotation - houserotate.js - sets it), never from this script.
 //
 //   node tools/setup-pepes-pad.js --actor=<site admin>                       DRY RUN (default): what would change, nothing written
@@ -16,7 +16,7 @@
 // running process (padlook / padaccess load them at start).
 //
 // Steps - each reads the current value first and only writes what differs (running it twice changes nothing):
-//   page       description (with the links); the title is the pad's own (1.99??: the rotation sets it)
+//   page       description (with the links); the title is the pad's own (1.99ano: the rotation sets it)
 //   rules      the pad's intro + house rules (padrules.js)
 //   look       avatar + banner (tools/pepespad/*.png, drawn by tools/gen-pepespad-art.py) + the frog accent (padlook.js)
 //   plus       💎 Prime Time Plus, comped with no end date when the pad doesn't have it (comps.compPremium: free, audited; no PAT)
@@ -26,7 +26,7 @@
 //   soundboard a starter set of TTS clips on the pad's board (Pepe renders them) (soundboards.addRoomClip)
 //   pepe       Pepe on the pad's page: his posts (every kind, 5 a day), flair + tags, comments, replies, announcements, automod
 //   access     Public (padaccess.js)
-//   welcome    Pepe's pinned welcome post explaining the pad (feedstore.create as Pepe, free; pinned with roomMod). 1.99??: found
+//   welcome    Pepe's pinned welcome post explaining the pad (feedstore.create as Pepe, free; pinned with roomMod). 1.99ano: found
 //              again by the id stored when it was posted (feed_kv pepespad:welcome:<pad id>; it moves with the pad), so a rename
 //              never makes a second one
 // Never touches another pad, never charges PAT (no buy / top-up path is used anywhere).
@@ -53,7 +53,7 @@ const DESCRIPTION = [
   "Pepe's own pad - the house room of PATV. Pepe runs the games, posts the news, recaps the night and keeps the stage going.",
   "Casino: /casino · Markets: /markets · Pepeball: /lotto · Grand Theft Frogger: /gtf · Stickers: /stickers · Help: /help",
 ].join("\n");
-// 1.99??: the intro names the pad by its registry title (rulesFor(title))
+// 1.99ano: the intro names the pad by its registry title (rulesFor(title))
 const rulesFor = (title) => ({
   intro: `${title} is the house room: loud, friendly and a bit unhinged. Have fun - just don't make it worse for anyone else. Padiquette applies on top of these.`,
   rules: [
@@ -100,7 +100,7 @@ const SOUNDBOARD = [
 ];
 const PEPE_SITE = [["feed", true], ["posts", true], ["posts_per_day", 5], ["labels", true], ["announce", true], ["replies", true],
                    ["comments", true], ["comment_rate", "normal"], ["automod", true], ["automod_level", "standard"]];
-const welcomeTitle = (title) => `👋 Welcome to ${title} - start here`;       // 1.99??: the pad's registry title
+const welcomeTitle = (title) => `👋 Welcome to ${title} - start here`;       // 1.99ano: the pad's registry title
 const welcomeBody = (slug, tags) => [
   "This is my pad - the house room of PATV, and the example pad for every owner. Everything a pad can do is switched on here, so have a look around:",
   "",
@@ -294,7 +294,7 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
     const flair = "Announcement";
     const tags = ["news", "stage", "casino"];
     const WELCOME_TITLE = welcomeTitle(R.title);
-    // 1.99??: the post this script made (its id stored when it posted), else the one with this title (posted before the id was kept)
+    // 1.99ano: the post this script made (its id stored when it posted), else the one with this title (posted before the id was kept)
     const KEY = "pepespad:welcome:" + R0.id;
     const storedId = await store.kvGet(KEY);
     let ex = storedId ? (await getQuery("SELECT id, title, body FROM feed_posts WHERE id = ? AND author_id = ? AND deleted_at IS NULL", [storedId, acct.userId]))[0] : null;

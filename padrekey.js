@@ -41,10 +41,10 @@ const ROOM_BOUND = new Set([
   "evidence_clips",
   "cam_evidence",                                       // 1.99aid (privacy controls S4): stills / clips of a cam in that room (camevidence.js)
 ]);
-// feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen; 1.99??: the house pad's welcome post id,
+// feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen; 1.99ano: the house pad's welcome post id,
 // tools/setup-pepes-pad.js)
 const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:", "pepespad:welcome:"];
-// 1.99?? (account rotation): rooms_kv keys "<prefix><pad id>" that move with the pad (seeded: has its own rule - see rekey)
+// 1.99ano (account rotation): rooms_kv keys "<prefix><pad id>" that move with the pad (seeded: has its own rule - see rekey)
 const ROOMS_KV_PREFIXES = ["pepespad:art:"];
 
 const q = (name) => '"' + String(name).replace(/"/g, '""') + '"';
@@ -65,7 +65,7 @@ async function padColumns() {
 /**
  * Move pad `from` to id `to` (the registry row is the caller's job). -> {moved: {"table.column": n}}
  * Never call it with from === to.
- * 1.99?? opts.keep: extra tables (or table.column) that stay with the Camfrog room for THIS call only - the house rotation keeps
+ * 1.99ano opts.keep: extra tables (or table.column) that stay with the Camfrog room for THIS call only - the house rotation keeps
  * the room's evidence (bridge_spans, livecam_audit) under the old Camfrog room id (houserotate.js, D4).
  */
 async function rekey(from, to, opts = {}) {
@@ -88,7 +88,7 @@ async function rekey(from, to, opts = {}) {
   if (tables.has("feed_kv")) {
     for (const p of FEED_KV_PREFIXES) note("feed_kv." + p, await runQuery("UPDATE OR REPLACE feed_kv SET key = ? WHERE key = ?", [p + to, p + from]));
   }
-  // 1.99?? (seeds never ghost): seeded:<from> is COPIED to seeded:<to> and itself becomes "rekeyed:<to>". rooms.seed() skips an id
+  // 1.99ano (seeds never ghost): seeded:<from> is COPIED to seeded:<to> and itself becomes "rekeyed:<to>". rooms.seed() skips an id
   // with any seeded: value, so a seeded pad that moved away (the house rotation, a disconnect) is never re-created at its old id.
   if (tables.has("rooms_kv")) {
     note("rooms_kv.seeded", await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) SELECT ?, value FROM rooms_kv WHERE key = ?", ["seeded:" + to, "seeded:" + from]));
@@ -99,7 +99,7 @@ async function rekey(from, to, opts = {}) {
     if (seeds.some((x) => x && x.room_id === from)) await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) VALUES (?, ?)", ["seeded:" + from, "rekeyed:" + to]);
     for (const p of ROOMS_KV_PREFIXES) note("rooms_kv." + p, await runQuery("UPDATE OR REPLACE rooms_kv SET key = ? WHERE key = ?", [p + to, p + from]));
   }
-  // 1.99??: the pad's ids the generic column scan can't see (each was left behind before):
+  // 1.99ano: the pad's ids the generic column scan can't see (each was left behind before):
   //   pepe_modlog.room_l     the lower-case copy the moderation log's readers filter on (pepemodlog.js) - with the moved room_id
   //   sb_clips.board         the pad's soundboard ("room:<id>")
   //   backend_wants.feature  the pad's casino switch wish ("casino:<id>", backends.js)
@@ -182,7 +182,7 @@ async function reloadCaches() {
   try { await require("./premium").loadCache(); } catch (e) { /* not loaded */ }      // 1.99qy: Plus / Prime Time moved with the pad
   try { await require("./chatlog").loadPadCfg(); } catch (e) { /* not loaded */ }      // CL3: the pad's chat settings moved with it
   try { await require("./cliplink").loadCache(); } catch (e) { /* not loaded */ }      // 1.99aiq cliplink: the pad's clip switch (pad_clip_cfg) too
-  // 1.99??: Pepe's AI prices may have moved a room key (feed_kv aigen_prices) - only when aigen is loaded in this process
+  // 1.99ano: Pepe's AI prices may have moved a room key (feed_kv aigen_prices) - only when aigen is loaded in this process
   try { const p = require.resolve("./aigen"); if (require.cache[p]) await require.cache[p].exports.reloadPrices(); } catch (e) { /* not loaded */ }
 }
 

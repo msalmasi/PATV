@@ -56,7 +56,7 @@ const DEFAULTS = Object.freeze({
 });
 const PLATFORMS = new Set(["camfrog", "site", "twitch"]);
 const STRONG = ["cf", "discord", "twitch", "email", "dev"];
-// 1.99?? (account rotation): Pepe's Camfrog logins - every one he has had (pepelogins.js), not a hard-coded pair
+// 1.99ano (account rotation): Pepe's Camfrog logins - every one he has had (pepelogins.js), not a hard-coded pair
 const PL = require("./pepelogins");
 const FRESH_MS = 15 * 60 * 1000;          // a launchpad state older than this pays nothing
 const EVAL_MS = 5 * 60 * 1000;

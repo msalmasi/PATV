@@ -1879,7 +1879,7 @@ module.exports = {
   siteAnonSince,                                     // owner-change fix-up (review 2): named lines after a website ON stay anonymised
   now: () => now(),
   noteRk: (roomId, rk) => { if (roomId && rk) RK.set(roomId, rk); },
-  // 1.99?? (account rotation): houserotate.js moved the archive row (chatlog_rooms.room_id) to the house pad's new room id
+  // 1.99ano (account rotation): houserotate.js moved the archive row (chatlog_rooms.room_id) to the house pad's new room id
   moveRk: (from, to) => { const rk = RK.get(from); if (rk) { RK.delete(from); RK.set(to, rk); } return rk || null; },
   archivePath: () => (ATTACHED ? path.resolve(ARCHIVE_DB) : null),
   TABLES, MAIN_DDL, ARCHIVE_DDL, FTS_DDL, TRIGGERS, PRIVATE_ARGS, SWITCHES, NOTICE_DAYS, SEED_AT_SWITCH_ON, PERK_ROOMS_ONLY, TRIP_AFTER, HOLD_N, HOLD_PCT,

@@ -1,4 +1,4 @@
-// houserotate.js — 1.99?? (Pepe account rotation): move Pepe's HOUSE PAD to his new Camfrog home room - its title and address
+// houserotate.js — 1.99ano (Pepe account rotation): move Pepe's HOUSE PAD to his new Camfrog home room - its title and address
 // with it - in ONE transaction, journaled with a before-image and an undo. Design: the rotation design of 2026-11-10 (§2-§3.2).
 //
 // Pepe's Camfrog account is rotated now and then: the owner signs him into a new account, and that account owns a new home room
@@ -48,12 +48,12 @@ const { runQuery, getQuery, tx } = require("./dbUtils");
 const rooms = require("./rooms");
 const PL = require("./pepelogins");
 
-// D4: the Camfrog room's evidence stays with its id. 1.99?? (review S11): so do the room's privacy audit (seethrough_log: which
+// D4: the Camfrog room's evidence stays with its id. 1.99ano (review S11): so do the room's privacy audit (seethrough_log: which
 // logins an admin revealed IN that room) and where an on-air consent was asked (onair_consent.room - its pad column moves with
 // the pad; the consent itself never carried over: session allows live in memory, "always" is per pad / per cam owner)
 const KEEP = Object.freeze(["bridge_spans", "livecam_audit", "seethrough_log", "onair_consent.room"]);
 const kept = (t, c) => KEEP.includes(t) || KEEP.includes(`${t}.${c}`);
-// 1.99?? (review S9): the bot keys allowed to rotate the house pad - Pepe's own (prod / staging). A key of any other caller
+// 1.99ano (review S9): the bot keys allowed to rotate the house pad - Pepe's own (prod / staging). A key of any other caller
 // (the shared /api/pepe family covers the VM supervisor's) is refused; the shared legacy token still works (counted by botkeys)
 const PEPE_CALLERS = new Set(["pepe", "pepe-staging"]);
 const TITLE_MAX = 60;

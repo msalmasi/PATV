@@ -225,7 +225,7 @@ function bridgeRoom(name) {
 /** Can pad R (owned by ownerId) become the pad of Camfrog room `roomId`? -> null or why not. */
 async function targetProblem(R, roomId) {
   if (!ROOM_ID_RE.test(String(roomId || ""))) return "That isn't a Camfrog room id Pepe can use.";
-  // 1.99?? (account rotation): his current house room or any earlier one (rooms.js), whatever the case typed
+  // 1.99ano (account rotation): his current house room or any earlier one (rooms.js), whatever the case typed
   if (rooms.isPepeHome(roomId)) return "That's Pepe's own room.";
   const T = await rooms.get(roomId);
   if (!T) return null;
