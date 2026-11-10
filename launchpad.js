@@ -56,7 +56,8 @@ const DEFAULTS = Object.freeze({
 });
 const PLATFORMS = new Set(["camfrog", "site", "twitch"]);
 const STRONG = ["cf", "discord", "twitch", "email", "dev"];
-const PEPE_LOGINS = new Set(["pepefrog", "pepebeta"]);
+// 1.99?? (account rotation): Pepe's Camfrog logins - every one he has had (pepelogins.js), not a hard-coded pair
+const PL = require("./pepelogins");
 const FRESH_MS = 15 * 60 * 1000;          // a launchpad state older than this pays nothing
 const EVAL_MS = 5 * 60 * 1000;
 const CACHE_MS = 60 * 1000;
@@ -254,7 +255,7 @@ async function activity(pad, from, to) {
   const get = (u) => { let x = per.get(u); if (!x) { x = { real: new Set(), visit: new Set(), lines: 0, mic: {}, chat: false, posts: 0, comments: 0, first: Infinity }; per.set(u, x); } return x; };
   let part = [];
   try { part = await getQuery("SELECT day, login, lines, mic_min FROM econ_participation WHERE room_id = ? AND day >= ?", [pad.id, fromDay]); } catch (e) { part = []; }
-  const byLogin = await usersByLogin(part.map((p) => p.login).filter((l) => !PEPE_LOGINS.has(String(l).toLowerCase())));
+  const byLogin = await usersByLogin(part.map((p) => p.login).filter((l) => !PL.has(l)));
   for (const p of part) {
     const u = byLogin.get(String(p.login).toLowerCase());
     if (!u) continue;
@@ -284,7 +285,7 @@ function disqualify(u, kind, c, owner, ownerKeys, keys) {
   if (!u) return "no account";
   if (owner && (u.userId === owner.userId || u.dup_of === owner.userId || (owner.dup_of && owner.dup_of === u.userId))) return "owner";
   for (const k of keys.get(u.userId) || []) if (ownerKeys.has(k)) return "owner";
-  if (u.camfrogUsername && PEPE_LOGINS.has(String(u.camfrogUsername).toLowerCase())) return "bot";
+  if (u.camfrogUsername && PL.has(u.camfrogUsername)) return "bot";
   if (u.wb_state === "duplicate" || u.dup_of) return "duplicate";
   if (!linked(u)) return "unlinked";
   const age = ageMs(u.created_at);

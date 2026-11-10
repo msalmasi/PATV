@@ -25,6 +25,8 @@ const LIVE = ["offered", "active"];
 const RECENT = ["won", "void", "expired", "declined", "cancelled"];
 const VOID_WORDS = new Set(["void", "refund", "draw", "push", "cancel", "nobody", "none", "tie"]);
 const AI_WORDS = new Set(["pepe", "@pepe", "ai", "pepefrog", "bot"]);
+// 1.99?? (account rotation): + every Camfrog login Pepe has had (pepelogins.js), with or without the @
+const isAiWord = (w) => AI_WORDS.has(w) || require("../pepelogins").has(String(w || "").replace(/^@/, ""));
 
 const G = () => require("./games");
 const ref = (w) => `W${w.id}`;
@@ -290,7 +292,7 @@ function parseCreate(words) {
   let secs = DEFAULT_SECS;
   const bm = BY_RE.exec(text);
   if (bm) { secs = durationSecs(bm[1], bm[2]); text = (text.slice(0, bm.index) + " " + text.slice(bm.index + bm[0].length)).trim(); }
-  const ai = AI_WORDS.has(low(jword));
+  const ai = isAiWord(low(jword));
   return { opponent: { login: opponent }, amount: Number.isFinite(amount) ? amount : 0, terms: text, secs, ai_judge: ai, judge: ai ? null : { login: jword.replace(/^@+/, "") } };
 }
 function fromForm(words, actor) {

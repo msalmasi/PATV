@@ -520,7 +520,8 @@ async function dropSession(s, reason, pos, error) {
 const roomOf = async (v) => {
   const id = String(v || "");
   if (!id) return null;
-  return (await rooms.bySlug(id)) || (await rooms.get(id)) || (id === rooms.HOUSE_ROOM ? { id, title: "Pepe's pad" } : null);
+  // 1.99??: an unregistered house room reads as Pepe's home pad (its registry title is the name whenever it has a row)
+  return (await rooms.bySlug(id)) || (await rooms.get(id)) || (id === rooms.HOUSE_ROOM ? { id, title: "Pepe's home pad" } : null);
 };
 
 // ── actions ──

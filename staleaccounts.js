@@ -75,8 +75,19 @@ const SYSTEM_USERNAMES = new Set(["wheel_of_misfortune", "publicaccess_ttv"]);
 
 // Badges every account gets without doing anything.
 const AUTO_BADGES = new Set(["fresh_meat", "twitch-user", "discord-user", "cf_linked"]);
-// Pepe's own Camfrog logins (and the staging bot) - never classified.
-const SYSTEM_LOGINS = new Set(["pepefrog", "pepebeta", "pepefrog.room", "pepebeta.room"]);
+// Pepe's own Camfrog logins (and the staging bot) - never classified. 1.99?? (account rotation): every login he has had
+// (pepelogins.js) + his house room ids, the current one and the earlier ones (rooms.js; rooms_kv house_room is read here
+// directly - a dry run never initialises the registry, which writes), lower case - read when classifying
+async function systemLogins() {
+  const R = require("./rooms");
+  const ids = [R.houseRoom(), ...R.retiredHouseRooms()];
+  try {
+    const h = JSON.parse(((await getQuery("SELECT value FROM rooms_kv WHERE key = 'house_room'"))[0] || {}).value || "null");
+    if (h && h.id) ids.push(h.id, ...(Array.isArray(h.prev) ? h.prev.map((p) => p && p.id) : []));
+  } catch (e) { /* no registry table / no rotation yet */ }
+  await require("./pepelogins").refresh().catch(() => {});
+  return new Set([...require("./pepelogins").list(), "pepefrog.room", "pepebeta.room", ...ids.filter(Boolean).map((x) => String(x).toLowerCase())]);
+}
 
 // Transaction types. "bonus win" rows take their real type from bonus_winners.
 const SYSTEM_DEBIT = /^(fine|automod-fine|exploit|staff transfer|ledger-correction|bounty-refund-reversal|stale-reclaim|clawback|account merge|zero)/i;
@@ -231,6 +242,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
   // only: one userId (holdsFor) - its own row and ledger, not the whole database (cpRefs / Camfrog
   // "seen" times are then incomplete; the holds are not)
   // read-only: works on a database that has never had the archive column (dry runs write nothing)
+  const SYS_LOGINS = await systemLogins();                       // 1.99??: Pepe's logins + house rooms as recorded now
   const arch = (await hasColumn("users", "archived_at")) ? "archived_at" : "NULL AS archived_at";
   const hasNames = (await hasColumn("users", "twitchDisplayname")) && (await hasColumn("users", "discordUsername"));
   const users = await getQuery(`SELECT userId, username, class, email, isEmailVerified, discordId, twitchId, camfrogUsername,
@@ -353,7 +365,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     }
     // ownerless ghost: an auto account with no Camfrog login, or whose "login" is really a PATV
     // account name (Pepe used to create these from "CFxxxxxxxx" names - 1.99az stopped it)
-    if (f.login && SYSTEM_LOGINS.has(f.login)) f.holds.add("Pepe's own login");
+    if (f.login && SYS_LOGINS.has(f.login)) f.holds.add("Pepe's own login");
     if (f.userId === "pepe-bot") f.holds.add("Pepe's feed account");      // 1.99cg pepefeed.js (feedstore.PEPE_ID)
   }
   for (const f of F.values()) {

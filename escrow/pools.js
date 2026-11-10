@@ -36,6 +36,8 @@ const LIVE = ["open", "closed"];
 const RECENT = ["settled", "void"];
 const VOID_WORDS = new Set(["void", "refund", "draw", "push", "cancel", "nobody", "none", "tie"]);
 const AI_WORDS = new Set(["pepe", "ai", "pepefrog", "pepebot", "robot", "🤖"]);
+// 1.99?? (account rotation): + every Camfrog login Pepe has had (pepelogins.js) - "judge: Pepe_Frog" means the AI judge too
+const isAiWord = (w) => AI_WORDS.has(w) || require("../pepelogins").has(w);
 
 const G = () => require("./games");
 const ref = (m) => `M${m.id}`;
@@ -421,7 +423,7 @@ function parseCreate(text) {
   const cm = CLOSES_RE.exec(text);
   if (cm) { secs = durationSecs(cm[1], cm[2]); text = (text.slice(0, cm.index) + " " + text.slice(cm.index + cm[0].length)).trim(); }
   if (tok.until) secs = Math.round(tok.until - Date.now() / 1000);
-  const ai = AI_WORDS.has(low(jword));
+  const ai = isAiWord(low(jword));
   return { question: text, options, secs, ai_judge: ai, judge: ai ? null : { login: jword.replace(/^@+/, "") },
            ...(tok.pad ? { pad: tok.pad } : {}), ...(tok.tz ? { tz: tok.tz } : {}) };
 }

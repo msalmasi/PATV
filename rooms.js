@@ -28,7 +28,40 @@ const { runQuery, getQuery } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 
 const STAGING = !!process.env.STAGING;
-const HOUSE_ROOM = process.env.STAGE_DEFAULT_ROOM || (STAGING ? "PepeBeta.Room" : "PepeFrog.Room");
+// 1.99?? (Pepe account rotation): the HOUSE ROOM - Pepe's own home pad - is a per-instance setting now. In order: rooms_kv
+// house_room (written only by houserotate.js, the rotation; loaded with the cache), env STAGE_DEFAULT_ROOM, then the literal
+// (PepeBeta.Room on staging, else PepeFrog.Room). rooms.HOUSE_ROOM is a getter over houseRoom() (bottom of the file), so its ~40
+// call sites read the current one at call time. house_room = {id, title, slug, since, prev: [{id, title, slug, until}]}.
+const HOUSE_DEFAULT = process.env.STAGE_DEFAULT_ROOM || (STAGING ? "PepeBeta.Room" : "PepeFrog.Room");
+// Pepe's house rooms before the rotation existed (both instances' homes) - never a pad anybody else can take
+const BUILTIN_HOUSE_ROOMS = ["PepeFrog.Room", "PepeBeta.Room"];
+let HOUSE = null;                 // the parsed rooms_kv house_room, or null (unset: the env / literal default)
+let HOUSE_WARNED = false;
+/** The house room's id (Pepe's own home pad) - see HOUSE_DEFAULT. Sync; the kv value arrives with the cache (init / loadCache). */
+function houseRoom() { return (HOUSE && HOUSE.id) || HOUSE_DEFAULT; }
+/** 1.99??: the rotation's record {id, title, slug, since, prev} (a copy), or null while unset. */
+function houseRecord() { return HOUSE ? JSON.parse(JSON.stringify(HOUSE)) : null; }
+/** 1.99??: Pepe's earlier house rooms (the record's prev[] + the two built-in homes), minus the current one. */
+function retiredHouseRooms() {
+  const cur = houseRoom().toLowerCase();
+  const out = [];
+  for (const id of [...((HOUSE && HOUSE.prev) || []).map((p) => p && p.id), ...BUILTIN_HOUSE_ROOMS]) {
+    if (id && String(id).toLowerCase() !== cur && !out.some((x) => x.toLowerCase() === String(id).toLowerCase())) out.push(String(id));
+  }
+  return out;
+}
+/** 1.99??: is this id Pepe's house room or one of his earlier ones (case-insensitive)? */
+function isPepeHome(roomId) {
+  const id = String(roomId || "").toLowerCase();
+  return !!id && (id === houseRoom().toLowerCase() || retiredHouseRooms().some((x) => x.toLowerCase() === id));
+}
+function parseHouse(v) {
+  let h = null;
+  try { h = v ? JSON.parse(v) : null; } catch (e) { h = null; }
+  if (!h || typeof h !== "object" || typeof h.id !== "string" || !h.id) return null;
+  return { id: h.id, title: h.title || null, slug: h.slug || null, since: Number(h.since) || null,
+           prev: Array.isArray(h.prev) ? h.prev.filter((p) => p && typeof p.id === "string").slice(-20) : [] };
+}
 // owner "match" = one PATV account whose username / display name / Camfrog / Discord / Twitch name is
 // exactly this (case-insensitive); the seed is retried every start until it resolves or an admin sets it
 const SEEDS = [
@@ -173,6 +206,13 @@ async function loadCache() {
   // 1.99iy: retired slugs -> the pad that had them (only for pads that still exist)
   const aliases = new Map();
   for (const a of await getQuery("SELECT slug, room_id FROM pad_slug_aliases")) if (byId.has(a.room_id)) aliases.set(a.slug, a.room_id);
+  // 1.99??: the house room the rotation set (houserotate.js) - the kv is the later, deliberate act, so it wins over the env
+  const h = (await getQuery("SELECT value FROM rooms_kv WHERE key = 'house_room'"))[0];
+  HOUSE = parseHouse(h && h.value);
+  if (HOUSE && process.env.STAGE_DEFAULT_ROOM && process.env.STAGE_DEFAULT_ROOM !== HOUSE.id && !HOUSE_WARNED) {
+    HOUSE_WARNED = true;
+    console.log(`[rooms] house room: rooms_kv house_room = ${HOUSE.id} (the rotation) wins over STAGE_DEFAULT_ROOM = ${process.env.STAGE_DEFAULT_ROOM}`);
+  }
   CACHE = { byId, bySlug, aliases, front: f ? String(f.value) : "auto", at: Date.now() };
   return CACHE;
 }
@@ -469,6 +509,9 @@ async function noteBridged(roomId, name) {
   }
   await init();
   if (CACHE.byId.has(roomId)) return;
+  // 1.99?? (account rotation): a home Pepe moved away from never gets a new unowned pad - its old addresses are the house pad's now
+  // (pad_slug_aliases), and a fresh pad at the old id would take /p/<old id slug> back from it
+  if (HOUSE && (HOUSE.prev || []).some((p) => p && p.id === roomId)) return;
   const want = await inheritableSlug(roomId, name);
   if (!(await ensureRow(roomId, name, want))) return;
   await loadCache();
@@ -775,9 +818,10 @@ async function frontRoom(summary, opts = {}) {
   const sees = (id) => !PA || PA.canSee(o.viewer || null, id);
   if (pin && pin !== "auto" && CACHE.byId.has(pin) && sees(pin)) return { id: pin, pinned: true };
   if (auto && auto.id && sees(auto.id)) return { id: auto.id, pinned: false };
-  if (sees(HOUSE_ROOM)) return { id: HOUSE_ROOM, pinned: false };
+  const house = houseRoom();
+  if (sees(house)) return { id: house, pinned: false };
   const alt = ((auto && auto.ranked) || []).find((r) => r && r.id && sees(r.id)) || listCached().find((r) => sees(r.id));
-  return { id: alt ? alt.id : HOUSE_ROOM, pinned: false };
+  return { id: alt ? alt.id : house, pinned: false };
 }
 /** 1.99fu: summary rows minus Approved pads (padaccess.js) - they never take part in the automatic front pick. */
 function notApproved(rows) {
@@ -909,9 +953,14 @@ module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, withSitePads, notify, followName, inheritableSlug, findUser, event,
-  hasRoute, slugify, managesAny, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
+  hasRoute, slugify, managesAny, cleanBanner, kvGet, kvSet, loadCache, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
   aliasTarget,                                                        // 1.99iy: pad addresses (padaddress.js)
   listAll, listAllCached, isListed, setListed, cleanPlatform, seedAccess,   // S1 Q4: unlisted pads (ADR 0007 D1)
+  houseRoom, houseRecord, retiredHouseRooms, isPepeHome, HOUSE_DEFAULT, BUILTIN_HOUSE_ROOMS, ROOM_ID_RE,   // 1.99?? account rotation
+  _seed: seed,                                                        // tests: the seeds again (what a restart runs)
 };
+// 1.99??: rooms.HOUSE_ROOM reads the CURRENT house room (a getter: the rotation can change it while the site runs). Nothing
+// destructures it - every caller reads the property when it needs it.
+Object.defineProperty(module.exports, "HOUSE_ROOM", { get: houseRoom, enumerable: true });

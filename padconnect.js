@@ -225,7 +225,8 @@ function bridgeRoom(name) {
 /** Can pad R (owned by ownerId) become the pad of Camfrog room `roomId`? -> null or why not. */
 async function targetProblem(R, roomId) {
   if (!ROOM_ID_RE.test(String(roomId || ""))) return "That isn't a Camfrog room id Pepe can use.";
-  if (roomId === rooms.HOUSE_ROOM || ["PepeFrog.Room", "PepeBeta.Room"].includes(roomId)) return "That's Pepe's own room.";
+  // 1.99?? (account rotation): his current house room or any earlier one (rooms.js), whatever the case typed
+  if (rooms.isPepeHome(roomId)) return "That's Pepe's own room.";
   const T = await rooms.get(roomId);
   if (!T) return null;
   if (T.id === R.id) return "This pad already is that room's pad.";
@@ -641,6 +642,6 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   }
 }
 
-module.exports = { plusRoomsForPepe, plusView, plusEnforced, needsPlus, init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire,
+module.exports = { plusRoomsForPepe, plusView, plusEnforced, needsPlus, init, register, state, current, requestCamfrog, setJoin, finishCamfrog, verifyFromPepe, pendingForPepe, checkTopics, expire, openSlots,
                    disconnect, connectTwitch, twitchOf, twitchChatHook, queueList, adminOp, newCode, cleanCode, PLATFORMS, Refuse,
                    _setClock: (fn) => { NOW = fn || (() => Date.now()); } };

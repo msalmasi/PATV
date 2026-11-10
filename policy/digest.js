@@ -46,7 +46,9 @@ const SHADOW_WAIT_S = 600;                  // Pepe's notices are pushed async: 
 const SHADOW_FINAL_S = 2 * 3600;            // ...and final this long after it (a row still missing = he sent none)
 const SHADOW_EVERY_S = 60;                  // review of PO-4: a pending audit is rebuilt at most this often (not on every 15 s pass)
 const RETRY_DAYS = 7;                       // the live retry: a site-run record with no audit, within 7 days (Pepe's rule)
-const PEPE_LOGINS = new Set(["pepefrog", "pepebeta"]);   // notify_user to his own login sends nothing but counts as sent
+// notify_user to his own login sends nothing but counts as sent. 1.99?? (account rotation): every login Pepe has had (pepelogins.js) -
+// the same set as the bot's _pepe_accounts() (known accounts + configured + former logins), so the shadow compares agree
+const PL = require("../pepelogins");
 const ALINE_MARK = " 🔎 Staking audit: ";
 
 // ── Python's formatting (exact) ──
@@ -388,7 +390,7 @@ async function notifiedOf(eid, ids) {
       try { n += Number(((await getQuery(`SELECT COUNT(*) AS n FROM ${t} WHERE ref = ?`, [ref]))[0] || {}).n || 0); } catch (e) { /* no table */ }
     }
     if (!n) {
-      try { const s = await require("../stashes").get(id); if (s && PEPE_LOGINS.has(String(s.owner || "").toLowerCase())) n = 1; } catch (e) { /* none */ }
+      try { const s = await require("../stashes").get(id); if (s && PL.has(s.owner)) n = 1; } catch (e) { /* none */ }
     }
     if (n) out[id] = true;
   }
@@ -571,4 +573,4 @@ async function recent(limit = 8) {
 
 module.exports = { auditRecord, auditNotice, digestOf, matchDigest, matchAudit, p31Base, stashPayouts, evaluate, pepeRecord, shadowAudit, afterEpoch, retryLive,
                    recent, row, init, storedBody, storedTitle, fixed, fmtG, cpLen, cpSlice, TR_WEEKLY_POOLS, TR_DAILY_POOLS, TR_VAULT_LABEL, SHADOW_WAIT_S,
-                   SHADOW_FINAL_S, RETRY_DAYS, TEXT_MAX, PEPE_LOGINS, isFinal: (eid) => finalMemo.has(eid), _forget: () => { finalMemo.clear(); pendingSig.clear(); lastEval.clear(); } };
+                   SHADOW_FINAL_S, RETRY_DAYS, TEXT_MAX, get PEPE_LOGINS() { return PL.list(); }, isFinal: (eid) => finalMemo.has(eid), _forget: () => { finalMemo.clear(); pendingSig.clear(); lastEval.clear(); } };

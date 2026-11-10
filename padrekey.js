@@ -41,8 +41,11 @@ const ROOM_BOUND = new Set([
   "evidence_clips",
   "cam_evidence",                                       // 1.99aid (privacy controls S4): stills / clips of a cam in that room (camevidence.js)
 ]);
-// feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen)
-const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:"];
+// feed_kv keys "<prefix><pad id>" (feedstore / padrules / feedautomod / pepefeed / aigen; 1.99??: the house pad's welcome post id,
+// tools/setup-pepes-pad.js)
+const FEED_KV_PREFIXES = ["room:", "rules:", "mention:", "mention_set:", "mention_at:", "automod:scope:", "pepe:scope:", "aigen_room:", "pepespad:welcome:"];
+// 1.99?? (account rotation): rooms_kv keys "<prefix><pad id>" that move with the pad (seeded: has its own rule - see rekey)
+const ROOMS_KV_PREFIXES = ["pepespad:art:"];
 
 const q = (name) => '"' + String(name).replace(/"/g, '""') + '"';
 
@@ -62,9 +65,12 @@ async function padColumns() {
 /**
  * Move pad `from` to id `to` (the registry row is the caller's job). -> {moved: {"table.column": n}}
  * Never call it with from === to.
+ * 1.99?? opts.keep: extra tables (or table.column) that stay with the Camfrog room for THIS call only - the house rotation keeps
+ * the room's evidence (bridge_spans, livecam_audit) under the old Camfrog room id (houserotate.js, D4).
  */
-async function rekey(from, to) {
+async function rekey(from, to, opts = {}) {
   if (!from || !to || from === to) throw new Error("rekey: bad ids");
+  const keep = new Set(Array.isArray(opts && opts.keep) ? opts.keep.map(String) : []);
   const moved = {};
   const note = (k, r) => { const n = (r && r.changes) || 0; if (n) moved[k] = (moved[k] || 0) + n; };
   const tables = new Set((await getQuery("SELECT name FROM sqlite_master WHERE type = 'table'")).map((r) => r.name));
@@ -75,13 +81,45 @@ async function rekey(from, to) {
   if (tables.has("pad_hub")) { const d = await HP.rekeyBefore(from, to); if (d) moved["pad_hub.displaced"] = 1; }
   for (const [t, c] of await padColumns()) {
     if (t === "follows" && c !== "target_id") continue;
+    if (keep.has(t) || keep.has(`${t}.${c}`)) continue;
     note(`${t}.${c}`, await runQuery(`UPDATE OR REPLACE ${q(t)} SET ${q(c)} = ? WHERE ${q(c)} = ?`, [to, from]));
   }
   if (tables.has("follows")) note("follows.target_id", await runQuery("UPDATE OR REPLACE follows SET target_id = ? WHERE target_kind = 'room' AND target_id = ?", [to, from]));
   if (tables.has("feed_kv")) {
     for (const p of FEED_KV_PREFIXES) note("feed_kv." + p, await runQuery("UPDATE OR REPLACE feed_kv SET key = ? WHERE key = ?", [p + to, p + from]));
   }
-  if (tables.has("rooms_kv")) note("rooms_kv.seeded", await runQuery("UPDATE OR REPLACE rooms_kv SET key = ? WHERE key = ?", ["seeded:" + to, "seeded:" + from]));
+  // 1.99?? (seeds never ghost): seeded:<from> is COPIED to seeded:<to> and itself becomes "rekeyed:<to>". rooms.seed() skips an id
+  // with any seeded: value, so a seeded pad that moved away (the house rotation, a disconnect) is never re-created at its old id.
+  if (tables.has("rooms_kv")) {
+    note("rooms_kv.seeded", await runQuery("INSERT OR REPLACE INTO rooms_kv (key, value) SELECT ?, value FROM rooms_kv WHERE key = ?", ["seeded:" + to, "seeded:" + from]));
+    await runQuery("UPDATE rooms_kv SET value = ? WHERE key = ?", ["rekeyed:" + to, "seeded:" + from]);
+    for (const p of ROOMS_KV_PREFIXES) note("rooms_kv." + p, await runQuery("UPDATE OR REPLACE rooms_kv SET key = ? WHERE key = ?", [p + to, p + from]));
+  }
+  // 1.99??: the pad's ids the generic column scan can't see (each was left behind before):
+  //   pepe_modlog.room_l     the lower-case copy the moderation log's readers filter on (pepemodlog.js) - with the moved room_id
+  //   sb_clips.board         the pad's soundboard ("room:<id>")
+  //   backend_wants.feature  the pad's casino switch wish ("casino:<id>", backends.js)
+  //   media_requests.pad_id  the pad a 📼 request came from
+  //   feed_kv aigen_prices   Pepe's per-room AI generation prices (JSON rooms.<id>) - the moving pad's price wins on a clash
+  if (tables.has("pepe_modlog") && !keep.has("pepe_modlog")) {
+    note("pepe_modlog.room_l", await runQuery("UPDATE pepe_modlog SET room_l = ? WHERE room_id = ? AND room_l = ?",
+                                              [String(to).toLowerCase(), to, String(from).toLowerCase()]));
+  }
+  if (tables.has("sb_clips")) note("sb_clips.board", await runQuery("UPDATE sb_clips SET board = ? WHERE board = ?", ["room:" + to, "room:" + from]));
+  if (tables.has("backend_wants")) note("backend_wants.feature", await runQuery("UPDATE OR REPLACE backend_wants SET feature = ? WHERE feature = ?", ["casino:" + to, "casino:" + from]));
+  if (tables.has("media_requests") && (await getQuery("PRAGMA table_info(media_requests)")).some((c) => c.name === "pad_id")) {
+    note("media_requests.pad_id", await runQuery("UPDATE media_requests SET pad_id = ? WHERE pad_id = ?", [to, from]));
+  }
+  if (tables.has("feed_kv")) {
+    const r = (await getQuery("SELECT value FROM feed_kv WHERE key = 'aigen_prices'"))[0];
+    let v = null;
+    try { v = r && r.value ? JSON.parse(r.value) : null; } catch (e) { v = null; }
+    if (v && v.rooms && typeof v.rooms === "object" && Object.prototype.hasOwnProperty.call(v.rooms, from)) {
+      v.rooms[to] = v.rooms[from];
+      delete v.rooms[from];
+      note("feed_kv.aigen_prices", await runQuery("UPDATE feed_kv SET value = ? WHERE key = 'aigen_prices'", [JSON.stringify(v)]));
+    }
+  }
   if (tables.has("feed_seen")) note("feed_seen.scope", await runQuery("UPDATE OR REPLACE feed_seen SET scope = ? WHERE scope = ?", ["pad:" + to, "pad:" + from]));
   if (tables.has("pepe_feed_log")) note("pepe_feed_log.scope", await runQuery("UPDATE pepe_feed_log SET scope = ? WHERE scope = ?", [to, from]));
   // 1.99rl: the vault's PAT follows the pad - Pepe moves pool room:<from> -> room:<to> (keyed, journaled) when he sees this
@@ -140,6 +178,8 @@ async function reloadCaches() {
   try { await require("./premium").loadCache(); } catch (e) { /* not loaded */ }      // 1.99qy: Plus / Prime Time moved with the pad
   try { await require("./chatlog").loadPadCfg(); } catch (e) { /* not loaded */ }      // CL3: the pad's chat settings moved with it
   try { await require("./cliplink").loadCache(); } catch (e) { /* not loaded */ }      // 1.99aiq cliplink: the pad's clip switch (pad_clip_cfg) too
+  // 1.99??: Pepe's AI prices may have moved a room key (feed_kv aigen_prices) - only when aigen is loaded in this process
+  try { const p = require.resolve("./aigen"); if (require.cache[p]) await require.cache[p].exports.reloadPrices(); } catch (e) { /* not loaded */ }
 }
 
-module.exports = { vaultRekeysForPepe, vaultRekeysDone, rekey, padColumns, reloadCaches, ROOM_BOUND, ROOM_COLUMNS, FEED_KV_PREFIXES };
+module.exports = { vaultRekeysForPepe, vaultRekeysDone, rekey, padColumns, reloadCaches, ROOM_BOUND, ROOM_COLUMNS, FEED_KV_PREFIXES, ROOMS_KV_PREFIXES };

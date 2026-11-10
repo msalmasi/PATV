@@ -111,6 +111,54 @@ async function nextRenameAt(user, R) {
   return last ? last + C.rename_days * DAY : 0;
 }
 
+/** 1.99??: a slug some OTHER pad holds in the database (its address or one it gave up) -> why not, or null. Unlike takenProblem
+ *  it never reads the registry cache - renameInTx runs inside transactions that re-keyed rows the cache doesn't know yet. */
+async function takenInDb(s, roomId) {
+  const a = (await getQuery("SELECT room_id FROM pad_slug_aliases WHERE slug = ?", [s]))[0];
+  if (a && a.room_id !== roomId) return "That address belonged to another pad and still points there.";
+  if ((await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ? AND room_id <> ?", [s, roomId])).length) return "Another pad already uses that address.";
+  return null;
+}
+/** The running bridge's live rooms, without loading the bridge (a tools/ script doesn't run one). */
+function loadedBridge() {
+  try { const p = require.resolve("./bridge"); return require.cache[p] ? require.cache[p].exports : null; } catch (e) { return null; }
+}
+
+/**
+ * 1.99?? (account rotation): the address change's writes, inside a transaction the CALLER holds - rename() below, and
+ * houserotate.js inside the rotation's own (after it re-keyed the pad: the pad's row is read from the database, not the cache).
+ * `raw` is folded here. The old slug becomes an alias (and the live bridge room's display-name slug, when it shows another one),
+ * one of the pad's own old slugs is taken back, slug_set = 1 + slug_changed_at = now, the per-account feed views move. The slug
+ * the pad already has counts as done ({same: true}). opts: expectSlug (refuse 409 when the pad's slug isn't this one any more -
+ * rename's check that nothing changed meanwhile), holder (takenProblem's live-bridge lookup). -> {from, to, same}; throws Refuse.
+ * Permissions and the rename limit are the caller's job.
+ */
+async function renameInTx(roomId, raw, actor, now = Date.now(), opts = {}) {
+  const row = (await getQuery("SELECT room_id, slug FROM rooms_registry WHERE room_id = ?", [roomId]))[0];
+  if (!row) throw new Refuse(404, "No such pad.");
+  if (opts.expectSlug != null && row.slug !== opts.expectSlug) throw new Refuse(409, "The pad changed while you were editing - reload and try again.");
+  const slug = fold(raw);
+  if (slug === row.slug) return { from: row.slug, to: slug, same: true };
+  const tp = { holder: typeof opts.holder === "function" ? opts.holder : (x) => { const B = loadedBridge(); return B ? bridgeHolder(x) : null; } };
+  const problem = formProblem(slug) || (await takenInDb(slug, roomId)) || (await takenProblem(slug, roomId, tp));
+  if (problem) throw new Refuse(400, problem);
+  const old = row.slug;
+  let bridgeSlug = null;
+  try { const B = loadedBridge(); const L = B && B._rooms.get(roomId); if (L && L.slug && L.slug !== old && L.slug !== slug) bridgeSlug = L.slug; } catch (e) { bridgeSlug = null; }
+  await runQuery("DELETE FROM pad_slug_aliases WHERE slug = ? AND room_id = ?", [slug, roomId]);       // taking an old slug back
+  await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [old, roomId, now, actor]);
+  if (bridgeSlug && !(await takenInDb(bridgeSlug, roomId)) && !(await takenProblem(bridgeSlug, roomId, tp))) {
+    await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [bridgeSlug, roomId, now, actor]);
+  }
+  const u = await runQuery("UPDATE rooms_registry SET slug = ?, slug_set = 1, slug_changed_at = ?, updated = ? WHERE room_id = ? AND slug = ?",
+                           [slug, now, now, roomId, old]);
+  if (!u.changes) throw new Refuse(409, "The pad changed while you were editing - reload and try again.");
+  // per-account List / Gallery choices for this pad's feed (feedgallery.js) were stored under its slug
+  const fv = await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feed_view'");
+  if (fv.length) await runQuery("UPDATE OR REPLACE feed_view SET scope = ? WHERE scope = ?", ["p/" + slug, "p/" + old]);
+  return { from: old, to: slug, same: false };
+}
+
 /** Rename pad `roomId` to `raw`. user = the account doing it (owner or staff). -> the pad (fresh view). */
 async function rename(user, roomId, raw, { now = Date.now() } = {}) {
   await rooms.init();
@@ -127,22 +175,8 @@ async function rename(user, roomId, raw, { now = Date.now() } = {}) {
   if (problem) throw new Refuse(400, problem);
   if (slug === R.slug) throw new Refuse(400, "That's already this pad's address.");
   const old = R.slug;
-  let bridgeSlug = null;
-  try { const B = require("./bridge")._rooms.get(R.id); if (B && B.slug && B.slug !== old && B.slug !== slug) bridgeSlug = B.slug; } catch (e) { bridgeSlug = null; }
   const actor = (user && user.username) || "?";
-  await require("./mainstage")._tx(async () => {
-    await runQuery("DELETE FROM pad_slug_aliases WHERE slug = ? AND room_id = ?", [slug, R.id]);       // taking an old slug back
-    await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [old, R.id, now, actor]);
-    if (bridgeSlug && !(await takenProblem(bridgeSlug, R.id))) {
-      await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [bridgeSlug, R.id, now, actor]);
-    }
-    const u = await runQuery("UPDATE rooms_registry SET slug = ?, slug_set = 1, slug_changed_at = ?, updated = ? WHERE room_id = ? AND slug = ?",
-                             [slug, now, now, R.id, old]);
-    if (!u.changes) throw new Refuse(409, "The pad changed while you were editing - reload and try again.");
-    // per-account List / Gallery choices for this pad's feed (feedgallery.js) were stored under its slug
-    const fv = await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feed_view'");
-    if (fv.length) await runQuery("UPDATE OR REPLACE feed_view SET scope = ? WHERE scope = ?", ["p/" + slug, "p/" + old]);
-  });
+  await require("./dbUtils").tx(() => renameInTx(R.id, slug, actor, now, { expectSlug: old }));
   await rooms.event(R.id, "pad-address", actor, `p/${old} -> p/${slug}${SP.can(user, "pads.manage_any") && !(R.owner && user && R.owner.userId === user.userId) ? " (site staff)" : ""}`);
   await rooms.loadCache();
   // the bridge's live room shows the chosen slug from now on (bridge.roomFor reads slug_set)
@@ -197,4 +231,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { register, fold, formProblem, takenProblem, check, rename, nextRenameAt, aliasesOf, RESERVED, MIN_LEN, MAX_LEN, Refuse };
+module.exports = { register, fold, formProblem, takenProblem, takenInDb, check, rename, renameInTx, nextRenameAt, aliasesOf, RESERVED, MIN_LEN, MAX_LEN, Refuse };

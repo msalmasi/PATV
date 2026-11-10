@@ -13,7 +13,7 @@
 //
 // 1.99qy (the user's model): Plus is what puts Pepe in a Camfrog room, and he can be in 5 rooms, so at most
 // ptplus_max_rooms (default 5) pads have Plus at once - comps included. These comps take spots:
-//   Pepe's Pad      (PepeFrog.Room)                                        no end date   (Pepe's own room)
+//   the house pad   (rooms.houseRoom(): The_Swamp since 11-10, PepeFrog.Room before)  no end date   (Pepe's own room)
 //   Houseplants     (plant_based_chatting)                                 3 periods (90 days) (the user, 2026-10-11)
 //   PepeLab         (PepeBeta.Room)                                        no end date   only where Pepe sits in it (bridged
 //                                                                                        in the last 14 days = staging)
@@ -48,8 +48,9 @@ const day = (ms) => (ms ? new Date(ms).toISOString().slice(0, 10) : "-");
   const since = Date.now() - BRIDGED_DAYS * 86400000;
   const bridged = await getQuery("SELECT id, name, updated FROM bridge_rooms WHERE updated >= ? ORDER BY updated DESC", [since]).catch(() => []);
   const TARGETS = [
-    { pad: "PepeFrog.Room", mode: "lifetime", label: "Pepe's Pad" },
-    ...(bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
+    // 1.99?? (account rotation): Pepe's own room is the house room, whatever it is called now
+    { pad: rooms.houseRoom(), mode: "lifetime", label: ((rooms.getCached(rooms.houseRoom()) || {}).title) || "Pepe's home pad" },
+    ...(rooms.houseRoom() !== "PepeBeta.Room" && bridged.some((b) => b.id === "PepeBeta.Room") ? [{ pad: "PepeBeta.Room", mode: "lifetime", label: "PepeLab" }] : []),
     // 1.99rl / 1.99ru: the user (2026-10-11) - Houseplants gets Plus for 3 months, like players-lounge and DRAMA_CENTRAL
     { pad: "plant_based_chatting", mode: "periods", n: 3, label: "Houseplants" },
     { pad: "players-lounge", mode: "periods", n: 3, label: "Players__lounge" },

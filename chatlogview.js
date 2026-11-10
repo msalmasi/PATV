@@ -775,6 +775,24 @@ function inputsOf(padId) {
            pad: reg && reg.created ? "p" + reg.created : null,
            owner: reg && reg.owner && reg.owner.userId ? String(reg.owner.userId) : null, tier: padTier(id), cfg: c, reg, level };
 }
+/** 1.99?? (account rotation): houserotate.js moved a room's archive row (chatlog_rooms.room_id + chatlog_meta tier:<id>) to the
+ *  house pad's new Camfrog room id in its transaction - the caches follow (the row, its tier, a pending opening, the archive's
+ *  room -> rk map), and the per-viewer answer caches start again. Nothing is written. */
+function moveRoom(from, to) {
+  const a = String(from || ""), b = String(to || "");
+  if (!a || !b || a === b) return false;
+  for (const M of [ROWS, TIERS, OPENS]) {
+    if (!M.has(a)) continue;
+    const v = M.get(a);
+    M.delete(a);
+    M.set(b, v);
+  }
+  const r = ROWS.get(b);
+  if (r) r.room_id = b;
+  try { CL.moveRk(a, b); } catch (e) { /* an older chatlog.js */ }
+  for (const m of Object.values(CACHE)) m.clear();
+  return true;
+}
 /** The hooks (rooms.setOwner / seeding, padaccess.setLevel, pad connect / disconnect, the settings routes): move the watermarks
  *  at the moment of change. Never throws. opts.newPad: the room got a different pad. CL3 fix-up: the registry is loaded first
  *  (an unloaded cache would read as "no pad, no owner" and record that). */
@@ -1761,4 +1779,5 @@ module.exports = {
   _setAttested: (f) => { attestedFn = f || null; CACHE.att.clear(); },
   _bumpNames: () => { NAMES_V++; },
   _clearCaches: () => { for (const m of Object.values(CACHE)) m.clear(); },
+  moveRoom,                                           // 1.99?? account rotation (houserotate.js)
 };

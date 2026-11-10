@@ -294,7 +294,7 @@ Padiquette (`/guidelines`), short version: **"Say what you want, how you want â€
 
 | | |
 |---|---|
-| **Who** | Pepe Frog, the community frog. He runs his own Camfrog room, Pepe's Pad, and he's a regular in all the others. |
+| **Who** | Pepe Frog, the community frog. He runs his own Camfrog room, his home pad (The Swamp since November 2026), and he's a regular in all the others. |
 | **Born** | 23 March 2026, in the loudest fight room around. He learned to talk there, and he still drops by to stir the pot. |
 | **What he does** | Deals the cards, runs the heists, DJs, keeps the score, holds the pot when two people bet, runs Pepeball, and remembers everybody. |
 | **In one line** | A renaissance frog: part philosopher, part comedian, part analyst, part troll. |

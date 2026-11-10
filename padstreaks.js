@@ -34,7 +34,10 @@ const BACKFILL_FLAG = "padstreak_backfill_1";       // the history import
 const QUIET_FLAG = "padstreak_quiet_2";             // 1.99zx: the quiet badge pass - again for the 60-day tier (+ PAT from then on)
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ROOM_RE = /^[A-Za-z0-9_.:\-]{1,120}$/;
-const PEPE_LOGINS = new Set(["pepefrog", "pepebeta", "pepe", "pepebot"]);
+// 1.99?? (account rotation): Pepe's Camfrog logins (pepelogins.js: every one he has had) + the names his site accounts use
+const PL = require("./pepelogins");
+const PEPE_NAMES = ["pepe", "pepebot"];
+const isPepeLogin = (l) => PL.has(l) || PEPE_NAMES.includes(String(l || "").toLowerCase());
 const MILESTONES = [7, 30, 60, 100];
 const METRIC_PAD = "pad_streak", METRIC_REG = "pad_regular_streak";
 const DEFAULTS = Object.freeze({ min_users: 3 });
@@ -79,7 +82,7 @@ async function fromParticipation(rows, { live = true } = {}) {
     const room = String((x && (x.room || x.room_id)) || "");
     const day = String((x && x.day) || "");
     const login = String((x && x.login) || "").toLowerCase();
-    if (!ROOM_RE.test(room) || !DAY_RE.test(day) || !login || PEPE_LOGINS.has(login)) continue;
+    if (!ROOM_RE.test(room) || !DAY_RE.test(day) || !login || isPepeLogin(login)) continue;
     if (!((Number(x.lines) || 0) > 0 || (Number(x.mic_min) || 0) > 0)) continue;
     if (live) {
       const t = ST().dn(today()), n = ST().dn(day);
@@ -94,8 +97,9 @@ async function fromParticipation(rows, { live = true } = {}) {
   for (const [k] of byPad) {
     const [room, day] = k.split("|");
     // the whole day's distinct people from everything the site has for it (a sync carries only the rows that changed)
+    const notPepe = PL.sqlIn(PEPE_NAMES);
     const r = (await getQuery(`SELECT COUNT(DISTINCT login) AS n FROM econ_participation WHERE room_id = ? AND day = ? AND (lines > 0 OR mic_min > 0)
-                               AND login NOT IN ('pepefrog', 'pepebeta', 'pepe', 'pepebot')`, [room, day]).catch(() => []))[0];
+                               AND login NOT IN ${notPepe.sql}`, [room, day, ...notPepe.params]).catch(() => []))[0];
     const n = Math.max(Number(r && r.n) || 0, byPad.get(k).size);
     await runQuery(`INSERT INTO pad_days (room_id, day, users, src) VALUES (?, ?, ?, 'chat') ON CONFLICT(room_id, day)
                     DO UPDATE SET users = MAX(users, excluded.users)`, [room, day, n]);
@@ -123,7 +127,8 @@ async function fromParticipation(rows, { live = true } = {}) {
 let pepeIds = null;
 function isPepe(id) { return String(id) === "pepe-bot" || !!(pepeIds && pepeIds.has(String(id))); }
 async function loadPepe() {
-  const r = await getQuery("SELECT userId FROM users WHERE LOWER(username) IN ('pepe', 'pepebot', 'pepebeta') OR LOWER(camfrogUsername) IN ('pepe', 'pepebot', 'pepebeta', 'pepefrog')").catch(() => []);
+  const cf = PL.sqlIn(PEPE_NAMES);
+  const r = await getQuery(`SELECT userId FROM users WHERE LOWER(username) IN ('pepe', 'pepebot', 'pepebeta') OR LOWER(camfrogUsername) IN ${cf.sql}`, cf.params).catch(() => []);
   pepeIds = new Set(["pepe-bot", ...r.map((x) => String(x.userId))]);
 }
 

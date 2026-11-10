@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // tools/setup-pepes-pad.js — 1.99wq: dress Pepe's own pad as the SHOWCASE pad - every pad feature, set up the way we'd tell an
-// owner to - so other owners have an example to copy. Prod: PepeFrog.Room (Pepe's Pad). Staging: PepeBeta.Room (PepeLab).
+// owner to - so other owners have an example to copy. The house pad: prod The_Swamp ("The Swamp"; PepeFrog.Room "Pepe's Pad" until
+// the 2026-11-10 account rotation), staging PepeBeta.Room (PepeLab). 1.99??: the pad's NAME comes from its registry title (the
+// rotation - houserotate.js - sets it), never from this script.
 //
 //   node tools/setup-pepes-pad.js --actor=<site admin>                       DRY RUN (default): what would change, nothing written
 //   node tools/setup-pepes-pad.js --actor=<site admin> --apply               a DB backup first (dbbackup.js), then apply
 //        [--dir=<site dir>]      the directory with the site's myapp.db + .env (default: the current directory)
-//        [--pad=<room id>]       default rooms.HOUSE_ROOM (PepeBeta.Room with STAGING=1, else PepeFrog.Room); must be a HOUSE pad
+//        [--pad=<room id>]       default rooms.houseRoom() (the house room the rotation set; else PepeBeta.Room with STAGING=1,
+//                                else PepeFrog.Room); must be a HOUSE pad
 //        [--skip=a,b]            leave steps out (names below)
 //
 // Run it as the site's own user with the site's environment (STAGING, PAD_DIR ...), from the site directory, so the pictures
@@ -13,7 +16,7 @@
 // running process (padlook / padaccess load them at start).
 //
 // Steps - each reads the current value first and only writes what differs (running it twice changes nothing):
-//   page       title (Pepe's Pad on PepeFrog.Room; other house pads keep theirs) + description (with the links)
+//   page       description (with the links); the title is the pad's own (1.99??: the rotation sets it)
 //   rules      the pad's intro + house rules (padrules.js)
 //   look       avatar + banner (tools/pepespad/*.png, drawn by tools/gen-pepespad-art.py) + the frog accent (padlook.js)
 //   plus       💎 Prime Time Plus, comped with no end date when the pad doesn't have it (comps.compPremium: free, audited; no PAT)
@@ -23,7 +26,9 @@
 //   soundboard a starter set of TTS clips on the pad's board (Pepe renders them) (soundboards.addRoomClip)
 //   pepe       Pepe on the pad's page: his posts (every kind, 5 a day), flair + tags, comments, replies, announcements, automod
 //   access     Public (padaccess.js)
-//   welcome    Pepe's pinned welcome post explaining the pad (feedstore.create as Pepe, free; pinned with roomMod)
+//   welcome    Pepe's pinned welcome post explaining the pad (feedstore.create as Pepe, free; pinned with roomMod). 1.99??: found
+//              again by the id stored when it was posted (feed_kv pepespad:welcome:<pad id>; it moves with the pad), so a rename
+//              never makes a second one
 // Never touches another pad, never charges PAT (no buy / top-up path is used anywhere).
 "use strict";
 const path = require("path");
@@ -48,8 +53,9 @@ const DESCRIPTION = [
   "Pepe's own pad - the house room of PATV. Pepe runs the games, posts the news, recaps the night and keeps the stage going.",
   "Casino: /casino · Markets: /markets · Pepeball: /lotto · Grand Theft Frogger: /gtf · Stickers: /stickers · Help: /help",
 ].join("\n");
-const RULES = {
-  intro: "Pepe's Pad is the house room: loud, friendly and a bit unhinged. Have fun - just don't make it worse for anyone else. Padiquette applies on top of these.",
+// 1.99??: the intro names the pad by its registry title (rulesFor(title))
+const rulesFor = (title) => ({
+  intro: `${title} is the house room: loud, friendly and a bit unhinged. Have fun - just don't make it worse for anyone else. Padiquette applies on top of these.`,
   rules: [
     { title: "Be a good roommate", desc: "Roasts and banter are welcome; harassment, slurs aimed at people and pile-ons aren't. If someone asks you to stop, stop." },
     { title: "Flair your post", desc: "Pick the flair that fits (📰 News, 🎰 Casino, 🔮 Markets ...) so people can filter the feed. Mods may change it." },
@@ -59,7 +65,7 @@ const RULES = {
     { title: "Private stays private", desc: "No screenshots of DMs, no personal info about anyone (real names, addresses, jobs) without their OK." },
     { title: "Pepe is a bot", desc: "Pepe posts and comments with a 🤖 badge. Mute him on a thread with the post's menu; tell a mod if he gets something wrong." },
   ],
-};
+});
 const POST_FLAIRS = [
   { name: "News", emoji: "📰", color: "#2196f3" },
   { name: "Casino", emoji: "🎰", color: "#ffcf40" },
@@ -94,7 +100,7 @@ const SOUNDBOARD = [
 ];
 const PEPE_SITE = [["feed", true], ["posts", true], ["posts_per_day", 5], ["labels", true], ["announce", true], ["replies", true],
                    ["comments", true], ["comment_rate", "normal"], ["automod", true], ["automod_level", "standard"]];
-const WELCOME_TITLE = "👋 Welcome to Pepe's Pad - start here";
+const welcomeTitle = (title) => `👋 Welcome to ${title} - start here`;       // 1.99??: the pad's registry title
 const welcomeBody = (slug, tags) => [
   "This is my pad - the house room of PATV, and the example pad for every owner. Everything a pad can do is switched on here, so have a look around:",
   "",
@@ -130,7 +136,7 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
   if (!R0.house) throw new Error(`${padId} isn't a house pad - this script only dresses Pepe's own pads`);
   console.log(`${APPLY ? "APPLY" : "DRY RUN"} · pad ${R0.title} [${R0.id}] p/${R0.slug} · as ${admin.username} · STAGING=${process.env.STAGING ? 1 : 0} · ${DIR}`);
   if (APPLY) {
-    const file = await M("dbbackup").backupDb("pepes-pad");
+    const file = await M("dbbackup").backupDb("setup-" + R0.slug);
     console.log(`backup: ${file}`);
   }
   const step = (n) => !SKIP.has(n);
@@ -138,7 +144,6 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
   // ── page ──
   if (step("page")) {
     const want = { description: DESCRIPTION };
-    if (R0.id === "PepeFrog.Room") want.title = "Pepe's Pad";
     const diff = Object.keys(want).filter((k) => (R0[k] || "") !== want[k]);
     if (diff.length) { plan("page", diff.map((k) => `${k} -> ${fmt(want[k])}`).join(", ")); if (APPLY) await rooms.setPage(R0.id, want, admin.username + " (setup)"); }
     else same("page", "title + description");
@@ -147,6 +152,7 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
   if (step("rules")) {
     const PR = M("padrules");
     const cur = await PR.get(R0.id);
+    const RULES = rulesFor(R0.title);
     const want = PR.clean(RULES);
     const norm = (x) => JSON.stringify({ intro: (x && x.intro) || "", rules: ((x && x.rules) || []).map((r) => [r.title, r.desc]) });
     if (norm(cur) !== norm(want)) { plan("rules", `intro + ${want.rules.length} rules`); if (APPLY) await PR.set(admin, R0.id, RULES); }
@@ -181,7 +187,7 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
     if (sub && Date.now() < P.endsAt(sub)) same("plus", `Prime Time Plus ${P.statusOf(sub)}${sub.comped ? " (comped)" : ""}`);
     else {
       plan("plus", "comp 💎 Prime Time Plus with no end date (free, admin audit)");
-      if (APPLY) { await M("comps").compPremium(admin, { tier: "prime_plus", pad: R0.id, mode: "lifetime", reason: "Pepe's Pad showcase (setup-pepes-pad.js)" }); await P.loadCache(); }
+      if (APPLY) { await M("comps").compPremium(admin, { tier: "prime_plus", pad: R0.id, mode: "lifetime", reason: `p/${R0.slug} showcase (setup-pepes-pad.js)` }); await P.loadCache(); }
     }
   }
   // ── cosmetics (perk items only) ──
@@ -287,8 +293,13 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
     const body = welcomeBody(R.slug, PAD_TAGS);
     const flair = "Announcement";
     const tags = ["news", "stage", "casino"];
-    const ex = (await getQuery("SELECT id, body FROM feed_posts WHERE author_id = ? AND home_pad = ? AND title = ? AND deleted_at IS NULL ORDER BY created LIMIT 1",
-                               [acct.userId, R0.id, WELCOME_TITLE]))[0];
+    const WELCOME_TITLE = welcomeTitle(R.title);
+    // 1.99??: the post this script made (its id stored when it posted), else the one with this title (posted before the id was kept)
+    const KEY = "pepespad:welcome:" + R0.id;
+    const storedId = await store.kvGet(KEY);
+    let ex = storedId ? (await getQuery("SELECT id, title, body FROM feed_posts WHERE id = ? AND author_id = ? AND deleted_at IS NULL", [storedId, acct.userId]))[0] : null;
+    if (!ex) ex = (await getQuery("SELECT id, title, body FROM feed_posts WHERE author_id = ? AND home_pad = ? AND title = ? AND deleted_at IS NULL ORDER BY created LIMIT 1",
+                                  [acct.userId, R0.id, WELCOME_TITLE]))[0];
     let id = ex ? ex.id : null;
     if (!ex) {
       plan("welcome", `Pepe posts "${WELCOME_TITLE}" (📣 Announcement, #${tags.join(" #")})`);
@@ -297,10 +308,11 @@ const same = (step, what) => console.log(`  = ${step}: ${what}`);
         const p = await store.create(acct.userId, { title: WELCOME_TITLE, body, community: R0.id, nsfw: false, announce: [], tags, flair }, { free: true });
         id = p.id;
       }
-    } else if (ex.body !== body) {
-      plan("welcome", "update the welcome post's text");
+    } else if (ex.body !== body || ex.title !== WELCOME_TITLE) {
+      plan("welcome", "update the welcome post's title / text");
       if (APPLY) await store.edit({ userId: acct.userId }, ex.id, { title: WELCOME_TITLE, body, tags, flair });
     } else same("welcome", `post ${ex.id}`);
+    if (id && APPLY && String(storedId || "") !== String(id)) await store.kvSet(KEY, id);
     if (id) {
       const pin = (await getQuery("SELECT pinned_at FROM feed_post_rooms WHERE post_id = ? AND room_id = ?", [id, R0.id]))[0];
       if (!pin || !pin.pinned_at) { plan("welcome", "pin it"); if (APPLY) await store.roomMod(admin, R0.id, "pin", { post: id }); }

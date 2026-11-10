@@ -203,7 +203,12 @@ const RULES = {
   // 1.99th: a Plus spot held for an open card checkout - the payer moves with the account; target is a pad (room) id
   "premium_plus_holds.user_id": M(), "premium_plus_holds.target": { deny: "a pad (room) id, not a userId" },
   "pad_vault_rekeys.from_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
-  "pad_vault_rekeys.to_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },          // 1.99qy: the 💎 Plus waitlist (one row per account)
+  "pad_vault_rekeys.to_id": { deny: "a pad id (1.99rl vault re-keys), not a userId" },
+  // 1.99?? (account rotation, houserotate.js): the house pad's moves - room ids, an actor label (pepe / cli:<user>) and a journal row id
+  "house_rotations.from_id": { deny: "a Camfrog room id (the house pad's old id), not a userId" },
+  "house_rotations.to_id": { deny: "a Camfrog room id (the house pad's new id), not a userId" },
+  "house_rotations.actor": { deny: "an actor label (pepe / cli:<user>), not a userId" },
+  "house_rotations.restored_by": { deny: "the house_rotations row id of the undo, not a userId" },          // 1.99qy: the 💎 Plus waitlist (one row per account)
   // 1.99iw stickers.js: packs owned (both own a pack: one row stays)
   "user_sticker_packs.user_id": M({ key: ["pack_id"] }), "user_sticker_packs.payer_id": M(),
   // 1.99qw likeness.js: opt-outs (both have a row: the more private setting wins), the cuts follow both sides, a freeze

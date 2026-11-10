@@ -168,6 +168,8 @@ async function loadPrices() {
   if (!PRICES || typeof PRICES !== "object") PRICES = { global: {}, rooms: {}, at: 0 };
   return PRICES;
 }
+/** 1.99??: re-read the prices (padrekey.js moved a room key in feed_kv aigen_prices). */
+async function reloadPrices() { PRICES = null; return loadPrices(); }
 const cleanPrice = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : null);
 let roomCmds = (roomId) => { try { const B = require("./bridge")._rooms.get(roomId); return (B && B.cmds) || {}; } catch (e) { return {}; } };
 function _setRoomCmds(fn) { roomCmds = fn; }
@@ -891,7 +893,7 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
   }
 }
 
-module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, sweep, mine, pricesFor, refusal, view,
+module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, reloadPrices, sweep, mine, pricesFor, refusal, view,
                    refPriceFor, roomStart, roomGenOn, setRoomGen, optedOut, setOptOut, DEFAULT_SURCHARGE, ROOM_PEPE_PER_DAY, REF_MAX_PX,
                    camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, camList, claimCamRef, camMember, veiledRefOk, _setBridge, CAMREF_TTL,
                    _camRefs: camRefs, _camJobFrames: camJobFrames, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse,
