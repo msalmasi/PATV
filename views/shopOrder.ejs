@@ -51,6 +51,7 @@
   <% } %>
 
   <div class="sd-card">
+    <% if (o.delivery === 'collectible' && o.official && o.status === 'completed') { %><p class="sd-deliv" style="margin:0"><span aria-hidden="true">✓</span> <span><%- t('shop.orders.deliv_collectible') %></span></p><% } %>
     <% if (role === 'gifter') { %><p class="muted" style="margin:0"><%- t('shop.order.gift_private', { name: t.esc(o.buyer_name || '?') }) %></p><% } %>
     <% if (role === 'fulfiller') { %><p class="muted" style="margin:0"><span class="ds-ic" aria-hidden="true">🛎️</span> <%- t('shop.order.fulfiller_note') %><% if (o.buyer_name) { %> <a href="/messages/new?to=<%= encodeURIComponent(o.buyer_name) %>"><%- t('shop.order.fulfiller_msg', { name: t.esc(o.buyer_name) }) %></a><% } %></p><% } %>
     <% if (o.seller_note && role !== 'gifter' && role !== 'fulfiller' && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>

@@ -2,6 +2,8 @@
 // Fixed clocks only (each test on its own New York day): the fixed and % modes, the supply frozen at the day's start, open
 // checkouts reserved, the partial-fit offer + "full for today", the webhook race credited and flagged, the crypto hold, the
 // USD cap, and all three limits together (per-member limit, promo cap, global cap).
+// 1.99ans (no PAT for dollars, nopat.js): a donation mints 0 PAT, so the PAT caps never fill and the USD cap does the limiting;
+// promos are retired - the tests below are the USD cap, the race, the crypto hold, and the member limit with it.
 //   NODE_PATH=<a PATV node_modules with @noble/curves> node --test test/donation-global.test.js
 "use strict";
 const test = require("node:test");
@@ -63,101 +65,84 @@ test.before(async () => {
   DP._setSupply(async () => 1000000000);
 });
 
-test("fixed mode: open checkouts are reserved, a partial fit is offered, then 'full for today'; a new day reopens", async () => {
+// 1.99ans (no PAT for dollars, nopat.js): a donation mints 0 PAT, so the PAT caps (fixed / % of supply) can never fill; the
+// USD cap is what limits a day's donations now.
+test("1.99ans: the PAT caps can never fill - a donation mints nothing; nobody is credited PAT", async () => {
   now = NOON(0);
-  await settings({ global_mode: "fixed", global_pat: 6000000 });             // = $20 a day at 300k minted per $1
-  assert.deepEqual(await DP.globalPublic(), { on: true, full: false, pct_left: 100, resets_at: START(1), tz: "America/New_York" });
-  await SB.donate(user("ann"), { usd: 15 });                                 // open: 4.5M reserved
-  assert.equal((await DP.globalPublic()).pct_left, 25);
+  await settings({ global_mode: "fixed", global_pat: 6000000 });
+  for (const [u, usd] of [["ann", 15], ["bob", 10], ["cy", 5]]) await SB.donate(user(u), { usd });
+  assert.equal((await DP.globalPublic()).full, false);
+  const A = await DP.globalAdmin();
+  assert.deepEqual([A.cap_pat, A.used_pat, A.left_pat], [6000000, 0, 6000000]);
+  assert.deepEqual(await DP.quote("u-dee", 10).then((q) => [q.pat, q.bonus, q.global.fits]), [0, 0, true]);
+  now = START(2) + 1000;
+  await settings({ global_mode: "pct", global_pct: 0.5 });
+  assert.equal(await DP.ensureFrozen(now), 1000000000, "the % cap still freezes its base");
+  now = NOON(2);
+  await SB.handleEvent(paidEv("evt_p1", "dee", 1500, "cs_p1", now));
+  assert.equal((await DP.globalAdmin()).used_pat, 0);
+  assert.equal(await bal("dee"), 0, "no PAT for dollars");
+});
+
+test("the USD cap: open checkouts are reserved, a partial fit is offered, then 'full for today'; a new day reopens", async () => {
+  now = NOON(7);
+  await settings({ global_usd: 30 });
+  assert.equal((await DP.globalPublic()).pct_left, 100);
+  await SB.donate(user("ann"), { usd: 25 });
   await assert.rejects(SB.donate(user("bob"), { usd: 10 }), (e) => e.status === 409 && /room for \$5 more - you can donate up to \$5/.test(e.message));
   const q = await DP.quote("u-bob", 10);
   assert.deepEqual(q.global, { on: true, fits: false, max_usd: 5 });
-  assert.equal(sess, 1, "no Stripe session for the refused one");
   await SB.donate(user("bob"), { usd: 5 });
   await assert.rejects(SB.donate(user("cy"), { usd: 1 }), /Donations are full for today; they reopen at midnight New York time/);
   assert.equal((await DP.globalPublic()).full, true);
   const A = await DP.globalAdmin();
-  assert.deepEqual([A.cap_pat, A.used_pat, A.left_pat], [6000000, 6000000, 0]);
-  now = START(1);
+  assert.deepEqual([A.cap_cents, A.used_cents, A.left_cents, A.used_pat], [3000, 3000, 0, 0]);
+  now = START(8);
   assert.equal((await DP.globalPublic()).full, false, "midnight New York reopens it");
 });
 
-test("% mode: the cap is a % of the supply FROZEN at the day's start - it doesn't drift that day", async () => {
-  now = START(2) + 1000;                                                    // 00:00:01 - the minute timer's first look
-  await settings({ global_mode: "pct", global_pct: 0.5 });
-  DP._setSupply(async () => 1000000000);
-  assert.equal(await DP.ensureFrozen(now), 1000000000);
-  DP._setSupply(async () => 3000000000);                                    // supply grows during the day
-  now = NOON(2);
-  assert.equal((await DP.globalCaps(now)).pat, 5000000, "0.5% of the frozen 1B, not of 3B");
-  assert.equal((await DP.globalAdmin()).supply, 1000000000);
-  await SB.handleEvent(paidEv("evt_p1", "dee", 1500, "cs_p1", now));       // $15 -> 4.5M of 5M
-  await assert.rejects(SB.donate(user("eli"), { usd: 2 }), /room for \$1 more/);
-  now = NOON(3);
-  assert.equal((await DP.globalCaps(now)).pat, 15000000, "the next day freezes the new supply (0.5% of 3B)");
-  DP._setSupply(async () => 1000000000);
-});
-
-test("the webhook race: paid checkouts over the cap are credited (the money is taken), flagged and counted", async () => {
+test("the webhook race over the USD cap: counted (the money is taken) and flagged - and still no PAT", async () => {
   now = NOON(4);
-  await settings({ global_mode: "fixed", global_pat: 3000000 });            // $10
+  await settings({ global_usd: 10 });
   await SB.handleEvent(paidEv("evt_r1", "fox", 800, "cs_r1", now));
   const r = await SB.handleEvent(paidEv("evt_r2", "gil", 500, "cs_r2", now + 1000));
-  assert.equal(r.outcome, "donation-credited");
-  assert.equal(await bal("gil"), 1250000);
+  assert.equal(r.outcome, "donation-perks");
+  assert.equal(await bal("gil"), 0);
   const rows = await getQuery("SELECT ref, over_global, pat FROM donation_usd_log WHERE ref IN ('don-evt_r1','don-evt_r2') ORDER BY ref");
-  assert.deepEqual(rows.map((x) => [x.ref, x.over_global, x.pat]), [["don-evt_r1", 0, 2400000], ["don-evt_r2", 1, 1500000]]);
+  assert.deepEqual(rows.map((x) => [x.ref, x.over_global, x.pat]), [["don-evt_r1", 0, 0], ["don-evt_r2", 1, 0]]);
   const A = await DP.globalAdmin();
-  assert.equal(A.used_pat, 3900000, "counted"); assert.ok(A.flagged_count >= 1);
+  assert.equal(A.used_cents, 1300, "counted"); assert.ok(A.flagged_count >= 1);
   assert.equal((await SB.handleEvent(paidEv("evt_r2", "gil", 500, "cs_r2", now + 1000))).outcome, "dup");
-  assert.equal((await DP.globalAdmin()).used_pat, 3900000, "a retry never counts twice");
+  assert.equal((await DP.globalAdmin()).used_cents, 1300, "a retry never counts twice");
 });
 
-test("crypto over the global cap is held (global_daily_limit, donor told); approve credits it at the seen-time terms", async () => {
+test("crypto over the USD cap is held (global_daily_limit, donor told); approve counts it on the seen day - no PAT", async () => {
   now = NOON(5);
-  await settings({ global_mode: "fixed", global_pat: 3000000 });
-  await SB.handleEvent(paidEv("evt_c1", "hal", 900, "cs_c1", now));       // 2.7M of 3M
+  await settings({ global_usd: 10 });
+  await SB.handleEvent(paidEv("evt_c1", "hal", 900, "cs_c1", now));
   const id = await cryptoPay("hal", 500, now + 60000);
   assert.equal(await CP.settle(id), "held");
   const p = (await getQuery("SELECT status, hold_reason FROM crypto_payments WHERE id = ?", [id]))[0];
   assert.deepEqual([p.status, p.hold_reason], ["held", "global_daily_limit"]);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u-hal' AND ref LIKE 'cglobal-%'"))[0].n, 1);
   assert.equal((await DP.globalAdmin()).crypto_held, 1);
-  now = NOON(6);                                                            // approved the next day - still the seen day's terms
+  now = NOON(6);
   assert.equal((await CP.decide(id, "approve", "admin")).status, "credited");
-  assert.equal(await bal("hal"), 2250000 + 1250000);
-  const l = (await getQuery("SELECT over_global, paid_at FROM donation_usd_log WHERE ref = (SELECT claim_id FROM crypto_payments WHERE id = ?)", [id]))[0];
-  assert.equal(l.over_global, 1, "counted on the day it was seen, flagged");
-  assert.equal(l.paid_at, NOON(5) + 60000);
+  assert.equal(await bal("hal"), 0, "no PAT for dollars");
+  const l = (await getQuery("SELECT over_global, paid_at, pat FROM donation_usd_log WHERE ref = ?", [CP.claimIdOf(id)]))[0];
+  assert.deepEqual([l.over_global, l.paid_at, l.pat], [1, NOON(5) + 60000, 0], "counted on the day it was seen, flagged");
 });
 
-test("the USD cap alone (mode off): whichever is hit first", async () => {
-  now = NOON(7);
-  await settings({ global_usd: 30 });
-  await SB.donate(user("ann"), { usd: 25 });
-  await assert.rejects(SB.donate(user("bob"), { usd: 10 }), /room for \$5 more/);
-  // and with a PAT cap that binds earlier
-  await settings({ global_usd: 30, global_mode: "fixed", global_pat: 7800000 }); // 7.5M used by the open $25 -> $1 fits
-  await assert.rejects(SB.donate(user("bob"), { usd: 5 }), /room for \$1 more/);
-});
-
-test("all three together: the per-member limit, the promo cap and the global cap each apply", async () => {
-  now = NOON(8);
-  // promo 500k per $1 (2x), first $10 per donor; member limit $50/day; global 14M PAT
-  await settings({ daily_limit_usd: 50, global_mode: "fixed", global_pat: 14000000 });
-  const P = await DP.create(ADMIN, { mode: "rate", rate: 500000, cap_usd: 10, starts: now, ends: now + 3600e3 });
-  // $40: $10 at 500k + $30 at 250k = 12.5M to the donor + 20% of the normal 7.5M = 1.5M bonus -> 14M minted
-  const q = await DP.quote("u-eli", 40);
-  assert.deepEqual([q.pat, q.bonus, q.promo_cents, q.limit.over, q.global.fits], [12500000, 1500000, 1000, false, true]);
+test("the per-member limit and the USD cap both apply", async () => {
+  now = NOON(9);
+  await settings({ daily_limit_usd: 50, global_usd: 60 });
   await assert.rejects(SB.donate(user("eli"), { usd: 51 }), /donate \$50 more today/, "the member limit first");
   await SB.donate(user("eli"), { usd: 40 });
   await assert.rejects(SB.donate(user("eli"), { usd: 11 }), /donate \$10 more today/, "member: $10 left");
-  await assert.rejects(SB.donate(user("fox"), { usd: 1 }), /Donations are full for today/, "global: 14M reserved");
+  await assert.rejects(SB.donate(user("fox"), { usd: 21 }), /room for \$20 more/, "global: $40 of $60 reserved");
   await SB.handleEvent(paidEv("evt_all", "eli", 4000, lastSession, now));
-  assert.equal(await bal("eli"), 12500000);
-  const A = await DP.globalAdmin();
-  assert.equal(A.used_pat, 14000000);
-  await DP.end(ADMIN, P.id);
+  assert.equal(await bal("eli"), 0);
+  assert.equal((await DP.globalAdmin()).used_cents, 4000);
 });
 
 test("settings are validated and audit-logged", async () => {

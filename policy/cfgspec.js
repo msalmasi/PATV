@@ -168,6 +168,8 @@ for (const [v, label] of [["bank", "Bank (player loans)"], ["house", "House (pay
   P("flash_" + v, "flash", "Fed flash liquidity: " + label, true, { kind: "bool", unit: "bool" });
 }
 P("grant_weekly_cap", "grants", "Staff PAT grants: weekly cap (paid from incentives)", UNLIMITED, { kind: "cap", suffix: "PAT/week" });
+// 1.99ans: NOT applied - donations give supporter perks, never PAT (nopat.js: a hard rule, not this setting). Kept because the
+// econ_cfg key set and its labels are Pepe's (ECON_KEYS order; test/policy-config-vectors.test.js).
 P("donation_rate", "donation", "Donations: PAT minted per $1", 500000, { min: 1, max: 1000000000, suffix: "PAT/$" });
 P("donation_bonus_pct", "donation", "Donations: extra % minted into incentives", 20.0, { max: 100, kind: "pct", unit: "pct", suffix: "%" });
 P("staker_share_pct", "waterfall", "Waterfall: stakers' share of the surplus", 20.0, Object.assign({ max: 100, kind: "pct", unit: "pct", suffix: "%" }, NEXT));

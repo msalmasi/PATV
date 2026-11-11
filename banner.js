@@ -78,20 +78,14 @@ const DEFAULT_PROMOS = Object.freeze([
 
 let NOW = () => Date.now();
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
-/** 1.99kz: the Support PATV promo's numbers ({rate} PAT per $1, {bonus}% to the community pot), or null while neither
- *  card (Stripe) nor stablecoin donations are on - /support would 404 then. */
+/** 1.99kz: the Support PATV promo is shown ({} = on, no numbers), or null while neither card (Stripe) nor stablecoin
+ *  donations are on - /support would 404 then. 1.99ans: no "{rate} PAT per $1", no pot bonus, no donation promo - a
+ *  donation gives supporter perks, never PAT (nopat.js). */
 let supportTerms = () => {
   let on = false;
   try { on = require("./cryptopay").enabled(); } catch (e) { on = false; }
   if (!on) { try { on = require("./stripebilling").enabled(); } catch (e) { on = false; } }
-  if (!on) return null;
-  let T = { rate: 500000, bonus_pct: 20 };
-  try { T = require("./funding").donationTerms(); } catch (e) { /* defaults */ }
-  // 1.99tq: a live donation promo shows its boosted rate + per-donor cap (the "support_promo" texts, views/partials/banner.ejs)
-  let P = null;
-  try { P = require("./donationpromo").liveCached(); } catch (e) { P = null; }
-  if (P) return { rate: fmt(P.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)), promo_on: true, promo_cap: fmt(P.cap_usd), promo_mult: String(P.mult) };
-  return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
+  return on ? {} : null;
 };
 // 1.99ack: the review queue is banner.review (Assistants too since the owner's 2026-10-18 decision), settings + house
 // promos banner.config (siteperms.js)

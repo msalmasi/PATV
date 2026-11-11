@@ -104,20 +104,30 @@ test("routes: the opt-in is the viewer's own (sign-in, same-site); the switches 
   assert.match(ad.text, /name="goal_usd" min="0" step="1" value="400"/);
 });
 
-test("latestCard: the viewer's newest CARD donation in the last hour (not crypto, not older)", async () => {
-  assert.deepEqual(await SP.latestCard("u-alice", NOW), { pat: 12500000, usd: 25 });
+test("latestCard: the viewer's newest CARD donation in the last hour (not crypto, not older) - no PAT amount (1.99ans)", async () => {
+  assert.deepEqual(await SP.latestCard("u-alice", NOW), { usd: 25 });
   assert.equal(await SP.latestCard("u-bob", NOW), null, "bob's recent one was crypto");
   assert.equal(await SP.latestCard("u-alice", NOW + 2 * 3600e3), null, "too old");
+  // 1.99ans: a perks-only donation (its donation_usd_log row, no mint claim) counts everywhere the page looks
+  const DP = require(path.join(repo, "donationpromo"));
+  await DP.init();
+  await DP.recordCredit({ ref: "don-evt_new", userId: "u-boss", via: "card", paidAt: NOW - 600e3, cents: 700, mint: 0 });
+  assert.deepEqual(await SP.latestCard("u-boss", NOW), { usd: 7 });
+  const d = await SP.pageData(NOW);
+  assert.deepEqual(d.total, { usd: 92, supporters: 3 });
+  assert.equal(d.goal.usd, 82);
+  assert.equal(d.recent[0].tier, "t5", "the newest first");
 });
 
-test("page: hero + value exchange, amount tiers with their PAT, crypto steps, trust, FAQ; card tab only while Stripe is on", async () => {
+test("page: hero + value exchange (perks, never PAT), amount tiers, crypto steps, trust, FAQ; card tab only while Stripe is on", async () => {
   let pg = await raw("GET", "/support", { user: "alice" });
   assert.equal(pg.status, 200);
-  assert.match(pg.text, /<b>500,000<\/b> PAT for you/);
-  assert.match(pg.text, /\+20% extra to the community pot/);
-  for (const [usd, pat] of [[5, "2,500,000"], [10, "5,000,000"], [25, "12,500,000"], [50, "25,000,000"]]) {
-    assert.match(pg.text, new RegExp(`value="${usd}"[\\s\\S]*?\\$${usd}<\\/span>\\s*<span class="pat">${pat} PAT`), "$" + usd);
-  }
+  // 1.99ans: no PAT for dollars - the value exchange is the perks
+  assert.match(pg.text, /💚 The Supporter perks for you: a flair, badges and cosmetics/);
+  assert.match(pg.text, /Never PAT: PAT can’t be bought/);
+  assert.match(pg.text, /You give \$10 → you get the 💚 Supporter perks\. Donations never add PAT\./);
+  assert.doesNotMatch(pg.text, /PAT for you|community pot|class="pat"|class="bon"|data-rate=|500,000|PAT per \$/);
+  for (const usd of [5, 10, 25, 50]) assert.match(pg.text, new RegExp(`value="${usd}"[\\s\\S]*?\\$${usd}<\\/span>`), "$" + usd);
   assert.match(pg.text, /id="spCustom"/);
   assert.doesNotMatch(pg.text, /role="tab"/, "Stripe off: no tabs");
   assert.doesNotMatch(pg.text, /id="donateGo"/);
@@ -137,7 +147,8 @@ test("page: hero + value exchange, amount tiers with their PAT, crypto steps, tr
     assert.doesNotMatch(anon.text, /id="donateGo"|id="spShowName"/);
     const ty = await raw("GET", "/support?donate=success", { user: "alice" });
     assert.match(ty.text, /id="thanks"/);
-    assert.match(ty.text, /<b>12,500,000<\/b> PAT just landed in your wallet/);
+    assert.match(ty.text, /Your 💚 Supporter perks are on/);
+    assert.doesNotMatch(ty.text, /PAT just landed|See your wallet/);
     assert.match((await raw("GET", "/support?donate=cancel", { user: "alice" })).text, /Donation cancelled/);
   } finally { delete process.env.STRIPE_ENABLED; }
 });

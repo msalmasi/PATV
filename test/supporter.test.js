@@ -97,13 +97,32 @@ test("a new donation (Stripe or crypto hook -> onDonation): cache + tier now, th
   await new Promise((r) => setTimeout(r, 200));
   assert.deepEqual(await badges("u-dave"), ["cf_donor"]);
   assert.deepEqual(await feedFor("u-dave"), ["cf_donor"], "Pepe announces it");
-  assert.ok(xp.some((x) => x.userId === "u-dave" && x.amount === 3000));
+  assert.ok(!xp.some((x) => x.userId === "u-dave"), "1.99ans: no XP (it would level up into PAT) - the badge + cosmetics only");
   assert.deepEqual(await items("u-dave"), ["ad_supporter", "nc_supporter"]);
   // bob tops up past $100 -> gold + 🌟
   await donate("don-6", "u-bob", 9600);
   assert.equal((await SUP.onDonation("u-bob")).tier, "gold");
   await new Promise((r) => setTimeout(r, 200));
   assert.ok((await feedFor("u-bob")).includes("cf_donor_100"));
+});
+
+test("1.99ans: a perks-only donation (its donation_usd_log row, no claim, no PAT) makes a Supporter - counted once with the old claims", async () => {
+  const DP = require(path.join(repo, "donationpromo"));
+  await DP.init();
+  await DP.recordCredit({ ref: "don-evt_p1", userId: "u-boss", via: "card", paidAt: Date.now(), cents: 2600, mint: 0 });
+  const v = await SUP.onDonation("u-boss");
+  assert.deepEqual([v.tier, v.usd, v.donations], ["silver", 26, 1]);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.deepEqual(await badges("u-boss"), ["cf_donor"]);
+  assert.deepEqual(await items("u-boss"), ["ad_supporter", "nc_supporter"]);
+  // a pre-1.99ans donation has BOTH a mint claim and a donation_usd_log row with the same ref: counted once
+  await DP.recordCredit({ ref: "don-6", userId: "u-bob", via: "card", paidAt: Date.now(), cents: 9600, mint: 48000000 });
+  assert.equal((await SUP.refresh("u-bob")).usd, 101, "$5 + $96, not $197");
+  assert.deepEqual((await SUP.tiersFor(["u-boss", "u-bob", "u-nobody"])).get("u-boss").tier, "silver");
+  const DN = require(path.join(repo, "donations"));
+  assert.deepEqual(await DN.totalsFor("u-carol"), { n: 2, cents: 10000 });
+  assert.deepEqual(await DN.totalsFor("u-boss"), { n: 1, cents: 2600 });
+  assert.equal((await getQuery("SELECT points_balance AS b FROM users WHERE userId = 'u-boss'"))[0].b, 0);
 });
 
 test("cosmetics: the two Supporter items are achievement unlocks (free, never sold), the catalog knows them", () => {

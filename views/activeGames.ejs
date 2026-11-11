@@ -33,7 +33,7 @@
     <h1>Poker Now Tables</h1>
     <% if (discordUsername) { %>
     
-      <div class="pokerpanel"><p>Welcome, <strong><%= discordUsername %></strong>.<br> <strong><a href="https://discord.com/channels/913269267691094026/1192942161747001344">Use your PAT to buy or cashout your poker chips in our #poker channel on Discord!</strong></p></a><br>Commands:<br> <strong>/buyin [amount]<br> /cashout [amount]</strong></div>
+      <div class="pokerpanel"><p>Welcome, <strong><%= discordUsername %></strong>.<br> <strong><a href="https://discord.com/channels/913269267691094026/1192942161747001344">Swap your PAT for poker chips, and back again, in our #poker channel on Discord!</strong></p></a><br>Commands:<br> <strong>/buyin [amount]<br> /cashout [amount]</strong></div>
       <% } else { %>
           <div class="pokerpanel"><p>You must connect to the Public Access Discord to play.<br><br></p>          <div id="discordLoginDiv">  <button id="discordLoginButton" onclick="loginWithDiscord()" class="discord-btn">
             

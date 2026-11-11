@@ -4,7 +4,8 @@
 //
 // A RAFFLE
 //   prize       "pat"    a PAT amount the creator puts up (held in escrow from the moment the raffle is made)
-//               "item"   an OFFICIAL Prize Shop item (shopcatalog: giftable, delivered by PATV - staff / Plex invite / role).
+//               "item"   an OFFICIAL Prize Shop item (shopcatalog: giftable, delivered by PATV - staff / Plex invite / role /
+//                        1.99ans a virtual in-game collectible, which the winner's order simply is).
 //                        One of its stock is RESERVED when the raffle is made (prizes.quantity - 1) and comes back if the
 //                        raffle doesn't draw. A community creator pays the item's shop price into escrow up front (it goes
 //                        to the store owner at the draw, exactly like a shop sale); a house raffle's item is PATV's own.

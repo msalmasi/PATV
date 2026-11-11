@@ -81,7 +81,7 @@
         <% } %>
       <% } %>
       <div class="muted"><span class="<%= oos ? 'oos' : '' %>" data-stock="<%= p.prizeId %>"><%- oos ? t('shop.out_of_stock') : t('shop.n_left', { n: H.fmt(p.quantity) }) %></span><%- p.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(p.sold) }) : '' %>
-        · <%- official ? (C.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant')) : t('shop.item.seller_delivers') %></div>
+        · <%- official ? (C.delivery === 'collectible' ? t('shop.item.collectible') : C.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant')) : t('shop.item.seller_delivers') %></div>
 
       <div class="st-buy">
         <div id="shopStatus" class="status-msg" role="status" aria-live="polite" style="margin:0"></div>

@@ -73,8 +73,10 @@ const state = {
   restoredAt: 0,
 };
 const INC = "incentives:";
-const DONATION_RATE = 500000;          // 1.99jw: PAT per $1 while Pepe never synced a rate
-const DONATION_BONUS_PCT = 20;         // 1.99jw: % extra minted into the incentive budget
+// 1.99jw: Pepe's donation terms while he never synced them. 1.99ans: carried for the record only - the site credits NO PAT for a
+// donation and mints no bonus, whatever these say (nopat.js: a hard rule, not a setting)
+const DONATION_RATE = 500000;
+const DONATION_BONUS_PCT = 20;
 const HOUSE_HARD_FLOOR = 5000000;
 
 let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
@@ -434,7 +436,8 @@ async function takeIncentivesRef(flow, amount, userId, type) {
   return { ok: true, available, claimId: id, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
 }
 
-// 1.99jw: the donation terms Pepe synced (or the defaults while he never has)
+// 1.99jw: the donation terms Pepe synced (or the defaults while he never has). 1.99ans: NOT applied to any donation - a donation
+// credits 0 PAT (nopat.donorTerms); this only reports what Pepe's econ_cfg says.
 function donationTerms() {
   const d = state.monetary && state.monetary.donation;
   return { rate: d ? d.rate : DONATION_RATE, bonus_pct: d ? d.bonus_pct : DONATION_BONUS_PCT };

@@ -6,8 +6,8 @@
 <main class="sb" id="cryptoAdm">
   <div class="sb-head">
     <h1><span class="ds-ic" aria-hidden="true">🪙</span> Crypto donations</h1>
-    <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature mint PAT exactly like a card donation
-      (policy <code>donation</code>: <b><%= fmt(terms.rate) %></b> PAT per $1 to the donor + <b><%= terms.bonus_pct %>%</b> into the incentive budget).
+    <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature count as a donation exactly like a card donation:
+      the donor gets the 💚 supporter perks and <b>no PAT</b> - nothing is minted (1.99ans, no PAT for dollars: <code>nopat.js</code>).
       Receive-only: nobody here holds a key and nothing is ever sent out. Public page: <a href="/support">/support</a>. Card donations: <%= stripe ? 'on' : 'off' %>.</p>
   </div>
 
@@ -82,7 +82,7 @@
 
   <section class="sb-card" id="held" aria-labelledby="heT">
     <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>, or over the member's daily limit / today's global donation cap)</h2>
-    <p class="muted">Approve = credit it now (mint as usual, at the terms of the moment it was seen - a promo included; an approved over-limit one is flagged on /admin/economy#donations). Reject = no PAT; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: no PAT, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
+    <p class="muted">Approve = count it now (supporter perks, no PAT; an approved over-limit one is flagged on /admin/economy#donations). Reject = not counted; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: not counted, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
     <% table(held, 'held', 'held') %>
   </section>
   <% if (suspect.length) { %>

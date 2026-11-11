@@ -76,7 +76,6 @@ function register(app, { addUser, noTimers } = {}) {
       if (!cryptoOn && !stripeOn() && !admin) return next("route");
       const me = req.user && req.user.userId ? req.user : null;
       const chains = CP.accepted().map((c) => ({ ...c, qr: qrSvg(c.address) }));
-      const T = CP.patFor(100);
       let donate = null;
       try { donate = { ...require("./stripebilling").donateLocals("/support", req.query.donate), onSupport: true }; } catch (e) { donate = null; }
       // 1.99mn design pass: the optional goal / total / recent supporters (supportpage.js, all off by default), the viewer's
@@ -87,15 +86,8 @@ function register(app, { addUser, noTimers } = {}) {
         if (me) showName = await SPG.showName(me.userId);
         if (me && donate && donate.result === "success") thanks = await SPG.latestCard(me.userId);
       } catch (e) { console.error("[support] page extras:", e.message); }
-      // 1.99tq: a live donation promo (+ the viewer's allowance) and what each amount credits THIS viewer (donationpromo.split -
-      // the same split the credit uses)
-      let promo = null;
-      try { promo = await require("./donationpromo").live(me ? me.userId : null); } catch (e) { console.error("[support] promo:", e.message); }
-      const DPs = require("./donationpromo").split;
-      const quoteFor = (usdAmt) => DPs({ cents: Math.round(Number(usdAmt) * 100), normalRate: T.rate, bonusPct: T.bonus_pct,
-        promo: promo ? { rate: promo.rate, capCents: promo.allowance_cents, budgetPat: promo.budget_left_pat == null ? null : promo.budget_left_pat, bonusBase: promo.bonus_base } : null });
+      // 1.99ans: no PAT for dollars (nopat.js) - no rate, no pot bonus, no promo on the page: a donation gives the supporter perks
       res.render("support", {
-        promo, quoteFor,
         // 1.99ts: the viewer's daily donation limit (null = none / signed out)
         daily: me ? await require("./donationpromo").daily(me.userId).catch(() => null) : null,
         // 1.99uh: today's global donation pool ({on, full, pct_left, resets_at} - never the cap itself)
@@ -103,7 +95,7 @@ function register(app, { addUser, noTimers } = {}) {
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],
-        rate: T.rate, bonus_pct: T.bonus_pct, min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
+        min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
         perks: await supporterPerks(me),
       });
     } catch (e) { next(e); }

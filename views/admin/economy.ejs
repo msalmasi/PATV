@@ -46,14 +46,16 @@
 
 <section class="adm-card" id="donations" aria-labelledby="donT">
   <h2 id="donT"><span class="ds-ic" aria-hidden="true">💖</span> Donations: promos <span class="adm-pill admin">admins</span></h2>
+  <%# 1.99ans: no PAT for dollars (nopat.js) %>
+  <p class="adm-help"><b>Retired 2026-11-11 (NY S5935-A): donations give supporter perks only - they never credit PAT, never mint the incentive bonus, and no promo applies.</b> Creating or editing a promo is refused; the table below is the history. Pepe's <code>donation_rate</code> / <code>donation_bonus_pct</code> are no longer applied by the site. The daily limits below still apply.</p>
   <p class="adm-help">The normal rate is Pepe's (<code>!econ set donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosts it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>paid</b> (card: when the checkout opened). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
   <% if (!_can('donations.admin')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <%# owner answers 2026-10-20 (1): the API refuses anyone but a Pepe owner (donationpromo.js) %>
     <p class="adm-help"><%- t('admin.donpromo.owner_only') %></p>
     <div id="dpAdm">
       <div class="adm-kv" id="dpKv"><div><b>Status</b><span>loading…</span></div></div>
-      <h3>New promo</h3>
-      <form class="adm-form" id="dpForm" autocomplete="off">
+      <h3 hidden>New promo</h3>
+      <form class="adm-form" id="dpForm" autocomplete="off" hidden>
         <label for="dpLabel">Headline (optional)<input type="text" id="dpLabel" maxlength="120" placeholder="Today only: 1M PAT per $1, up to $100"></label>
         <label for="dpMode">Boost<select id="dpMode"><option value="rate">a promo rate (PAT per $1)</option><option value="mult">a multiplier on the normal rate</option></select></label>
         <label for="dpRate" id="dpRateL">Promo rate (PAT per $1)<input type="number" id="dpRate" min="1" step="1" placeholder="1000000"></label>

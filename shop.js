@@ -6,6 +6,8 @@
 //  * OFFICIAL items (prizes.seller_id IS NULL) behave exactly as they always have: the buyer pays,
 //    the PAT goes to the store owner's account (STORE_OWNER_USERNAME, default "pb"), role prizes
 //    and the spin boost take effect at once. Each one is also recorded as a COMPLETED order.
+//    1.99ans: the 21 items that were real-world things are VIRTUAL IN-GAME COLLECTIBLES (shopcatalog.js "collectible"):
+//    the completed order is the whole delivery - no store email, no store_alerts, nothing ships (collectiblesMigration).
 //    Exception (1.99fj): "+100 Daily Gold Spins" (spinboost100) is priced per buyer - 3M for the
 //    first copy, +1M for every copy they already own (spinboostPrice) - always computed here, never
 //    taken from the client, and its PAT goes to the House (a jackpot_rakes row, like wheel wagers),
@@ -141,7 +143,45 @@ const ready = (async () => {
                  [SPINBOOST_BASE, SPINBOOST_ID, SPINBOOST_BASE]);
   await loadSettings();
   await backfillHistory();
+  await collectiblesMigration();
 })().catch((e) => console.error("[shop] schema:", e));
+
+// 1.99ans (NY S5935-A, owner 2026-11-11): the 21 official items with a real-world value are VIRTUAL IN-GAME COLLECTIBLES
+// (shopcatalog.js delivery "collectible"). Once per database (shop_settings 'collectibles_v1', like 'backfilled'), in one
+// transaction:
+//   * each of those official rows (seller_id NULL) gets its collectible name + description (shopcatalog.COLLECTIBLES)
+//   * a row the compliance pause took off sale - status 'paused' AND review_note starting '2026-11-11 compliance' - is back
+//     on sale (status 'active') with the note cleared. A row paused for any other reason stays paused.
+// Never touched: any other row, member listings, prices, stock, sold counts. Safe on every boot: after the first run the
+// marker skips it (so a later admin rename sticks), and every statement is conditional anyway (a second run changes nothing).
+const COLLECTIBLES_KEY = "collectibles_v1";
+const COMPLIANCE_NOTE = "2026-11-11 compliance";
+async function collectiblesMigration() {
+  if ((await getQuery("SELECT 1 FROM shop_settings WHERE key = ?", [COLLECTIBLES_KEY]))[0]) return { skipped: true };
+  const C = require("./shopcatalog").COLLECTIBLES;
+  const ids = Object.keys(C);
+  return tx(async () => {
+    if ((await getQuery("SELECT 1 FROM shop_settings WHERE key = ?", [COLLECTIBLES_KEY]))[0]) return { skipped: true };
+    const t = Date.now();
+    let renamed = 0;
+    for (const id of ids) {
+      const r = await runQuery(`UPDATE prizes SET prize = ?, description = ?, updated = ?
+                                WHERE prizeId = ? AND seller_id IS NULL AND (prize IS NOT ? OR description IS NOT ?)`,
+                               [C[id].name, C[id].description, t, id, C[id].name, C[id].description]);
+      renamed += r.changes || 0;
+    }
+    const back = await runQuery(`UPDATE prizes SET status = 'active', review_note = NULL, updated = ?
+      WHERE prizeId IN (${ids.map(() => "?").join(",")}) AND seller_id IS NULL AND status = 'paused'
+        AND substr(review_note, 1, ${COMPLIANCE_NOTE.length}) = ?`, [t, ...ids, COMPLIANCE_NOTE]);
+    const out = { renamed, reactivated: back.changes || 0 };
+    await runQuery("INSERT INTO shop_settings (key, value) VALUES (?, ?)", [COLLECTIBLES_KEY, JSON.stringify({ at: t, ...out })]);
+    if (out.renamed || out.reactivated) console.log(`[shop] virtual collectibles: ${out.renamed} renamed, ${out.reactivated} back on sale`);
+    return out;
+  });
+}
+/** 1.99ans: an official virtual collectible (shopcatalog.js): its order is the whole delivery - no staff, store or vendor notice. */
+const collectible = (p) => require("./shopcatalog").isCollectible(p);
+const COLLECTIBLE_NOTE = "A virtual in-game collectible - it's yours on PATV now. Nothing is shipped; it has no cash value.";
 
 // ── settings ──
 const settings = { ...DEFAULTS, categories: DEFAULT_CATEGORIES.slice() };
@@ -224,8 +264,10 @@ const feeFor = (price, pct) => Math.max(0, Math.min(price, Math.floor(price * (N
 
 // ── notifications ──
 let _resend = null, _sg = null;
+let _mailer = null;                        // 1.99ans: tests capture the shop's emails (_setMailer)
 async function sendEmail(to, subject, text) {
   if (!to) return false;
+  if (_mailer) { try { return !!(await _mailer({ to, subject, text })); } catch (e) { return false; } }
   const html = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>').replace(/\n/g, "<br>");
   try {
@@ -387,8 +429,9 @@ async function giftRecipient(prize, payerId, giftTo) {
 // ── 1.99ma: admin COMPS of official items (comps.js) ──
 /**
  * Can an admin comp this official item, i.e. does PATV fulfil it itself? -> {kind, compable, giftable, why}
- * role / spinboost / plex (Wizarr invites on) = yes; everything delivered by hand outside PATV (gift cards, consoles,
- * Nitro, ...) = no - comping it would only promise something a person still has to send. giftable = shopcatalog's flag.
+ * role / spinboost / collectible (1.99ans: a virtual collectible - the order is the item) / plex (Wizarr invites on) = yes;
+ * anything a person still has to set up by hand = no - comping it would only promise something someone still has to do.
+ * giftable = shopcatalog's flag.
  */
 function compPolicy(p) {
   if (!p) return { kind: "gone", compable: false, giftable: false, why: "That item isn't in the shop any more." };
@@ -399,6 +442,7 @@ function compPolicy(p) {
   let kind = null;
   if (ROLE_PRIZES[p.prizeId]) kind = "role";
   else if (isSpinboost(p)) kind = "spinboost";
+  else if (collectible(p)) kind = "collectible";          // 1.99ans: the order IS the item - PATV fulfils it itself
   else {
     try {
       const c = require("./mediaconf");
@@ -453,10 +497,11 @@ async function compOrder({ admin, to, title, reason, note }) {
 // ── 1.99xk: 🎫 an official item as a PAT Raffles prize (raffles.js) ──
 // The raffle reserves ONE of the item's stock when it's made (quantity - 1, nothing sold yet) and gives it back if it doesn't
 // draw. At the draw the winner gets a completed official order exactly like a gift: a role is granted, the sale hooks run
-// (a Plex invite), the store is told to deliver a staff item. Who paid is the raffle's business (the creator's escrowed item
+// (a Plex invite), the store is told to set up a staff item. Who paid is the raffle's business (the creator's escrowed item
 // price goes to the store owner; a house raffle's item is PATV's own - price 0). Only giftable items PATV delivers itself
-// (staff / invite / role) can be raffled - not the per-owner spin boost, not the retired request credits.
-const RAFFLE_DELIVERY = ["staff", "invite", "role"];
+// (staff / invite / role / collectible) can be raffled - not the per-owner spin boost, not the retired request credits.
+// 1.99ans: a virtual collectible needs nothing after the draw (the order is the item): no store email.
+const RAFFLE_DELIVERY = ["staff", "invite", "role", "collectible"];
 /** The official items a raffle can offer right now: [{prizeId, prize, cost, quantity, image_url, delivery}] */
 async function raffleItems() {
   await ready;
@@ -497,9 +542,14 @@ async function raffleOrderInTx({ prizeId, title, winnerId, payerId, payerName, p
 function raffleOrderAfter({ orderId, prizeId, title, userId, username, price, raffleId }) {
   try {
     runSaleHooks({ orderId, prizeId, title, price: Number(price) || 0, userId, username, source: "raffle" });
-    sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", "Raffle prize to deliver",
-              `${username} won ${title} in raffle R${raffleId} (order ${orderId}) - deliver it to ${username}.`).catch(() => {});
-    notify(userId, { subject: `🎫 You won ${title} in raffle R${raffleId}`, text: "It's on your orders page - PATV delivers it.",
+    const virt = collectible({ prizeId });
+    // 1.99ans: a virtual collectible is the order itself - nobody at the store has anything to do
+    if (!virt) {
+      sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", "Raffle prize to deliver",
+                `${username} won ${title} in raffle R${raffleId} (order ${orderId}) - deliver it to ${username}.`).catch(() => {});
+    }
+    notify(userId, { subject: `🎫 You won ${title} in raffle R${raffleId}`,
+                     text: virt ? `It's on your orders page. ${COLLECTIBLE_NOTE}` : "It's on your orders page - PATV adds it to your account.",
                      pm: `🎫 You won ${title} in a PATV raffle!`, link: `/shop/orders/${orderId}` }).catch(() => {});
   } catch (e) { console.error("[shop] raffle order:", e.message); }
 }
@@ -515,6 +565,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
     const prize = (await getQuery("SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [listed.prizeId]))[0];
     if (!prize) return { success: false, status: 404, message: "That item isn't in the shop any more." };
     const boost = isSpinboost(prize);
+    const virt = collectible(prize);               // 1.99ans: a virtual in-game collectible (shopcatalog.js)
     if (gift && boost) return { success: false, status: 400, message: `${prize.prize} can't be sent as a gift.` };
     const payerId = gift ? gift.payerId : userId;
     const payerName = gift ? gift.payerName : username;
@@ -613,10 +664,12 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
                        [uuidv4(), `shop-order:${orderId}`, userId, prize.cost]);
       }
       // 1.99mt: an anonymous gift's events are seen by the recipient too - no giver name in them (admins: gift_from / gift_log)
+      // 1.99ans: a virtual collectible's event says what it is (the order is the record of ownership)
       await event(orderId, "completed", comp ? comp.by : gift && gift.anon ? null : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
                                                          : boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
-                                                         : gift && gift.anon ? `🎁 An anonymous gift to ${username} — official store item`
-                                                         : gift ? `🎁 Gift from ${payerName} to ${username} — official store item`
+                                                         : gift && gift.anon ? `🎁 An anonymous gift to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
+                                                         : gift ? `🎁 Gift from ${payerName} to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
+                                                         : virt ? COLLECTIBLE_NOTE
                                                          : "Official store item — delivered instantly");
       });
     } catch (error) {
@@ -635,9 +688,12 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
 
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
-    sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", comp ? "Comp Notification" : "Purchase Notification",
-              comp ? `${comp.by} comped ${prize.prize} to ${username}: ${comp.reason || "-"}` : gift ?`User ${payerName} bought ${prize.prize} for ${prize.cost} coins as a GIFT for ${username} (via ${source}) - deliver it to ${username}.`
-                   : `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`).catch(() => {});
+    // 1.99ans: a virtual collectible sends the store nothing - there is nothing to deliver or set up (the order is the item)
+    if (!virt) {
+      sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", comp ? "Comp Notification" : "Purchase Notification",
+                comp ? `${comp.by} comped ${prize.prize} to ${username}: ${comp.reason || "-"}` : gift ?`User ${payerName} bought ${prize.prize} for ${prize.cost} PAT as a GIFT for ${username} (via ${source}) - set it up for ${username}.`
+                     : `User ${username} purchased ${prize.prize} for ${prize.cost} PAT (via ${source}).`).catch(() => {});
+    }
     // 1.99lz: the recipient hears about their gift (inbox + email + Camfrog PM, their own notification settings)
     // 1.99mt: 🕶 anonymous = "Someone", in the recipient's language; every gift goes in the gift log (admins see the giver)
     if (gift) {
@@ -677,6 +733,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       owner: boost ? "House" : (owner ? owner.username : null), role, discord_role, order_id: orderId,
       ...(boost ? { owned: owned + 1, next_cost: spinboostPrice(owned + 1) } : {}),
       ...(comp ? { comp: true } : {}),
+      ...(virt ? { collectible: true } : {}),          // 1.99ans: a virtual in-game collectible (the bots can say so)
       message: comp ? `Comped ${prize.prize} to ${username}. ` : (gift ? `🎁 Sent ${prize.prize} to ${username} for ${prize.cost.toLocaleString()} PAT. `
                      : `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. `) +
                `Balance: ${remaining.toLocaleString()} PAT.`,
@@ -1385,8 +1442,11 @@ function register(app, deps) {
     try {
       await ready;
       const rows = await getQuery("SELECT prizeId, prize, cost, quantity, image_url FROM prizes WHERE seller_id IS NULL AND status = 'active'");
+      const CAT = require("./shopcatalog");
       // the spin boost's cost here is its first-copy price; buying it charges the buyer's own price
+      // 1.99ans: + delivery (shopcatalog.js; "collectible" = a virtual in-game collectible, nothing is delivered)
       res.json(rows.map((row) => ({ prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity, image_url: row.image_url || null,
+        delivery: (CAT.info(row) || {}).delivery || "staff",
         ...(row.prizeId === SPINBOOST_ID ? { cost_note: `${SPINBOOST_BASE.toLocaleString()} for your first, +${SPINBOOST_STEP.toLocaleString()} for each one you own` } : {}) })));
     } catch (error) {
       console.error(error);
@@ -1752,7 +1812,8 @@ function register(app, deps) {
   });
 }
 
-module.exports = { register, purchasePrize, orderAction, onOfficialSale, saleHooksIdle, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
+module.exports = { register, purchasePrize, collectiblesMigration, COLLECTIBLES_KEY, COLLECTIBLE_NOTE /* 1.99ans */,
+                   _setMailer: (fn) => { _mailer = typeof fn === "function" ? fn : null; }, orderAction, onOfficialSale, saleHooksIdle, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify, Refuse,
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts

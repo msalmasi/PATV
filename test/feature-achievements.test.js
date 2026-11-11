@@ -117,8 +117,8 @@ test("catalog: 20 new web-side achievements with badge art and rewards in line w
     assert.ok(["common", "uncommon", "rare"].includes(a.tier), id);
     assert.ok(a.xp <= 10000 && a.pat <= 100000, id + " reward");
   }
-  // Support PATV: XP only - donating never pays PAT back on top of the donation's own mint
-  for (const id of ["cf_donor", "cf_donor_100"]) assert.equal(list.find((x) => x.id === id).pat, 0);
+  // Support PATV (1.99ans, no PAT for dollars): no PAT and no XP either (XP levels up into level-up PAT) - the badges + cosmetics only
+  for (const id of ["cf_donor", "cf_donor_100"]) assert.deepEqual([list.find((x) => x.id === id).pat, list.find((x) => x.id === id).xp], [0, 0], id);
   assert.equal(new Set(list.map((a) => a.id)).size, list.length, "unique ids");
 });
 
@@ -186,7 +186,7 @@ test("after it, the hooks award loudly: a gift (recipient), a donation, 3 sticke
   const f = await feedFor(nc);
   for (const id of ["cf_donor", "cf_packs_3", "cf_pad_made", "cf_stream_live"]) assert.ok(f.includes(id), id + " in " + f.join(","));
   assert.ok(!f.includes("cf_donor_100"), "$5 isn't $100");
-  assert.ok(xp.some((x) => x.userId === nc.userId && x.amount === 3000), "XP for 💡");
+  assert.ok(!xp.some((x) => x.userId === nc.userId && x.amount === 3000), "1.99ans: no XP for 💡 (it would level up into PAT)");
 });
 
 test("what doesn't count: embeds / library plays aren't 'your stream'; a request still pending; a removed clip; a pending translation", async () => {

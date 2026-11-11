@@ -487,12 +487,14 @@ async function featureMetrics(userId) {
   let rf = {};
   try { rf = await require("./raffles").achMetrics(userId); } catch (e) { rf = {}; }   // 1.99xk: a drawn raffle with 3+ different buyers
   await marksReady;
-  const DON = "FROM reserve_claims WHERE flow = 'mint:donation' AND userId = ? AND amount > 0";
+  // 1.99ans: every donation, both eras (donations.js: the old mint:donation claims + the perks-only donation_usd_log rows)
+  let don = { n: 0, cents: 0 };
+  try { don = await require("./donations").totalsFor(userId); } catch (e) { don = { n: 0, cents: 0 }; }
   return {
     gift_people: g.gift_people || 0,
     gifts_received: g.gifts_received || 0,
-    donations: await one(`SELECT COUNT(*) ${DON}`, [userId]),
-    donated_usd: Math.floor(await one(`SELECT COALESCE(SUM(json_extract(meta, '$.usd_cents')), 0) ${DON}`, [userId]) / 100),
+    donations: don.n,
+    donated_usd: Math.floor(don.cents / 100),
     wallet_linked: Math.min(1, await one("SELECT COUNT(*) FROM crypto_wallets WHERE user_id = ?", [userId])),
     // 📼 a library play that actually went on air (queue plays share one slot)
     plex_plays: await one(`SELECT COUNT(*) FROM media_plays p JOIN stage_slots s ON s.id = p.slot_id
@@ -538,7 +540,8 @@ function featureBackfill() {
       const ach = catalog.filter((a) => a.side === "web" && FEATURE_METRICS.includes(a.metric));
       const SRC = [
         "SELECT giver_id AS u FROM gift_log", "SELECT recipient_id AS u FROM gift_log",
-        "SELECT userId AS u FROM reserve_claims WHERE flow = 'mint:donation'", "SELECT user_id AS u FROM crypto_wallets",
+        "SELECT userId AS u FROM reserve_claims WHERE flow = 'mint:donation'", "SELECT user_id AS u FROM donation_usd_log WHERE status = 'credited'",
+        "SELECT user_id AS u FROM crypto_wallets",
         "SELECT user_id AS u FROM media_plays", "SELECT user_id AS u FROM media_queues", "SELECT user_id AS u FROM media_requests",
         "SELECT userId AS u FROM stage_slots WHERE went_live IS NOT NULL", "SELECT userId AS u FROM ach_marks",
         "SELECT author_id AS u FROM feed_posts WHERE id IN (SELECT post_id FROM feed_voices)",

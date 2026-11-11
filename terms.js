@@ -22,7 +22,9 @@ const { runQuery, getQuery } = require("./dbUtils");
 const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the §10 premium/donations/prizes terms
 // 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
-const UPDATED = "11 October 2026";                 // /terms
+// 1.99ans (NY S5935-A, owner 2026-11-11): sections 9 / 10 say every prize is virtual and donations give perks, never PAT. The date
+// moves; VERSION (re-acceptance) is NOT bumped here - whether members must accept again is the owner's decision.
+const UPDATED = "11 November 2026";                // /terms
 const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voice is still heard" is dated by TEXT_DATES below - the day this server first served it; mic retention review 2: the deleted accounts' Camfrog-name markers in sections 10 and 9 - additive, VERSION unchanged; the owner approved the text on 2026-10-27 (ops plan mic-audio-retention 8.5 A) and it merged to staging on 28 October 2026 - this date and its changelog entry; 1.99afn: the never-kept commands list matches chatlog.PRIVATE_ARGS - + !patvmsg, !padmove and the privacy commands - additive, VERSION unchanged; date it the day it reaches prod; S1 F13:the patv_chat_sweep sign-out cookie in section 8 - additive, VERSION unchanged; photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
 
 // 1.99aft (review): a privacy-text change dated the day THIS server first served it - policy_text_dates keeps that first moment

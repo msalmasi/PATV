@@ -104,7 +104,7 @@
                 <% steps.forEach((s) => { %><li class="<%= s.cls %>"<%- s.cls === 'cur' ? ' aria-current="step"' : '' %>><%= s.l %></li><% }) %>
               </ol>
             <% } else if (!o.comp_by && o.status === 'completed' && o.delivery && o.delivery !== 'retired') { %>
-              <div class="sd-deliv"><span aria-hidden="true">✓</span><span><%- o.delivery === 'invite' ? t('shop.orders.deliv_invite') : o.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant') %></span></div>
+              <div class="sd-deliv"><span aria-hidden="true">✓</span><span><%- o.delivery === 'invite' ? t('shop.orders.deliv_invite') : o.delivery === 'collectible' ? t('shop.orders.deliv_collectible') : o.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant') %></span></div>
             <% } %>
 
             <% if (o.seller_note && !sent_ && (o.status === 'fulfilled' || o.status === 'completed' || o.status === 'disputed')) { %>

@@ -42,14 +42,15 @@
 // Entitlements are the same rows PAT pays for (premium.js): a pad / account is on while paid_through OR
 // stripe_through is ahead. POST /api/premium/stripe/portal opens Stripe's billing portal (cancel / change card).
 //
-// 1.99jw "Support PATV" donations (Economy v3 - the ONLY way the site creates PAT): POST /api/premium/stripe/donate
-// {usd} (whole dollars, 1..1000) -> a Checkout Session in mode "payment" (price_data, product "Support PATV", metadata
-// {kind:"donation", userId}). Its checkout.session.completed (payment_status "paid") credits the donor in ONE transaction
-// with the stripe_events row: pat = floor(amount_total cents * rate / 100), bonus = floor(pat * bonus_pct / 100) (rate /
-// bonus_pct = Pepe's monetary.donation, defaults 500,000 / 20), a "donation" transactions row "don-<event id>", and a
-// "mint:donation" reserve_claims row (claimId "don-<event id>", meta {bonus, usd_cents, rate, bonus_pct, event}) - Pepe
-// journals the mint (policy "donation") and mints `bonus` into the incentive budget. Donated PAT is purchased PAT: there
-// is no cash-out, and there must stay none. A replayed event changes nothing (stripe_events + the fixed ids).
+// 1.99jw "Support PATV" donations: POST /api/premium/stripe/donate {usd} (whole dollars, 1..1000) -> a Checkout Session in
+// mode "payment" (price_data, product "Support PATV", metadata {kind:"donation", userId}). Its checkout.session.completed
+// (payment_status "paid") is recorded in ONE transaction with the stripe_events row.
+// 1.99ans NO PAT FOR DOLLARS (nopat.js; NY S5935-A, owner 2026-11-11: "Perks only, no PAT"): a donation credits NO PAT and
+// books NO "mint:donation" claim (nothing is minted, no incentive bonus). It's recorded - stripe_events outcome
+// "donation-perks" + its donation_usd_log row (status 'credited', pat 0; it also counts toward the daily limit) - and gives
+// the 💚 supporter perks (supporter.onDonation). Before 1.99ans it credited floor(cents * rate / 100) PAT (a "donation"
+// transactions row "don-<event id>") and booked the mint claim; those balances and claims are untouched. Card subscriptions
+// (above) never moved PAT either: they extend the tier. A replayed event changes nothing (stripe_events).
 //
 // TEST MODE (later): put sk_test_ / whsec_ from the Stripe dashboard's test mode in the env, create two test Prices,
 // set STRIPE_ENABLED=1 on STAGING only, point a test-mode webhook endpoint at
@@ -381,17 +382,17 @@ async function donate(user, { usd, back } = {}) {
   return { url: s.url, id: s.id };
 }
 
-/** 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it. */
+/**
+ * 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it.
+ * 1.99ans: no rate, no bonus, no promo - a donation gives supporter perks, never PAT (nopat.js).
+ */
 function donateLocals(back, result) {
   const st = publicState();
   // 1.99ks: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
   let crypto = false;
   try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
   if (!st.enabled) return { stripe: st, crypto, back };
-  const terms = require("./funding").donationTerms();
-  let promo = null;     // 1.99tq: a live donation promo (the card shows the boosted rate + the cap; /support has the allowance)
-  try { promo = require("./donationpromo").liveCached(); } catch (e) { promo = null; }
-  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD, promo };
+  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, max: DONATE_MAX_USD, perks_only: true };
 }
 
 /** Stripe's billing portal for the customer behind one of the viewer's card subscriptions. -> {url} */
@@ -464,23 +465,19 @@ async function handleEvent(ev) {
         if (!target) { outcome = "donation-no-user"; console.error(`[stripe] donation ${ev.id}: account ${dm.userId} not found - not credited`); }
         else if (cents <= 0) outcome = "donation-zero";
         else {
-          // 1.99tq: THE shared donation credit (donationpromo.creditTerms - the crypto rail calls the same): the normal rate, or
-          // a live donation promo's split (per-donor cap, budget). Paid when the Checkout Session was CREATED (the quote the donor saw).
+          // 1.99ans: THE shared donation terms (donationpromo.creditTerms = nopat.donorTerms; the crypto rail takes the same):
+          // 0 PAT, 0 bonus. Paid when the Checkout Session was CREATED.
           const DP = require("./donationpromo");
           const id = "don-" + ev.id;
           const paidAt = Number(obj.created) > 0 ? Number(obj.created) * 1000 : Number(ev.created) * 1000;
           const terms = await DP.creditTerms({ ref: id, userId: target, cents, paidAt, via: "card" });
-          // 1.99ts: counts toward the day's limit; a race past it (two checkouts at once) is still credited - the money is taken - and flagged
-          // 1.99uh: + the PAT it mints (donor + incentive bonus) for the global daily cap - a race over it is credited and flagged too
-          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents, mint: terms.pat + terms.bonus });
-          const pat = terms.pat, bonus = terms.bonus;
-          await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation", note: DP.noteOf(terms) });
-          await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
-                         [id, target, pat, JSON.stringify({ bonus, usd_cents: cents, rate: terms.rate, bonus_pct: terms.bonus_pct, event: ev.id, ...DP.metaOf(terms) })]);
-          donation = { userId: target, pat, cents, ref: "donation-" + ev.id, terms };
-          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} -> ${pat} PAT for ${target} (+${bonus} to the incentive budget)` +
-                      (terms.promo ? ` - promo ${terms.promo.id}: ${terms.promo_pat} PAT for $${(terms.promo_cents / 100).toFixed(2)}` : ""));
-          outcome = "donation-credited";
+          require("./nopat").assertNoPat(terms.pat + terms.bonus, "card donation");
+          // 1.99ts: the donation's record, and it counts toward the day's limit; a race past it (two checkouts at once) is still
+          // counted - the money is taken - and flagged. mint 0: nothing is minted (the global cap's PAT side never moves).
+          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents, mint: 0 });
+          donation = { userId: target, cents, ref: "donation-" + ev.id };
+          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} from ${target} - supporter perks, no PAT (nopat.js)`);
+          outcome = "donation-perks";
         }
       }
     } else if (ev.type === "checkout.session.completed" && obj.mode === "subscription") {
@@ -575,10 +572,10 @@ async function handleEvent(ev) {
       const i18n = require("./i18n");
       await i18n.ensure();
       const t = i18n.tFor(i18n.getPref(donation.userId) || "en");
-      await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/wallet",
+      // 1.99ans: the receipt names the perks - no PAT (nopat.js)
+      await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/support#perks",
         title: t("donate.notice_title"),
-        body: t("donate.notice_body", { usd: (donation.cents / 100).toFixed(2), pat: t.num ? t.num(donation.pat) : donation.pat.toLocaleString("en-US") }) +
-              require("./donationpromo").receiptLine(t, donation.terms) });
+        body: t("donate.notice_perks", { usd: (donation.cents / 100).toFixed(2) }) });
     } catch (e) { /* notice only */ }
   }
   if (notice) {

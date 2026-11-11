@@ -71,7 +71,7 @@ test("every catalog item has its pixel picture and strings; every picture belong
   }
   for (const [id, v] of Object.entries(CAT.ITEMS)) {
     assert.ok(CAT.SHELF_IDS.includes(v.shelf), id);
-    assert.ok(["instant", "role", "invite", "staff", "retired"].includes(v.delivery), id);
+    assert.ok(["instant", "role", "invite", "staff", "collectible", "retired"].includes(v.delivery), id);
     if (v.delivery === "role") assert.ok(shop.ROLE_PRIZES[id], id + " is a store role");
     else assert.ok(EN["shop.cat.item." + CAT.tkey(v.key)], "en.json shop.cat.item." + CAT.tkey(v.key));
     if (v.delivery !== "role") assert.ok(EN["shop.deliver." + v.delivery], "en.json shop.deliver." + v.delivery);

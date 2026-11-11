@@ -2,6 +2,7 @@
 // promo rate, so it was 1,000 PAT and every donation fell back to the normal rate. Now: the form converts as you type
 // (public/js/donpromo-budget.js, shared with the server), warns when the budget is smaller than one donor's full promo
 // allowance (cap x promo rate), and the server refuses that (409 budget_small) unless confirmed.
+// 1.99ans: promos are retired (no PAT for dollars, nopat.js) - the pure budget arithmetic stays tested; creating one is refused.
 //   NODE_PATH=<a PATV node_modules> node --test test/donation-promo-budget.test.js
 "use strict";
 const test = require("node:test");
@@ -87,42 +88,14 @@ test("the warning: a budget smaller than one donor's full promo allowance", () =
   assert.equal(B.warnText(t, null), "");
 });
 
-test("the server refuses a too-small budget unless confirmed (create and edit), and says so over HTTP", async () => {
+test("1.99ans: promos are retired (no PAT for dollars) - the create / edit routes answer 410 before any budget check", async () => {
   const base1 = { mode: "rate", rate: 1000000, cap_usd: 100, starts: now, ends: now + H };
-  await assert.rejects(DP.create(ADMIN, { ...base1, budget: 1000 }), (e) => {
-    assert.equal(e.code, "budget_small"); assert.equal(e.status, 409);
-    assert.match(e.message, /runs out after \$0\.00 of promo donations/); assert.match(e.message, /Did you mean 1,000,000,000 PAT\?/);
-    return true;
-  });
   const r = await post("/api/admin/donpromo/create", { ...base1, budget: 1000 });
-  assert.equal(r.status, 409);
-  assert.equal(r.json.code, "budget_small");
-  assert.equal(r.json.detail.allowance_pat, 100000000);
-  // a multiplier promo checks at its effective rate (x2 of 500k = 1M per $1)
-  await assert.rejects(DP.create(ADMIN, { mode: "mult", mult: 2, cap_usd: 100, starts: now, ends: now + H, budget: 99999999 }), (e) => e.code === "budget_small");
-  // confirmed: it's kept as typed
-  const ok = await post("/api/admin/donpromo/create", { ...base1, budget: 1000, confirm_budget: true });
-  assert.equal(ok.status, 200);
-  assert.equal(ok.json.promo.budget_pat, 1000);
-  const id = ok.json.promo.id;
-  const st = (await DP.adminState()).promos.find((x) => x.id === id);
-  assert.equal(st.budget.small, true);
-  assert.equal(st.budget.cents, 0);
-  // an edit that doesn't touch the budget isn't asked again; a new small budget is
-  assert.equal((await post(`/api/admin/donpromo/${id}/edit`, { label: "x", budget: 1000 })).status, 200);
-  assert.equal((await post(`/api/admin/donpromo/${id}/edit`, { budget: 5000 })).json.code, "budget_small");
-  assert.equal((await post(`/api/admin/donpromo/${id}/edit`, { budget: 1000000000 })).json.promo.budget_pat, 1000000000, "a real budget needs no confirmation");
-  assert.equal((await post(`/api/admin/donpromo/${id}/edit`, { budget: "" })).json.promo.budget_pat, null, "blank = no budget");
-  await DP.end(ADMIN, id);
-});
-
-test("a donation cut short by the budget is counted as a fallback (and replays don't count twice)", async () => {
-  now += 2 * H;
-  const p = await DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, starts: now, ends: now + H, budget: 1000, confirm_budget: true });
+  assert.equal(r.status, 410);
+  assert.equal(r.json.code, "retired");
+  assert.match(r.json.error, /donations give supporter perks, never PAT/);
+  assert.equal((await post("/api/admin/donpromo/create", { ...base1, budget: 1000, confirm_budget: true })).status, 410);
+  assert.equal((await post("/api/admin/donpromo/DP-x/edit", { budget: 5000 })).status, 410);
   const s = await DP.creditTerms({ ref: "don-1", userId: "u-boss", cents: 5000, paidAt: now + 1, via: "card" });
-  assert.deepEqual([s.promo_cents, s.normal_cents], [0, 5000], "1,000 PAT covers no whole cent at 1M per $1");
-  await DP.creditTerms({ ref: "don-1", userId: "u-boss", cents: 5000, paidAt: now + 1, via: "card" });
-  const st = (await DP.adminState()).promos.find((x) => x.id === p.id);
-  assert.deepEqual([st.stats.budget_fallbacks, st.stats.budget_short_cents, st.budget.exhausted_live], [1, 5000, true]);
-  await DP.end(ADMIN, p.id);
+  assert.deepEqual([s.pat, s.bonus, s.promo_cents], [0, 0, 0]);
 });

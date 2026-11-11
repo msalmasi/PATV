@@ -6,7 +6,8 @@
 //              look's columns and verified.js's proof columns), a deletion's state, equips and the equipped copies (a
 //              transfer, a market listing's lock), telegram_links and the sso_links of verified.js's SSO_PROOF_PROVIDERS
 //              (verified), premium_subs (the Season
-//              Pass holder; a Plus pad's owner), plex_members, donations (reserve_claims mint:donation), the badge showcase,
+//              Pass holder; a Plus pad's owner), plex_members, donations (reserve_claims mint:donation, and since 1.99ans the
+//              perks-only donation_usd_log rows - donations.js), the badge showcase,
 //              pad flair assignments, a pad's owner change (auto.plus_pads of both owners).
 //   snapshot   accounts with a non-default look (§12.4's rule) in acct:<userId> byte order; the hub re-fetches every held
 //              look a complete page leaves out (a default one too) through the call.
@@ -75,6 +76,10 @@ function triggerSql(userCols = null) {
   add("plex_d", "AFTER DELETE ON plex_members", row("OLD.user_id"));
   add("plex_u", `AFTER UPDATE OF ${PLEX_COLS.join(", ")} ON plex_members`, both("user_id"), changed(PLEX_COLS));
   add("donation_i", "AFTER INSERT ON reserve_claims", row("NEW.userId"), "NEW.flow = 'mint:donation'");
+  // 1.99ans: a perks-only donation (no PAT for dollars, nopat.js) is its donation_usd_log row turning 'credited'
+  add("donlog_i", "AFTER INSERT ON donation_usd_log", row("NEW.user_id"), "NEW.status = 'credited'");
+  add("donlog_u", "AFTER UPDATE OF status, user_id ON donation_usd_log", both("user_id"),
+      "(NEW.status = 'credited' OR OLD.status = 'credited') AND (" + changed(["status", "user_id"]) + ")");
   add("show_i", "AFTER INSERT ON user_badge_showcase", row("NEW.user_id"));
   add("show_u", "AFTER UPDATE ON user_badge_showcase", both("user_id"));
   add("show_d", "AFTER DELETE ON user_badge_showcase", row("OLD.user_id"));
@@ -99,6 +104,7 @@ async function init() {
   await require("./ssolinks").init();
   await require("./padflair").init();
   await require("./accountdelete").init();
+  await require("./donations").init();                     // 1.99ans: donation_usd_log (perks-only donations)
   await runQuery("CREATE INDEX IF NOT EXISTS hub_s1_donors ON reserve_claims (userId) WHERE flow = 'mint:donation' AND amount > 0");
   await runQuery("CREATE INDEX IF NOT EXISTS pad_user_flairs_user ON pad_user_flairs (user_id)");
   const HI = require("./hubidentity");
@@ -120,6 +126,7 @@ async function candidates(after, n) {
     "SELECT DISTINCT user_id AS id FROM pad_user_flairs WHERE user_id > ? ORDER BY user_id LIMIT ?",
     "SELECT user_id AS id FROM user_badge_showcase WHERE user_id > ? AND badges IS NOT NULL AND badges NOT IN ('', '[]') ORDER BY user_id LIMIT ?",
     "SELECT DISTINCT userId AS id FROM reserve_claims WHERE flow = 'mint:donation' AND amount > 0 AND userId > ? ORDER BY userId LIMIT ?",
+    "SELECT DISTINCT user_id AS id FROM donation_usd_log WHERE status = 'credited' AND user_id > ? ORDER BY user_id LIMIT ?",   // 1.99ans
     "SELECT DISTINCT user_id AS id FROM plex_members WHERE user_id > ? AND on_server = 1 ORDER BY user_id LIMIT ?",
     "SELECT target AS id FROM premium_subs WHERE tier = 'season_pass' AND target > ? ORDER BY target LIMIT ?",
     `SELECT DISTINCT r.owner_user_id AS id FROM rooms_registry r JOIN premium_subs p ON p.tier = 'prime_plus' AND p.target = r.room_id

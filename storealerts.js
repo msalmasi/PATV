@@ -14,7 +14,8 @@
 //
 // WHEN: shop.onOfficialSale (after an official sale COMMITS - a refused / failed purchase never gets there), and only while
 // the order is still "completed" when the alert goes out (a refunded order is skipped). Comps and subscription renewals of
-// the item alert too (marked as such): staff still deliver them.
+// the item alert too (marked as such): staff still deliver them. 1.99ans: NEVER for a virtual in-game collectible
+// (shopcatalog.js delivery "collectible"): the order is the item, nothing is delivered, so nobody is alerted.
 // ONCE: store_alert_sent (order_id, user_id) is claimed before anything is sent, so a retried hook / restart never alerts
 // twice; the inbox ref (store_purchase:<order>) and the Telegram ref are idempotent on top.
 // GIFTS: the order's buyer is who it's FOR. A gift names the giver; an 🕶 anonymous gift says "someone (anonymous gift)"
@@ -140,6 +141,7 @@ async function overview() {
 /** Can this user open orders of this item as its fulfiller? (shop.js /shop/orders/:id) */
 async function isFulfiller(prizeId, userId) {
   if (!prizeId || !userId) return false;
+  if (require("./shopcatalog").isCollectible({ prizeId })) return false;   // 1.99ans: nothing to fulfil, no buyer details
   await init();
   return !!(await getQuery("SELECT 1 FROM store_alerts WHERE prize_id = ? AND user_id = ? AND details = 1", [String(prizeId), userId]))[0];
 }
@@ -233,6 +235,8 @@ async function alertOrder(orderId) {
   await init();
   const o = await orderFor(orderId);
   if (!o || !o.official || !o.prize_id || o.status !== "completed") return 0;     // never a refunded / failed / marketplace order
+  // 1.99ans: a virtual in-game collectible (shopcatalog.js) - nothing to deliver, so the vendor / fulfiller never hears
+  if (require("./shopcatalog").isCollectible({ prizeId: o.prize_id })) return 0;
   const cols = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
   const recips = await getQuery(`SELECT a.*, u.username, u.class, u.camfrogUsername AS camfrog, ${cols.has("archived_at") ? "u.archived_at" : "NULL AS archived_at"}
     FROM store_alerts a JOIN users u ON u.userId = a.user_id WHERE a.prize_id = ? ORDER BY a.created`, [o.prize_id]);

@@ -230,7 +230,7 @@ test("1.99kz: the Pepeball promo shows the lotto page's jackpot (lotto_state, un
   t = t0;
 });
 
-test("1.99kz: the Support PATV house promo - seeded, shown only while a donation rail is on, with the live rate", async () => {
+test("1.99kz: the Support PATV house promo - seeded, shown only while a donation rail is on; 1.99ans: perks, never a PAT rate", async () => {
   const t0 = t;
   t = Date.UTC(2026, 9, 10, 14);                          // a day nobody booked
   const row = (await BN.promos({ all: true })).find((p) => p.id === "support");
@@ -244,11 +244,12 @@ test("1.99kz: the Support PATV house promo - seeded, shown only while a donation
     for (let i = 0; i < 30; i++) { const p = await BN.pick({ lotto: { jackpot: 1000000, next_at: Math.floor(t / 1000) + 86400 } }); seen.add(p.promo); if (p.promo === "support") sp = p; }
     assert.ok(seen.has("support") && seen.has("lotto") && seen.has("wheel"), "in rotation with Pepeball and the rest: " + [...seen]);
     assert.equal(sp.href, "/b/go/h/support");
-    assert.equal(sp.vars.rate, "500,000");
-    assert.equal(sp.vars.bonus, "20");
+    assert.equal(sp.vars.rate, undefined, "no PAT for dollars: no rate");
+    assert.equal(sp.vars.bonus, undefined);
     const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
-    assert.match(en["banner.promo.support.h"], /\{rate\} PAT per \$1/);
-    assert.match(en["banner.promo.support.l"], /\{bonus\}% to the community pot/);
+    assert.equal(en["banner.promo.support.h"], "💖 Support PATV — get the Supporter perks");
+    assert.match(en["banner.promo.support.l"], /Donations never add PAT\./);
+    assert.doesNotMatch(en["banner.promo.support.h"] + en["banner.promo.support.l"], /\{rate\}|\{bonus\}|PAT per|community pot/);
   } finally {
     for (const [k, v] of [["STRIPE_ENABLED", keep.e], ["STRIPE_SECRET_KEY", keep.k], ["STRIPE_WEBHOOK_SECRET", keep.w]]) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;

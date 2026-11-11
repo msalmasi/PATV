@@ -1,11 +1,13 @@
-// supporter.js — 1.99mv: 💚 Supporter perks for people who donated to PATV (card via Stripe, or crypto: both land as a
-// "mint:donation" reserve_claims row - stripebilling.js / cryptopay.js). User-approved 2026-10-11.
+// supporter.js — 1.99mv: 💚 Supporter perks for people who donated to PATV (card via Stripe, or crypto - stripebilling.js /
+// cryptopay.js). User-approved 2026-10-11. 1.99ans: these perks are ALL a donation gives - no PAT for dollars (nopat.js) -
+// and the donations are read from donations.js (the old "mint:donation" claims + the perks-only donation_usd_log rows).
 //
 // What a donor gets (nothing to claim, nothing to buy):
 //   * the automatic "Supporter" FLAIR (padflair.js) in every pad where they have no flair of the pad's own, with a tier
 //     look by lifetime total - 🥉 bronze (any donation), 🥈 silver ($25+), 🥇 gold ($100+) - and a chip on their profile
 //   * the 💡 Supporter achievement (cf_donor, + 🌟 Gold Supporter at $100: cf_donor_100), which unlock two cosmetics for
-//     good: the "Supporter Gold" name colour and the "Supporter Halo" avatar ring (cosmetics.json unlock)
+//     good: the "Supporter Gold" name colour and the "Supporter Halo" avatar ring (cosmetics.json unlock). 1.99ans: both pay
+//     0 PAT and 0 XP (XP levels up into level-up PAT - achievements.json)
 // A donation's hook calls onDonation(userId) (the cache + the achievement check); everything else reads the cache.
 "use strict";
 const { getQuery } = require("./dbUtils");
@@ -15,9 +17,11 @@ const TIERS = [                                          // highest first; usd =
   { id: "silver", min: 25, emoji: "🥈", color: "#cfd8dc" },
   { id: "bronze", min: 0, emoji: "🥉", color: "#d7894a" },
 ];
-const SQL = `SELECT r.userId AS userId, u.username AS username, COUNT(*) AS n, COALESCE(SUM(json_extract(r.meta, '$.usd_cents')), 0) AS cents
-             FROM reserve_claims r LEFT JOIN users u ON u.userId = r.userId
-             WHERE r.flow = 'mint:donation' AND r.amount > 0 AND r.userId IS NOT NULL`;
+// 1.99ans: every donation, both eras (donations.js); group by r.userId
+const SQL = `SELECT r.user_id AS userId, u.username AS username, COUNT(*) AS n, COALESCE(SUM(r.usd_cents), 0) AS cents
+             FROM ${require("./donations").SQL} r LEFT JOIN users u ON u.userId = r.user_id
+             WHERE r.user_id IS NOT NULL`;
+const DON = () => require("./donations").init().catch(() => {});
 let BY_ID = new Map(), BY_NAME = new Map(), loaded = null;
 
 function tierOf(usd) { return TIERS.find((t) => usd >= t.min) || TIERS[TIERS.length - 1]; }
@@ -29,7 +33,8 @@ function view(row) {
 
 /** (Re)load every donor - at boot, and after a donation (one account: refresh). */
 async function reload() {
-  const rows = await getQuery(`${SQL} GROUP BY r.userId`).catch(() => []);
+  await DON();
+  const rows = await getQuery(`${SQL} GROUP BY r.user_id`).catch(() => []);
   const a = new Map(), n = new Map();
   for (const r of rows) { const v = view(r); a.set(String(v.userId), v); if (v.username) n.set(v.username.toLowerCase(), v); }
   BY_ID = a; BY_NAME = n;
@@ -37,7 +42,8 @@ async function reload() {
 }
 function init() { if (!loaded) loaded = reload().catch((e) => { loaded = null; console.error("[supporter] load:", e.message); return 0; }); return loaded; }
 async function refresh(userId) {
-  const r = (await getQuery(`${SQL} AND r.userId = ? GROUP BY r.userId`, [String(userId)]).catch(() => []))[0];
+  await DON();
+  const r = (await getQuery(`${SQL} AND r.user_id = ? GROUP BY r.user_id`, [String(userId)]).catch(() => []))[0];
   if (!r) return null;
   const v = view(r);
   const old = BY_ID.get(String(userId));
@@ -68,9 +74,10 @@ const noTable = (e) => { if (/no such table/i.test(String(e && e.message))) retu
 async function tiersFor(userIds) {
   const ids = [...new Set([...(userIds || [])].filter(Boolean).map(String))];
   const out = new Map();
+  if (ids.length) await DON();
   for (let i = 0; i < ids.length; i += 400) {
     const part = ids.slice(i, i + 400);
-    const rows = await getQuery(`${SQL} AND r.userId IN (${part.map(() => "?").join(",")}) GROUP BY r.userId`, part).catch(noTable);
+    const rows = await getQuery(`${SQL} AND r.user_id IN (${part.map(() => "?").join(",")}) GROUP BY r.user_id`, part).catch(noTable);
     for (const r of rows) out.set(String(r.userId), view(r));
   }
   return out;

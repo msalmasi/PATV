@@ -92,7 +92,7 @@ test("card: open checkouts count (two tabs can't double up), over the limit is r
   // paying the open one (Stripe can still deliver it) counts it as credited, not twice
   await SB.handleEvent(paidEv("evt_s2", "ann", 4000, s2, T0));
   assert.equal((await DP.daily("u-ann")).left_cents, 6000);
-  assert.equal(await bal("ann"), 20000000);
+  assert.equal(await bal("ann"), 0, "1.99ans: counted, no PAT for dollars");
   now = T0;
 });
 
@@ -107,11 +107,11 @@ test("window edges: a donation paid at 23:59:59 New York counts for that day, no
   now = T0;
 });
 
-test("webhook race: two checkouts paid at once past the limit - both credited (the money is taken), the second flagged and counted", async () => {
+test("webhook race: two checkouts paid at once past the limit - both counted (the money is taken), the second flagged", async () => {
   await SB.handleEvent(paidEv("evt_r1", "cy", 8000, "cs_r1", T0));
   const r = await SB.handleEvent(paidEv("evt_r2", "cy", 5000, "cs_r2", T0 + 1000));
-  assert.equal(r.outcome, "donation-credited");
-  assert.equal(await bal("cy"), 65000000);
+  assert.equal(r.outcome, "donation-perks");
+  assert.equal(await bal("cy"), 0, "1.99ans: no PAT for dollars");
   const rows = await getQuery("SELECT ref, over_limit, usd_cents FROM donation_usd_log WHERE user_id = 'u-cy' ORDER BY paid_at");
   assert.deepEqual(rows.map((x) => [x.ref, x.over_limit]), [["don-evt_r1", 0], ["don-evt_r2", 1]]);
   assert.equal((await DP.daily("u-cy")).used_cents, 13000, "counted");
@@ -122,31 +122,27 @@ test("webhook race: two checkouts paid at once past the limit - both credited (t
   assert.equal((await DP.daily("u-cy")).used_cents, 13000);
 });
 
-test("crypto: over the limit is HELD (not credited, the donor is told); the admin credits it at the seen-time terms, or marks it refunded", async () => {
+test("crypto: over the limit is HELD (not counted, the donor is told); the admin counts it on its seen day (no PAT), or marks it refunded", async () => {
   await SB.handleEvent(paidEv("evt_c0", "dee", 8000, "cs_c0", T0));
-  // a promo live when the transfer is seen
-  const P = await DP.create(ADMIN, { mode: "mult", mult: 2, cap_usd: 100, starts: T0, ends: T0 + 3600e3 });
   const id = await cryptoPay("dee", 5000, T0 + 60000);
   assert.equal(await CP.settle(id), "held");
   const p = (await getQuery("SELECT status, hold_reason, pat FROM crypto_payments WHERE id = ?", [id]))[0];
   assert.deepEqual([p.status, p.hold_reason, p.pat], ["held", "daily_limit", null]);
-  assert.equal(await bal("dee"), 40000000, "not credited");
+  assert.equal(await bal("dee"), 0, "1.99ans: no PAT for dollars");
   const n = await getQuery("SELECT body FROM inbox WHERE user_id = 'u-dee' AND ref LIKE 'climit-%'");
   assert.equal(n.length, 1); assert.match(n[0].body, /daily donation limit \(\$80\.00 of \$100\.00/);
   assert.equal((await DP.limitState()).crypto_held, 1);
-  // the promo ends; the admin credits it anyway - at the terms of when it was SEEN (promo: $20 of the $100 promo cap is left
-  // after the $80 card... the card donation was before the promo, so all $50 fit the promo cap)
+  // the admin approves it later - counted on the day it was SEEN, flagged; still no PAT
   now = T0 + 2 * 3600e3;
-  await DP.end(ADMIN, P.id).catch(() => {});
   assert.equal((await CP.decide(id, "approve", "admin", "ok")).status, "credited");
-  assert.equal(await bal("dee"), 40000000 + 50000000, "$50 at 2x the normal rate");
-  const l = (await getQuery("SELECT over_limit FROM donation_usd_log WHERE ref = (SELECT claim_id FROM crypto_payments WHERE id = ?)", [id]))[0];
-  assert.equal(l.over_limit, 1, "an approved over-limit credit is flagged and counted");
+  assert.equal(await bal("dee"), 0);
+  const l = (await getQuery("SELECT over_limit, pat FROM donation_usd_log WHERE ref = ?", [CP.claimIdOf(id)]))[0];
+  assert.deepEqual([l.over_limit, l.pat], [1, 0], "an approved over-limit donation is flagged and counted");
   // another one over the limit, sent back by hand
   const id2 = await cryptoPay("dee", 2000, T0 + 120000);
   assert.equal(await CP.settle(id2), "held");
   assert.equal((await CP.decide(id2, "refunded", "admin", "sent back 0xabc")).status, "refunded");
-  assert.equal(await bal("dee"), 90000000);
+  assert.equal(await bal("dee"), 0);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u-dee' AND ref LIKE 'crefund-%'"))[0].n, 1);
   await assert.rejects(CP.decide(id2, "approve", "admin"), /not held/);
   // under the limit the next day: credited normally

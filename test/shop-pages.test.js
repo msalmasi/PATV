@@ -151,6 +151,7 @@ test("an order: picture + badge; the gifter's view still hides the delivery; str
   const asGifter = await get(`/shop/orders/${IDS.sent}`, "sp-bob");
   assert.match(asGifter.html, /src="\/public\/img\/shop\/gaming-pc\.svg"/);
   assert.match(asGifter.html, /class="sd-badge" style="--c:#4caf50">Completed</);
+  assert.match(asGifter.html, /A virtual in-game collectible - it’s yours on PATV now/, "1.99ans: the gaming PC is a virtual collectible");
   assert.doesNotMatch(asGifter.html, /DAVE-ONLY/);
   const asRecipient = await get(`/shop/orders/${IDS.anon}`, "sp-bob");
   assert.match(asRecipient.html, /From someone \(anonymous\) to bob/);

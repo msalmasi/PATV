@@ -164,9 +164,12 @@ test("(1) donation promos: create / settings / edit / end are a Pepe owner's; re
     }
   }
   assert.equal((await one("SELECT COUNT(*) AS n FROM donation_promos")).n, 0, "nothing created");
-  const ok = await call("/api/admin/donpromo/create", U.owner, body);
-  assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assert.equal((await call(`/api/admin/donpromo/${ok.body.promo.id}/end`, U.owner, {})).status, 200);
+  // 1.99ans (no PAT for dollars, nopat.js): promos are retired - even the owner gets 410, and nothing is created
+  const no = await call("/api/admin/donpromo/create", U.owner, body);
+  assert.equal(no.status, 410, JSON.stringify(no.body));
+  assert.match(no.body.error, /retired/);
+  assert.equal((await one("SELECT COUNT(*) AS n FROM donation_promos")).n, 0, "still nothing created");
+  assert.equal((await call("/api/admin/donpromo/settings", U.owner, {})).status, 200, "the settings (daily limits) stay the owner's");
   assert.equal((await fetch(base + "/api/admin/donpromo", { headers: { "x-test-user": U.admin } })).status, 200, "an Admin still reads the card");
 });
 

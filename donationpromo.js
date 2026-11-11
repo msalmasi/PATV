@@ -1,5 +1,12 @@
 // donationpromo.js — 1.99tq: time-limited DONATION PROMOS ("500k PAT per $1, up to $100, today only").
 //
+// 1.99ans: NO PAT FOR DOLLARS (nopat.js; NY S5935-A, owner 2026-11-11: donations are "Perks only, no PAT"). The donation
+// credit below (creditTerms / previewTerms / quote) is nopat.donorTerms(): 0 PAT, 0 incentive bonus, never a promo rate.
+// Promos are RETIRED: create / edit refuse, live() / liveCached() are null, so nothing shows or applies one (an old row can
+// still be ended). Kept as they were: the per-member DAILY donation limit, the global daily USD cap (the PAT caps can't trip -
+// nothing is minted), donation_usd_log (THE record of every donation since 1.99ts - donations.js reads it) and the pure
+// split() arithmetic. The text below describes how promos worked before 1.99ans.
+//
 // The normal donation rate lives in Pepe (pepe_econcfg donation_rate / donation_bonus_pct, synced to the site as
 // funding.donationTerms()). A promo is the SITE's: it only changes how many PAT a donation credits on the site, so Pepe
 // needs nothing new (he journals the claim's `amount` + `bonus` as before) and Stripe needs nothing new (the charge is the
@@ -113,6 +120,8 @@ function init() {
 class Refuse extends Error { constructor(status, message, code = null, detail = null) { super(message); this.status = status; this.refuse = true; this.code = code; this.detail = detail; } }
 const refuse = (m, s = 400, code = null, detail = null) => new Refuse(s, m, code, detail);
 const normalTerms = () => { try { return require("./funding").donationTerms(); } catch (e) { return { rate: 500000, bonus_pct: 20 }; } };
+const NP = require("./nopat");                 // 1.99ans: the hard rule - a dollar donation's terms are always 0 PAT
+const RETIRED = "Donation promos are retired: donations give supporter perks, never PAT (no PAT for dollars).";
 
 // ── the cache (sync readers: the homepage banner) ──
 let CACHE = [];
@@ -179,12 +188,10 @@ function donorKeyOf(kind, value) {
   const v = String(value || "").trim().toLowerCase();
   return v ? kind + ":" + crypto.createHash("sha256").update(v).digest("hex").slice(0, 32) : null;
 }
-const fromRow = (r, promo) => ({ usd_cents: r.usd_cents, pat: r.promo_pat + r.normal_pat, bonus: r.bonus, rate: r.normal_rate, bonus_pct: r.bonus_pct,
-  promo_cents: r.promo_cents, normal_cents: r.normal_cents, promo_pat: r.promo_pat, normal_pat: r.normal_pat, promo_rate: r.promo_rate,
-  promo: { id: r.promo_id, label: promo ? promo.label : null }, replay: true });
 
 /** The split a donation would get (read-only): {s, p (the promo row or null), rate, id}. creditTerms() writes what this says. */
 async function computeTerms({ userId = null, donorKey = null, cents, paidAt }) {
+  if (NP.PAT_PER_USD === 0) return { s: NP.donorTerms(cents), p: null };     // 1.99ans: always (nopat.js)
   const T = normalTerms();
   const plain = { s: { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null }, p: null };
   const at = Number(paidAt);
@@ -205,30 +212,14 @@ async function computeTerms({ userId = null, donorKey = null, cents, paidAt }) {
 /** 1.99uh: what a donation would credit (PAT + the incentive bonus = what it mints), without writing anything. */
 async function previewTerms(args) { await init(); return (await computeTerms(args)).s; }
 /**
- * THE donation credit. Call it inside the transaction that credits the donor (it wraps itself in one otherwise).
- * {ref (the credit's id, e.g. the claim id), userId, donorKey?, cents, paidAt (ms), via ("card" | "crypto")}
- * -> {usd_cents, pat, bonus, rate, bonus_pct, promo_cents, normal_cents, promo_pat, normal_pat, promo_rate, promo: {id, label} | null}
+ * THE donation "credit" both rails take their numbers from ({cents, ...} - the other fields the callers pass are ignored).
+ * 1.99ans: always nopat.donorTerms(cents) -> {usd_cents, pat: 0, bonus: 0, rate: 0, bonus_pct: 0, ..., promo: null, perks_only}.
  */
-async function creditTerms({ ref, userId = null, donorKey = null, cents, paidAt, via = null }) {
+async function creditTerms({ cents } = {}) {
   await init();
-  const run = async () => {
-    const T = normalTerms();
-    const old = ref ? (await getQuery("SELECT * FROM donation_promo_credits WHERE ref = ?", [String(ref)]))[0] : null;
-    if (old) return fromRow(old, (await getQuery("SELECT label FROM donation_promos WHERE id = ?", [old.promo_id]))[0]);
-    if (!ref) return { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
-    const C = await computeTerms({ userId, donorKey, cents, paidAt });
-    if (!C.p) return C.s;
-    const { s, p, rate, id, budgetShort } = C;
-    const at = Number(paidAt);
-    await runQuery(`INSERT INTO donation_promo_credits (ref, promo_id, user_id, donor_key, via, paid_at, credited, usd_cents, promo_cents, normal_cents,
-                    promo_rate, normal_rate, promo_pat, normal_pat, bonus, bonus_pct, budget_short_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [String(ref), p.id, id.col === "user_id" ? id.v : null, id.col === "donor_key" ? id.v : null, via, at, clock(), s.usd_cents, s.promo_cents,
-       s.normal_cents, rate, T.rate, s.promo_pat, s.normal_pat, s.bonus, T.bonus_pct, budgetShort || 0]);
-    if (budgetShort > 0) console.warn(`[donpromo] budget fallback: ${ref} (${via || "?"}) - $${(budgetShort / 100).toFixed(2)} got the normal rate because ` +
-                                      `${p.id}'s budget (${Number(p.budget_pat).toLocaleString("en-US")} PAT) ran out`);
-    return { ...s, promo: { id: p.id, label: p.label || null } };
-  };
-  return inTx() ? run() : tx(run);
+  // 1.99ans: no PAT for dollars and no promo split (nopat.js). Before 1.99ans this split the donation at the promo / normal rate
+  // and wrote its donation_promo_credits row; those rows stay as the history of the promo credits already made.
+  return NP.donorTerms(cents);
 }
 /** The extra reserve_claims meta for a credit: {} without a promo (the old meta stays byte-for-byte the same). */
 function metaOf(s) {
@@ -263,9 +254,10 @@ function publicOf(p, normal, now) {
            cap_usd: p.cap_cents / 100, starts: p.starts, ends: p.ends, left_ms: Math.max(0, p.ends - now), bonus_base: p.bonus_base,
            bonus_pct: normal.bonus_pct, budget: p.budget_pat != null };
 }
-/** The live promo for display (+ the viewer's allowance when signed in), or null. */
+/** The live promo for display (+ the viewer's allowance when signed in), or null. 1.99ans: always null (promos retired). */
 async function live(userId = null, now = clock()) {
   await init();
+  if (NP.PAT_PER_USD === 0) return null;
   const p = await promoAt(now);
   if (!p) return null;
   const out = publicOf(p, normalTerms(), now);
@@ -283,6 +275,7 @@ async function live(userId = null, now = clock()) {
 }
 /** Sync: the live promo from the cache (no allowance) - the homepage banner. */
 function liveCached(now = clock()) {
+  if (NP.PAT_PER_USD === 0) return null;       // 1.99ans: promos retired
   const p = CACHE.find((x) => !x.cancelled && x.enabled && x.starts <= now && x.ends > now);
   return p ? publicOf(p, normalTerms(), now) : null;
 }
@@ -294,10 +287,11 @@ async function quote(userId, usd, now = clock()) {
   const T = normalTerms();
   const D = await daily(userId, now);      // 1.99ts: the daily limit (null = none)
   const lim = D ? { left_cents: D.left_cents, over: cents > D.left_cents } : null;
-  const p = await promoAt(now);
+  const p = NP.PAT_PER_USD === 0 ? null : await promoAt(now);      // 1.99ans: no promo applies
   const rate = p ? effectiveRate(p, T.rate) : 0;
   let s;
-  if (!p || !rate) s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
+  if (NP.PAT_PER_USD === 0) s = { ...NP.donorTerms(cents) };      // 1.99ans: 0 PAT for dollars (nopat.js)
+  else if (!p || !rate) s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
   else {
     const u = await usage(p.id, identity(userId));
     s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
@@ -457,8 +451,8 @@ async function globalPublic(now = clock()) {
   if (caps.pat != null) fr.push(caps.pat > 0 ? Math.max(0, 1 - used.pat / caps.pat) : 0);
   if (caps.cents != null) fr.push(caps.cents > 0 ? Math.max(0, 1 - used.cents / caps.cents) : 0);
   const left = fr.length ? Math.min(...fr) : 1;
-  // full = not even $1 at the normal rate fits
-  const one = split({ cents: 100, normalRate: normalTerms().rate, bonusPct: normalTerms().bonus_pct });
+  // full = not even $1 fits (1.99ans: a donation mints nothing - nopat.js)
+  const one = NP.donorTerms(100);
   const full = !(await globalCheck(100, mintOf(one), now, now)).fits;
   return { on: true, full, pct_left: Math.floor(left * 100), resets_at: dayWindow(now).end, tz: S.tz };
 }
@@ -665,6 +659,7 @@ const nextId = async () => {
 /** Create a promo. b = {label, mode, rate | mult, cap_usd, budget, bonus_base, enabled, starts, ends, today} */
 async function create(admin, b = {}) {
   await init();
+  if (NP.PAT_PER_USD === 0) throw refuse(RETIRED, 410, "retired");      // 1.99ans: promos raise a PAT rate - retired
   await auditReady();
   const now = clock();
   const T = normalTerms();
@@ -696,6 +691,7 @@ const LOCKED = ["mode", "rate", "mult", "cap_usd", "bonus_base", "starts"];
 /** Edit. Before it starts (and with no credits): anything. After: label, ends, budget, enabled only. */
 async function edit(admin, id, b = {}) {
   await init();
+  if (NP.PAT_PER_USD === 0) throw refuse(RETIRED, 410, "retired");      // 1.99ans (end() still works)
   await auditReady();
   const now = clock();
   const row = await tx(async () => {

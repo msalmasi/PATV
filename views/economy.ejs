@@ -268,10 +268,8 @@
     const bs = (INC && INC.budgets) || (typeof treasury !== 'undefined' && treasury && treasury.budgets) || null;
     const bud = bs ? Object.values(bs).reduce((a, x) => a + (Number(x) || 0), 0) : 0;
     const target = bud > 0 ? bud : 25e6;
-    const d = (L && L.donation) || {};
     return { floor: b.floor != null ? b.floor : 50e6, ceiling: b.ceiling != null ? b.ceiling : 150e6, target,
-             fk: Math.max(2e6, target * 0.6), cv: Math.max(2e6, target * 0.4),
-             rate: d.rate != null ? d.rate : 500000, bonus: d.bonus_pct != null ? d.bonus_pct : 20 };
+             fk: Math.max(2e6, target * 0.6), cv: Math.max(2e6, target * 0.4) };
   })();
   const LAYER_C = { players: '#3987e5', fed: '#d95926', treasury: '#199e70', incentive: '#c98500', pots: '#d55181', burn: '#008300' };
 %>
@@ -551,7 +549,8 @@
     <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🪙</span> What PAT is</h2>
     <p class="lead">PAT (Public Access Token) is the points currency of PATV. It's one balance shared by the website, the
       pads' chat rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
-      It isn't crypto and it isn't real money, but you can spend it on real prizes in the <a href="/shop">shop</a>.</p>
+      It isn't crypto and it isn't real money: it's points with no cash value, and you spend it on virtual prizes in the <a href="/shop">shop</a>.
+      It can't be bought: donations give supporter perks, never PAT.</p>
     <div class="grid">
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">💬</span> Hang out</h3>
@@ -662,7 +661,8 @@
       <div class="pm-box" style="--c:#66bb6a">
         <h4><%- t('economy.map.pl_h') %></h4>
         <p><%- t('economy.map.pl_d') %></p>
-        <p><%- t('economy.map.don', { rate: sh(V3.rate), pct: V3.bonus, link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) %></p>
+        <%# 1.99ans: no PAT for dollars (nopat.js) - a donation gives supporter perks %>
+        <p><%- t('economy.map.don_perks', { link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) %></p>
       </div>
 
       <div class="pm-ar"><%- t('economy.map.to_spend') %></div>

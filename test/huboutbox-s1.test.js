@@ -295,6 +295,12 @@ test("looks triggers: only with the switch on, only for the look's sources and c
   await step("a Plex renewal (expires only): valid_until moves", "UPDATE plex_members SET expires = ? WHERE user_id = '1002'", [AT + 30 * DAY], ["acct:1002"]);
   await step("a donation", "INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('don-2', 'mint:donation', '1002', 'mint', 5)", [], ["acct:1002"]);
   await step("another claim: not the look's", "INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES ('c-3', 'heist', '1002', 'x', 5)", [], []);
+  // 1.99ans: a perks-only donation (no PAT for dollars) is its donation_usd_log row - a card checkout's hold turning 'credited'
+  await step("a card checkout opens: not yet the look's", "INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, status, created) VALUES ('hold:1', '1003', 'card', ?, 500, 'open', ?)",
+             [AT, AT], []);
+  await step("a perks-only donation (the hold credited)", "UPDATE donation_usd_log SET ref = 'don-evt_9', status = 'credited', pat = 0 WHERE ref = 'hold:1'", [], ["acct:1003"]);
+  await step("a crypto one, credited at once", "INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, pat, status, created) VALUES ('cdon-9', '1003', 'crypto', ?, 500, 0, 'credited', ?)",
+             [AT, AT], ["acct:1003"]);
   await step("a badge showcase", "INSERT INTO user_badge_showcase (user_id, badges) VALUES ('1002', '[\"cf_linked\"]')", [], ["acct:1002"]);
   await step("a pad flair", "INSERT INTO pad_user_flairs (room_id, user_id, flair_id, set_by, self, set_at) VALUES ('patv:frogpond', '1002', 18, 'alice', 0, ?)", [AT],
              ["acct:1002"]);

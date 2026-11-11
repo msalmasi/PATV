@@ -16,7 +16,7 @@
       if (el.type === 'checkbox') { body._bools.push(el.name); if (el.checked) body[el.name] = true; }
       else body[el.name] = el.value;
     });
-    if (body.crypto_donations_enabled && !/crypto_donations_enabled/.test(form.getAttribute('data-was') || '') && !window.confirm('Turn crypto donations ON? Payments from linked wallets will mint PAT.')) return;
+    if (body.crypto_donations_enabled && !/crypto_donations_enabled/.test(form.getAttribute('data-was') || '') && !window.confirm('Turn crypto donations ON? Payments from linked wallets count as donations (supporter perks, no PAT).')) return;
     post('/api/crypto/admin/settings', body).then(function (j) { msg('cxSetMsg', j.changed && j.changed.length ? 'Saved: ' + j.changed.join(', ') : 'No change.'); },
       function (e) { msg('cxSetMsg', e.message, true); });
   });
@@ -55,7 +55,7 @@
     var b = ev.target.closest && ev.target.closest('[data-cx]');
     if (!b) return;
     var action = b.getAttribute('data-cx');
-    var note = window.prompt(action === 'approve' ? 'Approve and credit this payment? Optional note:' : action === 'reject' ? 'Reject (no PAT)? Reason:' : action === 'reverify' ? 'Ask the verifier RPC again? Note:' : action === 'refunded' ? 'Mark refunded off-site (no PAT; the donor is told)? Note (e.g. the refund tx):' : 'Ignore (never credit)? Reason:', '');
+    var note = window.prompt(action === 'approve' ? 'Approve and count this payment (supporter perks, no PAT)? Optional note:' : action === 'reject' ? 'Reject (no PAT)? Reason:' : action === 'reverify' ? 'Ask the verifier RPC again? Note:' : action === 'refunded' ? 'Mark refunded off-site (no PAT; the donor is told)? Note (e.g. the refund tx):' : 'Ignore (never credit)? Reason:', '');
     if (note === null) return;
     b.disabled = true;
     post('/api/crypto/admin/decide', { id: b.getAttribute('data-id'), action: action, note: note })

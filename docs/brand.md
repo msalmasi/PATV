@@ -98,6 +98,7 @@ They speak 20-plus languages. Most are on phones. Many are night owls. Assume th
 ### Points copy rules
 
 - **PAT is points, never money.** Never call PAT "money", "cash" or "funds", and never say it "funds" anything. Say "PAT" or "points": "the PAT goes to Fort Knox", "the Fed fills the pools", "free PAT in the vault". Keep "money" for real money only: donations in dollars, card payments, crypto, and the no-cash-value disclaimers.
+- **Prizes are virtual.** PAT never buys cash, gift cards, physical goods, memberships of other services or anything outside PATV, and money never buys PAT: donations give supporter perks only. Say "virtual prizes" and "virtual in-game collectibles"; a collectible named after a real thing (a console, a gift card, Camfrog Pro) says plainly that it isn't that thing.
 - **PAT has no cash value.** Say so wherever PAT is earned, bought, donated or traded. The canonical lines are the footer ("PAT is a points system with no cash value · 18+") and terms §9 ("PAT is a virtual points system for fun inside PATV. It has no cash value."). Don't paraphrase them into something weaker.
 - **Finance words are game words.** "Staking", "vaults", "markets", "returns", "loans", "credit score" describe game mechanics, not financial products or advice. Never write "invest", "earn interest", "profit", "guaranteed" or "cash out" (except "cash out" between heist rounds, which is a game action).
 - **Write amounts as "20,000 PAT".** Use the locale's digit grouping and keep "PAT" after the number. Big numbers are gold and tabular (design-system §3.3).
@@ -125,7 +126,7 @@ They speak 20-plus languages. Most are on phones. Many are night owls. Assume th
 | **Padiquette** | the community guidelines | 📜 |
 | **stash** | a shared PAT account you can stake into the vaults | |
 
-**Words we avoid:** "money", "cash" and "funds" for PAT (it's points: say PAT), "users" (say members, people, or you), "customers", "content creators" (say streamers, hosts), "platform" in marketing copy, "invest", "profit", "cash out" (outside heists), "crypto" for PAT (crypto donations are a separate, real-money support feature), "AI" as a selling point (Pepe is a character, not a feature), and "Pond Life" (the old GTF name).
+**Words we avoid:** "money", "cash" and "funds" for PAT (it's points: say PAT), "real prizes", "real-world prizes" and "redeem PAT for..." (every prize is virtual: say "virtual prizes"), "buy PAT" or "PAT per $" (PAT can't be bought), sweepstakes words ("no purchase necessary", "void where prohibited"), "users" (say members, people, or you), "customers", "content creators" (say streamers, hosts), "platform" in marketing copy, "invest", "profit", "cash out" (outside heists), "crypto" for PAT (crypto donations are a separate, real-money support feature), "AI" as a selling point (Pepe is a character, not a feature), and "Pond Life" (the old GTF name).
 
 ### Emoji
 

@@ -291,7 +291,7 @@ test("linking: off -> 404; signature required; nonce single-use + expiring; one 
 });
 
 // ── the watcher: finality, reorgs, idempotency, crediting ──
-test("EVM watcher: pending until finalized; a reorged-out transfer is dropped; credit = the donation mint, once", async () => {
+test("EVM watcher: pending until finalized; a reorged-out transfer is dropped; credited = counted, perks only (1.99ans: no PAT, no mint), once", async () => {
   CP.set({ chain_sol: false, chain_base: false, max_usd: 1000, min_usd: 1 }, "test");
   const alice = (await CP.wallets("u-alice"))[0].address;
   CHAIN.eth = { head: 1000, final: 990, logs: [] };
@@ -315,35 +315,32 @@ test("EVM watcher: pending until finalized; a reorged-out transfer is dropped; c
   await CP.pollOnce({ force: true });
   const p = await pay(idB);
   assert.equal(p.status, "credited");
-  assert.equal(p.pat, 2500000); assert.equal(p.bonus, 500000);
-  assert.equal(await bal("alice"), 2500000);
-  const c = await claims();
-  assert.equal(c.length, 1);
-  assert.equal(c[0].flow, "mint:donation"); assert.equal(c[0].type, "donation"); assert.equal(c[0].amount, 2500000);
-  assert.equal(c[0].claimId, CP.claimIdOf(idB));
-  assert.ok(c[0].claimId.length <= 56, "fits Pepe's claim id sanitizer");
-  assert.deepEqual(JSON.parse(c[0].meta), { bonus: 500000, usd_cents: 500, rate: 500000, bonus_pct: 20, via: "crypto", chain: "eth", token: "USDC", tx: "0x" + "aa".padStart(64, "0"), idx: "1" });
-  const tx = await getQuery("SELECT type, points FROM transactions WHERE userId = 'u-alice'");
-  assert.deepEqual(tx.map((x) => [x.type, x.points]), [["donation-crypto", 2500000]]);
+  assert.deepEqual([p.pat, p.bonus, p.claim_id], [0, 0, null], "1.99ans: no PAT for dollars - nothing credited or minted");
+  assert.equal(await bal("alice"), 0);
+  assert.deepEqual(await claims(), [], "no mint:donation claim");
+  assert.deepEqual(await getQuery("SELECT type, points FROM transactions WHERE userId = 'u-alice'"), []);
+  const log = await getQuery("SELECT user_id, via, usd_cents, pat, status FROM donation_usd_log WHERE ref = ?", [CP.claimIdOf(idB)]);
+  assert.deepEqual(log, [{ user_id: "u-alice", via: "crypto", usd_cents: 500, pat: 0, status: "credited" }], "the donation's record");
   // re-reading the same blocks (a restart that lost its cursor) changes nothing
   await runQuery("UPDATE crypto_cursors SET last_block = 980 WHERE chain = 'eth'");
   await CP.pollOnce({ force: true });
-  assert.equal(await bal("alice"), 2500000);
-  assert.equal((await claims()).length, 1);
+  assert.equal(await bal("alice"), 0);
   assert.equal((await CP.settle(idB)), "credited", "settling a credited payment again is a no-op");
-  assert.equal((await claims()).length, 1);
-  // the inbox notice
-  const n = await getQuery("SELECT * FROM inbox WHERE userId = 'u-alice'").catch(() => []);
-  if (n.length) assert.match(n[0].body, /5\.00 USDC received on Ethereum, 2,500,000 PAT added/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM donation_usd_log WHERE ref = ?", [CP.claimIdOf(idB)]))[0].n, 1);
+  // the inbox notice names the perks, never PAT
+  const n = await getQuery("SELECT * FROM inbox WHERE user_id = 'u-alice'").catch(() => []);
+  assert.ok(n.length, "a receipt");
+  assert.match(n[0].body, /5\.00 USDC received on Ethereum\. Your 💚 Supporter perks are on\. Donations never add PAT\./);
 });
-test("Pepe's synced donation terms drive the amounts; dust is recorded, never credited", async () => {
+test("Pepe's synced donation terms are NOT applied (1.99ans: 0 PAT); dust is recorded, never credited", async () => {
   const alice = (await CP.wallets("u-alice"))[0].address;
   F.sync({ reserve: 1, monetary: { donation: { rate: 1000, bonus_pct: 50 } } });
   CHAIN.eth.logs.push(logOf({ from: alice, block: 1011, tx: "bb", li: 0, usd: 12.345678 }), logOf({ from: alice, block: 1011, tx: "bc", li: 0, usd: 0.99 }));
   CHAIN.eth.final = 1015; CHAIN.eth.head = 1020;
   await CP.pollOnce({ force: true });
   const p = await pay(`eth:0x${"bb".padStart(64, "0")}:0`);
-  assert.equal(p.status, "credited"); assert.equal(p.usd_cents, 1234); assert.equal(p.pat, 12340); assert.equal(p.bonus, 6170);
+  assert.equal(p.status, "credited"); assert.equal(p.usd_cents, 1234); assert.equal(p.pat, 0); assert.equal(p.bonus, 0);
+  assert.equal(await bal("alice"), 0);
   assert.equal((await pay(`eth:0x${"bc".padStart(64, "0")}:0`)).status, "dust");
   F.sync({ reserve: 1, monetary: { donation: { rate: 500000, bonus_pct: 20 } } });
 });
@@ -358,7 +355,8 @@ test("unlinked sender -> unclaimed; credited when its owner links it by signatur
   const l = await link("carol", "evm", w);
   assert.equal(l.finish.status, 200, l.finish.text);
   assert.deepEqual(l.finish.json.claimed, [{ id, status: "credited" }]);
-  assert.equal(await bal("carol"), 1500000);
+  assert.equal(await bal("carol"), 0, "counted for carol - perks, no PAT");
+  assert.equal((await pay(id)).status, "credited");
   assert.equal((await pay(id)).user_id, "u-carol");
 });
 test("over the per-transfer maximum -> held; an admin approves (credited) or rejects (nothing); admins only", async () => {
@@ -390,11 +388,11 @@ test("over the per-transfer maximum -> held; an admin approves (credited) or rej
   const a = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idD, action: "approve", note: "checked" } });
   assert.equal(a.status, 200, a.text);
   assert.equal(a.json.status, "credited");
-  assert.equal(await bal("alice"), before + 75000000);
+  assert.equal(await bal("alice"), before, "approved = counted, no PAT");
   assert.equal((await pay(idD)).decided_by, "boss");
   const rj = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idE, action: "reject", note: "refund by hand" } });
   assert.equal(rj.json.status, "rejected");
-  assert.equal(await bal("alice"), before + 75000000);
+  assert.equal(await bal("alice"), before);
   assert.equal((await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id: idE, action: "approve" } })).status, 409, "a rejected payment can't be approved later");
   await CP.set({ max_usd: 1000 }, "test");
 });
@@ -418,9 +416,9 @@ test("Solana watcher: the wallet's token-account history before the first look i
   await CP.pollOnce({ force: true });
   const p = await pay("sol:new1:0");
   assert.equal(p.status, "credited"); assert.equal(p.token, "USDC"); assert.equal(p.chain, "sol");
-  assert.equal(await bal("bob"), 1000000);
+  assert.equal(await bal("bob"), 0, "no PAT for dollars");
   await CP.pollOnce({ force: true });
-  assert.equal(await bal("bob"), 1000000, "idempotent");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM donation_usd_log WHERE ref = ?", [CP.claimIdOf("sol:new1:0")]))[0].n, 1, "idempotent");
   assert.equal((await getQuery("SELECT last_sig FROM crypto_sol_cursors WHERE account = ?", [ACCT]))[0].last_sig, "fail1");
 });
 test("a transfer the independent verifier RPC doesn't confirm is SUSPECT (never credited) until an admin re-verifies it", async () => {
@@ -439,7 +437,7 @@ test("a transfer the independent verifier RPC doesn't confirm is SUSPECT (never 
   CHAIN.tamper = false;
   const r = await raw("POST", "/api/crypto/admin/decide", { user: "boss", body: { id, action: "reverify", note: "verifier was wrong" } });
   assert.equal(r.json.status, "credited", r.text);
-  assert.equal(await bal("alice"), before + 3500000);
+  assert.equal(await bal("alice"), before, "no PAT for dollars");
   // the verifier not having it yet = "verifying", retried next pass, no mint meanwhile
   CHAIN.eth.logs.push(logOf({ from: alice, block: 1031, tx: "ef", li: 0, usd: 2 }));
   CHAIN.eth.final = 1033; CHAIN.eth.head = 1036;
@@ -479,7 +477,8 @@ test("pages: /support (QR codes, addresses, the viewer's payments) and /admin/cr
   assert.match(pg.text, /<svg[^>]*>/, "QR codes inline");
   assert.match(pg.text, /data-crypto-link="evm"/);
   assert.match(pg.text, /id="cryptoPayments"/);
-  assert.match(pg.text, /500,000/);
+  assert.doesNotMatch(pg.text, /500,000|PAT per \$|\$1 = /, "1.99ans: no PAT for dollars - no rate on the page");
+  assert.match(pg.text, /Supporter perks/);
   const anon = await raw("GET", "/support");
   assert.equal(anon.status, 200);
   assert.doesNotMatch(anon.text, /id="cryptoPayments"/);
@@ -487,6 +486,7 @@ test("pages: /support (QR codes, addresses, the viewer's payments) and /admin/cr
   const ad = await raw("GET", "/admin/crypto", { user: "boss" });
   assert.equal(ad.status, 200, ad.text.slice(0, 400));
   assert.match(ad.text, /Watcher/); assert.match(ad.text, /ethereum-rpc\.publicnode\.com/);
+  assert.match(ad.text, /<b>no PAT<\/b> - nothing is minted/);
   await CP.set({ crypto_donations_enabled: false }, "test");
   assert.equal((await raw("GET", "/support", { user: "alice" })).status, 404, "off (and Stripe off): no page");
   assert.equal((await raw("GET", "/support", { user: "boss" })).status, 200, "admins get a preview");

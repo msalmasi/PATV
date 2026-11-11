@@ -365,10 +365,23 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
                     "premium-processor", "premium-chargebacks", "premium-changes", "premium-ending"]) assert.match(s10, new RegExp(`id="${id}"`));
   assert.match(s10, /renews automatically/);
   assert.match(s10, /never see or store your full card number/);
-  assert.match(s10, /No purchase necessary/);
+  // 1.99ans (NY S5935-A, owner 2026-11-11): every prize is virtual, donations give perks never PAT, no sweepstakes wording;
+  // the date moves, VERSION doesn't (re-acceptance is the owner's call)
+  assert.match(s10, /<h3 id="prizes">Virtual prizes in the store<\/h3>/);
+  assert.match(s10, /Everything the official store sells is a virtual item for use on PATV/);
+  assert.match(s10, /Virtual in-game collectibles<\/b> are pictures in your PATV collection/);
+  assert.match(s10, /<b>For fun only:<\/b> PAT is points with no cash value/);
+  assert.match(s10, /<b>Perks, never PAT:<\/b>/);
+  assert.match(s10, /can't be bought, with a donation or any other payment/);
+  for (const gone of [/Real-world prizes/, /No purchase necessary/, /void where prohibited/i, /W-9/, /similar or greater value/, /Thank-you PAT/,
+                      /500,000 PAT/, /community pot/, /maker's or seller's own warranty/]) assert.doesNotMatch(s10, gone);
+  const s9 = (t.text.match(/<section id="pat">[\s\S]*?<\/section>/) || [""])[0];
+  assert.match(s9, /every prize PATV itself gives for PAT is virtual/);
+  assert.doesNotMatch(s9, /other than through the store/);
   assert.match(t.text, /href="#premium">Premium subscriptions and donations/);
   assert.match(t.text, /<h2>20\. Contact<\/h2>/);
-  assert.equal(terms.UPDATED, "11 October 2026");
+  assert.equal(terms.UPDATED, "11 November 2026");
+  assert.equal(terms.VERSION, "2026-10-11", "1.99ans did not bump VERSION");
   // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
   const wp1 = (await terms.textDates())["wp1-voice"];
   assert.ok(wp1 && wp1.at > 0 && wp1.day, "WP-1's first-served day is recorded");
