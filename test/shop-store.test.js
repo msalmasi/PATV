@@ -205,7 +205,7 @@ test("/shop renders: hero, featured, chips, cards with pictures, afford states, 
   const data = await shop.browse({ _balance: 950 });
   const html = await ejs.renderFile(path.join(repo, "views", "shop.ejs"), base({ ...data, me, user: "me", store: null, feat: await shop.featured() }));
   assert.match(html, /<section class="st-hero"/);
-  assert.match(html, /<em>real prizes<\/em>/);
+  assert.match(html, /<em>virtual prizes<\/em>/);
   assert.match(html, /class="st-feat"/);
   assert.match(html, /src="\/public\/img\/shop\/gaming-pc\.svg"/);
   assert.match(html, /aria-label="Shelves"/);
