@@ -109,7 +109,9 @@ test("catalogue: every clip seeded for rendering; Pepe's sync hands out render j
   assert.ok(nGlobal >= 12 + 15, "the global board: voice lines + 🎛️ sound effects (1.99vu)");
   const nSeasons = SB.CAT.seasons.reduce((s, x) => s + x.clips.length, 0);
   assert.ok(SB.CAT.seasons.length >= 2 && SB.CAT.seasons.every((s) => s.clips.length === 12), "12 clips a season (🎃 Spooky, 🍂 Fireside ...)");
-  assert.equal(n, nGlobal + 3 * 8 + nSeasons + 2, "global + 3 packs + every season board (past ones stay seeded) + 2 legendaries");
+  const nPacks = SB.CAT.packs.reduce((s, x) => s + x.clips.length, 0);   // 1.99anu: the Drama Pack has a 9th clip
+  assert.ok(SB.CAT.packs.length === 3 && SB.CAT.packs.every((p) => p.clips.length >= 8), "3 packs, 8+ clips each");
+  assert.equal(n, nGlobal + nPacks + nSeasons + 2, "global + the packs + every season board (past ones stay seeded) + 2 legendaries");
   const r = await call("POST", "/api/soundboards/bot/sync", null, { password: "bot", plays: [{ clip: "g-airhorn", room: "X", login: "a", paid: 1000 }] });
   assert.equal(r.status, 200);
   assert.equal(r.d.render.length, 6, "six render jobs at a time");

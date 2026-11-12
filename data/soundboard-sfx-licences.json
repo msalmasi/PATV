@@ -163,6 +163,13 @@
    "secs": 2.17,
    "licence": "PATV's own"
   },
+  "drama-disgusting": {
+   "file": "drama-disgusting.ogg",
+   "made_with": "provided by the PATV owner 2026-11-12 (disgusting.opus); loudness-normalised (-19 LUFS, true peak -1.5 dB), mono Opus",
+   "line": "Disgusting.",
+   "secs": 1.82,
+   "licence": "PATV's own (provided by the owner)"
+  },
   "drama-clown": {
    "file": "drama-clown.ogg",
    "made_with": "VoiceBox, voice ksox4 (Pepe's default), qwen 1.7B, seed 1000",

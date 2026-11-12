@@ -57,7 +57,8 @@
         { "id": "drama-salty", "label": "Salty", "emoji": "🧂", "rarity": "rare", "text": "Why is it so salty in here all of a sudden?" },
         { "id": "drama-clown", "label": "Clown", "emoji": "🤡", "rarity": "rare", "text": "Honk honk. The circus is in town.", "file": "drama-clown.ogg" },
         { "id": "drama-objection", "label": "Objection", "emoji": "⚖️", "rarity": "rare", "text": "Objection! Your honor, this is outrageous." },
-        { "id": "drama-plot", "label": "Plot twist", "emoji": "🌀", "rarity": "epic", "text": "Plot twist. Nobody saw that coming. Nobody.", "file": "drama-plot.ogg" }
+        { "id": "drama-plot", "label": "Plot twist", "emoji": "🌀", "rarity": "epic", "text": "Plot twist. Nobody saw that coming. Nobody.", "file": "drama-plot.ogg" },
+        { "id": "drama-disgusting", "label": "Disgusting", "emoji": "🤢", "rarity": "common", "text": "Disgusting.", "file": "drama-disgusting.ogg" }
       ]
     },
     {
