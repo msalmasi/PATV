@@ -152,16 +152,33 @@ const ready = (async () => {
 //   * each of those official rows (seller_id NULL) gets its collectible name + description (shopcatalog.COLLECTIBLES)
 //   * a row the compliance pause took off sale - status 'paused' AND review_note starting '2026-11-11 compliance' - is back
 //     on sale (status 'active') with the note cleared. A row paused for any other reason stays paused.
+//   * a row filed under the marketplace's "Gift cards" category (on prod: the PS5 Pro, GTA VI, Wattz probation and Lunch
+//     for Blake) loses it (category NULL, like the other official rows - they go by shelf): a collectible is not a gift card
+//     (the item page's category chip, the /shop Category filter). Any other category is left alone.
 // Never touched: any other row, member listings, prices, stock, sold counts. Safe on every boot: after the first run the
 // marker skips it (so a later admin rename sticks), and every statement is conditional anyway (a second run changes nothing).
 const COLLECTIBLES_KEY = "collectibles_v1";
 const COMPLIANCE_NOTE = "2026-11-11 compliance";
+// The marker's time is THE CUTOVER (shopcatalog.setCollectiblesSince): only orders placed at or after it are collectibles;
+// older orders of these items were for the real thing and keep the staff delivery + fulfiller access.
+async function collectiblesMarker() {
+  const row = (await getQuery("SELECT value FROM shop_settings WHERE key = ?", [COLLECTIBLES_KEY]))[0];
+  if (!row) return null;
+  let at = null;
+  try { at = Number(JSON.parse(row.value).at); } catch (e) { at = null; }
+  if (!(at > 0)) console.error("[shop] collectibles_v1 has no cutover time - no order counts as a virtual collectible");
+  require("./shopcatalog").setCollectiblesSince(at);
+  return { skipped: true, at };
+}
 async function collectiblesMigration() {
-  if ((await getQuery("SELECT 1 FROM shop_settings WHERE key = ?", [COLLECTIBLES_KEY]))[0]) return { skipped: true };
-  const C = require("./shopcatalog").COLLECTIBLES;
+  const had = await collectiblesMarker();
+  if (had) return had;
+  const CAT = require("./shopcatalog");
+  const C = CAT.COLLECTIBLES;
   const ids = Object.keys(C);
   return tx(async () => {
-    if ((await getQuery("SELECT 1 FROM shop_settings WHERE key = ?", [COLLECTIBLES_KEY]))[0]) return { skipped: true };
+    const again = await collectiblesMarker();
+    if (again) return again;
     const t = Date.now();
     let renamed = 0;
     for (const id of ids) {
@@ -173,9 +190,14 @@ async function collectiblesMigration() {
     const back = await runQuery(`UPDATE prizes SET status = 'active', review_note = NULL, updated = ?
       WHERE prizeId IN (${ids.map(() => "?").join(",")}) AND seller_id IS NULL AND status = 'paused'
         AND substr(review_note, 1, ${COMPLIANCE_NOTE.length}) = ?`, [t, ...ids, COMPLIANCE_NOTE]);
-    const out = { renamed, reactivated: back.changes || 0 };
+    const uncat = await runQuery(`UPDATE prizes SET category = NULL, updated = ?
+      WHERE prizeId IN (${ids.map(() => "?").join(",")}) AND seller_id IS NULL AND category = 'Gift cards'`, [t, ...ids]);
+    const out = { renamed, reactivated: back.changes || 0, uncategorised: uncat.changes || 0 };
     await runQuery("INSERT INTO shop_settings (key, value) VALUES (?, ?)", [COLLECTIBLES_KEY, JSON.stringify({ at: t, ...out })]);
-    if (out.renamed || out.reactivated) console.log(`[shop] virtual collectibles: ${out.renamed} renamed, ${out.reactivated} back on sale`);
+    CAT.setCollectiblesSince(t);
+    if (out.renamed || out.reactivated || out.uncategorised) {
+      console.log(`[shop] virtual collectibles: ${out.renamed} renamed, ${out.reactivated} back on sale, ${out.uncategorised} out of "Gift cards"`);
+    }
     return out;
   });
 }
@@ -1308,7 +1330,8 @@ async function attachArt(orders) {
     const info = p ? CAT.info(p) : null;
     o.art = p ? H.img(p) : null;
     o.shelf = info ? info.shelf : (o.official ? "more" : "market");
-    o.delivery = info ? info.delivery : (o.official ? "staff" : "seller");
+    // 1.99ans: an order of a collectible item from before the cutover keeps "staff" (it was for the real thing)
+    o.delivery = info ? CAT.orderDelivery(o, info) : (o.official ? "staff" : "seller");
   }
   return orders;
 }
@@ -1415,7 +1438,7 @@ function register(app, deps) {
       return res.status(403).send("Access denied");
     }
     const r = await purchasePrize({ userId, username, prizeId: product, source: "discord" });
-    if (r.success) return res.json({ success: true, message: "Purchase successful" });
+    if (r.success) return res.json({ success: true, message: "Purchase successful", ...(r.collectible ? { collectible: true } : {}) });   // 1.99ans
     return res.status(r.status).json({ success: false, message: r.message });
   });
 
@@ -1623,7 +1646,7 @@ function register(app, deps) {
       const o = await getOrder(req.params.id);
       // 1.99tp: a designated FULFILLER of an official item (storealerts.js, "include delivery details" on) may open its orders
       const fulfiller = !!o && !!o.official && !me.staff && o.buyer_id !== me.userId && o.gift_from !== me.userId &&
-                        await SA.isFulfiller(o.prize_id, me.userId).catch(() => false);
+                        await SA.isFulfiller(o.prize_id, me.userId, o).catch(() => false);   // 1.99ans: by the order (a pre-cutover order is still owed)
       if (!o || !(me.staff || fulfiller || o.buyer_id === me.userId || o.seller_id === me.userId || (o.gift_from && o.gift_from === me.userId))) {
         return res.status(404).render("shopOrder", base(req, me, { o: null, events: [], role: null }));
       }

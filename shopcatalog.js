@@ -100,6 +100,32 @@ const COLLECTIBLES = Object.freeze({
 /** Is this prizes row an official virtual collectible? */
 const isCollectible = (p) => !!p && !p.seller_id && !!ITEMS[p.prizeId] && ITEMS[p.prizeId].delivery === "collectible";
 
+// 1.99ans: an ORDER of one of those items is a virtual collectible only when it was placed AT OR AFTER THE CUTOVER - the
+// moment shop.js collectiblesMigration ran (shop_settings 'collectibles_v1' value.at, handed over with
+// setCollectiblesSince at boot). An order placed before it was for the real-world thing and may still be owed: it keeps
+// the "staff" delivery (LEGACY_DELIVERY: the old "by the PATV team" label) and its fulfiller (storealerts.js) can still
+// open it and see the buyer's details. Until the cutover time is known (before the shop's boot) no order counts as one.
+const LEGACY_DELIVERY = "staff";
+let SINCE = null;
+function setCollectiblesSince(ms) {
+  const n = Number(ms);
+  SINCE = Number.isFinite(n) && n > 0 ? n : null;
+  return SINCE;
+}
+const collectiblesSince = () => SINCE;
+/** Is this ORDER (a shop_orders row: prize_id, official, created) a virtual collectible? */
+function isCollectibleOrder(o) {
+  if (!o || !o.prize_id || !Number(o.official)) return false;
+  if (!isCollectible({ prizeId: String(o.prize_id) })) return false;
+  return SINCE != null && Number(o.created) >= SINCE;
+}
+/** The delivery an ORDER shows: the item's (info().delivery), except that an order of a collectible item placed before the
+ *  cutover keeps the old "staff" delivery. */
+function orderDelivery(o, inf) {
+  const d = inf ? inf.delivery : null;
+  return d === "collectible" && !isCollectibleOrder(o) ? LEGACY_DELIVERY : d;
+}
+
 // The hero + featured strip on /shop, in order; sold-out or inactive ones are skipped. 1.99ans: the gaming PC stays first -
 // it's a virtual collectible now.
 const FEATURED = ["35433a15-f2d4-4b43-b886-3bdb1686e8b2", "1c120384-c080-4186-b246-f1227e82ab01",
@@ -129,4 +155,5 @@ function artRows() {
   return Object.entries(ITEMS).map(([prizeId, v]) => ({ prizeId, key: v.key, image_url: artPath(v.key) }));
 }
 
-module.exports = { SHELVES, SHELF_IDS, ITEMS, FEATURED, COLLECTIBLES, isCollectible, info, shelfIds, knownIds, artRows, artPath, tkey };
+module.exports = { SHELVES, SHELF_IDS, ITEMS, FEATURED, COLLECTIBLES, isCollectible, info, shelfIds, knownIds, artRows, artPath, tkey,
+                   isCollectibleOrder, orderDelivery, setCollectiblesSince, collectiblesSince, LEGACY_DELIVERY };

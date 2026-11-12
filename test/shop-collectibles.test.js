@@ -4,8 +4,11 @@
 //     what they are (virtual, no cash value; the memberships are not memberships, the gift card is not a gift card, the
 //     joke items are jokes); the pictures stay; the gaming PC stays featured
 //   * the startup migration: renames + describes exactly those official rows, puts back on sale exactly the rows the
-//     compliance pause took off (status paused + review_note '2026-11-11 compliance...'), never another row, a member
-//     listing, a price, stock or sold count; idempotent (marker + conditional statements; an admin rename after it sticks)
+//     compliance pause took off (status paused + review_note '2026-11-11 compliance...'), takes the four out of the "Gift
+//     cards" category, never another row, a member listing, a price, stock or sold count; idempotent (marker + conditional
+//     statements; an admin rename after it sticks)
+//   * THE CUTOVER (the marker's time): only orders placed at or after it are collectibles; older orders of those items were
+//     for the real thing - they keep the staff label, their store alert and their fulfiller's access
 //   * a collectible order completes at once and is the record of ownership: no staff "Purchase Notification" email, no
 //     raffle-delivery email, no store_alerts (the vendor never hears), no fulfiller access; gifts, comps and raffle wins too
 //   * the pages say "virtual in-game collectible"; /api/prizes carries the delivery
@@ -45,6 +48,9 @@ const CARDS = "0c920cd9-564a-4338-8716-3f4b0250af57";
 const GIFT_CARD = "37e6ceed-781c-46b6-8644-c134e53338f4";
 const NITRO = "178a838b-df7f-42b7-aef4-915d6a8a5c4a";
 const RING = "e2626ad3-82b9-42c3-9ed1-5d6c22e1c6e5";
+const PS5 = "9c0aa228-e0c4-46dd-97cc-dc41a245bc05";
+// on prod these four sit in the marketplace's "Gift cards" category (PS5 Pro, GTA VI, Wattz probation, Lunch for Blake)
+const GIFT_CARDS_CAT = [PS5, "1289bc9c-4c1f-4f02-b61f-354d4c51ff0b", "e9c179b4-ee7c-4dcc-b087-dccca9df4725", "769d3a54-0ac6-4dbe-873f-c325e77137ec"];
 const PLEX_1M = "1c120384-c080-4186-b246-f1227e82ab01";
 const HIGH_ROLLER = "491cde2e-097e-4c2a-a351-ce441137ba38";
 const NOTE = "2026-11-11 compliance (NY S5935-A): off sale until it is a virtual in-game collectible";
@@ -57,8 +63,9 @@ async function mkUser(bal = 0, extra = {}) {
                  [id, extra.username || "collector" + n, bal, extra.camfrog || null, extra.cls || "pleb", extra.email || null]);
   return { userId: id, username: extra.username || "collector" + n };
 }
-const row = async (id) => (await getQuery("SELECT prizeId, prize, description, cost, quantity, sold, status, review_note, seller_id FROM prizes WHERE prizeId = ?", [id]))[0];
+const row = async (id) => (await getQuery("SELECT prizeId, prize, description, cost, quantity, sold, status, review_note, seller_id, category FROM prizes WHERE prizeId = ?", [id]))[0];
 const storeMails = () => mails.filter((m) => m.to === "store@example.test");
+const base = (extra) => Object.assign({ user: null, me: null, H: shop.H, msg: null, settings: shop.settings, categories: shop.settings.categories, donate: null }, extra);
 
 test.before(async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT,
@@ -135,14 +142,16 @@ async function seed() {
     // most are paused by the compliance pause; the card pack was paused for another reason; the ring is still active
     const status = id === CARDS ? "paused" : id === RING ? "active" : "paused";
     const note = id === CARDS ? "2026-11-01 restock: waiting on Tricon" : id === RING ? null : NOTE;
+    // the category column as on prod: "Gift cards" on four, empty on the rest; the ring gets another one (left alone)
+    const cat = GIFT_CARDS_CAT.includes(id) ? "Gift cards" : id === RING ? "Collectibles" : null;
     await runQuery(`INSERT INTO prizes (prizeId, prize, cost, quantity, status, review_note, sold, description, image_url, category)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Gift cards')`,
-                   [id, "Old name " + i, 1000 * i, i % 4, status, note, i, "We ship it to your door.", CAT.artPath(CAT.ITEMS[id].key)]);
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   [id, "Old name " + i, 1000 * i, i % 4, status, note, i, "We ship it to your door.", CAT.artPath(CAT.ITEMS[id].key), cat]);
   }
   // not one of the 21, paused with the same note: stays paused (the owner's pause, or someone's, of something else)
-  await runQuery("INSERT INTO prizes (prizeId, prize, cost, quantity, status, review_note) VALUES (?, 'Plex Invite 1 Month Access', 500, 4, 'paused', ?)", [PLEX_1M, NOTE]);
+  await runQuery("INSERT INTO prizes (prizeId, prize, cost, quantity, status, review_note, category) VALUES (?, 'Plex Invite 1 Month Access', 500, 4, 'paused', ?, 'Gift cards')", [PLEX_1M, NOTE]);
   // a member's listing with one of the 21's ids can't exist (PK), but a listing that LOOKS like one, paused the same way, stays put
-  await runQuery("INSERT INTO prizes (prizeId, prize, cost, quantity, status, review_note, seller_id) VALUES ('lst-ring', 'Plain pure silver band', 50000000, 1, 'paused', ?, 'sc-seller')", [NOTE]);
+  await runQuery("INSERT INTO prizes (prizeId, prize, cost, quantity, status, review_note, seller_id, category) VALUES ('lst-ring', 'Plain pure silver band', 50000000, 1, 'paused', ?, 'sc-seller', 'Gift cards')", [NOTE]);
 }
 
 test("migration: renames + describes the 21, puts back on sale only the compliance-paused ones, nothing else changes", async () => {
@@ -150,7 +159,7 @@ test("migration: renames + describes the 21, puts back on sale only the complian
   const before = {};
   for (const r of await getQuery("SELECT * FROM prizes")) before[r.prizeId] = r;
   const r = await shop.collectiblesMigration();
-  assert.deepEqual(r, { renamed: 21, reactivated: 19 });
+  assert.deepEqual(r, { renamed: 21, reactivated: 19, uncategorised: 4 });
   for (const id of IDS21) {
     const p = await row(id);
     assert.equal(p.prize, CAT.COLLECTIBLES[id].name);
@@ -159,13 +168,24 @@ test("migration: renames + describes the 21, puts back on sale only the complian
     if (id === CARDS) assert.deepEqual([p.status, p.review_note], ["paused", "2026-11-01 restock: waiting on Tricon"], "paused for another reason: stays");
     else if (id === RING) assert.deepEqual([p.status, p.review_note], ["active", null]);
     else assert.deepEqual([p.status, p.review_note], ["active", null], "back on sale, note cleared: " + id);
+    assert.equal(p.category, id === RING ? "Collectibles" : null, "a collectible isn't filed under 'Gift cards' (another category stays): " + id);
   }
   const plex = await row(PLEX_1M);
-  assert.deepEqual([plex.prize, plex.status, plex.review_note], ["Plex Invite 1 Month Access", "paused", NOTE], "another official row stays paused");
+  assert.deepEqual([plex.prize, plex.status, plex.review_note, plex.category], ["Plex Invite 1 Month Access", "paused", NOTE, "Gift cards"], "another official row stays as it was");
   const lst = await row("lst-ring");
-  assert.deepEqual([lst.prize, lst.status, lst.review_note, lst.cost], ["Plain pure silver band", "paused", NOTE, 50000000], "a member listing is never touched");
+  assert.deepEqual([lst.prize, lst.status, lst.review_note, lst.cost, lst.category], ["Plain pure silver band", "paused", NOTE, 50000000, "Gift cards"], "a member listing is never touched (marketplace categories stay)");
   const mark = JSON.parse((await getQuery("SELECT value FROM shop_settings WHERE key = ?", [shop.COLLECTIBLES_KEY]))[0].value);
-  assert.deepEqual([mark.renamed, mark.reactivated], [21, 19]);
+  assert.deepEqual([mark.renamed, mark.reactivated, mark.uncategorised], [21, 19, 4]);
+  assert.ok(mark.at > 0 && mark.at <= Date.now(), "the cutover time");
+  assert.equal(CAT.collectiblesSince(), mark.at, "handed to shopcatalog: orders from now on are collectibles");
+  // the /shop Category filter no longer offers "Gift cards" for them (the member listing is paused here)
+  const b = await shop.browse({});
+  assert.equal(b.catCounts["Gift cards"], undefined, JSON.stringify(b.catCounts));
+  assert.equal((await shop.browse({ cat: "Gift cards" })).items.filter((x) => IDS21.includes(x.prizeId)).length, 0);
+  const ps5 = (await getQuery("SELECT * FROM prizes WHERE prizeId = ?", [PS5]))[0];
+  const page = await ejs.renderFile(path.join(repo, "views", "shopItem.ejs"), base({ p: ps5, me: null, user: null, sales: 0, more: [], sub: null }));
+  assert.match(page, /PS5 Pro - virtual collectible/);
+  assert.doesNotMatch(page, /Gift cards|cat=Gift/, "no 'Gift cards' chip on a collectible");
 });
 
 test("migration: safe on every boot - a second run is skipped, an admin's later rename sticks; without the marker it changes nothing", async () => {
@@ -174,18 +194,21 @@ test("migration: safe on every boot - a second run is skipped, an admin's later 
   const snap = async () => JSON.stringify(await getQuery("SELECT prizeId, prize, description, cost, quantity, sold, status, review_note, seller_id FROM prizes ORDER BY prizeId"));
   await runQuery("UPDATE prizes SET prize = 'PS5 Pro (limited) - virtual collectible' WHERE prizeId = '9c0aa228-e0c4-46dd-97cc-dc41a245bc05'");
   const a = await snap();
-  assert.deepEqual(await shop.collectiblesMigration(), { skipped: true });
+  const at0 = CAT.collectiblesSince();
+  const again = await shop.collectiblesMigration();
+  assert.deepEqual([again.skipped, again.at], [true, at0], "skipped - and the cutover time is read back, not moved");
+  assert.equal(CAT.collectiblesSince(), at0);
   assert.equal(await snap(), a, "the marker: the next boot changes nothing (the admin's rename sticks)");
   // the statements themselves are idempotent too: drop the marker after a run and nothing moves except that one rename
   await runQuery("UPDATE prizes SET prize = ? WHERE prizeId = '9c0aa228-e0c4-46dd-97cc-dc41a245bc05'", [CAT.COLLECTIBLES["9c0aa228-e0c4-46dd-97cc-dc41a245bc05"].name]);
   const b = await snap();
   await runQuery("DELETE FROM shop_settings WHERE key = ?", [shop.COLLECTIBLES_KEY]);
-  assert.deepEqual(await shop.collectiblesMigration(), { renamed: 0, reactivated: 0 });
+  assert.deepEqual(await shop.collectiblesMigration(), { renamed: 0, reactivated: 0, uncategorised: 0 });
   assert.equal(await snap(), b);
   // an empty database (a fresh staging site): nothing to do, marker set, no error
   await runQuery("DELETE FROM prizes");
   await runQuery("DELETE FROM shop_settings WHERE key = ?", [shop.COLLECTIBLES_KEY]);
-  assert.deepEqual(await shop.collectiblesMigration(), { renamed: 0, reactivated: 0 });
+  assert.deepEqual(await shop.collectiblesMigration(), { renamed: 0, reactivated: 0, uncategorised: 0 });
 });
 
 // ── buying one ──
@@ -217,6 +240,7 @@ test("a collectible order completes at once; the store gets no email, the vendor
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM store_alert_sent WHERE order_id = ?", [r.order_id]))[0].n, 0);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = ?", [vendor.userId]).catch(() => [{ n: 0 }]))[0].n, 0, "the vendor hears nothing");
   assert.equal(await SA.isFulfiller(CARDS, vendor.userId), false, "no fulfiller access to a collectible's orders");
+  assert.equal(await SA.isFulfiller(CARDS, vendor.userId, o), false, "...by the order too");
   assert.deepEqual(storeMails(), [], "no Purchase Notification to the store");
   // the contrast: an item PATV still sets up (a role) does email the store
   const r2 = await shop.purchasePrize({ userId: buyer.userId, username: buyer.username, prizeId: HIGH_ROLLER, source: "website", expectedCost: 100 });
@@ -265,8 +289,48 @@ test("raffles: collectibles can still be raffle prizes; a win sends no store ema
   assert.deepEqual(storeMails().map((m) => m.subject), ["Raffle prize to deliver"]);
 });
 
+test("the cutover: an order from before it was for the real thing - staff label, store alert and fulfiller access stay", async () => {
+  await stockAll();
+  const since = CAT.collectiblesSince();
+  assert.ok(since > 0 && since <= Date.now(), "the shop's boot handed over the cutover time");
+  const admin = await mkUser(0, { username: "boss3", cls: "Admin" });
+  const vendor = await mkUser(0, { username: "tricon3", camfrog: "Tricon3CF" });
+  await SA.setRecipient({ userId: admin.userId, username: "boss3" }, CARDS, "add", { who: "tricon3", tg: 1, pm: 1, details: 1 });
+  const buyer = await mkUser(1000, { camfrog: "OldBuyerCF" });
+  // as on prod: Tricon card packs (the last on 2026-11-07), memberships, the Lunch for Blake bought on 2026-11-11 - placed
+  // before the cutover, maybe still owed
+  const t0 = since - 3600 * 1000;
+  const ins = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net, seller_paid,
+                                status, source, created, completed_at, closed_at, updated)
+                              VALUES (?, ?, NULL, 1, 'Pokemon Card Pack from Tricon', 100, 0, 0, 100, 1, 'completed', 'website', ?, ?, ?, ?)`,
+                             [CARDS, buyer.userId, t0, t0, t0, t0]);
+  const old = await shop.getOrder(ins.id);
+  const r = await shop.purchasePrize({ userId: buyer.userId, username: buyer.username, prizeId: CARDS, source: "website", expectedCost: 100 });
+  assert.equal(r.success, true, r.message);
+  const neu = await shop.getOrder(r.order_id);
+  assert.deepEqual([CAT.isCollectibleOrder(old), CAT.isCollectibleOrder(neu)], [false, true]);
+  assert.equal(CAT.isCollectibleOrder({ ...neu, official: 0 }), false, "a marketplace order never is");
+  await shop.attachArt([old, neu]);
+  assert.deepEqual([old.delivery, neu.delivery], ["staff", "collectible"], "the old order keeps the staff label");
+  // the Tricon fulfiller can still open the old order (and see who to ship to), not the new one
+  assert.equal(await SA.isFulfiller(CARDS, vendor.userId, old), true);
+  assert.equal(await SA.isFulfiller(CARDS, vendor.userId, neu), false);
+  // a late / retried store alert of the old order still goes out; the new one never alerts
+  await shop.saleHooksIdle();
+  assert.equal(await SA.alertOrder(neu.id), 0);
+  assert.ok((await SA.alertOrder(old.id)) > 0, "a pre-cutover order still alerts its fulfiller");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM store_alert_sent WHERE order_id = ? AND user_id = ?", [old.id, vendor.userId]))[0].n, 1);
+  // the pages: the old order says "by the PATV team", never "virtual collectible"
+  const me = { userId: buyer.userId, username: buyer.username, points_balance: 0, staff: false };
+  const one = await ejs.renderFile(path.join(repo, "views", "shopOrder.ejs"), base({ o: old, events: [], role: "buyer", me, user: buyer.username }));
+  assert.doesNotMatch(one, /virtual in-game collectible/);
+  const list = await ejs.renderFile(path.join(repo, "views", "shopOrders.ejs"),
+    base({ orders: [neu, old], events: {}, spent: { t: 200, n: 2 }, open: { n: 0, t: 0 }, page: 1, pages: 1, me, user: buyer.username }));
+  assert.equal((list.match(/A virtual in-game collectible - it’s yours on PATV now/g) || []).length, 1, "only the new order");
+  assert.equal((list.match(/Set up by the PATV team/g) || []).length, 1, "the old order keeps its label");
+});
+
 // ── pages + the bots' list ──
-const base = (extra) => Object.assign({ user: null, me: null, H: shop.H, msg: null, settings: shop.settings, categories: shop.settings.categories, donate: null }, extra);
 
 test("pages: the item page, My orders and the order page say it's a virtual in-game collectible", async () => {
   await stockAll();

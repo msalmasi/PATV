@@ -28,7 +28,7 @@
       </label>
       <p class="bx-fine" data-rf-show="item" hidden><%- t('rf.f_item_note') %></p>
       <label class="bx-field" data-rf-show="custom" hidden><%- t('rf.f_custom') %><input class="bx-in" type="text" name="prize_text" maxlength="200" placeholder="<%- t('rf.f_custom_ph') %>"></label>
-      <p class="bx-fine" data-rf-show="custom" hidden><%- t('rf.f_custom_note', { days: cfg.custom_hold_days }) %></p>
+      <p class="bx-fine" data-rf-show="custom" hidden><%- house ? t('rf.f_custom_house_note') : t('rf.f_custom_note', { days: cfg.custom_hold_days }) %></p>
     </fieldset>
 
     <div class="bx-row2">

@@ -253,7 +253,7 @@ function draw(prog) {
 const EXAMPLES = Object.freeze([
   {
     key: "switch-2", title: "Handheld console", shelf: "gaming", tag: null,
-    asked: { title: "Nintendo Switch 2", description: "The new handheld console, delivered sealed." },
+    asked: { title: "Nintendo Switch 2 - virtual collectible", description: "A virtual collectible of the new handheld console." },   // 1.99ans
     result: "A generic handheld (no logos): a dark screen body between two rounded controllers with a blue and a red rail, a stick and four keys on each; on the screen, a little game - sky, sun, a cloud, green hills and a frog mid-hop. The screen is drawn inside a clip so the hills stay on the glass.",
     program: {
       palette: { body: "#1e1f24", pad: "#2b2d33", key: "#4a4d55", stick: "#121216", rail_l: "#2f9bff", rail_r: "#ff4b5c", nub: "#3a3c44",

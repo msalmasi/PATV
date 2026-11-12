@@ -235,17 +235,6 @@ function noteOf(s) {
          (s.normal_cents ? ` + ${f(s.normal_pat)} PAT for $${(s.normal_cents / 100).toFixed(2)} at the normal ${f(s.rate)}/$1` : "");
 }
 
-/** The receipt's promo sentence (" " + text) for the donor's inbox notice, in their language; "" without a promo portion. */
-function receiptLine(t, s) {
-  if (!s || !s.promo || !s.promo_cents) return "";
-  const f = (n) => (t && t.num ? t.num(n) : Number(n).toLocaleString("en-US"));
-  const usd = (c) => (c / 100).toFixed(2);
-  return " " + (s.normal_cents
-    ? t("donate.notice_promo_split", { promo_usd: usd(s.promo_cents), promo_pat: f(s.promo_pat), promo_rate: f(s.promo_rate),
-                                        normal_usd: usd(s.normal_cents), normal_pat: f(s.normal_pat), normal_rate: f(s.rate) })
-    : t("donate.notice_promo_all", { promo_usd: usd(s.promo_cents), promo_pat: f(s.promo_pat), promo_rate: f(s.promo_rate) }));
-}
-
 // ── public (what a donor sees BEFORE paying) ──
 function publicOf(p, normal, now) {
   const rate = effectiveRate(p, normal.rate);
@@ -899,7 +888,7 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = {
-  init, register, creditTerms, metaOf, noteOf, receiptLine, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
+  init, register, creditTerms, metaOf, noteOf, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
   promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
   setOverride, overrideOf, limitState, donorKeyOf, budgetState,
   // 1.99uh

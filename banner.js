@@ -613,10 +613,9 @@ async function chatHouse(paidToday) {
     if (p.kind === "support" && !sup) continue;
     const fill = (s) => plainText(String(s || "").replace(/\{(jackpot|draw)\}/g, (m, k) => vars[k] || ""));
     const own = !!(p.headline || p.line);                                    // an admin's own text, else the built-in
-    const base = p.kind === "support" && vars.promo_on ? "support_promo" : p.kind;
-    const headline = cleanLine(own ? fill(p.headline) : enText(`banner.promo.${base}.h`, vars), HEADLINE_MAX);
+    const headline = cleanLine(own ? fill(p.headline) : enText(`banner.promo.${p.kind}.h`, vars), HEADLINE_MAX);   // 1.99ans: no donation promo text
     if (!headline) continue;
-    const line = cleanLine(own ? fill(p.line) : enText(`banner.promo.${base}.l`, vars), LINE_MAX) || null;
+    const line = cleanLine(own ? fill(p.line) : enText(`banner.promo.${p.kind}.l`, vars), LINE_MAX) || null;
     const link = p.link ? (p.link[0] === "/" ? siteBase() + p.link : p.link) : null;
     items.push({ id: "h:" + p.id, kind: p.kind, headline, line, link, weight: Math.max(1, Math.min(10, Number(p.weight) || 1)) });
   }

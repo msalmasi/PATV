@@ -3,6 +3,7 @@
 //   * ledger.post refuses ANY positive credit labelled as a dollar donation (type or source), whoever calls it
 //   * no site code books a "mint:donation" claim or posts a donation credit any more (a source scan)
 //   * card and crypto donations: recorded, perks, 0 PAT, 0 mint - even with a high synced rate
+//   * the 💡 Supporter cosmetics a donation unlocks are bound: no listing, sale, trade or gift (indirect PAT for dollars)
 //   NODE_PATH=G:/PATV/node_modules TZ=UTC node --test test/nopat.test.js
 "use strict";
 const test = require("node:test");
@@ -120,4 +121,86 @@ test("source scan: no site code books a donation mint claim or credits PAT for a
     assert.doesNotMatch(src, /\.post(?:OrThrow)?\([^)]*"donation(?:-crypto)?"/, path.relative(repo, f) + " posts a donation credit");
   }
   for (const f of ["stripebilling.js", "cryptopay.js"]) assert.match(fs.readFileSync(path.join(repo, f), "utf8"), /nopat"\)\.assertNoPat\(/, f + " asserts the rule");
+});
+
+test("the 💡 Supporter cosmetics a donation unlocks are bound: never listed, sold, traded or gifted (that would be PAT for dollars)", async () => {
+  const COS = require(path.join(repo, "cosmetics"));
+  const N = require(path.join(repo, "notices"));
+  await COS.ready;
+  assert.deepEqual([...COS.BOUND_IDS].sort(), ["ad_supporter", "nc_supporter"]);
+  for (const it of COS.catalog()) {
+    if (/^cf_donor/.test(String((it.unlock || {}).achievement || ""))) assert.ok(COS.isBound(it), it.id + " comes with a donation, so it's bound");
+  }
+  const plain = COS.catalog().find((i) => !COS.isBound(i) && i.kind === "name_color");
+  assert.ok(plain && !COS.isBound(plain), "ordinary items are not bound");
+  // a Supporter copy listed before 1.99ans comes off the market (and back to its owner, unlocked); safe on every boot
+  const old = await COS.grant("u-ann", "nc_supporter", "achievement", "np-old");
+  await runQuery("UPDATE user_cosmetics SET locked = 1 WHERE id = ?", [old.inv_id]);
+  const ol = await runQuery("INSERT INTO cosmetic_listings (inv_id, seller_id, price, status, created, updated) VALUES (?, 'u-ann', 5000000, 'active', 1, 1)", [old.inv_id]);
+  assert.equal(await COS.unlistBound(), 1);
+  assert.equal(await COS.unlistBound(), 0, "a no-op the next boot");
+  assert.equal((await getQuery("SELECT status FROM cosmetic_listings WHERE id = ?", [ol.id]))[0].status, "cancelled");
+  assert.equal((await getQuery("SELECT locked, user_id FROM user_cosmetics WHERE id = ?", [old.inv_id]))[0].locked, 0);
+  // Pepe's market sale of it (buylisting -> transfer with the listing) is refused even if a listing were active
+  await runQuery("UPDATE cosmetic_listings SET status = 'active' WHERE id = ?", [ol.id]);
+  const tr = await COS.transfer({ invId: old.inv_id, fromId: "u-ann", toId: "u-bob", idem: "np-sale", listingId: ol.id });
+  assert.equal(tr.ok, false);
+  assert.match(tr.error, /Supporter items can't be traded or gifted/);
+  assert.equal((await getQuery("SELECT user_id FROM user_cosmetics WHERE id = ?", [old.inv_id]))[0].user_id, "u-ann");
+  await COS.unlistBound();
+  // the owner's own buttons (POST /cosmetics/list and /cosmetics/gift) refuse both items
+  const express = require("express");
+  const http = require("http");
+  const app = express();
+  app.use(express.json());
+  app.use((req, res, next) => { const u = req.get("x-test-user"); req.user = u ? { userId: u } : null; next(); });
+  COS.register(app, { isBotToken: () => false, addUser: (req, res, next) => next() });
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (url, user, json) => new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(json));
+    const r = http.request(base + url, { method: "POST", headers: { Origin: base, "x-test-user": user, "Content-Type": "application/json", "Content-Length": data.length } },
+      (res) => { res.resume(); res.on("end", () => resolve({ status: res.statusCode, location: res.headers.location })); });
+    r.on("error", reject);
+    r.end(data);
+  });
+  try {
+    for (const id of ["nc_supporter", "ad_supporter"]) {
+      const g = await COS.grant("u-ann", id, "achievement", "np-own-" + id);
+      const l = await post("/cosmetics/list", "u-ann", { inv_id: g.inv_id, price: "50000", tab: "mine" });
+      assert.equal(l.status, 302);
+      assert.match(N.textOf(l.location, "u-ann"), /Supporter items can't be sold/, id);
+      const gf = await post("/cosmetics/gift", "u-ann", { inv_id: g.inv_id, to: "bob", tab: "mine" });
+      assert.equal(gf.status, 302);
+      assert.match(N.textOf(gf.location, "u-ann"), /can't be traded or gifted/, id);
+      assert.deepEqual(await getQuery("SELECT user_id, locked FROM user_cosmetics WHERE id = ?", [g.inv_id]), [{ user_id: "u-ann", locked: 0 }], id + " stays with the donor");
+      assert.equal((await COS.inventory("u-ann")).items.find((i) => i.inv_id === g.inv_id).bound, true, "the page hides List / Gift");
+    }
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM cosmetic_listings WHERE status = 'active'"))[0].n, 0, "nothing on the market");
+    // an ordinary item still lists (the rule is only for the bound ones)
+    const p = await COS.grant("u-ann", plain.id, "shop", "np-plain");
+    const pl = await post("/cosmetics/list", "u-ann", { inv_id: p.inv_id, price: "50000", tab: "mine" });
+    assert.match(N.textOf(pl.location, "u-ann"), /^Listed /);
+  } finally {
+    server.close();
+  }
+});
+
+test("copy: no English string promises PAT for a donation; the retired PAT-per-dollar strings are gone from every catalog", () => {
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  const bad = /PAT per \$1|\$1 (=|adds)[^.]*PAT|mint that lands in a wallet|PAT (just landed|credited to your wallet)|added \{pat\} PAT|community pot gets|credit your stablecoin|won.t be credited|donation\(s\) credited/i;
+  for (const [k, v] of Object.entries(en)) assert.doesNotMatch(typeof v === "string" ? v : JSON.stringify(v), bad, k);
+  assert.match(en["economy.loop.s1_d"], /Donations never create PAT: they give supporter perks\.$/, "the public /economy page");
+  const gone = ["support.rate", "support.hero_deal", "support.hero_deal_pot", "support.promo_deal", "support.promo_signin", "support.promo_left",
+    "support.promo_used", "support.faq_promo_a", "support.sum", "support.tier_pat", "support.tier_bonus", "support.mini_pot", "support.where_pot",
+    "support.where_pot_d", "support.faq_pot_q", "support.faq_pot_a", "support.thanks_credited", "donate.notice_body", "donate.notice_promo_split",
+    "donate.notice_promo_all", "donate.promo_line", "economy.map.don", "banner.promo.support_promo.h", "banner.promo.support_promo.l",
+    "js.support.sum", "js.support.credited"];
+  for (const f of fs.readdirSync(path.join(repo, "locales")).filter((x) => x.endsWith(".json") && x !== "glossary.json" && !x.startsWith("."))) {
+    const cat = JSON.parse(fs.readFileSync(path.join(repo, "locales", f), "utf8"));
+    for (const k of gone) assert.equal(cat[k], undefined, `${f}: ${k}`);
+    // rewritten: dropped from the machine catalogs until the i18n sync re-translates them from the new English
+    if (f !== "en.json") for (const k of ["economy.loop.s1_d", "settings.connections.crypto_hint", "js.crypto.linked_claimed", "js.crypto.unlink_confirm"]) assert.equal(cat[k], undefined, `${f}: ${k}`);
+  }
+  for (const f of ["banner.js", path.join("views", "partials", "banner.ejs")]) assert.doesNotMatch(fs.readFileSync(path.join(repo, f), "utf8"), /support_promo/, f);
 });

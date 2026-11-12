@@ -24,12 +24,12 @@
     </div>
     <% const MP = typeof monetary !== 'undefined' ? monetary : null; %>
     <h3>Monetary policy (from Pepe)</h3>
-    <% if (!MP) { %><p class="adm-help">Not synced yet: House flash liquidity is off and donations use the defaults (500,000 PAT per $1, +20% to the incentive budget).</p><% } else { %>
+    <% if (!MP) { %><p class="adm-help">Not synced yet: House flash liquidity is off. Donations give supporter perks only - no PAT, no incentive mint (nopat.js, 1.99ans).</p><% } else { %>
     <div class="adm-kv" id="monetaryKv">
       <div><b>Flash liquidity</b><span>House <%= MP.flash.house ? 'on' : 'off' %> · Bank <%= MP.flash.bank ? 'on' : 'off' %> · MM <%= MP.flash.mm ? 'on' : 'off' %></span></div>
       <div><b>Fed loan room</b><span><%= fmt(MP.fedloan_room) %> PAT</span></div>
       <div><b>House hard floor</b><span><%= fmt(MP.house_hard_floor) %> PAT</span></div>
-      <div><b>Donations</b><span><%= fmt(MP.donation.rate) %> PAT per $1 · +<%= MP.donation.bonus_pct %>% to incentives</span></div>
+      <div><b>Donations</b><span>perks only - Pepe's <%= fmt(MP.donation.rate) %> PAT per $1 · +<%= MP.donation.bonus_pct %>% is not applied (nopat.js, 1.99ans)</span></div>
       <div><b>Staff grant cap</b><span><%= MP.grant_weekly_cap < 0 ? 'unlimited' : fmt(MP.grant_weekly_cap) + ' PAT / week' %></span></div>
       <% if (MP.band) { %><div><b>Fed band</b><span><%= MP.band.fed === null ? '?' : fmt(MP.band.fed) %> (floor <%= MP.band.floor === null ? '?' : fmt(MP.band.floor) %> · ceiling <%= MP.band.ceiling === null ? '?' : fmt(MP.band.ceiling) %>)</span></div><% } %>
     </div>
@@ -48,7 +48,7 @@
   <h2 id="donT"><span class="ds-ic" aria-hidden="true">💖</span> Donations: promos <span class="adm-pill admin">admins</span></h2>
   <%# 1.99ans: no PAT for dollars (nopat.js) %>
   <p class="adm-help"><b>Retired 2026-11-11 (NY S5935-A): donations give supporter perks only - they never credit PAT, never mint the incentive bonus, and no promo applies.</b> Creating or editing a promo is refused; the table below is the history. Pepe's <code>donation_rate</code> / <code>donation_bonus_pct</code> are no longer applied by the site. The daily limits below still apply.</p>
-  <p class="adm-help">The normal rate is Pepe's (<code>!econ set donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosts it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>paid</b> (card: when the checkout opened). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
+  <p class="adm-help"><b>Before 1.99ans</b> (how the promos in the history worked): the normal rate was Pepe's (<code>!econ set donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosted it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>paid</b> (card: when the checkout opened). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
   <% if (!_can('donations.admin')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <%# owner answers 2026-10-20 (1): the API refuses anyone but a Pepe owner (donationpromo.js) %>
     <p class="adm-help"><%- t('admin.donpromo.owner_only') %></p>

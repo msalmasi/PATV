@@ -73,7 +73,9 @@ test.before(async () => {
                                 fulfilled_at: now - H, note: "CODE-123" }, [["paid"], ["fulfilled", "sent"]]);
   IDS.anon = await order({ prize_id: PLEX_1M, buyer: "sp-bob", gift_from: "sp-carol", anon: true, gift_note: "for movie night", title: "Plex Invite 1 Month Access",
                            price: 500, status: "completed", note: "https://plex.example/invite" }, [["completed"]]);
-  IDS.sent = await order({ prize_id: PC, buyer: "sp-dave", gift_from: "sp-bob", title: "Custom Gaming PC", price: 500, status: "completed", note: "DAVE-ONLY" }, [["completed"]]);
+  // 1.99ans: bought after the collectibles cutover (shop.ready ran the migration), so it's a virtual collectible order
+  IDS.sent = await order({ prize_id: PC, buyer: "sp-dave", gift_from: "sp-bob", title: "Custom Gaming PC", price: 500, status: "completed", note: "DAVE-ONLY",
+                           created: CAT.collectiblesSince() }, [["completed"]]);
   IDS.done = await order({ prize_id: "sp3", buyer: "sp-carol", seller: "sp-alice", title: "Game key", price: 1200, fee: 120, net: 1080, paid: true, status: "completed",
                            fulfilled_at: now - 2 * H }, [["paid"], ["fulfilled"], ["completed"]]);
 

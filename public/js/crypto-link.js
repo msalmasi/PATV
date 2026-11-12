@@ -62,7 +62,7 @@
       return;
     }
     if (b.hasAttribute('data-crypto-unlink')) {
-      if (!window.confirm(_t('js.crypto.unlink_confirm', 'Unlink this wallet? Donations it sends afterwards won’t be credited until it’s linked again.'))) return;
+      if (!window.confirm(_t('js.crypto.unlink_confirm', 'Unlink this wallet? Donations it sends afterwards won’t count until it’s linked again.'))) return;
       b.disabled = true;
       post('/api/crypto/unlink', { id: Number(b.getAttribute('data-crypto-unlink')) })
         .then(function () { location.reload(); }, function (e) { b.disabled = false; say(b, e.message, true); });
@@ -75,7 +75,7 @@
         b.disabled = false;
         if (!j) return;
         var n = (j.claimed || []).filter(function (c) { return c.status === 'credited'; }).length;
-        say(b, n ? _t('js.crypto.linked_claimed', 'Wallet linked - {n} earlier donation(s) credited.', { n: n }) : _t('js.crypto.linked', 'Wallet linked.'));
+        say(b, n ? _t('js.crypto.linked_claimed', 'Wallet linked - {n} earlier donation(s) counted.', { n: n }) : _t('js.crypto.linked', 'Wallet linked.'));
         setTimeout(function () { location.reload(); }, 1200);
       }, function (e) { b.disabled = false; say(b, walletError(e), true); });
   });

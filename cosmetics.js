@@ -120,6 +120,14 @@ const perkOn = (it, userId) => (it && it.perk === "plex" ? plexOn(userId) : pass
 const perkLive = (it, userId) => !isPerk(it) || perkOn(it, userId);
 const PERK_IDS = ITEMS.filter((i) => i.perk === "season_pass").map((i) => i.id);
 const PLEX_PERK_IDS = ITEMS.filter((i) => i.perk === "plex").map((i) => i.id);
+// 1.99ans (NY S5935-A, nopat.js "no PAT for dollars"): BOUND items. The 💡 Supporter cosmetics a dollar donation unlocks
+// (achievements cf_donor / cf_donor_100) are the donor's to keep: never listed, sold, traded or gifted - a sale for PAT
+// would turn the donor's dollar into PAT. "bound": true in cosmetics.json, and any item a cf_donor* achievement unlocks is
+// bound even without it. Perk items (above) are bound too. A bound copy listed before 1.99ans comes off the market at boot.
+const isDonorBound = (it) => !!it && (it.bound === true || /^cf_donor/.test(String((it.unlock || {}).achievement || "")));
+const isBound = (it) => isPerk(it) || isDonorBound(it);
+const boundLabel = (it) => (isPerk(it) ? `${PERKS[it.perk].label} items` : "💡 Supporter items");
+const BOUND_IDS = ITEMS.filter(isDonorBound).map((i) => i.id);
 
 // ── rendering (inline CSS from the catalog's style data) ──
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -183,7 +191,21 @@ const ready = (async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_drop_config (key TEXT PRIMARY KEY, value REAL, updated INTEGER)");
   // Phase 5 (5.17): who owns the drop table (enabled = Pepe may hand it over, live = the site's table is THE table) + its log
   await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_drop_meta (key TEXT PRIMARY KEY, value TEXT)");
+  await unlistBound();
 })().catch((e) => console.error("[cosmetics] tables:", e));
+
+/** 1.99ans: take every active listing of a bound (💡 Supporter) copy off the market and give the copy back to its owner,
+ *  unlocked. Safe on every boot (a no-op once there are none). -> listings cancelled */
+async function unlistBound() {
+  if (!BOUND_IDS.length) return 0;
+  const q = BOUND_IDS.map(() => "?").join(",");
+  const r = await runQuery(`UPDATE cosmetic_listings SET status = 'cancelled', updated = ?
+                            WHERE status = 'active' AND inv_id IN (SELECT id FROM user_cosmetics WHERE item_id IN (${q}))`, [Date.now(), ...BOUND_IDS]);
+  await runQuery(`UPDATE user_cosmetics SET locked = 0 WHERE locked = 1 AND item_id IN (${q})`, BOUND_IDS);
+  const n = (r && r.changes) || 0;
+  if (n) console.log(`[cosmetics] 1.99ans: ${n} Supporter listing(s) taken off the market (bound items)`);
+  return n;
+}
 
 // ── users ──
 /** {userId} | {username} | {camfrog} (or a bare string, tried as both) -> users row or null. */
@@ -271,6 +293,7 @@ async function inventory(userId) {
     inv_id: r.id, item_id: r.item_id, kind: BY_ID[r.item_id].kind, name: BY_ID[r.item_id].name,
     rarity: BY_ID[r.item_id].rarity, source: r.source, acquired: r.acquired, locked: !!r.locked,
     perk: isPerk(BY_ID[r.item_id]) ? BY_ID[r.item_id].perk : null, perk_off: isPerk(BY_ID[r.item_id]) && !perkOn(BY_ID[r.item_id], userId),
+    bound: isBound(BY_ID[r.item_id]),                  // 1.99ans: can't be listed, sold, traded or gifted
     equipped: equippedInv.has(r.id), listing_id: r.listing_id || null, listing_price: r.listing_price || null,
   }));
   return { items, equipped };
@@ -627,7 +650,7 @@ async function transfer({ invId, fromId, toId, idem, listingId }) {
   if (fromId === toId) return { ok: false, error: "can't transfer to the same user" };
   {
     const c0 = (await getQuery("SELECT item_id FROM user_cosmetics WHERE id = ?", [invId]))[0];
-    if (c0 && isPerk(BY_ID[c0.item_id])) return { ok: false, error: `${PERKS[BY_ID[c0.item_id].perk].label} items can't be traded or gifted` };
+    if (c0 && isBound(BY_ID[c0.item_id])) return { ok: false, error: `${boundLabel(BY_ID[c0.item_id])} can't be traded or gifted` };   // 1.99ans: + 💡 Supporter
   }
   idem = String(idem).slice(0, 200);
   const claim = await runQuery("INSERT OR IGNORE INTO cosmetic_transfers (idem, inv_id, from_id, to_id, listing_id, created) VALUES (?, ?, ?, ?, ?, ?)",
@@ -681,7 +704,7 @@ async function marketListings(sort) {
      FROM cosmetic_listings l JOIN user_cosmetics c ON c.id = l.inv_id AND c.user_id = l.seller_id
      LEFT JOIN users s ON s.userId = l.seller_id
      WHERE l.status = 'active' ORDER BY ${order} LIMIT 300`);
-  return rows.filter((r) => BY_ID[r.item_id]).map((r) => ({ ...r, item: BY_ID[r.item_id], r: render(BY_ID[r.item_id]) }));
+  return rows.filter((r) => BY_ID[r.item_id] && !isBound(BY_ID[r.item_id])).map((r) => ({ ...r, item: BY_ID[r.item_id], r: render(BY_ID[r.item_id]) }));
 }
 
 async function showcaseFor(userId) {
@@ -922,7 +945,7 @@ function register(app, { isBotToken, addUser }) {
     const inv = await inventory(u.userId);
     res.json({ ok: true, username: u.username, camfrog: u.camfrogUsername || null,
                items: inv.items.map((i) => ({ inv_id: i.inv_id, item_id: i.item_id, kind: i.kind, name: i.name, rarity: i.rarity,
-                                              locked: i.locked, equipped: i.equipped, listing_id: i.listing_id })),
+                                              locked: i.locked, equipped: i.equipped, listing_id: i.listing_id, bound: i.bound })),
                equipped: inv.equipped });
   }));
 
@@ -1008,7 +1031,7 @@ function register(app, { isBotToken, addUser }) {
     if (price > LIST_MAX) return back("That price is too high.");
     const c = (await getQuery("SELECT id, item_id, locked FROM user_cosmetics WHERE id = ? AND user_id = ?", [invId, me]))[0];
     if (!c || !BY_ID[c.item_id]) return back("You don't own that item.");
-    if (isPerk(BY_ID[c.item_id])) return back(`${PERKS[BY_ID[c.item_id].perk].label} items can't be sold.`);
+    if (isBound(BY_ID[c.item_id])) return back(`${boundLabel(BY_ID[c.item_id])} can't be sold.`);     // 1.99ans: + 💡 Supporter (no PAT for dollars)
     if (c.locked) return back("That copy is already listed.");
     const open = await getQuery("SELECT COUNT(*) AS n FROM cosmetic_listings WHERE seller_id = ? AND status = 'active'", [me]);
     if (open[0].n >= MAX_LISTINGS) return back(`You can have ${MAX_LISTINGS} listings at a time.`);
@@ -1154,7 +1177,7 @@ async function grantPlexPerks(userId) {
 }
 
 module.exports = {
-  grantSeasonPerks, grantPlexPerks, isPerk, invalidateNames: () => invalidateNames(), PERK_IDS, PLEX_PERK_IDS, PERKS,
+  grantSeasonPerks, grantPlexPerks, isPerk, isBound, unlistBound, BOUND_IDS, invalidateNames: () => invalidateNames(), PERK_IDS, PLEX_PERK_IDS, PERKS,
   register, locals, grantUnlocks, syncUnlocks, backfillLevelUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
   resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, importDropConfig, releaseDropConfig, adminSetDrops,
   dropAdminView, dropLive, dropEnabled, setDropMeta, DROP_DEFAULTS, transfer, equip, inventory, equippedFor, profileData, pageData,

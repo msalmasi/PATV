@@ -507,6 +507,9 @@
                     <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="on" value="<%= c.equipped ? 0 : 1 %>"><input type="hidden" name="tab" value="mine">
                     <button class="ds-btn sm<%= c.equipped ? ' ghost' : '' %>" type="submit"><%= c.equipped ? 'Unequip' : 'Equip' %></button>
                   </form>
+                  <% if (c.bound) { %>
+                    <div class="cxp-src" style="margin-top:6px"><%- t('cos.bound_note') %></div>
+                  <% } else { %>
                   <details class="cxp-more"><summary><span class="ds-ic" aria-hidden="true">🏪</span>List for sale</summary>
                     <form method="POST" action="/cosmetics/list" class="cxp-row">
                       <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
@@ -523,6 +526,7 @@
                       <button class="ds-btn ghost sm" type="submit">Gift</button>
                     </form>
                   </details>
+                  <% } %>
                 <% } %>
               </div>
             </div>

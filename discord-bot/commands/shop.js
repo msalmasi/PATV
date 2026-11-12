@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils'); // Reuse this to get user info
+const { purchaseReply } = require('../shopReply'); // 1.99ans: a virtual collectible is never "activated"
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -85,7 +86,10 @@ module.exports = {
         const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
         const balance = balanceResponse.data.balance;
         interaction.guild.channels.cache.get('1245478269294346320').send(`${interaction.user} bought ${selectedPrizeName.prizeName}`)
-        await interaction.update({ content: `You successfully purchased ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost})! You have PAT ${balance}. Please wait up to 24 hours for activation.`, components: [], ephemeral: true });
+        // 1.99ans: by delivery (/api/prizes) - a virtual in-game collectible is in their PATV collection now, nothing to wait for
+        const content = purchaseReply({ name: selectedPrizeName.prizeName, cost: selectedPrizeName.prizeCost, balance,
+                                        delivery: selectedPrizeName.delivery, collectible: !!response.data.collectible });
+        await interaction.update({ content, components: [], ephemeral: true });
       } else {
         // Handle errors like insufficient balance
         await interaction.update({ content: `Purchase failed: ${response.data.message}`, components: [], ephemeral: true });
@@ -123,6 +127,7 @@ async function getPrizeDetails(prizeId) {
         return {
           prizeName: prize.prize,
           prizeCost: prize.cost,
+          delivery: prize.delivery || null,     // 1.99ans: "collectible" = a virtual in-game collectible
         };
       } else {
         throw new Error(`Prize with ID ${prizeId} not found.`);
