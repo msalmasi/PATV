@@ -32,6 +32,23 @@
     <div id="pcOut" aria-live="polite"><p class="muted"><%= t('adm.media.catalog.loading') %></p></div>
   </section>
 
+  <%# 1.99anw plexhook: Plex's webhook. The URL carries its secret, so it is never rendered here: media-admin.js reads it from the
+      admin-only /api/media/admin/catalog/hook and shows it masked until Show. %>
+  <section class="sb-card" id="plexHook" aria-labelledby="phT">
+    <h2 id="phT"><%= t('adm.media.hook.title') %></h2>
+    <p class="muted"><%= t('adm.media.hook.help') %></p>
+    <p><%= t('adm.media.hook.howto') %></p>
+    <div class="row">
+      <span><%= t('adm.media.hook.url') %></span>
+      <code id="phUrl" style="word-break: break-all"></code>
+      <button type="button" class="btn" id="phShow" disabled><%= t('adm.media.hook.show') %></button>
+      <button type="button" class="btn primary" id="phCopy" disabled><%= t('adm.media.hook.copy') %></button>
+      <button type="button" class="btn danger" id="phRegen" disabled><%= t('adm.media.hook.regenerate') %></button>
+      <span class="msg" id="phMsg" role="status"></span>
+    </div>
+    <div id="phOut" aria-live="polite"><p class="muted"><%= t('adm.media.catalog.loading') %></p></div>
+  </section>
+
   <section class="sb-card" id="clerkLists" aria-labelledby="clTitle">
     <h2 id="clTitle"><%= t('adm.media.lists.title') %></h2>
     <p class="muted"><%= t('adm.media.lists.help') %></p>
@@ -85,7 +102,7 @@
   <section class="sb-card" id="settings" aria-labelledby="stT">
     <h2 id="stT">Settings</h2>
     <form id="mediaSettings" class="book" autocomplete="off">
-      <input type="hidden" name="_bools" value="library_enabled,library_plex,library_queue,library_break,requests_enabled,request_landed_relay,invites_enabled,plex_auto_revoke,plex_selflink,plex_sso,plex_flair,wizarr_timed">
+      <input type="hidden" name="_bools" value="library_enabled,library_plex,library_queue,library_break,requests_enabled,request_landed_relay,invites_enabled,plex_auto_revoke,plex_selflink,plex_sso,plex_flair,wizarr_timed,catalog_hook">
       <h3>📼 Play from library</h3>
       <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
       <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
@@ -123,6 +140,9 @@
       </label>
       <label><%= t('adm.media.catalog.embed_k') %> <input type="number" name="clerk_embed_k" min="20" max="50" value="<%= S.clerk_embed_k || 30 %>"></label>
       <label><%= t('adm.media.catalog.sync_minutes') %> <input type="number" name="catalog_sync_min" min="10" max="1440" value="<%= S.catalog_sync_min || 60 %>"></label>
+      <%# 1.99anw plexhook: the webhook's switch + its wait (the URL itself: the Plex webhook card above) %>
+      <label class="chk"><input type="checkbox" name="catalog_hook" <%= S.catalog_hook !== false ? 'checked' : '' %>> <%= t('adm.media.hook.enabled') %></label>
+      <label><%= t('adm.media.hook.debounce') %> <input type="number" name="catalog_hook_debounce_s" min="10" max="600" value="<%= S.catalog_hook_debounce_s || 30 %>"></label>
       <label><%= t('adm.media.catalog.blocked') %> <input type="text" name="clerk_block_ratings" maxlength="400" value="<%= S.clerk_block_ratings == null ? 'X,XXX,AO,R18,R18+' : S.clerk_block_ratings %>"></label>
       <label><%= t('adm.media.catalog.warned') %> <input type="text" name="clerk_warn_ratings" maxlength="400" value="<%= S.clerk_warn_ratings == null ? 'NR,Not Rated,Unrated' : S.clerk_warn_ratings %>"></label>
       <p class="muted" style="grid-column:1/-1"><%= t('adm.media.catalog.warning_help') %></p>
@@ -191,5 +211,5 @@
     <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
   </section>
 </main>
-<script src="/public/js/media-admin.js?v=11" defer></script>
+<script src="/public/js/media-admin.js?v=12" defer></script>
 <%- include('partials/admin-close') %>

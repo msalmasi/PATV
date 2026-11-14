@@ -151,7 +151,9 @@ test("the lists cover every per-environment table, and the script runs it with s
                                          // mic retention: staging's own mic-recordings policy switch (micrec.js)
                                          "micrec_meta",
                                          // 1.99ano (review S10): staging's own house-pad rotation journal
-                                         "house_rotations"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
+                                         "house_rotations",
+                                         // 1.99anw: the Plex webhook's secret (plexhook.js) - prod's URL never works on staging
+                                         "plex_hook"].sort(), "S1-D1: staging keeps its own hub pad ids; S1 Q4: and its own chat switches; and its own mic-recordings switch; wave 2: real identities never cross");
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");

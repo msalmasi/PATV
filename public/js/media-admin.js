@@ -101,6 +101,109 @@
   window.addEventListener("pagehide", function () { clearTimeout(pcTimer); });
   pcLoad();
 
+  // 1.99anw plexhook: the Plex webhook card. Its URL carries the webhook's secret: read from the admin-only route, shown masked
+  // until Show, copied from memory (never put in the page's HTML). Everything is text (a server's name comes from Plex), never markup.
+  var ht = function (key, fallback, values) {
+    return window.__t ? window.__t("js.media.hook." + key, fallback, values) : String(fallback).replace(/\{(\w+)\}/g, function (m, n) {
+      return values && values[n] != null ? String(values[n]) : m;
+    });
+  };
+  var phUrl = null, phShown = false;
+  function phDate(value) {
+    if (!value || !Number.isFinite(Number(value))) return ht("never", "Never");
+    var date = new Date(Number(value));
+    return isNaN(date.getTime()) ? ht("never", "Never") : date.toLocaleString();
+  }
+  function phWhat(outcome) {
+    switch (outcome) {
+      case "scheduled": return ht("what_scheduled", "a catalog read was scheduled");
+      case "joined": return ht("what_joined", "joined the catalog read already waiting");
+      case "after": return ht("what_after", "a catalog read runs right after the one in progress");
+      case "ignored": return ht("what_ignored", "ignored (only new titles count)");
+      case "switch_off": return ht("what_switch_off", "ignored (the webhook is switched off)");
+      case "catalog_off": return ht("what_catalog_off", "ignored (the catalog is off)");
+      case "other_server": return ht("what_other_server", "ignored (another Plex server)");
+      case "unavailable": return ht("what_unavailable", "ignored (the catalog is unavailable)");
+      case "bad_request": return ht("what_bad_request", "refused (not a Plex webhook)");
+      case "too_large": return ht("what_too_large", "refused (too large)");
+      case "rate_limited": return ht("what_rate_limited", "refused (too many at once)");
+      default: return String(outcome || "");
+    }
+  }
+  function phButton(parent, label, onClick) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
+    b.addEventListener("click", onClick); parent.appendChild(b); return b;
+  }
+  function phShowUrl() {
+    var node = document.getElementById("phUrl"), show = document.getElementById("phShow");
+    if (node) node.textContent = !phUrl ? "" : phShown ? phUrl : phUrl.slice(0, phUrl.lastIndexOf("/") + 1) + "••••••••";
+    if (show) show.textContent = phShown ? ht("hide", "Hide") : ht("show", "Show");
+  }
+  function phDraw(j) {
+    var out = document.getElementById("phOut");
+    phUrl = typeof j.url === "string" && j.url ? j.url : null;
+    phShowUrl();
+    ["phShow", "phCopy", "phRegen"].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = id === "phRegen" ? false : !phUrl; });
+    while (out.firstChild) out.removeChild(out.firstChild);
+    pcText(out, "p", !j.catalog_on ? ht("status_catalog_off", "The catalog is off (no clerk switch is on), so Plex's messages are answered and ignored.")
+      : j.on ? ht("status_on", "On: a title Plex adds is read into the catalog about {n} seconds later.", { n: Number(j.debounce_s) || 30 })
+      : ht("status_off", "Switched off in Settings below: Plex's messages are answered and ignored."));
+    if (j.pending) pcText(out, "p", j.pending.after_running ? ht("pending_after", "A catalog read runs right after the one in progress.")
+      : ht("pending", "A catalog read is waiting, due {at}.", { at: phDate(j.pending.due) }));
+    pcText(out, "p", j.last ? ht("last", "Last webhook: {at}, {event}, {what}.", { at: phDate(j.last.at),
+      event: j.last.event && j.last.event !== "-" ? j.last.event : ht("no_event", "no event"), what: phWhat(j.last.outcome) }) : ht("last_none", "No webhook received yet."));
+    if (j.wrong) pcText(out, "p", ht("wrong", "Requests to an old or wrong webhook address since the site started: {n} (last {at}).", { n: Number(j.wrong.n) || 0, at: phDate(j.wrong.at) }));
+    var who = pcText(out, "p", j.server ? ht("server_pinned", "Accepted only from the Plex server {id}.", { id: j.server })
+      : ht("server_any", "Accepted from any Plex server that has this address: the site cannot read its own server's identifier, so pick it below once Plex has sent a new title."));
+    if (j.server) { who.appendChild(document.createTextNode(" ")); phButton(who, ht("server_any_btn", "Accept any server"), function () { phServer(""); }); }
+    if ((j.servers || []).length) {
+      pcText(out, "p", ht("servers_title", "Plex servers seen in new-title messages since the site started:"));
+      var list = pcText(out, "ul", "");
+      j.servers.forEach(function (s) {
+        var item = pcText(list, "li", ht("server_row", "{name} ({id}): {n} new-title messages, last {at}", { name: s.name || ht("server_unnamed", "unnamed"),
+          id: s.id, n: Number(s.n) || 0, at: phDate(s.at) }));
+        if (!s.pinned) { item.appendChild(document.createTextNode(" ")); phButton(item, ht("server_pin", "Accept only this server"), function () { phServer(s.id); }); }
+      });
+    }
+  }
+  function phLoad() {
+    if (!document.getElementById("phOut")) return Promise.resolve();
+    return api("GET", "/api/media/admin/catalog/hook").then(phDraw).catch(function () { msg("phMsg", ht("failed", "Could not read the webhook settings. Refresh the page to try again.")); });
+  }
+  function phServer(id) {
+    msg("phMsg", ht("saving", "Saving…"), true);
+    api("POST", "/api/media/admin/catalog/hook/server", { server: id }).then(function (j) { phDraw(j); msg("phMsg", ht("saved", "Saved."), true); })
+      .catch(function () { msg("phMsg", ht("save_failed", "Could not save. Try again.")); });
+  }
+  function phCopy() {
+    if (!phUrl) return;
+    var done = function () { msg("phMsg", ht("copied", "Copied. Paste it into Plex Web → Settings → Webhooks."), true); };
+    var fail = function () { msg("phMsg", ht("copy_failed", "Copy did not work. Press Show, then select the address and copy it.")); };
+    var fallback = function () {
+      try {
+        var area = document.createElement("textarea");
+        area.value = phUrl; area.setAttribute("readonly", ""); area.style.position = "fixed"; area.style.opacity = "0";
+        document.body.appendChild(area); area.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(area);
+        if (ok) done(); else fail();
+      } catch (e) { fail(); }
+    };
+    if (window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) window.navigator.clipboard.writeText(phUrl).then(done, fallback);
+    else fallback();
+  }
+  var phShowBtn = document.getElementById("phShow"), phCopyBtn = document.getElementById("phCopy"), phRegenBtn = document.getElementById("phRegen");
+  if (phShowBtn) phShowBtn.addEventListener("click", function () { phShown = !phShown; phShowUrl(); });
+  if (phCopyBtn) phCopyBtn.addEventListener("click", phCopy);
+  if (phRegenBtn) phRegenBtn.addEventListener("click", function () {
+    if (!window.confirm(ht("confirm_regen", "Make a new webhook address? The old one stops working at once, and Plex must be given the new one."))) return;
+    phRegenBtn.disabled = true;
+    api("POST", "/api/media/admin/catalog/hook/regenerate", {}).then(function (j) {
+      phShown = false; phDraw(j); msg("phMsg", ht("regenerated", "New address made. Paste it into Plex: the old one no longer works."), true);
+    }).catch(function () { msg("phMsg", ht("regen_failed", "Could not make a new address. Try again.")); phRegenBtn.disabled = false; });
+  });
+  phLoad();
+
   // Admin-configured lists. Provider metadata is rendered as text, never markup.
   var lt = function (key, fallback, values) {
     return window.__t ? window.__t("js.media.lists." + key, fallback, values) : String(fallback).replace(/\{(\w+)\}/g, function (m, n) {

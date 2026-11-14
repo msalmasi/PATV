@@ -61,6 +61,7 @@ const KEEP = ["bot_keys", "bot_keys_settings", "bot_key_families", "hubseam_sett
               "chat_switches",   // S1 Q4 (ADR 0007 D3): staging's own CHAT_HUB (a prod value would switch the staging pilot on or off)
               "micrec_meta",     // mic retention: staging's own mic-recordings policy switch (micrec.js - staging tries it before prod)
               "house_rotations", // 1.99ano (review S10): staging's own house-pad rotation journal (houserotate.js) - prod's would refuse staging's
+              "plex_hook",       // 1.99anw: the Plex webhook's secret + last delivery (plexhook.js) - prod's URL must never work on (or show on) staging
               ...CHATLOG, ...LIVE_FEED, ...VEIL];
 // 1.99ano (review S10): rooms_kv keys that belong to the ENVIRONMENT (rooms_kv itself is data): the house room (houserotate.js; prod's
 // "The_Swamp" would make staging's house pad prod's room, and staging Pepe's rotations would be refused not_house) and Pepe's logins

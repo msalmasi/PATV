@@ -851,6 +851,53 @@ function createCatalog(options = {}) {
   // looks again every IDLE_CHECK_MIN, so a switch turned on is picked up within minutes. "Sync now" on /admin/media still
   // pre-warms it by hand with everything off.
   const inUse = (cfg) => ["clerk_enabled", "clerk_requests"].some((k) => cfg[k] && cfg[k] !== "off") || cfg.clerk_embed === true || cfg.clerk_lists === true;
+  // 1.99anw plexhook: soon() - Plex's webhook (plexhook.js: library.new only) asks for the ORDINARY sync - sync() above, the same
+  // doSync and its single-flight `syncing` - about catalog_hook_debounce_s (10-600, default 30) later: Plex announces each title of
+  // a season or a batch on its own, and its metadata settles meanwhile. Every request inside that wait joins it. One that comes
+  // while a sync runs (the timer's, "Sync now", the webhook's own) is run right after that sync finishes, once its wait is over -
+  // never a second waiting run, never a pile-up. Inside the quiet window it waits for the window's end; a catalog that is off
+  // (inUse) or a webhook switched off meanwhile drops it. Nothing the webhook carried reaches doSync: it reads mediactl as always
+  // (the changes since the last run; the first run of a UTC day is the day's full sweep, whoever starts it).
+  const hook = { due: null, timer: null, watching: false, runs: 0 };
+  const setTimer = options.setTimer || ((fn, ms) => { const h = setTimeout(fn, ms); if (h.unref) h.unref(); return h; });
+  const clearTimer = options.clearTimer || ((h) => clearTimeout(h));
+  const hookWaitMs = (cfg) => Math.max(10, Math.min(600, Math.floor(number((cfg || {}).catalog_hook_debounce_s, 30)))) * 1000;
+  const quietEnd = (t) => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 4, 20); };
+  /** -> {ok, state: "scheduled" | "after" (a sync is running: runs right after it) | "joined" (one is already asked for) | "off" | "closed", due} */
+  function soon() {
+    if (closed || options.readOnly) return { ok: false, state: "closed", due: null };
+    const cfg = settings() || {};
+    if (!inUse(cfg)) return { ok: true, state: "off", due: null };
+    if (hook.due != null) return { ok: true, state: "joined", due: hook.due };
+    hook.due = now() + hookWaitMs(cfg);
+    planHook();
+    return { ok: true, state: syncing ? "after" : "scheduled", due: hook.due };
+  }
+  function planHook() {
+    if (hook.timer != null) { clearTimer(hook.timer); hook.timer = null; }
+    if (closed || hook.due == null) return;
+    if (syncing) {
+      // one watcher on the run in progress; when it settles (syncing is null by then) the asked-for run is planned again
+      if (!hook.watching) { hook.watching = true; syncing.finally(() => { hook.watching = false; planHook(); }).catch(() => {}); }
+      return;
+    }
+    const t = now();
+    if (quiet(t)) hook.due = Math.max(hook.due, quietEnd(t));
+    hook.timer = setTimer(fireHook, Math.max(0, hook.due - t));
+  }
+  function fireHook() {
+    hook.timer = null;
+    if (closed || hook.due == null) return;
+    if (syncing || quiet(now()) || now() < hook.due) return planHook();
+    const cfg = settings() || {};
+    hook.due = null;   // a request from here on asks for the next run
+    if (!inUse(cfg) || cfg.catalog_hook === false) { log.log("[plexcatalog] webhook sync dropped: " + (inUse(cfg) ? "the webhook is switched off" : "the catalog is off")); return; }
+    hook.runs++;
+    log.log("[plexcatalog] webhook: changes-only sync");
+    sync().catch(() => {});
+  }
+  /** The admin card's view: when the asked-for run is due (null = none waiting) and how many the webhook started. */
+  const hookState = () => ({ due: hook.due, waiting: hook.due != null, after_running: hook.due != null && !!syncing, runs: hook.runs });
   function start() {
     if (timer || closed || options.readOnly) return;
     const tick = async () => {
@@ -867,6 +914,8 @@ function createCatalog(options = {}) {
   async function close() {
     closed = true;
     clearTimeout(timer); timer = null;
+    if (hook.timer != null) clearTimer(hook.timer);
+    hook.timer = null; hook.due = null;
     if (outsideLists) await outsideLists.close();
     for (const q of [...queue.splice(0), ...later.splice(0)]) q.reject(coded("unavailable"));
     await tail;
@@ -911,7 +960,7 @@ function createCatalog(options = {}) {
     listsCache().register(app, { addUser, noTimers });
     if (!noTimers) start();
   }
-  return { init, sync, dryCount, status, shelves, rows, roots, byTitle, getByKeys, search, read, write, admin, importSnapshot, exportSnapshot, start, close, register, file, inUse };
+  return { init, sync, soon, hookState, dryCount, status, shelves, rows, roots, byTitle, getByKeys, search, read, write, admin, importSnapshot, exportSnapshot, start, close, register, file, inUse };
 }
 
 let singleton;
@@ -924,7 +973,7 @@ const current = () => {
 };
 module.exports = { createCatalog, crow, fold, ratings, normRating, quiet, nextTickMin, sourceError, SEARCH_BUDGET_MS, SHELVES_BUDGET_MS, ADMIN_BUDGET_MS, SEARCH_QUEUE, BACKGROUND_QUEUE };
 // 1.99amh plexclerk review: roots / byTitle too - production's finder and lists use this module, not an instance
-for (const name of ["init", "sync", "dryCount", "status", "shelves", "rows", "roots", "byTitle", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
+for (const name of ["init", "sync", "soon", "hookState", "inUse", "dryCount", "status", "shelves", "rows", "roots", "byTitle", "getByKeys", "search", "read", "write", "importSnapshot", "exportSnapshot", "start", "close", "register"]) module.exports[name] = (...args) => current()[name](...args);
 // plexlists 1.99amd: the admin lane for require("./plexcatalog") users (plexlists' own singleton), forwarded like the rest
 module.exports.admin = { read: (...args) => current().admin.read(...args), rows: (...args) => current().admin.rows(...args), getByKeys: (...args) => current().admin.getByKeys(...args),
   roots: (...args) => current().admin.roots(...args) };   // 1.99amh plexclerk (rebase onto 1.99amd): a list's matching

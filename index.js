@@ -105,6 +105,11 @@ require("./hlsauth").register(app);
 // sign-in (the one its notifications are bound to), count as a visit, or run the nav counts. It needs no user.
 app.get("/sw.js", require("./webpush").serveWorker);
 
+// 1.99anw plexhook: Plex's webhook (POST /api/plex/webhook/<secret>, plexhook.js) - a machine-to-machine call like Apple's
+// server-to-server notifications: before the cookie / session / body middleware (Plex sends no cookie and no Origin, so no CSRF
+// check applies and no session is made for it). It parses its own multipart body; a wrong secret falls through to the 404.
+require("./plexhook").registerEarly(app);
+
 // Cookie Parser Middleware
 app.use(cookieParser(process.env.APP_SESSION_SECRET));
 // 1.99wj: server-side sign-in sessions (sessions.js) - a revoked / expired session is a signed-out request for everything

@@ -33,6 +33,12 @@ const DEFAULTS = {
   clerk_block_ratings: "X,XXX,AO,R18,R18+",
   clerk_warn_ratings: "NR,Not Rated,Unrated",
   catalog_sync_min: 60,
+  // 1.99anw plexhook: Plex's webhook (plexhook.js, POST /api/plex/webhook/<secret>) - a title Plex adds (library.new) asks for the
+  // catalog's ordinary changes-only sync this many seconds later (more additions inside the wait join it). On by default; it
+  // does nothing until an admin pastes the URL from /admin/media into Plex. The secret itself is never a setting (plex_hook table).
+  catalog_hook: true,
+  catalog_hook_debounce_s: 30,
+  catalog_hook_server: "",       // only this Plex server's events (its machine identifier); "" = any server that has the URL
   clerk_embed: false,
   clerk_lists: false,
   clerk_embed_k: 30,
@@ -138,6 +144,9 @@ const CLEAN = {
   clerk_block_ratings: (v) => [...new Set(String(v == null ? "" : v).split(",").map((x) => x.trim().toUpperCase().replace(/^[A-Z]{2}\/\s*/, "")).filter((x) => /^[A-Z0-9 +\-]{1,30}$/.test(x)))].slice(0, 30).join(","),
   clerk_warn_ratings: (v) => [...new Set(String(v == null ? "" : v).split(",").map((x) => x.trim().replace(/^[A-Za-z]{2}\/\s*/, "")).filter((x) => /^[A-Za-z0-9 +\-]{1,30}$/.test(x)))].slice(0, 30).join(","),
   catalog_sync_min: (v) => num(v, 10, 1440, 60),
+  catalog_hook: bool,                                                           // 1.99anw plexhook
+  catalog_hook_debounce_s: (v) => num(v, 10, 600, 30),
+  catalog_hook_server: (v) => { const s = String(v == null ? "" : v).trim(); return /^[A-Za-z0-9]{8,64}$/.test(s) ? s : ""; },
   clerk_lists: (v) => v === true || v === "true" || v === "1",
   clerk_embed: (v) => v === true || v === "true" || v === "1",
   clerk_embed_k: (v) => num(v, 20, 50, 30),

@@ -47,6 +47,7 @@ function register(app, { addUser, noTimers } = {}) {
   reqs.register(app, { addUser, noTimers });
   inv.register(app, { noTimers });
   require("./plexcatalog").register(app, { addUser, noTimers });
+  require("./plexhook").registerAdmin(app, { addUser });   // 1.99anw: the Plex webhook's admin card (the webhook itself: index.js, early)
   Promise.all([lib.init(), reqs.init(), inv.init()]).catch((e) => console.error("[media] setup:", conf.errLine(e)));
 
   const fail = (res, e) => {
