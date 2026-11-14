@@ -857,6 +857,7 @@
   "siteperm.k.feed.automod_csam_reverse": "Review child-safety automod actions",
   "siteperm.k.takedown.handle": "TAKE IT DOWN requests",
   "siteperm.k.imagesafety.admin": "Image safety settings and review",
+  "siteperm.k.feed.story_originals": "How a story was captured, and its original upload for quality checks (kept 48 hours; every download logged)",
   "siteperm.k.dm.limits_exempt": "No message limits or picture rules",
   "siteperm.k.dm.report_review": "Reported direct messages",
   "siteperm.k.chat.breakglass": "Chat hub break-glass (/admin/chat): turn the chat hub or a pad's hub chat off (turning either on is a Pepe owner's too)",

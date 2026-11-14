@@ -715,6 +715,10 @@ async function execute(userId, { force = false } = {}) {
     const path = require("path"), fs = require("fs");
     for (const m of mediaRows) { if (m.file) { try { fs.unlinkSync(path.join(M.DIR, m.file)); } catch (e) { /* gone */ } } try { M.removePoster(m.id); } catch (e) { /* none */ } }
   } catch (e) { /* no media module */ }
+  // 1.99anv (storyorig.js): the original uploads of their stories (kept 48 h for quality checks) - files and rows, now (outside the
+  // transaction, like the clip files: what the member asked for stays done if the job has to run again)
+  try { const k = await require("./storyorig").forgetOwner(uid); if (k) report.story_originals_deleted = k; }
+  catch (e) { console.error("[acctdel] story originals:", e.message); }
   // CL6 (decision 14): "Also hide my past public chat lines" - the login (while the row still knows it) and the account key join
   // the pad chat archive's sticky hidden set for good (src delete). Never inside the transaction below (the hidden set serialises
   // its own writes); a deletion that has to be retried leaves them hidden, which is what the member asked for.

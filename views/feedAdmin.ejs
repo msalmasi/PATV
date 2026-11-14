@@ -289,6 +289,8 @@
         <label class="ck"><input type="checkbox" name="story_studio"<%= C.story_studio ? ' checked' : '' %>> Story Studio: the full-screen story editor (crop, text, stickers, mentions, trim)</label>
         <%# story camera (1.99alu, public/js/story-camera.js) %>
         <label class="ck"><input type="checkbox" name="story_camera"<%= C.story_camera !== false ? ' checked' : '' %>> Story camera: Story Studio opens on a live camera (tap for a photo, hold for a video, flip, gallery). Off = the studio's picture / video picker only. Needs Story Studio on</label>
+        <%# 1.99anv (storyorig.js): the original uploads, for quality checks (a choppy video: compare it with what the phone sent) %>
+        <label class="ck"><input type="checkbox" name="story_keep_originals"<%= C.story_keep_originals !== false ? ' checked' : '' %>> Keep each story's original upload for 48 hours (the file as it came from the phone, before it's re-encoded) - Admins can download it from the story's page for quality checks; deleting the story deletes it; never backed up. Off = no new ones (kept ones still go at 48 hours)</label>
         <label class="ck"><input type="checkbox" name="story_votes"<%= C.story_votes !== false ? ' checked' : '' %>> Votes on stories (▲▼, the feed's vote rules; they don't count for activity rewards or achievements)</label>
         <label class="ck"><input type="checkbox" name="story_tips"<%= C.story_tips !== false ? ' checked' : '' %>> Tips on stories (💸, the normal tip: the full amount to the person in it or who posted it)</label>
         <label class="ck"><input type="checkbox" name="story_replies"<%= C.story_replies !== false ? ' checked' : '' %>> Replies to stories (a direct message under every DM rule)</label>

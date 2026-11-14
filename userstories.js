@@ -93,6 +93,11 @@ function init() {
       const cols = new Set((await getQuery("PRAGMA table_info(feed_attachments)")).map((c) => c.name));
       if (!cols.has("purpose")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN purpose TEXT").catch(() => {});
       if (!cols.has("edit")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN edit TEXT").catch(() => {});
+      // 1.99anv (storyorig.js): how the story's file was made (the story camera or a chosen file; a clip's recorder type and
+      // timeslice) - on the upload, then on the story (media.capture), for the admins' quality checks
+      if (!cols.has("capture")) await runQuery("ALTER TABLE feed_attachments ADD COLUMN capture TEXT").catch(() => {});
+      const mcols0 = new Set((await getQuery("PRAGMA table_info(media)")).map((c) => c.name));
+      if (!mcols0.has("capture")) await runQuery("ALTER TABLE media ADD COLUMN capture TEXT").catch(() => {});
       await runQuery("CREATE TABLE IF NOT EXISTS story_text (story_id TEXT PRIMARY KEY, text TEXT NOT NULL, created INTEGER)");
       await runQuery("CREATE TABLE IF NOT EXISTS story_mentions (story_id TEXT NOT NULL, user_id TEXT NOT NULL, x REAL, y REAL, created INTEGER, removed_at INTEGER, PRIMARY KEY (story_id, user_id))");
       await runQuery("CREATE INDEX IF NOT EXISTS media_subject_login ON media (subject_login)").catch(() => {});
@@ -500,14 +505,17 @@ async function create(user, { attachment, pad, nsfw, mentions } = {}) {
     fm().removeFiles([a.thumb].filter(Boolean));
     const isNsfw = verdict.nsfw === true || nsfw === true || nsfw === 1 || nsfw === "1" || nsfw === "on";
     const bytes = fs.statSync(path.join(media.DIR, file)).size;
-    await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, source, nsfw, by_user_id)
-                    VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, 0, 0, 'user', ?, ?)`,
+    // 1.99anv: the upload's capture source goes with the story (storyorig.js; checked again - it outlives the upload row)
+    const cap = require("./storyorig").parseCapture(a.capture, a.kind);
+    await runQuery(`INSERT INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, source, nsfw, by_user_id, capture)
+                    VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, 0, 0, 'user', ?, ?, ?)`,
                    [id, video ? "clip" : "photo", video ? "video/mp4" : "image/webp", file, bytes, video ? Number(a.secs) || 0 : 0,
-                    String(u.displayname || u.username).slice(0, 60), rid, t, t + WINDOW_MS, isNsfw ? 1 : 0, u.userId]);
+                    String(u.displayname || u.username).slice(0, 60), rid, t, t + WINDOW_MS, isNsfw ? 1 : 0, u.userId, cap ? JSON.stringify(cap) : null]);
     if (edit) await runQuery("INSERT INTO story_text (story_id,text,created) VALUES (?,?,?)", [id, editAlt(edit), t]);
     for (const chip of chips) await runQuery("INSERT INTO story_mentions (story_id,user_id,x,y,created) VALUES (?,?,?,?,?)", [id, chip.userId, chip.x, chip.y, t]);
     if (video && !media.hasPoster({ id, kind: "clip" })) media.makePoster({ id, kind: "clip", file, secs: Number(a.secs) || 0 }).catch(() => {});
   } catch (e) {
+    await require("./storyorig").forgetUpload(a.id);      // 1.99anv: no story, so no kept original either (never throws)
     for (const f of [path.join(media.DIR, file), media.posterFile(id)]) { try { fs.unlinkSync(f); } catch (_) { /* none */ } }
     await runQuery("DELETE FROM media WHERE id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM story_text WHERE story_id = ?", [id]).catch(() => {});
@@ -515,6 +523,8 @@ async function create(user, { attachment, pad, nsfw, mentions } = {}) {
     console.error("[userstories] create failed:", id);
     throw new Refuse(500, "That story couldn't be saved - try again.");
   }
+  // 1.99anv: the upload's kept original (storyorig.js, 48 h) now belongs to this story - deleting the story deletes it
+  await require("./storyorig").linkStory(a.id, id).catch((e) => console.error("[userstories] original link:", e.message));
   await require("./storyreact").selfUp(u.userId, id);   // storyreact site: only with POLICY.autoSelfUp (D-5 alternative; off)
   console.log(`[userstories] account=${u.userId} story=${id} pad=${rid}`);
   const result = { id, room: rid, href: rooms.isProfile(rid) ? "/u/" + encodeURIComponent(u.username) : require("./pads").padHref(R), expires: t + WINDOW_MS };
@@ -595,6 +605,8 @@ function register(app, { addUser, noTimers = false }) {
   app.locals.storyStudioOn = studioOn;
   app.locals.storyCameraOn = cameraOn;
   if (!noTimers) { const timer = setInterval(() => sweep().catch(() => {}), 3600e3); if (timer.unref) timer.unref(); }
+  // 1.99anv: the kept original uploads (storyorig.js) - the admins' download and the 48 h sweep (on boot + hourly)
+  require("./storyorig").register(app, { addUser, noTimers });
   const guard = require("./middleware/authGuard");
   const json = (req, res, next) => {
     if (!guard.sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });

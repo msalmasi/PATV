@@ -90,6 +90,7 @@ const DEFAULTS = Object.freeze({
   story_tips_per_hour: 30, story_capture_new_convos_per_day: 10, story_capture_tips_per_person_per_day: 10,
   story_studio: false,               // Story Studio's edited uploads, mentions and editor; additive and off by default.
   story_camera: true,                // story camera (1.99alu): the studio opens on a live camera (tap = photo, hold = video); off = its picker only
+  story_keep_originals: true,        // 1.99anv (storyorig.js): keep each story's ORIGINAL upload 48 h for quality checks (Admins only; never backed up)
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
 const BOOL_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "boolean");

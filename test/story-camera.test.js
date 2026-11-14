@@ -294,12 +294,16 @@ function recorderClass(P, supported) {
   return class FakeRecorder {
     constructor(stream, options) { this.stream = stream; this.options = options || {}; this.mimeType = this.options.mimeType || "video/webm"; this.state = "inactive"; this.stops = 0; P.recorders.push(this); }
     static isTypeSupported(t) { return supported.includes(t); }
-    start(slice) { this.state = "recording"; this.slice = slice; this.startedAt = P.clock.t; queueMicrotask(() => { if (this.onstart) this.onstart({ type: "start" }); }); }
+    // storyrec (1.99anv): startArgs - how many arguments start() was given (WebKit: none, so no timeslice at all)
+    start(slice) { this.state = "recording"; this.slice = slice; this.startArgs = arguments.length; this.startedAt = P.clock.t; queueMicrotask(() => { if (this.onstart) this.onstart({ type: "start" }); }); }
     stop() {
       if (this.state === "inactive") throw new Error("InvalidStateError");
       this.state = "inactive"; this.stops++; this.stoppedAt = P.clock.t;
-      const body = /mp4/.test(this.mimeType) ? mp4Bytes() : chromeWebm();
-      queueMicrotask(() => { if (this.ondataavailable) this.ondataavailable({ data: new Blob([body], { type: this.mimeType }) }); if (this.onstop) this.onstop({ type: "stop" }); });
+      const body = /mp4/.test(this.mimeType) ? mp4Bytes() : chromeWebm(), o = P.opts || {};
+      const data = () => { if (this.ondataavailable) this.ondataavailable({ data: new Blob([body], { type: this.mimeType }) }); };
+      // storyrec: options.lateData - the one final chunk comes after the stop event (P.late() hands it over); options.noData - none
+      if (o.lateData || o.noData) { queueMicrotask(() => { if (this.onstop) this.onstop({ type: "stop" }); }); if (o.lateData) P.late = data; return; }
+      queueMicrotask(() => { data(); if (this.onstop) this.onstop({ type: "stop" }); });
     }
   };
 }
@@ -315,7 +319,7 @@ function camPage(options = {}) {
   const P = { doc, clock, calls: [], uploaded: [], puts: [], gum: [], streams: [], recorders: [], snaps: [], draws: [], blobs: new Map(), events: [],
     winListeners: [], session: Object.assign({}, options.session), pickClicks: { camera: 0, gallery: 0 }, sessAtGum: [], rs: [], md: [], perm: {}, srcs: [],
     // storyplay: every play() of the editor's <video> ({ node, src, gesture, out }) and the owner's one carry-over (see node.play)
-    plays: [], carry: 0 };
+    plays: [], carry: 0, opts: options };
   doc.visibilityState = "visible"; doc.hidden = false;
   doc.dispatchEvent = (ev) => { for (const l of doc.listeners.filter((x) => x.type === ev.type)) l.fn(ev); P.events.push(ev); return !ev.defaultPrevented; };
   doc.fonts = { load: async () => {} };
@@ -414,7 +418,8 @@ function camPage(options = {}) {
     addEventListener(type, fn) { if (type === "change") this.ls.push(fn); }, removeEventListener(type, fn) { this.ls = this.ls.filter((f) => f !== fn); },
     set(state) { this.state = state; this.ls.slice().forEach((f) => f({ type: "change" })); } });
   const navigator = { userAgent: options.ua || "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36",
-    vendor: options.vendor || "Google Inc.", permissions: { query: async (d) => (options.permStatus ? permStatus(d.name) : { state: (options.permissions || {})[d.name] || "prompt" }) } };
+    vendor: options.vendor != null ? options.vendor : "Google Inc.", maxTouchPoints: options.maxTouchPoints || 0,
+    permissions: { query: async (d) => (options.permStatus ? permStatus(d.name) : { state: (options.permissions || {})[d.name] || "prompt" }) } };
   if (options.audioSession) navigator.audioSession = { type: options.audioSession };      // Safari 17+'s Audio Session API
   if (!options.noMedia) navigator.mediaDevices = {
     getUserMedia: (c) => {
@@ -779,7 +784,7 @@ test("Story camera: the strip loads the camera with the studio while story_camer
   const locals = { story: { signed: true, compose: true, rooms: [], caps: [], room: "studio-test-pad" }, user: "maplecanvas" };
   const render = (extra) => ejs.render(source, Object.assign({}, locals, extra), { filename: stripFile });
   const on = render({ storyStudioOn: () => true, storyCameraOn: () => true });
-  assert.match(on, /story-camera\.js\?v=3/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=11/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3; storyplay verify: studio v=10; storywide: studio v=11 (camera unchanged)
+  assert.match(on, /story-camera\.js\?v=4/); assert.match(on, /story-camera\.css\?v=1/); assert.match(on, /story-studio\.js\?v=12/);   // storyfix2: v=5; storyprev: studio v=6, camera v=2; storyux: studio v=7; storyux verify: studio v=8; storyplay: studio v=9, camera v=3; storyplay verify: studio v=10; storywide: studio v=11 (camera unchanged); storyrec 1.99anv: camera v=4 (no timeslice on WebKit), studio v=12 (the capture source)
   assert.ok(on.indexOf("story-camera.js") < on.indexOf("story-studio.js"));
   for (const extra of [{ storyStudioOn: () => true, storyCameraOn: () => false }, { storyStudioOn: () => true }, { storyStudioOn: () => false, storyCameraOn: () => true }, {}])
     assert.doesNotMatch(render(extra), /story-camera\./);
@@ -2023,4 +2028,106 @@ test("Story play verify: 'Pick another' on a gallery video that can't preview ye
     assert.ok(!root.querySelector('[data-tool="layout"]').disabled, which + ": editable"); assert.equal(gv.paused, false, which + ": it plays");
     root.querySelector(".sst-post").click(); await flush(24); assert.ok(P.uploaded[0].body.edit, which + ": posted with its edit");
   }
+});
+
+// ── storyrec (1.99anv): no timeslice on WebKit, and the capture source with the upload ──
+// The owner's report (2026-11-14): an iPhone story froze about every 1.03 s - MediaRecorder's 1 s timeslice, where WebKit drops
+// frames at each chunk. WebKit (Safari and every iPhone / iPad browser) records in one piece now; Blink and Gecko keep 1 s chunks.
+const UA = {
+  iphoneSafari: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1",
+  iphoneChrome: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0.7444.0 Mobile/15E148 Safari/604.1",
+  iphoneFirefox: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/145.0 Mobile/15E148 Safari/605.1.15",
+  iphoneEdge: "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 EdgiOS/142.0 Mobile/15E148 Safari/605.1.15",
+  ipadDesktop: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15",
+  macSafari: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15",
+  epiphany: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15 Epiphany/605.1.15",
+  androidChrome: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36",
+  androidWebView: "Mozilla/5.0 (Linux; Android 15; Pixel 9; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.0.0 Mobile Safari/537.36",
+  samsung: "Mozilla/5.0 (Linux; Android 15; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 Mobile Safari/537.36",
+  macChrome: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+  winEdge: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+  winFirefox: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+  androidFirefox: "Mozilla/5.0 (Android 15; Mobile; rv:145.0) Gecko/145.0 Firefox/145.0",
+};
+/** story-camera.js in a bare VM with only a navigator: its WebKit check and the timeslice it would record with. */
+function recorderStart(nav) {
+  const win = { navigator: nav, Blob, Promise, Uint8Array, DataView, ArrayBuffer, Math, Number, Object, Array, String, Error, isFinite, Response, console };
+  win.window = win; const context = vm.createContext(win); vm.runInContext(SRC("story-camera.js"), context);
+  return { webkit: win.patvStoryCamera._webkit(), slice: win.patvStoryCamera._timeslice() };
+}
+
+test("storyrec: the recorder's start options per browser - WebKit (every iPhone / iPad browser, desktop Safari) none, Blink / Gecko 1 s", () => {
+  const apple = "Apple Computer, Inc.", google = "Google Inc.";
+  const cases = [
+    ["iPhone Safari", { userAgent: UA.iphoneSafari, vendor: apple, maxTouchPoints: 5 }, 0],
+    ["iPhone Chrome (WebKit)", { userAgent: UA.iphoneChrome, vendor: apple, maxTouchPoints: 5 }, 0],
+    ["iPhone Firefox (WebKit)", { userAgent: UA.iphoneFirefox, vendor: apple, maxTouchPoints: 5 }, 0],
+    ["iPhone Edge (WebKit)", { userAgent: UA.iphoneEdge, vendor: apple, maxTouchPoints: 5 }, 0],
+    ["an iPhone UA without a vendor", { userAgent: UA.iphoneChrome, vendor: "" }, 0],
+    ["iPad asking for the desktop site", { userAgent: UA.ipadDesktop, vendor: apple, maxTouchPoints: 5 }, 0],
+    ["iPad desktop site, no vendor", { userAgent: UA.ipadDesktop, vendor: "", maxTouchPoints: 5 }, 0],
+    ["desktop Safari", { userAgent: UA.macSafari, vendor: apple, maxTouchPoints: 0 }, 0],
+    ["another WebKit (Epiphany)", { userAgent: UA.epiphany, vendor: "" }, 0],
+    ["Android Chrome", { userAgent: UA.androidChrome, vendor: google, maxTouchPoints: 5 }, 1000],
+    ["Android WebView", { userAgent: UA.androidWebView, vendor: google, maxTouchPoints: 5 }, 1000],
+    ["Samsung Internet", { userAgent: UA.samsung, vendor: google, maxTouchPoints: 5 }, 1000],
+    ["Chrome on a Mac", { userAgent: UA.macChrome, vendor: google, maxTouchPoints: 0 }, 1000],
+    ["Edge on Windows", { userAgent: UA.winEdge, vendor: google, maxTouchPoints: 0 }, 1000],
+    ["Firefox on Windows", { userAgent: UA.winFirefox, vendor: "", maxTouchPoints: 0 }, 1000],
+    ["Firefox on Android", { userAgent: UA.androidFirefox, vendor: "", maxTouchPoints: 5 }, 1000],
+    ["no navigator facts at all", {}, 1000],
+  ];
+  for (const [name, nav, slice] of cases) {
+    const r = recorderStart(nav);
+    assert.equal(r.slice, slice, name); assert.equal(r.webkit, slice === 0, name);
+  }
+});
+
+test("storyrec: an iPhone records with NO timeslice (one final chunk) and the clip still reaches the editor; Android keeps its 1 s chunks", async () => {
+  const P = camPage({ ...IPHONE, maxTouchPoints: 5 }), root = await openStudio(P);
+  await quickClip(P);
+  const r = P.recorders[0];
+  assert.equal(r.startArgs, 0, "start() with no timeslice argument at all"); assert.equal(r.slice, undefined);
+  assert.ok(root.classList.contains("sst-video"), "the clip is in the editor");
+  root.querySelector(".sst-post").click(); await flush(24);
+  const up = P.uploaded[0].body;
+  assert.deepEqual(up.capture, { source: "camera", mime: "video/mp4", timeslice: 0 }, "the upload says how it was recorded");
+  assert.equal(up.edit.camera, true);
+  const Q = camPage(), root2 = await openStudio(Q);
+  await quickClip(Q);
+  assert.equal(Q.recorders[0].startArgs, 1); assert.equal(Q.recorders[0].slice, 1000, "Chrome / Android: 1 s chunks, as before");
+  root2.querySelector(".sst-post").click(); await flush(24);
+  assert.deepEqual(Q.uploaded[0].body.capture, { source: "camera", mime: "video/webm;codecs=vp8,opus", timeslice: 1000 });
+});
+
+test("storyrec: the one chunk arriving just after the stop event is still kept; no chunk at all says so (after the wait), then the camera comes back", async () => {
+  const P = camPage({ ...IPHONE, lateData: true }), root = await openStudio(P);
+  const s = shutter(P); fire(s, "pointerdown"); await P.clock.tick(300); fire(s, "pointerup"); await P.clock.tick(1200); await flush(16);
+  assert.equal(P.recorders[0].stops, 1); assert.ok(!root.classList.contains("sst-video"), "stopped, the chunk not here yet");
+  assert.match(cam(P).querySelector(".scam-hint").textContent, /Finishing the video/, "it says it is finishing");
+  P.late(); await flush(16);
+  assert.ok(root.classList.contains("sst-video"), "the late chunk is the clip"); assert.ok(cam(P) === null, "the camera made way for it");
+  const Q = camPage({ ...IPHONE, noData: true }), root2 = await openStudio(Q);
+  const t = shutter(Q); fire(t, "pointerdown"); await Q.clock.tick(300); fire(t, "pointerup"); await Q.clock.tick(1200); await flush(16);
+  assert.ok(cam(Q), "still waiting for its chunk");
+  await Q.clock.tick(1600); await flush(16);
+  assert.match(cam(Q).querySelector(".scam-note").textContent, /didn.t work/i, "nothing came: said so");
+  assert.ok(!root2.classList.contains("sst-video"));
+  assert.equal(Q.gum.length, 2, "and the camera starts again");
+});
+
+test("storyrec: a camera photo, a gallery pick and the 📷 capture input each tell the upload where the file came from", async () => {
+  const P = camPage(), root = await openStudio(P);
+  await tap(P);
+  root.querySelector(".sst-post").click(); await flush(24);
+  assert.deepEqual(P.uploaded[0].body.capture, { source: "camera" }, "a story camera photo (no recorder)");
+  const Q = camPage(), root2 = await openStudio(Q);
+  pickFile(Q, "image/jpeg", "holiday.jpg"); await flush(12);
+  root2.querySelector(".sst-post").click(); await flush(24);
+  assert.deepEqual(Q.uploaded[0].body.capture, { source: "file", picker: "gallery" });
+  const R = camPage(), root3 = await openStudio(R);
+  const f = new Blob([new Uint8Array(16)], { type: "image/jpeg" }); f.name = "IMG_0001.jpg";
+  const input = R.doc.querySelector('[data-pick="camera"]'); input.files = [f]; input.dispatchEvent(new Ev("change")); await flush(12);
+  root3.querySelector(".sst-post").click(); await flush(24);
+  assert.deepEqual(R.uploaded[0].body.capture, { source: "file", picker: "camera" }, "the phone's own camera app");
 });

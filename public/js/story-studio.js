@@ -355,7 +355,7 @@
       f.addEventListener('change', function () {
         var file = f.files && f.files[0], p = s.pending, n = 0;
         if (!file) { settle(s); tell(s, pair[0] === 'camera' ? _t('js.feed.ss.no_camera_file', 'No picture arrived from the camera. Try again, or choose it from Gallery.') : _t('js.feed.ss.no_file', 'No file arrived. Try again.')); }
-        else { if (p) { clearTimeout(p.timer); p.phase = 'arrived'; n = p.n; notePicking(s); } pick(s, file, n); }
+        else { if (p) { clearTimeout(p.timer); p.phase = 'arrived'; n = p.n; notePicking(s); } pick(s, file, n, { picker: pair[0] }); }     // storyrec: which picker (the upload's capture source)
         f.value = '';
       });
       f.addEventListener('cancel', function () { settle(s); });
@@ -575,7 +575,8 @@
     function paint() {
       var video = m.localName === 'video', e = m.error && m.error.code ? { code: m.error.code, message: m.error.message || '' } : null, src = String(m.getAttribute('src') || ''), hash = src.indexOf('#'), nav = window.navigator || {};
       var lines = ['story debug', 'file ' + (file.type || '(no type)') + ' · ' + bytes(file.size) + ' · ' + (file.name || '(no name)') + ' · ' + (camera ? 'camera' : 'gallery')];
-      if (camera) lines.push('camera ' + px(info.width, info.height) + ' · ' + num(info.secs) + ' s' + (info.mime ? ' · ' + info.mime : '') + (info.facing ? ' · ' + info.facing : '') + (info.sound === false && info.kind === 'video' ? ' · silent' : ''));
+      // (storyrec 1.99anv: + the recorder's timeslice - "none" on WebKit)
+      if (camera) lines.push('camera ' + px(info.width, info.height) + ' · ' + num(info.secs) + ' s' + (info.mime ? ' · ' + info.mime : '') + (typeof info.timeslice === 'number' ? ' · timeslice ' + (info.timeslice ? info.timeslice + ' ms' : 'none') : '') + (info.facing ? ' · ' + info.facing : '') + (info.sound === false && info.kind === 'video' ? ' · silent' : ''));
       lines.push('poster ' + (st ? px(info.width, info.height) + ' · ' + bytes(info.poster.size) + (st.naturalWidth ? ' · decoded ' + px(st.naturalWidth, st.naturalHeight) : '') + (st.bad ? ' · failed' : st.hidden ? ' · hidden' : ' · shown') : camera && info.kind === 'video' ? 'none came' : 'none'));
       lines.push('src ' + (!src ? '-' : hash >= 0 ? 'blob ' + src.slice(hash) : 'blob (no fragment)'));
       lines.push(video ? 'element readyState ' + m.readyState + ' · networkState ' + m.networkState + ' · ' + px(m.videoWidth, m.videoHeight) + ' · duration ' + num(m.duration) + ' · ' + (m.paused === false ? 'playing' : 'paused') + ' at ' + num(m.currentTime)
@@ -600,6 +601,16 @@
     s.dbgPaint = paint; paint();
     return { note: note, view: function (what) { view = what; note('preview: ' + what); } };
   }
+  // storyrec (1.99anv): how the file was made, for the upload (storyorig.js - the admins' quality checks): the story camera (a clip
+  // with its recorder type and timeslice, 0 = none) or a chosen file (📷 the phone's camera app / 🖼️ the gallery)
+  function captureOf(info, kind) {
+    if (info && info.camera) {
+      var c = { source: 'camera' };
+      if (kind === 'video') { if (info.mime) c.mime = String(info.mime).slice(0, 100); if (typeof info.timeslice === 'number' && isFinite(info.timeslice)) c.timeslice = info.timeslice; }
+      return c;
+    }
+    return info && (info.picker === 'camera' || info.picker === 'gallery') ? { source: 'file', picker: info.picker } : { source: 'file' };
+  }
   function use(s, file, kind, gif, n, info) {
     s.sniffId = (s.sniffId || 0) + 1;     // a typed pick after an untyped one wins
     var limit = kind === 'video' ? s.caps.srcVideoMb || s.caps.videoMb || 60 : s.caps.imageMb || 10;
@@ -608,7 +619,7 @@
     var captured = !!(info && info.camera); s.camWhy = ''; unask(s);
     if (s.ready) discard([s.ready.id]); s.ready = null; drop(s); closeSheet(s); revoke(s);
     if (s.still) { s.still.remove(); s.still = null; }
-    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw, camera: captured && kind === 'video' };
+    var id = ++s.pickId, d = s.d = { file: file, kind: kind, gif: !!gif || /\.gif$/i.test(file.name || ''), decoded: false, valid: true, texts: [], stickers: [], mentions: [], fit: 'fit', crop: null, nsfw: s.d.nsfw, camera: captured && kind === 'video', capture: captureOf(info, kind) };
     s.selected = null; s.gesture = null; s.mediaAt = null; s.failed = false; s.recovery.hidden = true; s.recovery.textContent = ''; s.filename.textContent = file.name || ''; s.empty.hidden = true;
     // storyplay: a clip goes into the studio's one <video> (player(): muted + inline, attributes too, preload auto - the first frame
     // below; the loop inside the trim) - never a new element, as WebKit's unlock is the element's; a picture gets an <img> of its own
@@ -1424,6 +1435,7 @@
   function activeAttempt(s, a) { if (!live(s) || a.cancelled || s.attempt !== a) throw new Error('cancelled'); }
   function upload(s, a, blob, kind, purpose, edit) {
     var body = { kind: kind, size: blob.size, name: purpose === 'story_ovl' ? 'story-overlay.png' : String(blob.name || '').slice(0, 100), purpose: purpose }; if (edit) body.edit = edit;
+    if (purpose === 'story' && s.d.capture) body.capture = s.d.capture;     // storyrec (1.99anv)
     activeAttempt(s, a);
     return req('/api/feed/uploads', body).then(function (data) { a.ids.push(data.id); if (!live(s) || a.cancelled || s.attempt !== a) { discard([data.id]); throw new Error('cancelled'); }
       var id = data.id, offset = 0, chunk = data.chunk || CHUNK, failures = 0;

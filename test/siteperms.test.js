@@ -59,6 +59,7 @@ const GOLDEN = {
   "feed.automod_global": ["admin", false], "feed.filter_admin": ["admin", false], "feed.pepe_admin": ["admin", false],
   "feed.admin_lock": ["admin", true], "feed.abuse_details": ["admin", true], "safety.net_bans": ["admin", true], "accounts.name_clash": ["admin", false], "feed.automod_csam_reverse": ["staff", true],
   "takedown.handle": ["staff", true], "imagesafety.admin": ["admin", true],
+  "feed.story_originals": ["admin", true],          // 1.99anv (storyorig.js): a story's capture source + its original upload (48 h), locked: privacy
   "dm.limits_exempt": ["staff", false], "dm.report_review": ["admin", true],
   // S1 V1 (ADR 0007 D15): the chat hub - the break-glass is locked at Admin ("ops"); the moderation queue opens to Assistants
   "chat.breakglass": ["admin", true], "chat.mod_queue": ["assistant", false], "chat.audit": ["admin", false],

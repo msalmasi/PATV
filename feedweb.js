@@ -678,9 +678,12 @@ function register(app, { addUser, isBotToken }) {
         return res.status(507).json({ ok: false, error: "The feed's storage is full right now - try again later." });
       }
       const id = require("crypto").randomBytes(12).toString("hex");
+      // 1.99anv (storyorig.js): how a story's file was made - the story camera or a chosen file, a clip's recorder type and
+      // timeslice - as the page says it (diagnostics for the admins; a field that doesn't fit is dropped, never refused)
+      const capture = story ? require("./storyorig").cleanCapture(b.capture, kind) : null;
       if (story || onair || overlay) {
-        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose, edit) VALUES (?, ?, ?, 'uploading', ?, ?, 0, ?, ?)`,
-                       [id, u.userId, kind, t, size, onair ? "onair" : overlay ? "story_ovl" : "story", edit ? JSON.stringify(edit) : null]);
+        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose, edit, capture) VALUES (?, ?, ?, 'uploading', ?, ?, 0, ?, ?, ?)`,
+                       [id, u.userId, kind, t, size, onair ? "onair" : overlay ? "story_ovl" : "story", edit ? JSON.stringify(edit) : null, capture ? JSON.stringify(capture) : null]);
       } else {
         await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received) VALUES (?, ?, ?, 'uploading', ?, ?, 0)`,
                        [id, u.userId, kind, t, size]);
@@ -770,9 +773,14 @@ function register(app, { addUser, isBotToken }) {
       if (a.kind !== "image" && out.kind === "image") throw new media.MediaError("That file is a picture, not " + a.kind + ".");
       if (overlay && (out.w !== require("./userstories").STORY_W || out.h !== require("./userstories").STORY_H))
         throw new media.MediaError("The overlay must be 1080 × 1920.");
+      // 1.99anv (storyorig.js): a story's original upload is kept 48 hours for quality checks - moved out of tmp (so the finally
+      // below finds nothing to delete) BEFORE the upload shows as ready, so a story posted at once is linked to it; never a
+      // reason for the story to fail
+      const kept = a.purpose === "story" ? await require("./storyorig").keep(a, tmp, sn) : false;
       const result = await runQuery(`UPDATE feed_attachments SET state = 'ready', kind = ?, ct = ?, file = ?, thumb = ?, poster = ?, w = ?, h = ?, secs = ?, bytes = ?, error = NULL
                       WHERE id = ? AND state = 'processing'`, [out.kind, out.ct, out.file, out.thumb, out.poster, out.w, out.h, out.secs, out.bytes, a.id]);
-      if (!result.changes) return; // Discard won while composing: finally removes every generated file.
+      // Discard won while composing: finally removes every generated file (1.99anv: and the kept original goes)
+      if (!result.changes) { if (kept) await require("./storyorig").forgetUpload(a.id); return; }
       saved = true;
       // 1.99fc: start the image safety classification now (only while it's switched on), so the post / story finds it ready
       // On-air pictures have their own check; a Studio overlay is only a layer, and its composite is checked instead.
@@ -807,6 +815,7 @@ function register(app, { addUser, isBotToken }) {
     const current = (await getQuery("SELECT file, thumb, poster FROM feed_attachments WHERE id = ?", [a.id]))[0];
     if (current) media.removeFiles([current.file, current.thumb, current.poster].filter(Boolean));
     try { fs.unlinkSync(media.tmpPath(a.id)); } catch (e) { /* none */ }
+    if (a.purpose === "story") await require("./storyorig").forgetUpload(a.id);   // 1.99anv: its kept original goes too (never throws)
     res.json({ ok: true });
   });
 
@@ -1009,7 +1018,15 @@ function register(app, { addUser, isBotToken }) {
     try {
       const v = await viewerOf(req);
       if (!SP.can(v, "feed.config")) return res.status(403).json({ ok: false, error: "Admins only." });
-      res.json({ ok: true, config: await store.setConfig(req.body || {}, v.username) });
+      // 1.99anv: every changed setting (story_keep_originals among them) is written to admin_audit ("feed_config": from -> to)
+      const before = { ...store.config() }, after = await store.setConfig(req.body || {}, v.username);
+      const changed = Object.keys(after).filter((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]));
+      if (changed.length) {
+        await require("./adminaudit").record({ userId: v.userId, username: v.username }, "feed_config", null,
+          Object.fromEntries(changed.map((k) => [k, { from: before[k] === undefined ? null : before[k], to: after[k] }])))
+          .catch((e) => console.error("[feed] config audit:", e.message));
+      }
+      res.json({ ok: true, config: after });
     } catch (e) { fail(res, e); }
   });
   // 1.99cc: the abuse details panel (site Admins only; every view is logged in content_audit_views first)

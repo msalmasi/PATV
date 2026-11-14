@@ -62,12 +62,16 @@ const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voi
 // "gift-inbox" = section 6's gifts-to-frog-names paragraph (veilgift.js), shown and dated only while those gifts are switched on
 // audiogate2: "net-bans-2" = the network-bans paragraph's "and listening to a pad's room audio" (listenban.js) - shown with that paragraph,
 // dated its first serve that way (the paragraph's own "net-bans" date may be older), counts only while it shows
-const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox", "net-bans-2"];
+// 1.99anv (story camera fix, owner 2026-11-14): "story-originals" = section 9's row "original story uploads are kept 48 hours for
+// quality checks, then deleted" (storyorig.js) and its change note - shown while originals are kept (the /feed/admin switch
+// story_keep_originals, on by default) or any still are; dated its first serve that way, counts toward "Last updated" only while it shows
+const TEXT_DATES = ["wp1-voice", "mic-stage-keep", "tx-bar", "frog-15", "livecam-never-kept", "stage-cover", "rooms-web-2", "net-bans", "blocks-2", "chat-mentions", "gift-inbox", "net-bans-2", "story-originals"];
 const SWITCHED_TEXTS = { "mic-stage-keep": () => require("./mainstage").config().stagecap_mic === true,
                          "rooms-web-2": () => require("./paddock").current().cfg.mode !== "off",
                          "net-bans": () => require("./netban").hasDataNow() === true,     // (review fix: while ANY code is stored, switch or not)
                          "net-bans-2": () => require("./netban").hasDataNow() === true,   // (audiogate2: shown with net-bans)
                          "gift-inbox": () => require("./veilgift").isOn() === true,
+                         "story-originals": () => require("./storyorig").privacyOn() === true,   // (1.99anv)
                          "tx-bar": () => require("./privwire").txBar() === true,
                          "frog-15": () => require("./privwire").isOn() === true,
                          "livecam-never-kept": () => { const c = require("./chatlog").cfg(); return !!(c && c.notice && c.notice_at); },
@@ -105,6 +109,7 @@ const padwebOn = () => { try { return require("./paddock").current().cfg.mode !=
 // (1.99ajn padppl review fix: section 4's network-code paragraph shows while network bans are on OR any code is still stored - netban.hasData)
 const netbanOn = () => { try { const NB = require("./netban"); NB.hasData().catch(() => {}); return NB.hasDataNow() === true; } catch (e) { return false; } };
 const giftsOn = () => { try { return require("./veilgift").isOn() === true; } catch (e) { return false; } };
+const storyOrigOn = () => { try { return require("./storyorig").privacyOn() === true; } catch (e) { return false; } };   // 1.99anv
 
 let ready = null;
 function init() {
@@ -240,6 +245,7 @@ function register(app, { addUser }) {
                              ...Object.values(pcopy).map((c) => [c && c.on_at, c && c.on_day]),
                              ...Object.entries(policyDates).filter(([k]) => k !== "tx-bar" || txbar).filter(([k]) => k !== "frog-15" || privwire).filter(([k]) => k !== "stage-cover" || pcopy.wcover)
                                .filter(([k]) => k !== "rooms-web-2" || padwebOn()).filter(([k]) => (k !== "net-bans" && k !== "net-bans-2") || netbanOn()).filter(([k]) => k !== "gift-inbox" || giftsOn())   // (1.99ajn padppl)
+                               .filter(([k]) => k !== "story-originals" || storyOrigOn())   // (1.99anv)
                                .map(([, d]) => [d.at, d.day])]) {
       if (at && day && at > updAt) { upd = day; updAt = at; }
     }
@@ -251,6 +257,7 @@ function register(app, { addUser }) {
     try { res.locals.padweb = require("./paddock").current().cfg.mode !== "off"; } catch (e) { res.locals.padweb = false; }
     res.locals.netban = netbanOn();                                  // 1.99ajn padppl: section 4's network codes, only while network bans are on
     res.locals.giftsOn = giftsOn();                                  // 1.99ajn padppl: section 6's gifts to frog names, only while they are on
+    res.locals.storyOrig = storyOrigOn();                            // 1.99anv: section 9's original story uploads row, while any are kept
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

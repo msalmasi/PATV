@@ -216,6 +216,8 @@ function register(app, { isBotToken, addUser, noTimers }) {
     await ready;
     const rows = await getQuery("SELECT * FROM media WHERE id = ? AND deleted = 0", [String((req.body || {}).id || "")]);
     if (rows.length) await removeMedia(rows[0]);
+    // 1.99anv: a member's story taken down - its kept original upload (storyorig.js) goes at once too (never throws)
+    if (rows.length && rows[0].source === "user") await require("./storyorig").forgetStory(rows[0].id);
     // 1.99eq: taken down before it expired (admin !snap delete) - Saved copies go with it, a post of it is hidden
     if (rows.length && Number(rows[0].expires) > Date.now()) {
       await require("./storykeep").onCaptureRemoved(rows[0].id, { reason: "removed" }).catch((e) => console.error("[media] keep cascade:", e.message));
@@ -338,7 +340,13 @@ function register(app, { isBotToken, addUser, noTimers }) {
     } catch (e) { pad = null; }
     try { canDelete = !!(req.user && req.user.userId) && (await require("./stagecap").canDelete(req.user, row)); } catch (e) { canDelete = false; }
     const poster = hasPoster(row) ? `/media/${encodeURIComponent(row.id)}/poster` : null;   // 1.99dq
-    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null, pad, canDelete, poster });
+    // 1.99anv (storyorig.js): a member's story, for a site Admin - how it was captured and its kept original (download)
+    let storyOrig = null;
+    if (row.source === "user" && req.user && req.user.userId && require("./siteperms").can(req.user, "feed.story_originals")) {
+      try { storyOrig = await require("./storyorig").adminInfo(row); } catch (e) { storyOrig = null; }
+      if (storyOrig) res.set("Cache-Control", "private, no-store");
+    }
+    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null, pad, canDelete, poster, storyOrig });
   });
 
   // The /feed page (posts + these captures) lives in feedweb.js since 1.99bv.

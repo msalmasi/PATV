@@ -952,11 +952,11 @@ test("Studio strip loads only the selected composer and every viewer entry uses 
   const render = extra => ejs.render(stripSource, Object.assign({}, locals, extra), { filename: stripFile });
   for (const extra of [{}, { storyStudioOn: () => false }]) {
     const html = render(extra);
-    assert.match(html, /story-compose\.js\?v=1/);
+    assert.match(html, /story-compose\.js\?v=2/);     // storyrec 1.99anv: v=2 (the capture source)
     assert.doesNotMatch(html, /story-studio\.(?:js|css)/);
   }
   const html = render({ storyStudioOn: () => true });
-  assert.match(html, /story-studio\.js\?v=11/);    // ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself; storyplay verify (v=10): the review fixes; storywide (v=11): the stage's box (G.fitStage)
+  assert.match(html, /story-studio\.js\?v=12/);    // storyrec 1.99anv (v=12): the capture source with the upload; ssfix (v=3): the camera hand-off + the empty state's icon; story camera (v=4): the live camera hook; storyfix2 (v=5): camera clips + first frame; storyprev (v=6): the bounded wait, the camera's poster, ?storydebug=1; storyux (v=7): direct manipulation; storyux verify (v=8): the review fixes; storyplay (v=9): it plays by itself; storyplay verify (v=10): the review fixes; storywide (v=11): the stage's box (G.fitStage)
   assert.match(html, /story-studio\.css\?v=7/);   // storyux verify (v=5): the grips, the overlays' pass-through, focus rings; storyplay (v=6): the ▶ over the picture; storywide (v=7): edge to edge, every control inside the picture
   assert.doesNotMatch(html, /story-compose\.js/);
   assert.match(html, /data-story-compose data-pad="studio-test-pad"/);

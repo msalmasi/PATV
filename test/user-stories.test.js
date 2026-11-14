@@ -366,7 +366,7 @@ test("person story rings: profile page, Following (people I follow first), homep
   const ejs = require("ejs");
   const html = await ejs.renderFile(path.join(repo, "views/partials/story-strip.ejs"), { story: { rooms: [r.d.rooms[0]], caps: [], room: null, signed: true, compose: true, pad: "profile" }, heading: "x", next: "/" });
   assert.match(html, /data-story-compose data-pad="profile"/);
-  assert.match(html, /story-compose\.js\?v=1/);
+  assert.match(html, /story-compose\.js\?v=2/);     // storyrec 1.99anv: v=2 (the capture source)
   assert.match(html, /data-story-room="user:u_subby"/);
   const html2 = await ejs.renderFile(path.join(repo, "views/partials/story-strip.ejs"), { story: { rooms: [], caps: [], room: null, signed: false, compose: true }, heading: "x", next: "/" });
   assert.doesNotMatch(html2, /data-story-compose/, "signed out: no compose circle");

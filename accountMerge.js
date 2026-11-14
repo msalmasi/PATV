@@ -268,6 +268,7 @@ const RULES = {
   "feed_comments.author_id": M(), "feed_comments.deleted_by": M(),
   "feed_votes.user_id": M({ key: ["post_id"] }), "feed_comment_votes.user_id": M({ key: ["comment_id"] }),
   "feed_attachments.owner_id": M(), "feed_aigen_jobs.user_id": M({ name: "username" }),
+  "story_originals.owner_id": M(),           // 1.99anv storyorig.js: a story's original upload (48 h) follows its uploader
   "feed_automod.author_id": M(), "feed_automod.reversed_by": M(), "feed_automod.target": M({ key: [] }),
   "feed_filter.author_id": M(), "feed_filter.released_by": { deny: NAME },      // 1.99ux: the content filter's log (feedfilter.js)
   "feed_bans.user_id": M({ key: ["room_id"], merge: { until: "NULL_WINS" }, name: "username" }), "feed_bans.by": M(),

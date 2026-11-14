@@ -46,6 +46,9 @@
       <div class="mut"><%= user_ ? 'Posted' : (stage_ ? (item.kind === 'clip' ? 'Clipped' : 'Snapped') : 'Captured') + ' by ' + (item.by_user || '?') %> · <%= new Date(item.created).toUTCString() %> · expires in <%= item.ttl %></div>
       <div><% if (stage_) { %><a href="/stage/captures">More stage snaps &amp; clips ›</a> · <% } %><a href="/feed">More clips &amp; snaps ›</a></div>
       <% if (typeof canDelete !== 'undefined' && canDelete) { %><button type="button" class="ds-btn danger sm del" id="mdDel" data-id="<%= item.id %>"><span class="ds-ic" aria-hidden="true">🗑️</span>Delete this <%= user_ ? 'story' : 'capture' %></button><% } %>
+      <%# 1.99anv (storyorig.js): site Admins only (feed.story_originals) - how the story was captured, and its original upload while it is kept (48 h) %>
+      <% if (typeof storyOrig !== 'undefined' && storyOrig) { const SO = storyOrig, K = SO.kept; %><div class="mut" id="mdOrig"><b>Admin · how it was made:</b> <%= SO.how %><br>
+        <% if (K) { %>Original upload: <%= K.bytes >= 1048576 ? (K.bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(K.bytes / 1024)) + ' KB' %><%= K.fmt ? ' · ' + K.fmt : '' %> · kept until <%= new Date(K.until).toUTCString() %> · <a href="<%= K.href %>" rel="nofollow noopener" download>Download the original</a> (logged)<% } else { %>Original upload: not kept (deleted, past its 48 hours, kept off, or posted before 1.99anv)<% } %></div><% } %>
     </div>
     <script>
     (function () {

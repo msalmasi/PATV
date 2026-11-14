@@ -109,6 +109,7 @@ var CAPS = [
   ["feed.automod_csam_reverse", "feed", "staff", "safety"],
   ["takedown.handle", "feed", "staff", "safety"],
   ["imagesafety.admin", "feed", "admin", "privacy"],
+  ["feed.story_originals", "feed", "admin", "privacy"],         // 1.99anv (storyorig.js): how a story was captured + its original upload (48 h; every download logged)
   // ── messages ──
   ["dm.limits_exempt", "messages", "staff", null],
   ["dm.report_review", "messages", "admin", "privacy"],

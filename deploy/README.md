@@ -121,6 +121,27 @@ monthly one (any other snapshot there fails the run and alerts). A purged clip's
 within 30 days of the purge; don't restore from those snapshots after a rollback. The `evidence_clips` rows (metadata, no audio)
 are in `myapp.db`, so they stay in the database backups (up to 12 months) like the rest of the database.
 
+## Story originals (1.99anv, storyorig.js)
+
+Each story upload's original file (the member's file as it was sent, before the site re-encodes it) is kept 48 hours for
+quality checks in `/var/lib/patv/storyorig/` (staging `/var/lib/patv-staging/storyorig/`, or `STORYORIG_DIR`; 0700, made by
+the site the first time it keeps one). Site Admins download one from the story's page (`/media/<id>`, logged in
+`admin_audit`). The folder is **outside the feed folder and in no backup, on purpose**: pve1's `patv-backup` part `vps`
+pulls an allow-list of `/var/lib/patv/{feed,onair,pad,shopart,banner,cover}` (minus `cover/held`) plus the site's own
+`uploads/`, `media/` and `data/` - that list must never gain `storyorig` (a file would then live up to 12 months in the
+GFS snapshots, where the privacy policy says 48 hours and "never in backups"). The `story_originals` rows (no media: the
+owner, the story, size, format, expiry) are in `myapp.db` and its backups like any other row.
+
+- The site deletes a file at once when its upload is discarded, its story is deleted (by its owner, the pad's owner or mods,
+  staff, or Pepe's admin delete) or the account is deleted, and sweeps the rest after 48 hours (on boot and hourly) - an
+  upload that was never posted goes sooner, once the feed's own sweep purges it (unattached for 6 hours).
+- `/feed/admin` › Stories › "Keep each story's original upload for 48 hours" switches new ones off (kept ones still go at 48 h).
+- A staging refresh copies prod's rows, not the files: staging's sweep drops rows whose file isn't there (after 15 minutes).
+- Rolling back past 1.99anv: the older build has no sweep - delete the folder by hand (`rm -rf /var/lib/patv/storyorig`;
+  nothing else reads it). The older build deletes each upload after processing again, as before.
+- (Seen, not changed: an upload still in progress sits in `/var/lib/patv/feed/tmp/*.part`, inside the backed-up feed folder,
+  so a nightly run can copy a half-sent upload. That was so before 1.99anv too.)
+
 ## The chat hub seam's /internal/ routes (1.99acm)
 
 `hubinbound.js` mounts `/internal/v1/...` (the chat hub's signed snapshot pulls and rewinds) on the website's own Express

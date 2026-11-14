@@ -435,7 +435,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   await terms.textDates();
   assert.equal((await terms.textDates())["wp1-voice"].at, wp1.at, "the first-served moment never moves");
   const PROD_DAY = Date.UTC(2026, 10, 3, 12, 0, 0);
-  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep', 'blocks-2', 'chat-mentions')", [PROD_DAY]);   // (1.99ajn padppl: + its always-shown dated texts)
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep', 'blocks-2', 'chat-mentions', 'story-originals')", [PROD_DAY]);   // (1.99ajn padppl: + its always-shown dated texts; 1.99anv: + story-originals, shown while story_keep_originals is on - the default)
   const p2 = await get("/privacy", null);
   assert.match(p2.text, /Last updated 3 November 2026/);
   assert.match(p2.text, /3 November 2026:<\/b> sections 3 and 10 now say that/);

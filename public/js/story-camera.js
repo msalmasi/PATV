@@ -33,11 +33,19 @@
 // storyplay (1.99aml): o.gesture(why) - each of the camera's taps (the shutter's press, let-go, click or key; Try again) is told to
 // the studio while it is being handled, so the editor's <video> is played (unlocked) inside it: WebKit lets the clip the camera
 // hands over play by itself only on an element played inside a gesture before
+// storyrec (1.99anv): a choppy iPhone story (2026-11-14) froze about every 1.03 s - the 1 s timeslice: WebKit drops frames where
+// MediaRecorder cuts a chunk. WebKit (Safari, and EVERY iPhone / iPad browser - Chrome, Firefox, Edge there are WebKit too) now
+// records with no timeslice - r.start(), one chunk when it stops; Chrome / Android / Firefox keep their 1 s chunks (SLICE_MS).
+// Nothing here waits on a chunk while recording (the clock, the limit, "Finishing the video…" and the shortest clip are timers;
+// sizes are checked on the finished file), so a single final chunk changes nothing else; a chunk that comes just after the
+// stop event is still waited for (LATE_MS), and requestData() is never called. A clip tells the studio its timeslice
+// (info.timeslice: 0 = none), which goes with the upload (storyorig.js) for the admins' quality checks.
 (function () {
   'use strict';
   if (window.patvStoryCamera) return;
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var HOLD_MS = 250, MIN_MS = 1200, EARLY_MS = 250, JPEG_Q = 0.92, POSTER_Q = 0.85, POSTER_MS = 2000, MEMO = 'patv.storycam', MEMO_MIC = 'patv.storycam.mic';
+  var SLICE_MS = 1000, LATE_MS = 1500;     // storyrec: the timeslice off WebKit; how long a stopped recorder's last chunk is waited for
   var WEBM = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'], MP4 = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4'];
   var WEBM_SILENT = ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'], MP4_SILENT = ['video/mp4;codecs=avc1', 'video/mp4'];
   var SVG = 'http://www.w3.org/2000/svg', RING = 238.76, current = null, refused = false, micRefused = false, serial = 0;
@@ -88,6 +96,19 @@
     if (refused || memo(MEMO) === 'denied') perm('camera').then(function (s) { if (s === 'granted') forget('camera'); });
     if (micRefused || memo(MEMO_MIC) === 'denied') perm('microphone').then(function (s) { if (s === 'granted') forget('microphone'); });
   }
+  // storyrec: WebKit's engine - Safari, and every iPhone / iPad browser (Apple's rule: they all are WebKit, whatever their name).
+  // navigator.vendor is "Apple Computer, Inc." on all of them; the user agent backs it up (iOS names its device; an iPad asking
+  // for the desktop site says "Macintosh" with a touch screen; any other WebKit says AppleWebKit without Chrome / Chromium,
+  // which every Blink browser adds - Android's WebView and desktop Chrome on a Mac included). Firefox (Gecko) has no AppleWebKit.
+  function webkit() {
+    var n = window.navigator || {}, ua = String(n.userAgent || ''), v = String(n.vendor || '');
+    if (/Apple/.test(v)) return true;
+    if (/\b(?:iPhone|iPad|iPod)\b/.test(ua)) return true;
+    if (/\bMacintosh\b/.test(ua) && Number(n.maxTouchPoints) > 1) return true;
+    return /AppleWebKit\//.test(ua) && !/\b(?:Chrome|Chromium|HeadlessChrome)\//.test(ua);
+  }
+  // storyrec: the timeslice r.start() is given - none (0) on WebKit, SLICE_MS elsewhere
+  function timeslice() { return webkit() ? 0 : SLICE_MS; }
   // the recorder type: WebM where it is native (its length is fixed below), MP4 on Apple's WebKit; null = can't record here
   function recType(silent) {
     var MR = window.MediaRecorder; if (typeof MR !== 'function') return null;
@@ -354,15 +375,16 @@
     var options = { videoBitsPerSecond: 4000000 }, r;
     if (type) options.mimeType = type; if (!c.noMic) options.audioBitsPerSecond = 128000;
     try { r = new MR(c.stream, options); } catch (e) { try { r = new MR(c.stream); } catch (e2) { return; } }
-    var rec = c.rec = { r: r, chunks: [], type: type || '', began: now(), limit: limitMs(c) };
+    var rec = c.rec = { r: r, chunks: [], type: type || '', began: now(), limit: limitMs(c), slice: timeslice() };
     // storyprev: the clip's size and poster - the live preview's frame as the recording starts, for the editor to show
     // whenever this browser can't show the recording itself (iOS: a fragmented MP4 with an empty moov)
     rec.w = c.video.videoWidth; rec.h = c.video.videoHeight; rec.poster = snap(c, 'scam-poster');
-    r.ondataavailable = function (e) { if (e.data && e.data.size) rec.chunks.push(e.data); };
+    // storyrec: with no timeslice the whole clip is ONE chunk, at the stop; one that comes after the stop event is still kept
+    r.ondataavailable = function (e) { if (e.data && e.data.size) rec.chunks.push(e.data); if (rec.late) { clearTimeout(rec.late); rec.late = 0; done(c, rec); } };
     r.onstart = function () { if (rec.stopping) return; rec.began = now(); clearTimeout(rec.timer); rec.timer = setTimeout(function () { stopRec(c, 'limit'); }, rec.limit - EARLY_MS); };
-    r.onstop = function () { done(c, rec); };
+    r.onstop = function () { if (rec.chunks.length || rec.failed || rec.done) done(c, rec); else if (!rec.late) rec.late = setTimeout(function () { rec.late = 0; done(c, rec); }, LATE_MS); };
     r.onerror = function () { rec.failed = true; if (r.state === 'inactive') done(c, rec); else { try { r.stop(); } catch (e) { done(c, rec); } } };
-    try { r.start(1000); } catch (e) { c.rec = null; return; }
+    try { if (rec.slice) r.start(rec.slice); else r.start(); } catch (e) { c.rec = null; return; }
     rec.timer = setTimeout(function () { stopRec(c, 'limit'); }, rec.limit - EARLY_MS);
     c.view.style.setProperty('--scam-secs', (rec.limit - EARLY_MS) / 1000 + 's');
     c.live.textContent = _t('js.feed.cam.recording_on', 'Recording video');
@@ -385,7 +407,7 @@
   }
   function done(c, rec) {
     if (rec.done) return; rec.done = true; if (c.rec === rec) c.rec = null;
-    clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock);
+    clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock); clearTimeout(rec.late); rec.late = 0;
     var secs = Math.round(Math.max(0, (rec.ended || now()) - rec.began)) / 1000;
     var type = String(rec.r.mimeType || rec.type || (rec.chunks[0] && rec.chunks[0].type) || 'video/webm').split(';')[0].trim() || 'video/webm';
     c.live.textContent = ''; release(c);
@@ -397,7 +419,7 @@
     var still = rec.poster || c.frozen || null, mime = String(rec.r.mimeType || rec.type || type);
     Promise.all([/webm/.test(type) ? webmDuration(blob, secs).catch(function () { return blob; }) : Promise.resolve(blob), jpeg(still)]).then(function (r) {
       // storyprev verify: the size is read before the poster's canvas is emptied (the frozen one goes with the camera, in close)
-      var more = { width: still ? still.width : rec.w, height: still ? still.height : rec.h, poster: r[1], mime: mime };
+      var more = { width: still ? still.width : rec.w, height: still ? still.height : rec.h, poster: r[1], mime: mime, timeslice: rec.slice };
       empty(rec.poster); rec.poster = null;
       c.busy = false; hand(c, r[0], type, secs, more);
     });
@@ -415,7 +437,7 @@
   function close(c) {
     if (c.closed) return; c.closed = true;
     if (c.press) { clearTimeout(c.press.timer); c.press = null; }
-    if (c.rec) { var rec = c.rec; rec.discard = true; clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock); try { if (rec.r.state !== 'inactive') rec.r.stop(); } catch (e) { /* stopped */ } empty(rec.poster); rec.poster = null; c.rec = null; }
+    if (c.rec) { var rec = c.rec; rec.discard = true; clearTimeout(rec.timer); clearTimeout(rec.min); clearTimeout(rec.clock); clearTimeout(rec.late); try { if (rec.r.state !== 'inactive') rec.r.stop(); } catch (e) { /* stopped */ } empty(rec.poster); rec.poster = null; c.rec = null; }
     release(c);
     c.on.forEach(function (x) { x[0].removeEventListener(x[1], x[2], x[3]); }); c.on = [];
     var had = c.view.contains(document.activeElement);
@@ -518,5 +540,5 @@
     if (typeof M.addEventListener === 'function') M.addEventListener('devicechange', function () { cams = null; camsAsk = null; none = false; });
     probe(); recheck();
   })();
-  window.patvStoryCamera = { open: open, available: function () { return !unavailable(); }, _webmDuration: webmDuration, _recType: recType };
+  window.patvStoryCamera = { open: open, available: function () { return !unavailable(); }, _webmDuration: webmDuration, _recType: recType, _webkit: webkit, _timeslice: timeslice };
 })();

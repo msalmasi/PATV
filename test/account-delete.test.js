@@ -16,6 +16,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acctdel-test-"));
 process.chdir(dir);
 delete process.env.STAGING;
 process.env.SECRET_KEY = "test-secret";
+process.env.STORYORIG_DIR = path.join(dir, "storyorig");     // 1.99anv: story originals (storyorig.js), inside this test's folder
 const repo = path.resolve(__dirname, "..");
 const { scanSource, schemaSql } = require(path.join(__dirname, "fixtures", "schemascan"));
 
@@ -417,6 +418,30 @@ test("Sign in with Apple: deleting the account revokes its Apple authorization a
   } finally {
     for (const k2 of Object.keys(env)) delete process.env[k2];
   }
+});
+
+test("1.99anv: the original uploads of their stories (storyorig.js, kept 48 h) - files and rows - go when the deletion runs; someone else's stay", async () => {
+  await setup();
+  const SO = require(path.join(repo, "storyorig"));
+  await SO.init();
+  await user("so1", { username: "storyorig1", cf: "SoCF1", password: await bcrypt.hash("pw-orig-1234", 4) });
+  await user("so2", { username: "storyorig2" });
+  const put = async (id, owner, story) => {
+    fs.writeFileSync(SO.fileOf(id, SO.dir()), "original bytes " + id);
+    await runQuery("INSERT INTO story_originals (id, owner_id, story_id, kind, fmt, bytes, kept_at, expires) VALUES (?, ?, ?, 'video', 'mp4', 20, ?, ?)",
+                   [id, owner, story, Date.now(), Date.now() + SO.KEEP_MS]);
+  };
+  await put("a1".repeat(12), "so1", "s1".repeat(12)); await put("a2".repeat(12), "so1", null); await put("b1".repeat(12), "so2", "s2".repeat(12));
+  const f = await S.create({ get: () => "" }, "so1", "password");
+  await D.request(reqOf("so1", f.id), { password: "pw-orig-1234", confirm: "storyorig1" });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_originals WHERE owner_id = 'so1'"))[0].n, 2, "nothing before the deletion runs");
+  clockAt += 15 * DAY;
+  await D.tick();
+  assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'so1'"))[0].state, "done");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM story_originals WHERE owner_id = 'so1'"))[0].n, 0, "their rows");
+  assert.ok(!fs.existsSync(SO.fileOf("a1".repeat(12), SO.dir())) && !fs.existsSync(SO.fileOf("a2".repeat(12), SO.dir())), "their files");
+  assert.ok(fs.existsSync(SO.fileOf("b1".repeat(12), SO.dir())), "someone else's file stays");
+  assert.equal(JSON.parse((await getQuery("SELECT report FROM account_deletions WHERE user_id = 'so1'"))[0].report).story_originals_deleted, 2);
 });
 
 test("CL6: 'Also hide my past public chat lines' - ticked, the login and the account key join the pad chat's hidden set (src delete) when the deletion runs; unticked, nothing", async () => {

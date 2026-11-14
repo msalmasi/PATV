@@ -124,7 +124,8 @@
   }
 
   function upload(file, kind, progress) {
-    return api('/api/feed/uploads', { kind: kind, size: file.size, name: String(file.name || '').slice(0, 100), purpose: 'story' }).then(function (d) {
+    // storyrec (1.99anv): a chosen file, always (this form has no camera) - the upload's capture source (storyorig.js)
+    return api('/api/feed/uploads', { kind: kind, size: file.size, name: String(file.name || '').slice(0, 100), purpose: 'story', capture: { source: 'file' } }).then(function (d) {
       var id = d.id, chunk = d.chunk || CHUNK, off = 0;
       function next() {
         if (cancelled) { api('/api/feed/uploads/' + id + '/discard', {}).catch(function () {}); throw new Error('cancelled'); }
