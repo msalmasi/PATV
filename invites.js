@@ -12,6 +12,10 @@
 //     is a sign-up
 //   * claiming a Camfrog auto account (Pepe's !signup link, autoescrow.js) needs a signed-in website account first, so it goes
 //     through the sign-up form above
+//   * review fix: the FIRST website sign-in of an account Pepe made (users.auto_source, never cleared) through a chat sign-in link
+//     (chatsignin.js !signin - chatSignInRefused): '!patv set <name>' renames an auto account so it no longer looks like one, and
+//     !signin would then make it a website login with no invite. While invite-only such an account gets reason "signup" (Pepe
+//     sends them to !signup, which needs a website account - an invite) until it has signed in on the website once (webSignedIn)
 // NOT gated: existing accounts signing in by any method, linking another sign-in method to an account, Pepe's automatic
 // Camfrog accounts (/api/users/camfrog/register - auto-account escrow, they are not website sign-ups), the bots' own chat
 // accounts (above), staff's house invites (an admin makes a code that counts against nobody), the staging rehearsal seed.
@@ -22,29 +26,41 @@
 // parks the code in the browser's session, so it survives the Twitch / Discord / Google / Apple / Plex / Telegram round trip;
 // the sign-up and "new SSO account" forms also take it typed in. Redemption is ONE conditional UPDATE (pending + unexpired ->
 // used) inside the same dbUtils.tx as the account's INSERT: two sign-ups racing for one code can't both get it, and a failed
-// INSERT (the username was just taken) gives the invite back. Code look-ups that fail are rate limited per IP and per session
-// (LOOK_MAX per LOOK_WINDOW), so codes can't be guessed. The new account keeps users.invited_by (the inviter's userId) and
-// users.invite_id; the inviter gets an inbox notice.
+// INSERT (the username was just taken) gives the invite back. Code look-ups are rate limited per IP (IPv6 by its /64) and per
+// session (LOOK_MAX failures per LOOK_WINDOW): each look-up is counted BEFORE the database is asked (authGuard limiter.attempt -
+// a parallel burst can't slip past) and given back when the code turned out good, so codes can't be guessed. The new account
+// keeps users.invited_by (the inviter's userId) and users.invite_id; the inviter gets an inbox notice.
+// An invite whose inviter is site-banned (feed_bans room '') or deleted / archived can't be made and can't be used (review fix:
+// no ban evasion through a banned member's links); house invites are staff's and always work.
 // Expiry: `expiry_days` (default 14) from creation. The inviter (or an admin) can revoke a pending one. An expired or revoked
 // invite goes back to the inviter's allowance.
 //
 // THE ALLOWANCE (cumulative level tiers, admin setting `tiers`, default level 5 -> 1, level 20 -> +5, level 50 -> unlimited):
 //   allowance = the grants of every tier reached (users.level) + bought invites + admin-issued invites
 //               - invites created that still count (used, or pending and not expired; house invites never count)
+// Review fix - two pools, so a bought / gifted / comped / admin-issued invite ALWAYS adds one, even after a tier change left a
+// member "over" their level's share: each invite is stamped (invites.pool) with what it used when it was made -
+//   tier   the level tiers' share (used first)        tierLeft  = max(0, tier grants reached - tier invites that count)
+//   extra  bought + admin-issued                      extraLeft = max(0, bought + admin - extra invites that count)
+//   free   made while the member was unlimited (counts against nothing - losing the unlimited tier leaves no hole)
+//   left = tierLeft + extraLeft (Infinity while unlimited). An expired / revoked invite goes back to its own pool.
 // A tier change recomputes it on the next read; invites already sent stay valid (left never goes below 0). Unlimited members
-// never need to buy one (the shop refuses it), but they still hold at most MAX_PENDING unused invites at once.
+// never need to buy one (the shop refuses it), but they still hold at most MAX_PENDING unused invites at once. An admin can take
+// back only unused issued invites.
 //
 // THE SHOP ITEM (shop.js / shopcatalog.js "siteinvite1", delivery "instant", key site-invite): an official PATV store item,
 // price in PAT points (prizes.cost, default 2,500,000 - set on this module's admin card, or the item's Edit page). Buying it
 // adds 1 to the buyer's bought invites inside the purchase's own transaction (grantInTx); buying it as a 🎁 gift adds it to
-// the recipient's. It is a site-virtual item with no cash value. Official store orders have no refund path (shop.orderAction
+// the recipient's. It is a site-virtual item with no cash value. Refused before any charge (buyRefusal) for someone who could
+// never use it: unlimited, a chat-only account (Pepe's / a chat bot's, never signed in on the website), a site-banned or
+// deleted account. Official store orders have no refund path (shop.orderAction
 // refuses official orders, refundService only takes service charges), so an invite that was bought - and maybe used - can
 // never be refunded. Its stock is put back after each sale, so it never sells out.
 //
 // Data
 //   invites          id PK, code UNIQUE (normalised), inviter_id, house (1 = an admin's, outside every allowance), status
 //                    pending | used | revoked (expired = pending past `expires`), created, expires, used_by, used_at,
-//                    revoked_at, revoked_by (the userId who revoked it), note
+//                    revoked_at, revoked_by (the userId who revoked it), note, pool tier | extra | free (the allowance above)
 //   invite_grants    id PK, user_id, kind bought | admin, amount (admin may be negative - never below 0 in total), ref UNIQUE
 //                    (shop:<order id> | admin:<random>), by_id, at, note
 //   invite_settings  k -> JSON: signups, invites_when_open, expiry_days, tiers (+ updated)
@@ -58,7 +74,9 @@
 // admin_audit row: "signups" (the switch, {from, to}), "invite_settings" ({changes}), "invite_grant", "invite_house",
 // "invite_revoke".
 //   GET  /api/admin/invites[?q=&status=]              settings, stats, invites, grants, audit
-//   POST /api/admin/invites/settings {signups, invites_when_open, expiry_days, tiers, price, reason}
+//   POST /api/admin/invites/settings {signups, invites_when_open, expiry_days, tiers, price, reason, expect}
+//        the card sends only what the admin changed, with what it loaded as `expect` (409 E_STALE when another admin changed
+//        one of those meanwhile - a stale card can't silently undo the switch)
 //   POST /api/admin/invites/grant {username, amount, reason}
 //   POST /api/admin/invites/house {note, reason}      -> {invite: {id, code, link}}
 //   POST /api/admin/invites/:id/revoke {reason}
@@ -79,6 +97,7 @@ const DEFAULTS = Object.freeze({ signups: "open", invites_when_open: true, expir
 const MODES = ["open", "invite"];
 const EXPIRY_MIN = 1, EXPIRY_MAX = 365;
 const TIERS_MAX = 10, LEVEL_MAX = 1000, GRANT_MAX = 1000;
+const POOLS = ["tier", "extra", "free"];
 const ADMIN_GRANT_MAX = 1000;                 // one admin issue (either way)
 const MAX_PENDING = 50;                       // unused invites one member can hold at once (unlimited members too)
 const CREATE_PER_HOUR = 30;
@@ -124,7 +143,12 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS invites (
         id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, inviter_id TEXT NOT NULL, house INTEGER NOT NULL DEFAULT 0,
         status TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL, expires INTEGER NOT NULL, used_by TEXT, used_at INTEGER,
-        revoked_at INTEGER, revoked_by TEXT, note TEXT)`);
+        revoked_at INTEGER, revoked_by TEXT, note TEXT, pool TEXT NOT NULL DEFAULT 'tier')`);
+      // review fix: the allowance's pools (a table made by the first build of 1.99anv has no pool column)
+      const ic = (await getQuery("SELECT name FROM pragma_table_info('invites')")).map((c) => c.name);
+      if (!ic.includes("pool")) {
+        try { await runQuery("ALTER TABLE invites ADD COLUMN pool TEXT NOT NULL DEFAULT 'tier'"); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+      }
       await runQuery("CREATE INDEX IF NOT EXISTS invites_inviter ON invites (inviter_id, status, expires)");
       await runQuery("CREATE INDEX IF NOT EXISTS invites_used_by ON invites (used_by)");
       await runQuery(`CREATE TABLE IF NOT EXISTS invite_grants (
@@ -196,7 +220,10 @@ function checkExpiry(v) {
  * Validate the level tiers. Takes an array of {level, grant} / {level, unlimited: true}, or text like "5:1, 20:5, 50:unlimited".
  * Levels are whole numbers 0..LEVEL_MAX in strictly ascending order, grants whole numbers 0..GRANT_MAX, at most one
  * "unlimited" tier and only as the last one. -> the normalised array, or throws Refuse(400).
+ * Review fix: a level / a count must be a number or a string of digits - a blank field (""), null or true is refused, never
+ * read as 0 / 1.
  */
+const wholeOf = (v) => (typeof v === "number" ? v : typeof v === "string" && /^\s*\+?\d+\s*$/.test(v) ? Number(v) : NaN);
 function checkTiers(raw) {
   let list = raw;
   if (typeof raw === "string") {
@@ -212,7 +239,7 @@ function checkTiers(raw) {
   let prev = -1;
   list.forEach((t, i) => {
     if (!t || typeof t !== "object") throw new Refuse(400, `Tier ${i + 1} isn't a tier.`, "E_TIERS");
-    const level = Number(t.level);
+    const level = wholeOf(t.level);
     if (!Number.isInteger(level) || level < 0 || level > LEVEL_MAX) throw new Refuse(400, `Tier ${i + 1}: the level must be a whole number 0-${LEVEL_MAX}.`, "E_TIERS");
     if (level <= prev) throw new Refuse(400, "Tier levels must go up, each one higher than the one before.", "E_TIERS");
     prev = level;
@@ -222,7 +249,7 @@ function checkTiers(raw) {
       out.push({ level, unlimited: true });
       return;
     }
-    const grant = Number(t.grant);
+    const grant = wholeOf(t.grant);
     if (!Number.isInteger(grant) || grant < 0 || grant > GRANT_MAX) throw new Refuse(400, `Tier ${i + 1}: invites must be a whole number 0-${GRANT_MAX}.`, "E_TIERS");
     out.push({ level, grant });
   });
@@ -255,6 +282,13 @@ const formatCode = (code) => String(code || "").replace(/(.{4})(?=.)/g, "$1-");
 function linkOf(code) {
   return require("./sharelinks").shareUrl("/signup?invite=" + formatCode(code));
 }
+/** What a form shows back in its invite field after a refusal: the code (XXXX-XXXX-XXXX-XXXX) when it is one - a pasted link
+ *  too - else what was typed, up to normalize()'s own limit (review fix: it was cut at 40, shorter than an invite link). */
+function echo(raw) {
+  if (typeof raw !== "string") return "";
+  const code = normalize(raw);
+  return code ? formatCode(code) : raw.trim().slice(0, 300);
+}
 
 // ── the allowance ──
 /** The tiers a level reaches: {n, unlimited, reached: [{level, grant|unlimited}], next: the next tier or null, unlimitedAt}. */
@@ -275,8 +309,9 @@ function tierSum(level, tiers) {
 }
 /**
  * How many invites this account can still make, and why.
- * -> {level, unlimited, tiers: reached, next, unlimitedAt, fromTiers, bought, admin, total, used, pending, left (Infinity when
- *    unlimited)}; null for an unknown account.
+ * -> {level, unlimited, tiers: reached, next, unlimitedAt, fromTiers, bought, admin, total, used (tier + extra invites that
+ *    count), tierUsed, extraUsed, pending (every unused, unexpired one - free ones too), tierLeft, extraLeft, left (Infinity when
+ *    unlimited)}; null for an unknown account. The pools: see THE ALLOWANCE above.
  */
 async function allowance(userId, { at = now() } = {}) {
   await fresh();
@@ -288,13 +323,81 @@ async function allowance(userId, { at = now() } = {}) {
     if (g.kind === "bought") bought = Number(g.n) || 0;
     else if (g.kind === "admin") admin = Math.max(0, Number(g.n) || 0);
   }
-  const c = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN status = 'used' OR (status = 'pending' AND expires > ?) THEN 1 ELSE 0 END), 0) AS used,
+  const counts = "(status = 'used' OR (status = 'pending' AND expires > ?))";
+  const c = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN pool = 'extra' AND ${counts} THEN 1 ELSE 0 END), 0) AS extra_used,
+                                    COALESCE(SUM(CASE WHEN pool NOT IN ('extra', 'free') AND ${counts} THEN 1 ELSE 0 END), 0) AS tier_used,
                                     COALESCE(SUM(CASE WHEN status = 'pending' AND expires > ? THEN 1 ELSE 0 END), 0) AS pending
-                             FROM invites WHERE inviter_id = ? AND house = 0`, [at, at, String(userId)]))[0] || {};
-  const used = Number(c.used) || 0, pending = Number(c.pending) || 0;
+                             FROM invites WHERE inviter_id = ? AND house = 0`, [at, at, at, String(userId)]))[0] || {};
+  const tierUsed = Number(c.tier_used) || 0, extraUsed = Number(c.extra_used) || 0, pending = Number(c.pending) || 0;
   const total = ts.n + bought + admin;
+  const tierLeft = Math.max(0, ts.n - tierUsed), extraLeft = Math.max(0, bought + admin - extraUsed);
   return { level: Math.max(0, Math.floor(Number(u.level) || 0)), unlimited: ts.unlimited, tiers: ts.reached, next: ts.next, unlimitedAt: ts.unlimitedAt,
-           fromTiers: ts.n, bought, admin, total, used, pending, left: ts.unlimited ? Infinity : Math.max(0, total - used) };
+           fromTiers: ts.n, bought, admin, total, used: tierUsed + extraUsed, tierUsed, extraUsed, pending, tierLeft, extraLeft,
+           left: ts.unlimited ? Infinity : tierLeft + extraLeft };
+}
+/** The pool a new invite comes out of (the tiers' share first, then bought / issued; unlimited -> free). */
+const poolFor = (a) => (a.unlimited ? "free" : a.tierLeft > 0 ? "tier" : "extra");
+
+// ── who can't send (or be sent) invites ──
+// (SELECT * of one users row: archived_at / auto_source are added by other modules' migrations, and a test database may lack them)
+const userRow = async (id) => (await getQuery("SELECT * FROM users WHERE userId = ?", [String(id || "")]))[0] || null;
+/**
+ * Review fix: an account whose invites must not work - null (fine) | "banned" (a site ban: feed_bans with room '' that hasn't
+ * ended - what telegram.siteBanned checks) | "gone" (no such account, archived, or deleted: accountdelete pseudonymises the row
+ * and sets archived_at; account_deletions 'done' too).
+ */
+async function inviterBlock(userId, { at = now() } = {}) {
+  const id = String(userId || "");
+  if (!id) return "gone";
+  const u = await userRow(id);
+  if (!u || u.archived_at) return "gone";
+  try { if ((await getQuery("SELECT 1 FROM account_deletions WHERE user_id = ? AND state = 'done' LIMIT 1", [id])).length) return "gone"; }
+  catch (e) { /* no deletions table yet */ }
+  try { if ((await getQuery("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = '' AND (until IS NULL OR until > ?) LIMIT 1", [id, at])).length) return "banned"; }
+  catch (e) { /* no feed_bans table yet */ }
+  return null;
+}
+
+/**
+ * Has this account ever been signed in to on the website? A sessions row (every sign-in since 1.99wj, kept when it ends), a chat
+ * sign-in link used (chat_signin_log 'used'), or a sign-in method on the account (an email with "@", Discord / Twitch, a
+ * linked Google / Apple / Plex / Telegram - only a signed-in member can add one).
+ */
+async function webSignedIn(userId, row = null) {
+  const id = String(userId || "");
+  try { if ((await getQuery("SELECT 1 FROM sessions WHERE user_id = ? LIMIT 1", [id])).length) return true; } catch (e) { /* no sessions table */ }
+  try { if ((await getQuery("SELECT 1 FROM chat_signin_log WHERE user_id = ? AND kind = 'used' LIMIT 1", [id])).length) return true; } catch (e) { /* none */ }
+  const AA = require("./autoaccount");
+  const u = row || (await userRow(id));
+  if (AA.rowFacts(u).signIn) return true;
+  return AA.hasLinkedSignIn(id);
+}
+/**
+ * A chat-only account: made by Pepe (users.auto_source - never cleared, so a renamed one too) or by a Twitch / Discord chat bot
+ * while sign-ups were invite-only (invite_shadow, not yet signed in), and nobody has signed in to it on the website. It holds chat
+ * rewards; it is not a website account (no invites of its own, and turning it into a website login is a sign-up).
+ */
+async function chatOnly(userId) {
+  await init();
+  const id = String(userId || "");
+  if (!id) return false;
+  await require("./autoaccount").ensure();
+  const u = await userRow(id);
+  if (!u) return false;
+  if (u.auto_source) return !(await webSignedIn(id, u));
+  const sh = (await getQuery("SELECT 1 FROM invite_shadow WHERE user_id = ? AND web_at IS NULL", [id]))[0];
+  if (!sh) return false;
+  try { return !(await getQuery("SELECT 1 FROM sessions WHERE user_id = ? LIMIT 1", [id])).length; } catch (e) { return true; }
+}
+/**
+ * chatsignin.js (!signin issue + redeem): while sign-ups are invite-only, a chat sign-in link can't be the FIRST website sign-in
+ * of a chat-only account (the '!patv set' rename + '!signin' route to a website login with no invite). -> true = refuse
+ * (reason "signup": Pepe sends them to !signup, which needs a website account - an invite).
+ */
+async function chatSignInRefused(userId) {
+  try { await fresh(); } catch (e) { /* the last settings read stands */ }
+  if (S.signups !== "invite") return false;
+  return chatOnly(userId);
 }
 
 /** Can this member make an invite right now? -> null, or {code, message} (what the page / API says). */
@@ -317,19 +420,23 @@ async function create(me, { house = false, note = null, req = null } = {}) {
   await fresh();
   if (!me || !me.userId) throw new Refuse(401, tr(req, "invites.err.sign_in"), "E_SIGN_IN");
   if (!house && createLimit.attempt("u:" + me.userId)) throw new Refuse(429, tr(req, "invites.err.create_rate"), "E_RATE");
+  // review fix: a site-banned (or deleted / archived) member makes no invites - each one would be a fresh, unbanned account
+  if (!house && (await inviterBlock(me.userId))) throw new Refuse(403, tr(req, "invites.err.banned_maker"), "E_BANNED");
   const row = await tx(async () => {
+    let pool = "tier";
     if (!house) {
       const a = await allowance(me.userId);
       const why = createRefusal(a, req);
       if (why) throw new Refuse(409, why.message, why.code);
+      pool = poolFor(a);                    // review fix: which share it uses (THE ALLOWANCE above)
     }
     const t = now();
     const expires = t + S.expiry_days * DAY;
     for (let i = 0; i < 5; i++) {
       const code = newCode();
       try {
-        const r = await runQuery("INSERT INTO invites (code, inviter_id, house, status, created, expires, note) VALUES (?, ?, ?, 'pending', ?, ?, ?)",
-                                 [code, String(me.userId), house ? 1 : 0, t, expires, note ? String(note).replace(/[\r\n\t]+/g, " ").slice(0, 200) : null]);
+        const r = await runQuery("INSERT INTO invites (code, inviter_id, house, status, created, expires, note, pool) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)",
+                                 [code, String(me.userId), house ? 1 : 0, t, expires, note ? String(note).replace(/[\r\n\t]+/g, " ").slice(0, 200) : null, pool]);
         return { id: r.id || r.lastID, code, created: t, expires };
       } catch (e) {
         if (!/UNIQUE/i.test(String(e && e.message))) throw e;   // 2^80 codes: a collision is a freak - draw again
@@ -347,6 +454,8 @@ async function revoke(me, id, { admin = false, req = null } = {}) {
   if (!(n > 0)) throw new Refuse(404, tr(req, "invites.err.not_found"), "E_NOT_FOUND");
   const row = (await getQuery("SELECT * FROM invites WHERE id = ?", [n]))[0];
   if (!row || (!admin && row.inviter_id !== String(me && me.userId))) throw new Refuse(404, tr(req, "invites.err.not_found"), "E_NOT_FOUND");
+  // review fix: a house invite is staff's (the admin card revokes it, with its admin_audit row) - never from the member page
+  if (!admin && Number(row.house)) throw new Refuse(409, tr(req, "invites.err.house"), "E_HOUSE");
   const t = now();
   const r = await runQuery("UPDATE invites SET status = 'revoked', revoked_at = ?, revoked_by = ? WHERE id = ? AND status = 'pending'",
                            [t, String(me && me.userId || ""), n]);
@@ -358,9 +467,25 @@ async function revoke(me, id, { admin = false, req = null } = {}) {
 const newLookLimit = () => require("./middleware/authGuard").limiter({ max: LOOK_MAX, windowMs: LOOK_WINDOW });
 let lookLimit = newLookLimit();
 const ipOf = (req) => { try { return require("./middleware/authGuard").clientIp(req) || "?"; } catch (e) { return "?"; } };
-const lookKeys = (req) => ["ip:" + ipOf(req), ...(req && req.sessionID ? ["s:" + req.sessionID] : [])];
-function lookBlocked(req) { return Math.max(0, ...lookKeys(req).map((k) => lookLimit.blocked(k))); }
-function lookFailed(req) { for (const k of lookKeys(req)) lookLimit.hit(k); }
+// review fix: an IPv6 address by its /64 (netban.netOf), so one network can't rotate past the limit
+const netKey = (ip) => { try { return require("./netban").netOf(ip) || ip; } catch (e) { return ip; } };
+const lookKeys = (req) => ["ip:" + netKey(ipOf(req)), ...(req && req.sessionID ? ["s:" + req.sessionID] : [])];
+/**
+ * Review fix (the parallel-guess bypass, as authGuard's sign-in limiter): count one look-up on every key BEFORE the database is
+ * asked. -> {wait (seconds, nothing counted) | 0, keys: the keys counted - lookGood(keys) gives them back for a good code}.
+ */
+function lookAttempt(req) {
+  const counted = [];
+  let wait = 0;
+  for (const k of lookKeys(req)) {
+    const w = lookLimit.attempt(k);
+    if (w) wait = Math.max(wait, w); else counted.push(k);
+  }
+  if (wait) { for (const k of counted) lookLimit.undo(k); return { wait, keys: [] }; }
+  return { wait: 0, keys: counted };
+}
+function lookGood(keys) { for (const k of keys || []) lookLimit.undo(k); }
+const slowDown = (req, wait) => tr(req, "invites.err.slow_down", { wait: require("./middleware/authGuard").waitText(wait, req) });
 
 /** The invite row for a normalised code (+ the inviter's username / display name), or null. */
 async function byCode(code) {
@@ -377,19 +502,20 @@ function unusable(row, at = now()) {
   return Number(row.expires) > at ? null : "expired";
 }
 /**
- * Check a code someone gave us, rate limited (a failed look-up counts against the IP and the session).
- * -> {ok: true, invite} | {ok: false, reason: "rate" | "unknown" | "used" | "revoked" | "expired", error}
+ * Check a code someone gave us, rate limited (every look-up is counted against the IP and the session before the database is
+ * asked; a good code gives it back, so only failures add up).
+ * -> {ok: true, invite} | {ok: false, reason: "rate" | "unknown" | "used" | "revoked" | "expired" | "inviter", error}
+ * "inviter" (review fix): the inviter is site-banned, or the account was deleted / archived - a house invite always works.
  */
 async function check(req, raw) {
-  const wait = lookBlocked(req);
-  if (wait) return { ok: false, reason: "rate", error: tr(req, "invites.err.slow_down", { wait: require("./middleware/authGuard").waitText(wait, req) }) };
+  const lk = lookAttempt(req);
+  if (lk.wait) return { ok: false, reason: "rate", error: slowDown(req, lk.wait) };
   const code = normalize(raw);
   const row = code ? await byCode(code) : null;
-  const why = unusable(row);
-  if (why) {
-    lookFailed(req);
-    return { ok: false, reason: why, error: tr(req, "invites.err." + why) };
-  }
+  let why = unusable(row);
+  if (!why && !Number(row.house) && (await inviterBlock(row.inviter_id))) why = "inviter";
+  if (why) return { ok: false, reason: why, error: tr(req, "invites.err." + why) };
+  lookGood(lk.keys);
   return { ok: true, invite: row, code };
 }
 
@@ -418,8 +544,8 @@ async function viewState(req) {
   const st = { mode: S.signups, required: S.signups === "invite", code: "", valid: false, from: null, house: false, error: null, whenOpen: S.invites_when_open };
   const c = capture(req);
   if (c.given && !c.code) {
-    if (lookBlocked(req)) st.error = tr(req, "invites.err.slow_down", { wait: require("./middleware/authGuard").waitText(lookBlocked(req), req) });
-    else { lookFailed(req); st.error = tr(req, "invites.err.unknown"); }
+    const lk = lookAttempt(req);             // a malformed code is a failed look-up (counted; never given back)
+    st.error = lk.wait ? slowDown(req, lk.wait) : tr(req, "invites.err.unknown");
     return st;
   }
   const code = sessionCode(req);
@@ -567,16 +693,29 @@ async function grantInTx(userId, amount, kind, ref, { byId = null, note = null }
                  [String(userId), kind, Math.trunc(Number(amount)) || 0, String(ref).slice(0, 120), byId ? String(byId) : null, now(),
                   note ? String(note).slice(0, 200) : null]);
 }
-/** The shop's check before charging: unlimited members never need an invite. -> the refusal (English, like the shop's) or null. */
+/**
+ * The shop's check before charging (buy, 🎁 gift precheck, comp): never sell an invite that can't be used. -> the refusal
+ * (English, like the shop's messages - from the catalog) or null.
+ *   unlimited members never need one
+ *   review fix: a chat-only account (Pepe's Camfrog account, a chat bot's - chatOnly) can't make invites, and its own website
+ *   account needs an invite anyway; a site-banned or deleted account can't make them either
+ *   a bought invite always adds one (the extra pool - THE ALLOWANCE above); refused if it somehow wouldn't (defensive)
+ */
 async function buyRefusal(userId, { gift = false, username = "" } = {}) {
+  const T = enT();
+  const name = username || "They";
   const a = await allowance(userId).catch(() => null);
   if (a && a.unlimited) {
     return gift ? `${username || "They"} already ${username ? "has" : "have"} unlimited invites - they don't need one.`
                 : `You have unlimited invites (level ${a.unlimitedAt}) - you never need to buy one.`;
   }
+  if (await chatOnly(userId).catch(() => false)) return T(gift ? "invites.buy.no_web_gift" : "invites.buy.no_web", { name });
+  if (await inviterBlock(userId).catch(() => null)) return T(gift ? "invites.buy.blocked_gift" : "invites.buy.blocked", { name });
+  if (a && a.bought + a.admin + 1 - a.extraUsed < 1) return T(gift ? "invites.buy.no_room_gift" : "invites.buy.no_room", { name });
   return null;
 }
-/** Admin: issue (or take back, negative) invites to a member. -> {user, amount, admin_total}. Throws Refuse. */
+/** Admin: issue (or take back, negative - only unused ones) invites to a member. -> {user, amount, admin_total, left (a number,
+ *  "unlimited", or null)}. Throws Refuse. */
 async function adminGrant(admin, { username, amount, reason }) {
   await init();
   const n = Number(String(amount == null ? "" : amount).trim());
@@ -588,10 +727,15 @@ async function adminGrant(admin, { username, amount, reason }) {
   try { to = await G.recipient(username); } catch (e) { throw new Refuse(e.status || 404, e.message, "E_TARGET"); }
   const out = await tx(async () => {
     const cur = Number(((await getQuery("SELECT COALESCE(SUM(amount), 0) AS n FROM invite_grants WHERE user_id = ? AND kind = 'admin'", [to.userId]))[0] || {}).n) || 0;
-    if (cur + n < 0) throw new Refuse(409, `${to.username} has ${cur} admin-issued invite${cur === 1 ? "" : "s"} - you can take back at most that many.`, "E_BELOW_ZERO");
+    // review fix: take back only what's unused - issued invites they already sent stay sent (the extra pool never goes negative)
+    const before = await allowance(to.userId);
+    const back = before ? Math.max(0, Math.min(cur, before.extraLeft)) : cur;
+    if (n < 0 && -n > back) throw new Refuse(409, `${to.username} has ${back} unused staff-issued invite${back === 1 ? "" : "s"} - you can take back at most that many.`, "E_BELOW_ZERO");
     await grantInTx(to.userId, n, "admin", "admin:" + crypto.randomBytes(9).toString("hex"), { byId: admin.userId, note: why });
-    await require("./adminaudit").record(admin, AUDIT.grant, to, { amount: n, admin_total: cur + n }, why);
-    return { user: to, amount: n, admin_total: cur + n };
+    const after = await allowance(to.userId);
+    const left = !after ? null : after.unlimited ? "unlimited" : after.left;
+    await require("./adminaudit").record(admin, AUDIT.grant, to, { amount: n, admin_total: cur + n, left }, why);
+    return { user: to, amount: n, admin_total: cur + n, left };
   });
   if (n > 0) {
     const t = tFor(to.userId);
@@ -625,21 +769,50 @@ function checkPrice(v) {
 }
 
 // ── admin: settings ──
+const boolOf = (v) => v === true || v === "1" || v === "on" || v === "true" || v === 1;
+/**
+ * Review fix: `expect` = the values the admin's card loaded, for the fields it sends. One that no longer matches what's saved
+ * (another admin changed it meanwhile) -> Refuse(409, E_STALE) and nothing is saved - a stale card can't silently reopen
+ * sign-ups or undo a tier change.
+ */
+function staleCheck(expect, cur, curPrice, keys) {
+  if (!expect || typeof expect !== "object") return;
+  const norm = {
+    signups: (v) => { try { return checkMode(v); } catch (e) { return { bad: String(v) }; } },
+    invites_when_open: (v) => boolOf(v),
+    expiry_days: (v) => Number(v),
+    tiers: (v) => { try { return checkTiers(v); } catch (e) { return { bad: true }; } },
+    price: (v) => (v === "" || v == null ? null : Number(String(v).replace(/[, _]/g, ""))),
+  };
+  for (const k of keys) {
+    if (!(k in expect) || !norm[k]) continue;
+    const have = k === "price" ? curPrice : cur[k];
+    if (JSON.stringify(norm[k](expect[k])) !== JSON.stringify(have)) {
+      throw new Refuse(409, "Another admin changed these settings since you loaded this card - reload it and try again (nothing was saved).", "E_STALE");
+    }
+  }
+}
 /**
  * Save settings (any subset of signups, invites_when_open, expiry_days, tiers, price) - validated first, then written in one
- * dbUtils.tx with their admin_audit rows. admin = {userId, username}. -> {settings, price, changed: [keys]}. Throws Refuse.
+ * dbUtils.tx with their admin_audit rows. admin = {userId, username}. opts.expect: what the admin's card loaded (staleCheck).
+ * -> {settings, price, changed: [keys]}. Throws Refuse.
  */
-async function setSettings(admin, patch, { reason = null } = {}) {
+async function setSettings(admin, patch, { reason = null, expect = null } = {}) {
   await fresh();
   const p = patch || {};
   const want = {};
   if ("signups" in p) want.signups = checkMode(p.signups);
-  if ("invites_when_open" in p) want.invites_when_open = p.invites_when_open === true || p.invites_when_open === "1" || p.invites_when_open === "on" || p.invites_when_open === "true" || p.invites_when_open === 1;
+  if ("invites_when_open" in p) want.invites_when_open = boolOf(p.invites_when_open);
   if ("expiry_days" in p) want.expiry_days = checkExpiry(p.expiry_days);
   if ("tiers" in p) want.tiers = checkTiers(p.tiers);
   let newPrice = null;
   if ("price" in p && p.price !== "" && p.price != null) newPrice = checkPrice(p.price);
   const why = reason ? String(reason).replace(/[\r\n\t]+/g, " ").trim().slice(0, 200) : null;
+  if (expect) {
+    await load().catch((e) => console.error("[invites] reload:", e.message));   // compare with what's saved NOW (another process too)
+    const pr0 = await price();
+    staleCheck(expect, settings(), pr0 ? pr0.cost : null, [...Object.keys(want), ...(newPrice != null ? ["price"] : [])]);
+  }
   const cur = settings();
   const changes = {};
   for (const k of Object.keys(want)) {
@@ -683,10 +856,11 @@ function publicRow(r, at) {
 /** The member page: {mode, whenOpen, allowance, canCreate, why, price, expiryDays, pending, used, closed}. */
 async function mine(userId, { req = null, at = now() } = {}) {
   const a = await allowance(userId, { at });
+  // (review fix: house invites are staff's - they live on the admin card, not on an admin's own page)
   const rows = await getQuery(`SELECT i.*, u.username AS used_name FROM invites i LEFT JOIN users u ON u.userId = i.used_by
-                               WHERE i.inviter_id = ? ORDER BY i.id DESC LIMIT 300`, [String(userId)]);
+                               WHERE i.inviter_id = ? AND i.house = 0 ORDER BY i.id DESC LIMIT 300`, [String(userId)]);
   const list = rows.map((r) => publicRow(r, at));
-  const why = createRefusal(a, req);
+  const why = a && (await inviterBlock(userId, { at })) ? { code: "E_BANNED", message: tr(req, "invites.err.banned_maker") } : createRefusal(a, req);
   const pr = await price();
   return { mode: S.signups, whenOpen: S.invites_when_open, allowance: a, canCreate: !why, why: why ? why.message : null, whyCode: why ? why.code : null,
            price: pr && pr.status === "active" ? pr.cost : null, prizeId: PRIZE_ID, expiryDays: S.expiry_days,
@@ -813,12 +987,13 @@ function register(app, { addUser }) {
     const b = req.body || {};
     const patch = {};
     for (const k of ["signups", "invites_when_open", "expiry_days", "tiers", "price"]) if (k in b) patch[k] = b[k];
-    try { res.json({ ok: true, ...(await setSettings(me, patch, { reason: b.reason })) }); } catch (e) { fail(res, e, "settings"); }
+    const expect = b.expect && typeof b.expect === "object" && !Array.isArray(b.expect) ? b.expect : null;
+    try { res.json({ ok: true, ...(await setSettings(me, patch, { reason: b.reason, expect })) }); } catch (e) { fail(res, e, "settings"); }
   });
   app.post("/api/admin/invites/grant", addUser, async (req, res) => {
     const me = await admin(req, res); if (!me) return;
     const b = req.body || {};
-    try { const r = await adminGrant(me, { username: b.username, amount: b.amount, reason: b.reason }); res.json({ ok: true, username: r.user.username, amount: r.amount, admin_total: r.admin_total }); }
+    try { const r = await adminGrant(me, { username: b.username, amount: b.amount, reason: b.reason }); res.json({ ok: true, username: r.user.username, amount: r.amount, admin_total: r.admin_total, left: r.left }); }
     catch (e) { fail(res, e, "grant"); }
   });
   app.post("/api/admin/invites/house", addUser, async (req, res) => {
@@ -849,8 +1024,9 @@ module.exports = {
   init, register, fresh, mode, inviteOnly, settings, checkMode, checkExpiry, checkTiers, tiersText, tierSum, allowance, createRefusal,
   create, revoke, byCode, check, gate, withInvite, refuseOauth, viewState, viewMw, captureMw, capture, sessionCode,
   markShadow, shadowGate, grantInTx, buyRefusal, adminGrant, ensureShopItem, price, setSettings, mine, hubState, adminView,
-  newCode, normalize, formatCode, linkOf, isPrize, ensureUserCols,
-  CAP, PRIZE_ID, PRIZE_KEY, DEFAULT_PRICE, DEFAULTS, MAX_PENDING, LOOK_MAX, AUDIT, Refuse,
+  newCode, normalize, formatCode, linkOf, echo, isPrize, ensureUserCols,
+  inviterBlock, webSignedIn, chatOnly, chatSignInRefused,           // review fixes: bans / deletions, chat-only accounts, !signin
+  CAP, PRIZE_ID, PRIZE_KEY, DEFAULT_PRICE, DEFAULTS, MAX_PENDING, LOOK_MAX, AUDIT, POOLS, Refuse,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reload: () => load(),
   _resetLimits: () => { lookLimit = newLookLimit(); createLimit = newCreateLimit(); },

@@ -710,6 +710,9 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       await event(orderId, "completed", comp ? comp.by : gift && gift.anon ? null : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
                                                          : boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
                                                          : siteInvite && !gift ? "🎟 One invite added to your invites (Settings → Invites) — a site pass with no cash value"
+                                                         // 1.99anv review fix: a gifted invite says where it went (the recipient sees this event too)
+                                                         : siteInvite && gift.anon ? `🎁 An anonymous gift to ${username} — one invite added to ${username}'s invites (Settings → Invites), a site pass with no cash value`
+                                                         : siteInvite ? `🎁 Gift from ${payerName} to ${username} — one invite added to ${username}'s invites (Settings → Invites), a site pass with no cash value`
                                                          : gift && gift.anon ? `🎁 An anonymous gift to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
                                                          : gift ? `🎁 Gift from ${payerName} to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
                                                          : virt ? COLLECTIBLE_NOTE
@@ -744,15 +747,18 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       const G = require("./gifts");
       G.record({ kind: "shop", giverId: payerId, recipientId: userId, item: prize.prize, ref: `shop:${orderId}`, anon: !!gift.anon }).catch(() => {});
     }
+    // 1.99anv review fix: a gifted 🎟 invite points at Settings → Invites (where it is), not at the order
+    const giftLink = siteInvite ? "/settings/invites" : `/shop/orders/${orderId}`;
+    const giftWhere = siteInvite ? " " + require("./gifts").tFor(userId)("invites.gift_where") : "";
     if (gift && gift.anon) {
       const tr = require("./gifts").tFor(userId);
       notify(userId, { subject: tr("gifts.anon.subject", { item: prize.prize }),
-                       text: tr("gifts.anon.text", { item: prize.prize }) + (gift.note ? `\n\n"${gift.note}"` : ""),
-                       pm: tr("gifts.anon.pm", { item: prize.prize }), link: `/shop/orders/${orderId}` }).catch(() => {});
+                       text: tr("gifts.anon.text", { item: prize.prize }) + giftWhere + (gift.note ? `\n\n"${gift.note}"` : ""),
+                       pm: tr("gifts.anon.pm", { item: prize.prize }) + giftWhere, link: giftLink }).catch(() => {});
     } else if (gift) {
       notify(userId, { subject: `🎁 ${payerName} sent you a gift: ${prize.prize}`,
-                       text: `${payerName} bought you ${prize.prize} from the PATV shop.${gift.note ? `\n\n"${gift.note}"` : ""}`,
-                       pm: `🎁 ${payerName} sent you a gift from the PATV shop: ${prize.prize}.`, link: `/shop/orders/${orderId}` }).catch(() => {});
+                       text: `${payerName} bought you ${prize.prize} from the PATV shop.${giftWhere}${gift.note ? `\n\n"${gift.note}"` : ""}`,
+                       pm: `🎁 ${payerName} sent you a gift from the PATV shop: ${prize.prize}.${giftWhere}`, link: giftLink }).catch(() => {});
     }
 
     // Discord: the Discord shop announces its own sales and grants roles itself; for website and

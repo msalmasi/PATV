@@ -44,11 +44,13 @@
     tiersBox.textContent = '';
     (tiers || []).forEach(function (t) { tiersBox.appendChild(tierRow(t)); });
   }
+  // review fix: a blank box goes as null, so the server refuses it ("Tier N: ... must be a whole number") - never a silent 0
+  function numOrNull(input) { var s = String(input.value == null ? '' : input.value).trim(); return s === '' ? null : Number(s); }
   function readTiers() {
     return Array.prototype.map.call(tiersBox.querySelectorAll('[data-tier]'), function (row) {
       var v = function (k) { return row.querySelector('[data-k="' + k + '"]'); };
-      if (v('unlimited').checked) return { level: Number(v('level').value), unlimited: true };
-      return { level: Number(v('level').value), grant: Number(v('grant').value) };
+      if (v('unlimited').checked) return { level: numOrNull(v('level')), unlimited: true };
+      return { level: numOrNull(v('level')), grant: numOrNull(v('grant')) };
     });
   }
   $('invTierAdd').addEventListener('click', function () { tiersBox.appendChild(tierRow(null)); });
@@ -126,11 +128,24 @@
   }
   $('invLoad').addEventListener('click', load);
 
+  // review fix: Save sends ONLY the fields changed on this card, each with the value the card loaded (`expect`): the server
+  // refuses with "reload" when another admin changed one of them meanwhile, and a price-only save never re-sends a stale switch
+  function tiersKey(list) {
+    return JSON.stringify((list || []).map(function (t) { return t && t.unlimited ? [t.level, 'u'] : [t && t.level, t && t.grant]; }));
+  }
   $('invSave').addEventListener('click', function () {
-    var body = { signups: $('invSignups').value, expiry_days: Number($('invExpiry').value), invites_when_open: $('invWhenOpen').checked,
-                 tiers: readTiers(), reason: $('invReason').value.trim() };
-    if ($('invPrice').value !== '') body.price = Number($('invPrice').value);
-    if (S && S.settings.signups !== body.signups &&
+    if (!S) return;
+    var st = S.settings, body = { reason: $('invReason').value.trim(), expect: {} };
+    var put = function (k, now, loaded) { body[k] = now; body.expect[k] = loaded; };
+    if ($('invSignups').value !== st.signups) put('signups', $('invSignups').value, st.signups);
+    if (String($('invExpiry').value).trim() !== String(st.expiry_days)) put('expiry_days', $('invExpiry').value === '' ? null : Number($('invExpiry').value), st.expiry_days);
+    if ($('invWhenOpen').checked !== !!st.invites_when_open) put('invites_when_open', $('invWhenOpen').checked, !!st.invites_when_open);
+    var tiers = readTiers();
+    if (tiersKey(tiers) !== tiersKey(st.tiers)) put('tiers', tiers, st.tiers);
+    var pv = String($('invPrice').value).trim();
+    if (pv !== '' && pv !== String(S.price != null ? S.price : '')) put('price', Number(pv), S.price);
+    if (!Object.keys(body.expect).length) { msg('invMsg', 'Nothing changed.'); return; }
+    if ('signups' in body &&
         !window.confirm(body.signups === 'invite' ? 'Close sign-ups? New accounts will need an invite from now on.' : 'Open sign-ups? Anyone can make an account again.')) return;
     msg('invMsg', 'Saving…');
     api('/api/admin/invites/settings', body).then(function (d) {
@@ -145,7 +160,8 @@
     if (!u) { $('invGrantUser').focus(); return; }
     msg('invGrantMsg', 'Issuing…');
     api('/api/admin/invites/grant', { username: u, amount: Number(n), reason: why }).then(function (d) {
-      msg('invGrantMsg', (d.amount > 0 ? 'Issued ' + d.amount : 'Took back ' + (-d.amount)) + ' for @' + d.username + ' (staff-issued total ' + d.admin_total + ').');
+      msg('invGrantMsg', (d.amount > 0 ? 'Issued ' + d.amount : 'Took back ' + (-d.amount)) + ' for @' + d.username + ' (staff-issued total ' + d.admin_total + ')' +
+        (d.left === 'unlimited' ? ' - they have unlimited invites anyway.' : d.left != null ? ' - they can make ' + d.left + ' now.' : '.'));
       $('invGrantWhy').value = '';
       return load();
     }).catch(function (e) { msg('invGrantMsg', e.message, true); });

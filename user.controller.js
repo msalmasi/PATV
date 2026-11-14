@@ -75,7 +75,7 @@ async function registerUser(req, res) {
   const password = typeof body.password === "string" ? body.password : "";
   const confirm = body.confirm_password;
   const next = guard.safeNext(body.next);
-  const typedInvite = typeof body.invite === "string" ? body.invite.trim().slice(0, 40) : "";
+  const typedInvite = invites.echo(body.invite);   // 1.99anv review fix: a pasted invite link comes back as its code (was cut at 40)
   const back = (msg, field) => backTo(req, res, "/register", next, msg, { username: username.slice(0, 64), email: email.slice(0, 254), invite: typedInvite, field });
 
   if (!guard.authFormOk(req)) return res.status(403).send(guard.FORM_REFUSED);   // 1.99zl

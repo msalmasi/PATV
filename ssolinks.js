@@ -310,7 +310,7 @@ function register(app, { addUser, authView }) {
     if (!enabled(p)) return fail(req, res, "auth.sso.off", "That sign-in method isn't available right now.");
     const P = PROVIDERS[p.provider];
     const username = String((req.body || {}).username || "").trim().slice(0, 64);
-    const invite = String((req.body || {}).invite || "").trim().slice(0, 40);   // 1.99anv: the invite code typed (invites.js)
+    const invite = require("./invites").echo((req.body || {}).invite);   // 1.99anv: the invite code typed (invites.js; a pasted link -> its code)
     const back = (msg, field) => { req.flash("error", msg); req.flash("authForm", JSON.stringify({ username, invite, field })); return res.redirect("/auth/sso/new"); };
     const ip = guard.clientIp(req);
     if (createLimit.blocked(ip)) return back(tr(req, "auth.sso.slow_down", "Too many sign-ins from your network. Try again in a few minutes."));

@@ -12,6 +12,10 @@
 //   * the shop item: buy, gift, unlimited refused before any charge, never refundable
 //   * the admin switch + settings validation + audit; grants; house invites; admin revoke
 //   * the pages: the sign-up page's notice / field / "invited by", the member page, merges
+//   * review fixes: !signin of a renamed Camfrog auto account (chatsignin.js), site-banned / deleted inviters, the parallel-guess
+//     burst + IPv6 /64, the allowance pools (a bought / issued invite always adds one after a tier change or a lost unlimited
+//     tier), a pasted invite link (maxlength), blank tier fields, chat-only accounts can't buy one, house invites off the
+//     member page, the gift recipient's pointer, a stale admin card
 //   NODE_PATH=G:/PATV/node_modules TZ=UTC node --test test/invites.test.js
 "use strict";
 const test = require("node:test");
@@ -50,6 +54,8 @@ const TGSSO = require(path.join(repo, "telegramsso"));
 const PM = require(path.join(repo, "plexmembers"));
 const PLEXSSO = require(path.join(repo, "plexsso"));
 const UC = require(path.join(repo, "user.controller"));
+const CS = require(path.join(repo, "chatsignin"));
+const AA = require(path.join(repo, "autoaccount"));
 const shop = require(path.join(repo, "shop"));
 const CAT = require(path.join(repo, "shopcatalog"));
 const EN = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
@@ -138,7 +144,10 @@ test.before(async () => {
   await INV.init();
   await INV.ensureUserCols();
   await INV.ensureShopItem();
-  await mkUser("pb");                              // the store owner (shop.js STORE_OWNER_USERNAME)
+  await CS.init();
+  await AA.ensure();
+  await require(path.join(repo, "sessions")).init();
+  await mkUser("pb");                            // the store owner (shop.js STORE_OWNER_USERNAME)
   await mkUser("boss", { cls: "Admin", level: 3 });
 
   const app = express();
@@ -573,6 +582,13 @@ test("index.js wires every account-creation path through invites.js (Twitch / Di
     assert.ok(g > 0 && ins > g, fn + " gates before the INSERT");
     assert.match(body, /invites\.withInvite\(req, inv, userId, \(\) => runQuery\(/, fn + " inserts inside withInvite");
   }
+  // review fix: !signin (chatsignin.js) - a chat-only account's FIRST website sign-in is a sign-up: issue AND redeem ask the gate
+  const cs = fs.readFileSync(path.join(repo, "chatsignin.js"), "utf8");
+  const issueBody = cs.slice(cs.indexOf("async function issue("), cs.indexOf("async function peek("));
+  const redeemBody = cs.slice(cs.indexOf("async function redeem("), cs.indexOf("async function recent("));
+  assert.match(issueBody, /require\("\.\/invites"\)\.chatSignInRefused\(u\.userId\)/, "!signin issue asks the sign-up gate");
+  assert.match(redeemBody, /require\("\.\/invites"\)\.chatSignInRefused\(u\.userId\)/, "!signin redeem asks it again (sign-ups closed since)");
+  assert.ok(redeemBody.indexOf("chatSignInRefused") < redeemBody.indexOf("await signIn(u)"), "before the session is issued");
   // every INSERT INTO users in the server code is one of the known paths (a new one must be gated or exempted here)
   const known = { "index.js": 5, "user.controller.js": 2, "engagement.js": 1, "pepefeed.js": 1 };
   const walk = (d, out = []) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (["node_modules", "test", "public", "tools", ".git", "views", "locales", "camfrog-bot", "data", "uploads", "docs"].includes(e.name)) continue; const p = path.join(d, e.name); if (e.isDirectory()) walk(p, out); else if (e.name.endsWith(".js")) out.push(p); } return out; };
@@ -950,4 +966,400 @@ test("account merges: invites, grants and invited_by follow the account", async 
   assert.equal((await userBy("mergekid")).invited_by, to.userId);
   const rule = AM.classify("invite_shadow", "user_id");
   assert.ok(rule && rule.keep, "a bot account's first-sign-in marker stays where it was");
+});
+
+// ───────────────────────── review fixes ─────────────────────────
+// a request as authGuard.clientIp reads one behind the proxy (loopback peer + cf-connecting-ip), for check() / gate() directly
+function fakeReq(ip, sid, body) {
+  const headers = { "cf-connecting-ip": ip };
+  return { get: (k) => headers[String(k).toLowerCase()], headers, socket: { remoteAddress: "127.0.0.1" }, connection: { remoteAddress: "127.0.0.1" },
+           ip: "127.0.0.1", sessionID: sid, session: {}, body: body || {}, query: {} };
+}
+// what Pepe's /api/users/camfrog/register makes: "CF" + 8, an "@"-less email, the login; then (optionally) '!patv set <name>'
+let cfSeq = 0;
+async function cfAuto(login, { rename = null, bal = 0 } = {}) {
+  const id = "cf_auto_" + (++cfSeq);
+  const name = "CF" + String(cfSeq).padStart(8, "0").replace(/\d/g, (d) => "abcdefghij"[d]);
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, email, points_balance) VALUES (?, ?, ?, 'x', ?, ?, ?)",
+                 [id, name, login, login, "r" + cfSeq + "x9f2k1", bal]);
+  await AA.markNew(id);
+  if (rename) await runQuery("UPDATE users SET username = ? WHERE userId = ?", [rename, id]);   // POST /api/users/camfrog/rename's UPDATE
+  return { userId: id, username: rename || name };
+}
+const banSite = (userId, until = null) => runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', ?)", [userId, until]);
+const unban = (userId) => runQuery("DELETE FROM feed_bans WHERE user_id = ?", [userId]);
+
+test("review: a renamed Camfrog auto account can't become a website login through !signin while invite-only (issue AND redeem)", async () => {
+  await setMode("invite");
+  await cfAuto("plain_cf");
+  assert.deepEqual(await CS.issue("plain_cf"), { ok: false, reason: "signup" }, "an auto account: no real account");
+  // '!patv set mynewname': no longer looks like an auto account ...
+  const renamed = await cfAuto("renamed_cf", { rename: "mynewname" });
+  assert.equal(await AA.isAutoAccount(renamed.userId), false);
+  assert.equal(await INV.chatOnly(renamed.userId), true, "made by Pepe, never signed in on the website");
+  // ... but its first website sign-in is a sign-up: refused while invite-only
+  assert.deepEqual(await CS.issue("renamed_cf"), { ok: false, reason: "signup" });
+  const lg = await getQuery("SELECT kind, why FROM chat_signin_log WHERE user_id = ? ORDER BY id DESC LIMIT 1", [renamed.userId]);
+  assert.deepEqual(lg.map((x) => [x.kind, x.why]), [["refused", "invite-only"]]);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chat_signin_tokens WHERE user_id = ?", [renamed.userId]))[0].n, 0, "no link issued");
+  // sign-ups open: allowed (and that sign-in counts as the website sign-in from then on)
+  await setMode("open");
+  const link = await CS.issue("renamed_cf");
+  assert.equal(link.ok, true);
+  let signed = null;
+  const r = await CS.redeem(link.url.split("#t=")[1], { signIn: async (u) => { signed = u; } });
+  assert.equal(r.ok, true);
+  assert.equal(signed.userId, renamed.userId);
+  await setMode("invite");
+  assert.equal(await INV.chatOnly(renamed.userId), false, "signed in on the website once: an existing account");
+  assert.equal((await CS.issue("renamed_cf")).ok, true, "existing users keep signing in from chat while invite-only");
+  // a link sent while open, redeemed after sign-ups closed: refused at the button, nothing signed in
+  const late = await cfAuto("late_cf", { rename: "latecomer" });
+  await setMode("open");
+  const l2 = await CS.issue("late_cf");
+  assert.equal(l2.ok, true);
+  await setMode("invite");
+  let signed2 = null;
+  const r2 = await CS.redeem(l2.url.split("#t=")[1], { signIn: async (u) => { signed2 = u; } });
+  assert.deepEqual(r2, { ok: false, error: "signup" });
+  assert.equal(signed2, null, "no session");
+  assert.equal((await getQuery("SELECT why FROM chat_signin_log WHERE user_id = ? ORDER BY id DESC LIMIT 1", [late.userId]))[0].why, "invite-only");
+  // a website sign-in some other way (a sessions row, even an ended one) also counts
+  const old = await cfAuto("old_cf", { rename: "oldhand" });
+  await runQuery("INSERT INTO sessions (id, user_id, created, expires, method) VALUES (?, ?, ?, ?, 'claim')", ["sess-" + old.userId, old.userId, Date.now() - DAY, Date.now() - 1]);
+  assert.equal((await CS.issue("old_cf")).ok, true, "an ended session still proves a past website sign-in");
+  // a real website account linked to a Camfrog login is untouched
+  await mkUser("realweb", { camfrog: "realweb_cf", email: "realweb@example.test" });
+  assert.equal((await CS.issue("realweb_cf")).ok, true);
+  await setMode("open");
+});
+
+test("review: the chatsignin page explains the 'signup' refusal (invite-only) with a way to sign up", async () => {
+  const src = fs.readFileSync(path.join(repo, "views", "chatSignin.ejs"), "utf8");
+  assert.match(src, /error === 'signup'\) \{ %><%- t\('chatsignin\.err\.signup'\) %>/);
+  assert.match(src, /error === 'signup'\) \{ %><p><a class="pa-btn primary" href="\/register">/);
+  assert.match(EN["chatsignin.err.signup"], /invite link/);
+  assert.match(EN["chatsignin.err.signup"], /!signup/);
+});
+
+test("review: a site-banned or deleted member can't make invites, and their pending invites stop opening accounts (house invites still work)", async () => {
+  await setMode("invite");
+  INV._resetLimits();
+  const bad = await mkUser("bannedbig", { level: 50 });
+  const before = [await make(bad), await make(bad)];
+  await banSite(bad.userId);
+  await assert.rejects(make(bad), (e) => e.status === 403 && e.code === "E_BANNED");
+  const page = await INV.mine(bad.userId);
+  assert.equal(page.canCreate, false);
+  assert.equal(page.whyCode, "E_BANNED");
+  const b = browser(); b.as(bad);
+  assert.equal((await b.api("/api/invites")).status, 403);
+  // the invites made before the ban: no account
+  const g = await INV.gate(fakeReq("198.51.100.7", "s-ban-1", { invite: before[0].code }));
+  assert.equal(g.ok, false);
+  assert.equal(g.reason, "inviter");
+  const r = await reg(browser(), "banalt1", { invite: before[0].display });
+  assert.equal(r.location, "/register");
+  assert.equal(await userBy("banalt1"), null, "no ban evasion through a banned member's link");
+  assert.equal((await INV.byCode(before[0].code)).status, "pending", "nothing used");
+  // sign-ups open: the bad invite is ignored (an account like any other, NOT stamped invited_by the banned member)
+  await setMode("open");
+  await reg(browser(), "banopen1", { invite: before[1].display });
+  assert.equal((await userBy("banopen1")).invited_by, null);
+  await setMode("invite");
+  // a ban that ended: works again
+  await unban(bad.userId);
+  await banSite(bad.userId, Date.now() - 1000);
+  const ok = await reg(browser(), "banover1", { invite: before[1].display });
+  assert.match(ok.location, /^\/u\/banover1\//);
+  assert.equal((await userBy("banover1")).invited_by, bad.userId);
+  await unban(bad.userId);
+  // deleted (accountdelete pseudonymises the row and sets archived_at) / account_deletions 'done'
+  const gone = await mkUser("deletedone", { level: 20 });
+  const gi = await make(gone);
+  await runQuery("UPDATE users SET archived_at = ?, username = 'deleted_x1' WHERE userId = ?", [Date.now(), gone.userId]);
+  assert.equal((await INV.gate(fakeReq("198.51.100.8", "s-del-1", { invite: gi.code }))).reason, "inviter");
+  await assert.rejects(make(gone), (e) => e.code === "E_BANNED");
+  const gone2 = await mkUser("deletedtwo", { level: 20 });
+  const gi2 = await make(gone2);
+  await runQuery("CREATE TABLE IF NOT EXISTS account_deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, state TEXT NOT NULL, requested_at INTEGER NOT NULL DEFAULT 0, execute_at INTEGER NOT NULL DEFAULT 0)");
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at) VALUES (?, 'done', ?, ?)", [gone2.userId, Date.now(), Date.now()]);
+  assert.equal((await INV.gate(fakeReq("198.51.100.9", "s-del-2", { invite: gi2.code }))).reason, "inviter");
+  // a house invite is staff's: it works whoever made it
+  const staffer = await mkUser("bannedstaff", { cls: "Admin" });
+  const house = await INV.create(staffer, { house: true, note: "test" });
+  await banSite(staffer.userId);
+  assert.equal((await INV.gate(fakeReq("198.51.100.10", "s-house", { invite: house.code }))).ok, true);
+  await unban(staffer.userId);
+  INV._resetLimits();
+  await setMode("open");
+});
+
+test("review: the guess limiter counts BEFORE the database - a parallel burst gets at most LOOK_MAX look-ups; good codes don't use it up; IPv6 by /64", async () => {
+  await setMode("invite");
+  INV._resetLimits();
+  const res = await Promise.all(Array.from({ length: 200 }, () => INV.check(fakeReq("203.0.113.9", "burst-A"), INV.newCode())));
+  const by = {};
+  for (const r of res) by[r.reason] = (by[r.reason] || 0) + 1;
+  assert.equal(by.unknown, INV.LOOK_MAX, JSON.stringify(by));
+  assert.equal(by.rate, 200 - INV.LOOK_MAX);
+  // gate() (what POST /register runs), 100 at once from one network, each in its own session: the IP key holds
+  INV._resetLimits();
+  const gs = await Promise.all(Array.from({ length: 100 }, (_, i) => INV.gate(fakeReq("203.0.113.11", "burst-C" + i, { invite: INV.newCode() }))));
+  const gb = {};
+  for (const g of gs) gb[g.reason] = (gb[g.reason] || 0) + 1;
+  assert.equal(gb.unknown, INV.LOOK_MAX, JSON.stringify(gb));
+  assert.equal(gb.rate, 100 - INV.LOOK_MAX);
+  // a good code is counted and given back: looking at one 50 times never blocks, and doesn't wipe failures either
+  INV._resetLimits();
+  const inviter = await mkUser("burstgood", { level: 20 });
+  const good = await make(inviter);
+  for (let i = 0; i < 50; i++) assert.equal((await INV.check(fakeReq("203.0.113.12", "good-1"), good.code)).ok, true, "look " + i);
+  for (let i = 0; i < INV.LOOK_MAX - 1; i++) await INV.check(fakeReq("203.0.113.12", "good-1"), INV.newCode());
+  assert.equal((await INV.check(fakeReq("203.0.113.12", "good-1"), good.code)).ok, true, "LOOK_MAX - 1 failures: still fine");
+  await INV.check(fakeReq("203.0.113.12", "good-1"), INV.newCode());
+  assert.equal((await INV.check(fakeReq("203.0.113.12", "good-1"), good.code)).reason, "rate", "the good code didn't reset the failures");
+  // IPv6: one /64 is one key, however the address is spelled; another /64 is not
+  INV._resetLimits();
+  for (let i = 0; i < INV.LOOK_MAX; i++) await INV.check(fakeReq("2001:db8:1:2::" + (i + 1).toString(16), "v6-" + i), INV.newCode());
+  assert.equal((await INV.check(fakeReq("2001:db8:1:2:abcd:ef01:2345:6789", "v6-new"), good.code)).reason, "rate", "same /64, new address + session");
+  assert.equal((await INV.check(fakeReq("2001:db8:1:3::1", "v6-other"), good.code)).ok, true, "another /64");
+  INV._resetLimits();
+  await setMode("open");
+});
+
+test("review: the allowance pools - after a tier change a bought / gifted / issued invite still adds one; a lost unlimited tier leaves no hole", async () => {
+  await setMode("invite");
+  // level 20 sends all 6, then the owner shrinks level 20's tier: over the tiers' share, but a bought invite adds one
+  const u = await mkUser("poolsender", { level: 20, bal: 6000000 });
+  for (let i = 0; i < 6; i++) await make(u);
+  await INV.setSettings(users.boss, { tiers: "5:1, 20:1, 50:unlimited" });
+  let a = await INV.allowance(u.userId);
+  assert.deepEqual([a.total, a.used, a.tierLeft, a.extraLeft, a.left], [2, 6, 0, 0, 0]);
+  const r = await shop.purchasePrize({ userId: u.userId, username: u.username, prizeId: INV.PRIZE_ID, source: "website", expectedCost: 2500000 });
+  assert.equal(r.success, true, r.message);
+  a = await INV.allowance(u.userId);
+  assert.deepEqual([a.bought, a.extraLeft, a.left], [1, 1, 1], "the bought one is usable");
+  const extra = await make(u);
+  assert.equal((await getQuery("SELECT pool FROM invites WHERE id = ?", [extra.id]))[0].pool, "extra");
+  await assert.rejects(make(u), (e) => e.code === "E_NONE_LEFT");
+  await INV.revoke(u, extra.id);
+  assert.equal((await INV.allowance(u.userId)).left, 1, "a revoked one goes back to its own pool");
+  // an admin issue adds exactly what it says
+  await INV.adminGrant(users.boss, { username: u.username, amount: 2, reason: "pool test" });
+  assert.equal((await INV.allowance(u.userId)).left, 3);
+  // a gift too
+  const giver = await mkUser("poolgiver", { level: 1, bal: 3000000 });
+  const gr = await shop.purchasePrize({ userId: giver.userId, username: giver.username, prizeId: INV.PRIZE_ID, source: "website", giftTo: u.username });
+  assert.equal(gr.success, true, gr.message);
+  assert.equal((await INV.allowance(u.userId)).left, 4);
+  // the tiers' share is used first: a level-5 member with a bought one makes a tier invite, then the bought one
+  const v = await mkUser("poolorder", { level: 5 });
+  await tx(() => INV.grantInTx(v.userId, 1, "bought", "test:poolorder"));
+  const p1 = await make(v), p2 = await make(v);
+  assert.deepEqual((await getQuery("SELECT pool FROM invites WHERE id IN (?, ?) ORDER BY id", [p1.id, p2.id])).map((x) => x.pool), ["tier", "extra"]);
+  // unlimited at 55: invites made then are "free"; the unlimited tier moves to 100 -> the normal share, nothing owed
+  await INV.setSettings(users.boss, { tiers: "5:1, 20:5, 50:unlimited" });
+  const w = await mkUser("poolwhale", { level: 55, bal: 9000000 });
+  const made = [];
+  for (let i = 0; i < 10; i++) made.push(await make(w));
+  await runQuery(`UPDATE invites SET status = 'used', used_at = ? WHERE id IN (${made.slice(0, 7).map(() => "?").join(",")})`, [Date.now(), ...made.slice(0, 7).map((m) => m.id)]);
+  assert.ok((await getQuery("SELECT pool FROM invites WHERE inviter_id = ?", [w.userId])).every((x) => x.pool === "free"));
+  await INV.setSettings(users.boss, { tiers: "5:1, 20:5, 100:unlimited" });
+  a = await INV.allowance(w.userId);
+  assert.deepEqual([a.unlimited, a.fromTiers, a.used, a.pending, a.left], [false, 6, 0, 3, 6], "the unlimited invites count against nothing");
+  const wr = await shop.purchasePrize({ userId: w.userId, username: w.username, prizeId: INV.PRIZE_ID, source: "website" });
+  assert.equal(wr.success, true, wr.message);
+  await INV.adminGrant(users.boss, { username: w.username, amount: 5, reason: "pool test" });
+  assert.equal((await INV.allowance(w.userId)).left, 12, "6 + 1 bought + 5 issued");
+  await resetTiers();
+  await setMode("open");
+});
+
+test("review: an admin takes back only unused issued invites (the extra pool never goes negative)", async () => {
+  const m = await mkUser("takeback", { level: 0 });
+  const a = browser(); a.as(users.boss);
+  let r = await a.api("/api/admin/invites/grant", { username: "takeback", amount: 2, reason: "two to start" });
+  assert.equal(r.json.left, 2);
+  await make(m);
+  r = await a.api("/api/admin/invites/grant", { username: "takeback", amount: -2, reason: "too many" });
+  assert.equal(r.status, 409);
+  assert.match(r.json.error, /1 unused staff-issued invite -/);
+  r = await a.api("/api/admin/invites/grant", { username: "takeback", amount: -1, reason: "one back" });
+  assert.equal(r.json.ok, true);
+  assert.equal(r.json.left, 0);
+  assert.equal((await INV.allowance(m.userId)).left, 0);
+  const au = (await getQuery("SELECT detail FROM admin_audit WHERE action = 'invite_grant' AND target_id = ? ORDER BY id DESC LIMIT 1", [m.userId]))[0];
+  assert.equal(JSON.parse(au.detail).left, 0, "the log says what they had left");
+});
+
+test("review: a pasted invite LINK works - the field takes 300 characters (pa.tv and publicaccess.tv links), and is shown back as the code", async () => {
+  await setMode("invite");
+  INV._resetLimits();
+  const p = await browser().get("/register");
+  const ml = /<input[^>]+id="invite"[^>]+maxlength="(\d+)"/.exec(p.text);
+  assert.ok(ml, "the invite field has a maxlength");
+  assert.ok(Number(ml[1]) >= 300, "maxlength " + ml[1]);
+  const inviter = await mkUser("linkpaster", { level: 20 });
+  const i1 = await make(inviter), i2 = await make(inviter);
+  const short = "https://pa.tv/signup?invite=" + i1.display, long = "https://publicaccess.tv/signup?invite=" + i2.display;
+  assert.equal(short.length, 47);
+  assert.equal(long.length, 57);
+  let r = await reg(browser(), "pastedshort", { invite: short });
+  assert.match(r.location, /^\/u\/pastedshort\//);
+  r = await reg(browser(), "pastedlong", { invite: long });
+  assert.match(r.location, /^\/u\/pastedlong\//);
+  // refused for another reason (the username is taken): the field comes back with the CODE, not a cut-off link
+  const i3 = await make(inviter);
+  const b = browser();
+  r = await reg(b, "pastedlong", { invite: "https://publicaccess.tv/signup?invite=" + i3.display });
+  assert.equal(r.location, "/register");
+  const back = await b.get("/register");
+  assert.ok(back.text.includes('value="' + i3.display + '"'), "the code, formatted");
+  assert.equal(INV.echo(long), i2.display);
+  assert.equal(INV.echo("x".repeat(400)).length, 300);
+  assert.equal(INV.echo(undefined), "");
+  // the page script: a pasted link becomes its code, and the code (not a cut link) rides the Discord / Twitch / Google start link
+  const js = fs.readFileSync(path.join(repo, "views", "partials", "auth-js.ejs"), "utf8");
+  assert.doesNotMatch(js, /slice\(0, 40\)/);
+  assert.match(js, /searchParams\.set\('invite', invCode\(v\) \|\| v\.slice\(0, 300\)\)/);
+  assert.match(js, /addEventListener\('paste'/);
+  for (const f of ["user.controller.js", "ssolinks.js", "plexsso.js"]) {
+    const src = fs.readFileSync(path.join(repo, f), "utf8");
+    assert.doesNotMatch(src, /invite[^\n]*\.slice\(0, 40\)/, f);
+  }
+  INV._resetLimits();
+  await setMode("open");
+});
+
+test("review: blank tier fields are refused, never saved as 0 (null, '', true, a blank row)", async () => {
+  const bad = (v, re) => assert.throws(() => INV.checkTiers(v), (e) => e.status === 400 && e.code === "E_TIERS" && re.test(e.message), JSON.stringify(v));
+  bad([{ level: 5, grant: 1 }, { level: 30, grant: "" }], /Tier 2: invites must be a whole number/);
+  bad([{ level: 5, grant: 1 }, { level: 30, grant: null }], /Tier 2: invites must be a whole number/);
+  bad([{ level: null, grant: 0 }], /Tier 1: the level must be a whole number/);
+  bad([{ level: "", grant: "" }], /Tier 1: the level/);
+  bad([{ level: 5, grant: true }], /Tier 1: invites must be a whole number/);
+  bad([{ level: true, grant: 1 }], /Tier 1: the level/);
+  bad([{ level: "", unlimited: true }], /Tier 1: the level/);
+  bad([{ level: "5x", grant: 1 }], /Tier 1: the level/);
+  assert.deepEqual(INV.checkTiers([{ level: "5", grant: "1" }, { level: " 20 ", grant: "+5" }, { level: 50, unlimited: true }]),
+                   [{ level: 5, grant: 1 }, { level: 20, grant: 5 }, { level: 50, unlimited: true }], "digits as text are fine (a form)");
+  const a = browser(); a.as(users.boss);
+  const r = await a.api("/api/admin/invites/settings", { tiers: [{ level: 5, grant: 1 }, { level: 30, grant: null }] });
+  assert.equal(r.status, 400);
+  assert.match(r.json.error, /Tier 2: invites must be a whole number/);
+  assert.equal(INV.tiersText(INV.settings().tiers), "5:1, 20:5, 50:unlimited", "nothing saved");
+  const js = fs.readFileSync(path.join(repo, "public", "js", "admin-invites.js"), "utf8");
+  assert.match(js, /s === '' \? null : Number\(s\)/, "the card sends a blank box as null");
+});
+
+test("review: chat-only, banned and deleted accounts can't buy an invite (or be sent one) - refused before any charge", async () => {
+  const auto = await cfAuto("autobuyer_cf", { bal: 5000000 });
+  let r = await shop.purchasePrize({ userId: auto.userId, username: auto.username, prizeId: INV.PRIZE_ID, source: "camfrog" });
+  assert.equal(r.success, false);
+  assert.match(r.message, /Invites are made on the PATV website/);
+  assert.equal((await userBy(auto.username)).points_balance, 5000000, "not charged");
+  const ren = await cfAuto("renbuyer_cf", { rename: "renbuyer", bal: 5000000 });
+  r = await shop.purchasePrize({ userId: ren.userId, username: ren.username, prizeId: INV.PRIZE_ID, source: "camfrog" });
+  assert.equal(r.success, false, "a renamed auto account, never signed in on the website");
+  // a chat bot's account made while invite-only (not yet signed in on the website)
+  await setMode("invite");
+  const bot = (await browser().api("/test/botreg/8101")).json;
+  assert.equal(bot.marked, true);
+  await setMode("open");
+  await runQuery("UPDATE users SET points_balance = 5000000 WHERE userId = ?", [bot.userId]);
+  r = await shop.purchasePrize({ userId: bot.userId, username: "botmade8101", prizeId: INV.PRIZE_ID, source: "website" });
+  assert.equal(r.success, false);
+  // as a gift
+  const payer = await mkUser("chatgiftpayer", { level: 1, bal: 9000000 });
+  r = await shop.purchasePrize({ userId: payer.userId, username: payer.username, prizeId: INV.PRIZE_ID, source: "website", giftTo: ren.username });
+  assert.equal(r.success, false);
+  assert.match(r.message, /renbuyer doesn't have a PATV website account yet/);
+  // banned
+  const banned = await mkUser("bannedbuyer", { level: 1, bal: 5000000 });
+  await banSite(banned.userId);
+  r = await shop.purchasePrize({ userId: banned.userId, username: banned.username, prizeId: INV.PRIZE_ID, source: "website" });
+  assert.equal(r.success, false);
+  assert.match(r.message, /can't send invites right now/);
+  r = await shop.purchasePrize({ userId: payer.userId, username: payer.username, prizeId: INV.PRIZE_ID, source: "website", giftTo: "bannedbuyer" });
+  assert.equal(r.success, false);
+  await unban(banned.userId);
+  assert.equal((await userBy("bannedbuyer")).points_balance, 5000000);
+  assert.equal((await userBy("chatgiftpayer")).points_balance, 9000000);
+  // once the account has signed in on the website, it buys like anyone
+  await runQuery("INSERT INTO sessions (id, user_id, created, expires, method) VALUES (?, ?, ?, ?, 'chat')", ["sess-" + ren.userId, ren.userId, Date.now(), Date.now() + DAY]);
+  r = await shop.purchasePrize({ userId: ren.userId, username: ren.username, prizeId: INV.PRIZE_ID, source: "website" });
+  assert.equal(r.success, true, r.message);
+});
+
+test("review: house invites stay off an admin's own invites page, and the member route can't revoke one", async () => {
+  const a = browser(); a.as(users.boss);
+  const h = await a.api("/api/admin/invites/house", { reason: "for the new host" });
+  assert.equal(h.json.ok, true);
+  const m = await INV.mine(users.boss.userId);
+  assert.ok(!m.pending.some((x) => x.id === h.json.invite.id), "not in the admin's personal list");
+  assert.ok([...m.pending, ...m.used, ...m.closed].every((x) => !x.house));
+  const r = await a.api("/api/invites/" + h.json.invite.id + "/revoke");
+  assert.equal(r.status, 409);
+  assert.equal(r.json.code, "E_HOUSE");
+  assert.equal((await INV.byCode(h.json.invite.code)).status, "pending");
+  const ok = await a.api("/api/admin/invites/" + h.json.invite.id + "/revoke", { reason: "not needed" });
+  assert.equal(ok.json.ok, true);
+  assert.equal((await INV.byCode(h.json.invite.code)).status, "revoked");
+  const au = (await getQuery("SELECT detail FROM admin_audit WHERE action = 'invite_revoke' ORDER BY id DESC LIMIT 1"))[0];
+  assert.equal(JSON.parse(au.detail).invite_id, h.json.invite.id, "audited");
+});
+
+test("review: a gifted invite tells the recipient where it went (Settings → Invites)", async () => {
+  const giver = await mkUser("pointergiver", { level: 1, bal: 9000000 });
+  const to = await mkUser("pointerfriend", { level: 0 });
+  const r = await shop.purchasePrize({ userId: giver.userId, username: giver.username, prizeId: INV.PRIZE_ID, source: "website", giftTo: to.username });
+  assert.equal(r.success, true, r.message);
+  const ev = await getQuery("SELECT note FROM shop_order_events WHERE order_id = ? AND status = 'completed'", [r.order_id]);
+  assert.match(ev[0].note, /Gift from pointergiver to pointerfriend — one invite added to pointerfriend's invites \(Settings → Invites\)/);
+  let note = null;
+  for (let i = 0; i < 40 && !note; i++) { note = (await getQuery("SELECT * FROM inbox WHERE user_id = ? AND kind = 'shop' ORDER BY id DESC", [to.userId]))[0]; if (!note) await new Promise((x) => setTimeout(x, 25)); }
+  assert.ok(note, "inbox notice");
+  assert.equal(note.link, "/settings/invites");
+  assert.match(note.body, /It's in your invites: Settings, Invites\./);
+  const src = fs.readFileSync(path.join(repo, "shop.js"), "utf8");
+  assert.match(src, /siteInvite && gift\.anon \? `🎁 An anonymous gift to \$\{username\} — one invite added/, "an anonymous gift's event names no giver");
+});
+
+test("review: a stale admin card can't undo another admin's change - only changed fields are sent, with `expect` (409 E_STALE)", async () => {
+  const a = browser(); a.as(users.boss);
+  // admin A closes sign-ups
+  let r = await a.api("/api/admin/invites/settings", { signups: "invite", expect: { signups: "open" }, reason: "closing" });
+  assert.equal(r.json.ok, true);
+  assert.equal(INV.mode(), "invite");
+  // admin B's card was loaded before that and saves only a price change: the switch is untouched
+  r = await a.api("/api/admin/invites/settings", { price: 2600000, expect: { price: 2500000 } });
+  assert.equal(r.json.ok, true);
+  assert.deepEqual(r.json.changed, ["price"]);
+  assert.equal(INV.mode(), "invite", "a price-only save never reopens sign-ups");
+  // admin B's card tries to flip the switch from its stale "open": refused, nothing saved
+  r = await a.api("/api/admin/invites/settings", { signups: "open", expect: { signups: "open" } });
+  assert.equal(r.status, 409);
+  assert.equal(r.json.code, "E_STALE");
+  assert.equal(INV.mode(), "invite");
+  // tiers changed elsewhere since the card loaded: refused
+  await INV.setSettings(users.boss, { tiers: "5:2, 20:5, 50:unlimited" });
+  r = await a.api("/api/admin/invites/settings", { tiers: "5:1, 20:4, 50:unlimited", expect: { tiers: [{ level: 5, grant: 1 }, { level: 20, grant: 5 }, { level: 50, unlimited: true }] } });
+  assert.equal(r.status, 409);
+  assert.equal(INV.tiersText(INV.settings().tiers), "5:2, 20:5, 50:unlimited");
+  // a stale price, a stale "invites while open"
+  r = await a.api("/api/admin/invites/settings", { price: 2700000, expect: { price: 2500000 } });
+  assert.equal(r.status, 409);
+  r = await a.api("/api/admin/invites/settings", { invites_when_open: false, expect: { invites_when_open: false } });
+  assert.equal(r.status, 409);
+  // with the right expectations everything goes back
+  r = await a.api("/api/admin/invites/settings", { signups: "open", price: 2500000, tiers: "5:1, 20:5, 50:unlimited",
+                                                   expect: { signups: "invite", price: 2600000, tiers: "5:2, 20:5, 50:unlimited" } });
+  assert.equal(r.json.ok, true, JSON.stringify(r.json));
+  assert.equal(INV.mode(), "open");
+  // no expect (a script / an older card): as before
+  r = await a.api("/api/admin/invites/settings", { expiry_days: 14 });
+  assert.equal(r.json.ok, true);
+  const js = fs.readFileSync(path.join(repo, "public", "js", "admin-invites.js"), "utf8");
+  assert.match(js, /body\.expect\[k\] = loaded/, "the card sends what it loaded for each changed field");
 });

@@ -56,7 +56,7 @@
       <button type="button" class="ds-btn" id="invCreate" data-busy="<%- t('invites.create_busy') %>"<% if (!inv.canCreate) { %> disabled aria-describedby="invMsg"<% } %>><%- t('invites.create') %></button>
       <p class="inv-msg<%= made ? ' ok' : '' %>" id="invMsg" role="status" aria-live="polite"><%= made ? t('invites.made') : (inv.why || '') %></p>
     </div>
-    <% if (!A.unlimited && inv.price) { %>
+    <% if (!A.unlimited && inv.price && inv.whyCode !== 'E_BANNED') { %><%# (review fix: no "buy one" for an account that can't send them - the shop refuses it) %>
       <p class="mut"><%- t('invites.buy', { link: '<a href="/shop/item/' + encodeURIComponent(inv.prizeId) + '">' + t('invites.buy_link') + '</a>', price: num(inv.price) }) %></p>
     <% } %>
   </section>

@@ -182,7 +182,7 @@ function register(app, { addUser, authView } = {}) {
     if (!p) return fail(req, res, "auth.plex.expired", "That Plex sign-in expired or didn't start here. Please try again.");
     if (!enabled()) return fail(req, res, "auth.plex.off", "Plex sign-in isn't available right now.");
     const username = String((req.body || {}).username || "").trim().slice(0, 64);
-    const invite = String((req.body || {}).invite || "").trim().slice(0, 40);   // 1.99anv: the invite code typed (invites.js)
+    const invite = require("./invites").echo((req.body || {}).invite);   // 1.99anv: the invite code typed (invites.js; a pasted link -> its code)
     const back = (msg, field) => { req.flash("error", msg); req.flash("authForm", JSON.stringify({ username, invite, field })); return res.redirect("/auth/plex/new"); };
     const ip = guard.clientIp(req);
     if (createLimit.blocked(ip)) return back(tr(req, "auth.plex.slow_down", "Too many Plex sign-ins from your network. Try again in a few minutes."));

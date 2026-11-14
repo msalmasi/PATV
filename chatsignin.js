@@ -3,7 +3,8 @@
 // Trust: the same as !verify - Pepe knows which Camfrog login typed the command, so whoever controls that login gets in.
 //
 //   POST /api/chatsignin/link {password (bot), login}   Pepe asks for a link for the login that typed !signin
-//        -> {ok:true, url, minutes, username} | {ok:false, reason: "signup" (no real account: use !signup) | "off" (the owner
+//        -> {ok:true, url, minutes, username} | {ok:false, reason: "signup" (no real account: use !signup - 1.99anv: also an
+//           account Pepe made that was never signed in to on the website, while sign-ups are invite-only) | "off" (the owner
 //           turned chat sign-in off) | "elevated" (admin / staff: refused) | "rate" (5 an hour) | "bad"}
 //   GET  /signin                     the landing page. The token is in the URL FRAGMENT (/signin#t=<token>): browsers never send
 //                                    a fragment, so it never reaches nginx's access log or this server's, and a link preview /
@@ -21,6 +22,9 @@
 // notice "Signed in from chat (!signin)" with the IP and browser.
 // Accounts with elevated rights (users.class other than a plain member, or an admin / staff / moderator role) are REFUSED: the
 // site has no second factor to ask for, and a hijacked Camfrog login must never become a hijacked admin account.
+// 1.99anv review fix: while sign-ups are invite-only (invites.js), an account Pepe made (users.auto_source - a '!patv set' rename
+// makes it look real) that has never been signed in to on the website gets reason "signup", at issue AND at redemption
+// (invites.chatSignInRefused): its first website sign-in would be a sign-up with no invite. Pepe sends them to !signup.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -101,6 +105,10 @@ async function issue(login, { now = Date.now() } = {}) {
   if (!l || l.length > 64) return { ok: false, reason: "bad" };
   const u = await realAccountFor(l);
   if (!u) return { ok: false, reason: "signup" };
+  if (await require("./invites").chatSignInRefused(u.userId)) {          // 1.99anv review fix (above)
+    await log({ userId: u.userId, login: l, kind: "refused", why: "invite-only", at: now });
+    return { ok: false, reason: "signup" };
+  }
   if (await elevated(u)) { await log({ userId: u.userId, login: l, kind: "refused", why: "elevated", at: now }); return { ok: false, reason: "elevated" }; }
   if (!(await enabledFor(u.userId))) { await log({ userId: u.userId, login: l, kind: "refused", why: "off", at: now }); return { ok: false, reason: "off" }; }
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM chat_signin_tokens WHERE login = ? AND created > ?", [l, now - 3600000]))[0].n;
@@ -140,10 +148,11 @@ async function redeem(token, { now = Date.now(), ip = null, agent = null, signIn
   // the account as it is NOW: still the login's real account, still allowed
   const u = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [r.user_id]))[0];
   const why = !u ? "gone" : String(u.camfrogUsername || "").toLowerCase().trim() !== r.login ? "relinked"
-    : (await elevated(u)) ? "elevated" : !(await enabledFor(u.userId)) ? "off" : null;
+    : (await elevated(u)) ? "elevated" : !(await enabledFor(u.userId)) ? "off"
+    : (await require("./invites").chatSignInRefused(u.userId)) ? "invite-only" : null;   // 1.99anv review fix: sign-ups closed since the link went out
   if (why) {
     await log({ userId: r.user_id, login: r.login, kind: "refused", why, ip, agent, at: now });
-    return { ok: false, error: why === "off" ? "off" : why === "elevated" ? "elevated" : "expired" };
+    return { ok: false, error: why === "off" ? "off" : why === "elevated" ? "elevated" : why === "invite-only" ? "signup" : "expired" };
   }
   await signIn(u);
   await log({ userId: u.userId, login: r.login, kind: "used", ip, agent, at: now });

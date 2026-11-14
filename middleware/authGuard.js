@@ -213,6 +213,12 @@ function limiter({ max, windowMs }) {
       else cur.n += 1;
       return 0;
     },
+    /** 1.99anv review (invites.js): give back ONE attempt() that turned out fine (a good invite code) - never below 0, the
+     *  window unchanged. Unlike reset(), a member with one real code can't use it to wipe their failed guesses. */
+    undo(key) {
+      const cur = hits.get(key);
+      if (cur && cur.n > 0) cur.n -= 1;
+    },
   };
 }
 
