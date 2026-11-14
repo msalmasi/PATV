@@ -89,6 +89,10 @@
       button.disabled = true; msg("pcMsg", ct("loading", "Loading…"));
       api("POST", route, body).then(function (j) {
         if (id === "pcDry") { pcDraw(j, true); msg("pcMsg", ct("dry_done", "Read-only count complete."), true); }
+        // review 1.99anw: say what happened - a run already in flight (the webhook's, the timer's) queues the full sync behind it
+        else if (j && j.skipped === "maintenance") msg("pcMsg", ct("sync_quiet", "No sync during the nightly maintenance window (03:40-04:20 UTC). Try again after it."));
+        else if (j && j.queued) { msg("pcMsg", ct("sync_queued", "A catalog read is already running. The full sync starts as soon as it finishes."), true); pcLoad(); }
+        else if (j && j.running) { msg("pcMsg", ct("sync_running", "A full sync is already running. Status updates automatically."), true); pcLoad(); }
         else { msg("pcMsg", ct("sync_started", "Sync started. Status updates automatically."), true); pcLoad(); }
       }).catch(function () { msg("pcMsg", ct("action_failed", "The catalog action could not finish. Refresh to check its status.")); })
         .then(function () { button.disabled = false; });

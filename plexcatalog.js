@@ -788,9 +788,18 @@ function createCatalog(options = {}) {
   // 1.99anw plexhook review: when the last real run (the timer's, "Sync now", the webhook's - not a dry count, not one the quiet
   // window skipped) ended - a run the webhook asks for keeps catalog_hook_gap_min after it (soon() below)
   let lastEnd = null;
+  // Review 1.99anw: "Sync now" (a full sweep asked for) while another run is in flight - the webhook's or the timer's
+  // changes-only run - used to get that run's promise and nothing else: no full sweep, and the page still said "Sync started".
+  // The webhook makes that more likely (a run about every 5 minutes during a Sonarr trickle). Now one full sweep is queued and
+  // starts as soon as the run in flight ends. Clicks meanwhile join it. A click while a "Sync now" sweep runs joins that sweep.
+  let syncingFull = false, fullAfter = false;
   function sync(opts = {}) {
-    if (syncing) return syncing;
+    if (syncing) {
+      if (opts.full && !opts.dry && !syncingFull && !closed && !options.readOnly) fullAfter = true;
+      return syncing;
+    }
     let skipped = false;
+    syncingFull = !!opts.full && !opts.dry;
     syncing = doSync(opts).then(async (result) => {
       skipped = !!(result && result.skipped);
       if (result.ok && !opts.dry) {
@@ -798,10 +807,22 @@ function createCatalog(options = {}) {
       }
       return result;
     }).catch(() => ({ ok: false, dry: !!opts.dry, error: "catalog unavailable" })).finally(() => {
-      syncing = null;
+      syncing = null; syncingFull = false;
       if (!opts.dry && !skipped) lastEnd = now();
+      if (fullAfter) {
+        fullAfter = false;
+        if (!closed) { log.log("[plexcatalog] Sync now: the full sync queued behind the last run"); sync({ full: true }).catch(() => {}); }
+      }
     });
     return syncing;
+  }
+  /** "Sync now"'s answer: started (nothing was running), queued (a full sweep follows the run in flight), or running (a
+   *  "Sync now" sweep is already running - this click joins it). */
+  function syncNow() {
+    if (!syncing) { sync({ full: true }).catch(() => {}); return "started"; }
+    if (syncingFull) return "running";
+    sync({ full: true }).catch(() => {});
+    return fullAfter ? "queued" : "running";
   }
   async function dryCount() {
     if (quiet(now())) return { ok: true, dry: true, skipped: "maintenance" };
@@ -967,9 +988,10 @@ function createCatalog(options = {}) {
     }));
     app.post("/api/media/admin/catalog/sync", ...route(async () => {
       if (quiet(now())) return { ok: true, started: false, skipped: "maintenance" };
-      const started = !syncing;
-      sync({ full: true }).catch(() => {});
-      return { ok: true, started, syncing: true };
+      // review 1.99anw: a click while another run is in flight queues the full sweep behind it (syncNow), and the page says so
+      const how = syncNow();
+      if (how === "started") return { ok: true, started: true, syncing: true };
+      return { ok: true, started: false, syncing: true, [how === "queued" ? "queued" : "running"]: "full" };
     }));
     app.post("/api/media/admin/catalog/dry", ...route(() => dryCount()));
     listsCache().register(app, { addUser, noTimers });

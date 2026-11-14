@@ -828,3 +828,42 @@ test("review: the card keeps the last new title apart from the last delivery; ig
   assert.ok(card.ignored.length <= 25, String(card.ignored.length));
   assert.ok(card.ignored.some((x) => x.event === "unknown"));
 });
+
+// Review 1.99anw: "Sync now" pressed while the webhook's run is in flight - the page says the full sync is queued behind it (it
+// used to say "Sync started" for every answer, the maintenance window's refusal included)
+test("review: the Sync now button says what the server did - started, queued behind the run in flight, already running, the maintenance window", async () => {
+  const nodes = new Map();
+  function element(tag) {
+    return { tag, children: [], handlers: {}, style: {}, textContent: "", disabled: false, attrs: {},
+      get firstChild() { return this.children[0] || null; },
+      appendChild(child) { this.children.push(child); return child; },
+      removeChild(child) { this.children.splice(this.children.indexOf(child), 1); },
+      addEventListener(name, fn) { this.handlers[name] = fn; },
+      setAttribute(k, v) { this.attrs[k] = v; },
+      set innerHTML(_) { throw new Error("text only"); } };
+  }
+  for (const id of ["pcOut", "pcSync", "pcMsg"]) nodes.set(id, element("div"));
+  let answer = null;
+  const document = { getElementById: (id) => nodes.get(id) || null, createElement: element, createTextNode: (s) => ({ textContent: s, children: [] }),
+    querySelectorAll: () => [], querySelector: () => null, addEventListener() {}, body: element("body") };
+  const window = { addEventListener() {},
+    __t(key, fallback, values) { assert.ok(EN[key], key); assert.equal(EN[key], fallback, key + " default = en.json"); return fallback.replace(/\{(\w+)\}/g, (m, n) => values && values[n] != null ? String(values[n]) : m); } };
+  const context = { document, window, console, Promise, Date, Number, String, isNaN, setTimeout() { return 0; }, clearTimeout() {}, encodeURIComponent,
+    fetch(url) {
+      let result = { ok: true };
+      if (url === "/api/media/admin/catalog/sync") result = answer;
+      else if (url === "/api/media/admin/catalog") result = { ok: true, sections: [] };
+      else if (url === "/api/media/admin/checks") result = { ok: true, checks: {} };
+      else if (url === "/api/media/admin/lists") result = { ok: true, configured: false };
+      else if (url === "/api/media/admin/plex" || url === "/api/media/admin/catalog/hook") return Promise.reject(new Error("not in this test"));
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(result) });
+    } };
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public", "js", "media-admin.js"), "utf8"), context);
+  await flush();
+  const said = async (a) => { answer = a; nodes.get("pcSync").handlers.click(); await flush(); return nodes.get("pcMsg").textContent; };
+  assert.equal(await said({ ok: true, started: true, syncing: true }), EN["js.media.catalog.sync_started"]);
+  assert.equal(await said({ ok: true, started: false, syncing: true, queued: "full" }), "A catalog read is already running. The full sync starts as soon as it finishes.");
+  assert.equal(await said({ ok: true, started: false, syncing: true, running: "full" }), "A full sync is already running. Status updates automatically.");
+  assert.equal(await said({ ok: true, started: false, skipped: "maintenance" }), "No sync during the nightly maintenance window (03:40-04:20 UTC). Try again after it.");
+  assert.equal(nodes.get("pcSync").disabled, false, "the button comes back");
+});

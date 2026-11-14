@@ -301,6 +301,70 @@ test("admin actions require current admin and same-site POST; a full sync respon
   assert.equal(state.ready, true);
 });
 
+// Review 1.99anw: "Sync now" while the webhook's (or the timer's) changes-only run is in flight got that run's promise and no full
+// sweep - and the page said "Sync started". Now the full sweep is queued behind it, clicks meanwhile join it, and the answer says so.
+test("Sync now while a changes-only run is in flight: a full sweep follows it (queued, once); Sync now while a full one runs joins it", async (t) => {
+  const h = await setup(t, {
+    permissions: { can: (u, key) => !!u && u.class === "Admin" && key === "media.admin" },
+    guard: { sameSite: (req) => req.get("Origin") === "https://fixture.invalid" },
+  });
+  const express = require("express"), app = express();
+  app.use(express.json());
+  h.catalog.register(app, { noTimers: true, addUser: (req, _res, next) => { req.user = { class: "Admin" }; next(); } });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const syncNow = async () => (await fetch("http://127.0.0.1:" + server.address().port + "/api/media/admin/catalog/sync",
+    { method: "POST", headers: { Origin: "https://fixture.invalid" } })).json();
+  const sweeps = () => h.calls.filter((r) => r === "/sections").length;
+  const shelves = () => h.calls.filter((r) => r.startsWith("/collections")).length;
+  // a gate left shut (a failed assertion) would hold catalog.close() forever: always opened at the end
+  let release = () => {}, release2 = () => {};
+  try {
+    assert.equal((await h.catalog.sync({ full: true })).full, true, "the day's full sweep");
+    const fullAt = (await h.catalog.status()).full_at;
+    assert.equal(fullAt, AT);
+    // the webhook's changes-only run, held at its first read
+    const gate = new Promise((r) => { release = r; });
+    h.api.hook = async (route) => { if (route === "/sections") { h.api.hook = null; await gate; } };
+    h.setClock(AT + 600000);
+    const delta = h.catalog.sync();
+    for (let i = 0; i < 100 && sweeps() < 2; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.equal(sweeps(), 2);
+    const shelvesBefore = shelves();
+    assert.deepEqual(await syncNow(), { ok: true, started: false, syncing: true, queued: "full" }, "queued behind the run in flight");
+    assert.deepEqual(await syncNow(), { ok: true, started: false, syncing: true, queued: "full" }, "a second click joins it");
+    assert.equal(sweeps(), 2, "nothing else read while the run is in flight");
+    h.setClock(AT + 660000);
+    release();
+    const first = await delta;
+    assert.equal(first.full, false, "the run in flight was changes-only");
+    for (let i = 0; i < 200 && !((await h.catalog.status()).full_at > fullAt && !(await h.catalog.status()).syncing); i++) await new Promise((r) => setTimeout(r, 5));
+    const st = await h.catalog.status();
+    assert.equal(st.syncing, false);
+    assert.equal(st.full_at, AT + 660000, "the queued full sweep ran when the run in flight ended");
+    assert.equal(sweeps(), 3, "once, though clicked twice");
+    assert.ok(shelves() > shelvesBefore, "a full sweep (it reads the shelves)");
+    assert.ok(h.logs.includes("[plexcatalog] Sync now: the full sync queued behind the last run"), h.logs.join("\n"));
+    // a click while a Sync now sweep runs joins that sweep - no second one queued behind it
+    const gate2 = new Promise((r) => { release2 = r; });
+    h.api.hook = async (route) => { if (route === "/sections") { h.api.hook = null; await gate2; } };
+    assert.deepEqual(await syncNow(), { ok: true, started: true, syncing: true });
+    for (let i = 0; i < 100 && sweeps() < 4; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.deepEqual(await syncNow(), { ok: true, started: false, syncing: true, running: "full" });
+    release2();
+    await h.catalog.sync();   // the running sweep's promise
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(sweeps(), 4, "no sweep queued behind a Sync now sweep");
+    assert.equal((await h.catalog.status()).syncing, false);
+    // the maintenance window: nothing started or queued
+    h.setClock(Date.UTC(2026, 10, 6, 3, 50));
+    assert.deepEqual(await syncNow(), { ok: true, started: false, skipped: "maintenance" });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(sweeps(), 4);
+  } finally { release(); release2(); }
+});
+
 test("snapshot export can open read-only and stale source timestamps remain stale on import", async (t) => {
   const h = await setup(t);
   await h.catalog.importSnapshot(snapshot());
