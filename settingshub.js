@@ -35,6 +35,8 @@ async function hub(user, ctx = {}) {
   const google = await safe(() => require("./ssolinks").linkOf("google", uid));
   const apple = await safe(() => require("./ssolinks").linkOf("apple", uid));
   const devices = await safe(async () => (await require("./sessions").list(uid)).length);
+  // 1.99anv: 🎟 invites (invites.js; its one home is /settings/invites) - how many are left
+  const invSt = await safe(() => require("./invites").hubState(uid));
   const conns = [!!row.camfrogUsername, !!row.twitchDisplayname, !!row.discordUsername, !!(plex && plex.rows && plex.rows.length), !!tg, !!google, !!apple];
   const linked = conns.filter(Boolean).length;
   const account = [
@@ -43,6 +45,7 @@ async function hub(user, ctx = {}) {
     E("camfrog", "🐸", ACCT + "#camfrogDiv", row.camfrogUsername ? st("as", { name: row.camfrogUsername }, "ok") : st("not_linked")),
     E("password", "🔑", ACCT + "#password", pwSet === null ? null : pwSet ? st("pw_set", null, "ok") : st("pw_unset", null, "warn")),
     E("chatsignin", "💬", ACCT + "#security", chatOn === null ? null : chatOn ? st("on", null, "ok") : st("off")),
+    E("invites", "🎟️", "/settings/invites", !invSt ? null : invSt.unlimited ? st("unlimited", null, "ok") : st("invites_left", { count: invSt.left }, invSt.left ? "ok" : "")),
     // 1.99wj: your devices (sessions.js), your data (accountexport.js), delete account (accountdelete.js)
     E("devices", "🖥️", ACCT + "#devices", devices === null ? null : st("devices_n", { count: devices })),
     E("data", "📦", ACCT + "#data"),

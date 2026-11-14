@@ -37,7 +37,7 @@
   </a>
   <% } %>
 </div>
-<p class="au-oauth-note"><%- t('auth.oauth.note') %></p>
+<p class="au-oauth-note"><%- locals.signupInvite && signupInvite.required ? t('auth.oauth.note_invite') : t('auth.oauth.note') %></p><%# 1.99anv: sign-ups invite-only (invites.js) %>
 <% if (locals.tgSso && tgSso.botId) { %>
 <p class="au-oauth-note" data-tg-msg role="status" aria-live="polite" hidden></p>
 <script async src="https://telegram.org/js/telegram-widget.js?22"></script>

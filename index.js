@@ -53,6 +53,7 @@ const ssoConf = require("./ssoconf");                // 1.99lb: Sign-in methods 
 const telegramSso = require("./telegramsso");        // 1.99lb: Sign in with Telegram (Login Widget)
 const googleSso = require("./googlesso");            // 1.99lb: Sign in with Google (OIDC + PKCE)
 const appleSso = require("./applesso");              // Sign in with Apple (OIDC code, form_post, ES256 client secret)
+const invites = require("./invites");                // 1.99anv: sign-ups open / invite-only + member invites (/settings/invites, /admin/users#invites)
 const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
@@ -456,6 +457,11 @@ app.get("/protected", authenticateToken, (req, res) => {
 // 1.99zl: the auth forms carry a per-form token (hidden "_ft", guard.formTokenMw) so a browser that hides the
 // origin ("Origin: null" - privacy modes, in-app webviews) can still sign in / reset; see guard.authFormOk.
 app.get(["/login", "/register", "/forgot-password", "/reset-password/:token"], guard.formTokenMw);
+// 1.99anv: the sign-up pages know whether sign-ups are invite-only and which invite this browser carries (res.locals.signupInvite,
+// invites.viewMw - it also parks ?invite=<code>); the Twitch / Discord / Google / Apple / Plex start routes park ?invite= too, so the
+// code survives the provider's round trip (invites.js)
+app.get(["/register", "/login", "/auth/sso/new", "/auth/plex/new", "/claim/:token"], invites.viewMw);
+app.get(["/auth/twitch", "/auth/discord", "/auth/google", "/auth/apple", "/auth/plex"], invites.captureMw);
 
 function authView(req, extra) {
   let form = {};
@@ -497,6 +503,7 @@ telegramSso.register(app, { addUser });
 googleSso.register(app, { addUser });
 appleSso.register(app, { addUser });   // /auth/apple, /auth/apple/link, /auth/apple/continue, /api/sso/apple/unlink (+ registerEarly above)
 ssoConf.register(app, { addUser });
+invites.register(app, { addUser });   // 1.99anv: GET /signup, /settings/invites, /api/invites*, /api/admin/invites*
 
 // ── OAuth (Twitch / Discord) sign-in ──
 // `state` ties the callback to the browser that started it: without it, someone could send you a
@@ -678,6 +685,9 @@ app.get("/auth/twitch/callback", async (req, res) => {
       // Returning User Found
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
+        // 1.99anv: an account the Twitch bot made while sign-ups are invite-only needs an invite for its FIRST website sign-in (invites.js)
+        const shadow_ = await invites.shadowGate(req, currentUser.userId);
+        if (!shadow_.ok) return invites.refuseOauth(req, res, shadow_);
         // 1.99gb: an account with no / a placeholder / an unverified email gets Twitch's verified one
         await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "twitch",
                                                 email: twitchUser.email, verified: !!twitchUser.email });
@@ -706,6 +716,10 @@ app.get("/auth/twitch/callback", async (req, res) => {
           // 1.99ajn padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
           const nbWhy_ = await require("./netban").newAccountRefusal(req);
           if (nbWhy_) return oauthFail(req, res, nbWhy_);
+          // 1.99anv: sign-ups invite-only (invites.js) - a brand-new Twitch identity needs an invite (parked in this browser's session
+          // by an invite link / the sign-up form's field), else NO account
+          const inv_ = await invites.gate(req);
+          if (!inv_.ok) return invites.refuseOauth(req, res, inv_);
           //create a new user
           const newUserUsername = await generateUniqueUsername(twitchUser.display_name);
           const password = Math.random().toString(36).substring(2, 15);
@@ -721,21 +735,26 @@ app.get("/auth/twitch/callback", async (req, res) => {
             avatar: twitchUser.profile_image_url,
             points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
           };
-          await runQuery(
-            "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-              newUser.userId,
-              newUser.username,
-              newUser.displayname,
-              newUser.email || null,
-              newUser.email ? 1 : 0,          // 1.99gb: Twitch only reports a verified address
-              newUser.password,
-              newUser.twitchId,
-              newUser.twitchDisplayname,
-              newUser.avatar,
-              newUser.points_balance,
-            ]
-          );
+          try {
+            await invites.withInvite(req, inv_, newUser.userId, () => runQuery(   // 1.99anv: the invite is used in the INSERT's transaction
+              "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [
+                newUser.userId,
+                newUser.username,
+                newUser.displayname,
+                newUser.email || null,
+                newUser.email ? 1 : 0,          // 1.99gb: Twitch only reports a verified address
+                newUser.password,
+                newUser.twitchId,
+                newUser.twitchDisplayname,
+                newUser.avatar,
+                newUser.points_balance,
+              ]
+            ));
+          } catch (e) {
+            if (e && e.code === "E_INVITE_GONE") return invites.refuseOauth(req, res, { error: e.message });
+            throw e;
+          }
           await displaynames.markNewAccount(newUser.userId).catch(() => {});
           await oauthLink.safeBadge(newUser.userId, 'fresh_meat');
           await oauthLink.safeBadge(newUser.userId, 'twitch-user');
@@ -972,6 +991,9 @@ app.get("/auth/discord/callback", async (req, res) => {
       );
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
+        // 1.99anv: an account the Discord bot made while sign-ups are invite-only needs an invite for its FIRST website sign-in (invites.js)
+        const shadow_ = await invites.shadowGate(req, currentUser.userId);
+        if (!shadow_.ok) return invites.refuseOauth(req, res, shadow_);
         // 1.99gb: an account with no / a placeholder / an unverified email gets Discord's verified one
         await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "discord",
                                                 email: discordEmail, verified: !!discordEmail });
@@ -999,6 +1021,9 @@ app.get("/auth/discord/callback", async (req, res) => {
           // 1.99ajn padppl (review fix): a network ban (netban.js) refuses the new account BEFORE it exists - never an orphan account
           const nbWhy_ = await require("./netban").newAccountRefusal(req);
           if (nbWhy_) return oauthFail(req, res, nbWhy_);
+          // 1.99anv: sign-ups invite-only (invites.js) - a brand-new Discord identity needs an invite, else NO account
+          const inv_ = await invites.gate(req);
+          if (!inv_.ok) return invites.refuseOauth(req, res, inv_);
           // Create a new user
           const password = Math.random().toString(36).substring(2, 15);
           const hashedPassword = await bcrypt.hash(password, 12);
@@ -1018,21 +1043,26 @@ app.get("/auth/discord/callback", async (req, res) => {
             points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
           };
           
-          await runQuery(
-            "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-              newUser.userId,
-              newUser.username,
-              newUser.displayname,
-              newUser.email || null,
-              newUser.email ? 1 : 0,          // 1.99gb: discordEmail is Discord-verified only
-              newUser.password,
-              newUser.avatar,
-              newUser.discordId,
-              newUser.discordUsername,
-              newUser.points_balance,
-            ]
-          );
+          try {
+            await invites.withInvite(req, inv_, newUser.userId, () => runQuery(   // 1.99anv: the invite is used in the INSERT's transaction
+              "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [
+                newUser.userId,
+                newUser.username,
+                newUser.displayname,
+                newUser.email || null,
+                newUser.email ? 1 : 0,          // 1.99gb: discordEmail is Discord-verified only
+                newUser.password,
+                newUser.avatar,
+                newUser.discordId,
+                newUser.discordUsername,
+                newUser.points_balance,
+              ]
+            ));
+          } catch (e) {
+            if (e && e.code === "E_INVITE_GONE") return invites.refuseOauth(req, res, { error: e.message });
+            throw e;
+          }
           await displaynames.markNewAccount(newUser.userId).catch(() => {});
           await oauthLink.safeBadge(newUser.userId, 'fresh_meat');
           await oauthLink.safeBadge(newUser.userId, 'discord-user');
@@ -1889,6 +1919,9 @@ app.post('/api/users/twitch/register', async (req, res) => {
         throw e;
       }
       await displaynames.markNewAccount(userId).catch(() => {});
+      // 1.99anv: a chat account the Twitch bot made, not a website sign-up - but made while sign-ups are invite-only, its first
+      // website sign-in (Sign in with Twitch) will need an invite (invites.shadowGate)
+      await invites.markShadow(userId, "twitch-bot");
       await oauthLink.safeBadge(userId, 'fresh_meat');
       await oauthLink.safeBadge(userId, 'twitch-user');
       await welcome.enroll(userId, "twitch-bot");    // 1.99bg: the welcome bonus vests (no instant connect bonus)
@@ -1936,6 +1969,8 @@ app.post('/api/users/discord/register', async (req, res) => {
         throw e;
       }
       await displaynames.markNewAccount(userId).catch(() => {});
+      // 1.99anv: a chat account the Discord bot made (see the Twitch one above; invites.markShadow / shadowGate)
+      await invites.markShadow(userId, "discord-bot");
       await oauthLink.safeBadge(userId, 'fresh_meat');
       await oauthLink.safeBadge(userId, 'discord-user');
       await welcome.enroll(userId, "discord-bot");   // 1.99bg: the welcome bonus vests (no instant connect bonus)
@@ -2679,6 +2714,8 @@ function isBotToken(token) {
 
 // Pepe registers new Camfrog users here. It can set a PAT balance, so it's bot-only.
 // ("password" in the body is the new account's hashed password, not the token.)
+// 1.99anv: never gated by sign-ups being invite-only (invites.js) - an automatic Camfrog account holds chat rewards (auto-account
+// escrow) and nobody can sign in to it; claiming it (!signup) needs a website account, and making one needs the invite.
 app.post('/api/users/camfrog/register', async (req, res) => {
   if (!isBotToken((req.body || {}).botToken)) {
     return res.status(403).json({ error: 'forbidden' });

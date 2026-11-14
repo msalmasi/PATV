@@ -16,10 +16,12 @@
     <p class="ds-sub"><%- t('auth.sso.sub', { provider: sso.label, who: sso.who }) %></p>
 
     <% if (oks.length) { %><div class="ds-note ok au-alert" role="status"><%= oks.join(' ') %></div><% } %>
-    <% if (errs.length) { %><div class="ds-note danger au-alert" role="alert"><%= errs.join(' ') %></div><% } %>
+    <% if (errs.length && F.field !== 'invite') { %><div class="ds-note danger au-alert" role="alert"><%= errs.join(' ') %></div><% } %><%# 1.99anv: an invite error shows under its field %>
 
     <h2 class="ds-h3 au-h2"><%- t('auth.plex.create_h') %></h2>
     <form action="/auth/sso/create" method="POST" data-au-form>
+      <%# 1.99anv: sign-ups invite-only -> a brand-new identity needs an invite (invites.js; the link's code is parked in the session) %>
+      <%- include('partials/invite-field', { si: locals.signupInvite, typed: F.invite, err: F.field === 'invite' && errs.length ? errs.join(' ') : null }) %>
       <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
         <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || suggest || '' %>" required

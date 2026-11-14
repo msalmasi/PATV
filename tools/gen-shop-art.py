@@ -565,6 +565,27 @@ def a_handheld():
     return g
 
 
+def a_ticket():
+    """1.99anv: the site invite - a gold admission pass with notched sides, a perforated stub and a star."""
+    g = Grid()
+    x0, y0, x1, y1 = 6, 9, 41, 27
+    g.rect(x0, y0, x1, y1, GOLD)
+    g.rect(x0 + 1, y0 + 1, x1 - 1, y0 + 2, GOLDL)
+    g.rect(x0 + 1, y1 - 2, x1 - 1, y1 - 1, GOLDD)
+    for (x, y) in ((x0, y0), (x1, y0), (x0, y1), (x1, y1)):
+        g.set(x, y, None)
+    for dy in (-2, -1, 0, 1, 2):          # the notches
+        for dx in range(2 if abs(dy) < 2 else 1):
+            g.set(x0 + dx, 18 + dy, None)
+            g.set(x1 - dx, 18 + dy, None)
+    for y in range(y0 + 1, y1, 2):        # the perforation before the stub
+        g.set(32, y, GOLDD)
+    text(g, "PASS", 11, 16, "#4a3200")
+    g.pts([(36, 14), (36, 15), (35, 16), (36, 16), (37, 16), (33, 17), (34, 17), (35, 17), (36, 17), (37, 17), (38, 17), (39, 17),
+           (34, 18), (35, 18), (36, 18), (37, 18), (38, 18), (35, 19), (36, 19), (37, 19), (34, 20), (35, 20), (37, 20), (38, 20)], RED)
+    return g
+
+
 # key -> (title, shelf, sprite fn, tag)
 ITEMS = {
     "camfrog-pro-1m": ("Camfrog Pro, 1 month", "camfrog", lambda: member_card("pro", False), "1 MO"),
@@ -576,6 +597,7 @@ ITEMS = {
     "nitro-1m": ("Discord Nitro, 1 month", "perks", lambda: member_card("nitro", False), "1 MO"),
     "nitro-1y": ("Discord Nitro, 1 year", "perks", lambda: member_card("nitro", True), "1 YR"),
     "spin-boost": ("+100 daily gold spins", "perks", a_wheel, "+100"),
+    "site-invite": ("Invite pass", "perks", a_ticket, "+1"),
     "plex-1m": ("Plex invite, 1 month", "plex", lambda: vhs("#262626", "#e5a00d", "#7a4a00"), "1 MO"),
     "plex-1y": ("Plex invite, 1 year", "plex", lambda: vhs("#262626", "#e5a00d", "#7a4a00"), "1 YR"),
     "plex-life": ("Plex invite, lifetime", "plex", lambda: vhs("#c8961e", "#e5a00d", "#7a4a00", True), "LIFE"),

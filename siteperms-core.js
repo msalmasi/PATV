@@ -38,6 +38,7 @@ var CAPS = [
   ["accounts.delete_other", "accounts", "admin", "privacy"],
   ["accounts.sessions_revoke", "accounts", "admin", "privacy"],
   ["auth.signin_methods", "accounts", "admin", "privacy"],
+  ["auth.invites", "accounts", "admin", null],                  // 1.99anv: sign-ups open / invite-only, the invite tiers + price, every invite (invites.js)
   ["profile.see_private", "accounts", "admin", "privacy"],
   ["history.lookup", "accounts", "staff", "privacy"],           // anyone's PAT history (1.99acl: locked)
   // ── economy ──

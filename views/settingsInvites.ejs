@@ -1,0 +1,111 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/invites - 1.99anv (invites.js): the member's invites. How many are left and why (the level tiers reached, bought, from
+    the PATV team, sent), create one and copy its link, the pending ones (copy / revoke), the used ones (who joined) and the expired /
+    revoked ones (they came back). Client: public/js/settings-invites.js (no innerHTML; POST /api/invites, /api/invites/:id/revoke).
+    Locals: user, inv = invites.mine(), made = the id of the invite just created (?made=). %>
+<%- include('layout', { title: t('invites.title'), user: user }) %>
+<style>
+  .inv .ds-card { display: grid; gap: var(--ds-sp-2h, 10px); }
+  .inv .inv-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--ds-sp-2, 8px); }
+  .inv .inv-top h2 { margin: 0; }
+  .inv .mut { margin: 0; color: var(--ds-text-muted, #999); font-size: 14px; }
+  .inv .inv-why { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .inv .inv-acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2, 8px); }
+  .inv .inv-msg { min-height: 1.2em; margin: 0; font-size: 14px; color: var(--ds-text-muted, #999); }
+  .inv .inv-msg.ok { color: var(--ds-ok, #4caf50); } .inv .inv-msg.bad { color: var(--ds-danger, #e57373); }
+  .inv ul.inv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .inv ul.inv-list > li { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--ds-line, #2a2a2a); border-radius: 10px; min-width: 0; }
+  .inv ul.inv-list > li.new { border-color: var(--ds-gold, #ffcf40); box-shadow: 0 0 0 1px var(--ds-gold, #ffcf40) inset; }
+  .inv .inv-code { font-family: var(--ds-font-mono, ui-monospace, monospace); letter-spacing: .04em; overflow-wrap: anywhere; }
+  .inv .inv-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+  .inv .inv-row input { flex: 1 1 220px; min-width: 0; font-family: var(--ds-font-mono, ui-monospace, monospace); }
+  .inv .inv-row small, .inv li small { color: var(--ds-text-muted, #999); font-size: 12.5px; }
+  .inv .empty { margin: 0; color: var(--ds-text-muted, #999); font-size: 14px; }
+  .inv details > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+</style>
+<%
+  const A = inv.allowance;
+  const day_ = (ms) => { try { return t.date ? t.date(new Date(Number(ms) || 0), { year: 'numeric', month: 'short', day: 'numeric' }) : new Date(Number(ms) || 0).toISOString().slice(0, 10); } catch (e) { return new Date(Number(ms) || 0).toISOString().slice(0, 10); } };
+  const num = (n) => (t.num ? t.num(n) : Number(n).toLocaleString('en-US'));
+  const lede = inv.mode === 'invite' ? 'invites.lede_invite' : inv.whenOpen ? 'invites.lede_open' : 'invites.lede_open_off';
+%>
+<main class="ds-page mid inv">
+  <a class="ds-back" href="/settings">← <%- t('sethub.back') %></a>
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('invites.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('invites.h1') %></h1>
+    <p class="ds-lead"><%- t(lede) %></p>
+  </div>
+
+  <section class="ds-card lg" id="allowance" aria-labelledby="invLeft">
+    <div class="inv-top">
+      <h2 class="ds-h2" id="invLeft" data-left="<%= A.unlimited ? 'unlimited' : A.left %>"><%- A.unlimited ? t('invites.unlimited') : t('invites.left', { count: A.left }) %></h2>
+      <% if (A.unlimited) { %><p class="mut"><%- t('invites.unlimited_why', { level: A.unlimitedAt }) %></p><% } %>
+    </div>
+    <ul class="inv-why" aria-label="<%- t('invites.why_h') %>" data-why>
+      <% A.tiers.forEach((x, i) => { %>
+        <li class="ds-tag ac"><%- x.unlimited ? t('invites.why.tier_unlimited', { level: x.level }) : t(i === 0 ? 'invites.why.tier_first' : 'invites.why.tier_more', { level: x.level, n: num(x.grant) }) %></li>
+      <% }) %>
+      <% if (A.bought) { %><li class="ds-tag ac"><%- t('invites.why.bought', { n: num(A.bought) }) %></li><% } %>
+      <% if (A.admin) { %><li class="ds-tag ac"><%- t('invites.why.admin', { n: num(A.admin) }) %></li><% } %>
+      <% if (A.used) { %><li class="ds-tag"><%- t('invites.why.sent', { n: num(A.used) }) %></li><% } %>
+    </ul>
+    <% if (!A.tiers.length && A.next) { %><p class="mut"><%- t('invites.why.none', { level: A.next.level }) %></p>
+    <% } else if (A.next) { %><p class="mut"><%- A.next.unlimited ? t('invites.next_unlimited', { level: A.next.level }) : t('invites.next_tier', { level: A.next.level, count: A.next.grant }) %></p><% } %>
+    <div class="inv-acts">
+      <button type="button" class="ds-btn" id="invCreate" data-busy="<%- t('invites.create_busy') %>"<% if (!inv.canCreate) { %> disabled aria-describedby="invMsg"<% } %>><%- t('invites.create') %></button>
+      <p class="inv-msg<%= made ? ' ok' : '' %>" id="invMsg" role="status" aria-live="polite"><%= made ? t('invites.made') : (inv.why || '') %></p>
+    </div>
+    <% if (!A.unlimited && inv.price) { %>
+      <p class="mut"><%- t('invites.buy', { link: '<a href="/shop/item/' + encodeURIComponent(inv.prizeId) + '">' + t('invites.buy_link') + '</a>', price: num(inv.price) }) %></p>
+    <% } %>
+  </section>
+
+  <section class="ds-card lg" id="pending" aria-labelledby="invPendingH">
+    <h2 class="ds-h2" id="invPendingH"><%- t('invites.pending_h') %></h2>
+    <% if (!inv.pending.length) { %><p class="empty"><%- t('invites.empty_pending') %></p><% } else { %>
+    <ul class="inv-list">
+      <% inv.pending.forEach((r) => { %>
+        <li data-invite="<%= r.id %>"<% if (made && made === r.id) { %> class="new"<% } %>>
+          <div class="inv-row"><b class="inv-code"><%= r.code %></b><small><%- t('invites.expires', { day: day_(r.expires) }) %></small></div>
+          <div class="inv-row">
+            <input type="text" readonly value="<%= r.link %>" aria-label="<%- t('invites.link_label') %> <%= r.code %>" data-link>
+            <button type="button" class="ds-btn sm" data-copy="<%= r.link %>"><%- t('invites.copy') %></button>
+            <button type="button" class="ds-btn sm ghost" data-revoke="<%= r.id %>"><%- t('invites.revoke') %></button>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+    <% } %>
+  </section>
+
+  <section class="ds-card lg" id="used" aria-labelledby="invUsedH">
+    <h2 class="ds-h2" id="invUsedH"><%- t('invites.used_h') %></h2>
+    <% if (!inv.used.length) { %><p class="empty"><%- t('invites.empty_used') %></p><% } else { %>
+    <ul class="inv-list">
+      <% inv.used.forEach((r) => { %>
+        <li><span><%- r.used_by ? t('invites.used_by', { name: '<a href="/u/' + encodeURIComponent(r.used_by) + '">@' + t.esc(r.used_by) + '</a>', day: day_(r.used_at) }) : t('invites.used_gone', { day: day_(r.used_at) }) %></span></li>
+      <% }) %>
+    </ul>
+    <% } %>
+  </section>
+
+  <% if (inv.closed.length) { %>
+  <section class="ds-card lg" id="closed" aria-labelledby="invClosedH">
+    <details>
+      <summary><h2 class="ds-h3" id="invClosedH" style="margin:0"><%- t('invites.closed_h') %> (<%= inv.closed.length %>)</h2></summary>
+      <ul class="inv-list">
+        <% inv.closed.forEach((r) => { %>
+          <li><small><%- r.state === 'revoked' ? t('invites.revoked_on', { day: day_(r.revoked_at) }) : t('invites.expired_on', { day: day_(r.expires) }) %></small></li>
+        <% }) %>
+      </ul>
+    </details>
+  </section>
+  <% } %>
+
+  <p class="mut"><%- t('invites.rules', { days: inv.expiryDays }) %></p>
+  <p class="mut"><%- t('invites.virtual') %></p>
+</main>
+<script src="/public/js/settings-invites.js?v=1" defer></script>
+</body>
+</html>

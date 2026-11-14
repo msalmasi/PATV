@@ -117,7 +117,7 @@ test("signed in: every section, a row per page with title + description, and the
     assert.match(r.text, new RegExp('<section class="ds-card lg sh-sec" id="' + s + '"'), s);
     assert.match(r.text, new RegExp('<a class="ds-tab" href="#' + s + '">' + EN["sethub.sec." + s].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</a>"), "jump to " + s);
   }
-  for (const k of ["account", "password", "chatsignin", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers", "stagecover",
+  for (const k of ["account", "password", "chatsignin", "invites", "connections", "camfrog", "profile", "feed", "cosmetics", "textstyle", "stickers", "stagecover",
                    "messages", "mentions", "telegram", "likeness", "voice", "clone", "policy", "wallet", "subscriptions", "premium", "creators",
                    "support", "newpad", "ownerguide", "language", "timezone"]) {
     assert.match(r.text, new RegExp('data-entry="' + k + '"'), k + " row");
@@ -132,6 +132,7 @@ test("signed in: every section, a row per page with title + description, and the
   assert.match(r.text, /data-entry="wallet">[^]*?class="ds-tag gold" data-state>123,456 PAT</);
   assert.match(r.text, /data-entry="messages">[^]*?data-state>From everyone</);
   assert.match(r.text, /data-entry="account">[^]*?data-state>@fan</);
+  assert.match(r.text, /data-entry="invites">[^]*?data-state>0 left</, "1.99anv: 🎟 invites left (fan is below the first tier)");
   // the pad name is escaped; its row goes to the owner panel
   assert.match(r.text, /data-entry="pad:fanpad">\s*<a class="sh-row" href="\/p\/fanpad\/owner">[^]*?<b>Fan &lt;Pad&gt;<\/b>/);
   // PAT is points: the section is "Wallet & subscriptions", never money
@@ -243,7 +244,7 @@ test("Settings -> Account and Edit profile render (fake member)", async () => {
 });
 
 test("each settings sub-page links back to /settings", () => {
-  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount", "stageCover"]) {   // (1.99ahq: + 🎙 Stage cover)
+  for (const v of ["likeness", "mentions", "telegram", "subscriptions", "editProfile", "language", "settingsAccount", "stageCover", "settingsInvites"]) {   // (1.99ahq: + 🎙 Stage cover; 1.99anv: + 🎟 Invites)
     const src = fs.readFileSync(path.join(repo, "views", v + ".ejs"), "utf8");
     assert.match(src, /<a class="ds-back" href="\/settings">← <%- t\('(sethub|lk)\.back'\) %><\/a>/, v);
   }

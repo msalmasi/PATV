@@ -1,0 +1,25 @@
+<%# views/partials/invite-field.ejs - 1.99anv (invites.js): the invite part of a sign-up form (register, a new SSO account, a new Plex
+    account). Locals: si = res.locals.signupInvite ({mode, required, code, valid, from, house, error} from invites.viewMw - absent when a
+    page is rendered without it), typed = what the visitor typed last time, err = an error for this field (shown under it).
+    Invite-only: a kind notice + the (required) field. Open: nothing, unless this browser carries an invite link (then "invited by"). %>
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<% const S_ = (typeof si !== 'undefined' && si) ? si : {}; const typed_ = (typeof typed !== 'undefined' && typed) ? String(typed) : ''; const err_ = (typeof err !== 'undefined' && err) ? err : ''; -%>
+<% const val_ = typed_ || S_.code || ''; -%>
+<% if (S_.required && !S_.valid) { %>
+  <div class="ds-note au-alert au-invite-closed" role="note"><span class="ds-ic" aria-hidden="true">🎟️</span><div><b><%- t('auth.invite.closed') %></b> <%- t('auth.invite.closed_sub') %></div></div>
+<% } %>
+<% if (S_.error && !err_) { %><div class="ds-note danger au-alert" role="alert"><%= S_.error %></div><% } %>
+<% if (S_.valid) { %>
+  <div class="ds-note ok au-alert au-invite-ok" role="status"><span class="ds-ic" aria-hidden="true">🎟️</span><div><%- S_.from ? t('auth.invite.from', { name: S_.from }) : t('auth.invite.from_house') %></div></div>
+<% } %>
+<% if (S_.required || S_.valid || typed_ || err_) { %>
+  <div class="ds-field au-field">
+    <label for="invite"><%- t('auth.invite.label') %><% if (!S_.required) { %> <span class="au-hint" style="display:inline"><%- t('auth.invite.optional') %></span><% } %></label>
+    <input class="ds-in" type="text" id="invite" name="invite" value="<%= val_ %>"<% if (S_.required) { %> required data-required="1"<% } %>
+           autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" data-rule="invite"
+           style="font-family:var(--ds-font-mono, ui-monospace, monospace);letter-spacing:.04em"
+           aria-describedby="invite-hint invite-err"<% if (err_) { %> aria-invalid="true"<% } %>>
+    <div class="au-hint" id="invite-hint"><%- t('auth.invite.hint') %></div>
+    <div class="au-err" id="invite-err" aria-live="polite"><%= err_ %></div>
+  </div>
+<% } %>

@@ -13,6 +13,7 @@ const ledger = require('./ledger');   // 1.99ga
 const { moveUserRows, copyCamfrogBadges, archiveMerged, logMerge, afterMerge } = require('./accountMerge');
 const inbox = require('./inbox');
 const displaynames = require('./displaynames');
+const invites = require('./invites');   // 1.99anv: sign-ups open / invite-only + member invites
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -74,7 +75,8 @@ async function registerUser(req, res) {
   const password = typeof body.password === "string" ? body.password : "";
   const confirm = body.confirm_password;
   const next = guard.safeNext(body.next);
-  const back = (msg, field) => backTo(req, res, "/register", next, msg, { username: username.slice(0, 64), email: email.slice(0, 254), field });
+  const typedInvite = typeof body.invite === "string" ? body.invite.trim().slice(0, 40) : "";
+  const back = (msg, field) => backTo(req, res, "/register", next, msg, { username: username.slice(0, 64), email: email.slice(0, 254), invite: typedInvite, field });
 
   if (!guard.authFormOk(req)) return res.status(403).send(guard.FORM_REFUSED);   // 1.99zl
   const ip = guard.clientIp(req);
@@ -82,6 +84,10 @@ async function registerUser(req, res) {
   if (wait) return back(req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
   // 1.99ajn padppl (review fix): a network ban (netban.js) refuses a new account here, on the form with its message (it was a bare 403 page)
   try { const NB = require("./netban"); if (NB.isOn()) { const why = await NB.refusal(req, {}); if (why) return back(why); } } catch (e) { /* fail open */ }
+  // 1.99anv: sign-ups invite-only (invites.js) -> a valid invite (typed here, or parked by an invite link) or no account; with
+  // sign-ups open a valid one is still used and recorded (invited_by)
+  const inv = await invites.gate(req);
+  if (!inv.ok) return back(inv.error, "invite");
 
   let problem;
   if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
@@ -101,12 +107,14 @@ async function registerUser(req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 12);
     try {
-      await runQuery(
+      // 1.99anv: the invite is used up in the same transaction as the INSERT (invites.withInvite)
+      await invites.withInvite(req, inv, userId, () => runQuery(
         "INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         // 1.99bg: starts at 0 (the 50,000 here was minted and farmable) - the welcome bonus vests (welcome.js)
         [userId, username, username, hashedPassword, email, 0, 0, "/public/img/avatar.png"]
-      );
+      ));
     } catch (e) {
+      if (e && e.code === "E_INVITE_GONE") return back(e.message, "invite");   // 1.99anv: someone else used it a moment ago
       // two sign-ups for the same name at once: the UNIQUE index catches the second
       if (/UNIQUE/i.test(String(e && e.message))) return back(req.t ? req.t('auth.err.just_taken') : "That username or email was just taken. Try another one.", "username");
       throw e;
@@ -252,6 +260,10 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
   const ip = guard.clientIp(req);
   const wait = registerLimit.blocked(ip);
   if (wait) return { error: req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.` };
+  // 1.99anv: sign-ups invite-only (invites.js) - a brand-new Plex / Telegram / Google / Apple identity needs an invite (the "new
+  // account" form's field, or one parked in the session by an invite link before the round trip), else NO account
+  const inv = await invites.gate(req);
+  if (!inv.ok) return { error: inv.error, field: "invite" };
   username = String(username == null ? "" : username).trim();
   const problem = guard.checkUsername(username, req);   // (1.99ajw padppl rework: a Camfrog login Pepe has seen is never refused - see hint below)
   if (problem) return { error: problem, field: "username" };
@@ -265,9 +277,10 @@ async function createSsoAccount(req, res, { username, email, emailVerified, prov
   const userId = uuidv4();
   const hashed = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
   try {
-    await runQuery("INSERT INTO users (userId, username, displayname, password, email, isEmailVerified, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                   [userId, username, username, hashed, mail || null, mail && emailVerified ? 1 : 0, 0, 0, "/public/img/avatar.png"]);
+    await invites.withInvite(req, inv, userId, () => runQuery("INSERT INTO users (userId, username, displayname, password, email, isEmailVerified, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   [userId, username, username, hashed, mail || null, mail && emailVerified ? 1 : 0, 0, 0, "/public/img/avatar.png"]));
   } catch (e) {
+    if (e && e.code === "E_INVITE_GONE") return { error: e.message, field: "invite" };   // 1.99anv
     if (/UNIQUE/i.test(String(e && e.message))) return { error: req.t ? req.t('auth.err.just_taken') : "That username or email was just taken. Try another one.", field: "username" };
     throw e;
   }

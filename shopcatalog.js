@@ -9,6 +9,8 @@
 //             "collectible" (a VIRTUAL IN-GAME COLLECTIBLE, see below), "retired" (the old request credits; requests are
 //             made on /plex)
 //   gift      false when it can't be bought for someone else (it's personal to the payer, or retired)
+// 1.99anv: "siteinvite1" (key site-invite, delivery "instant") is the 🎟 site invite - invites.js adds it to the account it's
+// bought for (a gift: the recipient's); a site-virtual item with no cash value, never refunded (no official order is).
 // Items not listed (a new official item, or a member's listing) still work: shelf "market" for listings, "more" for an
 // unknown official item, delivery "staff" for official / "seller" for listings.
 //
@@ -50,6 +52,8 @@ const ITEMS = {
   "c0e57e08-6696-4c51-94ec-485f13a68cd8": { key: "role-curator", shelf: "roles", delivery: "role" },
   "491cde2e-097e-4c2a-a351-ce441137ba38": { key: "role-high-roller", shelf: "roles", delivery: "role" },
   "spinboost100": { key: "spin-boost", shelf: "perks", delivery: "instant", gift: false },
+  // 1.99anv: 🎟 one extra invite (invites.js) - instant: added to the buyer's (or a gift recipient's) invites; a site pass, no cash value
+  "siteinvite1": { key: "site-invite", shelf: "perks", delivery: "instant" },
   "178a838b-df7f-42b7-aef4-915d6a8a5c4a": { key: "nitro-1m", shelf: "perks", delivery: "collectible" },
   "4b0c7b3c-61f5-4294-a4a4-b932f8977670": { key: "nitro-1y", shelf: "perks", delivery: "collectible" },
   "9c0aa228-e0c4-46dd-97cc-dc41a245bc05": { key: "ps5-pro", shelf: "gaming", delivery: "collectible" },

@@ -4,7 +4,7 @@
 <%
   const F = (typeof form !== 'undefined' && form) ? form : {};
   const errs = (errors || []).filter(Boolean), oks = (success || []).filter(Boolean);
-  const FIELDS = ['username', 'email', 'password', 'confirm_password'];
+  const FIELDS = ['username', 'email', 'password', 'confirm_password', 'invite'];
   const inline = errs.length && FIELDS.includes(F.field) ? F.field : null;   // server error shown under its field
   const errFor = (n) => (inline === n ? errs.join(' ') : '');
   const inv = (n) => (inline === n ? ' aria-invalid="true"' : '');
@@ -30,6 +30,8 @@
     <form action="/register" method="POST" data-au-form>
       <% if (typeof authFormToken === "string" && authFormToken) { %><input type="hidden" name="_ft" value="<%= authFormToken %>"><% } %>
       <input type="hidden" name="next" value="<%= next %>">
+      <%# 1.99anv: sign-ups open / invite-only (invites.js) - the notice + the invite field (res.locals.signupInvite) %>
+      <%- include('partials/invite-field', { si: locals.signupInvite, typed: F.invite, err: errFor('invite') }) %>
       <div class="ds-field au-field">
         <label for="username"><%- t('auth.username') %></label>
         <input class="ds-in" type="text" id="username" name="username" value="<%= F.username || '' %>" required

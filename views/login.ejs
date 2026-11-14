@@ -53,5 +53,6 @@
     <%- include('partials/auth-oauth', { next: next, verb: 'Sign in' }) %>
   </section>
   <p class="au-foot"><%- t('auth.login.new_here') %> <a href="/register<%= nextQ %>"><%- t('auth.create_account') %></a></p>
+  <% if (locals.signupInvite && signupInvite.required) { %><p class="au-foot"><%- t('auth.invite.login_note') %></p><% } %><%# 1.99anv (invites.js) %>
 </main>
 <%- include('partials/auth-js') %>

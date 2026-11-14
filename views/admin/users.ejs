@@ -2,7 +2,7 @@
 <% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); -%>
 <div class="adm-head">
   <h1>Users &amp; Accounts</h1>
-  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
+  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup<% if (_can('auth.invites')) { %>, <a href="#invites">🎟️ sign-ups &amp; invites</a><% } %>. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
 </div>
 <% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
 
@@ -233,6 +233,65 @@
   });
 })();
 </script>
+<% } %>
+<% if (_can('auth.invites')) { %>
+<%# 1.99anv: 🎟 sign-ups open / invite-only + invites (invites.js; GET/POST /api/admin/invites*, public/js/admin-invites.js) %>
+<section class="adm-card" id="invites" aria-labelledby="invitesT">
+  <h2 id="invitesT"><span class="ds-ic" aria-hidden="true">🎟️</span> Sign-ups &amp; invites <span class="adm-pill admin">admins</span> <span class="adm-pill" id="invMode" aria-label="sign-ups right now">?</span></h2>
+  <p class="adm-help">While sign-ups are <b>invite-only</b>, every new website account needs an invite: the sign-up form, a first Google / Apple / Telegram / Plex / Twitch / Discord sign-in, and the first website sign-in of an account the Twitch / Discord bots made while it was on (claiming a Camfrog account goes through the sign-up form too). Never stopped: existing accounts signing in by any method, linking a sign-in method, Pepe's automatic Camfrog accounts, and the house invites below. Members get invites by level (the tiers add up), from the shop, or from you. An expired or revoked invite goes back to its owner. Every change here is in the admin log.</p>
+  <p class="adm-help" id="invStats" style="color:var(--ds-text)">Loading…</p>
+  <form id="invForm" class="adm-form" onsubmit="return false" autocomplete="off">
+    <label for="invSignups">Sign-ups<select id="invSignups" name="signups"><option value="open">Open - anyone can sign up</option><option value="invite">Invite-only - an invite is needed</option></select></label>
+    <label for="invExpiry">Invites expire after (days)<input type="number" id="invExpiry" name="expiry_days" min="1" max="365" step="1" inputmode="numeric"></label>
+    <label for="invPrice">Shop price of one invite (PAT)<input type="number" id="invPrice" name="price" min="1" step="1" inputmode="numeric"></label>
+    <label class="ck"><input type="checkbox" id="invWhenOpen" name="invites_when_open"> Members can make invites while sign-ups are open (an invite used then is still recorded)</label>
+    <fieldset style="grid-column:1/-1;border:0;padding:0;margin:0;min-width:0">
+      <legend class="adm-help" style="margin:0 0 6px">Invites by level - each tier adds to the ones before it; the last can be unlimited</legend>
+      <div id="invTiers" style="display:grid;gap:8px"></div>
+      <div class="adm-actions" style="margin-top:8px"><button type="button" class="adm-btn ghost" id="invTierAdd">Add a tier</button></div>
+    </fieldset>
+    <label for="invReason" style="grid-column:1/-1">Reason (optional, for the log)<input type="text" id="invReason" name="reason" maxlength="200"></label>
+    <div class="adm-actions"><button type="button" id="invSave">Save sign-ups &amp; invites</button><span id="invMsg" class="adm-msg" role="status"></span></div>
+  </form>
+
+  <h3>Issue invites to a member</h3>
+  <form id="invGrantForm" class="adm-form" onsubmit="return false" autocomplete="off">
+    <label for="invGrantUser">Username<input type="text" id="invGrantUser" maxlength="64" required></label>
+    <label for="invGrantN">Invites (negative takes back)<input type="number" id="invGrantN" step="1" value="1" inputmode="numeric" required></label>
+    <label for="invGrantWhy">Reason (for the log)<input type="text" id="invGrantWhy" maxlength="200" required></label>
+    <div class="adm-actions"><button type="button" id="invGrant">Issue</button><span id="invGrantMsg" class="adm-msg" role="status"></span></div>
+  </form>
+
+  <h3>House invite</h3>
+  <p class="adm-help">A link from PATV itself: it counts against nobody's invites and works while sign-ups are invite-only. It expires like any invite.</p>
+  <form id="invHouseForm" class="adm-form" onsubmit="return false" autocomplete="off">
+    <label for="invHouseWhy">Who it's for (for the log)<input type="text" id="invHouseWhy" maxlength="200" required></label>
+    <div class="adm-actions"><button type="button" id="invHouse">Make a house invite</button><span id="invHouseMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <p id="invHouseOut" class="mono" style="overflow-wrap:anywhere;margin:6px 0 0" hidden></p>
+
+  <h3>Every invite</h3>
+  <form id="invFilter" class="adm-form" onsubmit="return false" autocomplete="off">
+    <label for="invQ">Username or code<input type="text" id="invQ" maxlength="64"></label>
+    <label for="invStatus">Status<select id="invStatus"><option value="">all</option><option value="pending">pending</option><option value="used">used</option><option value="expired">expired</option><option value="revoked">revoked</option><option value="house">house</option></select></label>
+    <div class="adm-actions"><button type="button" class="adm-btn ghost" id="invLoad">Show</button></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Invites">
+    <thead><tr><th>#</th><th>Code</th><th>From</th><th>Used by</th><th>State</th><th>Made (UTC)</th><th>Expires (UTC)</th><th></th></tr></thead>
+    <tbody id="invRows"></tbody>
+  </table></div>
+
+  <details class="adm-adv">
+    <summary>Issued and bought invites, and the log</summary>
+    <div class="adm-adv-body">
+      <h3>Issued and bought</h3>
+      <ul class="adm-help" id="invGrants" style="margin:0;padding-left:18px"></ul>
+      <h3>Log</h3>
+      <ul class="adm-help" id="invAudit" style="margin:0;padding-left:18px"></ul>
+    </div>
+  </details>
+</section>
+<script src="/public/js/admin-invites.js?v=1" defer></script>
 <% } %>
 <script src="/public/js/admin-panel.js?v=6" defer></script>
 <%- include('../partials/admin-close') %>

@@ -12,6 +12,9 @@
 //    first copy, +1M for every copy they already own (spinboostPrice) - always computed here, never
 //    taken from the client, and its PAT goes to the House (a jackpot_rakes row, like wheel wagers),
 //    not to the store owner. The buyer's debit equals the House credit exactly.
+//    1.99anv: "🎟 Invite" (siteinvite1, invites.js) adds one invite to the buyer's - or a gift recipient's - bought invites
+//    inside the purchase's transaction; refused before any charge for someone with unlimited invites; its stock is put back
+//    after each sale (never sells out); no store email (nothing to set up). Like every official order it can't be refunded.
 //  * USER listings (seller_id = a user) are escrowed orders: the buyer is charged at once and the
 //    order is "paid"; the seller fulfils it (a note/code for the buyer) and is credited the price
 //    minus the shop fee right then, with the fee going to Pepe's Federal Reserve as a NEGATIVE
@@ -45,6 +48,9 @@ const SPINBOOST_STEP = 1000000;       // + this for every copy the buyer already
 const spinboostOwned = (extraDailySpins) => Math.max(0, Math.floor((Number(extraDailySpins) || 0) / SPINBOOST_SPINS));
 const spinboostPrice = (owned) => SPINBOOST_BASE + SPINBOOST_STEP * Math.max(0, Math.floor(Number(owned) || 0));
 const isSpinboost = (prize) => !!prize && prize.prizeId === SPINBOOST_ID && !prize.seller_id;
+// 1.99anv: 🎟 the site invite (invites.js PRIZE_ID) - one more invite for the account it's bought for
+const INVITE_ID = "siteinvite1";
+const isSiteInvite = (prize) => !!prize && prize.prizeId === INVITE_ID && !prize.seller_id;
 const SITE = String(process.env.PUBLIC_BASE_URL || "https://publicaccess.tv").replace(/\/+$/, "");
 const MAIL_FROM = process.env.SHOP_FROM_EMAIL || "no-reply@publicaccess.tv";
 
@@ -464,6 +470,7 @@ function compPolicy(p) {
   let kind = null;
   if (ROLE_PRIZES[p.prizeId]) kind = "role";
   else if (isSpinboost(p)) kind = "spinboost";
+  else if (isSiteInvite(p)) kind = "site_invite";          // 1.99anv: an invite added to the account (invites.js) - PATV fulfils it itself
   else if (collectible(p)) kind = "collectible";          // 1.99ans: the order IS the item - PATV fulfils it itself
   else {
     try {
@@ -619,6 +626,12 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       return { success: false, status: 409, message: gift || comp ? `${username} already has the ${prize.prize.replace(/ role$/i, "")} role.${gift ? " You have not been charged." : ""}`
                                                           : `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
     }
+    // 1.99anv: 🎟 an invite - never sold to (or for) someone with unlimited invites; checked before anything is charged
+    const siteInvite = isSiteInvite(prize);
+    if (siteInvite) {
+      const why = await require("./invites").buyRefusal(userId, { gift: !!(gift || comp), username });
+      if (why) return { success: false, status: 409, message: why + (gift ? " You have not been charged." : "") };
+    }
     if (balance < prize.cost) {
       // Tell them exactly how short they are — "Insufficient coins" left people guessing.
       const short = prize.cost - balance;
@@ -680,6 +693,13 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
         [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now, gift ? payerId : null, gift ? gift.note : null,
          comp ? String(comp.by).slice(0, 60) : null, comp ? String(comp.reason || "").slice(0, 200) : null, gift && gift.anon ? 1 : 0]);
       orderId = o.id;
+      // 1.99anv: 🎟 the invite itself - in this transaction, so a charged order always has its invite (and never two: ref is unique);
+      // the stock goes back up (a site-virtual item never sells out)
+      if (siteInvite) {
+        await require("./invites").grantInTx(userId, 1, comp ? "admin" : "bought", `shop:${orderId}`,
+          { byId: comp ? null : payerId, note: comp ? `comp by ${comp.by}` : gift ? `gift from ${gift.anon ? "anonymous" : payerName}` : `bought (${source})` });
+        if (!comp) await runQuery("UPDATE prizes SET quantity = quantity + 1 WHERE prizeId = ?", [prize.prizeId]);
+      }
       if (boost && !comp) {
         // to the House, the same place gold-wheel wagers go: debit == credit, nothing minted or burned
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
@@ -689,6 +709,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       // 1.99ans: a virtual collectible's event says what it is (the order is the record of ownership)
       await event(orderId, "completed", comp ? comp.by : gift && gift.anon ? null : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
                                                          : boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
+                                                         : siteInvite && !gift ? "🎟 One invite added to your invites (Settings → Invites) — a site pass with no cash value"
                                                          : gift && gift.anon ? `🎁 An anonymous gift to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
                                                          : gift ? `🎁 Gift from ${payerName} to ${username} — ${virt ? "a virtual in-game collectible" : "official store item"}`
                                                          : virt ? COLLECTIBLE_NOTE
@@ -711,7 +732,8 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
     // 1.99ans: a virtual collectible sends the store nothing - there is nothing to deliver or set up (the order is the item)
-    if (!virt) {
+    // 1.99anv: nor does an invite (it was added to the account in the transaction)
+    if (!virt && !siteInvite) {
       sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", comp ? "Comp Notification" : "Purchase Notification",
                 comp ? `${comp.by} comped ${prize.prize} to ${username}: ${comp.reason || "-"}` : gift ?`User ${payerName} bought ${prize.prize} for ${prize.cost} PAT as a GIFT for ${username} (via ${source}) - set it up for ${username}.`
                      : `User ${username} purchased ${prize.prize} for ${prize.cost} PAT (via ${source}).`).catch(() => {});
@@ -751,11 +773,12 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
     const remaining = balance - prize.cost;
     return {
       success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost, ...(gift ? { gift_to: username } : {}),
-      balance: comp ? null : remaining, remaining_stock: comp ? Math.max(0, prize.quantity || 0) : Math.max(0, (prize.quantity || 1) - 1),
+      balance: comp ? null : remaining, remaining_stock: comp || siteInvite ? Math.max(0, prize.quantity || 0) : Math.max(0, (prize.quantity || 1) - 1),
       owner: boost ? "House" : (owner ? owner.username : null), role, discord_role, order_id: orderId,
       ...(boost ? { owned: owned + 1, next_cost: spinboostPrice(owned + 1) } : {}),
       ...(comp ? { comp: true } : {}),
       ...(virt ? { collectible: true } : {}),          // 1.99ans: a virtual in-game collectible (the bots can say so)
+      ...(siteInvite ? { invite: true } : {}),         // 1.99anv: an invite was added (invites.js)
       message: comp ? `Comped ${prize.prize} to ${username}. ` : (gift ? `🎁 Sent ${prize.prize} to ${username} for ${prize.cost.toLocaleString()} PAT. `
                      : `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. `) +
                `Balance: ${remaining.toLocaleString()} PAT.`,
@@ -1841,5 +1864,6 @@ module.exports = { register, purchasePrize, collectiblesMigration, COLLECTIBLES_
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
+                   INVITE_ID, isSiteInvite,                               // 1.99anv: 🎟 the site invite (invites.js)
                    browse, featured, validateListing, localImagePath, H /* 1.99lz: for the storefront tests */, attachArt /* 1.99mv */,
                    raffleItems, raffleReserveInTx, raffleReleaseInTx, raffleOrderInTx, raffleOrderAfter /* 1.99xk: raffles.js */ };

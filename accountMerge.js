@@ -539,6 +539,11 @@ const RULES = {
   "account_deletions.user_id": { keep: "1.99wj accountdelete.js: the deletion journal names the account" },
   "account_deletions.requested_by": { deny: "who asked: 'self' or 'admin:<userId>' (an audit label)" },
   "account_deletion_routes.user_id": { keep: "1.99wj accountdelete.js: the routing journal of a deleted account's balance" },
+  // 1.99anv 🎟 invites (invites.js): the invites someone made, the one they signed up with and their bought / admin-issued invites move
+  // with the account (a merged allowance); the chat bots' first-sign-in marker stays on the bot-made account it was about
+  "invites.inviter_id": M(), "invites.used_by": M(), "invites.revoked_by": M(),
+  "invite_grants.user_id": M(), "invite_grants.by_id": M(),
+  "invite_shadow.user_id": { keep: "1.99anv: a chat bot's account's own first-website-sign-in marker (invites.shadowGate) - never carried to another account" },
 };
 
 /** The rule for one column: its RULES entry, else null (an unclassified candidate). */
@@ -805,6 +810,12 @@ async function moveUserRows(fromId, toId, opts = {}) {
     if (r.rm_by) bump(out, "chat_log.rm_by", r.rm_by);                 // CL6 fix-up: the lines they hid as a mod / as staff
     if (r.hidden) bump(out, "chatlog_hidden (u: key)", r.hidden);
   }
+  // 1.99anv: the people the merged-away account invited were invited by the target now (users.invited_by - the users table is
+  // never in discover())
+  if ((await columnsOf("users")).includes("invited_by")) {
+    const r = await runQuery("UPDATE users SET invited_by = ? WHERE invited_by = ? AND userId != ?", [toId, fromId, toId]);
+    bump(out, "users.invited_by", (r && r.changes) || 0);
+  }
 
   for (const { table, column, rule } of await discover()) {
     if (rule && (rule.deny || rule.keep || rule.special)) continue;
@@ -874,6 +885,11 @@ async function carryUserFields(from, toId) {
     if (cols.has("age_confirmed_v")) set.age_confirmed_v = from.age_confirmed_v || null;
   }
   if (cols.has("avatar") && from.avatar && !DEFAULT_AVATAR.test(String(from.avatar)) && (!to.avatar || DEFAULT_AVATAR.test(String(to.avatar)))) set.avatar = from.avatar;
+  // 1.99anv: who invited them (invites.js) - the merged-away account's, when the target has none (never "invited by itself")
+  if (cols.has("invited_by") && from.invited_by && !to.invited_by && from.invited_by !== toId) {
+    set.invited_by = from.invited_by;
+    if (cols.has("invite_id")) set.invite_id = from.invite_id || null;
+  }
   for (const c of ["streamId", "streamKey"]) if (cols.has(c) && !to[c] && from[c]) set[c] = from[c];
   // a verified email the target lacks (users.email is UNIQUE: off the old row first). Never replaces a verified one.
   let emailMoved = false;

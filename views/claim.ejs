@@ -34,6 +34,10 @@
         It's kept for you as long as you're active - it expires after <%= months %> months without activity.</p>
       <% if (error) { %><p class="pa-mut" role="alert"><%= error %></p><% } %>
       <% if (!user) { %>
+        <%# 1.99anv: sign-ups invite-only (invites.js) - making the account needs an invite code; signing in to one doesn't %>
+        <% if (locals.signupInvite && signupInvite.required && !signupInvite.valid) { %>
+          <p class="pa-mut" role="note">🎟️ Sign-ups are invite-only right now - got an invite link? You'll need its code to create an account. Already on PATV? Sign in instead.</p>
+        <% } %>
         <p><a class="pa-btn primary" href="/register?next=<%= encodeURIComponent(here) %>">Create my free account</a></p>
         <p class="pa-mut">Already on PATV? <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> - you'll come straight back here.</p>
       <% } else { %>

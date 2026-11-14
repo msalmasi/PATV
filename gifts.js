@@ -92,6 +92,11 @@ async function precheck(prize, pol, to) {
     const has = await safe("SELECT 1 FROM user_roles WHERE userId = ? AND LOWER(role) = LOWER(?) LIMIT 1", [to.userId, role]);
     if (has.length) return `${to.username} already has the ${String(prize.prize).replace(/ role$/i, "")} role.`;
   }
+  // 1.99anv: 🎟 an invite for someone with unlimited invites (invites.js) - they never need one
+  if (pol.kind === "site_invite") {
+    const why = await require("./invites").buyRefusal(to.userId, { gift: true, username: to.username }).catch(() => null);
+    if (why) return why;
+  }
   if (pol.kind === "plex") {
     const item = (require("./mediaconf").get().invite_items || {})[prize.prizeId] || {};
     if (!(Number(item.days) > 0)) {

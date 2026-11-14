@@ -3,7 +3,7 @@
 //
 //   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts; S1 V2: the chat hub's
 //                       reports card (open reports, > 14-day escalations - <patv-modtools>, chatwidget.overviewCard)
-//   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup
+//   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup, 🎟️ sign-ups & invites (1.99anv invites.js)
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
 //   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements
@@ -155,6 +155,8 @@ async function overview(me) {
     if (d !== null && d >= 0 && d <= 7) alerts.push({ level: "info", text: `Stale-account archive runs in ${d} day${d === 1 ? "" : "s"} (${stale.applyOn})`, href: "/admin/users#stale-admin" });
   }
   if (terms === false) alerts.push({ level: "info", text: "Terms of Service aren't enforced yet", href: "/feed/admin#settings" });
+  // 1.99anv: sign-ups closed (invites.js) - new accounts need an invite
+  if (await safe(async () => require("./invites").inviteOnly(), false)) alerts.push({ level: "info", text: "Sign-ups are invite-only", href: "/admin/users#invites" });
   // 1.99acd: Web Push switched on without a key pair, a push service refusing our VAPID signature, or many failed pushes
   if (push && push.enabled && !push.keys.configured) alerts.push({ level: "warn", text: `Web Push is on but has no VAPID keys (${push.keys.why}) - nothing is sent`, href: "/admin/push" });
   if (push && push.vapidErrorAt && Date.now() - push.vapidErrorAt < 3600e3) alerts.push({ level: "warn", text: `A push service refused our VAPID signature (${push.vapidErrorStatus || 401}) in the last hour`, href: "/admin/push#health" });
