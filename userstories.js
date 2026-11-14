@@ -487,7 +487,12 @@ async function create(user, { attachment, pad, nsfw, mentions } = {}) {
   try {
     verdict = await SAFETY({ file: src, kind: a.kind, poster: a.poster ? fm().filePath(a.poster) : null, secs: Number(a.secs) || 0, roomId: rid, userId: u.userId });
   } catch (e) { verdict = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
-  if (!verdict || verdict.ok !== true) throw new Refuse(422, (verdict && verdict.reason) || "That file can't be used.");
+  if (!verdict || verdict.ok !== true) {
+    // 1.99anv review: a file the check REFUSED (verdict.refused - imagesafety's enforce decision, a possible minor included) keeps no
+    // original: it goes now, not at the unposted sweep hours later. A check that couldn't run keeps it for the retry.
+    if (verdict && verdict.refused) await require("./storyorig").forgetUpload(a.id);
+    throw new Refuse(422, (verdict && verdict.reason) || "That file can't be used.");
+  }
   // claim the upload (one story per upload, even with two clicks at once)
   const claim = await runQuery("UPDATE feed_attachments SET state = 'deleted', error = 'used for a story' WHERE id = ? AND state = 'ready' AND post_id IS NULL", [a.id]);
   if (!claim.changes) throw new Refuse(409, "That upload was already used.");

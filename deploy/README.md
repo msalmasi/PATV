@@ -136,6 +136,11 @@ owner, the story, size, format, expiry) are in `myapp.db` and its backups like a
   staff, or Pepe's admin delete) or the account is deleted, and sweeps the rest after 48 hours (on boot and hourly) - an
   upload that was never posted goes sooner, once the feed's own sweep purges it (unattached for 6 hours).
 - `/feed/admin` › Stories › "Keep each story's original upload for 48 hours" switches new ones off (kept ones still go at 48 h).
+- Never kept: a file the image safety check refused, and any original of an uploader whose story check flagged a possible minor
+  around it (the sweep, the admin box and the download delete it; imagesafety keeps no clear copy of such content either).
+- If the site can't write `/var/lib/patv/` (not running as root) it keeps originals in `<code dir>-storyorig` next to the code
+  tree instead; deletes and the sweep look in both, so a restart never strands a file there. That folder is outside the site's
+  `uploads/`, `media/` and `data/`, so it is in no backup either.
 - A staging refresh copies prod's rows, not the files: staging's sweep drops rows whose file isn't there (after 15 minutes).
 - Rolling back past 1.99anv: the older build has no sweep - delete the folder by hand (`rm -rf /var/lib/patv/storyorig`;
   nothing else reads it). The older build deletes each upload after processing again, as before.

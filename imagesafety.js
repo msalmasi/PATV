@@ -849,7 +849,9 @@ function install() {
   });
   require("./userstories").setSafetyCheck(async ({ file, kind, poster, secs, roomId, userId }) => {
     const r = await check({ surface: "story", kind, file, poster, secs, roomId, userId, ref: "story:" + roomId, padAllowsNsfw: await padAllowsNsfw(roomId) });
-    return r.ok ? { ok: true, nsfw: !!r.nsfw } : { ok: false, reason: r.reason };
+    // (1.99anv review: refused = the policy refused the file itself - storyorig.js drops its kept original at once; a check that
+    // couldn't run, fail-closed, isn't a refusal of the file)
+    return r.ok ? { ok: true, nsfw: !!r.nsfw } : { ok: false, reason: r.reason, refused: r.mode === "enforce" };
   });
   require("./feedstore").setMediaSafetyCheck(async ({ atts, roomId, userId }) => {
     const fm = require("./feedmedia");

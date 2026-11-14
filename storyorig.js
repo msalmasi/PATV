@@ -16,6 +16,11 @@
 //     KEEP_MS, and an upload that never became a story once the feed's own sweep has purged it (unattached for 6 h) or it
 //     failed. A story that only expires (24 h) keeps its original until the 48 h are up.
 //   * the feed switch story_keep_originals (/feed/admin, on by default): off = no new originals (kept ones still go at 48 h)
+//   * never kept for a file the image safety check refused (userstories.create forgets it), nor once that check has flagged a
+//     possible minor in a story of that uploader's around its time (minorFlagged: the sweep, the admin box and the download drop it
+//     - imagesafety.js never keeps a clear copy of minor_risk content either; the story's own file is what the CSAM procedure uses)
+//   * the folder: on Linux without root the default /var/lib/patv/storyorig can't be made, so originals go to the fallback next to
+//     the code tree - every delete and sweep looks in each folder an original may be in (dirs()), so a restart never strands one
 //   * site Admins (siteperms feed.story_originals, locked) see how a story was captured on its page (/media/<id>) and can
 //     download the original (GET /admin/story-originals/<story id>: an attachment, application/octet-stream, no-store, never
 //     inline - the bytes are the member's file as sent, never re-encoded). Each download writes an admin_audit row
@@ -39,17 +44,22 @@ let NOW = () => Date.now();
 function _setClock(fn) { NOW = typeof fn === "function" ? fn : () => Date.now(); }
 
 // ── the private directory (evidence.js's pattern) ──
+let PATHS = null;                     // tests: {candidate, fallback, pinned} in place of the real ones (_setPaths)
+/** Next to the code tree (off Linux, or on Linux when /var/lib/patv can't be written - not root). */
+function fallbackDir() { return PATHS && PATHS.fallback ? PATHS.fallback : path.resolve(__dirname, "..", path.basename(__dirname) + "-storyorig"); }
+const pinned = () => (PATHS ? !!PATHS.pinned : !!(process.env.STORYORIG_DIR || process.env.FEED_DIR));
 function candidateDir() {
+  if (PATHS && PATHS.candidate) return PATHS.candidate;
   if (process.env.STORYORIG_DIR) return path.resolve(process.env.STORYORIG_DIR);
   if (process.env.FEED_DIR) return path.join(path.dirname(path.resolve(process.env.FEED_DIR)), "storyorig");
   if (process.platform === "linux") return process.env.STAGING ? "/var/lib/patv-staging/storyorig" : "/var/lib/patv/storyorig";
-  return path.resolve(__dirname, "..", path.basename(__dirname) + "-storyorig");
+  return fallbackDir();
 }
 function pickDir() {
   const d = candidateDir();
-  if (process.env.STORYORIG_DIR || process.env.FEED_DIR || process.platform !== "linux") return d;
+  if (pinned() || process.platform !== "linux") return d;
   try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); fs.accessSync(d, fs.constants.W_OK); return d; } catch (e) { /* not root: below */ }
-  return path.resolve(__dirname, "..", path.basename(__dirname) + "-storyorig");
+  return fallbackDir();
 }
 let DIR = null;
 /** The folder - made (0700) the first time an original is kept, never at boot. */
@@ -62,10 +72,28 @@ function dir() {
   }
   return DIR;
 }
-/** The folder if it exists already (deleting and sweeping never create it). */
-function existingDir() {
-  if (DIR) return DIR;
-  try { const d = candidateDir(); return fs.existsSync(d) ? d : null; } catch (e) { return null; }
+/** Every folder an original may be in that exists now (deleting and sweeping never create one): the one in use, the default, and -
+ *  unless STORYORIG_DIR / FEED_DIR pins it - the fallback pickDir() takes when the default can't be made (review: after a restart
+ *  DIR is unset, and looking at the default alone left the fallback's files to nobody). */
+function dirs() {
+  const out = [];
+  let cands = [DIR];
+  try { cands.push(candidateDir()); if (!pinned()) cands.push(fallbackDir()); } catch (e) { /* as far as it got */ }
+  for (const d of cands) { try { if (d && !out.includes(d) && fs.existsSync(d)) out.push(d); } catch (e) { /* not there */ } }
+  return out;
+}
+/** The first of them (or null). */
+function existingDir() { return dirs()[0] || null; }
+/** Where upload `id`'s original is now, or null. */
+function findFile(id) {
+  for (const b of dirs()) { const f = fileOf(id, b); if (f && fs.existsSync(f)) return f; }
+  return null;
+}
+/** Remove upload `id`'s original from every folder (true when none is left). */
+function unlinkAll(id) {
+  let ok = true;
+  for (const b of dirs()) ok = unlinkQuiet(fileOf(id, b)) && ok;
+  return ok;
 }
 function _setDir(d) { DIR = d || null; if (d) fs.mkdirSync(d, { recursive: true }); }
 const fileOf = (id, base) => (base && ID_RE.test(String(id || "")) ? path.join(base, String(id) + ".orig") : null);
@@ -175,10 +203,9 @@ async function linkStory(uploadId, storyId) {
 }
 async function drop(ids) {
   if (!ids.length) return 0;
-  const base = existingDir();
   let n = 0;
   for (const id of ids) {
-    unlinkQuiet(fileOf(id, base));                         // the file first, then the row
+    unlinkAll(id);                                         // the file first, then the row
     const r = await runQuery("DELETE FROM story_originals WHERE id = ?", [id]);
     if (r && r.changes) n++;
   }
@@ -191,7 +218,7 @@ async function forgetUpload(uploadId) {
     const id = String(uploadId || "");
     if (!ID_RE.test(id)) return 0;
     await init();
-    unlinkQuiet(fileOf(id, existingDir()));                // even before its row exists (a discard racing the move)
+    unlinkAll(id);                                         // even before its row exists (a discard racing the move)
     return await drop([id]);
   } catch (e) { console.error("[storyorig] forget upload:", e.message); return 0; }
 }
@@ -208,22 +235,39 @@ async function forgetOwner(userId) {
   return drop((await getQuery("SELECT id FROM story_originals WHERE owner_id = ?", [String(userId || "")])).map((r) => r.id));
 }
 
+// ── a possible minor (image safety) ──
+const MINOR_BEFORE_MS = 15 * 60e3;      // a check a little before the row (clocks, the upload's own prefetch) still counts
+const MINOR_SQL = `EXISTS (SELECT 1 FROM image_safety_log l WHERE l.surface = 'story' AND l.user_id = o.owner_id
+  AND l.at >= o.kept_at - ${MINOR_BEFORE_MS} AND l.at <= o.expires AND l.categories LIKE '%"minor_risk"%')`;
+async function safetyLog() {
+  try { return (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'image_safety_log'")).length > 0; } catch (e) { return false; }
+}
+/** Has the image safety check flagged a possible minor in a story of this original's uploader, from its upload to its expiry (refused,
+ *  flagged late, or seen in shadow mode)? Such an original is never kept - nor offered for download. On a lookup error: true (fail
+ *  closed - an original is only a diagnostic). */
+async function minorFlagged(o) {
+  if (!o || !(await safetyLog())) return false;
+  try { return (await getQuery(`SELECT 1 FROM story_originals o WHERE o.id = ? AND ${MINOR_SQL}`, [o.id])).length > 0; } catch (e) { return true; }
+}
+
 // ── the sweep (on boot + hourly) ──
-/** -> {expired, unposted, missing, strays}: rows past KEEP_MS (file and row); uploads that never became a story and never will
- *  (the feed's sweep purged the unattached upload after 6 h, it failed, or it was let go); rows whose file is gone; and files of
- *  ours with no row (after GRACE_MS) or older than KEEP_MS by their own time (a file's time is the wall clock's: `wall`). */
+/** -> {expired, unposted, flagged, missing, strays}: rows past KEEP_MS (file and row); uploads that never became a story and never
+ *  will (the feed's sweep purged the unattached upload after 6 h, it failed, or it was let go); originals the image safety check has
+ *  flagged a possible minor around (minorFlagged); rows whose file is gone; and files of ours with no row (after GRACE_MS) or older
+ *  than KEEP_MS by their own time (a file's time is the wall clock's: `wall`) - in every folder an original may be in. */
 async function sweep(now = NOW(), wall = Date.now()) {
   await init();
-  const out = { expired: 0, unposted: 0, missing: 0, strays: 0 };
-  const base = existingDir();
+  const out = { expired: 0, unposted: 0, flagged: 0, missing: 0, strays: 0 };
+  const bases = dirs();
   out.expired = await drop((await getQuery("SELECT id FROM story_originals WHERE expires <= ?", [now])).map((r) => r.id));
   out.unposted = await drop((await getQuery(`SELECT o.id FROM story_originals o LEFT JOIN feed_attachments a ON a.id = o.id
     WHERE o.story_id IS NULL AND (a.id IS NULL OR a.state IN ('purged', 'failed') OR (a.state = 'deleted' AND COALESCE(a.error, '') <> 'used for a story'))`)).map((r) => r.id));
+  if (await safetyLog()) out.flagged = await drop((await getQuery(`SELECT o.id FROM story_originals o WHERE ${MINOR_SQL}`)).map((r) => r.id));
   const rows = await getQuery("SELECT id, kept_at FROM story_originals");
   const known = new Set(rows.map((r) => r.id));
-  const gone = rows.filter((r) => now - Number(r.kept_at) > GRACE_MS && !(base && fs.existsSync(fileOf(r.id, base)))).map((r) => r.id);
+  const gone = rows.filter((r) => now - Number(r.kept_at) > GRACE_MS && !findFile(r.id)).map((r) => r.id);
   out.missing = await drop(gone);
-  if (base) {
+  for (const base of bases) {
     let names = [];
     try { names = fs.readdirSync(base); } catch (e) { names = []; }
     for (const f of names) {
@@ -244,21 +288,24 @@ async function sweep(now = NOW(), wall = Date.now()) {
 }
 
 // ── the admin view ──
-/** The /media/<id> page's admin box for a story row (media.source "user"): {how, capture, kept: {bytes, fmt, until, href} | null}. */
+/** The /media/<id> page's admin box for a story row (media.source "user"): {how, capture, kept: {bytes, fmt, until, href} | null,
+ *  withheld} - withheld: the image safety check flagged a possible minor around it, so its original was deleted now (no link). */
 async function adminInfo(row) {
   if (!row || row.source !== "user") return null;
   await init();
   const capture = parseCapture(row.capture, row.kind === "clip" ? "video" : "image");
-  const o = (await getQuery("SELECT * FROM story_originals WHERE story_id = ?", [String(row.id)]))[0];
-  const p = o ? fileOf(o.id, existingDir()) : null;
-  const kept = o && p && Number(o.expires) > NOW() && fs.existsSync(p)
+  let o = (await getQuery("SELECT * FROM story_originals WHERE story_id = ?", [String(row.id)]))[0];
+  let withheld = false;
+  if (o && (await minorFlagged(o))) { await drop([o.id]); o = null; withheld = true; }
+  const p = o ? findFile(o.id) : null;
+  const kept = o && p && Number(o.expires) > NOW()
     ? { bytes: Number(o.bytes) || 0, fmt: o.fmt || null, until: Number(o.expires), href: "/admin/story-originals/" + encodeURIComponent(String(row.id)) } : null;
-  return { how: describe(capture, row.kind), capture, kept };
+  return { how: describe(capture, row.kind), capture, kept, withheld };
 }
 
 function register(app, { addUser, noTimers = false } = {}) {
   if (!noTimers) {
-    const run = () => sweep().then((r) => { if (r.expired || r.unposted || r.missing || r.strays) console.log(`[storyorig] sweep: ${JSON.stringify(r)}`); })
+    const run = () => sweep().then((r) => { if (r.expired || r.unposted || r.flagged || r.missing || r.strays) console.log(`[storyorig] sweep: ${JSON.stringify(r)}`); })
       .catch((e) => console.error("[storyorig] sweep:", e.message));
     const boot = setTimeout(run, 20e3); if (boot.unref) boot.unref();
     const hourly = setInterval(run, 3600e3); if (hourly.unref) hourly.unref();
@@ -273,8 +320,10 @@ function register(app, { addUser, noTimers = false } = {}) {
       if (!ID_RE.test(sid)) return nope(res, 404, "Not found.");
       await init();
       const o = (await getQuery("SELECT * FROM story_originals WHERE story_id = ?", [sid]))[0];
-      const p = o ? fileOf(o.id, existingDir()) : null;
-      if (!o || !p || Number(o.expires) <= NOW() || !fs.existsSync(p)) return nope(res, 404, "That story's original upload isn't kept (any more).");
+      // (review) a possible minor flagged around it: never downloadable - it goes now (see minorFlagged)
+      if (o && (await minorFlagged(o))) { await drop([o.id]); return nope(res, 404, "That story's original upload isn't kept (any more)."); }
+      const p = o ? findFile(o.id) : null;
+      if (!o || !p || Number(o.expires) <= NOW()) return nope(res, 404, "That story's original upload isn't kept (any more).");
       // the record first: no download without its audit row
       const owner = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [o.owner_id]).catch(() => []))[0] || { userId: o.owner_id };
       await require("./adminaudit").record({ userId: req.user.userId, username: req.user.username || null }, "story_original_download", owner,
@@ -290,4 +339,6 @@ function register(app, { addUser, noTimers = false } = {}) {
 }
 
 module.exports = { init, register, keep, linkStory, forgetUpload, forgetStory, forgetOwner, sweep, adminInfo, cleanCapture, parseCapture, describe,
-                   on, privacyOn, dir, existingDir, fileOf, _setDir, _setClock, KEEP_MS, GRACE_MS, EXT };
+                   on, privacyOn, dir, dirs, existingDir, fallbackDir, findFile, fileOf, minorFlagged, _setDir, _setClock, _resetDir: () => { DIR = null; },
+                   _setPaths: (p) => { PATHS = p || null; },
+                   KEEP_MS, GRACE_MS, EXT };

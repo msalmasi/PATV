@@ -246,7 +246,7 @@ test("deleting the story (its owner, staff, Pepe's admin delete) deletes its ori
 test("the sweep: past 48 h the file and the row go; a row with no file and a file with no row (after its grace) go; nothing else is touched", async () => {
   const a = await storyUpload(U.other, jpg);
   const b = await storyUpload(U.other, jpg);
-  assert.deepEqual(await SO.sweep(), { expired: 0, unposted: 0, missing: 0, strays: 0 }, "fresh: nothing (b, a ready upload not posted yet, stays)");
+  assert.deepEqual(await SO.sweep(), { expired: 0, unposted: 0, flagged: 0, missing: 0, strays: 0 }, "fresh: nothing (b, a ready upload not posted yet, stays)");
   // an upload that never became a story: once the feed's sweep has purged it (unattached for 6 h) its original goes too
   const c = await storyUpload(U.other, jpg);
   await runQuery("UPDATE feed_attachments SET state = 'purged' WHERE id = ?", [c.id]);
@@ -318,4 +318,112 @@ test("an account's originals all go with forgetOwner (the account deletion's ste
   assert.match(fs.readFileSync(path.join(repo, "accountdelete.js"), "utf8"), /require\("\.\/storyorig"\)\.forgetOwner\(uid\)/);
   assert.equal(require(path.join(repo, "accountMerge")).classify("story_originals", "owner_id").move, true);
   await SO.forgetUpload(mine.id);
+});
+
+// ── 1.99anv review fixes ──
+test("review: a file the safety check REFUSES keeps no original (gone at once); one it couldn't check keeps it for the retry", async () => {
+  try {
+    // refused (imagesafety's enforce decision - a possible minor among them)
+    US.setSafetyCheck(async () => ({ ok: false, reason: "That picture can't be posted here.", refused: true }));
+    let up = await storyUpload(U.poster, jpg);
+    assert.ok(fs.existsSync(origFile(up.id)), "kept while it waits to be posted");
+    tick(60e3);
+    let r = await post("/api/stories/mine", U.poster, { attachment: up.id, pad: "profile" });
+    assert.equal(r.status, 422, JSON.stringify(r.d));
+    assert.equal(await origRow(up.id), null, "the row went with the refusal"); assert.ok(!fs.existsSync(origFile(up.id)), "and the file");
+    // the check couldn't run (fail-closed, or it threw): the member may retry, so the original stays (the unposted sweep takes it otherwise)
+    US.setSafetyCheck(async () => ({ ok: false, reason: "The picture couldn't be safety-checked right now - try again in a minute." }));
+    up = await storyUpload(U.poster, jpg);
+    tick(60e3);
+    r = await post("/api/stories/mine", U.poster, { attachment: up.id, pad: "profile" });
+    assert.equal(r.status, 422);
+    assert.ok(await origRow(up.id)); assert.ok(fs.existsSync(origFile(up.id)));
+    US.setSafetyCheck(async () => { throw new Error("vision down"); });
+    tick(60e3);
+    r = await post("/api/stories/mine", U.poster, { attachment: up.id, pad: "profile" });
+    assert.equal(r.status, 422);
+    assert.ok(await origRow(up.id), "a check that threw isn't a refusal either");
+    US.setSafetyCheck(null);
+    const story = await postStory(U.poster, up.id);
+    assert.equal((await origRow(up.id)).story_id, story, "the retry posts it, original and all");
+    await SO.forgetStory(story);
+  } finally { US.setSafetyCheck(null); }
+  // the story surface's wrapper says which answers are refusals: the policy's own (mode enforce) - not fail-closed
+  assert.match(fs.readFileSync(path.join(repo, "imagesafety.js"), "utf8"),
+               /return r\.ok \? \{ ok: true, nsfw: !!r\.nsfw \} : \{ ok: false, reason: r\.reason, refused: r\.mode === "enforce" \};/);
+});
+
+test("review: a possible minor flagged around an uploader's story - its original is never kept or offered (admin box, download, sweep)", async () => {
+  await runQuery(`CREATE TABLE IF NOT EXISTS image_safety_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, surface TEXT NOT NULL, kind TEXT,
+                  user_id TEXT, room_id TEXT, ref TEXT, hash TEXT, mode TEXT NOT NULL, action TEXT NOT NULL, flagged INTEGER NOT NULL DEFAULT 0, verdict TEXT,
+                  categories TEXT)`);
+  const flag = (u, extra = {}) => runQuery("INSERT INTO image_safety_log (at, surface, user_id, ref, mode, action, flagged, verdict, categories) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
+    [extra.at != null ? extra.at : clockAt, extra.surface || "story", u.userId, "story:x", extra.mode || "late", "failopen", "refuse", JSON.stringify(extra.cats || ["minor_risk"])]);
+  try {
+    // posted, then flagged late: the admin box says so, offers no link, and the original is deleted then and there
+    let up = await storyUpload(U.poster, jpg);
+    let story = await postStory(U.poster, up.id);
+    assert.match(await (await get("/media/" + story, U.admin)).r.text(), /Download the original/, "before the flag");
+    await flag(U.poster);
+    assert.equal(await SO.minorFlagged(await origRow(up.id)), true);
+    let html = await (await get("/media/" + story, U.admin)).r.text();
+    assert.match(html, /Original upload: deleted - the image safety check flagged a possible minor around this story/);
+    assert.doesNotMatch(html, /Download the original|story-originals/);
+    assert.equal(await origRow(up.id), null); assert.ok(!fs.existsSync(origFile(up.id)));
+    await runQuery("DELETE FROM image_safety_log");
+    // the download itself refuses (and deletes) - nothing logged as downloaded
+    up = await storyUpload(U.poster, jpg);
+    story = await postStory(U.poster, up.id);
+    await flag(U.poster, { mode: "shadow" });
+    const before = (await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'story_original_download'"))[0].n;
+    assert.equal((await get("/admin/story-originals/" + story, U.admin)).status, 404);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM admin_audit WHERE action = 'story_original_download'"))[0].n, before);
+    assert.equal(await origRow(up.id), null); assert.ok(!fs.existsSync(origFile(up.id)));
+    await runQuery("DELETE FROM image_safety_log");
+    // the sweep: flagged ones go; another uploader's flag, another category, another surface or a check from long before don't count
+    const mine = await storyUpload(U.poster, jpg), theirs = await storyUpload(U.other, jpg);
+    await flag(U.other, { cats: ["sexual"] });
+    await flag(U.poster, { surface: "feed" });
+    await flag(U.poster, { at: clockAt - 3600e3 });
+    let r = await SO.sweep();
+    assert.equal(r.flagged, 0, JSON.stringify(r));
+    assert.ok(await origRow(mine.id)); assert.ok(await origRow(theirs.id));
+    await flag(U.poster);
+    r = await SO.sweep();
+    assert.equal(r.flagged, 1);
+    assert.equal(await origRow(mine.id), null); assert.ok(!fs.existsSync(origFile(mine.id)));
+    assert.ok(await origRow(theirs.id), "someone else's stays");
+    await SO.forgetUpload(theirs.id);
+  } finally { await runQuery("DELETE FROM image_safety_log"); }
+});
+
+test("review: originals kept in the fallback folder (Linux without root) are still found after a restart - deletes, the admin box, the sweep", async () => {
+  const def = path.join(tmp, "def-missing"), fb = path.join(tmp, "fallback-orig");
+  SO._setPaths({ candidate: def, fallback: fb, pinned: false });
+  try {
+    SO._setDir(fb);                                        // pickDir() fell back (it does on Linux when /var/lib/patv can't be made)
+    let up = await storyUpload(U.poster, jpg);
+    assert.ok(fs.existsSync(path.join(fb, up.id + ".orig")), "kept in the fallback");
+    let story = await postStory(U.poster, up.id);
+    SO._resetDir();                                        // a restart: nothing in memory says where it went
+    assert.ok(!fs.existsSync(def));
+    assert.deepEqual(SO.dirs(), [fb]);
+    assert.equal(SO.findFile(up.id), path.join(fb, up.id + ".orig"));
+    assert.match(await (await get("/media/" + story, U.admin)).r.text(), /Download the original/, "the admin box finds it");
+    assert.equal((await get("/admin/story-originals/" + story, U.admin)).status, 200, "and the download");
+    assert.equal((await post(`/api/stories/${story}/delete`, U.poster)).status, 200);
+    assert.equal(await origRow(up.id), null); assert.ok(!fs.existsSync(path.join(fb, up.id + ".orig")), "deleted at once, from the fallback");
+    // the sweep looks there too (past 48 h)
+    SO._setDir(fb);
+    up = await storyUpload(U.poster, jpg);
+    SO._resetDir();
+    tick(SO.KEEP_MS + 60e3);
+    const r = await SO.sweep();
+    assert.ok(r.expired >= 1, JSON.stringify(r));
+    assert.equal(await origRow(up.id), null); assert.ok(!fs.existsSync(path.join(fb, up.id + ".orig")), "swept from the fallback");
+    // STORYORIG_DIR / FEED_DIR pin the folder: then the fallback is never looked at
+    SO._setPaths({ candidate: def, fallback: fb, pinned: true });
+    assert.deepEqual(SO.dirs(), []);
+  } finally { SO._setPaths(null); SO._resetDir(); }
+  assert.ok(SO.dirs().includes(ORIG) || !fs.existsSync(ORIG), "back to the test's own folder");
 });
