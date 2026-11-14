@@ -3,7 +3,8 @@
 //
 //   /admin              Overview: Pepe, Reserve, reports, loan requests, stage, stale cleanup, alerts; S1 V2: the chat hub's
 //                       reports card (open reports, > 14-day escalations - <patv-modtools>, chatwidget.overviewCard)
-//   /admin/users        roles + classes, XP, welcome bonus, stale-account cleanup, 🎟️ sign-ups & invites (1.99anv invites.js)
+//   /admin/users        👥 all members (1.99anv members.js), roles + classes, XP, welcome bonus, stale-account cleanup, 🎟️ sign-ups & invites
+//                       (1.99anv invites.js)
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
 //   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements

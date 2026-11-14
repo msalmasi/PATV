@@ -4186,6 +4186,7 @@ loginSessions.register(app, { addUser });   // 1.99wj: Settings → Account → 
 require("./accountexport").register(app, { addUser, isBotToken });   // 1.99wj: Settings → Account → Your data: "Download my data" (mic retention: + Pepe's part, bot routes)
 require("./micrec").register(app, { addUser });   // mic retention: the mic-recordings policy switch + the owner sync's keep block (/admin/bridge "Mic recordings")
 require("./accountdelete").register(app, { addUser });
+require("./members").register(app, { addUser });         // 1.99anv: 👥 /admin/users#members - every account, sortable (GET /api/admin/members)
 require("./accountsadmin").register(app, { addUser });   // 1.99wl: /admin/accounts - Account security for admins   // 1.99wj: Settings → Account → Delete account (docs/account-deletion.md)
 require("./chatsignin").register(app, { isBotToken, addUser });   // !signin: a one-time sign-in link by PM for a linked Camfrog login (chatsignin.js)   // auto-account escrow (docs/auto-account-escrow.md): Pepe's PM list, the admin card, the 10-min tick
 

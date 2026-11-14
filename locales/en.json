@@ -13727,5 +13727,6 @@
   "sethub.st.invites_left": {"one": "{count} left", "other": "{count} left"},
   "sethub.st.unlimited": "Unlimited",
   "shop.cat.item.site_invite": "One extra invite: a one-time link that lets one new person make a PATV account. It’s added to your invites the moment you buy it - or to theirs, as a gift. A site pass with no cash value.",
-  "siteperm.k.auth.invites": "Sign-ups open / invite-only, the invite tiers and price, every invite"
+  "siteperm.k.auth.invites": "Sign-ups open / invite-only, the invite tiers and price, every invite",
+  "siteperm.k.accounts.members": "All members: every account with its sign-up date, last visit, level and sign-in methods (no emails or IPs)"
 }

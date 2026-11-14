@@ -2,9 +2,75 @@
 <% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); -%>
 <div class="adm-head">
   <h1>Users &amp; Accounts</h1>
-  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup<% if (_can('auth.invites')) { %>, <a href="#invites">🎟️ sign-ups &amp; invites</a><% } %>. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
+  <p><% if (_can('accounts.members')) { %><a href="#members">👥 Every account</a> (newest first), r<% } else { %>R<% } %>oles and classes, XP, the welcome bonus and the stale-account cleanup<% if (_can('auth.invites')) { %>, <a href="#invites">🎟️ sign-ups &amp; invites</a><% } %>. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
 </div>
 <% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
+
+<% if (_can('accounts.members')) { %>
+<%# 1.99anv: 👥 every account, paged on the server (members.js; GET /api/admin/members, public/js/admin-members.js). No emails / IPs. %>
+<section class="adm-card mm" id="members" aria-labelledby="membersT">
+  <h2 id="membersT"><span class="ds-ic" aria-hidden="true">👥</span> All members <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Every account, newest first - 50 a page. Click a column heading to sort by it (click again for the other way round); search finds a username, display name or Camfrog login. <b>Chat-only</b> accounts were made for chat - by Pepe for a Camfrog login, or by the Twitch / Discord bots - and nobody has signed in to them on the website yet. <b>Last seen</b> is the website (a sign-in session, or a signed-in visit); Camfrog activity isn't in it. No email addresses, IPs or devices are shown here<% if (_can('accounts.security')) { %> - a name opens its <a href="/admin/accounts">🔐 Account security</a> page<% } %>.</p>
+  <p class="adm-help" id="mmCounts" style="color:var(--ds-text)">Loading…</p>
+  <div class="mm-bar">
+    <div class="mm-chips" role="group" aria-label="Show">
+      <button type="button" class="mm-chip" data-mm-filter="all" aria-pressed="true">All <span class="mm-n"></span></button>
+      <button type="button" class="mm-chip" data-mm-filter="website" aria-pressed="false">Website members <span class="mm-n"></span></button>
+      <button type="button" class="mm-chip" data-mm-filter="chat" aria-pressed="false">Chat-only accounts <span class="mm-n"></span></button>
+      <button type="button" class="mm-chip" data-mm-filter="banned" aria-pressed="false">Banned <span class="mm-n"></span></button>
+      <button type="button" class="mm-chip" data-mm-filter="deleted" aria-pressed="false">Deleted <span class="mm-n"></span></button>
+    </div>
+    <form id="mmForm" class="mm-search" role="search" autocomplete="off">
+      <label for="mmQ" class="mm-sr">Search members</label>
+      <input type="search" id="mmQ" maxlength="64" placeholder="Username, display name or Camfrog login">
+    </form>
+  </div>
+  <div class="adm-tbl mm-tbl"><table aria-label="All members">
+    <thead><tr>
+      <th scope="col" data-mm-sort="username" aria-sort="none"><button type="button">Username <span class="mm-ar" aria-hidden="true"></span></button></th>
+      <th scope="col">Display name</th>
+      <th scope="col" data-mm-sort="created" aria-sort="descending"><button type="button">Created <span class="mm-ar" aria-hidden="true">▼</span></button></th>
+      <th scope="col" data-mm-sort="seen" aria-sort="none"><button type="button">Last seen <span class="mm-ar" aria-hidden="true"></span></button></th>
+      <th scope="col" class="num" data-mm-sort="level" aria-sort="none"><button type="button">Level <span class="mm-ar" aria-hidden="true"></span></button></th>
+      <th scope="col">Signs in with</th>
+      <th scope="col">Invited by</th>
+      <th scope="col">Status</th>
+    </tr></thead>
+    <tbody id="mmRows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+  </table></div>
+  <div class="adm-actions mm-pager">
+    <button type="button" class="adm-btn ghost" id="mmPrev" disabled>‹ Previous page</button>
+    <span id="mmPage" class="adm-msg" role="status"></span>
+    <button type="button" class="adm-btn ghost" id="mmNext" disabled>Next page ›</button>
+    <span id="mmMsg" class="adm-msg" role="status" aria-live="polite"></span>
+  </div>
+</section>
+<style>
+  .mm .mm-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; margin-top: 6px; }
+  .mm .mm-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .mm .mm-chip { min-height: 36px; padding: 0 12px; border: 1px solid var(--ds-line-strong, #333); border-radius: 999px; background: var(--ds-sunken, #111); color: var(--ds-text-2, #cfcfcf); font: 600 13px/1 var(--ds-font, sans-serif); cursor: pointer; width: auto; margin: 0; }
+  .mm .mm-chip[aria-pressed="true"] { border-color: var(--ds-green, #4caf50); color: #fff; background: var(--ds-hover, #1b2a1d); }
+  .mm .mm-chip .mm-n { color: var(--ds-text-muted, #9a9a9a); font-weight: 400; }
+  .mm .mm-search { flex: 1 1 220px; max-width: 360px; min-width: 0; margin: 0; }
+  .mm .mm-search input { width: 100%; box-sizing: border-box; min-height: 36px; font-size: 16px; }
+  .mm .mm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .mm .mm-tbl th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; min-height: 32px; font: inherit; color: inherit; }
+  .mm .mm-tbl th button:focus-visible { outline: 2px solid var(--ds-focus, #ffd54f); outline-offset: 2px; border-radius: 4px; }
+  .mm .mm-tbl td.mm-when { white-space: nowrap; }
+  .mm .mm-tbl td.mm-when small { display: block; }
+  .mm .mm-mut { color: var(--ds-text-muted, #9a9a9a); font-size: 12px; }
+  .mm .mm-user { white-space: nowrap; }
+  .mm .mm-user .mm-prof { margin-inline-start: 6px; text-decoration: none; }
+  .mm .mm-dn { max-width: 16em; overflow-wrap: anywhere; }
+  .mm .mm-methods { white-space: nowrap; }
+  .mm .mm-ic { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 3px; margin-inline-end: 3px; border: 1px solid var(--ds-line, #262626); border-radius: 6px; font: 700 11px/1 var(--ds-font, sans-serif); box-sizing: border-box; }
+  .mm .mm-st { white-space: normal; }
+  .mm .mm-st .adm-pill { margin: 1px 3px 1px 0; }
+  .mm tr.mm-gone td { opacity: .65; }
+  .mm .mm-pager { flex-wrap: wrap; }
+</style>
+<script src="/public/js/admin-members.js?v=1" defer></script>
+<% } %>
 
 <div class="adm-cols">
   <section class="adm-card" id="roles" aria-labelledby="rolesT">

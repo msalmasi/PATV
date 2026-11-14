@@ -37,6 +37,7 @@ const GOLDEN = {
   "accounts.security": ["admin", true], "accounts.delete_other": ["admin", true], "accounts.sessions_revoke": ["admin", true],
   "auth.signin_methods": ["admin", true], "profile.see_private": ["admin", true], "history.lookup": ["staff", true],
   "auth.invites": ["admin", false],                                            // 1.99anv: sign-ups open / invite-only + invites (invites.js)
+  "accounts.members": ["admin", false],                                        // 1.99anv: 👥 All members on /admin/users (members.js)
   "econ.grant_pat": ["admin", true], "econ.house_adjust": ["admin", true], "econ.codes_manage": ["admin", true], "econ.codes_view": ["admin", true],
   "econ.pepe_econ_cmds": ["admin", true], "econ.burn": ["admin", true], "econ.padvault_move": ["admin", true],
   "econ.telemetry_policy": ["admin", true], "econ.vwm_view": ["staff", false], "econ.backend_cutover": ["admin", true],
