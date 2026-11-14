@@ -49,18 +49,24 @@ test("index.js keeps isBotToken / isPlatformBot as thin wrappers over botkeys.js
 test("no bot route uses multer (the request context would be lost)", () => {
   // a member's own avatar upload and the admin badge form (cookie auth, never a bot)
   const ALLOW = new Set(["/api/u/:username/update/avatar", "/api/badges/add"]);
-  const bad = [];
+  const bad = [], unguarded = [], seen = [];
   for (const f of files) {
     const lines = fs.readFileSync(f, "utf8").split(/\r?\n/);
     lines.forEach((line, i) => {
-      if (!/\bupload\.(single|array|fields|none|any)\(/.test(line)) return;
+      // 1.99anw: any multer instance (upload / avatarUpload / ...), and each one runs behind uploadguard.guard (limits + an answer
+      // for every parser error - multer 1.x's unhandled busboy error ended the process, review 1.99anw)
+      if (!/\b\w*[uU]pload\.(single|array|fields|none|any)\(/.test(line)) return;
       const ctx = lines.slice(Math.max(0, i - 6), i + 1).join("\n");
       const m = ctx.match(/["'`](\/[^"'`]+)["'`]/g);
       const route = m ? m[m.length - 1].slice(1, -1) : "?";
+      seen.push(route);
       if (!ALLOW.has(route)) bad.push(`${path.relative(repo, f)}:${i + 1} ${route}`);
+      if (!/\bUG\.guard\(\s*\w*[uU]pload\.(single|array|fields|none|any)\(/.test(line)) unguarded.push(`${path.relative(repo, f)}:${i + 1} ${route}`);
     });
   }
   assert.deepEqual(bad, [], "a multer route outside the allow-list:\n" + bad.join("\n"));
+  assert.deepEqual(unguarded, [], "a multer middleware not behind UG.guard (uploadguard.js):\n" + unguarded.join("\n"));
+  assert.deepEqual(seen.sort(), [...ALLOW].sort(), "the scan saw both multer routes");
   const users = files.filter((f) => /require\(["']multer["']\)/.test(fs.readFileSync(f, "utf8"))).map((f) => path.relative(repo, f)).sort();
   assert.deepEqual(users, ["index.js", "user.controller.js"], "multer is loaded only where it always was");
 });

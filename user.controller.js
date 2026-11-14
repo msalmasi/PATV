@@ -19,7 +19,9 @@ const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
 const AWS = require('aws-sdk');
-const upload = multer({ dest: 'uploads/' });
+// 1.99anw: the profile photo's multer - index.js's POST /api/u/:username/update/avatar runs it behind uploadguard.guard (one
+// picture of at most 8 MB, nothing else; a parser error is a 400 / 413, never an exception - review 1.99anw)
+const avatarUpload = require('./uploadguard').avatarUpload(multer);
 // 1.99vz: the account forms (username, email, password, Camfrog / Twitch / Discord links) live on Settings -> Account
 const ACCOUNT_PAGE = '/settings/account';
 
@@ -465,17 +467,27 @@ async function updatePassword(req, res) {
 };
 
 // Change the avatar
+// 1.99anw (review): a form without the picture (another field name, or none) is a 400 - req.file.path threw outside any try, an
+// unhandled rejection that ended the site's process. The decode is capped like imagesafety.js (limitInputPixels 60 Mpx: a small
+// file that would decode to gigabytes is refused), a file sharp can't read is a 400, and multer's copy in uploads/ is removed once
+// read (it was left there for good). The path is the one multer wrote, from the process's folder (it is the repo's in prod).
 async function updateAvatar (req, res) {
+  if (!req.file || !req.file.path) return res.status(400).json({ success: false, message: 'No picture was uploaded.' });
   const userId = req.user.userId;
   const username = req.user.username;
-  const filePath = path.join(__dirname, req.file.path);
+  const filePath = path.resolve(req.file.path);
   console.log(filePath);
   try {
       // Resize and crop the image using Sharp
-      const resizedImage = await sharp(filePath)
-          .resize(200, 200) // Change dimensions as needed
-          .jpeg({ quality: 90 })
-          .toBuffer();
+      let resizedImage;
+      try {
+          resizedImage = await sharp(filePath, { limitInputPixels: 60e6 })
+              .resize(200, 200) // Change dimensions as needed
+              .jpeg({ quality: 90 })
+              .toBuffer();
+      } catch (e) {
+          return res.status(400).json({ success: false, message: "That picture couldn't be read - try a JPEG or PNG." });
+      }
 
       // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's switched off). Profile photos must be
       // safe for work (Terms) - a refused picture is never uploaded.
@@ -483,7 +495,6 @@ async function updateAvatar (req, res) {
       try { sv = await require('./imagesafety').check({ surface: 'profile_photo', kind: 'image', buf: resizedImage, userId, ref: 'profile:' + userId }); }
       catch (e) { sv = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
       if (!sv || sv.ok !== true) {
-          fs.unlink(filePath, () => {});
           return res.status(422).json({ success: false, message: (sv && sv.reason) || "That picture can't be used." });
       }
 
@@ -504,13 +515,9 @@ async function updateAvatar (req, res) {
   } catch (error) {
       console.error('Failed to upload avatar:', error);
       res.status(500).json({ success: false, message: 'Failed to upload avatar.' });
-  } 
-  // finally {
-  //     // Delete the uploaded file from the server
-  //     fs.unlink(filePath, err => {
-  //         if (err) console.error('Failed to delete file:', err);
-  //     });
-  // }
+  } finally {
+      fs.unlink(filePath, () => {});   // multer's copy; the S3 one is the resized picture
+  }
 };
 
 // Update discord
@@ -1340,6 +1347,7 @@ module.exports = {
   updatePassword,
   updateDisplayname,
   updateAvatar,
+  avatarUpload,         // 1.99anw: the profile photo's multer (index.js runs it behind uploadguard.guard)
   updateDiscordId,
   updateTwitchId,
   updateCamfrogUsername,

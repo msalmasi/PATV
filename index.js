@@ -29,6 +29,7 @@ const {
   updatePassword,
   updateDisplayname,
   updateAvatar,
+  avatarUpload,
   updateDiscordId,
   updateTwitchId,
   updateCamfrogUsername,
@@ -75,7 +76,10 @@ const sgMail = require("@sendgrid/mail");
 const multer = require("multer");
 const sharp = require("sharp");
 const AWS = require("aws-sdk");
-const upload = multer({ dest: "uploads/" });
+// 1.99anw: multer 2 behind uploadguard.js - the admin badge form's (text fields only; the profile photo's is user.controller's
+// avatarUpload). A parser error is a 400 / 413 answer, never an exception that ends the process (review 1.99anw).
+const UG = require("./uploadguard");
+const upload = UG.badgeFormUpload(multer);
 const axios = require("axios");
 const querystring = require("querystring");
 
@@ -2613,8 +2617,8 @@ app.post(
   "/api/u/:username/update/avatar",
   authenticateToken,
   addUser,
-  upload.single("avatar"),
-  updateAvatar
+  UG.guard(avatarUpload.single("avatar"), UG.AVATAR, "avatar"),   // 1.99anw: one picture, capped (uploadguard.js)
+  UG.safe(updateAvatar, "avatar")
 );
 
 app.post(
@@ -3184,7 +3188,14 @@ app.get("/api/badges", async (req, res) => {
   });
 
 // Create a new badge ADMIN
-app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (req, res) => {
+// 1.99anw (review): signed in and a badge manager BEFORE any multipart is read - multer parsed it first, for anyone; then the form
+// (text fields only, capped) behind uploadguard.guard. The refusal is the handler's own, unchanged.
+function badgeManager(req, res, next) {
+  if (SP.can(req.user, "badges.manage")) return next();
+  req.flash("error", "Access denied. You must be an admin or staff to access this page.");
+  return res.redirect("/login");
+}
+app.post("/api/badges/add", authenticateToken, addUser, badgeManager, UG.guard(upload.none(), UG.BADGE_FORM, "badge form"), async (req, res) => {
     const { name, description, icon, points, requirement } = req.body;
     const badgeId = uuidv4();
     if (SP.can(req.user, "badges.manage")) {
