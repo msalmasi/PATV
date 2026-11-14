@@ -18,7 +18,7 @@
   // collapsed stage / OFF AIR slate that jumps open on the first script tick)
   const live = (!!st.active && pepeHere_) || paid.length > 0 || !!(locals.stageFeatured && locals.stageFeatured.next);
   // 1.99ek: Top Pads (home.topPads: top 5 live pads, the front pick's order) and the shared 🚀 badge (boostmark.js)
-  const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) ? tops : [];
+  const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) && !(typeof guestHides === 'function' && guestHides('/p')) ? tops : [];
   // 1.99hm: 🎧 on Top Pads rows - room-bridge.js is loaded whenever a row or the room widget needs it
   const tpListen_ = tops_.some((r) => r.audio && r.listen);
   // adultgate site: the room widget's 18+ gate (home.js roomGate: "ok" unless the owner switch is on and the room is an 18+ pad)
@@ -39,20 +39,28 @@
     : np.k === 'mic_n' ? t('js.home.tp.np_mic_n', { n: np.n }) : '';
   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js), '' when rendered bare
   const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx), null when rendered bare
-  const feat = S0.featured;
+  // 1.99anv: sections an admin turned off for signed-out visitors (guestaccess.js) - their tiles, widgets and links aren't drawn here
+  // (res.locals.guestHides(href) / guestOff(key); nothing is hidden for a signed-in member or a render without the site's middleware)
+  const _gh = typeof guestHides === 'function' ? guestHides : () => false;
+  const _go = typeof guestOff === 'function' ? guestOff : () => false;
+  const padsOff_ = _gh('/p');
+  const feat = S0.featured && !_gh(S0.featured.href || '/casino/t/' + encodeURIComponent(S0.featured.id)) ? S0.featured : null;
+  const nowLotto_ = S0.lotto && !_gh('/lotto') ? S0.lotto : null;
+  const nowClosing_ = (S0.closing || []).filter((m) => !_gh('/markets/' + encodeURIComponent(m.id)));
+  const nowBounties_ = (S0.topBounties || []).filter((b) => !_gh('/bounties/' + encodeURIComponent(b.id)));
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
   const nameCss = me ? cosmeticName(me.username) : '';
   const M = mine || {};
   const wheelHref = me ? '/u/' + encodeURIComponent(me.username) + '/wheel' : '/login';
   // things to do: compact, action-first; `hot` = something live there now, `fresh` = you haven't tried it
-  const todo = [
+  const todo_ = [
     // i18n: t / s are HTML (t() output), printed raw below
     { href: '/p', ic: '📡', t: t('home.pads'), s: room && room.count != null ? t('home.todo.pads_in', { n: room.count, room: room.name }) : null, hot: !!(room && room.live) },
     { href: '/stage', ic: '🎥', t: t('home.todo.golive'), s: t('home.todo.golive_sub'), hot: paid.length > 0 },
     { href: '/markets', ic: '🔮', t: t('home.todo.markets'), s: S0.markets ? t('home.todo.markets_open', { n: S0.markets }) : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
     { href: '/lotto', ic: '🎟️', t: t('home.todo.lotto'), s: S0.lotto ? t('home.todo.jackpot', { n: short(S0.lotto.jackpot) }) : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
-    { href: wheelHref, ic: '🎡', t: t('home.todo.wheel'), s: S0.casinoPot ? t('home.todo.pot', { n: short(S0.casinoPot) }) : null },
+    { href: wheelHref, ic: '🎡', t: t('home.todo.wheel'), s: S0.casinoPot ? t('home.todo.pot', { n: short(S0.casinoPot) }) : null, key: 'wheel' },
     { href: S0.tablesHref || '/tables', ic: '🃏', t: t('home.todo.tables'), s: (S0.tables || []).length ? t('home.todo.tables_open', { games: S0.tables.map((x) => x.game).join(' + ') }) : null, hot: (S0.tables || []).length > 0 },
     { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', s: null },
     { href: '/bounties', ic: '🎯', t: t('home.todo.bounties'), s: S0.bounties ? t('home.todo.bounties_open', { n: S0.bounties }) : null, hot: S0.bounties > 0 },
@@ -62,6 +70,7 @@
     { href: '/feed', ic: '📝', t: t('home.todo.feed'), s: null },
     { href: '/rankings', ic: '🏆', t: t('home.todo.rankings'), s: null },
   ];
+  const todo = todo_.filter((td) => !(td.key ? _go(td.key) : _gh(td.href)));
   // 1.99ajh dockpop (owner P2: "a version of the new room dock for the main page that uses the same principles for preview mode"):
   // the Room Dock for this viewer (home.js padDockOn = paddock.viewerOn: 'staff' = staff only), the panel's pad past the 18+ gate and
   // not a chat-hub pad. Otherwise - Dock off included - today's homepage, byte for byte (the slurping tags below print nothing then).
@@ -510,7 +519,7 @@
 <%_ } _%>
   <% if (!homeDock_ && typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
 
-  <% if (!homeDock_) { %><!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
+  <% if (!homeDock_ && !padsOff_) { %><!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
   <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
     <div class="gl-txt">
       <h3 id="gsH"><%- t('home.show.title') %></h3>
@@ -528,7 +537,7 @@
     <div class="bar">
       <span class="ttl" id="stTtl"><%- t('home.stage.title') %></span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%- live ? t('home.stage.on_air') : t('home.stage.off_air') %></span></span>
-      <% if (frontInfo) { %><span class="sub" id="stRoom"><span class="ds-ic" aria-hidden="true">📡</span> <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><%- BM(frontInfo.boost, 'bm') %><% } %>
+      <% if (frontInfo) { %><span class="sub" id="stRoom"><span class="ds-ic" aria-hidden="true">📡</span> <% if (padsOff_) { %><span class="room-on"><%= frontInfo.title %></span><% } else { %><a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a><% } %></span><%- BM(frontInfo.boost, 'bm') %><% } %>
       <%# the subtitle only shows while off air (the ON AIR pill says it otherwise); setPill() still writes it %>
       <span class="sub" id="stSub"><%- live ? (st.since ? t('home.stage.on_air_for', { d: dur_(st.since) }) : t('home.stage.live_now')) : (st.ended ? t('home.stage.last_on_air', { ago: ago(st.ended) }) : t('home.stage.nothing')) %></span>
     </div>
@@ -551,9 +560,9 @@
               <div class="sl-pad"><span class="pill off"><span class="dot" aria-hidden="true"></span><%- t('home.stage.off_air') %></span><b id="slPad"><%- frontInfo ? t.esc(frontInfo.title) : t('home.stage.main_stage') %></b></div>
               <p class="sl-msg"><%- t('home.stage.nothing_on') %></p>
               <div class="sl-acts">
-                <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a>
+                <% if (!padsOff_) { %><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><% } %>
                 <% if (nextUp_) { %><span class="sl-next" id="slNext"><%- t('home.stage.next_up') %> <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(nextUp_.start_at, 'full') %></span>
-                <% } else { %><a class="btn" href="/p" id="slBrowse"><%- t('home.stage.browse_top') %></a><% } %>
+                <% } else if (!padsOff_) { %><a class="btn" href="/p" id="slBrowse"><%- t('home.stage.browse_top') %></a><% } %>
               </div>
             </div>
           </div>
@@ -563,7 +572,7 @@
       <%# 1.99eo: the stage widgets sit in the side column on and off air (they used to move to an off-air strip) %>
       <div class="stage-side" id="stageSide">
 <%_ } _%>
-      <div class="aw aw-hm" id="wheelBox">
+      <% if (me || !_go('wheel')) { %><div class="aw aw-hm" id="wheelBox">
         <% if (me) { %>
         <div class="aw-coinop" id="coinop">
           <div class="aw-credit" aria-hidden="true"><span><%- t('home.wheel.credit') %></span><span class="n" id="creditCount">00</span></div>
@@ -593,7 +602,7 @@
           <div class="aw-status"><%- t('home.wheel.status_out') %></div>
         </div>
         <% } %>
-      </div>
+      </div><% } %>
       <% /* homegap fix (review, focus order): with the Dock on the featured table is rendered after Top Pads (featBox_() there) - Tab goes
             the strip, Top Pads, the table, then the call-to-action card, as the side column reads (it went to the table at the column's foot
             first, then back up to Top Pads); Dock off it is where it always was */
@@ -687,7 +696,7 @@
     <% if (room && !homeDock_) { %>
     <section class="card lr-card" aria-labelledby="lrH">
       <h2 id="lrH"><span><span class="ds-ic" aria-hidden="true">📡</span> <%- roomOnStage ? t('home.room.on_stage') + ' ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="<%- t('home.room.pill_title') %>"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%- room.live ? t('home.room.active') : t('home.room.offline') %></span></span></span>
-        <a href="/p/<%= encodeURIComponent(room.slug) %>"><%- t('home.room.open') %></a></h2>
+        <% if (!padsOff_) { %><a href="/p/<%= encodeURIComponent(room.slug) %>"><%- t('home.room.open') %></a><% } %></h2>
       <%# 1.99fu: signed in, or a Public pad (padaccess.js) - roomLive is only set when this viewer may watch it %>
       <% if (roomGate_ !== 'ok') { %>
         <%# adultgate site: an 18+ pad while the owner switch is on - the 18+ card, no lines, names or counts %>
@@ -719,14 +728,14 @@
     <% } %>
     <aside class="hm-aside">
       <%# 1.99ci: the mini feed - the top 5 hot posts across every community (signed-out visitors: no NSFW) %>
-      <% if (typeof hot !== 'undefined' && hot) { %><%- include('partials/home-hot', { hot, fx }) %><% } %>
+      <% if (typeof hot !== 'undefined' && hot && !_gh('/feed')) { %><%- include('partials/home-hot', { hot, fx }) %><% } %>
       <section class="card now" aria-labelledby="nowH">
         <h2 id="nowH"><%- t('home.now.title') %></h2>
         <% if (feat) { %><a class="it" href="<%= feat.href || '/casino/t/' + encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%- t('home.now.table', { game: feat.game }) %><%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%- t('home.feat.seated', { n: feat.seats.length }) %></span></a><% } %>
-        <% if (S0.lotto) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q"><%- S0.lotto.next_at ? t('home.now.lotto_in', { when: '<span data-until="' + Number(S0.lotto.next_at) + '">…</span>' }) : t('home.now.lotto_sunday') %></span><span class="v"><%= short(S0.lotto.jackpot) %></span></a><% } %>
-        <% (S0.closing || []).forEach((m) => { %><a class="it" href="/markets/<%= encodeURIComponent(m.id) %>"><span>🔮</span><span class="q"><%= m.q %></span><span class="v" data-until="<%= Number(m.closes) %>">…</span></a><% }) %>
-        <% (S0.topBounties || []).forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
-        <% if (!feat && !S0.lotto && !(S0.closing || []).length && !(S0.topBounties || []).length) { %><p class="muted" style="margin:0"><%- t('home.now.quiet') %></p><% } %>
+        <% if (nowLotto_) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q"><%- nowLotto_.next_at ? t('home.now.lotto_in', { when: '<span data-until="' + Number(nowLotto_.next_at) + '">…</span>' }) : t('home.now.lotto_sunday') %></span><span class="v"><%= short(nowLotto_.jackpot) %></span></a><% } %>
+        <% nowClosing_.forEach((m) => { %><a class="it" href="/markets/<%= encodeURIComponent(m.id) %>"><span>🔮</span><span class="q"><%= m.q %></span><span class="v" data-until="<%= Number(m.closes) %>">…</span></a><% }) %>
+        <% nowBounties_.forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
+        <% if (!feat && !nowLotto_ && !nowClosing_.length && !nowBounties_.length) { %><p class="muted" style="margin:0"><%- t('home.now.quiet') %></p><% } %>
       </section>
     </aside>
   </div>
@@ -745,8 +754,9 @@
   </section>
 
   <!-- ───── top frogs ───── -->
+  <% if (!_gh('/u/' + encodeURIComponent(((top || [])[0] || {}).username || 'x'))) { %>
   <section class="card" aria-labelledby="tfH">
-    <h2 id="tfH"><span><%- t('home.tf.title') %></span><span class="h2r"><small><%- t('home.tf.members', { n: fmt(S0.members) }) %></small><a href="/rankings"><%- t('home.tf.all') %></a></span></h2>
+    <h2 id="tfH"><span><%- t('home.tf.title') %></span><span class="h2r"><small><%- t('home.tf.members', { n: fmt(S0.members) }) %></small><% if (!_gh('/rankings')) { %><a href="/rankings"><%- t('home.tf.all') %></a><% } %></span></h2>
     <ol class="tf">
       <% (top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
         <li class="r<%= i + 1 %>">
@@ -761,6 +771,7 @@
       <% }) %>
     </ol>
   </section>
+  <% } %>
 
   <%# 1.99dw: the old link row is in the site footer now (layout.ejs); the member count is in the Top frogs header.
       1.99xs: the admin Pepe control panel is on /admin/pepe#control only (linked from the stage's staff line) %>

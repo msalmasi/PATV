@@ -40,6 +40,7 @@ var CAPS = [
   ["auth.signin_methods", "accounts", "admin", "privacy"],
   ["auth.invites", "accounts", "admin", null],                  // 1.99anv: sign-ups open / invite-only, the invite tiers + price, every invite (invites.js)
   ["accounts.members", "accounts", "admin", null],              // 1.99anv: 👥 All members on /admin/users - every account, sortable, no emails / IPs (members.js)
+  ["auth.guest_access", "accounts", "admin", null],             // 1.99anv: 🚪 Guest access - which sections signed-out visitors can open (guestaccess.js)
   ["profile.see_private", "accounts", "admin", "privacy"],
   ["history.lookup", "accounts", "staff", "privacy"],           // anyone's PAT history (1.99acl: locked)
   // ── economy ──

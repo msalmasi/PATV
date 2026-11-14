@@ -319,6 +319,12 @@ const tz = require("./tz");
 app.use(tz.middleware(cookieUserId));
 tz.register(app, { addUser });
 tz.ensure();                                         // the user_timezone table + the saved choices, into memory
+// 1.99anv: 🚪 guest access (guestaccess.js) - a section an admin turned off for signed-out visitors (/admin/users#guests) answers its
+// pages with "Sign in to see <Section>" and its JSON GETs with 401 {error: "sign_in"}; res.locals.guestHides(href) / guestOff(key)
+// hide it from the navbar, the footer and the homepage. After the language middleware (the page is translated), before every route.
+// Never: the homepage, sign-in / sign-up, legal pages, bots, webhooks, OBS overlays and embeds (guestaccess.NEVER). All on by default.
+const guestAccess = require("./guestaccess");
+app.use(guestAccess.middleware);
 
 let clients = []; // Keep track of connected clients for SSE
 
@@ -504,6 +510,7 @@ googleSso.register(app, { addUser });
 appleSso.register(app, { addUser });   // /auth/apple, /auth/apple/link, /auth/apple/continue, /api/sso/apple/unlink (+ registerEarly above)
 ssoConf.register(app, { addUser });
 invites.register(app, { addUser });   // 1.99anv: GET /signup, /settings/invites, /api/invites*, /api/admin/invites*
+guestAccess.register(app, { addUser });   // 1.99anv: GET/POST /api/admin/guest-access (the 🚪 Guest access card, /admin/users#guests)
 
 // ── OAuth (Twitch / Discord) sign-in ──
 // `state` ties the callback to the browser that started it: without it, someone could send you a

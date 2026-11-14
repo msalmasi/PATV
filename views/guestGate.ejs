@@ -1,0 +1,31 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: title, user: null, og: og }) %>
+<%#
+  1.99anv (guestaccess.js): a section an admin turned off for signed-out visitors (/admin/users#guests). Only the section's name -
+  nothing from the page that was asked for. Sign in (back to that page) + "Got an invite?" while sign-ups are invite-only
+  (invites.mode()), else Sign up. HTTP 200, no-store, noindex.
+%>
+<link rel="stylesheet" href="/public/css/pad-access.css?v=2">
+<style>
+  .gg .pa-card .ds-actions { justify-content: center; display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+  .gg .gg-inv { color: var(--ds-text-2); margin: 14px auto 0; max-width: 44ch; line-height: 1.55; }
+</style>
+<main class="ds-page narrow flow pa-lock gg" id="guestGate" data-section="<%= gate.key %>">
+  <section class="pa-card" aria-labelledby="ggH">
+    <div class="pa-ic" aria-hidden="true">🔒</div>
+    <h1 id="ggH"><%- t('guest.title', { section: gate.name }) %></h1>
+    <p class="pa-what"><%- t('guest.lead', { section: gate.name }) %></p>
+    <div class="ds-actions">
+      <a class="pa-btn primary" href="<%= gate.signin %>"><%- t('guest.signin') %></a>
+      <% if (gate.mode === 'invite') { %>
+        <a class="pa-btn" href="<%= gate.signup %>"><span class="ds-ic" aria-hidden="true">🎟️</span><%- t('guest.invite') %></a>
+      <% } else { %>
+        <a class="pa-btn" href="<%= gate.signup %>"><%- t('guest.signup') %></a>
+      <% } %>
+    </div>
+    <% if (gate.mode === 'invite') { %><p class="gg-inv"><%- t('guest.invite_only') %></p><% } %>
+    <p class="pa-mut"><a href="/"><%- t('guest.home') %></a></p>
+  </section>
+</main>
+</body>
+</html>

@@ -255,6 +255,7 @@ test("the card and its nav link: only for someone who holds accounts.members", a
   assert.match(a, /id="members"/);
   assert.match(a, /admin-members\.js/);
   assert.match(a, /href="#members">All members</);
+  assert.match(a, /<table aria-label="All members" data-filtered="1">/, "no client-side row filter over one page - the search asks the server");
   const s = await render("Staff");
   assert.doesNotMatch(s, /id="members"/);
   assert.doesNotMatch(s, /href="#members"/);

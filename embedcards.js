@@ -136,12 +136,18 @@ async function build(refs, viewer, nowMs = Date.now()) {
 
 function register(app, { addUser }) {
   app.get("/api/embeds", addUser, async (req, res) => {
-    const refs = parseRefs(req.query.refs);
+    const all = parseRefs(req.query.refs);
+    // 1.99anv: a section an admin turned off for signed-out visitors (guestaccess.js) - its items' cards are null, like a missing item
+    const GA = require("./guestaccess");
+    const hidden = all.filter((r) => GA.hiddenFor(req, GA.EMBED_GROUP[r.kind]));
+    const refs = all.filter((r) => !hidden.includes(r));
     res.set("Cache-Control", `private, max-age=${CACHE_SECS}`);
     res.set("Vary", "Cookie");
     try {
       const now = Date.now();
-      res.json({ ok: true, now, items: await build(refs, req.user || null, now) });
+      const items = await build(refs, req.user || null, now);
+      for (const r of hidden) items[r.ref] = null;
+      res.json({ ok: true, now, items });
     } catch (e) {
       console.error("[embeds] build:", e);
       res.status(500).json({ ok: false });

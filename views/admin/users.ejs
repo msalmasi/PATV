@@ -2,7 +2,7 @@
 <% const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals); -%>
 <div class="adm-head">
   <h1>Users &amp; Accounts</h1>
-  <p><% if (_can('accounts.members')) { %><a href="#members">👥 Every account</a> (newest first), r<% } else { %>R<% } %>oles and classes, XP, the welcome bonus and the stale-account cleanup<% if (_can('auth.invites')) { %>, <a href="#invites">🎟️ sign-ups &amp; invites</a><% } %>. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
+  <p><% if (_can('accounts.members')) { %><a href="#members">👥 Every account</a> (newest first), r<% } else { %>R<% } %>oles and classes, XP, the welcome bonus and the stale-account cleanup<% if (_can('auth.invites')) { %>, <a href="#invites">🎟️ sign-ups &amp; invites</a><% } %><% if (_can('auth.guest_access')) { %>, <a href="#guests">🚪 what signed-out visitors can open</a><% } %>. Each card saves on its own. A member's sessions and account deletion: <a href="/admin/accounts">🔐 Account security</a>.</p>
 </div>
 <% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
 
@@ -25,7 +25,8 @@
       <input type="search" id="mmQ" maxlength="64" placeholder="Username, display name or Camfrog login">
     </form>
   </div>
-  <div class="adm-tbl mm-tbl"><table aria-label="All members">
+  <%# data-filtered: admin-shell.js's "Filter rows…" box would filter only this page's 50 rows - the search above asks the server %>
+  <div class="adm-tbl mm-tbl"><table aria-label="All members" data-filtered="1">
     <thead><tr>
       <th scope="col" data-mm-sort="username" aria-sort="none"><button type="button">Username <span class="mm-ar" aria-hidden="true"></span></button></th>
       <th scope="col">Display name</th>
@@ -358,6 +359,38 @@
   </details>
 </section>
 <script src="/public/js/admin-invites.js?v=2" defer></script>
+<% } %>
+<% if (_can('auth.guest_access')) { %>
+<%# 1.99anv: 🚪 guest access - sections signed-out visitors can open (guestaccess.js; GET/POST /api/admin/guest-access, public/js/admin-guests.js) %>
+<section class="adm-card ga" id="guests" aria-labelledby="guestsT">
+  <h2 id="guestsT"><span class="ds-ic" aria-hidden="true">🚪</span> Guest access <span class="adm-pill admin">admins</span> <span class="adm-pill" id="gaCount" aria-label="sections off for guests">?</span></h2>
+  <p class="adm-help">What a <b>signed-out</b> visitor can open. Untick a section and, for guests only, its pages show <i>"Sign in to see …"</i> with Sign in and - while sign-ups are invite-only - <i>Got an invite?</i> (else <i>Sign up</i>); its data feeds answer "sign in"; and it disappears from the navbar, the ☰ / More menus, the footer and the homepage's tiles. Members who are signed in see everything as before. Always open whatever this says: the homepage, signing in and up, invites, the legal pages, the bots' and Pepe's feeds, OBS overlays and embeds. All on = nothing changes. A change reaches every server process within 30 seconds, and each one is in the admin log (<code>guest_access</code>).</p>
+  <p class="adm-help" id="gaMode" style="color:var(--ds-text)">Loading…</p>
+  <form id="gaForm" class="ga-form" onsubmit="return false" autocomplete="off">
+    <div id="gaList" class="ga-list"></div>
+    <label for="gaReason" class="ga-why">Reason (optional, for the log)<input type="text" id="gaReason" maxlength="200"></label>
+    <div class="adm-actions"><button type="button" id="gaSave">Save guest access</button><button type="button" class="adm-btn ghost" id="gaAll">Turn everything on</button><span id="gaMsg" class="adm-msg" role="status" aria-live="polite"></span></div>
+  </form>
+  <details class="adm-adv">
+    <summary>Log</summary>
+    <div class="adm-adv-body"><ul class="adm-help" id="gaAudit" style="margin:0;padding-left:18px"></ul></div>
+  </details>
+</section>
+<style>
+  .ga .ga-list { display: grid; gap: 14px; margin-top: 6px; }
+  .ga .ga-sec { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .ga .ga-sec legend { font: 700 13px/1.4 var(--ds-font, sans-serif); color: var(--ds-text-2, #cfcfcf); margin: 0 0 6px; padding: 0; }
+  .ga .ga-rows { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .ga .ga-row { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; padding: 8px 10px; border: 1px solid var(--ds-line, #262626); border-radius: 10px; cursor: pointer; text-transform: none; letter-spacing: 0; min-width: 0; }
+  .ga .ga-row input { margin: 3px 0 0; grid-row: span 2; width: 18px; height: 18px; }
+  .ga .ga-row b { color: var(--ds-text, #eee); font-size: 14px; }
+  .ga .ga-row small { color: var(--ds-text-muted, #9a9a9a); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+  .ga .ga-row.off { border-color: var(--ds-danger-line, #5a2626); background: var(--ds-danger-bg, #1f1010); }
+  .ga .ga-row.dirty b::after { content: " · not saved"; color: var(--ds-gold-text, #ffd54f); font-weight: 400; font-size: 12px; }
+  .ga .ga-why { display: grid; gap: 4px; margin-top: 12px; text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--ds-text-muted, #9a9a9a); }
+  .ga .ga-why input { width: 100%; box-sizing: border-box; font-size: 16px; }
+</style>
+<script src="/public/js/admin-guests.js?v=1" defer></script>
 <% } %>
 <script src="/public/js/admin-panel.js?v=6" defer></script>
 <%- include('../partials/admin-close') %>

@@ -79,7 +79,13 @@
                 gtf: ['/gtf', '🔫', t('nav.gtf')],
                 rankings: ['/rankings', '🏆', t('nav.rankings')],
               };
-              const main = [T.watch, T.pads, T.wheel, T.feed, T.markets, T.wagers, T.gtf, T.rankings];
+              // 1.99anv: a section an admin turned off for signed-out visitors (guestaccess.js, /admin/users#guests) is hidden from every
+              // menu here - the top bar, More, the ☰ menu, the footer: res.locals.guestHides(href) (guestOff(key) for the Wheel, whose
+              // signed-out link is /login). Signed in (or rendered without the site's middleware) nothing is hidden.
+              const _gh = typeof guestHides === 'function' ? guestHides : () => false;
+              const _go = typeof guestOff === 'function' ? guestOff : () => false;
+              const _hid = (l) => !l || (l === T.wheel ? _go('wheel') : _gh(l[0]));
+              const main = [T.watch, T.pads, T.wheel, T.feed, T.markets, T.wagers, T.gtf, T.rankings].filter((l) => !_hid(l));
               // 1.99kz: "Support PATV" (/support) while a donation rail (card or stablecoins) is on - app.locals.supportOn (cryptoweb.js)
               const _supportOn = typeof supportOn === 'function' ? !!supportOn() : false;
               const _rafflesOn = typeof rafflesOn === 'function' ? !!rafflesOn() : false;
@@ -156,7 +162,7 @@
                 + ' title="' + l[2] + '"><span class="ic">' + l[1] + '</span>'
                 + (labelled ? '<span class="nav-lbl">' + l[2] + '</span>' : '') + '</a>';
               const groups = (pre, skipMain) => '<div class="nav-secs">' + sections.filter(Boolean).map((s) => {
-                const its = s[2].filter((l) => l && !(skipMain && main.includes(l)));
+                const its = s[2].filter((l) => l && !_hid(l) && !(skipMain && main.includes(l)));
                 return its.length ? '<div class="nav-sec' + (s[3] ? ' ' + s[3] : '') + '" role="group" aria-labelledby="' + pre + s[0] + '"'
                   + (s[3] === 'adminLink' && !_admHome ? ' hidden' : '') + '><div class="nav-sec-h" id="' + pre + s[0] + '">' + s[1] + '</div>'
                   + '<div class="nav-sec-items">' + its.map((l) => (l[4] ? '<div class="nav-row">' + item(l, true) + l[4] + '</div>' : item(l, true))).join('') + '</div></div>' : '';
@@ -168,21 +174,21 @@
                 <details class="nav-more">
                     <summary><span class="nav-more-ic" aria-hidden="true">⋯</span><span class="nav-more-lbl"><%- t('nav.more') %></span> <span aria-hidden="true">▾</span></summary>
                     <div class="nav-pop">
-                        <%# 1.99is: search (search.js) - in both menus, so every width has it %>
-                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
-                        <div class="nav-sep"></div>
+                        <%# 1.99is: search (search.js) - in both menus, so every width has it (1.99anv: unless Search is off for guests) %>
+                        <% if (!_gh('/search')) { %><form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
+                        <div class="nav-sep"></div><% } %>
                         <%- groups('nm-', true) %>
                     </div>
                 </details>
             </div>
             <div class="navbar-right">
                 <%# 1.99is: search - a box on wide screens, a 🔍 button on medium ones; narrower, it's in the ☰ / More menus %>
-                <form class="nav-search" action="/search" method="get" role="search"><span class="nav-s-ic" aria-hidden="true">🔍</span><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"></form>
-                <a href="/search" class="nav-sbtn" title="<%- t('nav.search_aria') %>" aria-label="<%- t('nav.search') %>"><span aria-hidden="true">🔍</span></a>
+                <% if (!_gh('/search')) { %><form class="nav-search" action="/search" method="get" role="search"><span class="nav-s-ic" aria-hidden="true">🔍</span><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"></form>
+                <a href="/search" class="nav-sbtn" title="<%- t('nav.search_aria') %>" aria-label="<%- t('nav.search') %>"><span aria-hidden="true">🔍</span></a><% } %>
                 <%# 1.99ec: "✏️ Post" - the create-post page; on a pad's pages (/p/<pad>/...) it preselects that pad %>
                 <% const _pm = typeof ogPath !== 'undefined' && ogPath ? /^\/p\/([A-Za-z0-9._~%-]+)/.exec(ogPath) : null; %>
-                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="<%- _pm ? t('nav.create_post_in', { pad: _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() }) : t('nav.create_post') %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl"><%- t('nav.post') %></span></a>
-                <a href="/stage" class="nav-golive" title="<%- t('nav.golive_title') %>"><span class="cta-ic" aria-hidden="true">🎥</span><span class="nav-lbl"><%- t('nav.golive') %></span></a>
+                <% if (!_gh(_pm ? '/p/' + _pm[1] + '/submit' : '/submit')) { %><a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="<%- _pm ? t('nav.create_post_in', { pad: _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() }) : t('nav.create_post') %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl"><%- t('nav.post') %></span></a><% } %>
+                <% if (!_gh('/stage')) { %><a href="/stage" class="nav-golive" title="<%- t('nav.golive_title') %>"><span class="cta-ic" aria-hidden="true">🎥</span><span class="nav-lbl"><%- t('nav.golive') %></span></a><% } %>
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin"><%- t('nav.signin') %></a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; const _dm = (typeof dmUnread !== 'undefined' && dmUnread > 0) ? dmUnread : 0; %>
@@ -196,8 +202,8 @@
                 <details class="nav-burger">
                     <summary aria-label="<%- t('nav.menu') %>">☰</summary>
                     <div class="nav-pop">
-                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
-                        <div class="nav-sep"></div>
+                        <% if (!_gh('/search')) { %><form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
+                        <div class="nav-sep"></div><% } %>
                         <%- groups('nb-', false) %>
                     </div>
                 </details>
@@ -419,15 +425,16 @@
                     <%# 1.99ta: the TAKE IT DOWN form (takedown.js) - no account needed, so it sits with the policies %>
                     <a href="/takedown"><%- t('foot.takedown') %></a>
                     <a href="/about"><%- t('nav.about') %></a>
-                    <a href="/economy"><%- t('nav.economy') %></a>
+                    <% if (!_gh('/economy')) { %><a href="/economy"><%- t('nav.economy') %></a><% } %>
                 </nav>
                 <%# 1.99dw: the homepage's old link row lives here now, on every page %>
                 <nav aria-label="<%- t('foot.more_aria') %>">
-                    <a href="/help"><%- t('foot.help') %></a>
+                    <%# 1.99anv: the links into a section that's off for guests go (guestaccess.js) %>
+                    <% if (!_gh('/help')) { %><a href="/help"><%- t('foot.help') %></a><% } %>
                     <a href="https://discord.gg/publicaccess" rel="noopener">Discord</a>
-                    <a href="/achievements"><%- t('nav.achievements') %></a>
-                    <a href="/shop"><%- t('nav.shop') %></a>
-                    <a href="/plex"><%- t('nav.plex') %></a>
+                    <% if (!_gh('/achievements')) { %><a href="/achievements"><%- t('nav.achievements') %></a><% } %>
+                    <% if (!_gh('/shop')) { %><a href="/shop"><%- t('nav.shop') %></a><% } %>
+                    <% if (!_gh('/plex')) { %><a href="/plex"><%- t('nav.plex') %></a><% } %>
                     <% if (_supportOn) { %><a href="/support"><%- t('foot.support') %></a><% } %>
                 </nav>
                 <div><%- t('foot.tagline') %></div>
