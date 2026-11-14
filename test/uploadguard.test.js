@@ -4,6 +4,9 @@
 // no closing boundary (multer 1.4.5-lts.1's uncaught "Unexpected end of form"), a form without the picture (req.file.path threw - an
 // unhandled rejection), a cut-off body, an upload that stops half-way - never end the process and are answered 4xx; an anonymous or
 // non-manager badge form is refused before its body is read; the normal profile photo (S3 faked) and badge form still work.
+// Review of the hardening: a picture's decode cost is read from its header (imagebudget.js) - a 41 KB GIF or an interlaced 16-bit
+// PNG that would take 400-550 MB is refused, a phone-sized JPEG is not; the real format decides (an SVG sent as image/png is
+// refused, image/jpg is a JPEG); a burst decodes 2 at a time; 10 uploads a minute per member.
 //   npm ci (multer 2.5.0), then: NODE_PATH=<repo>/node_modules TZ=UTC node --test test/uploadguard.test.js
 "use strict";
 const test = require("node:test");
@@ -73,7 +76,7 @@ function send(p, { data = Buffer.alloc(0), type = TYPE, cookie: c = MEMBER, head
       let s = "";
       res.setEncoding("utf8");
       res.on("data", (d) => { s += d; });
-      res.on("end", () => { let json = null; try { json = JSON.parse(s); } catch (_) { json = null; } resolve({ status: res.statusCode, json, location: res.headers.location }); });
+      res.on("end", () => { let json = null; try { json = JSON.parse(s); } catch (_) { json = null; } resolve({ status: res.statusCode, json, location: res.headers.location, retry: res.headers["retry-after"] }); });
     });
     req.on("error", (e) => resolve({ status: "error " + e.code }));
     req.end(data);
@@ -191,6 +194,71 @@ test("the profile photo: a normal upload still works (S3 faked) - resized, store
   alive("signed out");
 });
 
+// review 1.99anw (hardening): 60 Mpx alone let a 41 KB GIF or a 720 KB interlaced 16-bit PNG take 400-550 MB per decode
+const BOMB = cookie("u-bomb", "bomb1"), TYPES = cookie("u-types", "types1"), BURST = cookie("u-burst", "burst1");
+const RATE = cookie("u-rate", "rate1"), RATE2 = cookie("u-rate2", "rate21");
+const ofUser = (u) => "/api/u/" + u + "/update/avatar";
+const canvas = (w, h, ch) => sharp({ create: { width: w, height: h, channels: ch, background: ch === 4 ? { r: 9, g: 99, b: 9, alpha: 0.5 } : { r: 9, g: 99, b: 9 } }, limitInputPixels: false });
+const get = (p) => new Promise((res) => http.get({ host: "127.0.0.1", port, path: p }, (x) => { let s = ""; x.on("data", (d) => { s += d; }); x.on("end", () => res(JSON.parse(s))); }));
+
+test("the profile photo: what a picture costs to decode is read from its header - the review's small bombs are refused, the same sizes that stream are not", async () => {
+  const cases = [
+    // [name, want, error, picture, declared type] - every one well under nginx's 1 MB
+    ["gif 59.9 Mpx (the review's 41 KB, ~400 MB)", 400, "TOO_MANY_PIXELS", await canvas(7740, 7740, 4).gif().toBuffer(), "image/gif"],
+    ["gif 17.6 Mpx", 400, "TOO_MANY_PIXELS", await canvas(4200, 4200, 4).gif().toBuffer(), "image/gif"],
+    ["gif 16 Mpx", 200, null, await canvas(4000, 4000, 3).gif().toBuffer(), "image/gif"],
+    ["interlaced 16-bit png 13.7 Mpx", 400, "TOO_MANY_PIXELS", await canvas(3700, 3700, 4).toColourspace("rgb16").png({ progressive: true }).toBuffer(), "image/png"],
+    ["16-bit png 13.7 Mpx", 200, null, await canvas(3700, 3700, 4).toColourspace("rgb16").png().toBuffer(), "image/png"],
+    ["avif 9 Mpx (573 bytes)", 400, "TOO_MANY_PIXELS", await canvas(3000, 3000, 3).avif({ quality: 30, effort: 0 }).toBuffer(), "image/avif"],
+    ["avif 4 Mpx", 200, null, await canvas(2000, 2000, 3).avif({ quality: 30, effort: 0 }).toBuffer(), "image/avif"],
+    ["progressive jpeg 49 Mpx", 400, "TOO_MANY_PIXELS", await canvas(7000, 7000, 3).jpeg({ progressive: true, quality: 50 }).toBuffer(), "image/jpeg"],
+    ["baseline jpeg 49 Mpx (a phone photo)", 200, null, await canvas(7000, 7000, 3).jpeg({ quality: 50 }).toBuffer(), "image/jpeg"],
+  ];
+  for (const [name, want, error, pic, type] of cases) {
+    assert.ok(pic.length < 1024 * 1024, name + ": under nginx's 1 MB");
+    const r = await send(ofUser("bomb1"), { data: body(file("avatar", pic, type, "a.img"), END), cookie: BOMB });
+    alive(name);
+    assert.equal(r.status, want, `${name} -> ${r.status} ${JSON.stringify(r.json)}`);
+    if (error) { assert.equal(r.json.error, error, name); assert.match(r.json.message, /too large/); }
+    else assert.equal(r.json.message, "Avatar uploaded successfully.", name);
+  }
+  assert.deepEqual(await get("/test/decodes"), { size: 2, active: 0, waiting: 0, peak: 1 }, "one at a time here; every slot given back");
+});
+
+test("the profile photo: the real format decides - an SVG sent as image/png is refused; image/jpg and image/apng are pictures", async () => {
+  const svg = await send(ofUser("types1"), { data: body(file("avatar", "<svg xmlns='http://www.w3.org/2000/svg' width='4000' height='4000'/>", "image/png", "a.png"), END), cookie: TYPES });
+  alive("svg as png");
+  assert.equal(svg.status, 400);
+  assert.equal(svg.json.error, "NOT_A_PICTURE");
+  const jpg = await send(ofUser("types1"), { data: body(file("avatar", await sharp(await png()).jpeg().toBuffer(), "image/jpg", "a.jpg"), END), cookie: TYPES });
+  assert.equal(jpg.status, 200, "a JPEG the client called image/jpg: " + JSON.stringify(jpg.json));
+  const apng = await send(ofUser("types1"), { data: body(file("avatar", await png(), "image/apng", "a.png"), END), cookie: TYPES });
+  assert.equal(apng.status, 200, "image/apng: " + JSON.stringify(apng.json));
+});
+
+test("the profile photo: a burst of 8 decodes 2 at a time (the rest wait their turn) and every one is answered", async () => {
+  const pic = await canvas(4000, 4000, 3).gif().toBuffer();   // ~124 MB to decode: 8 at once took 4 libuv threads and ~1 GB
+  const rs = await Promise.all(times(8, () => send(ofUser("burst1"), { data: body(file("avatar", pic, "image/gif", "a.gif"), END), cookie: BURST })));
+  alive("the burst");
+  assert.deepEqual(rs.map((r) => r.status), Array(8).fill(200), JSON.stringify(rs.map((r) => r.json)));
+  const st = await get("/test/decodes");
+  assert.equal(st.peak, 2, "two decodes overlapped, never more");
+  assert.equal(st.active, 0); assert.equal(st.waiting, 0);
+});
+
+test("the profile photo: 10 uploads a minute per member, then 429 with Retry-After (another member is unaffected)", async () => {
+  const pic = body(file("avatar", await png(32, 32)), END);
+  for (let i = 0; i < 10; i++) assert.equal((await send(ofUser("rate1"), { data: pic, cookie: RATE })).status, 200, "upload " + (i + 1));
+  const r = await send(ofUser("rate1"), { data: pic, cookie: RATE });
+  alive("rate limited");
+  assert.equal(r.status, 429);
+  assert.equal(r.json.error, "RATE_LIMITED");
+  assert.ok(Number(r.retry) >= 1 && Number(r.retry) <= 60, "Retry-After " + r.retry);
+  assert.equal((await send(ofUser("rate21"), { data: pic, cookie: RATE2 })).status, 200, "per member");
+  await new Promise((res) => setTimeout(res, 100));
+  if (process.platform !== "win32") assert.deepEqual(fs.readdirSync(path.join(tmp, "uploads")), [], "the refused upload's copy is removed too");
+});
+
 test("the badge form: no sign-in (or no badge rights) is refused before the body is read; a manager's hostile bodies are 4xx", async () => {
   // the answer comes while the body is still on its way: nothing waits for (or parses) it
   assert.equal(await partial(BADGE, { length: 100000, sent: field("name", "x") }), "302 /login", "anonymous: refused before the body");
@@ -251,7 +319,17 @@ test("index.js runs the same chain as the fixture: auth before multer, every mul
   assert.match(uc, /const avatarUpload = require\('\.\/uploadguard'\)\.avatarUpload\(multer\);/);
   for (const [f, s] of [["index.js", src], ["user.controller.js", uc]]) assert.doesNotMatch(s, /multer\(\{\s*dest/, f + ": an uncapped multer");
   assert.match(uc, /if \(!req\.file \|\| !req\.file\.path\) return res\.status\(400\)/, "the missing-picture guard");
-  assert.match(uc, /sharp\(filePath, \{ limitInputPixels: 60e6 \}\)/, "the decode cap (imagesafety.js's)");
+  assert.match(uc, /maxPixels: 60e6, maxBytes: 128 \* IB\.MiB/, "the decode cap (imagesafety.js's 60 Mpx) and the decode budget");
+  // review 1.99anw: rate -> a decode slot -> the header -> the budget -> the decode, in that order, with the slot given back
+  const ua = uc.slice(uc.indexOf("async function updateAvatar"), uc.indexOf("// Update discord"));
+  const at = (re) => { const m = re.exec(ua); assert.ok(m, String(re)); return m.index; };
+  const order = [/AVATAR_RATE\.attempt\(String\(userId\)\)/, /AVATAR_DECODES\.acquire\(\)/, /release = await slot;/,
+    /sharp\(filePath, \{ limitInputPixels: AVATAR_PICTURE\.maxPixels \}\)\.metadata\(\)/, /IB\.check\(meta, AVATAR_PICTURE\)/,
+    /sharp\(filePath, \{ limitInputPixels: AVATAR_PICTURE\.maxPixels \}\)\s*\.resize\(200, 200\)/, /release\(\); release = null;/].map(at);
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "in that order");
+  assert.match(ua, /\.timeout\(\{ seconds: 10 \}\)/);
+  assert.match(ua, /finally \{\s*if \(release\) release\(\);\s*fs\.unlink\(filePath/, "the slot is given back on every path");
+  assert.equal((ua.match(/sharp\(/g) || []).length, 2, "no other decode of the upload");
 });
 
 test("the route's one caller - the admin Cosmetics page's form - is found by its own id and sends the fields the handler reads", () => {
@@ -281,9 +359,9 @@ test("uploadguard: the caps and the error answers", () => {
   assert.equal(UG.classify(new Error("Malformed part header"))[0], 400);
   assert.equal(UG.classify(Object.assign(new Error("no space"), { code: "ENOSPC", errno: -28, syscall: "write" }))[0], 500, "the disk failing is the site's fault");
   const ok = [], no = [];
-  for (const t of ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "IMAGE/PNG"]) UG.avatarFilter({}, { fieldname: "avatar", mimetype: t }, (e, y) => (e ? no : ok).push(t));
+  for (const t of ["image/jpeg", "image/jpg", "image/png", "image/apng", "image/webp", "image/gif", "image/avif", "IMAGE/PNG"]) UG.avatarFilter({}, { fieldname: "avatar", mimetype: t }, (e, y) => (e ? no : ok).push(t));
   for (const t of ["image/svg+xml", "text/html", "application/octet-stream", "image/heic", ""]) UG.avatarFilter({}, { fieldname: "avatar", mimetype: t }, (e) => (e ? no : ok).push(t));
   UG.avatarFilter({}, { fieldname: "photo", mimetype: "image/png" }, (e) => (e ? no : ok).push("photo"));
-  assert.deepEqual(ok, ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "IMAGE/PNG"]);
+  assert.deepEqual(ok, ["image/jpeg", "image/jpg", "image/png", "image/apng", "image/webp", "image/gif", "image/avif", "IMAGE/PNG"]);
   assert.equal(no.length, 6);
 });

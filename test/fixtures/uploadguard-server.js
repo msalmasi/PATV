@@ -18,11 +18,13 @@ const session = require("express-session");
 const flash = require("connect-flash");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const sharp = require("sharp");
+sharp.cache(false);   // index.js (review 1.99anw: no libvips operation cache)
 const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const SP = require(path.join(repo, "siteperms"));
 const authenticateToken = require(path.join(repo, "middleware", "authenticateToken"));
 const UG = require(path.join(repo, "uploadguard"));
-const { updateAvatar, avatarUpload } = require(path.join(repo, "user.controller"));
+const { updateAvatar, avatarUpload, AVATAR_DECODES } = require(path.join(repo, "user.controller"));
 
 // index.js's addUser, shortened: the login cookie's account (current class from the database), or null
 async function addUser(req, res, next) {
@@ -46,6 +48,8 @@ function badgeManager(req, res, next) {
 (async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, class TEXT, avatar TEXT)");
   await runQuery("INSERT OR IGNORE INTO users (userId, username, class) VALUES ('u-member', 'member1', NULL), ('u-staff', 'staff1', 'Staff')");
+  // review 1.99anw: members of their own for the decode-budget, type, burst and rate cases (AVATAR_RATE_MAX uploads a minute each)
+  for (const n of ["bomb", "types", "burst", "rate", "rate2"]) await runQuery("INSERT OR IGNORE INTO users (userId, username, class) VALUES (?, ?, NULL)", ["u-" + n, n + "1"]);
   const app = express();
   app.use(cookieParser());
   app.use(session({ secret: "uploadguard-test", resave: false, saveUninitialized: false }));
@@ -62,6 +66,8 @@ function badgeManager(req, res, next) {
     res.json({ message: "Badge created successfully.", body: { ...req.body } });
   });
   app.get("/test/s3", (req, res) => res.json({ keys: s3keys }));
+  app.get("/test/decodes", (req, res) => res.json(AVATAR_DECODES.stats()));
+  app.get("/test/sharpcache", (req, res) => res.json(sharp.cache()));
   app.get("/test/avatar/:userId", async (req, res) => res.json((await getQuery("SELECT avatar FROM users WHERE userId = ?", [req.params.userId]))[0] || {}));
   const server = app.listen(0, "127.0.0.1", () => process.stdout.write("PORT " + server.address().port + "\n"));
 })().catch((e) => { console.error("setup failed:", e && e.message); process.exit(3); });

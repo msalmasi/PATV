@@ -15,7 +15,10 @@ const MB = 1024 * 1024;
 
 // The profile photo: one file field, "avatar" (public/js/upload-avatar.js and views/editProfile.ejs send nothing else), a raster
 // picture sharp decodes, at most 8 MB (nginx in front takes 1 MB a request today - botupload.js - so this never binds first).
-const AVATAR_TYPES = Object.freeze(["image/jpeg", "image/pjpeg", "image/png", "image/x-png", "image/webp", "image/gif", "image/avif", "image/tiff"]);
+// Review 1.99anw: + the non-standard names some clients give a JPEG or an animated PNG (image/jpg, image/apng) - sharp decoded them
+// before. What the browser says only sorts out what to write to disk: updateAvatar reads the real format from the file's header
+// (imagebudget.check), so an SVG sent as image/png is refused there.
+const AVATAR_TYPES = Object.freeze(["image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/x-png", "image/apng", "image/webp", "image/gif", "image/avif", "image/tiff"]);
 const AVATAR = Object.freeze({
   limits: Object.freeze({ fileSize: 8 * MB, files: 1, fields: 4, fieldSize: 4096, fieldNameSize: 100, parts: 5, headerPairs: 20 }),
   maxBody: 8 * MB + 64 * 1024,

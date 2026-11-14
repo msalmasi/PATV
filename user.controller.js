@@ -471,22 +471,50 @@ async function updatePassword(req, res) {
 // unhandled rejection that ended the site's process. The decode is capped like imagesafety.js (limitInputPixels 60 Mpx: a small
 // file that would decode to gigabytes is refused), a file sharp can't read is a 400, and multer's copy in uploads/ is removed once
 // read (it was left there for good). The path is the one multer wrote, from the process's folder (it is the repo's in prod).
+// Review 1.99anw (hardening): 60 Mpx still let a 41 KB GIF or a 720 KB interlaced 16-bit PNG take 400-550 MB per decode, and 8 at
+// once took the site to 2.3 GB with every libuv thread busy. Now: the header is read first, and the picture's real format must be
+// one we take (an SVG sent as image/png is refused too) and its estimated decode must fit AVATAR_PICTURE.maxBytes (imagebudget.js);
+// at most AVATAR_DECODES.size decodes run at once, with a short queue behind them (503 when it is full); and each member gets
+// AVATAR_RATE_MAX uploads a minute (429 after that).
+const IB = require('./imagebudget');
+const AVATAR_PICTURE = Object.freeze({ formats: Object.freeze(['jpeg', 'png', 'webp', 'gif', 'heif', 'tiff']), maxPixels: 60e6, maxBytes: 128 * IB.MiB });
+const AVATAR_DECODES = IB.createSlots({ size: 2, waiting: 16 });
+const AVATAR_RATE_MAX = 10;
+const AVATAR_RATE = guard.limiter({ max: AVATAR_RATE_MAX, windowMs: 60 * 1000 });
 async function updateAvatar (req, res) {
   if (!req.file || !req.file.path) return res.status(400).json({ success: false, message: 'No picture was uploaded.' });
   const userId = req.user.userId;
   const username = req.user.username;
   const filePath = path.resolve(req.file.path);
   console.log(filePath);
+  let release = null;
   try {
+      const wait = AVATAR_RATE.attempt(String(userId));
+      if (wait) {
+          res.set('Retry-After', String(wait));
+          return res.status(429).json({ success: false, error: 'RATE_LIMITED', message: 'Too many uploads - try again in a minute.' });
+      }
+      const slot = AVATAR_DECODES.acquire();
+      if (!slot) {
+          res.set('Retry-After', '5');
+          return res.status(503).json({ success: false, error: 'BUSY', message: 'Busy right now - try again in a few seconds.' });
+      }
+      release = await slot;
       // Resize and crop the image using Sharp
       let resizedImage;
       try {
-          resizedImage = await sharp(filePath, { limitInputPixels: 60e6 })
+          const meta = await sharp(filePath, { limitInputPixels: AVATAR_PICTURE.maxPixels }).metadata();   // the header only
+          const no = IB.check(meta, AVATAR_PICTURE);
+          if (no) return res.status(400).json({ success: false, error: no.code, message: no.message });
+          resizedImage = await sharp(filePath, { limitInputPixels: AVATAR_PICTURE.maxPixels })
               .resize(200, 200) // Change dimensions as needed
               .jpeg({ quality: 90 })
+              .timeout({ seconds: 10 })
               .toBuffer();
       } catch (e) {
           return res.status(400).json({ success: false, message: "That picture couldn't be read - try a JPEG or PNG." });
+      } finally {
+          release(); release = null;   // the decode is done: the next upload's turn
       }
 
       // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's switched off). Profile photos must be
@@ -516,6 +544,7 @@ async function updateAvatar (req, res) {
       console.error('Failed to upload avatar:', error);
       res.status(500).json({ success: false, message: 'Failed to upload avatar.' });
   } finally {
+      if (release) release();
       fs.unlink(filePath, () => {});   // multer's copy; the S3 one is the resized picture
   }
 };
@@ -1348,6 +1377,7 @@ module.exports = {
   updateDisplayname,
   updateAvatar,
   avatarUpload,         // 1.99anw: the profile photo's multer (index.js runs it behind uploadguard.guard)
+  AVATAR_PICTURE, AVATAR_DECODES, AVATAR_RATE_MAX,   // 1.99anw review: the photo's decode budget, decode slots, uploads a minute
   updateDiscordId,
   updateTwitchId,
   updateCamfrogUsername,

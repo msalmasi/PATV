@@ -75,6 +75,11 @@ const crypto = require("crypto");
 const sgMail = require("@sendgrid/mail");
 const multer = require("multer");
 const sharp = require("sharp");
+// 1.99anw review: no libvips operation cache, for the whole process. Each cached load kept its decoder's memory, and the cache's
+// own 50 MB limit doesn't count that memory: 8 profile photos uploaded one after another (40 Mpx progressive JPEGs, 230 KB each)
+// left the process 917 MB bigger with the cache, 4 MB without it. The site decodes pictures people upload, each one once, so
+// the cache rarely saved a decode (imagebudget.js).
+sharp.cache(false);
 const AWS = require("aws-sdk");
 // 1.99anw: multer 2 behind uploadguard.js - the admin badge form's (text fields only; the profile photo's is user.controller's
 // avatarUpload). A parser error is a 400 / 413 answer, never an exception that ends the process (review 1.99anw).
