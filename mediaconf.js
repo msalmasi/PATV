@@ -38,6 +38,7 @@ const DEFAULTS = {
   // does nothing until an admin pastes the URL from /admin/media into Plex. The secret itself is never a setting (plex_hook table).
   catalog_hook: true,
   catalog_hook_debounce_s: 30,
+  catalog_hook_gap_min: 5,       // review: and at least this many minutes after the last catalog read ended (one webhook run per gap)
   catalog_hook_server: "",       // only this Plex server's events (its machine identifier); "" = any server that has the URL
   clerk_embed: false,
   clerk_lists: false,
@@ -146,6 +147,7 @@ const CLEAN = {
   catalog_sync_min: (v) => num(v, 10, 1440, 60),
   catalog_hook: bool,                                                           // 1.99anw plexhook
   catalog_hook_debounce_s: (v) => num(v, 10, 600, 30),
+  catalog_hook_gap_min: (v) => num(v, 1, 60, 5),
   catalog_hook_server: (v) => { const s = String(v == null ? "" : v).trim(); return /^[A-Za-z0-9]{8,64}$/.test(s) ? s : ""; },
   clerk_lists: (v) => v === true || v === "true" || v === "1",
   clerk_embed: (v) => v === true || v === "true" || v === "1",

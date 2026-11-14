@@ -118,7 +118,7 @@
     switch (outcome) {
       case "scheduled": return ht("what_scheduled", "a catalog read was scheduled");
       case "joined": return ht("what_joined", "joined the catalog read already waiting");
-      case "after": return ht("what_after", "a catalog read runs right after the one in progress");
+      case "after": return ht("what_after", "a catalog read follows the one in progress");
       case "ignored": return ht("what_ignored", "ignored (only new titles count)");
       case "switch_off": return ht("what_switch_off", "ignored (the webhook is switched off)");
       case "catalog_off": return ht("what_catalog_off", "ignored (the catalog is off)");
@@ -146,12 +146,19 @@
     ["phShow", "phCopy", "phRegen"].forEach(function (id) { var b = document.getElementById(id); if (b) b.disabled = id === "phRegen" ? false : !phUrl; });
     while (out.firstChild) out.removeChild(out.firstChild);
     pcText(out, "p", !j.catalog_on ? ht("status_catalog_off", "The catalog is off (no clerk switch is on), so Plex's messages are answered and ignored.")
-      : j.on ? ht("status_on", "On: a title Plex adds is read into the catalog about {n} seconds later.", { n: Number(j.debounce_s) || 30 })
+      : j.on ? ht("status_on", "On: a title Plex adds is read into the catalog about {n} seconds later, but never sooner than {m} minutes after the previous catalog read ended.",
+        { n: Number(j.debounce_s) || 30, m: Number(j.gap_min) || 5 })
       : ht("status_off", "Switched off in Settings below: Plex's messages are answered and ignored."));
-    if (j.pending) pcText(out, "p", j.pending.after_running ? ht("pending_after", "A catalog read runs right after the one in progress.")
+    if (j.pending) pcText(out, "p", j.pending.after_running ? ht("pending_after", "A catalog read follows the one in progress.")
       : ht("pending", "A catalog read is waiting, due {at}.", { at: phDate(j.pending.due) }));
-    pcText(out, "p", j.last ? ht("last", "Last webhook: {at}, {event}, {what}.", { at: phDate(j.last.at),
-      event: j.last.event && j.last.event !== "-" ? j.last.event : ht("no_event", "no event"), what: phWhat(j.last.outcome) }) : ht("last_none", "No webhook received yet."));
+    // review 1.99anw: the last new title on its own line - a busy server's play / pause messages never hide what became of it
+    pcText(out, "p", j.last_new ? ht("last_new", "Last new title (library.new): {at}, {what}.", { at: phDate(j.last_new.at), what: phWhat(j.last_new.outcome) })
+      : ht("last_new_none", "No new title (library.new) received yet."));
+    pcText(out, "p", j.last ? ht("last", "Last webhook of any kind: {at}, {event}, {what}.", { at: phDate(j.last.at),
+      event: j.last.event && j.last.event !== "-" ? j.last.event : ht("no_event", "no event"), what: phWhat(j.last.outcome) }) : ht("last_none", "No webhook received since the site started."));
+    if ((j.ignored || []).length) pcText(out, "p", ht("ignored_counts", "Answered and ignored since the site started: {list}.", { list: j.ignored.map(function (x) {
+      return ht("ignored_item", "{event} × {n}", { event: String(x.event || ""), n: Number(x.n) || 0 });
+    }).join(", ") }));
     if (j.wrong) pcText(out, "p", ht("wrong", "Requests to an old or wrong webhook address since the site started: {n} (last {at}).", { n: Number(j.wrong.n) || 0, at: phDate(j.wrong.at) }));
     var who = pcText(out, "p", j.server ? ht("server_pinned", "Accepted only from the Plex server {id}.", { id: j.server })
       : ht("server_any", "Accepted from any Plex server that has this address: the site cannot read its own server's identifier, so pick it below once Plex has sent a new title."));

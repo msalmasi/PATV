@@ -65,7 +65,7 @@ async function setup(t, o = {}) {
   const T = fakeTime(o.start || AT);
   const dir = fs.mkdtempSync(path.join(tmp, "cat-"));
   const cfg = { clerk_enabled: "staff", clerk_requests: "off", clerk_block_ratings: "X", catalog_sync_min: 60, catalog_hook: true,
-    catalog_hook_debounce_s: 30, catalog_hook_server: "", ...(o.cfg || {}) };
+    catalog_hook_debounce_s: 30, catalog_hook_gap_min: 5, catalog_hook_server: "", ...(o.cfg || {}) };
   const api = { gate: null };
   const calls = [], logs = [], syncAt = [], audits = [];
   const mediactl = async (method, route) => {
@@ -161,6 +161,7 @@ const noSecretIn = (h, secret) => { for (const l of h.logs) assert.ok(!l.include
 test("a good secret + library.new -> one debounced, changes-only sync; the payload never reaches the catalog, a log or the store", async (t) => {
   const h = await setup(t);
   assert.equal((await h.catalog.sync({ full: true })).ok, true);   // the day's full sweep is done: what follows is a delta
+  h.T.jump(AT + 600000);                                           // 10 minutes on: past catalog_hook_gap_min after that run
   const mark = h.calls.length;
   const url = await h.url();
   assert.match(url, /^https:\/\/publicaccess\.tv\/api\/plex\/webhook\/[A-Za-z0-9_-]{43}$/);
@@ -185,14 +186,15 @@ test("a good secret + library.new -> one debounced, changes-only sync; the paylo
   assert.deepEqual(await h.catalog.search("zebra lantern"), []);
   for (const l of h.logs) assert.ok(!/Zebra|Fixture Section Name|fixture-owner|Fixture Server/.test(l), l);
   for (const v of h.store.m.values()) assert.ok(!/Zebra|Fixture/.test(v), v);
-  assert.deepEqual([...h.store.m.keys()].sort(), ["last", "secret"]);
-  assert.deepEqual(JSON.parse(h.store.m.get("last")), { at: AT, event: "library.new", outcome: "scheduled" });
+  assert.deepEqual([...h.store.m.keys()].sort(), ["last_new", "secret"]);
+  assert.deepEqual(JSON.parse(h.store.m.get("last_new")), { at: AT + 600000, outcome: "scheduled" });
   noSecretIn(h, secretOf(url));
 });
 
-test("a burst of 10 -> one sync; a burst while it runs -> exactly one follow-up after it, never a pile-up", async (t) => {
+test("a burst of 10 -> one sync; a burst while it runs -> exactly one follow-up after it (and the gap), never a pile-up", async (t) => {
   const h = await setup(t);
   await h.catalog.sync({ full: true });
+  h.T.jump(AT + 600000);
   const url = await h.url();
   const first = [];
   for (let i = 0; i < 10; i++) first.push((await h.deliver("library.new", { url })).body.outcome);
@@ -210,15 +212,21 @@ test("a burst of 10 -> one sync; a burst while it runs -> exactly one follow-up 
   await h.idle();
   await waitFor(() => h.T.size() === 1, "the follow-up to be planned");
   assert.equal(h.started(), 2);
+  const ended = h.T.now();
   await h.T.advance(30000);
+  assert.equal(h.started(), 2, "not 30 s after: catalog_hook_gap_min (5) after the last run ended");
+  await h.T.advance(ended + 300000 - 1 - h.T.now());
+  assert.equal(h.started(), 2);
+  await h.T.advance(1);
   await h.idle();
-  assert.equal(h.started(), 3, "one follow-up");
+  assert.equal(h.started(), 3, "one follow-up, 5 minutes after the run before it ended");
+  assert.equal(h.syncAt[2], ended + 300000);
   await h.T.advance(3600000);
   assert.equal(h.started(), 3, "and nothing more");
   assert.equal(h.catalog.hookState().runs, 2);
 });
 
-test("a sync already running (the timer's, Sync now): the request runs right after it finishes - the same single-flight sync", async (t) => {
+test("a sync already running (the timer's, Sync now): the request runs after it finishes and the gap - the same single-flight sync", async (t) => {
   const h = await setup(t);
   await h.catalog.sync({ full: true });
   const url = await h.url();
@@ -232,10 +240,13 @@ test("a sync already running (the timer's, Sync now): the request runs right aft
   assert.equal(h.started(), 2, "no second sync while one runs");
   h.api.gate = null; release();
   await running;
+  const ended = h.T.now();
   await waitFor(() => h.T.size() === 1, "the follow-up to be planned");
   await h.T.advance(0);
+  assert.equal(h.started(), 2, "its 30 s wait is over, the gap after Sync now is not");
+  await h.T.advance(ended + 300000 - h.T.now());
   await h.idle();
-  assert.equal(h.started(), 3, "right after it finished (its wait was over)");
+  assert.equal(h.started(), 3, "5 minutes after Sync now finished");
 });
 
 test("a wrong or missing secret -> the site's ordinary 404 (no route revealed); no secret made yet -> 404 for any", async (t) => {
@@ -281,7 +292,12 @@ test("every other Plex event -> 200 and ignored (nothing scheduled, nothing read
   assert.equal(h.T.size(), 0);
   assert.equal(h.started(), 0);
   assert.equal(h.hook.servers.size, 0, "only new-title messages list a server");
-  assert.deepEqual((await h.card()).body.last.outcome, "ignored");
+  const card = (await h.card()).body;
+  assert.deepEqual(card.last.outcome, "ignored");
+  assert.equal(card.last_new, null, "no new title came");
+  assert.equal(card.ignored.length, events.length + 1);
+  assert.ok(card.ignored.every((x) => x.n === 1));
+  assert.deepEqual([...h.store.m.keys()], ["secret"], "an ignored event is never written to the database");
 });
 
 test("the catalog off or the webhook switched off -> ignored; switched off during the wait -> the sync is dropped", async (t) => {
@@ -352,8 +368,8 @@ test("a thumbnail is drained and discarded: never written to disk, a table or me
   assert.ok(!JSON.stringify((await h.card()).body).includes("THUMB-MARKER"));
   for (const l of h.logs) assert.ok(!l.includes("THUMB-MARKER"));
   const src = fs.readFileSync(path.join(repo, "plexhook.js"), "utf8");
-  assert.match(src, /fileFilter: \(req, file, cb\) => cb\(null, false\)/, "multer drops every file part unread");
-  assert.doesNotMatch(src, /diskStorage|dest:/, "no disk storage");
+  assert.doesNotMatch(src, /\.on\("file"/, "no file handler: busboy skips a file part without making a stream");
+  assert.doesNotMatch(src, /require\("multer"\)|diskStorage|dest:|createWriteStream/, "no multer, no disk storage");
 });
 
 /** A POST without Content-Length (chunked), the way a client streaming a big body would send it. */
@@ -399,6 +415,19 @@ test("the size cap: the whole body (Content-Length or streamed) and the payload 
   assert.equal(broken.status, 400);
   assert.equal(h.T.size(), 1, "only the good one waits");
   assert.ok(h.logs.includes("[plexhook] -: refused (too large)"));
+  // review: a sender that goes away mid-body - the parse settles (refused), never a delivery left hanging
+  const refusedLine = "[plexhook] -: refused (not a Plex webhook delivery)";
+  const before = h.logs.filter((l) => l === refusedLine).length;
+  const cut = plexBody("library.new", {}, Buffer.alloc(16 * 1024, 0x63));
+  await new Promise((resolve) => {
+    const u = new URL(local);
+    const req = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: "POST", headers: { "Content-Type": cut.type, "Content-Length": cut.body.length } });
+    req.on("error", () => resolve());
+    req.write(cut.body.subarray(0, 2000));
+    setTimeout(() => { req.destroy(); resolve(); }, 50);
+  });
+  await waitFor(() => h.logs.filter((l) => l === refusedLine).length > before, "the cut-off delivery to settle");
+  assert.equal(h.T.size(), 1, "it scheduled nothing");
 });
 
 test("the rate limit: per IP and overall, for deliveries with the right secret; a wrong secret is never told the route exists", async (t) => {
@@ -440,7 +469,7 @@ test("server identifier: any server until one is picked on the card; then only t
   assert.equal((await h.deliver("library.new", { url, extra: { Server: { uuid: "bad id!" } } })).body.outcome, "other_server");
   assert.equal(h.T.size(), 0);
   assert.equal((await h.deliver("library.new", { url })).body.outcome, "scheduled", "ours");
-  await h.T.advance(30000); await h.idle();
+  await h.T.advance(300000); await h.idle();
   assert.equal(h.started(), n + 1);
   card = (await h.card()).body;
   assert.equal(card.servers.find((s) => s.id === SERVER).pinned, true);
@@ -458,6 +487,7 @@ test("regenerating the secret kills the old URL at once and for good (the secret
   const h = await setup(t, { store: PH.dbStore() });
   const url1 = await h.url();
   assert.equal(await h.url(), url1, "made once");
+  assert.equal((await h.deliver("library.new", { url: url1 })).status, 200);
   assert.equal((await h.deliver("media.play", { url: url1 })).status, 200);
   const r = await h.adminPost("/api/media/admin/catalog/hook/regenerate", {});
   assert.equal(r.status, 200);
@@ -470,15 +500,17 @@ test("regenerating the secret kills the old URL at once and for good (the secret
   assert.ok(h.logs.some((l) => /webhook secret regenerated by admin1/.test(l)));
   // a restart: a new instance reads the stored secret (and the last delivery)
   const { getQuery } = require(path.join(repo, "dbUtils"));
-  await waitFor(async () => (await getQuery("SELECT v FROM plex_hook WHERE k = 'last'")).length === 1, "the last delivery to be stored");
+  await waitFor(async () => (await getQuery("SELECT v FROM plex_hook WHERE k = 'last_new'")).length === 1, "the last new title to be stored");
   const fresh = h.mkHook(PH.dbStore());
   const base2 = await h.serve(fresh);
-  assert.deepEqual((await h.card("admin1", base2)).body.last, { at: AT, event: "media.play", outcome: "ignored" }, "the last delivery survives a restart");
+  const after = (await h.card("admin1", base2)).body;
+  assert.deepEqual(after.last_new, { at: AT, outcome: "scheduled" }, "the last new title survives a restart");
+  assert.equal(after.last, null, "the last delivery of any kind is memory only");
   assert.equal((await h.card("admin1", base2)).body.url, url2);
   assert.equal((await h.deliver("media.play", { url: url1, base: base2 })).status, 404);
   assert.equal((await h.deliver("media.play", { url: url2, base: base2 })).status, 200);
   const rows = await getQuery("SELECT k FROM plex_hook ORDER BY k");
-  assert.deepEqual(rows.map((x) => x.k), ["last", "secret"]);
+  assert.deepEqual(rows.map((x) => x.k), ["last_new", "secret"]);
   await conf.init();
   const settingsRows = await getQuery("SELECT key, value FROM media_settings");
   assert.ok(!JSON.stringify(settingsRows).includes(secretOf(url2)), "never a setting");
@@ -530,8 +562,9 @@ test("the card's script: the URL masked until Show, Copy copies it whole, Regene
   for (const id of ["phOut", "phUrl", "phShow", "phCopy", "phRegen", "phMsg"]) nodes.set(id, element("div"));
   const SECRET = "S".repeat(43), SECRET2 = "T".repeat(43);
   let state = { ok: true, url: "https://publicaccess.tv/api/plex/webhook/" + SECRET, on: true, catalog_on: true, debounce_s: 30, server: "",
-    servers: [{ id: SERVER, name: "<img src=x onerror=unsafe()>", n: 2, at: AT, pinned: false }], last: { at: AT, event: "library.new", outcome: "scheduled" },
-    wrong: null, pending: { due: AT + 30000, after_running: false } };
+    servers: [{ id: SERVER, name: "<img src=x onerror=unsafe()>", n: 2, at: AT, pinned: false }], last_new: { at: AT, outcome: "scheduled" },
+    last: { at: AT + 60000, event: "media.pause", outcome: "ignored" }, ignored: [{ event: "media.pause", n: 7, at: AT + 60000 }, { event: "media.play", n: 3, at: AT }],
+    gap_min: 5, wrong: null, pending: { due: AT + 30000, after_running: false } };
   const document = { getElementById: (id) => nodes.get(id) || null, createElement: element, createTextNode: (s) => ({ textContent: s, children: [] }),
     querySelectorAll: () => [], querySelector: () => null, addEventListener() {}, body: element("body") };
   const window = { addEventListener() {}, confirm: () => confirmAnswer,
@@ -557,8 +590,10 @@ test("the card's script: the URL masked until Show, Copy copies it whole, Regene
   assert.equal(url.textContent, "https://publicaccess.tv/api/plex/webhook/••••••••", "masked");
   assert.equal(nodes.get("phCopy").disabled, false);
   const out = text(nodes.get("phOut"));
-  assert.match(out, /On: a title Plex adds is read into the catalog about 30 seconds later\./);
-  assert.match(out, /Last webhook: .+, library\.new, a catalog read was scheduled\./);
+  assert.match(out, /On: a title Plex adds is read into the catalog about 30 seconds later, but never sooner than 5 minutes after the previous catalog read ended\./);
+  assert.match(out, /Last new title \(library\.new\): .+, a catalog read was scheduled\./, "the new title's line, though playback came after it");
+  assert.match(out, /Last webhook of any kind: .+, media\.pause, ignored \(only new titles count\)\./);
+  assert.match(out, /Answered and ignored since the site started: media\.pause × 7, media\.play × 3\./);
   assert.match(out, /<img src=x onerror=unsafe\(\)> \(a1b2c3d4e5f60718293a4b5c6d7e8f9012345678\): 2 new-title messages/, "a server's name is text");
   assert.ok(!out.includes(SECRET));
   nodes.get("phShow").handlers.click();
@@ -590,6 +625,9 @@ test("settings: the switch (on by default, a checkbox that saves off when untick
   assert.equal(conf.DEFAULTS.catalog_hook, true);
   assert.equal(conf.DEFAULTS.catalog_hook_debounce_s, 30);
   assert.equal(conf.DEFAULTS.catalog_hook_server, "");
+  assert.equal(conf.DEFAULTS.catalog_hook_gap_min, 5);
+  for (const [v, want] of [[0, 1], [1, 1], ["5", 5], [60, 60], [61, 60], ["abc", 5], [null, 1], [-2, 1], [2.7, 2]])
+    assert.equal(C.catalog_hook_gap_min(v), want, "gap " + String(v));
   for (const [v, want] of [[5, 10], [10, 10], ["45", 45], [600, 600], [601, 600], ["1,000", 600], ["abc", 30], [null, 10], [-3, 10], [29.9, 29]])
     assert.equal(C.catalog_hook_debounce_s(v), want, String(v));
   for (const [v, want] of [[true, true], ["on", true], ["1", true], ["true", true], [false, false], ["0", false], [undefined, false], ["yes", false]])
@@ -603,11 +641,16 @@ test("settings: the switch (on by default, a checkbox that saves off when untick
   r = await conf.set({ _bools: ["catalog_hook"], catalog_hook: true, catalog_hook_debounce_s: 9999 }, "fixture-admin");
   assert.equal(r.settings.catalog_hook, true);
   assert.equal(r.settings.catalog_hook_debounce_s, 600);
+  r = await conf.set({ catalog_hook_gap_min: "15" }, "fixture-admin");
+  assert.equal(r.settings.catalog_hook_gap_min, 15, "the gap saves from the form");
+  r = await conf.set({ catalog_hook_gap_min: "0" }, "fixture-admin");
+  assert.equal(r.settings.catalog_hook_gap_min, 1, "clamped to 1-60");
   // the page: the switch + the wait in the settings form (the server id is the card's, never the form's)
   const view = fs.readFileSync(path.join(repo, "views", "mediaAdmin.ejs"), "utf8");
   assert.match(view, /name="_bools" value="[^"]*\bcatalog_hook\b/);
   assert.match(view, /<input type="checkbox" name="catalog_hook" <%= S\.catalog_hook !== false \? 'checked' : '' %>>/);
   assert.match(view, /name="catalog_hook_debounce_s" min="10" max="600"/);
+  assert.match(view, /name="catalog_hook_gap_min" min="1" max="60"/);
   assert.doesNotMatch(view, /name="catalog_hook_server"/);
   // the catalog clamps the wait it is handed too
   const T = fakeTime(AT), cfg = { clerk_enabled: "staff", catalog_hook_debounce_s: 5 };
@@ -618,6 +661,12 @@ test("settings: the switch (on by default, a checkbox that saves off when untick
   assert.equal(c2.soon().due, AT + 600000);
   await c2.close();
   assert.equal(c2.soon().state, "closed");
+  // ... and the gap (1-60 minutes after the last run ended)
+  for (const [gap, want] of [[0, 60000], [9999, 3600000], [undefined, 300000]]) {
+    const g = { ...cfg, catalog_hook_debounce_s: 10, catalog_hook_gap_min: gap };
+    const c3 = createCatalog({ file: path.join(dir, "c3-" + String(gap) + ".db"), settings: () => g, now: T.now, sleep: async () => {}, setTimer: T.set, clearTimer: T.clear, mediactl: async () => ({ status: 503 }), log: { log() {}, error() {} } });
+    try { await c3.sync(); assert.equal(c3.soon().due, T.now() + want, "gap " + String(gap)); } finally { await c3.close(); }
+  }
 });
 
 test("wiring: index.js serves the webhook before the cookie / session / body middleware; staging keeps its own secret; en.json has the strings", () => {
@@ -640,4 +689,142 @@ test("wiring: index.js serves the webhook before the cookie / session / body mid
   }
   assert.ok(n >= 30);
   assert.equal(EN["adm.media.hook.enabled"], "Update the catalog when Plex adds something (webhook)");
+});
+
+// ── review 1.99anw ──
+
+test("review: a body that trips a parser limit and then has a malformed part header never ends the process (child process)", async (t) => {
+  // multer 1.4.5-lts.1 took busboy's listeners off on a limit; busboy's next "Malformed part header" was then an unhandled
+  // 'error' event and the site's process exited (code 1). The four bodies the review found, then a good delivery.
+  const SECRET = "C".repeat(43);
+  const src = [
+    '"use strict";',
+    'const express = require("express");',
+    "const PH = require(" + JSON.stringify(path.join(repo, "plexhook")) + ");",
+    "const SECRET = " + JSON.stringify(SECRET) + ";",
+    "const hook = PH.createHook({ store: { get: async () => SECRET, put: async () => {}, putIfMissing: async () => {} }, settings: () => ({ catalog_hook: true }),",
+    "  catalog: { soon: () => ({ ok: true, state: 'scheduled', due: Date.now() + 30000 }), inUse: () => true, hookState: () => ({}) },",
+    "  log: { log() {}, error() {} }, origin: () => 'https://publicaccess.tv' });",
+    "const app = express();",
+    "hook.registerEarly(app);",
+    "app.use((req, res) => res.status(404).json({ error: 'not found' }));",
+    "const server = app.listen(0, '127.0.0.1', () => process.stdout.write('PORT ' + server.address().port + '\\n'));",
+  ].join("\n");
+  const { spawn } = require("child_process");
+  const child = spawn(process.execPath, ["-e", src], { cwd: tmp, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "", err = "", exited = null;
+  child.stdout.on("data", (d) => { out += d; });
+  child.stderr.on("data", (d) => { err += d; });
+  child.on("exit", (code, signal) => { exited = { code, signal }; });
+  t.after(() => { if (!exited) child.kill(); });
+  await waitFor(() => /PORT \d+/.test(out) || exited, "the child to listen");
+  assert.equal(exited, null, "the child started: " + err);
+  const port = Number(/PORT (\d+)/.exec(out)[1]);
+  const send = (body, type) => new Promise((resolve) => {
+    const req = http.request({ host: "127.0.0.1", port, path: "/api/plex/webhook/" + SECRET, method: "POST",
+      headers: { "Content-Type": type, "Content-Length": body.length } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+    req.on("error", (e) => resolve("error " + e.code));
+    req.end(body);
+  });
+  const B = "crashFixture";
+  const part = (name, value, extra = "") => "--" + B + "\r\nContent-Disposition: form-data; name=\"" + name + "\"" + extra + "\r\n\r\n" + value + "\r\n";
+  const malformed = "--" + B + "\r\nthis header line has no colon\r\n\r\nx\r\n--" + B + "--\r\n";
+  const bodies = {
+    fields: [0, 1, 2, 3, 4].map((i) => part("f" + i, "x")).join("") + malformed,                       // 5 fields (limit 4)
+    fieldkey: part("k".repeat(80), "x") + malformed,                                                   // a field name over 64
+    fieldsize: part("payload", "p".repeat(300 * 1024)) + malformed,                                    // a payload over 256 KB
+    files: [0, 1, 2].map((i) => part("thumb" + i, "JPEG", "; filename=\"t" + i + ".jpg\"\r\nContent-Type: image/jpeg")).join("") + malformed,   // 3 files (limit 2)
+    parts: [0, 1, 2, 3].map((i) => part("f" + i, "x")).join("") + [0, 1].map((i) => part("thumb" + i, "JPEG", "; filename=\"t.jpg\"")).join("") + malformed,   // 6 parts
+    malformed_only: part("payload", "{}") + malformed,
+  };
+  for (const [name, body] of Object.entries(bodies)) {
+    const status = await send(Buffer.from(body), "multipart/form-data; boundary=" + B);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(exited, null, name + ": the process is still running (" + err.split("\n").slice(0, 3).join(" | ") + ")");
+    assert.ok(status === 413 || status === 400, name + " -> " + status);
+    if (name !== "malformed_only") assert.equal(status, 413, name + ": over a limit");
+  }
+  const truncated = Buffer.from(part("payload", JSON.stringify({ event: "library.new" })).slice(0, 60));
+  assert.equal(await send(truncated, "multipart/form-data; boundary=" + B), 400, "a cut-off body");
+  const good = plexBody("library.new");
+  assert.equal(await send(good.body, good.type), 200, "and it still answers a good delivery");
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(exited, null);
+  assert.doesNotMatch(err, /Unhandled|ERR_UNHANDLED_ERROR|Malformed part header/, err);
+});
+
+test("review: webhook runs keep catalog_hook_gap_min after the last run ended - an all-night trickle is a run per gap, not per title", async (t) => {
+  const h = await setup(t);
+  await h.catalog.sync({ full: true });
+  const url = await h.url();
+  // a library.new every 2 minutes for 3 hours (Sonarr importing a season one episode at a time)
+  const start = h.T.now();
+  for (let i = 0; i < 90; i++) {
+    await h.deliver("library.new", { url });
+    await h.T.advance(120000);
+    await h.idle();
+  }
+  await h.T.advance(600000); await h.idle();
+  const runs = h.syncAt.slice(1);                       // the setup's sweep aside
+  t.diagnostic("90 library.new over 3 hours -> " + runs.length + " catalog runs");
+  assert.ok(runs.length >= 25 && runs.length <= 37, "about one run per 5-minute gap + its wait, not 90: " + runs.length);
+  for (let i = 1; i < runs.length; i++) assert.ok(runs[i] - runs[i - 1] >= 300000, "run " + i + " came " + (runs[i] - runs[i - 1]) / 1000 + " s after the one before");
+  assert.ok(runs[0] - start >= 300000, "the first one waited for the gap after the setup's sweep");
+  assert.ok(h.syncAt.at(-1) >= start + 89 * 120000, "the last title was read too");
+  assert.equal(h.T.size(), 0, "nothing left waiting");
+  // "Sync now" while a webhook run waits moves the gap on: the webhook's run waits 5 minutes after Sync now ended
+  assert.equal((await h.deliver("library.new", { url })).body.outcome, "scheduled");
+  await h.catalog.sync();                               // Sync now, while the webhook's run waits its 30 s
+  const now1 = h.T.now(), n = h.started();
+  await h.T.advance(299999); await h.idle();
+  assert.equal(h.started(), n, "not inside the gap after Sync now");
+  await h.T.advance(1); await h.idle();
+  assert.equal(h.started(), n + 1);
+  assert.equal(h.syncAt.at(-1), now1 + 300000);
+  // the first request long after any run: only the debounce
+  h.T.jump(h.T.now() + 3600000);
+  const at = h.T.now();
+  assert.equal((await h.deliver("library.new", { url })).body.outcome, "scheduled");
+  await h.T.advance(30000); await h.idle();
+  assert.equal(h.syncAt.at(-1), at + 30000, "30 s, no gap to keep");
+  assert.ok(h.logs.includes("[plexhook] library.new: changes-only catalog sync in 300 s"), "the log says when, gap included");
+});
+
+test("review: the card keeps the last new title apart from the last delivery; ignored events are counted in memory, not written", async (t) => {
+  const base = memStore();
+  let puts = 0;
+  const store = { ...base, put: async (k, v) => { puts++; return base.put(k, v); } };
+  const h = await setup(t, { store });
+  const url = await h.url();
+  const p0 = puts;
+  assert.equal((await h.deliver("library.new", { url })).body.outcome, "scheduled");
+  assert.equal(puts, p0 + 1, "a new title: one write");
+  const events = ["media.play", "media.pause", "media.resume", "media.pause", "media.stop", "media.scrobble", "media.play", "media.pause"];
+  for (const e of events) assert.equal((await h.deliver(e, { url })).body.outcome, "ignored");
+  assert.equal(puts, p0 + 1, "no write for any of the playback events");
+  let card = (await h.card()).body;
+  assert.deepEqual(card.last_new, { at: AT, outcome: "scheduled" }, "what became of the new title is still on the card");
+  assert.deepEqual(card.last, { at: AT, event: "media.pause", outcome: "ignored" });
+  const counts = Object.fromEntries(card.ignored.map((x) => [x.event, x.n]));
+  assert.deepEqual(counts, { "media.pause": 3, "media.play": 2, "media.resume": 1, "media.stop": 1, "media.scrobble": 1 });
+  assert.deepEqual(card.ignored.slice(0, 2).map((x) => x.event), ["media.pause", "media.play"], "most first");
+  // a refused new title shows as such, whatever came after it
+  h.cfg.catalog_hook_server = OTHER;
+  assert.equal((await h.deliver("library.new", { url })).body.outcome, "other_server");
+  await h.deliver("media.play", { url });
+  card = (await h.card()).body;
+  assert.equal(card.last_new.outcome, "other_server");
+  assert.equal(card.last.event, "media.play");
+  h.cfg.catalog_hook_server = ""; h.cfg.clerk_enabled = "off";
+  assert.equal((await h.deliver("library.new", { url })).body.outcome, "catalog_off");
+  await h.deliver("media.stop", { url });
+  assert.equal((await h.card()).body.last_new.outcome, "catalog_off");
+  assert.equal(puts, p0 + 3, "one write per new-title message, none for the rest");
+  assert.deepEqual(JSON.parse(base.m.get("last_new")), { at: AT, outcome: "catalog_off" });
+  assert.ok(!base.m.has("last"), "no any-delivery record in the database");
+  // the counts stay small: at most IGNORED_KEPT names (+ "unknown")
+  for (let i = 0; i < 40; i++) await h.deliver("custom.event" + i, { url });
+  card = (await h.card()).body;
+  assert.ok(card.ignored.length <= 25, String(card.ignored.length));
+  assert.ok(card.ignored.some((x) => x.event === "unknown"));
 });

@@ -785,14 +785,22 @@ function createCatalog(options = {}) {
     });
     return outsideLists;
   }
+  // 1.99anw plexhook review: when the last real run (the timer's, "Sync now", the webhook's - not a dry count, not one the quiet
+  // window skipped) ended - a run the webhook asks for keeps catalog_hook_gap_min after it (soon() below)
+  let lastEnd = null;
   function sync(opts = {}) {
     if (syncing) return syncing;
+    let skipped = false;
     syncing = doSync(opts).then(async (result) => {
+      skipped = !!(result && result.skipped);
       if (result.ok && !opts.dry) {
         try { if (listsCache().enabled()) await listsCache().rematch(); } catch (_) { /* lists retain their last complete cache */ }
       }
       return result;
-    }).catch(() => ({ ok: false, dry: !!opts.dry, error: "catalog unavailable" })).finally(() => { syncing = null; });
+    }).catch(() => ({ ok: false, dry: !!opts.dry, error: "catalog unavailable" })).finally(() => {
+      syncing = null;
+      if (!opts.dry && !skipped) lastEnd = now();
+    });
     return syncing;
   }
   async function dryCount() {
@@ -854,16 +862,21 @@ function createCatalog(options = {}) {
   // 1.99anw plexhook: soon() - Plex's webhook (plexhook.js: library.new only) asks for the ORDINARY sync - sync() above, the same
   // doSync and its single-flight `syncing` - about catalog_hook_debounce_s (10-600, default 30) later: Plex announces each title of
   // a season or a batch on its own, and its metadata settles meanwhile. Every request inside that wait joins it. One that comes
-  // while a sync runs (the timer's, "Sync now", the webhook's own) is run right after that sync finishes, once its wait is over -
-  // never a second waiting run, never a pile-up. Inside the quiet window it waits for the window's end; a catalog that is off
-  // (inUse) or a webhook switched off meanwhile drops it. Nothing the webhook carried reaches doSync: it reads mediactl as always
+  // while a sync runs (the timer's, "Sync now", the webhook's own) is run after that sync finishes, once its wait and the gap
+  // below are over - never a second waiting run, never a pile-up. Inside the quiet window it waits for the window's end; a
+  // catalog that is off (inUse) or a webhook switched off meanwhile drops it. Nothing the webhook carried reaches doSync: it reads mediactl as always
   // (the changes since the last run; the first run of a UTC day is the day's full sweep, whoever starts it).
+  // Review 1.99anw: a "changes-only" run is not cheap (counts(): every row's play counts + Tautulli's walk of every allowed
+  // section, the shelf index, the lists' rematch), and Sonarr importing an episode every 2 minutes all night would otherwise
+  // start one every ~30 s + its run time. So a run the webhook asks for also waits until catalog_hook_gap_min (1-60, default 5)
+  // after the last real run ENDED - whoever ran it - and every request meanwhile joins it: at most one webhook run per gap.
   const hook = { due: null, timer: null, watching: false, runs: 0 };
   const setTimer = options.setTimer || ((fn, ms) => { const h = setTimeout(fn, ms); if (h.unref) h.unref(); return h; });
   const clearTimer = options.clearTimer || ((h) => clearTimeout(h));
   const hookWaitMs = (cfg) => Math.max(10, Math.min(600, Math.floor(number((cfg || {}).catalog_hook_debounce_s, 30)))) * 1000;
+  const hookGapMs = (cfg) => Math.max(1, Math.min(60, Math.floor(number((cfg || {}).catalog_hook_gap_min, 5)))) * 60000;
   const quietEnd = (t) => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 4, 20); };
-  /** -> {ok, state: "scheduled" | "after" (a sync is running: runs right after it) | "joined" (one is already asked for) | "off" | "closed", due} */
+  /** -> {ok, state: "scheduled" | "after" (a sync is running: runs after it) | "joined" (one is already asked for) | "off" | "closed", due} */
   function soon() {
     if (closed || options.readOnly) return { ok: false, state: "closed", due: null };
     const cfg = settings() || {};
@@ -882,14 +895,16 @@ function createCatalog(options = {}) {
       return;
     }
     const t = now();
+    if (lastEnd != null) hook.due = Math.max(hook.due, lastEnd + hookGapMs(settings() || {}));   // the gap after the last run
     if (quiet(t)) hook.due = Math.max(hook.due, quietEnd(t));
     hook.timer = setTimer(fireHook, Math.max(0, hook.due - t));
   }
   function fireHook() {
     hook.timer = null;
     if (closed || hook.due == null) return;
-    if (syncing || quiet(now()) || now() < hook.due) return planHook();
     const cfg = settings() || {};
+    // a run that ended after this was planned ("Sync now" in the gap) moves the gap on too
+    if (syncing || quiet(now()) || now() < hook.due || (lastEnd != null && now() < lastEnd + hookGapMs(cfg))) return planHook();
     hook.due = null;   // a request from here on asks for the next run
     if (!inUse(cfg) || cfg.catalog_hook === false) { log.log("[plexcatalog] webhook sync dropped: " + (inUse(cfg) ? "the webhook is switched off" : "the catalog is off")); return; }
     hook.runs++;

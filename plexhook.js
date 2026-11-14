@@ -10,14 +10,18 @@
 //     * ONLY "library.new" acts, and all it does is ask the catalog for its ordinary changes-only sync, soon (plexcatalog.soon():
 //       debounced, single-flight, the quiet window respected, nothing when the catalog is off). The payload is read for the event
 //       name and the Plex server's identifier / name (Server.uuid / .title) and is never stored; nothing in it reaches the
-//       catalog - the sync reads media-control as always. The thumbnail is drained unread (multer's fileFilter says no), never
-//       buffered or written. Every other event (media.play / pause / resume / stop / scrobble / rate, library.on.deck, admin.*,
-//       device.new, playback.started, ...) -> 200, ignored.
+//       catalog - the sync reads media-control as always. The thumbnail is skipped unread (the parser has no file handler, so
+//       busboy makes no stream for it), never buffered or written. Every other event (media.play / pause / resume / stop /
+//       scrobble / rate, library.on.deck, admin.*, device.new, playback.started, ...) -> 200, ignored: counted in memory per event
+//       name, never written to the database (an active server sends one per play / pause / stop).
 //     * catalog_hook_server (optional) = one Plex server's machine identifier: only its library.new acts. The site can't read
 //       its own server's identifier (media-control doesn't hand it out), so until an admin picks one any server holding the URL
 //       counts; the admin card lists the servers seen in recent library.new deliveries (in memory only) to pick from.
 //     * Rate limits per IP and overall (deliveries with the right secret), a cap on the whole body (MAX_BODY) and on the payload
-//       field (MAX_PAYLOAD), multipart only.
+//       field (MAX_PAYLOAD), multipart only. Parsed with busboy itself, not multer 1.x (review 1.99anw: multer took the parser's
+//       listeners off on a limit, and a malformed part header after it was an unhandled 'error' that ended the site's process).
+//     * The card keeps two records: the last new-title message (library.new: when, and what happened to it - kept in plex_hook,
+//       so it survives a restart) and the last delivery of any kind (memory only), plus per-event counts of the ignored ones.
 //     * One short log line per delivery: the event name and what happened - never the secret, a title or the payload.
 //     * index.js registers it before the cookie / session / body middleware (like Sign in with Apple's server-to-server
 //       notifications): Plex sends no cookie and no Origin, so no CSRF / origin check applies and no session is made for it. The
@@ -29,6 +33,7 @@
 //   POST /api/media/admin/catalog/hook/server      {server: "<machine identifier>" | ""} - only that server's events / any server
 "use strict";
 const crypto = require("crypto");
+const Busboy = require("busboy");
 
 const PATH = "/api/plex/webhook/";
 const SECRET_RE = /^[A-Za-z0-9_-]{43}$/;               // 32 random bytes, base64url
@@ -39,12 +44,14 @@ const MAX_PAYLOAD = 256 * 1024;       // the payload field (a few KB in practice
 const LIMITS = { perIp: 120, all: 600, windowMs: 60000 };   // a season added at once is a burst of library.new; one is enough
 const SECRET_TTL_MS = 60000;          // the kept secret is read again after this (another process may have made a new one)
 const SERVERS_KEPT = 5;
+const IGNORED_KEPT = 24;              // distinct event names counted (past it: "unknown") - memory only
+const PARTS = { fields: 4, files: 2, parts: 6, fieldName: 64 };
 const OUTCOMES = ["scheduled", "joined", "after", "ignored", "switch_off", "catalog_off", "other_server", "unavailable",
   "bad_request", "too_large", "rate_limited"];
 const SAY = {
   scheduled: (s) => "changes-only catalog sync in " + s + " s",
   joined: (s) => "joined the catalog sync due in " + s + " s",
-  after: () => "a sync is running - one more right after it",
+  after: () => "a sync is running - one more after it",
   ignored: () => "ignored",
   switch_off: () => "ignored (the webhook is switched off)",
   catalog_off: () => "ignored (the catalog is off)",
@@ -54,7 +61,6 @@ const SAY = {
   too_large: () => "refused (too large)",
   rate_limited: () => "refused (rate limit)",
 };
-const TOO_BIG = new Set(["LIMIT_FIELD_VALUE", "LIMIT_FILE_SIZE", "LIMIT_PART_COUNT", "LIMIT_FIELD_COUNT", "LIMIT_FILE_COUNT", "LIMIT_FIELD_KEY"]);
 const sha = (s) => crypto.createHash("sha256").update(String(s)).digest();
 const newSecret = () => crypto.randomBytes(32).toString("base64url");
 const clean = (v, max) => typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -88,7 +94,9 @@ function createHook(deps = {}) {
   const ipLimit = guard.limiter({ max: lim.perIp, windowMs: lim.windowMs });
   const allLimit = guard.limiter({ max: lim.all, windowMs: lim.windowMs });
   let kept = null;                       // {secret, at}
-  let last = null, lastRead = false;     // the last delivery {at, event, outcome}
+  let last = null;                       // the last delivery of any kind {at, event, outcome} - memory only
+  let lastNew = null, lastNewRead = false;   // the last library.new {at, outcome} - plex_hook "last_new" (survives a restart)
+  const ignored = new Map();             // event name -> {n, at}: the ignored deliveries since the site started (memory only)
   const servers = new Map();             // machine identifier -> {name, n, at}: library.new deliveries since the site started
   const wrong = { n: 0, at: null, logged: 0 };
   let limitedLogged = 0;
@@ -121,10 +129,22 @@ function createHook(deps = {}) {
   }
 
   // ── what happened ──
+  // review 1.99anw: one record for the last library.new (what the card is for: did the new title arrive, and what became of
+  // it) and one for the last delivery of any kind. Only the first is written to myapp.db - a playback event is counted in
+  // memory, never a database write per play / pause / stop on a busy server.
   function record(event, outcome, due) {
-    last = { at: now(), event, outcome };
-    lastRead = true;
-    if (outcome !== "rate_limited") store.put("last", JSON.stringify(last)).catch(() => {});
+    const at = now();
+    last = { at, event, outcome };
+    if (event === "library.new") {
+      lastNew = { at, outcome };
+      lastNewRead = true;
+      store.put("last_new", JSON.stringify(lastNew)).catch(() => {});
+    }
+    if (outcome === "ignored") {
+      const name = ignored.has(event) || ignored.size < IGNORED_KEPT ? event : "unknown";
+      const v = ignored.get(name) || { n: 0, at: 0 };
+      ignored.set(name, { n: v.n + 1, at });
+    }
     if (outcome === "rate_limited") { if (now() - limitedLogged < 60000) return; limitedLogged = now(); }
     const s = due ? Math.max(0, Math.round((due - now()) / 1000)) : 0;
     log.log("[plexhook] " + event + ": " + SAY[outcome](s));
@@ -141,28 +161,38 @@ function createHook(deps = {}) {
   }
 
   // ── the delivery ──
-  let upload = null;
-  function parser() {
-    if (!upload) {
-      const multer = require("multer");
-      upload = multer({ storage: multer.memoryStorage(),
-        limits: { fieldNameSize: 64, fieldSize: maxPayload, fields: 4, files: 2, parts: 6, fileSize: maxBody, headerPairs: 40 },
-        fileFilter: (req, file, cb) => cb(null, false) }).any();   // the thumbnail: drained unread, never kept
-    }
-    return upload;
-  }
-  /** multer's fields, or a coded error: too_large (over a cap, on the wire or in a field) / bad_request. */
+  /** The payload field ({payload}: a string, or null when the body had none), or a coded error: too_large (over a cap, on the
+   *  wire or in a part) / bad_request (not multipart, malformed, cut off). busboy itself, not multer 1.x (review 1.99anw): on a
+   *  limit multer took every listener off busboy (removeAllListeners), so a malformed part header further on in the same body
+   *  was an 'error' event with no listener - an exception that ended the site's process. Here the parser's 'error' listener
+   *  stays on for the parser's whole life; a refused body is unpiped from it and its rest drained by linger(). There is no
+   *  'file' listener: busboy then skips each file part (the thumbnail) without making a stream - its bytes are counted against
+   *  the body cap and dropped, never buffered. */
   function parse(req) {
     return new Promise((resolve, reject) => {
-      let seen = 0, done = false;
-      const finish = (e, v) => { if (done) return; done = true; req.removeListener("data", count); if (e) reject(e); else resolve(v); };
-      // the whole body, chunked or not (a Content-Length over the cap was refused before reading): past the cap the parser
-      // is let go (unpiped) and the rest is drained by refuse() below
-      const count = (chunk) => { seen += chunk.length; if (seen > maxBody) { req.unpipe(); finish(coded("too_large")); } };
-      req.on("data", count);
-      try {
-        parser()(req, {}, (e) => finish(e ? coded(e.code && TOO_BIG.has(e.code) ? "too_large" : "bad_request") : null, req.body));
-      } catch (_) { finish(coded("bad_request")); }
+      let seen = 0, done = false, bb = null, payload = null;
+      const finish = (code) => {
+        if (done) return;
+        done = true;
+        req.removeListener("data", count); req.removeListener("error", gone); req.removeListener("close", closed);
+        if (bb) { try { req.unpipe(bb); } catch (_) { /* not piped */ } }
+        if (code) reject(coded(code)); else resolve({ payload });
+      };
+      // the whole body, chunked or not (a Content-Length over the cap was refused before reading)
+      const count = (chunk) => { seen += chunk.length; if (seen > maxBody) finish("too_large"); };
+      const gone = () => finish("bad_request");
+      const closed = () => { if (!req.complete) finish("bad_request"); };   // the sender went away mid-body
+      req.on("data", count); req.on("error", gone); req.on("close", closed);
+      try { bb = Busboy({ headers: req.headers, limits: { fieldSize: maxPayload, fields: PARTS.fields, files: PARTS.files, parts: PARTS.parts } }); }
+      catch (_) { return finish("bad_request"); }
+      bb.on("error", () => finish("bad_request"));   // never removed (see above)
+      bb.on("field", (name, value, info) => {
+        if (String(name == null ? "" : name).length > PARTS.fieldName || (info && (info.nameTruncated || info.valueTruncated))) return finish("too_large");
+        if (name === "payload" && payload == null) payload = value;
+      });
+      for (const limit of ["partsLimit", "filesLimit", "fieldsLimit"]) bb.on(limit, () => finish("too_large"));
+      bb.on("close", () => finish(null));
+      req.pipe(bb);
     });
   }
   /** A refused delivery's unread rest is read and thrown away (at most twice the cap, for at most 5 s - then the connection is
@@ -201,7 +231,7 @@ function createHook(deps = {}) {
     let fields;
     try { fields = await parse(req); } catch (e) { return refuse(e.code === "too_large" ? 413 : 400, e.code === "too_large" ? "too_large" : "bad_request"); }
     let p = null;
-    try { p = fields && typeof fields.payload === "string" ? JSON.parse(fields.payload) : null; } catch (_) { p = null; }
+    try { p = typeof fields.payload === "string" ? JSON.parse(fields.payload) : null; } catch (_) { p = null; }
     if (!p || typeof p !== "object" || Array.isArray(p)) return refuse(400, "bad_request");
     const event = typeof p.event === "string" && EVENT_RE.test(p.event) ? p.event : "unknown";
     const say = (outcome, due) => { record(event, outcome, due); return res.json({ ok: true, outcome }); };
@@ -223,22 +253,23 @@ function createHook(deps = {}) {
   async function view() {
     const s = await ensureSecret();
     const cfg = settings() || {};
-    if (!lastRead) {
+    if (!lastNewRead) {
       try {
-        const v = JSON.parse((await store.get("last")) || "null");
-        if (v && Number.isFinite(Number(v.at)) && OUTCOMES.includes(v.outcome) && (v.event === "-" || EVENT_RE.test(String(v.event || ""))))
-          last = { at: Number(v.at), event: String(v.event), outcome: v.outcome };
+        const v = JSON.parse((await store.get("last_new")) || "null");
+        if (v && Number.isFinite(Number(v.at)) && OUTCOMES.includes(v.outcome)) lastNew = { at: Number(v.at), outcome: v.outcome };
       } catch (_) { /* no record yet */ }
-      lastRead = true;
+      lastNewRead = true;
     }
     let catalogOn = false, pending = null;
     try { catalogOn = !!catalog.inUse(cfg); } catch (_) { catalogOn = false; }
     try { pending = catalog.hookState(); } catch (_) { pending = null; }
     const want = typeof cfg.catalog_hook_server === "string" && SERVER_RE.test(cfg.catalog_hook_server) ? cfg.catalog_hook_server : "";
     return { ok: true, url: s ? origin() + PATH + s : null, on: cfg.catalog_hook !== false, catalog_on: catalogOn,
-      debounce_s: Math.max(10, Math.min(600, Math.floor(Number(cfg.catalog_hook_debounce_s) || 30))), server: want,
+      debounce_s: Math.max(10, Math.min(600, Math.floor(Number(cfg.catalog_hook_debounce_s) || 30))),
+      gap_min: Math.max(1, Math.min(60, Math.floor(Number(cfg.catalog_hook_gap_min) || 5))), server: want,
       servers: [...servers].reverse().map(([id, v]) => ({ id, name: v.name, n: v.n, at: v.at, pinned: id === want })),
-      last, wrong: wrong.n ? { n: wrong.n, at: wrong.at } : null,
+      last_new: lastNew, last, ignored: [...ignored].map(([event, v]) => ({ event, n: v.n, at: v.at })).sort((a, b) => b.n - a.n || b.at - a.at),
+      wrong: wrong.n ? { n: wrong.n, at: wrong.at } : null,
       pending: pending && pending.waiting ? { due: pending.due, after_running: !!pending.after_running } : null };
   }
 
