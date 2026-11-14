@@ -254,6 +254,22 @@ test("index.js runs the same chain as the fixture: auth before multer, every mul
   assert.match(uc, /sharp\(filePath, \{ limitInputPixels: 60e6 \}\)/, "the decode cap (imagesafety.js's)");
 });
 
+test("the route's one caller - the admin Cosmetics page's form - is found by its own id and sends the fields the handler reads", () => {
+  // (1.99cv gave the card AND the form id="badges": getElementById found the card, new FormData(<section>) threw, nothing was sent)
+  const view = rd("views/admin/cosmetics.ejs");
+  const ids = [...view.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids.filter((x, i) => ids.indexOf(x) !== i), [], "every id on the page once");
+  const form = /<form id="badgeForm" class="adm-form" action="\/api\/badges\/add" method="post">([\s\S]*?)<\/form>/.exec(view);
+  assert.ok(form, "the badge form posts to /api/badges/add");
+  const names = [...form[1].matchAll(/\bname="([^"]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(names, ["description", "icon", "name", "points", "requirement"]);
+  assert.ok(names.length <= UG.BADGE_FORM.limits.fields, "inside the form's field cap");
+  assert.match(rd("index.js"), /const \{ name, description, icon, points, requirement \} = req\.body;/, "what the handler reads");
+  const js = rd("public/js/admin-panel.js");
+  assert.match(js, /var badges = \$\('badgeForm'\);\s*if \(badges\) \{\s*badges\.addEventListener\('submit', function \(e\) \{\s*e\.preventDefault\(\);\s*legacy\(fetch\(badges\.action, \{ method: 'POST', body: new FormData\(badges\) \}\)/);
+  assert.match(view, /admin-panel\.js\?v=7"/, "a fresh copy of the script");
+});
+
 test("uploadguard: the caps and the error answers", () => {
   assert.deepEqual({ ...UG.AVATAR.limits }, { fileSize: 8 * 1024 * 1024, files: 1, fields: 4, fieldSize: 4096, fieldNameSize: 100, parts: 5, headerPairs: 20 });
   assert.equal(UG.BADGE_FORM.limits.files, 0, "the badge form takes no files");

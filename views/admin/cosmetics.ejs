@@ -11,7 +11,7 @@
   <details class="adm-adv" id="badge-new">
     <summary>Create a badge</summary>
     <div class="adm-adv-body">
-      <form id="badges" class="adm-form" action="/api/badges/add" method="post">
+      <form id="badgeForm" class="adm-form" action="/api/badges/add" method="post">
         <label for="name">Badge name<input type="text" id="name" name="name" required></label>
         <label for="points">Points<input type="number" id="points" name="points" required></label>
         <label for="icon">Icon URL<input type="text" id="icon" name="icon"></label>
@@ -39,7 +39,7 @@
   <p class="adm-help" id="achBackend">Loading…</p>
   <p class="adm-help">Pepe counts what happens in Camfrog; once the counters live here, the site checks the thresholds and awards (docs/achievements-cutover-runbook.md).</p>
 </section>
-<script src="/public/js/admin-panel.js?v=6" defer></script>
+<script src="/public/js/admin-panel.js?v=7" defer></script>
 <script src="/public/js/admin-cosdrops.js?v=1" defer></script>
 <%- include('../partials/admin-close') %>
 </body>

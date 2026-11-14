@@ -330,7 +330,9 @@
       });
     });
   }
-  var badges = $('badges');
+  // 1.99anw: the form's own id - "badges" is also its card's (the Overview's #badges link), so getElementById found the card,
+  // new FormData(<section>) threw and "Create badge" did nothing (since 1.99cv)
+  var badges = $('badgeForm');
   if (badges) {
     badges.addEventListener('submit', function (e) {
       e.preventDefault();
