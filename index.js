@@ -4648,6 +4648,9 @@ app.use(addUser, (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "not found" });
   notFound(req, res);
 });
+// 1.99anw review: an error passed on with next(err) - a body the parsers above refused ('{', 1001 form fields, a bad gzip) - is
+// answered with its status's name, never Express's page with the stack and the server's paths (errorhandler.js). Last, always.
+app.use(require("./errorhandler").errorHandler());
 
 // 1.99cf: loopback only (nginx is the way in); BIND_HOST overrides. See listen.js.
 // 1.99ne: not before funding.js has restored Pepe's last synced state (Fort Knox / room vaults / flash liquidity),

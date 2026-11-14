@@ -270,6 +270,7 @@ function webhookApp(deps) {
   const app = deps.express();
   app.use(deps.bodyParser.json({ verify: rawBodyVerify }));
   app.post(WEBHOOK_PATH, webhookRoute(deps));
+  app.use(require("../errorhandler").errorHandler());   // 1.99anw review: a body '{' is a plain 400, never the stack + paths
   return app;
 }
 
