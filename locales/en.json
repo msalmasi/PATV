@@ -11044,7 +11044,7 @@
   "js.media.catalog.action_failed": "The catalog action could not finish. Refresh to check its status.",
   "adm.media.hook.title": "Plex webhook: new titles in the catalog",
   "adm.media.hook.help": "When Plex adds a title, it tells the site, and the catalog reads its changes shortly after instead of waiting for the next timed sync. Plex's message is only a signal: the catalog still reads everything from media-control, and the message itself is never stored.",
-  "adm.media.hook.howto": "To set it up: Plex Web → Settings → Webhooks → Add Webhook, paste this URL (needs Plex Pass). Use this address exactly, not a short link.",
+  "adm.media.hook.howto": "To set it up: Plex Web → Settings → Webhooks → Add Webhook, paste this URL (needs Plex Pass). Use this address exactly, not a short link. If no new titles arrive, turn on Push notifications in the Plex server's Settings → General, and check Webhooks is on in Settings → Network.",
   "adm.media.hook.url": "Webhook URL",
   "adm.media.hook.show": "Show",
   "adm.media.hook.copy": "Copy",
