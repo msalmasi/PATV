@@ -558,3 +558,44 @@ test("1.99aij review: the [spoiler] stand-in never makes a search match nor is m
     } finally { S.state.posts = true; }
   } finally { await store.setConfig({ feed_markdown: false }, "test"); }
 });
+
+test("1.99anv guest access: a kind whose section is off for guests is never searched - posts (Feed & Hop), pads (Pads), people (Member profiles)", async () => {
+  const GA = require(path.join(repo, "guestaccess"));
+  await GA.init();
+  const admin = { userId: U.admin.userId, username: "siteadmin" };
+  const on = { posts: (await get("/api/search?q=monstera")).d, plant: (await get("/api/search?q=plant")).d };
+  assert.ok(on.posts.posts.length > 0, "guests get posts while Feed is on");
+  assert.ok(on.plant.pads.length > 0 && on.plant.people.length > 0, "and pads and people");
+  const onPage = await get("/search");
+  try {
+    await GA.setSettings(admin, { feed: false });
+    let r = await get("/api/search?q=monstera");
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.d.posts, []); assert.equal(r.d.counts.posts, 0);
+    assert.deepEqual((await get("/api/search?q=monstera&type=posts")).d.posts, []);
+    assert.deepEqual((await get("/api/search?q=%23propagation")).d.posts, [], "a #tag search (posts only) finds nothing");
+    assert.ok((await get("/api/search?q=monstera", U.bob)).d.posts.length > 0, "a member still gets posts");
+    // the page: no Posts tab; ?type=posts shows what's left; no popular tags (they search posts)
+    let page = await get("/search?q=plant&type=posts");
+    assert.equal(page.status, 200);
+    const tabs = page.text.slice(page.text.indexOf('class="sr-tabs"'), page.text.indexOf("</nav>", page.text.indexOf('class="sr-tabs"')));
+    assert.doesNotMatch(tabs, /type=posts/, "no Posts tab");
+    assert.match(tabs, /sr-tab on" href="\/search\?q=plant"/, "All is the open tab");
+    assert.match(tabs, /type=people/); assert.match(tabs, /type=pads/);
+    assert.doesNotMatch(page.text, /id="srPosts"/);
+    if (/class="ftg sr-pop"/.test(onPage.text)) assert.doesNotMatch((await get("/search")).text, /class="ftg sr-pop"/, "no popular tags");
+    assert.match((await get("/search?q=plant&type=posts", U.bob)).text, /type=posts/, "a member keeps the Posts tab");
+    // Pads and Member profiles off too
+    await GA.setSettings(admin, { pads: false, members: false });
+    r = await get("/api/search?q=plant");
+    assert.deepEqual(r.d.pads, []); assert.deepEqual(r.d.people, []);
+    assert.deepEqual(r.d.counts, { people: 0, pads: 0, posts: 0 });
+    page = await get("/search?q=plant");
+    assert.doesNotMatch(page.text, /id="srPads"|id="srPeople"|type=pads|type=people/);
+    r = await get("/api/search?q=plant", U.bob);
+    assert.ok(r.d.pads.length > 0 && r.d.people.length > 0, "members get pads and people");
+  } finally {
+    await GA.setSettings(admin, { feed: true, pads: true, members: true });
+  }
+  assert.ok((await get("/api/search?q=monstera")).d.posts.length > 0, "back on: guests get posts again");
+});

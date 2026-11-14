@@ -1122,9 +1122,11 @@ async function botSync(body) {
 // they made (their profile + every pad, as before) or "profile" = just their profile pad. The owner gets the
 // composer with "Your profile" picked, and the profile's settings (Pepe answers mentions here, who's blocked from
 // commenting). show = false (the layout hides "posts" from this viewer): nothing is loaded - not the posts, not the
-// profile pad's posts.
-async function profileSocial(profileUser, reqUser, { show = true, query = {}, host = "publicaccess.tv" } = {}) {
+// profile pad's posts. 1.99anv guest access: guestOff = Feed & Hop is off for this signed-out visitor (guestaccess.hiddenFor) - the
+// same, and no Posts tab at all (no ?pview / ?pp brings an empty one back).
+async function profileSocial(profileUser, reqUser, { show = true, query = {}, host = "publicaccess.tv", guestOff = false } = {}) {
   await store.init();
+  if (guestOff) { show = false; query = {}; }
   const viewer = reqUser && reqUser.userId ? await viewerOf({ user: reqUser }) : null;
   const self = !!(viewer && viewer.userId === profileUser.userId);
   const q = query || {};

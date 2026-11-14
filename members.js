@@ -1,7 +1,7 @@
 // members.js — 1.99anv: the 👥 All members table on /admin/users#members (owner, 2026-11-14: "is there somewhere I can see all
 // users and sort by when users were created?").
 //
-//   GET /api/admin/members?page=&sort=&dir=&q=&filter=     capability accounts.members (Admin by default, movable on /admin/roles)
+//   GET /api/admin/members?page=&sort=&dir=&q=&filter=     capability accounts.members (Admin, locked: privacy)
 //     page    1-based; PER (50) rows a page, paged on the server
 //     sort    created (default, newest first) | seen | level | username; dir asc | desc (each sort has its own default)
 //     q       part of a username, display name or Camfrog login (any case; % and _ are literal)
@@ -13,7 +13,8 @@
 // What the columns mean
 //   created     users.created_at (UTC "YYYY-MM-DD HH:MM:SS", SQLite's CURRENT_TIMESTAMP - every INSERT INTO users leaves it at that)
 //   seen        the newest website activity: sessions.last_seen (every sign-in since 1.99wj, written at most every 5 minutes) or the
-//               newest welcome_activity day (signed-in page views, kept 120 days) - null = never seen on the website
+//               newest welcome_activity day (signed-in page views, kept 120 days) - null = no visit on record (the card says "no visit
+//               recorded", not "never": a member from before sessions who hasn't been back in 120 days has none either)
 //   methods     how the account can sign in: password (users.password_set = 1, or an older account with a real email and no 0
 //               marker), google / apple (sso_links), telegram (telegram_links), plex (plex_members linked), twitch / discord (the
 //               provider id on the row), camfrog (a linked Camfrog login - Pepe's !signin chat sign-in link)

@@ -37,7 +37,7 @@ const GOLDEN = {
   "accounts.security": ["admin", true], "accounts.delete_other": ["admin", true], "accounts.sessions_revoke": ["admin", true],
   "auth.signin_methods": ["admin", true], "profile.see_private": ["admin", true], "history.lookup": ["staff", true],
   "auth.invites": ["admin", false],                                            // 1.99anv: sign-ups open / invite-only + invites (invites.js)
-  "accounts.members": ["admin", false],                                        // 1.99anv: 👥 All members on /admin/users (members.js)
+  "accounts.members": ["admin", true],                                         // 1.99anv: 👥 All members on /admin/users (members.js; locked: privacy)
   "auth.guest_access": ["admin", false],                                       // 1.99anv: 🚪 Guest access on /admin/users (guestaccess.js)
   "econ.grant_pat": ["admin", true], "econ.house_adjust": ["admin", true], "econ.codes_manage": ["admin", true], "econ.codes_view": ["admin", true],
   "econ.pepe_econ_cmds": ["admin", true], "econ.burn": ["admin", true], "econ.padvault_move": ["admin", true],
@@ -543,6 +543,7 @@ test("1.99acl: locks - the owner's decisions (points Admin-only, security never 
     "pepe.modlog": ["admin", "privacy"], "pads.config": ["admin", "points"], "games.config": ["admin", "points"],
     "banner.config": ["admin", "points"], "voices.manage": ["admin", "points"], "likeness.manage": ["admin", "points"],
     "soundboards.config": ["admin", "points"], "pads.pepe_ctl_any": ["staff", "ops"],
+    "accounts.members": ["admin", "privacy"],     // 1.99anv review: its Camfrog-login search reaches people whose room activity is hidden
   };
   for (const [k, [def, why]] of Object.entries(want)) {
     assert.equal(SP.BY_KEY[k].def, def, k);

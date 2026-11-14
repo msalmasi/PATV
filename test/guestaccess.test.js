@@ -57,7 +57,9 @@ const real = (r) => !!(r.json && r.json.real);
 
 // a representative page / API / share card per section (a real route of each - the report's route map has them all)
 const REP = {
-  pads: { pages: ["/p", "/p/somepad", "/p/somepad/settings", "/pads/new", "/stage", "/stage/book", "/rooms/somepad"], apis: ["/api/pads/onair"] },
+  pads: { pages: ["/p", "/p/somepad", "/p/somepad/settings", "/pads/new", "/stage", "/stage/book", "/rooms/somepad"],
+          apis: ["/api/pads/onair", "/api/rooms/somepad/live", "/api/rooms/somepad/history", "/api/rooms/somepad/stage", "/p/somepad/audio", "/rooms/somepad/audio",
+                 "/api/stage?room=somepad", "/api/feed/communities"] },
   feed: { pages: ["/feed", "/feed/p/abc", "/submit", "/p/somepad/posts/abc", "/hop"], apis: ["/api/feed/communities", "/api/hop"], og: ["/og/post/abc.png"] },
   plex: { pages: ["/plex", "/requests", "/plex/manage"], apis: ["/api/plex/library/recent", "/api/requests/mine"] },
   creators: { pages: ["/creators", "/creators/bob", "/creator"], apis: [] },
@@ -72,7 +74,8 @@ const REP = {
   bounties: { pages: ["/bounties", "/bounties/3"], apis: [], og: ["/og/bounty/3.png"] },
   polls: { pages: ["/polls", "/polls/p_1"], apis: [] },
   raffles: { pages: ["/raffles", "/raffles/7"], apis: ["/api/raffles/7/fair"] },
-  economy: { pages: ["/wallet", "/staking", "/history", "/economy"], apis: ["/api/burns"] },
+  economy: { pages: ["/wallet", "/staking", "/history"], apis: [] },
+  howpat: { pages: ["/economy"], apis: ["/api/burns"] },
   rankings: { pages: ["/rankings", "/supply"], apis: [] },
   achievements: { pages: ["/achievements"], apis: ["/api/achievements/progress"] },
   shop: { pages: ["/shop", "/shop/item/x1", "/shop/seller/bob"], apis: [] },
@@ -88,13 +91,13 @@ const NEVER = [
   "/", "/about", "/info",
   "/login", "/register", "/signup?invite=ABCD", "/forgot-password", "/reset-password/tok123", "/verify-email?token=x", "/auth/twitch", "/auth/google/callback",
   "/auth/sso/new", "/claim/tok", "/signin?t=x", "/confirm-age", "/resolve-twitch-conflict",
-  "/terms", "/privacy", "/tos", "/privacy-policy", "/guidelines", "/padiquette", "/takedown", "/rules",
+  "/terms", "/privacy", "/tos", "/privacy-policy", "/guidelines", "/padiquette", "/takedown", "/rules", "/creators/terms", "/creators/terms/",
   "/robots.txt", "/healthz", "/sw.js", "/favicon.ico", "/public/css/ds.css", "/media/f/abc.png", "/og/page.png", "/.well-known/patv-jwks.json",
   "/language", "/i18n/de.json", "/lang/de",
   "/api/gtf/bot/board", "/api/feed/aigen/bot/state", "/api/premium/stripe/webhook", "/internal/hub/x",
   "/g/wheel", "/api/g/wheel/last.json", "/api/g/achievement-feed", "/events?type=spin&identifier=watch", "/onair/show", "/onair/player",
-  "/gtf/heist/overlay", "/api/gtf/heist/live", "/p/somepad/audio", "/rooms/somepad/audio", "/p/somepad/chatlog/dl/tok",
-  "/api/stage", "/api/stage/hls-auth", "/api/rooms/somepad/live", "/api/stories",
+  "/gtf/heist/overlay", "/api/gtf/heist/live", "/p/somepad/chatlog/dl/tok",
+  "/api/stage", "/api/stage/hls-auth", "/api/stage/whip-auth", "/api/stories",
   "/api/prizes", "/api/achievements", "/api/stats/supply", "/api/leaderboard", "/api/rankings/top", "/api/jackpot", "/api/pokernow/games",
   "/api/cosmetics/catalog", "/api/u/bob/avatar", "/api/u/bob/balance", "/api/users/twitch/123",
   "/admin", "/admin/users", "/pads/admin", "/rooms/admin", "/stage/admin", "/feed/admin", "/shop/admin", "/api/admin/members", "/api/pads/admin/config",
@@ -219,6 +222,95 @@ test("the never-gate list stays public with EVERY section off", async () => {
   } finally { await setAll(true); }
 });
 
+test("Pads off: every pad's live room, history, audio and stage are Pads APIs - but not the pads the homepage shows, nor the casino chat frame's own", async () => {
+  await setOne("pads", false);
+  try {
+    const PAD_READS = ["/api/rooms/otherpad/live", "/api/rooms/otherpad/history", "/api/rooms/otherpad/history/state", "/api/rooms/otherpad/stage",
+                       "/api/rooms/otherpad/cfstickers", "/p/otherpad/audio", "/rooms/otherpad/audio", "/api/stage?room=otherpad"];
+    for (const p of PAD_READS) {
+      const g = await go(p);
+      assert.equal(g.status, 401, p); assert.equal(g.json.error, "sign_in"); assert.equal(g.json.section, "pads");
+      assert.ok(real(await go(p, { as: "mem" })), p + " member");
+    }
+    assert.ok(real(await go("/api/stage")), "no pad named: the homepage's front pad stage");
+    // the guest-usable POSTs that read a pad are gated with them; the rest pass to their routes (the bots' own POSTs among them)
+    for (const p of ["/api/rooms/otherpad/audio/rtc", "/api/rooms/otherpad/search", "/api/rooms/otherpad/history/check"]) {
+      const g = await go(p, { method: "POST", body: {} });
+      assert.equal(g.status, 401, "POST " + p); assert.equal(g.json.error, "sign_in");
+      assert.ok(real(await go(p, { method: "POST", body: {}, as: "mem" })), "POST " + p + " member");
+    }
+    for (const p of ["/api/rooms/boost", "/api/rooms/owners", "/api/rooms/otherpad/challenge/payout", "/api/rooms/otherpad/say"]) {
+      assert.ok(real(await go(p, { method: "POST", body: {} })), "POST " + p + " passes to the route");
+    }
+    // the pads the homepage showed a guest (home.js noteHome): their reads stay open - by slug or id, any case - the pad page itself doesn't
+    GA.noteHome([{ id: "Front.Room", slug: "frontpad" }, null, { id: "Panel.Room", slug: "panelpad" }]);
+    for (const p of ["/api/rooms/frontpad/live", "/api/rooms/FrontPad/history", "/api/rooms/front.room/live", "/p/frontpad/audio", "/api/stage?room=frontpad",
+                     "/api/rooms/panelpad/live", "/rooms/panelpad/audio"]) assert.ok(real(await go(p)), "homepage pad: " + p);
+    assert.ok(real(await go("/api/rooms/frontpad/audio/rtc", { method: "POST", body: {} })), "the homepage's 🎧 WebRTC ticket");
+    assert.ok(!real(await go("/p/frontpad")), "the front pad's own page is still the Pads gate");
+    assert.equal((await go("/api/rooms/otherpad/live")).status, 401, "another pad stays closed");
+    // the house room / the front pick rooms.js holds: open without a note
+    const rooms = require(path.join(repo, "rooms"));
+    assert.ok(real(await go("/api/rooms/" + encodeURIComponent(rooms.HOUSE_ROOM) + "/live")), "the house room");
+    // a note lasts 6 h (a homepage that's open longer keeps re-noting it through its own reloads)
+    clockAt += 6 * 3600e3 + 1000;
+    assert.equal((await go("/api/rooms/frontpad/live")).status, 401, "an old note");
+    // the casino tables' 💬 Chat frame: that frame's own requests (Referer = the framed chat of the SAME pad, same-origin)
+    const frame = (ref, site = "same-origin") => ({ referer: ref, "sec-fetch-site": site });
+    for (const p of ["/api/rooms/otherpad/live", "/api/rooms/otherpad/history", "/p/otherpad/audio", "/api/stage?room=otherpad"]) {
+      assert.ok(real(await go(p, { headers: frame(base + "/p/otherpad/chat?embed=1") })), "framed chat: " + p);
+      assert.ok(real(await go(p, { headers: frame(base + "/p/OtherPad/chat?embed=1#listen") })), "framed chat (any case): " + p);
+    }
+    assert.ok(real(await go("/api/rooms/otherpad/audio/rtc", { method: "POST", body: {}, headers: frame(base + "/p/otherpad/chat?embed=1") })), "framed chat: rtc");
+    for (const [why, h] of [["another pad's frame", frame(base + "/p/elsewhere/chat?embed=1")], ["the chat window, not the frame", frame(base + "/p/otherpad/chat")],
+                            ["the pad page", frame(base + "/p/otherpad")], ["cross-site", frame(base + "/p/otherpad/chat?embed=1", "cross-site")],
+                            ["another host", frame("http://evil.test/p/otherpad/chat?embed=1")], ["no referer", { "sec-fetch-site": "same-origin" }]]) {
+      assert.equal((await go("/api/rooms/otherpad/live", { headers: h })).status, 401, why);
+    }
+    // Pads on: nothing of this applies
+    await setOne("pads", true);
+    for (const p of PAD_READS) assert.ok(real(await go(p)), "on: " + p);
+    assert.ok(real(await go("/api/rooms/otherpad/search", { method: "POST", body: {} })));
+  } finally { await setAll(true); GA._home.clear(); }
+});
+
+test("the Creator Terms stay public with Creators off (/terms points to them); the creators pages don't", async () => {
+  await setOne("creators", false);
+  try {
+    for (const p of ["/creators/terms", "/creators/terms/", "/CREATORS/TERMS"]) assert.ok(real(await go(p)), p);
+    for (const p of ["/creators", "/creators/bob", "/creator"]) assert.ok(!real(await go(p)), p);
+    assert.match(fs.readFileSync(path.join(repo, "views", "terms.ejs"), "utf8"), /href="\/creators\/terms"/, "the link the rule exists for");
+  } finally { await setOne("creators", true); }
+});
+
+test("search: posts / pads / people are left out for guests while Feed / Pads / Member profiles is off (searchHidden)", async () => {
+  const guest = { cookies: {}, query: {}, get: () => "" }, member = { cookies: {}, user: { userId: "u_mem" } };
+  assert.deepEqual(GA.searchHidden(guest), []);
+  await adminPost({ changes: { feed: false } });
+  assert.deepEqual(GA.searchHidden(guest), ["posts"]);
+  await adminPost({ changes: { pads: false, members: false } });
+  assert.deepEqual(GA.searchHidden(guest), ["posts", "pads", "people"]);
+  assert.deepEqual(GA.searchHidden(member), [], "members get everything");
+  assert.deepEqual(GA.searchHidden({ cookies: {}, query: {}, get: (h) => (h === "x-bot-token" ? process.env.TWITCH_BOT_TOKEN : "") }), [], "a bot too");
+  await setAll(true);
+  assert.deepEqual(GA.searchHidden(guest), []);
+});
+
+test("the admin card names the sections as the navbar does (PepeFrog commands, How PAT works under Info & links)", async () => {
+  const v = (await go("/api/admin/guest-access", { as: "adm" })).json;
+  const sec = (k) => v.sections.find((s) => s.key === k).groups.map((g) => g.key);
+  assert.deepEqual(sec("info"), ["rankings", "help", "howpat", "search"], "the navbar's Info & links order");
+  assert.ok(!sec("you").includes("rankings") && !sec("you").includes("howpat"));
+  assert.deepEqual(sec("you"), ["economy", "achievements"]);
+  const label = (k) => v.sections.flatMap((s) => s.groups).find((g) => g.key === k).label;
+  assert.match(label("help"), /PepeFrog commands/);
+  assert.match(label("howpat"), /How PAT works/);
+  assert.match(label("economy"), /Wallet & stashes, Staking & vaults, PAT history/);
+  const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.equal(en["guest.s.help"], "PepeFrog commands");
+  assert.equal(en["guest.s.howpat"], "How PAT works");
+});
+
 test("the gate page: Sign in back to the page; Got an invite? while invite-only, Sign up while open; only the section's name", async () => {
   await setOne("shop", false);
   let g = await go("/shop/item/x1?ref=home");
@@ -247,7 +339,7 @@ test("the gate page: Sign in back to the page; Got an invite? while invite-only,
 const navOf = (html) => html.slice(html.indexOf('<nav class="navbar">'), html.indexOf("</nav>", html.indexOf('<nav class="navbar">')));
 const footOf = (html) => html.slice(html.indexOf('<template id="siteFootTpl">'), html.indexOf("</template>"));
 test("navbar (top bar, More, ☰) + footer: off sections are hidden for guests and kept for members", async () => {
-  const off = ["markets", "shop", "search", "wheel", "help", "plex", "achievements", "economy", "casino", "pads", "feed"];
+  const off = ["markets", "shop", "search", "wheel", "help", "plex", "achievements", "economy", "howpat", "casino", "pads", "feed"];
   let html = (await go("/__layout")).text;
   for (const h of ["/markets", "/shop", "/search", "/help", "/plex", "/achievements", "/economy", "/p", "/feed", "/stage", "/submit"]) {
     assert.ok(navOf(html).includes('href="' + h + '"') || footOf(html).includes('href="' + h + '"'), "on: " + h + " is linked");
@@ -410,4 +502,8 @@ test("index.js wiring: the middleware runs after the language middleware and bef
     assert.ok(src.indexOf(r) > mw, r + " comes after the gate");
   }
   assert.match(src, /guestAccess\.register\(app, \{ addUser \}\)/);
+  // the profile's Posts tab follows Feed & Hop for guests (and in the owner's visitor preview)
+  assert.match(src, /guestOff: preview \? !guestAccess\.isOn\("feed"\) : guestAccess\.hiddenFor\(req, "feed"\)/);
+  // the homepage notes the pads it shows a guest (their reads stay open while Pads is off)
+  assert.match(fs.readFileSync(path.join(repo, "home.js"), "utf8"), /if \(!viewer\) \{ try \{ require\("\.\/guestaccess"\)\.noteHome\(\[\{ id: front\.id, slug: frontInfo && frontInfo\.slug \}, room && \{ id: room\.id, slug: room\.slug \}\]\)/);
 });

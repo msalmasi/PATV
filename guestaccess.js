@@ -12,25 +12,30 @@
 //   * it is hidden from the navbar (the top bar, More, the ☰ menu, the footer) and from the homepage's tiles / widgets that point
 //     into it: views call res.locals.guestHides(href) (or guestOff(key)) - the ONE helper, set here on every request
 //   * the feed's live link cards (embedcards.js) of its items answer null, like a missing item
+//   * (review fixes) what other pages show of it goes too (hiddenFor / searchHidden): Search leaves out posts (Feed & Hop off),
+//     pads (Pads & stages off) and people (Member profiles off); a pad page drops its Feed tab and a profile its Posts tab while
+//     Feed & Hop is off; with Pads off, every pad's live room / chat history / 🎧 audio / stage API is a Pads API - except the pads
+//     the homepage itself shows and the pad chat beside a casino table (padReadOpen, below)
 // Signed-in members are never affected (a valid login cookie - sessions.gate has already removed a revoked one), and neither are
 // requests that carry a bot credential (a resolved X-PATV-Key, or the shared bot token in X-Bot-Token / Authorization / the
 // query): those routes check it themselves.
-// Only GET / HEAD are gated: a guest's POST is refused by the route itself (it needs an account).
+// Only GET / HEAD are gated: a guest's POST is refused by the route itself (it needs an account) - except the few a guest can use
+// to read a pad (its audio's WebRTC ticket, chat search, history checks: PAD_POST), gated with the pad's other reads.
 //
 // NEVER GATED, whatever the switches say (NEVER below - checked first, so no section pattern can reach them): the homepage and
 // /about; sign-in / sign-up / invite / SSO / password reset / e-mail verification / Camfrog claim / chat sign-in (/signin) / the 18+
-// confirmation; terms, privacy, Padiquette, rules, TAKE IT DOWN and the other legal pages; robots.txt, sitemaps, /healthz,
+// confirmation; terms, privacy, Padiquette, rules, TAKE IT DOWN, the Creator Terms (/creators/terms - /terms points to them) and
+// the other legal pages; robots.txt, sitemaps, /healthz,
 // /sw.js, icons, /public, /media (uploaded files), /og/page.png (the generic card), /.well-known; the language pages; every bot /
 // webhook / internal route (an /api path with a /bot segment or "webhook", /internal/); OBS and embeds: /g/* and /api/g/* (the OBS wheel and
 // Pepe's feeds), /events (the spin stream), /onair/* (Pepe's OBS player / picture pages), /gtf/heist/overlay + /api/gtf/heist/live
-// (the heist overlay), a pad's audio stream (/p/<pad>/audio, old /rooms/<pad>/audio - the homepage's 🎧), the casino tables' chat frame
-// (/p/<pad>/chat?embed=1 framed by this site - Sec-Fetch-Dest iframe + Sec-Fetch-Site same-origin), chat-log download links (tokened); /api/stage/rtmp + /api/stage/hls-auth (nginx); /admin, every */admin page
-// and every /api/<x>/admin API (their own gate).
+// (the heist overlay), the casino tables' chat frame (/p/<pad>/chat?embed=1 framed by this site - Sec-Fetch-Dest iframe +
+// Sec-Fetch-Site same-origin), chat-log download links (tokened); /api/stage/rtmp + /api/stage/hls-auth (nginx); /admin, every
+// */admin page and every /api/<x>/admin API (their own gate).
 // APIs the bots READ without a key stay public too (Pepe's !store reads /api/prizes, his supply / burn ticks /api/stats/supply, the
 // Discord bot /api/prizes and /api/leaderboard ...): /api/prizes, /api/achievements, /api/stats/*, /api/leaderboard,
-// /api/rankings/top, /api/jackpot, /api/pokernow/*, /api/cosmetics/*, /api/u/*, /api/users/*, /api/stage, /api/rooms/* (the
-// homepage's live room and stage poll them too), /api/stories (the story strips - signed-out visitors only get their sign-in
-// prompt anyway).
+// /api/rankings/top, /api/jackpot, /api/pokernow/*, /api/cosmetics/*, /api/u/*, /api/users/*, /api/stories (the story strips -
+// signed-out visitors only get their sign-in prompt anyway). (The bots only POST to /api/rooms/*, with their key.)
 //
 // Settings: guest_access (k = section key, guest_open 0 | 1, updated) - a missing row is ON; who changed it is in admin_audit (no name
 // column here: nothing for account merges / deletions to follow). Read into memory at boot and re-read every
@@ -54,6 +59,7 @@ const now = () => clock();
 // ── the sections ──
 const I = "i";
 const re = (s) => new RegExp(s, I);
+const PAD_AUDIO = re("^/(?:p|rooms)/[^/]+/audio/?$");     // a pad's 🎧 room audio (the MP3 relay)
 const pre = (p) => re("^" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:/|$)");
 /**
  * [key, nav section, home page, pages, apis, og images, exceptions]. Express routes case-insensitively and with or without one
@@ -62,13 +68,13 @@ const pre = (p) => re("^" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:/|$)"
 const GROUPS = Object.freeze([
   // ── Watch & hang out ──
   { key: "pads", label: "📡 Pads & stages",
-    covers: "/p (the pads directory) and every pad page, /pads/* (new pad, owners' guide), /stage (Go live, booking, captures), /rooms/*; GET /api/pads/*. Not the homepage's own front-pad room and stage, a pad's 🎧 audio stream or the casino tables' chat frame.",
+    covers: "/p (the pads directory) and every pad page, /pads/* (new pad, owners' guide), /stage (Go live, booking, captures), /rooms/*; every pad's live room, chat history, 🎧 audio and stage (GET /api/rooms/<pad>/*, /p/<pad>/audio, /api/stage?room=<pad>), GET /api/pads/*; pads in Search and the pad list (GET /api/feed/communities). Still shown: the pads the homepage itself shows (its front pad's stage and live room) and the pad chat beside a casino table.",
     sec: "watch", home: "/p",
     pages: [pre("/p"), pre("/pads"), pre("/rooms"), pre("/stage")],
-    apis: [pre("/api/pads")],
-    not: [re("^/(?:pads|stage|rooms)/admin(?:/|$)"), re("^/(?:p|rooms)/[^/]+/audio/?$"), re("^/p/[^/]+/chatlog/dl/")] },
+    apis: [pre("/api/pads"), pre("/api/rooms"), PAD_AUDIO, re("^/api/stage/?$"), re("^/api/feed/communities/?$")],
+    not: [re("^/(?:pads|stage|rooms)/admin(?:/|$)"), re("^/p/[^/]+/chatlog/dl/")] },
   { key: "feed", label: "📝 Feed & Hop",
-    covers: "/feed and every post page (/feed/p/..., /p/<pad>/posts/..., /u/<name>/posts/...), /submit, Hop (/hop, /p/<pad>/hop, /u/<name>/hop); GET /api/feed/*, /api/hop; post share cards (/og/post). The homepage's Hot on PATV box is hidden.",
+    covers: "/feed and every post page (/feed/p/..., /p/<pad>/posts/..., /u/<name>/posts/...), /submit, Hop (/hop, /p/<pad>/hop, /u/<name>/hop); GET /api/feed/*, /api/hop; post share cards (/og/post). Also hidden: the Feed tab on pad pages, the Posts tab on profiles, posts in Search and the homepage's Hot on PATV box.",
     sec: "watch", home: "/feed",
     pages: [pre("/feed"), re("^/submit/?$"), re("^/p/[^/]+/submit/?$"), re("^/(?:p|u)/[^/]+/posts/"), re("^/hop/?$"), re("^/(?:p|u)/[^/]+/hop/?$")],
     apis: [pre("/api/feed"), re("^/api/hop/?$")],
@@ -80,12 +86,12 @@ const GROUPS = Object.freeze([
     pages: [pre("/plex"), pre("/requests")],
     apis: [pre("/api/plex"), pre("/api/requests")] },
   { key: "creators", label: "⭐ Creators",
-    covers: "/creators, /creators/terms, a creator's page /creators/<name>, the dashboard /creator.",
+    covers: "/creators, a creator's page /creators/<name>, the dashboard /creator. The Creator Terms (/creators/terms) stay public: /terms points to them.",
     sec: "watch", home: "/creators",
     pages: [pre("/creators"), pre("/creator")],
     apis: [] },
   { key: "members", label: "👤 Member profiles",
-    covers: "/u/<name> and its tabs, tip page and saved stories; GET /api/u/<name>/profile|transactions, /api/stories/person/<name>; profile share cards (/og/profile). Avatars stay (/api/u/<name>/avatar), and names stay visible elsewhere.",
+    covers: "/u/<name> and its tabs, tip page and saved stories; GET /api/u/<name>/profile|transactions, /api/stories/person/<name>; profile share cards (/og/profile); people in Search. Avatars stay (/api/u/<name>/avatar), and names stay visible elsewhere.",
     sec: "watch", home: "/",
     pages: [re("^/u/[^/]+(?:/|$)")],
     apis: [re("^/api/u/[^/]+/(?:profile|transactions)/?$"), pre("/api/stories/person")],
@@ -138,15 +144,11 @@ const GROUPS = Object.freeze([
     sec: "play", home: "/raffles", embeds: ["r"],
     pages: [pre("/raffles")], apis: [re("^/api/raffles/[^/]+/fair/?$")] },
   // ── You ──
-  { key: "economy", label: "👛 Wallet, staking & How PAT works",
-    covers: "/wallet, /staking, /history (PAT history), /economy (How PAT works); GET /api/burns.",
-    sec: "you", home: "/economy",
-    pages: [pre("/wallet"), pre("/staking"), pre("/history"), pre("/economy")],
-    apis: [re("^/api/burns/?$")] },
-  { key: "rankings", label: "🏆 Rankings",
-    covers: "/rankings (and /supply). The bots' own leaderboard and stats feeds stay.",
-    sec: "you", home: "/rankings",
-    pages: [pre("/rankings"), pre("/supply")], apis: [] },
+  { key: "economy", label: "👛 Wallet & stashes, Staking & vaults, PAT history",
+    covers: "/wallet, /staking, /history.",
+    sec: "you", home: "/wallet",
+    pages: [pre("/wallet"), pre("/staking"), pre("/history")],
+    apis: [] },
   { key: "achievements", label: "🏅 Achievements",
     covers: "/achievements; GET /api/achievements/progress. Pepe's achievement catalog feed stays.",
     sec: "you", home: "/achievements",
@@ -169,12 +171,20 @@ const GROUPS = Object.freeze([
     sec: "shop", home: "/soundboards",
     pages: [pre("/soundboards"), pre("/voices")], apis: [re("^/api/soundboards/?$"), re("^/api/voices/?$")] },
   // ── Info & links ──
-  { key: "help", label: "🐸 Pepe's commands (help)",
+  { key: "rankings", label: "🏆 Rankings",
+    covers: "/rankings (and /supply, its Supply tab). The bots' own leaderboard and stats feeds stay.",
+    sec: "info", home: "/rankings",
+    pages: [pre("/rankings"), pre("/supply")], apis: [] },
+  { key: "help", label: "🐸 PepeFrog commands",
     covers: "/help (with /help/formatting), /commands; GET /api/help/data.",
     sec: "info", home: "/help",
     pages: [pre("/help"), pre("/commands")], apis: [re("^/api/help/data/?$")] },
+  { key: "howpat", label: "📘 How PAT works",
+    covers: "/economy (How PAT works, with its burn log: GET /api/burns).",
+    sec: "info", home: "/economy",
+    pages: [pre("/economy")], apis: [re("^/api/burns/?$")] },
   { key: "search", label: "🔍 Search",
-    covers: "/search and the navbar's search box; GET /api/search.",
+    covers: "/search and the navbar's search box; GET /api/search. While Search is on, its results still leave out the kinds whose section is off (posts: Feed & Hop, pads: Pads & stages, people: Member profiles).",
     sec: "info", home: "/search",
     pages: [pre("/search")], apis: [re("^/api/search/?$")] },
 ].map((g) => Object.freeze({ embeds: [], og: [], not: [], ...g })));
@@ -189,18 +199,86 @@ const NEVER = Object.freeze([
   pre("/login"), pre("/register"), pre("/signup"), pre("/forgot-password"), pre("/reset-password"), pre("/verify-email"), pre("/auth"),
   re("^/resolve-(?:twitch|discord)-conflict"), pre("/claim"), pre("/signin"), pre("/confirm-age"), pre("/settings"), pre("/logout"),
   pre("/terms"), pre("/tos"), pre("/privacy"), pre("/privacy-policy"), pre("/guidelines"), pre("/padiquette"), pre("/rules"), pre("/takedown"),
-  pre("/dmca"), pre("/cookies"), pre("/legal"), pre("/support"),
+  pre("/dmca"), pre("/cookies"), pre("/legal"), pre("/support"), re("^/creators/terms/?$"),
   re("^/robots\\.txt$"), re("^/sitemap"), pre("/healthz"), re("^/sw\\.js$"), re("^/favicon\\.ico$"), re("^/apple-touch-icon"), pre("/public"),
   pre("/media"), re("^/og/page\\.png$"), pre("/.well-known"), pre("/i18n"), pre("/lang"), pre("/language"), pre("/translate"),
   pre("/events"), pre("/g"), pre("/api/g"), pre("/internal"), pre("/onair"), re("^/gtf/heist/overlay/?$"), re("^/api/gtf/heist/live/?$"),
-  re("^/api/stage/(?:rtmp|hls-auth)(?:/|$)"), re("^/api/(?:.*/)?bot(?:/|$)"), re("^/api/.*webhook"), re("^/(?:p|rooms)/[^/]+/audio/?$"),
+  re("^/api/stage/(?:rtmp|hls-auth)(?:/|$)"), re("^/api/(?:.*/)?bot(?:/|$)"), re("^/api/.*webhook"),
   re("^/p/[^/]+/chatlog/dl/"), pre("/admin"), pre("/api/admin"), re("^/(?:feed|pads|stage|shop|casino|rooms)/admin(?:/|$)"),
   re("^/api/[^/]+/admin(?:/|$)"), pre("/sb/audio"),
   // read by Pepe / the Discord / Twitch bots without a key
   re("^/api/prizes/?$"), re("^/api/achievements/?$"), pre("/api/stats"), pre("/api/leaderboard"), pre("/api/rankings"), pre("/api/jackpot"),
   pre("/api/pokernow"), pre("/api/cosmetics"), re("^/api/u/[^/]+/(?:avatar|balance|level|casino-banned|wheel)"), pre("/api/users"),
-  re("^/api/stage/?$"), pre("/api/rooms"), re("^/api/stories/?$"),
+  re("^/api/stories/?$"),
 ]);
+
+// ── a pad's own reads: its live room, chat history, 🎧 audio, stage ──
+// They belong to Pads (above), except for the pads the HOMEPAGE shows - it stays public, so its front pad's stage and its live
+// room keep working for guests (home.js notes them: noteHome; plus what rooms.js holds as the front pick) - and the pad whose chat
+// sits beside a casino table (the 💬 Chat frame's own requests: Referer /p/<pad>/chat?embed=1 of this site, same-origin).
+// Each pad's routes still decide who may read it (padaccess, the 18+ gate, bans) - this only stops the reads that Pads being off
+// should stop. The guest-usable POSTs among them are gated too (the room audio's WebRTC ticket, chat search, history checks).
+const PAD_REF = /^\/api\/rooms\/([^/]+)(?:\/|$)|^\/(?:p|rooms)\/([^/]+)\/audio\/?$/i;
+const PAD_POST = /^\/api\/rooms\/[^/]+\/(?:audio\/rtc|search|history\/check)\/?$/i;
+const STAGE_API = /^\/api\/stage\/?$/i;
+const HOME_TTL = 6 * 3600 * 1000, HOME_MAX = 50;
+const HOME = new Map();          // a lowercased slug or id -> when the homepage last showed that pad to a guest
+/** home.js: the homepage just showed these pads to a signed-out visitor - [{id, slug}] (the front pad, the live-room panel's pad). */
+function noteHome(pads) {
+  const t = now();
+  for (const p of pads || []) {
+    if (!p) continue;
+    for (const v of [p.id, p.slug]) if (v != null && String(v)) { const k = String(v).toLowerCase(); HOME.delete(k); HOME.set(k, t); }
+  }
+  while (HOME.size > HOME_MAX) HOME.delete(HOME.keys().next().value);
+}
+function decodeSlug(s) { try { return decodeURIComponent(String(s || "")).toLowerCase(); } catch (e) { return String(s || "").toLowerCase(); } }
+/** Every name a pad answers to here: what was written, and - from the registry - its id, its slug and its slugified id. */
+function padNames(slugOrId) {
+  const s = decodeSlug(slugOrId);
+  const out = new Set(s ? [s] : []);
+  try {
+    const R = require("./rooms");
+    const row = R.bySlugCached(s) || R.getCached(String(slugOrId || ""));
+    if (row) { out.add(String(row.id).toLowerCase()); if (row.slug) out.add(String(row.slug).toLowerCase()); out.add(R.slugify(row.id)); }
+  } catch (e) { /* no registry */ }
+  return out;
+}
+function homePad(slug) {
+  const names = padNames(slug);
+  const t = now();
+  for (const n of names) { const at = HOME.get(n); if (at != null && t - at < HOME_TTL) return true; }
+  let ids = [];
+  try { ids = [...require("./rooms").frontIdsCached()]; } catch (e) { ids = []; }
+  return ids.some((id) => [...padNames(id)].some((n) => names.has(n)));
+}
+/** The request comes from the casino tables' 💬 Chat frame of this pad (that page's own fetches, audio and stage polls). */
+function fromChatFrame(req, slug) {
+  if (!req || typeof req.get !== "function" || req.get("Sec-Fetch-Site") !== "same-origin") return false;
+  let u;
+  try { u = new URL(String(req.get("Referer") || "")); } catch (e) { return false; }
+  const hostOf = (h) => String(h || "").trim().toLowerCase().replace(/^www\./, "");      // authGuard.sameSite's own comparison
+  if (!hostOf(u.host) || hostOf(u.host) !== hostOf(req.get("Host")) || u.searchParams.get("embed") !== "1") return false;
+  const m = /^\/p\/([^/]+)\/chat\/?$/i.exec(u.pathname);
+  if (!m) return false;
+  const a = padNames(m[1]);
+  return [...padNames(slug)].some((n) => a.has(n));
+}
+/** Is this request a pad read that stays open to guests while Pads is off (see above)? */
+function padReadOpen(req) {
+  const p = String((req && req.path) || "");
+  let slug = null;
+  if (STAGE_API.test(p)) {
+    const q = req.query && req.query.room;
+    if (q == null || q === "") return true;                           // no pad named: the homepage's front pad
+    slug = String(Array.isArray(q) ? q[0] : q);
+  } else {
+    const m = PAD_REF.exec(p);
+    if (!m) return false;
+    slug = m[1] || m[2];
+  }
+  return homePad(slug) || fromChatFrame(req, slug);
+}
 
 // ── settings ──
 const OFF = new Set();
@@ -262,11 +340,14 @@ const framedChat = (req) => !!(req && req.query && String(req.query.embed || "")
 /**
  * Every section this path belongs to, with what it is there: [{group, kind: page | api | og}] (whatever the switches say).
  * opts.framedChat: the request is the casino tables' chat frame (framedChat(req)) - never gated.
+ * opts.padOpen: the request is a pad read that stays open while Pads is off (padReadOpen(req): a pad the homepage shows, the casino
+ * chat frame's own requests).
  */
-function sectionsOf(path, { framedChat: framed = false } = {}) {
+function sectionsOf(path, { framedChat: framed = false, padOpen = false } = {}) {
   const p = String(path || "");
   if (NEVER.some((r) => r.test(p))) return [];
   if (framed && /^\/p\/[^/]+\/chat\/?$/i.test(p)) return [];
+  if (padOpen && (PAD_REF.test(p) || STAGE_API.test(p))) return [];
   const out = [];
   for (const g of GROUPS) {
     if (g.not.some((r) => r.test(p))) continue;
@@ -343,15 +424,21 @@ function viewHelpers(req) {
 function middleware(req, res, next) {
   kick();
   Object.assign(res.locals, viewHelpers(req));
-  if (!OFF.size || (req.method !== "GET" && req.method !== "HEAD")) return next();
-  const hit = gatedBy(req.path, { framedChat: framedChat(req) });
+  if (!OFF.size) return next();
+  if (req.method !== "GET" && req.method !== "HEAD" && !(req.method === "POST" && PAD_POST.test(req.path))) return next();
+  const hit = gatedBy(req.path, { framedChat: framedChat(req), padOpen: OFF.has("pads") && padReadOpen(req) });
   if (!hit || signedIn(req) || botCaller(req)) return next();
   return refuse(req, res, hit);
 }
-/** For a route that serves several sections' items (embedcards.js): is this section hidden from THIS request? */
+/** For a route that serves several sections' items (embedcards.js, search.js, the pad page's Feed tab, the profile's Posts tab):
+ *  is this section hidden from THIS request? */
 function hiddenFor(req, key) {
   if (!key || !OFF.has(key)) return false;
   return !signedIn(req) && !botCaller(req);
+}
+/** search.js: the result kinds this request may not get - posts (Feed & Hop off), pads (Pads & stages off), people (Member profiles off). */
+function searchHidden(req) {
+  return [["posts", "feed"], ["pads", "pads"], ["people", "members"]].filter(([, k]) => hiddenFor(req, k)).map(([kind]) => kind);
 }
 
 // ── admin ──
@@ -441,7 +528,9 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, middleware, viewHelpers, settings, isOn, setSettings, adminView, sectionsOf, gatedBy, hrefGate, hiddenFor, signedIn, botCaller, framedChat,
+  noteHome, padReadOpen, searchHidden,
   GROUPS, KEYS, BY_KEY, SECTIONS, NEVER, EMBED_GROUP, CAP, AUDIT, RELOAD_MS, Refuse,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _reload: () => load(),
+  _home: HOME,
 };

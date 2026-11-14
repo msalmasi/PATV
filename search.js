@@ -27,6 +27,9 @@
 //           their room activity (stories.privateLogins - the same rule as captures; Pepe never sends !incognito /
 //           !bridge hide people by name anyway). Usernames and display names are public on every profile already.
 //   pads    feedstore.communities (profile pads never; Approved pads only for the people inside them).
+//   1.99anv guest access (guestaccess.js): a kind whose section is off for this signed-out visitor is never searched (opts.hide:
+//           posts - Feed & Hop, pads - Pads & stages, people - Member profiles; GA.searchHidden) - its count is 0, its tab and the
+//           popular tags (they search posts) aren't shown.
 // Rate limited per account (or IP when signed out): LIMIT searches a minute.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
@@ -352,8 +355,8 @@ async function posts(p, viewer, { sort = "relevance", page = 1, limit = PAGE } =
   return { posts: out, total: ids.length, more: ids.length > page * limit, page };
 }
 
-/** Everything for one search. kind: all | people | posts | pads */
-async function run(raw, viewer, { kind = "all", sort = "relevance", page = 1 } = {}) {
+/** Everything for one search. kind: all | people | posts | pads; hide: the kinds this viewer may not get (never searched) */
+async function run(raw, viewer, { kind = "all", sort = "relevance", page = 1, hide = [] } = {}) {
   await init();
   maybeRebuild();
   const p = parse(raw);
@@ -361,12 +364,14 @@ async function run(raw, viewer, { kind = "all", sort = "relevance", page = 1 } =
   const s = SORTS.includes(sort) ? sort : "relevance";
   const out = { q: p.q, tag: p.tag, kind: k, sort: s, page: 1, people: [], posts: [], pads: [], counts: { people: 0, posts: 0, pads: 0 }, more: false };
   if (!p.q || (!p.terms.length && !p.tag)) return out;
-  const wantPeople = !p.tag && (k === "all" || k === "people");
-  const wantPads = !p.tag && (k === "all" || k === "pads");
+  const off = new Set(Array.isArray(hide) ? hide : []);
+  const wantPeople = !p.tag && (k === "all" || k === "people") && !off.has("people");
+  const wantPads = !p.tag && (k === "all" || k === "pads") && !off.has("pads");
+  const wantPosts = (k === "all" || k === "posts") && !off.has("posts");
   const [P, D, T] = await Promise.all([
     wantPeople ? people(p, viewer) : [],
     wantPads ? pads(p, viewer) : [],
-    k === "all" || k === "posts" ? posts(p, viewer, { sort: s, page: k === "posts" ? page : 1, limit: k === "posts" ? PAGE : PREVIEW.posts }) : { posts: [], total: 0, more: false, page: 1 },
+    wantPosts ? posts(p, viewer, { sort: s, page: k === "posts" ? page : 1, limit: k === "posts" ? PAGE : PREVIEW.posts }) : { posts: [], total: 0, more: false, page: 1 },
   ]);
   out.counts = { people: P.length, pads: D.length, posts: T.total };
   out.people = k === "all" ? P.slice(0, PREVIEW.people) : P;
@@ -428,6 +433,7 @@ function register(app, { addUser }) {
   state.lim = lim;                                   // tests reset it
   const keyOf = (req) => (req.user && req.user.userId ? "u:" + req.user.userId : "ip:" + guard.clientIp(req));
   const viewerOf = async (req) => (req.user && req.user.userId ? require("./feedstore").account(req.user.userId) : null);
+  const hiddenOf = (req) => { try { return require("./guestaccess").searchHidden(req); } catch (e) { return []; } };
   const params = (req) => {
     const q = req.query || {};
     const one = (v) => (Array.isArray(v) ? v[0] : v);
@@ -446,19 +452,21 @@ function register(app, { addUser }) {
     res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
     try {
       const a = params(req);
+      const hide = hiddenOf(req);
+      if (hide.includes(a.kind)) a.kind = "all";               // a hidden kind's tab isn't there: everything that's left
       const viewer = await viewerOf(req);
       const fx = require("./feedweb").fx;
       let R = null, wait = 0;
       const p = parse(a.raw);
-      if (p.q) { wait = tooFast(req); if (!wait) R = await run(a.raw, viewer, a); }
-      const popular = !p.q ? await require("./feedtags").popular(null, { viewer, limit: 12 }).catch(() => []) : [];
+      if (p.q) { wait = tooFast(req); if (!wait) R = await run(a.raw, viewer, { ...a, hide }); }
+      const popular = !p.q && !hide.includes("posts") ? await require("./feedtags").popular(null, { viewer, limit: 12 }).catch(() => []) : [];
       // 1.99ade: a fixed link preview - never the query (?q= is anyone's text: it made /search unfurl "<any text> — Search" on
       // our own domain, with a signed card of it). The tab title still says what was searched.
       res.locals.og = require("./og").forFixed(req, res, { title: ["og.search.title", "Search · Public Access TV"],
         description: ["og.search.description", "Search PATV: posts, pads, people and tags."], heading: ["search.title", "Search"], path: "/search" });
       res.status(wait ? 429 : 200).render("search", {
         user: viewer ? viewer.username : null, viewer, fx, R, q: p.q, kind: KINDS.includes(a.kind) ? a.kind : "all", sort: SORTS.includes(a.sort) ? a.sort : "relevance",
-        wait, popular, url: searchUrl, snippetHtml, highlight, terms: p.terms, signed: !!viewer, thumbOf: require("./feedstore").thumbOf,
+        wait, popular, url: searchUrl, snippetHtml, highlight, terms: p.terms, signed: !!viewer, thumbOf: require("./feedstore").thumbOf, hiddenKinds: hide,
         title: p.q ? `${p.q} — Search` : "Search",
       });
     } catch (e) {
@@ -475,7 +483,7 @@ function register(app, { addUser }) {
       const wait = tooFast(req);
       if (wait) return res.status(429).json({ ok: false, error: `Slow down - try again in ${wait}s.`, retryAfter: wait });
       const viewer = await viewerOf(req);
-      const R = await run(a.raw, viewer, a);
+      const R = await run(a.raw, viewer, { ...a, hide: hiddenOf(req) });
       const PL = require("./postlabel");
       res.json({ ok: true, q: R.q, tag: R.tag, type: R.kind, sort: R.sort, page: R.page, more: R.more, counts: R.counts,
         people: R.people.map((u) => ({ username: u.username, display: u.display, avatar: u.avatar, camfrog: u.camfrog, href: u.href, bot: u.bot })),

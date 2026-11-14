@@ -435,3 +435,12 @@ test("the profile feed partial renders for the owner (composer, Your profile pic
   const anon = await render(null);
   assert.match(anon, /rendered post/);
 });
+
+test("1.99anv guest access: guestOff (Feed & Hop off for this signed-out visitor) - no posts and no Posts tab; ?pview / ?pp can't bring an empty one back", async () => {
+  const on = await web.profileSocial({ userId: U.alice.userId, username: "alice" }, null, { show: true, query: {} });
+  assert.ok(on.posts.length > 0, "a guest sees alice's posts while Feed is on");
+  const S = await web.profileSocial({ userId: U.alice.userId, username: "alice" }, null, { show: true, query: { pview: "profile", pp: "2" }, guestOff: true });
+  assert.deepEqual(S.posts, []);
+  assert.equal(S.show, false); assert.equal(S.view, "all"); assert.equal(S.page, 1); assert.equal(S.gallery, null); assert.equal(S.composer, null);
+  assert.ok(S.counts, "the follower counts in the header stay");
+});

@@ -2692,7 +2692,9 @@ function register(app, { isBotToken, addUser }) {
                                               quality: g.quality, queue: !!g.queue, onair: SP.can(req.user, "onair.operate") && !(pepeIn(R.id) && stage().active) };
       } catch (e) { plexPlay = null; }
     }
-    const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
+    // 1.99anv guest access (review): Feed & Hop off for signed-out visitors (guestaccess.js) - no Feed tab and no "Latest from the feed"
+    const feedOff_ = (() => { try { return require("./guestaccess").hiddenFor(req, "feed"); } catch (e) { return false; } })();
+    const feed = feedOff_ ? null : await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage(R.id);
     const latest = feed ? await padLatest(R.id, req.user, feed) : [];
     // 1.99ex: the Feed tab's seen state is per account for members (feedseen.js); signed out it stays in localStorage

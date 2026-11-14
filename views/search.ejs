@@ -9,7 +9,9 @@
 <link rel="stylesheet" href="/public/css/tags.css?v=3">
 <link rel="stylesheet" href="/public/css/search.css?v=3">
 <%
-  const tabs_ = [['all', t('search.tab.all')], ['people', t('search.tab.people')], ['posts', t('search.tab.posts')], ['pads', t('search.tab.pads')]];   // labels HTML-safe
+  // 1.99anv guest access: a kind whose section is off for this signed-out visitor has no tab (search.js hiddenKinds - never searched)
+  const hid_ = typeof hiddenKinds !== 'undefined' && Array.isArray(hiddenKinds) ? hiddenKinds : [];
+  const tabs_ = [['all', t('search.tab.all')], ['people', t('search.tab.people')], ['posts', t('search.tab.posts')], ['pads', t('search.tab.pads')]].filter((tb) => !hid_.includes(tb[0]));   // labels HTML-safe
   const C_ = R ? R.counts : { people: 0, posts: 0, pads: 0 };
   const num_ = (n, cap) => (cap && n >= cap ? n + '+' : String(n));
   const cnt_ = (k) => k === 'all' ? '' : num_(C_[k], k === 'posts' ? 400 : k === 'people' ? 100 : 0);

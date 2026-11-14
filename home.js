@@ -316,6 +316,9 @@ function register(app, { addUser, xpForNextLevel }) {
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
       let room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
+      // 1.99anv guest access (review): with Pads off for signed-out visitors, only the pads THIS page shows them keep their live room,
+      // chat history, 🎧 audio and stage APIs open (guestaccess.padReadOpen) - the front pad and the live-room panel's pad
+      if (!viewer) { try { require("./guestaccess").noteHome([{ id: front.id, slug: frontInfo && frontInfo.slug }, room && { id: room.id, slug: room.slug }]); } catch (e) { /* no gate */ } }
       const isStaff = SP.can(me, "stage.admin");
       // 1.99xs: staff only get a link line now (the picker is on /pads/admin#front, Pepe's panel on /admin/pepe#control)
       const stageAdmin = isStaff ? { front: reg.frontSetting(), admin: SP.can(me, "pepe.control") } : null;

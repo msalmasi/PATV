@@ -843,6 +843,15 @@ async function frontStatus() {
   return { setting: CACHE.front || "auto", auto: A, cfg: CFG, holdUntil: A && A.at ? A.at + CFG.hold_min * 60 * 1000 : null };
 }
 const frontSetting = () => CACHE.front || "auto";
+/** 1.99anv guest access (guestaccess.js): the pads the homepage may feature now, from memory (sync, no viewer): the pinned pick,
+ *  the last automatic pick, the house room. A superset - each pad's own routes still decide who may read it. */
+function frontIdsCached() {
+  const out = new Set();
+  if (CACHE.front && CACHE.front !== "auto") out.add(String(CACHE.front));
+  if (AUTO && AUTO.id) out.add(String(AUTO.id));
+  out.add(String(houseRoom()));
+  return out;
+}
 /** 1.99ee: public "Trending" for the Pads guide - the automatic pick and the runners-up from the last
  *  check (live pads only, best first), with their boost points. No activity internals beyond the score. */
 async function trending(limit = 5) {
@@ -951,7 +960,7 @@ function hasRoute(app, path) {
 
 module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
-  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
+  setOwner, addRoom, setFront, frontRoom, frontSetting, frontIdsCached, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, withSitePads, notify, followName, inheritableSlug, findUser, event,
   hasRoute, slugify, managesAny, cleanBanner, kvGet, kvSet, loadCache, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,

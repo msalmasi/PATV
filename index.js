@@ -1837,7 +1837,10 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         profileTab: String(req.params.tab || req.query.tab || "").slice(0, 20),     // 1.99dv: the path picks the tab
         // 1.99bz: the Posts panel (layout section "posts") + follower counts and the Follow button
         // 1.99df: the Posts panel is the profile feed (sorts, the owner's composer) - its query string and the host for embeds
-        social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
+        // 1.99anv guest access (review): no Posts tab for a signed-out visitor while Feed & Hop is off for guests (guestOff) - nor in the
+        // owner's ?preview=visitor, which shows the page as a signed-out visitor gets it
+        social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv",
+                                                                                           guestOff: preview ? !guestAccess.isOn("feed") : guestAccess.hiddenFor(req, "feed") })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
         profileVault,

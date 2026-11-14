@@ -563,3 +563,30 @@ async function settingsLocals(roomId) {
   return { user: "padowner", viewer, tab: "general", TABS: require(path.join(repo, "padsettings")).TABS, fx: require(path.join(repo, "feedweb")).fx,
            G: require(path.join(repo, "guidelines")), padBadge: require(path.join(repo, "pads")).padBadge, ...D };
 }
+
+// 1.99anv guest access (review): with Feed & Hop off for signed-out visitors (guestaccess.js), a pad page has no Feed tab and no
+// "Latest from the feed" for them - the posts don't show through the pad page; members keep the tab
+test("guest access: Feed & Hop off hides a pad page's Feed tab (and its posts) from signed-out visitors only", async () => {
+  const GA = require(path.join(repo, "guestaccess"));
+  await GA.init();
+  const P = PADS.public;
+  let r = await get("/p/" + P.slug, null);
+  assert.equal(r.status, 200);
+  assert.ok(r.text.includes(P.post), "on: a guest sees the pad's posts");
+  assert.match(r.text, /id="padTab-feed"/);
+  const admin = { userId: U.admin.userId, username: U.admin.username };
+  await GA.setSettings(admin, { feed: false });
+  try {
+    r = await get("/p/" + P.slug, null);
+    assert.equal(r.status, 200, "the pad page itself is the Pads switch's");
+    assert.ok(r.text.includes(P.title));
+    assert.ok(!r.text.includes(P.post), "no post of the pad on its page");
+    assert.doesNotMatch(r.text, /id="padTab-feed"|id="padPanel-feed"/, "no Feed tab");
+    r = await get("/p/" + P.slug + "?tab=feed", null);
+    assert.equal(r.status, 200);
+    assert.ok(!r.text.includes(P.post), "?tab=feed opens nothing");
+    r = await get("/p/" + P.slug, U.member);
+    assert.ok(r.text.includes(P.post), "a member still gets the Feed tab");
+    assert.match(r.text, /id="padTab-feed"/);
+  } finally { await GA.setSettings(admin, { feed: true }); }
+});

@@ -13754,14 +13754,15 @@
   "guest.s.bounties": "Bounties",
   "guest.s.polls": "Polls",
   "guest.s.raffles": "Raffles",
-  "guest.s.economy": "the PAT pages",
+  "guest.s.economy": "your wallet, staking and PAT history",
   "guest.s.rankings": "Rankings",
   "guest.s.achievements": "Achievements",
   "guest.s.shop": "the Prize shop",
   "guest.s.premium": "Prime Time and Season Pass",
   "guest.s.cosmetics": "Cosmetics",
   "guest.s.sounds": "Soundboards and voices",
-  "guest.s.help": "Pepe's commands",
+  "guest.s.help": "PepeFrog commands",
+  "guest.s.howpat": "How PAT works",
   "guest.s.search": "Search",
   "siteperm.k.auth.guest_access": "Guest access: which sections signed-out visitors can open (and see in the navbar)"
 }

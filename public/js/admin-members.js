@@ -81,7 +81,11 @@
     tr.appendChild(u);
     tr.appendChild(el('td', 'mm-dn', r.displayname || ''));
     tr.appendChild(when(r.created, 'unknown'));
-    tr.appendChild(when(r.seen, 'never on the website'));
+    // (review) not "never on the website": sign-ins are on record since sessions began (1.99wj) and page-view days for 120 days, so an
+    // older member who hasn't been back since has no visit on record either
+    var seenTd = when(r.seen, 'no visit recorded');
+    if (!r.seen) seenTd.title = 'No website visit on record: sign-ins are recorded since 1.99wj and visit days are kept 120 days.';
+    tr.appendChild(seenTd);
     tr.appendChild(el('td', 'num', String(r.level)));
     var m = el('td', 'mm-methods');
     if (!r.methods.length) m.appendChild(el('span', 'mm-mut', 'none'));
