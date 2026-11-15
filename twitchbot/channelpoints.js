@@ -22,6 +22,7 @@
 //   * guardProcess: server.js (pm2 'server': the webhook + the tmi chat bot + raffles) logs an unhandled rejection as
 //     errInfo and keeps running. Node 22 otherwise exits and prints the whole AxiosError (config.headers: X-Bot-Token,
 //     X-PATV-Key) - and a crash inside the prod updater's stability check rolls the deploy back.
+//     1.99anx: the guard lives in processguard.js (shared with the website, index.js); this guardProcess is it, as "[server]".
 //
 // No npm dependencies: the callers hand in their axios (patvAuth installed), express / body-parser and the chat client.
 "use strict";
@@ -36,43 +37,23 @@ const WEBHOOK_PATH = "/webhooks/callback";
 /** A reward that is about PAT: its title has "PAT" as a word (case-sensitive - "Pat the dog" isn't one). */
 const isPatReward = (title) => /(^|[^A-Za-z0-9_])PAT([^A-Za-z0-9_]|$)/.test(String(title || ""));
 
+// 1.99anx: errInfo / frames and the guard itself moved to processguard.js (the website, index.js, installs the same guard as
+// "[site]"); they are re-exported here unchanged for twitch.js, server.js and the tests.
+const PG = require("../processguard");
 /** What may be logged about a failed request: the status and the answer's body - never config / headers / the request. */
-function errInfo(e) {
-  if (!e || typeof e !== "object") return String(e);
-  const r = e.response;
-  if (r && typeof r === "object") {
-    let data = r.data;
-    try { data = typeof data === "string" ? data : JSON.stringify(data); } catch (x) { data = "[unreadable]"; }
-    return `HTTP ${r.status}${data ? " " + String(data).slice(0, 300) : ""}`;
-  }
-  return [e.code, e.message].filter(Boolean).join(" ").slice(0, 300) || "error";
-}
-
+const errInfo = PG.errInfo;
 /** Where an error happened: its stack's "at ..." frames only (never the first line's message, never the object). */
-function frames(e, n = 6) {
-  const s = e && typeof e === "object" && typeof e.stack === "string" ? e.stack : "";
-  return s.split("\n").filter((l) => /^\s+at /.test(l)).slice(0, n).map((l) => l.trim()).join(" | ");
-}
+const frames = PG.frames;
 
 /**
- * The process-wide last resort for server.js. An unhandled rejection (a !spin / raffle / chat line while the site or Twitch is
- * down, tmi's say() while it reconnects) is logged as errInfo + frames and the process keeps running; an uncaught exception
+ * The process-wide last resort for server.js (processguard.js, labelled "[server]"). An unhandled rejection (a !spin / raffle /
+ * chat line while the site or Twitch is down, tmi's say() while it reconnects) is logged as errInfo + frames and the process
+ * keeps running - from the start: no boot window here, a site that is down must not stop the chat bot; an uncaught exception
  * is logged the same way and the process exits 1 as Node would (pm2 restarts it) - without printing the error object.
- * opts: {warn, exit} (tests). Installed once per process.
+ * Repeats are throttled (processguard.js). opts: {warn, exit} (tests). Installed once per process.
  */
 function guardProcess(proc, opts = {}) {
-  if (!proc || proc.__patvGuarded) return proc;
-  proc.__patvGuarded = true;
-  const warn = opts.warn || console.error;
-  const exit = opts.exit || ((code) => proc.exit(code));
-  proc.on("unhandledRejection", (reason) => {
-    try { warn(`[server] unhandled rejection (kept running): ${errInfo(reason)}${frames(reason) ? " @ " + frames(reason) : ""}`); } catch (x) { /* never throw from here */ }
-  });
-  proc.on("uncaughtException", (err) => {
-    try { warn(`[server] uncaught exception - exiting: ${errInfo(err)}${frames(err) ? " @ " + frames(err) : ""}`); } catch (x) { /* never throw from here */ }
-    exit(1);
-  });
-  return proc;
+  return PG.guardProcess(proc, Object.assign({ label: "server" }, opts, { bootFatal: false }));
 }
 
 /** A small "seen recently" set (EventSub message ids, redemption ids). add() -> false when it was already there. */

@@ -1,3 +1,9 @@
+// 1.99anx: the process-wide crash guard (processguard.js) - FIRST, before anything starts a timer, opens the DB or loads a module
+// with async setup. An unhandled rejection used to end the whole site (Node 22), and inside the prod updater's post-deploy check
+// that rolls the deploy back. Now: while the site starts (until it listens + 10 s) a rejection is still fatal - logged, exit 1, so a
+// deploy that can't start is still rolled back instead of serving half-started; after that it is logged (status + answer + stack
+// frames, never the error object / its headers) and the site keeps running. An uncaught exception logs and exits 1, as before.
+require("./processguard").guardProcess(process, { label: "site", bootFatal: true });
 // 1.99jk: the VPS runs Node 16, which has no global fetch; mediarequests / mediainvites / mediaweb / stripebilling use it
 // (their tests ran on Node 20, so they passed). node-fetch 2 has the same API for what they use.
 if (typeof globalThis.fetch !== "function") {
@@ -4659,6 +4665,8 @@ app.use(require("./errorhandler").errorHandler());
 Promise.race([funding.init(), new Promise((r) => setTimeout(r, 10000))]).catch(() => {}).then(() => {
   require("./listen").listen(app, port, "site", () => {
     console.log(`Server running on ${require("./listen").bindHost()}:${port}`);
+    // 1.99anx: the site is up - an unhandled rejection is survived (logged) from 10 s after this (processguard.js SETTLE_MS)
+    require("./processguard").ready(process);
   });
 });
 
