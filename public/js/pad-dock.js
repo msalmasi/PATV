@@ -28,7 +28,7 @@
   // 1.99ajw casino2 (owner point 18: "docking chat doesn't stay active between page switches (like going to holdem)"): the chat that
   // floats on a pad page FOLLOWS to that pad's casino table in the same tab (sessionStorage: this tab only, a noopener tab never gets
   // it) - casino-chat.js reads it there, at most 2 minutes later. EMBED_PATH = the only pages that may frame the chat (casino tables).
-  var FOLLOW_KEY = 'patv.chat.follow', EMBED_PATH = /^\/casino\/(?:blackjack|holdem)\/t\/[0-9a-f]{10}$/;
+  var FOLLOW_KEY = 'patv.chat.follow', EMBED_PATH = /^\/casino\/(?:blackjack|holdem|roulette)\/t\/[0-9a-f]{10}$/;
   // the icons the Dock's own controls use (a proxied menu item that brings one of them shows • instead: one meaning per icon)
   var DOCK_ICONS = Object.keys(IC).map(function (k) { return IC[k].replace(/\uFE0F/g, ''); }).concat(['📸', '🎬', '✂', '▶', '🎦', '⬇', '📅', '📜', '🔍', '👥', '🎚', '💬', '📌', '🎥', '🗓', '🎫', '🚀', '⏯', '🔉', '🔇', '🎶']);   // (1.99ajy dockmedia: + ⏯ 🔉 🔇 - the stage's own media controls - and 🎶 Now playing)
   /** a proxied label's leading emoji (the Dock draws its own icon): "🎬 1/2 slots in use" -> "1/2 slots in use" */
@@ -1033,11 +1033,12 @@
     function apps(opener) {
       var box = sheet(t('apps_title', '⚡ Chat apps'), opener), doc = box.ownerDocument;
       layer.kind = 'apps';
-      var list = appList();
-      if (list.length) {
+      var list = appList(), wheel = canRoulette();
+      if (list.length || wheel) {
         box.appendChild(el('p', 'ds-eyebrow rmd-apps-h', t('apps_games', 'Games'), doc));
         var grid = el('div', 'rmd-apps', null, doc);
         list.forEach(function (a) { appTile(grid, a, doc); });
+        if (wheel) bigTile(grid, '🛞', t('app_roulette', 'Roulette'), t('app_roulette_sub', 'Chips and bets'), function () { rouletteSheet(opener); }, doc);
         box.appendChild(grid);
       }
       // (1.99ajq dockpol (owner item 29): ONE 🎧 DJ tile - the booth and Pepe's music commands live in its sheet; one icon, one meaning)
@@ -1751,7 +1752,7 @@
       if (!toolRow) return;
       var room = data && data.room || {}, relayOn = !!(o.relay && room.relay), pick = !!(W.PATVPadPicker && W.PATVPadPicker.available && W.PATVPadPicker.available(data, o));
       var show = { tip: !!o.signed && !inPip(), gif: pick && room.gifPicker === true, stickers: pick && relayOn, spin: hasCmd('!spin') && !!(o.relay && o.relay.sendCmd),
-        apps: !!(appList().length || dj() || musicOn()), sb: !!(o.linked && node('rmSb')), tts: hasCmd('!say') };
+        apps: !!(appList().length || dj() || musicOn() || canRoulette()), sb: !!(o.linked && node('rmSb')), tts: hasCmd('!say') };
       Object.keys(toolBtns).forEach(function (k) { toolBtns[k].hidden = !show[k]; });
       toolRow.hidden = !Object.keys(show).some(function (k) { return show[k]; });
     }
@@ -1795,6 +1796,7 @@
       if (live && !onLive) menuItem(box, '🔴', 'live', 'Live', function () { live.click(); });
       var share = node('rmStageH') && node('rmStageH').querySelector('[data-share-path]');
       if (share) menuItem(box, '🔗', 'share', 'Share pad', function (op) { sharePad(share, op); });
+      if (canRoulette()) menuItem(box, '🛞', 'roulette_menu', 'Roulette…', function () { rouletteSheet(opener); });
       var go = node('rmGoLive');
       if (go) {
         var here = go.querySelector('.stage-acts a.sact.primary'), book = go.querySelector('.stage-acts a.sact[href*="whenSet"]');
@@ -2006,6 +2008,15 @@
     // its confirm. The server has the last word (medialib / mediaqueue: Plex members, the override list, staff, the pad's slot rules and
     // limit, the daily caps, the encoder); a refusal shows in the sheet. Book it for later stays on /stage (linked). After a start the stage
     // picks the slot up and the 🎶 Now playing card / bar shows it (1.99ajy dockmedia). o.plexPlay = bridge.js's goLiveInfo answer (null = not offered).
+    function canRoulette() { return !!(mode === 'pad' && o.roulette && W.PATVRoulette && !inPip()); }
+    function rouletteSheet(opener) {
+      if (!canRoulette()) return;
+      external(function () {
+        var box = sheet(t('app_roulette', 'Roulette'), opener);
+        layer.kind = 'roulette';
+        layer.restore = W.PATVRoulette.mount(box, { slug: o.slug, linked: o.linked && hasCmd('!rl') });
+      });
+    }
     function plexSheet(opener) {
       var pp = o.plexPlay; if (!pp || !W.PATVPlexPlay) return;
       external(function () {

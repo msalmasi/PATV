@@ -3,6 +3,10 @@
     first tab): open tables of both games (seats taken, stakes, the Camfrog room each is pushed to, stream, fairness), Join /
     Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn. %>
 <section id="cz-lobby" hidden>
+  <div id="cz-roulette" class="tcard" hidden>
+    <a href="/casino/roulette"><strong>🛞 <%= t('casino.rl.title') %></strong></a>
+    <span id="cz-wheel-status"></span>
+  </div>
   <div class="lob-hero">
     <div class="lob-suits" aria-hidden="true"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></div>
     <h1><%- t('casino.lobby_hero') %></h1>

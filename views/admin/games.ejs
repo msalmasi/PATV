@@ -92,6 +92,67 @@
 <%# h22 (1.99alz): 🏁 Sit & Go - the switch casino_sng (off | staff | everyone, default off; Hold'em on the site must be on too), its
     settings (validated by casino/tourney.js checkSetting; a sit & go keeps the ones it opened with) and an admin's cancel with full refunds
     (POST /api/casino/sng/:id/cancel, in the admin log as casino_sng_cancel). Audited like the other casino settings (casino_settings.actor). %>
+<section class="adm-card" id="casino-roulette" aria-labelledby="casinoRlT">
+  <h2 id="casinoRlT">🛞 <%= t('casino.rl.title') %></h2>
+  <% if (!_can('casino.admin') || !locals.casino) { %><p><%= t('casino.rl.admins') %></p><% } else { %>
+  <form id="rlForm" class="adm-form">
+    <label><%= t('casino.rl.audience') %><select name="casino_roulette" data-old="<%= casino.casino_roulette %>">
+      <% for (const audience of ['off','staff','everyone']) { %><option value="<%= audience %>" <%= casino.casino_roulette === audience ? 'selected' : '' %>><%= audience %></option><% } %>
+    </select></label>
+    <% for (const [key,label,min,max] of [['rl_min_bet',t('casino.rl.min_bet'),1,10000000000],
+          ['rl_max_straight',t('casino.rl.max_straight'),1,10000000000],
+          ['rl_max_split',t('casino.rl.max_split'),1,10000000000],
+          ['rl_max_street',t('casino.rl.max_street'),1,10000000000],
+          ['rl_max_corner',t('casino.rl.max_corner'),1,10000000000],
+          ['rl_max_line',t('casino.rl.max_line'),1,10000000000],
+          ['rl_max_outside',t('casino.rl.max_outside'),1,10000000000],
+          ['rl_max_spin',t('casino.rl.max_spin'),1,10000000000],
+          ['rl_max_positions',t('casino.rl.max_positions'),1,60],
+          ['rl_max_lines',t('casino.rl.max_lines'),1,60],
+          ['rl_max_players',t('casino.rl.max_players'),1,35],
+          ['rl_bank_pct',t('casino.rl.bank_pct'),1,20],
+          ['rl_spin_cap',t('casino.rl.spin_cap'),0,10000000],
+          ['rl_bet_secs',t('casino.rl.bet_secs'),10,120],
+          ['rl_spin_secs',t('casino.rl.spin_secs'),4,20],
+          ['rl_result_secs',t('casino.rl.result_secs'),2,30],
+          ['rl_idle_close_mins',t('casino.rl.idle_close_mins'),2,120]]) { %>
+      <label><%= label %><input type="number" name="<%= key %>" value="<%= casino[key] %>" data-old="<%= casino[key] %>" min="<%= min %>" max="<%= max %>" step="1" required></label>
+    <% } %>
+    <button type="submit"><%= t('casino.rl.save') %></button><output id="rlStatus" role="status"></output>
+  </form>
+  <script>
+  (function () {
+    var form = document.getElementById('rlForm'), status = document.getElementById('rlStatus');
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      var btn = form.querySelector('[type=submit]');
+      if (btn.disabled) return;
+      var positions = ['straight','split','street','corner','line','outside'].map(function (k) { return Number(form.elements['rl_max_' + k].value); });
+      if (Math.min.apply(null, positions) < Number(form.elements.rl_min_bet.value) || Math.max.apply(null, positions) > Number(form.elements.rl_max_spin.value)) {
+        status.textContent = <%- JSON.stringify(t('casino.rl.limits_error')).replace(/</g,'\\u003c') %>; return;
+      }
+      function order(input) {
+        if (input.name === 'casino_roulette') return input.value === 'off' ? -2 : 2;
+        if (input.name === 'rl_min_bet') return +input.value < +input.dataset.old ? -1 : 1;
+        if (input.name === 'rl_max_spin') return +input.value > +input.dataset.old ? -1 : 1;
+        return 0;
+      }
+      var changed = Array.from(form.querySelectorAll('[name]')).filter(function (input) { return input.value !== input.dataset.old; });
+      btn.disabled = true;
+      try {
+        for (var input of changed.sort(function (a,b) { return order(a) - order(b); })) {
+          var value = input.value;
+          var res = await fetch('/api/casino/admin/settings', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},body:JSON.stringify({key:input.name,value:value})});
+          var data = await res.json(); if (!data.ok) throw Error(input.name + ' · ' + (data.error || res.status));
+          input.dataset.old = String(data.settings && data.settings[input.name] !== undefined ? data.settings[input.name] : value);
+        }
+        status.textContent = <%- JSON.stringify(t('casino.rl.saved')).replace(/</g,'\\u003c') %>;
+      } catch (err) { status.textContent = err.message; }
+      finally { btn.disabled = false; }
+    });
+  }());
+  </script><% } %>
+</section>
 <section class="adm-card" id="casino-sng" aria-labelledby="casinoSngT">
   <h2 id="casinoSngT">🏁 Sit &amp; Go <span class="adm-pill admin">admins</span></h2>
   <% if (!_can('casino.admin') || !locals.casino) { %><p class="adm-help">Admins only.</p><% } else { const _c = locals.casino; %>

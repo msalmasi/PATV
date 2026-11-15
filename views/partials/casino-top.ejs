@@ -3,10 +3,10 @@
     host buttons on a table), the toast and the polite announcer. Locals: t, game ('bj' | 'holdem'), tableId. %>
 <div class="cz-bar">
   <div class="cz-brand">
-    <span class="ic" aria-hidden="true"><%= game === 'holdem' ? '🃏' : '🂡' %></span>
+    <span class="ic" aria-hidden="true"><%= game === 'roulette' ? '🛞' : game === 'holdem' ? '🃏' : '🂡' %></span>
     <div>
-      <% if (tableId) { %><h1><%- game === 'holdem' ? t('casino.hm_title') : t('casino.bj_title') %></h1><% } else { %><div class="h1"><%- t('casino.lobby_title') %></div><% } %>
-      <small><%- !tableId ? t('casino.lobby_sub') : game === 'holdem' ? t('casino.hm_rules') : t('casino.bj_rules') %></small>
+      <% if (tableId) { %><h1><%- game === 'roulette' ? t('casino.rl.title') : game === 'holdem' ? t('casino.hm_title') : t('casino.bj_title') %></h1><% } else { %><div class="h1"><%- t('casino.lobby_title') %></div><% } %>
+      <small><%- game === 'roulette' ? t('casino.rl.rules') : !tableId ? t('casino.lobby_sub') : game === 'holdem' ? t('casino.hm_rules') : t('casino.bj_rules') %></small>
     </div>
   </div>
   <span class="cz-pill" id="cz-bal" hidden title="<%- t('casino.balance') %>"><span class="ds-ic" aria-hidden="true">👛</span><b>0</b> PAT</span>

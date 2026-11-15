@@ -388,7 +388,7 @@ test("ptttoast: cache-busters - room-bridge.js v34 (relaymic; v33 ptttoast) and 
     const s = read("views", v);
     assert.match(s, /room-bridge\.js\?v=34/, v);   // (relaymic: v34 - the release tail)
     assert.doesNotMatch(s, /room-bridge\.js\?v=(?!34\b)\d+/, v + ": one version");
-    assert.match(s, /<script src="\/public\/js\/pad-dock\.js\?v=13"><\/script>/, v);
+    assert.match(s, /<script src="\/public\/js\/pad-dock\.js\?v=14"><\/script>/, v);
   }
   assert.match(read("public", "css", "room-bridge.css"), /^\.rb-hide, [^{]*\{ display: none !important; \}/m);
   const dock = read("public", "js", "pad-dock.js");

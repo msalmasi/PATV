@@ -17,7 +17,7 @@
   const fmt = (n) => { try { return Math.trunc(Number(n) || 0).toLocaleString(lang); } catch (e) { return String(Math.trunc(Number(n) || 0)); } };
   const reduced = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   const idem = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-  const game = root.dataset.game === "holdem" ? "holdem" : "bj";
+  const game = ["roulette", "holdem"].includes(root.dataset.game) ? root.dataset.game : "bj";
   const tableId = root.dataset.table || "";
   const signed = !!root.dataset.signed;
   const meName = root.dataset.user || "";        // 1.99ajw casino2: your PATV name (the 💸 Tip modal's balance line)
@@ -344,10 +344,10 @@
       if (t.last_revealed) { a.href = `/casino/fair/${t.id}/${t.last_revealed}`; a.hidden = false; }
       else a.hidden = !t.commitment;
       if (!t.last_revealed) a.removeAttribute("href");
-      a.title = t.commitment ? T("fair_title", "Provably fair: the next shoe is fixed before anyone bets. Commitment {c}", { c: t.commitment.slice(0, 16) + "…" }) : "";
+      a.title = t.game === "roulette" && t.commitment ? T("rl_fair_title", "The next spin is fixed before anyone bets. Commitment {c}", { c: t.commitment.slice(0, 16) + "…" }) : t.commitment ? T("fair_title", "Provably fair: the next shoe is fixed before anyone bets. Commitment {c}", { c: t.commitment.slice(0, 16) + "…" }) : "";
     }
     const c = $("cz-commit");
-    if (c) c.textContent = !t.commitment ? "" : t.game === "holdem" ? T("commit_line_hm", "Hand #{n} commitment: {c} · client seed {s}", { n: t.commit_round, c: t.commitment, s: t.client_seed })
+    if (c) c.textContent = !t.commitment ? "" : t.game === "roulette" ? T("rl_commit_line", "Spin {n} commitment: {c} · client seed {s}", { n: t.commit_round, c: t.commitment, s: t.client_seed }) : t.game === "holdem" ? T("commit_line_hm", "Hand #{n} commitment: {c} · client seed {s}", { n: t.commit_round, c: t.commitment, s: t.client_seed })
                                                                : T("commit_line", "Round {n} commitment: {c} · client seed {s}", { n: t.commit_round, c: t.commitment, s: t.client_seed });
   }
   function balance(n) {
@@ -433,6 +433,13 @@
   function renderLobby() {
     const j = lobbyData;
     if (!j) return;
+    const wheelCard = $("cz-roulette");
+    if (wheelCard) {
+      const wheel = j.roulette && j.roulette.lobby;
+      wheelCard.hidden = !(j.roulette && j.roulette.on);
+      const phase = wheel && (wheel.phase === "spinning" ? T("rl_spinning", "No more bets") : wheel.phase === "result" ? T("rl_result", "Result") : T("rl_open", "Bets open"));
+      $("cz-wheel-status").textContent = wheel ? T("rl_lobby_status", "{n} players · {phase}", { n: wheel.players, phase }) : "";
+    }
     const all = j.tables || [];
     const me = j.me || null;
     const hr = !!(me && me.high_roller);
@@ -929,7 +936,7 @@
           const dock = $("cz-dock");
           if (dock) dock.hidden = true;
           const m = $("cz-msg");
-          if (m) m.innerHTML = `${esc(T("closed", "That table has closed."))}<small><a href="${game === "holdem" ? "/casino/holdem" : "/casino/blackjack"}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
+          if (m) m.innerHTML = `${esc(T("closed", "That table has closed."))}<small><a href="${game === "roulette" ? "/casino/roulette" : game === "holdem" ? "/casino/holdem" : "/casino/blackjack"}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
           return;
         }
         const d = await r.json();

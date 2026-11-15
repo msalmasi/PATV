@@ -118,7 +118,7 @@ test("the window: the Dock's chat card alone, the site's head, never cached / in
     assert.equal((h.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, id);
   for (const id of ["rmStage", "padTabs", "rmHero", "rmGoLive", "rmStrip", "padPanel-feed", "padPanel-about", "siteFootTpl", "padLaunch"]) assert.doesNotMatch(h, new RegExp('id="' + id + '"'), id);
   assert.doesNotMatch(h, /class="navbar"|<script src="[^"]*\/(?:pad-tabs|stage-room|stage-player|stage-mic|pad-camstrip|pad-launch)\.js|patv_chat_sweep|\/api\/u\/[^'"]+\/profile/);
-  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=2"><\/script><script src="\/public\/js\/pad-dock\.js\?v=13"><\/script>/);   // (ptttoast: v13 - the composer's lines are the chat notices; 1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7; 1.99ajw casino2: dock-link v2 + pad-dock v8 - the chat beside a casino table; 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11)
+  assert.match(h, /<script src="\/public\/js\/dock-link\.js\?v=2"><\/script><script src="\/public\/js\/pad-dock\.js\?v=14"><\/script>/);   // (ptttoast: v13 - the composer's lines are the chat notices; 1.99ajn padppl: v6 - a veiled line opens the person menu; the chat ⋯ mention items; 1.99ajq dockpol: v7; 1.99ajw casino2: dock-link v2 + pad-dock v8 - the chat beside a casino table; 1.99ajy dockmedia: v9; dock3 1.99akf: v10; pausebars: v11)
   assert.match(h, /var pageVt = "([^"]+)", chatOnly = true;/);
   assert.equal(/var pageVt = "([^"]+)"/.exec(h)[1], RPM.tag(U.viewer.userId), "the window's viewer tag is roompm.tag");
   assert.notEqual(RPM.tag(U.viewer.userId), U.viewer.userId); assert.doesNotMatch(h, new RegExp('pageVt = "' + U.viewer.userId));
@@ -392,7 +392,7 @@ test("casino2: ?embed=1 from a same-origin frame is the same page with SAMEORIGI
   assert.equal(no.headers.get("cache-control"), "private, no-store");
   assert.doesNotMatch(no.text, /rmFeed|rmInit|chatOnly|id="rm/, "no chat, no room data");
   assert.match(no.text, /parent\.postMessage\(\{t:'patv-chat:closed',why:'gate'\},location\.origin\)/);
-  assert.ok(no.text.includes("/^\\/casino\\/(?:blackjack|holdem)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname)"), "only a casino table page is told");
+  assert.ok(no.text.includes("/^\\/casino\\/(?:blackjack|holdem|roulette)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname)"), "only a casino table page is told");
   assert.match(no.text, new RegExp('href="/p/' + MSLUG + '" target="_top"'));
   assert.doesNotThrow(() => new Function(no.text.match(/<script>([\s\S]*?)<\/script>/)[1]), "the card's script parses");
   // ...and the plain window (not an embed) still goes to the pad page, which renders the right gate

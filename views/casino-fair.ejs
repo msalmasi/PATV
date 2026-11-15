@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: title, user: user}) %>
 <style>
   /* 1.99pz polish: a ds detail page in the casino accent (docs/design-system.md, "Area notes: games"). Ids cf / cf-rec / cf-mine are the script's hooks. */
@@ -17,7 +18,8 @@
   <div class="ds-card" id="cf-rec" aria-live="polite">Loading…</div>
   <div class="ds-card">
     <p><b>Your browser's check</b> (WebCrypto, nothing from the site's own verifier): <span id="cf-mine">…</span></p>
-    <p class="info">How it works: before anyone bets, the table publishes <code>sha256(server_seed)</code>. The shoe is 6 fresh decks
+    <p class="info" id="cf-wheel-how" hidden><%= t('casino.fair.rl_how') %></p>
+    <p class="info" id="cf-cards-how" hidden>How it works: before anyone bets, the table publishes <code>sha256(server_seed)</code>. The shoe is 6 fresh decks
       (2s–As in ♠♥♦♣ order) shuffled by Fisher–Yates, each swap index drawn from <code>HMAC-SHA256(server_seed, "client_seed:round:counter")</code>
       read as big-endian 32-bit words with rejection sampling. After the round the seed is revealed, so anyone can rebuild the shoe and
       check the cards dealt were its first cards.</p>
@@ -50,9 +52,42 @@
     }
     return s;
   }
+  async function pocket(seed, client, round) {
+    var key = await crypto.subtle.importKey("raw", enc.encode(seed), {name:"HMAC", hash:"SHA-256"}, false, ["sign"]);
+    var limit = Math.floor(4294967296 / 37) * 37;
+    for (var counter = 0; ; counter++) {
+      var bytes = new DataView(await crypto.subtle.sign("HMAC", key, enc.encode(client + ":" + round + ":" + counter)));
+      for (var off = 0; off < bytes.byteLength; off += 4) {
+        var word = bytes.getUint32(off, false);
+        if (word < limit) return word % 37;
+      }
+    }
+  }
   fetch("/api/casino/fair/" + root.dataset.table + "/" + root.dataset.round).then(function (r) { return r.json(); }).then(async function (j) {
     var box = document.getElementById("cf-rec");
     if (!j.ok) { box.textContent = j.error || "No such round."; document.getElementById("cf-mine").textContent = "-"; return; }
+    var wheel = j.game === "roulette";
+    root.querySelector(".ds-back").href = "/casino/" + (wheel ? "roulette" : j.game === "holdem" ? "holdem" : "blackjack") + "/t/" + root.dataset.table;
+    document.getElementById(wheel ? "cf-wheel-how" : "cf-cards-how").hidden = false;
+    if (wheel) {
+      var label = function (text, value) {
+        var row = document.createElement("p"), code = document.createElement("code");
+        code.textContent = value; row.append(text + " ", code); box.append(row);
+      };
+      box.replaceChildren();
+      label(<%- JSON.stringify(t('casino.fair.rl_commitment')).replace(/</g,'\\u003c') %>, j.commitment);
+      label(<%- JSON.stringify(t('casino.fair.rl_client')).replace(/</g,'\\u003c') %>, j.client_seed);
+      var check = document.getElementById("cf-mine");
+      if (!j.server_seed) { check.textContent = <%- JSON.stringify(t('casino.fair.rl_wait')).replace(/</g,'\\u003c') %>; return; }
+      label(<%- JSON.stringify(t('casino.fair.rl_server')).replace(/</g,'\\u003c') %>, j.server_seed);
+      label(<%- JSON.stringify(t('casino.fair.rl_pocket')).replace(/</g,'\\u003c') %>, j.shoe && j.shoe.pocket);
+      var hash = hex(await crypto.subtle.digest("SHA-256", enc.encode(j.server_seed)));
+      var spin = await pocket(j.server_seed, j.client_seed, j.round);
+      var matches = hash === j.commitment && j.shoe && j.shoe.pockets === 37 && spin === j.shoe.pocket;
+      check.className = matches ? "ok" : "bad";
+      check.textContent = matches ? <%- JSON.stringify(t('casino.fair.rl_verified')).replace(/</g,'\\u003c') %> : <%- JSON.stringify(t('casino.fair.rl_mismatch')).replace(/</g,'\\u003c') %>;
+      return;
+    }
     box.innerHTML = "<p>Commitment: <code>" + esc(j.commitment) + "</code></p><p>Client seed: <code>" + esc(j.client_seed) + "</code></p>" +
       (j.server_seed ? "<p>Server seed: <code>" + esc(j.server_seed) + "</code></p><p>Site check: <b class=\"" + (j.verified ? "ok\">verified" : "bad\">MISMATCH") + "</b></p>" +
         "<p class=\"shoe\">First cards of the shoe: " + esc((j.shoe || []).slice(0, 30).join(" ")) + "</p>"

@@ -1,0 +1,132 @@
+.rl-controls {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid #6e6850;
+  border-radius: 12px;
+  background: #17221e;
+  color: #fff5dd;
+}
+.rl-controls button,
+.rl-quick button {
+  min-height: 44px;
+  cursor: pointer;
+  background: #263a30;
+  color: #fff6df;
+  border: 1px solid #788e7c;
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.rl-controls button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+.rl-chips,
+.rl-actions,
+.rl-quick,
+.rl-slip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.rl-chips .rl-chip {
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 4px dashed #ecddd0;
+  background: #753c36;
+  color: #fff;
+  font-weight: 700;
+}
+.rl-chips .rl-chip[aria-pressed="true"] {
+  outline: 3px solid #f9dc85;
+  outline-offset: 1px;
+}
+.rl-controls input {
+  background: #111c15;
+  border: 1px solid #819781;
+  border-radius: 6px;
+  color: white;
+  font: inherit;
+  padding: 0.5rem;
+}
+.rl-chips input {
+  max-width: 6em;
+}
+.rl-slip label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rl-slip input {
+  min-width: 0;
+  width: 12em;
+}
+.rl-preview,
+.rl-feedback,
+.rl-own {
+  font-size: 0.85em;
+  margin: 0;
+}
+.rl-preview:empty,
+.rl-feedback:empty,
+.rl-own:empty {
+  display: none;
+}
+.rl-timer {
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 5px;
+  border-radius: 50%;
+  color: #fff9e8;
+  font-variant-numeric: tabular-nums;
+  background: conic-gradient(#efd08f calc(var(--left, 0) * 100%), #647165 0);
+}
+.rl-timer::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  background: #233429;
+  border-radius: inherit;
+}
+.rl-state {
+  font-weight: 700;
+}
+.rl-quick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+.rl-table-link {
+  display: inline-block;
+  margin: 0.7em 0;
+  color: #f4d88e;
+}
+@media (max-width: 639px) {
+  .rl-chips,
+  .rl-actions {
+    gap: 4px;
+  }
+  .rl-chips .rl-chip {
+    height: 44px;
+    width: 44px;
+  }
+  .rl-chips input {
+    width: 5em;
+  }
+  .rl-controls {
+    padding: 6px;
+  }
+  .rl-slip label {
+    flex: 1;
+  }
+  .rl-slip input {
+    width: 100%;
+  }
+}
