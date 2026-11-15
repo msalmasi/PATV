@@ -179,7 +179,13 @@ const LIMIT_KEYS = ["bj_min_bet", "bj_max_bet", "bj_hr_min_bet", "bj_hr_max_bet"
 const HM_QOL_NUMBERS = { hm_sitout_mins: 10, hm_timebank_secs: 30, hm_timebank_max: 60, hm_timebank_per10: 5 };
 const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3,4" };
 const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
-async function setSetting(key, value, actor) {
+function setSetting(key, value, actor) {
+  // A roulette audience or risk-limit edit takes effect between actions. Two
+  // admin edits must validate their paired limits against the last saved value.
+  if (RLCFG.SETTING_KEYS.includes(key)) return locked(() => writeSetting(key, value, actor));
+  return writeSetting(key, value, actor);
+}
+async function writeSetting(key, value, actor) {
   if (/h2b/i.test(String(key))) throw new Error("the H2b date is a code constant, not a setting");     // (h22 phase 2: casino/mttbudget.js H2B_AT)
   if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS, MTCFG.SETTING_KEYS, RLCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
   let sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)

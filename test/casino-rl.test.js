@@ -468,3 +468,18 @@ test("a reward outage cannot delay a paid spin; stale seats leave before queued 
   assert.equal(await held(), 100);
   assert.equal(await total(), before);
 });
+
+test("concurrent admin settings cannot leave an invalid roulette limit pair", async () => {
+  const changes = await Promise.allSettled([
+    svc.setSetting("rl_min_bet", 4000, "qa-a"),
+    svc.setSetting("rl_max_straight", 2000, "qa-b"),
+  ]);
+  assert.deepEqual(
+    changes.map((r) => r.status),
+    ["fulfilled", "rejected"],
+  );
+  const { rl_min_bet, rl_max_straight } = await svc.loadSettings(true);
+  assert.equal(rl_min_bet, 4000);
+  assert.equal(rl_max_straight, 5000);
+  assert.equal((await rows("SELECT actor FROM casino_settings WHERE key='rl_min_bet'"))[0].actor, "qa-a");
+});
