@@ -338,6 +338,7 @@ function install(core) {
       const previous = e.pending[uid];
       seat(T, actor);
       e.pending[uid] = { bets };
+      if (e.notes) delete e.notes[uid];
       return saveAnswer(
         T,
         reply(
@@ -373,6 +374,7 @@ function install(core) {
     T.intent = null;
     e.actions[uid] = (e.actions[uid] || 0) + 1;
     T.last_activity = clock();
+    if (e.notes) delete e.notes[uid];
     if (queued) delete e.pending[uid];
     const first = e.phase === "idle";
     if (first) {
@@ -478,6 +480,18 @@ function install(core) {
     crash("draw");
     await advertRepeat(T);
   }
+  // Rebet stores the previous stake per position. Repeated equivalent lines do not
+  // lengthen a saved slip on every subsequent round.
+  function combinedSlip(lines) {
+    const positions = new Map();
+    for (const line of lines)
+      for (const bet of line.bets) {
+        const previous = positions.get(bet.token);
+        if (previous) previous.amount += bet.amount;
+        else positions.set(bet.token, { ...bet });
+      }
+    return [...positions.values()];
+  }
   async function land(T) {
     await discardRefunded(T);
     const e = T.eng,
@@ -549,7 +563,7 @@ function install(core) {
         [JSON.stringify({ pocket: p, pockets: 37 }), JSON.stringify(last), r.seed, clock(), T.id, r.no],
       );
       crash("round");
-      for (const uid of Object.keys(results)) e.lastslip[uid] = own(T, uid).flatMap((l) => l.bets);
+      for (const uid of Object.keys(results)) e.lastslip[uid] = combinedSlip(own(T, uid));
       T.last_round = last;
       e.net = Object.fromEntries(Object.entries(results).map(([u, x]) => [u, x.net]));
       e.history = e.history.concat({ round_no: r.no, number: p, color: last.color }).slice(-20);

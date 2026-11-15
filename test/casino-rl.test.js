@@ -483,3 +483,17 @@ test("concurrent admin settings cannot leave an invalid roulette limit pair", as
   assert.equal(rl_max_straight, 5000);
   assert.equal((await rows("SELECT actor FROM casino_settings WHERE key='rl_min_bet'"))[0].actor, "qa-a");
 });
+
+test("a repeated position remains a single aggregated rebet across rounds", async () => {
+  const T = lobby();
+  expect(await act(T, "a", "bet", "red 100"));
+  for (let i = 0; i < 3; i++) {
+    expect(await act(T, "a", "bet", "red 100"));
+    expect(await act(T, "a", "go"));
+    await tick(8000);
+    assert.equal(T.eng.lastslip.a.length, 1);
+    assert.equal(T.eng.lastslip.a[0].amount, (i + 2) * 100);
+    expect(await act(T, "a", "rebet"));
+    await tick(5000);
+  }
+});
