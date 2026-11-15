@@ -14097,7 +14097,7 @@
   "sethub.st.unlimited": "Ilimitadas",
   "shop.cat.item.site_invite": "Una invitación extra: un enlace de un solo uso que permite a una nueva persona crear una cuenta en PATV. Se añade a tus invitaciones en cuanto la compras, o a las suyas si es un regalo. Un pase del sitio sin valor en dinero.",
   "siteperm.k.auth.invites": "Registros abiertos / solo por invitación, los niveles de invitación y su precio, todas las invitaciones",
-  "siteperm.k.accounts.members": "Todos los miembros: cada cuenta con su fecha de registro, última visita, nivel y métodos de inicio de sesión (sin correos ni IPs)",
+  "siteperm.k.accounts.members": "Todos los miembros: cada cuenta con su fecha de registro, última visita, nivel, métodos de inicio de sesión y el país desde el que inició sesión por última vez (sin correos ni IPs)",
   "guest.title": "Inicia sesión para ver {!section}",
   "guest.lead": "Esta parte de PATV es solo para miembros registrados por ahora. Iniciar sesión solo toma un momento.",
   "guest.signin": "Entrar",
@@ -14132,5 +14132,9 @@
   "guest.s.help": "Comandos de PepeFrog",
   "guest.s.howpat": "Cómo funciona PAT",
   "guest.s.search": "Buscar",
-  "siteperm.k.auth.guest_access": "Acceso de invitados: qué secciones pueden abrir los visitantes sin sesión (y ver en la barra de navegación)"
+  "siteperm.k.auth.guest_access": "Acceso de invitados: qué secciones pueden abrir los visitantes sin sesión (y ver en la barra de navegación)",
+  "admmembers.country_label": "País desde el que inició sesión por última vez",
+  "admmembers.any_country": "Cualquier país",
+  "admmembers.no_country": "Sin país registrado",
+  "admmembers.country_help": "La <b>bandera</b> junto a un nombre indica el país desde el que la persona inició sesión por última vez (su inicio de sesión más reciente con un país conocido, como en su perfil). Se muestra aquí aunque la haya ocultado a los visitantes o navegue en modo incógnito. Los números de la lista de países cuentan todas las cuentas: la búsqueda y los botones no los cambian."
 }

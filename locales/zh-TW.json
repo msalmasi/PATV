@@ -13826,7 +13826,7 @@
   "sethub.st.unlimited": "無限制",
   "shop.cat.item.site_invite": "多一個邀請名額：一次性的連結，讓一位新朋友建立 PATV 帳號。購買後會立即加到你的邀請名額中，若作為禮物則加到對方的名額中。這是沒有現金價值的站內通行證。",
   "siteperm.k.auth.invites": "註冊開放／僅限邀請、邀請等級與價格、所有邀請",
-  "siteperm.k.accounts.members": "所有成員：每個帳號的註冊日期、最近造訪、等級與登入方式（不含電子郵件與 IP）",
+  "siteperm.k.accounts.members": "所有成員：每個帳號的註冊日期、最近造訪、等級、登入方式，以及最近登入的國家／地區（不含電子郵件與 IP）",
   "guest.title": "登入以查看{!section}",
   "guest.lead": "PATV 的這個部分目前僅限已登入的成員使用。登入只需片刻。",
   "guest.signin": "登入",
@@ -13861,5 +13861,9 @@
   "guest.s.help": "PepeFrog 指令",
   "guest.s.howpat": "PAT 運作方式",
   "guest.s.search": "搜尋",
-  "siteperm.k.auth.guest_access": "訪客權限：未登入的訪客可以開啟哪些區塊（並在導覽列看到）"
+  "siteperm.k.auth.guest_access": "訪客權限：未登入的訪客可以開啟哪些區塊（並在導覽列看到）",
+  "admmembers.country_label": "最近登入的國家／地區",
+  "admmembers.any_country": "任何國家／地區",
+  "admmembers.no_country": "紀錄中無國家／地區",
+  "admmembers.country_help": "名稱後的<b>旗幟</b>是該成員最近登入的國家／地區（即其個人資料中最新一筆已知國家的登入紀錄），即使他們對訪客隱藏或以無痕模式登入，此處仍會顯示。國家清單中的數字計算所有帳號，搜尋與按鈕不會改變這些數字。"
 }

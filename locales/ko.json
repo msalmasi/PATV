@@ -13826,7 +13826,7 @@
   "sethub.st.unlimited": "무제한",
   "shop.cat.item.site_invite": "추가 초대장 1개: 새로운 사람 한 명이 PATV 계정을 만들 수 있는 일회용 링크예요. 구매하는 순간 내 초대장에 추가되거나, 선물로 상대방의 초대장에 추가돼요. 현금 가치가 없는 사이트 이용권이에요.",
   "siteperm.k.auth.invites": "가입 공개 / 초대 전용 여부, 초대 등급과 가격, 모든 초대 내역",
-  "siteperm.k.accounts.members": "전체 회원: 모든 계정의 가입일, 마지막 방문, 레벨, 로그인 방법 (이메일과 IP 제외)",
+  "siteperm.k.accounts.members": "전체 회원: 모든 계정의 가입일, 마지막 방문, 레벨, 로그인 방법, 마지막으로 로그인한 국가 (이메일과 IP 제외)",
   "guest.title": "{!section} 보려면 로그인하세요",
   "guest.lead": "PATV의 이 부분은 지금 로그인한 회원만 이용할 수 있어요. 로그인은 잠깐이면 돼요.",
   "guest.signin": "로그인",
@@ -13861,5 +13861,9 @@
   "guest.s.help": "PepeFrog 명령어",
   "guest.s.howpat": "PAT 작동 방식",
   "guest.s.search": "검색",
-  "siteperm.k.auth.guest_access": "비회원 접근: 로그아웃한 방문자가 열어볼 수 있는 섹션 (상단 메뉴에 표시되는 섹션 포함)"
+  "siteperm.k.auth.guest_access": "비회원 접근: 로그아웃한 방문자가 열어볼 수 있는 섹션 (상단 메뉴에 표시되는 섹션 포함)",
+  "admmembers.country_label": "마지막으로 로그인한 국가",
+  "admmembers.any_country": "모든 국가",
+  "admmembers.no_country": "기록된 국가 없음",
+  "admmembers.country_help": "이름 옆의 <b>국기</b>는 마지막으로 로그인한 국가예요 (프로필에 표시되는 것과 같이, 국가가 알려진 가장 최근 로그인 기준). 회원이 방문자에게 숨겼거나 시크릿 모드여도 여기에는 표시돼요. 국가 목록의 숫자는 모든 계정을 집계하며, 검색과 버튼으로 바뀌지 않아요."
 }

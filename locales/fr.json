@@ -14097,7 +14097,7 @@
   "sethub.st.unlimited": "Illimité",
   "shop.cat.item.site_invite": "Une invitation supplémentaire : un lien à usage unique qui permet à une nouvelle personne de créer un compte PATV. Elle est ajoutée à tes invitations dès que tu l’achètes, ou aux siennes, en cadeau. Un pass du site sans valeur monétaire.",
   "siteperm.k.auth.invites": "Inscriptions ouvertes / sur invitation uniquement, niveaux et prix des invitations, toutes les invitations",
-  "siteperm.k.accounts.members": "Tous les membres : chaque compte avec sa date d’inscription, sa dernière visite, son niveau et ses méthodes de connexion (ni e-mails ni IP)",
+  "siteperm.k.accounts.members": "Tous les membres : chaque compte avec sa date d’inscription, sa dernière visite, son niveau, ses méthodes de connexion et le pays de sa dernière connexion (ni e-mails ni IP)",
   "guest.title": "Connecte-toi pour voir {!section}",
   "guest.lead": "Cette partie de PATV est réservée aux membres connectés. Te connecter ne prend qu’un instant.",
   "guest.signin": "Connexion",
@@ -14132,5 +14132,9 @@
   "guest.s.help": "Commandes PepeFrog",
   "guest.s.howpat": "Fonctionnement du PAT",
   "guest.s.search": "Rechercher",
-  "siteperm.k.auth.guest_access": "Accès invité : les sections que les visiteurs non connectés peuvent ouvrir (et voir dans la barre de navigation)"
+  "siteperm.k.auth.guest_access": "Accès invité : les sections que les visiteurs non connectés peuvent ouvrir (et voir dans la barre de navigation)",
+  "admmembers.country_label": "Pays de dernière connexion",
+  "admmembers.any_country": "Tous les pays",
+  "admmembers.no_country": "Aucun pays enregistré",
+  "admmembers.country_help": "Le <b>drapeau</b> après un nom indique le pays de sa dernière connexion (sa connexion la plus récente avec un pays connu, comme sur son profil) - affiché ici même s’il l’a masqué aux visiteurs ou s’il est en navigation privée. Les chiffres de la liste des pays comptent chaque compte : la recherche et les boutons ne les modifient pas."
 }

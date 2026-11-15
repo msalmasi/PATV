@@ -13984,7 +13984,7 @@
   "sethub.st.unlimited": "Onbeperkt",
   "shop.cat.item.site_invite": "Eén extra uitnodiging: een eenmalige link waarmee één nieuwe persoon een PATV-account kan maken. Hij wordt direct aan je uitnodigingen toegevoegd zodra je hem koopt, of aan die van iemand anders als cadeau. Een sitepas zonder geldwaarde.",
   "siteperm.k.auth.invites": "Aanmeldingen open / alleen op uitnodiging, de uitnodigingsniveaus en prijs, elke uitnodiging",
-  "siteperm.k.accounts.members": "Alle leden: elk account met de datum van aanmelding, laatste bezoek, niveau en inlogmethodes (geen e-mails of IP's)",
+  "siteperm.k.accounts.members": "Alle leden: elk account met de aanmelddatum, laatste bezoek, niveau, inlogmethoden en het land waarvandaan ze voor het laatst zijn ingelogd (geen e-mails of IP's)",
   "guest.title": "Log in om {!section} te zien",
   "guest.lead": "Dit deel van PATV is op dit moment voor ingelogde leden. Inloggen duurt maar even.",
   "guest.signin": "Inloggen",
@@ -14019,5 +14019,9 @@
   "guest.s.help": "PepeFrog-commando's",
   "guest.s.howpat": "Hoe PAT werkt",
   "guest.s.search": "Zoeken",
-  "siteperm.k.auth.guest_access": "Gastentoegang: welke secties niet-ingelogde bezoekers kunnen openen (en zien in de navigatiebalk)"
+  "siteperm.k.auth.guest_access": "Gastentoegang: welke secties niet-ingelogde bezoekers kunnen openen (en zien in de navigatiebalk)",
+  "admmembers.country_label": "Land waarvandaan ze voor het laatst zijn ingelogd",
+  "admmembers.any_country": "Elk land",
+  "admmembers.no_country": "Geen land bekend",
+  "admmembers.country_help": "De <b>vlag</b> na een naam is het land waarvandaan ze voor het laatst zijn ingelogd (hun nieuwste login met een bekend land, zoals op hun profiel) - hier getoond, ook als ze het voor bezoekers verborgen hebben of incognito zijn. De aantallen in de landenlijst tellen elk account: zoeken en de knoppen veranderen die niet."
 }

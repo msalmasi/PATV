@@ -13826,7 +13826,7 @@
   "sethub.st.unlimited": "Không giới hạn",
   "shop.cat.item.site_invite": "Một lời mời thêm: liên kết dùng một lần, cho phép một người mới tạo tài khoản PATV. Lời mời được thêm vào danh sách của bạn ngay khi bạn mua, hoặc vào danh sách của họ như một món quà. Đây là vé truy cập trang web không có giá trị tiền mặt.",
   "siteperm.k.auth.invites": "Đăng ký mở / chỉ theo lời mời, các cấp lời mời và giá, mọi lời mời",
-  "siteperm.k.accounts.members": "Tất cả thành viên: mọi tài khoản kèm ngày đăng ký, lần truy cập gần nhất, cấp độ và phương thức đăng nhập (không có email hay IP)",
+  "siteperm.k.accounts.members": "Tất cả thành viên: mọi tài khoản kèm ngày đăng ký, lần truy cập gần nhất, cấp độ, phương thức đăng nhập và quốc gia đăng nhập gần nhất (không có email hay IP)",
   "guest.title": "Đăng nhập để xem {!section}",
   "guest.lead": "Phần này của PATV hiện chỉ dành cho thành viên đã đăng nhập. Đăng nhập chỉ mất một chút thời gian.",
   "guest.signin": "Đăng nhập",
@@ -13861,5 +13861,9 @@
   "guest.s.help": "Lệnh PepeFrog",
   "guest.s.howpat": "PAT hoạt động thế nào",
   "guest.s.search": "Tìm kiếm",
-  "siteperm.k.auth.guest_access": "Quyền truy cập khách: những mục nào khách chưa đăng nhập có thể mở (và thấy trên thanh điều hướng)"
+  "siteperm.k.auth.guest_access": "Quyền truy cập khách: những mục nào khách chưa đăng nhập có thể mở (và thấy trên thanh điều hướng)",
+  "admmembers.country_label": "Quốc gia đăng nhập gần nhất",
+  "admmembers.any_country": "Mọi quốc gia",
+  "admmembers.no_country": "Chưa có quốc gia trong hồ sơ",
+  "admmembers.country_help": "<b>Cờ</b> bên cạnh tên là quốc gia mà họ đăng nhập gần nhất (lần đăng nhập mới nhất có quốc gia đã biết, như trên hồ sơ của họ) - hiển thị ở đây ngay cả khi họ đã ẩn với khách hoặc đang ẩn danh. Các con số trong danh sách quốc gia đếm mọi tài khoản: tìm kiếm và các nút không thay đổi chúng."
 }

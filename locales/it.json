@@ -14097,7 +14097,7 @@
   "sethub.st.unlimited": "Illimitati",
   "shop.cat.item.site_invite": "Un invito extra: un link monouso che permette a una nuova persona di creare un account PATV. Viene aggiunto ai tuoi inviti nel momento in cui lo acquisti, o ai suoi, come regalo. Un pass del sito senza valore in denaro.",
   "siteperm.k.auth.invites": "Registrazioni aperte / solo su invito, livelli e prezzo degli inviti, ogni invito",
-  "siteperm.k.accounts.members": "Tutti i membri: ogni account con data di registrazione, ultima visita, livello e metodi di accesso (niente email né IP)",
+  "siteperm.k.accounts.members": "Tutti i membri: ogni account con data di registrazione, ultima visita, livello, metodi di accesso e il paese dell'ultimo accesso (niente email né IP)",
   "guest.title": "Accedi per vedere {!section}",
   "guest.lead": "Questa parte di PATV è riservata ai membri registrati. Accedere richiede solo un momento.",
   "guest.signin": "Accedi",
@@ -14132,5 +14132,9 @@
   "guest.s.help": "Comandi PepeFrog",
   "guest.s.howpat": "Come funziona PAT",
   "guest.s.search": "Cerca",
-  "siteperm.k.auth.guest_access": "Accesso ospiti: quali sezioni possono aprire i visitatori non registrati (e vedere nella barra di navigazione)"
+  "siteperm.k.auth.guest_access": "Accesso ospiti: quali sezioni possono aprire i visitatori non registrati (e vedere nella barra di navigazione)",
+  "admmembers.country_label": "Paese dell'ultimo accesso",
+  "admmembers.any_country": "Qualsiasi paese",
+  "admmembers.no_country": "Nessun paese registrato",
+  "admmembers.country_help": "La <b>bandierina</b> accanto a un nome indica il paese dell'ultimo accesso (il loro accesso più recente con un paese noto, come nel profilo), ed è mostrata qui anche se l'hanno nascosta ai visitatori o se sono in incognito. I numeri nell'elenco dei paesi contano ogni account: la ricerca e i pulsanti non li cambiano."
 }

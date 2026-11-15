@@ -14300,7 +14300,7 @@
   "sethub.st.unlimited": "Bez limitu",
   "shop.cat.item.site_invite": "Jedno dodatkowe zaproszenie: jednorazowy link, dzięki któremu jedna nowa osoba może założyć konto w PATV. Trafia do twoich zaproszeń w chwili zakupu – albo do zaproszeń kogoś innego, jako prezent. Przepustka do serwisu bez wartości pieniężnej.",
   "siteperm.k.auth.invites": "Rejestracja otwarta / tylko na zaproszenia, poziomy zaproszeń i ich cena, wszystkie zaproszenia",
-  "siteperm.k.accounts.members": "Wszyscy członkowie: każde konto z datą rejestracji, ostatnią wizytą, poziomem i metodami logowania (bez e-maili i adresów IP)",
+  "siteperm.k.accounts.members": "Wszyscy członkowie: każde konto z datą rejestracji, ostatnią wizytą, poziomem, metodami logowania i krajem, z którego logowali się ostatnio (bez e-maili i adresów IP)",
   "guest.title": "Zaloguj się, aby zobaczyć {!section}",
   "guest.lead": "Ta część PATV jest teraz dla zalogowanych członków. Logowanie zajmuje tylko chwilę.",
   "guest.signin": "Zaloguj się",
@@ -14335,5 +14335,9 @@
   "guest.s.help": "Komendy PepeFrog",
   "guest.s.howpat": "Jak działa PAT",
   "guest.s.search": "Szukaj",
-  "siteperm.k.auth.guest_access": "Dostęp dla gości: jakie sekcje mogą otwierać niezalogowani odwiedzający (i widzieć w pasku nawigacji)"
+  "siteperm.k.auth.guest_access": "Dostęp dla gości: jakie sekcje mogą otwierać niezalogowani odwiedzający (i widzieć w pasku nawigacji)",
+  "admmembers.country_label": "Kraj, z którego logowali się ostatnio",
+  "admmembers.any_country": "Dowolny kraj",
+  "admmembers.no_country": "Brak kraju w zapisach",
+  "admmembers.country_help": "<b>Flaga</b> przy nazwie to kraj, z którego członek logował się ostatnio (jego najnowsze logowanie ze znanym krajem, tak jak na profilu) - pokazywana tutaj nawet wtedy, gdy ukrył ją przed odwiedzającymi lub jest w trybie incognito. Liczby na liście krajów zliczają wszystkie konta: wyszukiwanie i przyciski ich nie zmieniają."
 }

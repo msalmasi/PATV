@@ -13826,7 +13826,7 @@
   "sethub.st.unlimited": "無制限",
   "shop.cat.item.site_invite": "招待を1件追加: 新しい1人がPATVアカウントを作成できる一回限りのリンクです。購入した時点であなたの招待に追加されます。ギフトとして相手の招待に追加することもできます。現金価値のないサイトパスです。",
   "siteperm.k.auth.invites": "新規登録の公開／招待制、招待ランクと料金、すべての招待",
-  "siteperm.k.accounts.members": "全メンバー: 登録日、最終アクセス、レベル、ログイン方法を含むすべてのアカウント（メールアドレスとIPは除く）",
+  "siteperm.k.accounts.members": "全メンバー: 登録日、最終訪問、レベル、ログイン方法、最後にログインした国を含むすべてのアカウント(メールアドレスとIPは除く)",
   "guest.title": "{!section}を見るにはログイン",
   "guest.lead": "PATVのこの部分は現在ログイン中のメンバー向けです。ログインはすぐに終わります。",
   "guest.signin": "ログイン",
@@ -13861,5 +13861,9 @@
   "guest.s.help": "PepeFrog のコマンド",
   "guest.s.howpat": "PAT の仕組み",
   "guest.s.search": "検索",
-  "siteperm.k.auth.guest_access": "ゲストアクセス：ログアウト中の訪問者が開けるセクション(ナビバーに表示されるものを含む)"
+  "siteperm.k.auth.guest_access": "ゲストアクセス：ログアウト中の訪問者が開けるセクション(ナビバーに表示されるものを含む)",
+  "admmembers.country_label": "最後にログインした国",
+  "admmembers.any_country": "すべての国",
+  "admmembers.no_country": "国の記録なし",
+  "admmembers.country_help": "名前の後ろの<b>旗</b>は、最後にログインした国です(国が分かっている最新のログインから取得し、プロフィールと同じ内容です)。訪問者に非公開にしている場合やシークレットモードの場合でも、ここには表示されます。国別リストの数はすべてのアカウントを数えます。検索やボタンを使っても数は変わりません。"
 }

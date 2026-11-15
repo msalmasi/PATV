@@ -14097,7 +14097,7 @@
   "sethub.st.unlimited": "Ilimitado",
   "shop.cat.item.site_invite": "Um convite extra: um link de uso único que permite que uma nova pessoa crie uma conta no PATV. Ele é adicionado aos seus convites no momento em que você compra, ou aos dela, como presente. Um passe do site sem valor em dinheiro.",
   "siteperm.k.auth.invites": "Cadastros abertos / só por convite, os níveis e preços de convite, todos os convites",
-  "siteperm.k.accounts.members": "Todos os membros: cada conta com a data de cadastro, última visita, nível e métodos de login (sem e-mails ou IPs)",
+  "siteperm.k.accounts.members": "Todos os membros: cada conta com a data de cadastro, última visita, nível, métodos de login e o país do último login (sem e-mails ou IPs)",
   "guest.title": "Entre para ver {!section}",
   "guest.lead": "Esta parte do PATV é só para membros conectados no momento. Entrar leva só um instante.",
   "guest.signin": "Entrar",
@@ -14132,5 +14132,9 @@
   "guest.s.help": "Comandos do PepeFrog",
   "guest.s.howpat": "Como funciona o PAT",
   "guest.s.search": "Buscar",
-  "siteperm.k.auth.guest_access": "Acesso de visitantes: quais seções os visitantes não logados podem abrir (e ver na barra de navegação)"
+  "siteperm.k.auth.guest_access": "Acesso de visitantes: quais seções os visitantes não logados podem abrir (e ver na barra de navegação)",
+  "admmembers.country_label": "País do último login",
+  "admmembers.any_country": "Qualquer país",
+  "admmembers.no_country": "Nenhum país registrado",
+  "admmembers.country_help": "A <b>bandeira</b> ao lado de um nome é o país do último login dele (o login mais recente com um país conhecido, como aparece no perfil) - mostrada aqui mesmo quando a pessoa a oculta dos visitantes ou está no modo anônimo. Os números da lista de países contam todas as contas: a busca e os botões não os alteram."
 }

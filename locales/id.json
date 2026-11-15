@@ -13828,7 +13828,7 @@
   "sethub.st.unlimited": "Tanpa batas",
   "shop.cat.item.site_invite": "Satu undangan tambahan: tautan sekali pakai yang memungkinkan satu orang baru membuat akun PATV. Langsung masuk ke undanganmu begitu kamu membelinya, atau ke undangan dia sebagai hadiah. Pass situs tanpa nilai uang.",
   "siteperm.k.auth.invites": "Pendaftaran terbuka / hanya lewat undangan, tingkat dan harga undangan, setiap undangan",
-  "siteperm.k.accounts.members": "Semua anggota: setiap akun dengan tanggal daftar, kunjungan terakhir, level dan metode login (tanpa email atau IP)",
+  "siteperm.k.accounts.members": "Semua anggota: setiap akun dengan tanggal daftar, kunjungan terakhir, level, metode masuk, dan negara tempat mereka terakhir masuk (tanpa email atau IP)",
   "guest.title": "Masuk untuk melihat {!section}",
   "guest.lead": "Bagian PATV ini khusus untuk anggota yang sudah login. Masuk hanya butuh sebentar.",
   "guest.signin": "Masuk",
@@ -13863,5 +13863,9 @@
   "guest.s.help": "Perintah PepeFrog",
   "guest.s.howpat": "Cara kerja PAT",
   "guest.s.search": "Cari",
-  "siteperm.k.auth.guest_access": "Akses tamu: bagian mana yang bisa dibuka pengunjung yang belum masuk (dan terlihat di navbar)"
+  "siteperm.k.auth.guest_access": "Akses tamu: bagian mana yang bisa dibuka pengunjung yang belum masuk (dan terlihat di navbar)",
+  "admmembers.country_label": "Negara tempat mereka terakhir masuk",
+  "admmembers.any_country": "Semua negara",
+  "admmembers.no_country": "Tidak ada negara tercatat",
+  "admmembers.country_help": "<b>Bendera</b> setelah nama adalah negara tempat mereka terakhir masuk (masuk terbaru mereka dengan negara yang diketahui, seperti di profil mereka) - ditampilkan di sini meskipun mereka menyembunyikannya dari pengunjung atau sedang incognito. Angka di daftar negara menghitung setiap akun: pencarian dan tombol tidak mengubahnya."
 }

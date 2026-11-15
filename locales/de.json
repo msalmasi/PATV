@@ -13984,7 +13984,7 @@
   "sethub.st.unlimited": "Unbegrenzt",
   "shop.cat.item.site_invite": "Eine zusätzliche Einladung: ein einmaliger Link, mit dem eine neue Person ein PATV-Konto erstellen kann. Sie wird dir sofort gutgeschrieben, sobald du sie kaufst, oder dem Empfänger, wenn du sie verschenkst. Ein Site-Pass ohne Geldwert.",
   "siteperm.k.auth.invites": "Registrierung offen / nur auf Einladung, die Einladungsstufen und Preise, jede Einladung",
-  "siteperm.k.accounts.members": "Alle Mitglieder: jedes Konto mit Anmeldedatum, letztem Besuch, Level und Anmeldemethoden (keine E-Mails oder IPs)",
+  "siteperm.k.accounts.members": "Alle Mitglieder: jedes Konto mit Anmeldedatum, letztem Besuch, Level, Anmeldemethoden und dem Land, von dem aus sich zuletzt angemeldet wurde (keine E-Mails oder IPs)",
   "guest.title": "Melde dich an, um {!section} zu sehen",
   "guest.lead": "Dieser Bereich von PATV ist im Moment nur für angemeldete Mitglieder. Anmelden dauert nur einen Moment.",
   "guest.signin": "Anmelden",
@@ -14019,5 +14019,9 @@
   "guest.s.help": "PepeFrog-Befehle",
   "guest.s.howpat": "So funktioniert PAT",
   "guest.s.search": "Suche",
-  "siteperm.k.auth.guest_access": "Gastzugang: welche Bereiche nicht angemeldete Besucher öffnen können (und in der Navbar sehen)"
+  "siteperm.k.auth.guest_access": "Gastzugang: welche Bereiche nicht angemeldete Besucher öffnen können (und in der Navbar sehen)",
+  "admmembers.country_label": "Land, von dem sie sich zuletzt angemeldet haben",
+  "admmembers.any_country": "Beliebiges Land",
+  "admmembers.no_country": "Kein Land hinterlegt",
+  "admmembers.country_help": "Die <b>Flagge</b> nach einem Namen zeigt das Land, von dem aus sich die Person zuletzt angemeldet hat (ihre neueste Anmeldung mit bekanntem Land, wie auf ihrem Profil) - hier auch dann angezeigt, wenn sie es vor Besuchern versteckt hat oder inkognito unterwegs ist. Die Zahlen in der Länderliste zählen jeden Account: die Suche und die Buttons ändern sie nicht."
 }

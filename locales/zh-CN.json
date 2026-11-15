@@ -13826,7 +13826,7 @@
   "sethub.st.unlimited": "无限制",
   "shop.cat.item.site_invite": "一个额外邀请名额：一次性链接，可让一位新朋友注册 PATV 账户。购买后会立即加入你的邀请名额，也可以作为礼物加入对方的名额。这是一种没有现金价值的站点通行证。",
   "siteperm.k.auth.invites": "开放注册 / 仅限邀请，邀请等级和价格，所有邀请",
-  "siteperm.k.accounts.members": "所有成员：每个账户的注册日期、上次访问时间、等级和登录方式（不含邮箱或 IP）",
+  "siteperm.k.accounts.members": "所有成员：每个账户的注册日期、上次访问时间、等级、登录方式，以及上次登录所在国家（不含邮箱或 IP）",
   "guest.title": "登录以查看{!section}",
   "guest.lead": "PATV 的这部分目前仅对已登录成员开放。登录只需片刻。",
   "guest.signin": "登录",
@@ -13861,5 +13861,9 @@
   "guest.s.help": "PepeFrog 指令",
   "guest.s.howpat": "PAT 如何运作",
   "guest.s.search": "搜索",
-  "siteperm.k.auth.guest_access": "访客权限：未登录的访客可以打开哪些板块（以及在导航栏中看到哪些）"
+  "siteperm.k.auth.guest_access": "访客权限：未登录的访客可以打开哪些板块（以及在导航栏中看到哪些）",
+  "admmembers.country_label": "上次登录所在国家",
+  "admmembers.any_country": "任意国家",
+  "admmembers.no_country": "没有国家记录",
+  "admmembers.country_help": "成员名字后面的<b>旗帜</b>表示他们上次登录的国家（即其资料中显示的最新一次已知国家的登录记录），即使他们对访客隐藏了它或处于隐身模式，这里也会显示。国家列表中的数字统计所有账户：搜索和按钮不会改变这些数字。"
 }

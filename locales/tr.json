@@ -13986,7 +13986,7 @@
   "sethub.st.unlimited": "Sınırsız",
   "shop.cat.item.site_invite": "Bir ekstra davet: yeni bir kişinin PATV hesabı açmasını sağlayan tek kullanımlık bağlantı. Satın aldığın anda davetlerine eklenir, ya da hediye olarak birinin davetlerine. Nakit değeri olmayan bir site geçişi.",
   "siteperm.k.auth.invites": "Kayıtlar açık / yalnızca davetle, davet seviyeleri ve fiyatı, her davet",
-  "siteperm.k.accounts.members": "Tüm üyeler: her hesap, kayıt tarihi, son ziyaret, seviye ve giriş yöntemleriyle (e-posta veya IP yok)",
+  "siteperm.k.accounts.members": "Tüm üyeler: her hesap, kayıt tarihi, son ziyaret, seviye, giriş yöntemleri ve en son giriş yaptıkları ülke (e-posta ve IP yok)",
   "guest.title": "{!section} görmek için giriş yap",
   "guest.lead": "PATV'nin bu bölümü şu an giriş yapmış üyeler için. Giriş yapmak sadece bir an sürer.",
   "guest.signin": "Giriş yap",
@@ -14021,5 +14021,9 @@
   "guest.s.help": "PepeFrog komutları",
   "guest.s.howpat": "PAT nasıl çalışır",
   "guest.s.search": "Ara",
-  "siteperm.k.auth.guest_access": "Misafir erişimi: çıkış yapmış ziyaretçilerin hangi bölümleri açabileceği (ve üst menüde görebileceği)"
+  "siteperm.k.auth.guest_access": "Misafir erişimi: çıkış yapmış ziyaretçilerin hangi bölümleri açabileceği (ve üst menüde görebileceği)",
+  "admmembers.country_label": "Son giriş yaptıkları ülke",
+  "admmembers.any_country": "Herhangi bir ülke",
+  "admmembers.no_country": "Kayıtlı ülke yok",
+  "admmembers.country_help": "Bir adın yanındaki <b>bayrak</b>, en son giriş yaptıkları ülkedir (bilinen bir ülkeyle yaptıkları en yeni giriş, profillerinde olduğu gibi). Ziyaretçilerden gizlemiş veya gizli modda olsalar bile burada gösterilir. Ülke listesindeki sayılar tüm hesapları sayar: arama ve düğmeler bunları değiştirmez."
 }
