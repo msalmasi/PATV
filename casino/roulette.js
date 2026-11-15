@@ -151,6 +151,10 @@ function install(core) {
     for (const key of Object.keys(T)) if (!Object.hasOwn(saved, key)) delete T[key];
     Object.assign(T, saved);
   }
+  function pruneInactive(T) {
+    const e = T.eng;
+    e.seats = e.seats.filter((uid) => own(T, uid).length || e.pending[uid] || clock() - e.seen[uid] < 600000);
+  }
   async function nextSeed(T) {
     const n = T.eng.round_no + 1,
       seed = fair.newServerSeed();
@@ -159,6 +163,7 @@ function install(core) {
       T.eng.round_no = n;
       T.eng.phase = "idle";
       T.eng.book = [];
+      pruneInactive(T);
       T.eng.actions = {};
       T.dl = {};
       await runQuery(
@@ -504,7 +509,12 @@ function install(core) {
     }
     houseAt = null;
     crash("house-");
-    await require("./rewards").rouletteSpin(T, r.no, results, p);
+    try {
+      await require("./rewards").rouletteSpin(T, r.no, results, p);
+    } catch (e) {
+      // Reward outages have no bearing on a completed PAT settlement.
+      console.error("[casino] roulette rewards:", e.message);
+    }
     crash("rewards");
     winners.sort((a, b) => b.net - a.net);
     const kept = winners.slice(0, 3),
@@ -640,8 +650,7 @@ function install(core) {
       (!T.lobby && clock() - T.last_activity >= S.settings.rl_idle_close_mins * 60000)
     )
       return closeTable(T, "idle");
-    const e = T.eng;
-    e.seats = e.seats.filter((uid) => own(T, uid).length || e.pending[uid] || clock() - e.seen[uid] < 600000);
+    pruneInactive(T);
     await queuedLines(T);
     await save(T);
   }

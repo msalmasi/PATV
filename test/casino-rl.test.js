@@ -447,3 +447,24 @@ test("receipt for a three-player spin against the pinned fair seed", async () =>
     }),
   );
 });
+
+test("a reward outage cannot delay a paid spin; stale seats leave before queued lines start the next spin", async (t) => {
+  const rewards = require("../casino/rewards");
+  t.mock.method(rewards, "rouletteSpin", async () => {
+    throw new Error("test reward outage");
+  });
+  const T = lobby(),
+    before = await total();
+  expect(await act(T, "a", "bet", "red 500"));
+  expect(await act(T, "b", "bet", "black 500"));
+  await tick(25000);
+  expect(await act(T, "b", "bet", "red 100"));
+  await tick(8000);
+  assert.equal(T.eng.phase, "result");
+  assert.equal(await total(), before);
+  await tick(11 * 60000);
+  assert.equal(T.eng.phase, "betting");
+  assert.deepEqual(T.eng.seats, ["b"]);
+  assert.equal(await held(), 100);
+  assert.equal(await total(), before);
+});
