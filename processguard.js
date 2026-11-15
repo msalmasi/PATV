@@ -13,6 +13,7 @@
 //   guardProcess(process, {label, bootFatal})   install once per process (process.__patvGuarded); -> process
 //   ready(process)                              index.js's listen callback: the site is up (starts the settle window)
 //   errInfo(e) / frames(e)                      what may be logged about an error (below)
+//   where(e) / isAppFrame(line)                 the frames the guard prints: the top one + the site's own (below)
 //
 // What it does
 //   * unhandled rejection -> one log line "[<label>] unhandled rejection (kept running): <errInfo> @ <frames>" and the process
@@ -21,8 +22,18 @@
 //     nothing caught, the state of whatever was running (a half-written structure, a lock held, a stream half-read) is not
 //     trustworthy, so the process is not kept;
 //   * the log line is errInfo + frames ONLY: the status and the answer's body for an HTTP error, else code + message (each
-//     bounded to 300 characters), then the stack's "at ..." frames. Never the error object, so never an AxiosError's config /
-//     headers / request, never a request body. The handlers never throw.
+//     bounded to 300 characters) and the cause's code + message (below), then the stack's "at ..." frames (where(), below).
+//     Never the error object, so never an AxiosError's config / headers / request, never a request body. The handlers never throw.
+//   * the cause (1.99anx review G2): Node 22's fetch (undici) rejects with TypeError "fetch failed" and puts the reason in .cause
+//     (ECONNREFUSED, ENOTFOUND, a certificate error, "other side closed"). errInfo adds " (cause: <code> <message>)", at most
+//     CAUSE_MAX (120) characters, from the cause's code and message only - never the cause object; nothing when the message
+//     already says it (an AxiosError's network cause repeats it). Node's own crash print showed the cause; without it every
+//     fetch failure in the site read the same;
+//   * the frames (review G1): an axios / fetch failure's top frames are the library's (axios's settle, handleStreamEnd, emit,
+//     ..., undici's internals) and the site's own caller ("at async telegramSend") is frame 7 or later. where() prints the top
+//     frame (where it was thrown), the first APP_FRAMES (3) frames of the site's own code wherever they are (isAppFrame: a
+//     file:line:col outside node_modules/ and node: internals), then the next top frames - 6 in all, in stack order, "..."
+//     where frames were left out. A stack of the site's own code prints exactly its top 6, as before.
 //
 // BOOT (bootFatal: index.js only) - an unhandled rejection is still FATAL (logged, exit 1) until the site is listening and
 // SETTLE_MS (10 s) after that:
@@ -44,9 +55,11 @@
 //   stop the chat bot (test/twitch-bot-errors.test.js boots it that way).
 //
 // THROTTLE - a rejection in a hot path (every request, every tick) must not flood index-error.log:
-//   * the same signature (code + name + message + top frame) is printed at most once per SAME_MS (60 s); the ones in between are
-//     counted, and reported either on that signature's next printed line ("(+k more since 75 s ago)") or, when it doesn't come
-//     back, by a summary line once its 60 s are up ("repeated k more times in the last 60 s ... @ <top frame>");
+//   * the same signature (code + name + status + message + the cause's code + the top frame and the first app frame) is printed
+//     at most once per SAME_MS (60 s) - two call sites that fail the same way inside axios / fetch are two signatures (review G1);
+//     an HTTP answer's body is not part of it (it may carry an id / a time: one hot path stays one signature). The ones in
+//     between are counted, and reported either on that signature's next printed line ("(+k more since 75 s ago)") or, when it
+//     doesn't come back, by a summary line once its 60 s are up ("repeated k more times in the last 60 s ... @ <those frames>");
 //   * at most CAP_PER_MIN (10) lines a minute in all (a fixed 60 s window); past it the rejections are only counted, and ONE
 //     line a minute says how many were not logged ("rate cap"). A signature's pending count that can't be printed under the cap
 //     moves into that count - every rejection is either printed or counted, never silently lost;
@@ -64,8 +77,21 @@ const SAME_MS = 60 * 1000;            // one signature: at most one printed line
 const CAP_PER_MIN = 10;               // all signatures: at most 10 printed lines per minute (+ one "not logged" line)
 const MAX_SIGS = 500;                 // signatures remembered
 const MAX_LINE = 2000;                // characters in one log line
+const APP_FRAMES = 3;                 // where(): the site's own frames printed, wherever they are in the stack
+const CAUSE_MAX = 120;                // errInfo: characters of the cause's code + message
 
-/** What may be logged about a failed request: the status and the answer's body - never config / headers / the request. */
+/** An error's cause as "<code> <message>" (bounded; "" when none / not an object / unreadable) - never the cause object. */
+function causeText(e) {
+  try {
+    const c = e && typeof e === "object" ? e.cause : null;
+    if (!c || typeof c !== "object") return "";
+    return [c.code, c.message].filter((v) => (typeof v === "string" || typeof v === "number") && String(v))
+      .map(String).join(" ").replace(/[\r\n]+/g, " ").slice(0, CAUSE_MAX);
+  } catch (x) { return ""; }
+}
+
+/** What may be logged about a failed request: the status and the answer's body - never config / headers / the request.
+ *  Anything else: code + message, and the cause's code + message when it says more (fetch's "fetch failed"). */
 function errInfo(e) {
   if (!e || typeof e !== "object") return String(e);
   const r = e.response;
@@ -74,28 +100,63 @@ function errInfo(e) {
     try { data = typeof data === "string" ? data : JSON.stringify(data); } catch (x) { data = "[unreadable]"; }
     return `HTTP ${r.status}${data ? " " + String(data).slice(0, 300) : ""}`;
   }
-  return [e.code, e.message].filter(Boolean).join(" ").slice(0, 300) || "error";
+  const main = [e.code, e.message].filter(Boolean).join(" ").slice(0, 300) || "error";
+  const c = causeText(e);
+  return c && !main.includes(c) ? `${main} (cause: ${c})` : main;
 }
 
-/** Where an error happened: its stack's "at ..." frames only (never the first line's message, never the object). */
-function frames(e, n = 6) {
+/** The stack's "at ..." lines, trimmed (never the first line's message, never the object). */
+function stackFrames(e) {
   const s = e && typeof e === "object" && typeof e.stack === "string" ? e.stack : "";
-  return s.split("\n").filter((l) => /^\s+at /.test(l)).slice(0, n).map((l) => l.trim()).join(" | ");
+  return s.split("\n").filter((l) => /^\s+at /.test(l)).map((l) => l.trim());
+}
+
+/** Where an error happened: its stack's top n "at ..." frames only (never the first line's message, never the object). */
+function frames(e, n = 6) {
+  return stackFrames(e).slice(0, n).join(" | ");
+}
+
+/** A frame of the site's own code: a file:line:col that isn't in node_modules/ and isn't a node: / internal one. */
+function isAppFrame(line) {
+  const l = String(line || "").trim();
+  const m = /\(([^()]*)\)$/.exec(l);
+  const loc = m ? m[1] : ((/^at (?:async )?(\S+)$/.exec(l) || [])[1] || "");
+  return /:\d+:\d+$/.test(loc) && !/(^|[\\/])node_modules[\\/]|^node:|^internal[\\/]|^<anonymous>/.test(loc);
+}
+
+/**
+ * The frames the guard prints: the top one (where it was thrown), the first `apps` app frames (isAppFrame) wherever they are,
+ * then (fill) the next top frames - at most n, in stack order, "..." where frames were left out. A stack of the site's own code
+ * prints exactly as frames(e, n) does; an axios / fetch failure also shows the site's caller.
+ */
+function where(e, n = 6, apps = APP_FRAMES, fill = true) {
+  const all = stackFrames(e);
+  if (!all.length) return "";
+  const keep = new Set([0]);
+  for (let i = 0, k = 0; i < all.length && k < apps && keep.size < n; i++) if (isAppFrame(all[i])) { keep.add(i); k++; }
+  if (fill) for (let i = 0; i < all.length && keep.size < n; i++) keep.add(i);
+  const out = [];
+  let prev = -1;
+  for (const i of [...keep].sort((a, b) => a - b)) { if (i > prev + 1) out.push("..."); out.push(all[i]); prev = i; }
+  return out.join(" | ");
 }
 
 /** errInfo / frames that never throw (a getter on a hostile object, a Proxy). */
 function safe(fn, dflt) { try { return fn(); } catch (x) { return dflt; } }
 const infoOf = (e) => safe(() => errInfo(e), "[unreadable error]");
-const framesOf = (e, n) => safe(() => frames(e, n), "");
-const at = (e, n) => { const f = framesOf(e, n).slice(0, 1500); return f ? " @ " + f : ""; };
+const at = (e) => { const f = safe(() => where(e), "").slice(0, 1500); return f ? " @ " + f : ""; };
+/** The signature's / a summary line's location: the top frame + the first app frame ("..." between; one frame when they're one). */
+const topOf = (e) => safe(() => where(e, 2, 1, false), "");
 
-/** The throttle's key: code + name + message + the top frame (an HTTP answer's body is left out - it may carry an id / a time). */
+/** The throttle's key: code + name + status + message + the cause's code + topOf (an HTTP answer's body is left out - it may
+ *  carry an id / a time - so one hot path stays one signature; two call sites failing inside axios are two). */
 function signature(e) {
   return safe(() => {
     if (!e || typeof e !== "object") return "v|" + String(e).slice(0, 200);
     const msg = typeof e.message === "string" ? e.message.slice(0, 200) : "";
     const status = e.response && typeof e.response === "object" ? String(e.response.status) : "";
-    return ["o", e.code || "", e.name || "", status, msg, frames(e, 1)].join("|");
+    const cause = safe(() => (e.cause && typeof e.cause === "object" && e.cause.code != null ? String(e.cause.code).slice(0, 40) : ""), "");
+    return ["o", e.code || "", e.name || "", status, msg, cause, topOf(e)].join("|");
   }, "?");
 }
 
@@ -192,7 +253,7 @@ function createGuard(opts = {}) {
       if (!allow(t)) { toOverflow(sig, 1); schedule(); return; }            // over the minute's cap: counted
       const more = e && e.k > 0 ? ` (+${e.k} more since ${secs(t - e.last)} s ago)` : "";
       out(`${P} unhandled rejection (kept running): ${infoOf(reason)}${at(reason)}${more}`);
-      remember(sig, { last: t, k: 0, info: infoOf(reason), top: framesOf(reason, 1) });
+      remember(sig, { last: t, k: 0, info: infoOf(reason), top: topOf(reason) });
     } catch (x) { /* never throw from here */ }
   }
 
@@ -235,5 +296,5 @@ function ready(proc = process) {
   return true;
 }
 
-module.exports = { errInfo, frames, signature, createGuard, guardProcess, ready,
-                   SETTLE_MS, SAME_MS, CAP_PER_MIN, MAX_SIGS, MAX_LINE };
+module.exports = { errInfo, frames, where, isAppFrame, signature, createGuard, guardProcess, ready,
+                   SETTLE_MS, SAME_MS, CAP_PER_MIN, MAX_SIGS, MAX_LINE, APP_FRAMES, CAUSE_MAX };

@@ -7,6 +7,9 @@
 //     (+ one "not logged" line), 500 signatures; every rejection is printed or counted (a randomised conservation check)
 //   * never the error object: an AxiosError-like rejection with config.headers / request / a request body prints none of them
 //   * the handlers never throw (a throwing logger / exit / timer, a hostile error object)
+//   * review G1: the printed frames and the signature include the site's own caller (an axios failure's top 6 frames are axios's /
+//     node's) - two call sites failing the same way are two lines (a synthetic axios stack + REAL axios against a local 401)
+//   * review G2: a fetch failure's cause (code + message only, bounded) is on the line and in the signature (REAL fetch too)
 //   * real child processes: the guard alone (before / after ready, an uncaught exception, 1000 rejections -> one line, the summary
 //     timer never keeps a process alive) and the REAL index.js booted in a scratch folder (a rejection while it loads exits 1;
 //     its port taken exits 1; one after it is up + 10 s is survived and /healthz still answers; then an uncaught exception exits 1)
@@ -287,6 +290,118 @@ test("throttle: every rejection is printed or counted (a randomised run, then th
     assert.equal(counted, total, `run ${run}: printed + counted = every rejection`);
     assert.deepEqual(r.exits, [1]);
   }
+});
+
+// ── review G1 / G2: which frames, which cause ──
+/** An AxiosError's stack as axios 1.7 builds it: six library / node frames, then the caller's (paths as on the VPS). */
+const axiosStack = (caller) => [
+  "AxiosError: Request failed with status code 401",
+  "    at settle (/srv/patv/node_modules/axios/dist/node/axios.cjs:2019:12)",
+  "    at IncomingMessage.handleStreamEnd (/srv/patv/node_modules/axios/dist/node/axios.cjs:3135:11)",
+  "    at IncomingMessage.emit (node:events:531:35)",
+  "    at endReadableNT (node:internal/streams/readable:1698:12)",
+  "    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)",
+  "    at Axios.request (/srv/patv/node_modules/axios/dist/node/axios.cjs:4287:41)",
+  "    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)",
+  `    at async ${caller} (/srv/patv/${caller}.js:40:5)`,
+  "    at async Timeout._onTimeout (/srv/patv/index.js:900:7)"].join("\n");
+const axios401 = (caller) => Object.assign(new Error("Request failed with status code 401"),
+  { name: "AxiosError", code: "ERR_BAD_REQUEST", stack: axiosStack(caller), response: { status: 401, data: { error: "Unauthorized" } } });
+
+test("G1: isAppFrame - the site's own file:line:col, never node_modules / node: internals / <anonymous> / Promise.all's index", () => {
+  for (const l of ["at async telegramSend (/srv/patv/telegram.js:40:5)", "at route (C:\\patv\\members.js:9:1)", "at /srv/patv/x.js:1:2",
+                   "at async /srv/patv/x.js:1:2", "at Server.<anonymous> (/srv/patv/index.js:5:3)", "at [eval]:5:13",
+                   "at file:///srv/patv/x.mjs:3:4"]) assert.equal(PG.isAppFrame(l), true, l);
+  for (const l of ["at settle (/srv/patv/node_modules/axios/dist/node/axios.cjs:2019:12)", "at C:\\patv\\node_modules\\x\\y.js:1:1",
+                   "at IncomingMessage.emit (node:events:531:35)", "at node:internal/deps/undici/undici:15456:13",
+                   "at process.processTicksAndRejections (node:internal/process/task_queues:89:21)", "at new Promise (<anonymous>)",
+                   "at async Promise.all (index 0)", "at internal/main/run_main_module.js:17:47", "", null])
+    assert.equal(PG.isAppFrame(l), false, String(l));
+});
+
+test("G1: an axios failure prints the site's own caller; two call sites failing the same way are two signatures", () => {
+  assert.equal(PG.APP_FRAMES, 3);
+  const r = rig(); r.up();
+  r.g.onRejection(axios401("telegramSend"));
+  r.g.onRejection(axios401("stripeCall"));
+  assert.equal(r.logs.length, 2, "not folded into one line:\n" + r.logs.join("\n"));
+  assert.match(r.logs[0], /^\[site\] unhandled rejection \(kept running\): HTTP 401 \{"error":"Unauthorized"\} @ at settle \(\/srv\/patv\/node_modules\/axios\/dist\/node\/axios\.cjs:2019:12\) \| at IncomingMessage\.handleStreamEnd .* \| at endReadableNT .* \| \.\.\. \| at async telegramSend \(\/srv\/patv\/telegramSend\.js:40:5\) \| at async Timeout\._onTimeout \(\/srv\/patv\/index\.js:900:7\)$/);
+  assert.match(r.logs[1], /\| \.\.\. \| at async stripeCall \(\/srv\/patv\/stripeCall\.js:40:5\) \|/);
+  assert.equal(r.logs[0].split(" | ").length, 7, "6 frames + one '...'");
+  // the same call site again is still one signature (throttled), and its summary line names the caller
+  for (let i = 0; i < 3; i++) { r.adv(100); r.g.onRejection(axios401("telegramSend")); }
+  assert.equal(r.logs.length, 2);
+  r.adv(PG.SAME_MS); r.fire();
+  assert.match(r.logs[2], /^\[site\] unhandled rejection repeated 3 more times .*: HTTP 401 \{"error":"Unauthorized"\} @ at settle \(\/srv\/patv\/node_modules\/axios\/dist\/node\/axios\.cjs:2019:12\) \| \.\.\. \| at async telegramSend \(\/srv\/patv\/telegramSend\.js:40:5\)$/);
+  // a stack of the site's own code prints its top 6 frames exactly as frames() does (no '...')
+  const own = Object.assign(new Error("x"), { stack: "Error: x\n" + Array.from({ length: 9 }, (_, i) => `    at f${i} (/srv/patv/m${i}.js:1:1)`).join("\n") });
+  assert.equal(PG.where(own), PG.frames(own, 6));
+  assert.equal(PG.where({ stack: "no frames" }), "");
+  assert.equal(PG.where(null), "");
+  assert.notEqual(PG.signature(axios401("telegramSend")), PG.signature(axios401("stripeCall")));
+  assert.equal(PG.signature(axios401("telegramSend")), PG.signature(axios401("telegramSend")));
+});
+
+test("G1: REAL axios against a local 401 - two functions' rejections are two lines, each naming its function", async () => {
+  const axios = require("axios");
+  const srv = http.createServer((q, s) => { s.statusCode = 401; s.setHeader("content-type", "application/json"); s.end('{"error":"no"}'); });
+  await new Promise((res) => srv.listen(0, "127.0.0.1", res));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    async function telegramSendProbe() { await axios.post(base + "/send", { password: "FAKE-PASSWORD" }, { headers: { Authorization: "Bearer FAKE-TOKEN-1234" } }); }
+    async function stripeCallProbe() { await axios.get(base + "/charge", { headers: { "X-PATV-Key": "bot.FAKE-KEY-5678" } }); }
+    const errs = [];
+    for (const f of [telegramSendProbe, stripeCallProbe]) { try { await f(); assert.fail("expected a 401"); } catch (e) { errs.push(e); } }
+    const r = rig(); r.up();
+    for (const e of errs) r.g.onRejection(e);
+    assert.equal(r.logs.length, 2, r.logs.join("\n"));
+    assert.match(r.logs[0], /kept running\): HTTP 401 \{"error":"no"\} @ at settle .*\| at async telegramSendProbe \(/);
+    assert.match(r.logs[1], /kept running\): HTTP 401 \{"error":"no"\} @ at settle .*\| at async stripeCallProbe \(/);
+    assert.doesNotMatch(r.logs.join("\n"), FAKE);
+  } finally { await new Promise((res) => srv.close(res)); }
+});
+
+test("G2: a fetch failure's cause is logged (its code + message only) and is part of the signature", () => {
+  const fetchFailed = (code, msg) => Object.assign(new TypeError("fetch failed", { cause: Object.assign(new Error(msg), { code, config: axiosLike().config }) }),
+    { stack: "TypeError: fetch failed\n    at node:internal/deps/undici/undici:15456:13\n    at async pollPlex (/srv/patv/plexcatalog.js:77:9)" });
+  assert.equal(PG.errInfo(fetchFailed("ECONNREFUSED", "connect ECONNREFUSED 127.0.0.1:32400")),
+               "fetch failed (cause: ECONNREFUSED connect ECONNREFUSED 127.0.0.1:32400)");
+  const r = rig(); r.up();
+  r.g.onRejection(fetchFailed("ECONNREFUSED", "connect ECONNREFUSED 127.0.0.1:32400"));
+  r.g.onRejection(fetchFailed("ENOTFOUND", "getaddrinfo ENOTFOUND plex.example.test"));
+  r.g.onRejection(fetchFailed("ENOTFOUND", "getaddrinfo ENOTFOUND plex.example.test"));
+  assert.equal(r.logs.length, 2, "two causes = two signatures; the same one again is throttled");
+  assert.match(r.logs[0], /^\[site\] unhandled rejection \(kept running\): fetch failed \(cause: ECONNREFUSED connect ECONNREFUSED 127\.0\.0\.1:32400\) @ at node:internal\/deps\/undici\/undici:15456:13 \| at async pollPlex /);
+  assert.match(r.logs[1], /fetch failed \(cause: ENOTFOUND getaddrinfo ENOTFOUND plex\.example\.test\) @ /);
+  assert.doesNotMatch(r.logs.join("\n"), FAKE, "the cause's other properties are never printed");
+  // bounded; only code + message; nothing when it repeats the message (an AxiosError's network cause); never the object
+  const long = PG.errInfo(new Error("x", { cause: { code: "E1", message: "m".repeat(500), headers: { Authorization: "FAKE-TOKEN" } } }));
+  assert.equal(long, "x (cause: E1 " + "m".repeat(PG.CAUSE_MAX - 3) + ")");
+  const net = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" });
+  net.cause = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9"), { code: "ECONNREFUSED" });
+  assert.equal(PG.errInfo(net), "ECONNREFUSED connect ECONNREFUSED 127.0.0.1:9", "no repeat");
+  assert.equal(PG.errInfo(new Error("x", { cause: "a string" })), "x", "a cause that isn't an object is left out");
+  assert.equal(PG.errInfo(new Error("x", { cause: { nested: { message: "FAKE-deep" } } })), "x");
+  assert.equal(PG.errInfo(new Error("x", { cause: { code: "E\n1", message: "a\r\nb" } })), "x (cause: E 1 a b)", "one line");
+  const hostileCause = Object.defineProperty(new Error("outer"), "cause", { get() { throw new Error("FAKE-getter"); } });
+  assert.equal(PG.errInfo(hostileCause), "outer", "a throwing cause getter loses only the cause");
+  assert.doesNotThrow(() => PG.signature(hostileCause));
+  // an HTTP answer is still status + body (no cause)
+  assert.equal(PG.errInfo(Object.assign(new Error("y", { cause: { code: "E2" } }), { response: { status: 500, data: "z" } })), "HTTP 500 z");
+});
+
+test("G2: REAL fetch to a server that hangs up - the line says why (cause), not just 'fetch failed'", async () => {
+  const srv = net.createServer((sock) => sock.destroy());
+  await new Promise((res) => srv.listen(0, "127.0.0.1", res));
+  try {
+    let err = null;
+    try { await fetch(`http://127.0.0.1:${srv.address().port}/`); } catch (e) { err = e; }
+    assert.ok(err, "fetch failed");
+    const r = rig(); r.up();
+    r.g.onRejection(err);
+    // undici: "UND_ERR_SOCKET other side closed" (or the OS's ECONNRESET, depending on when the hang-up is seen)
+    assert.match(r.logs[0], /^\[site\] unhandled rejection \(kept running\): fetch failed \(cause: (UND_ERR_SOCKET|ECONNRESET|EPIPE) [^)]+\) @ at /, r.logs[0]);
+  } finally { await new Promise((res) => srv.close(res)); }
 });
 
 // ── real child processes ──

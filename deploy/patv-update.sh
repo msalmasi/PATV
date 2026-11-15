@@ -90,6 +90,10 @@ apps_for() {
     blackjack/*)                       echo blackjack ;;
     server.js)                         echo server ;;
     dbUtils.js|user.controller.js)     echo index twitch server ;;
+    # 1.99anx: the other root files twitchbot/ and server.js load (test/deploy-appsfor.test.js follows their requires):
+    # processguard.js + errorhandler.js (twitchbot/channelpoints.js), shutdown.js + sqlitecfg.js (dbUtils.js); listen.js (server.js)
+    processguard.js|errorhandler.js|shutdown.js|sqlitecfg.js) echo index twitch server ;;
+    listen.js)                         echo index server ;;
     package.json|package-lock.json)    echo index server ;;
     *)                                 echo index ;;
   esac

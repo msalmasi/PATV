@@ -2,12 +2,14 @@
 // the admin user list by their last logged in country (like we have the flag in the profile)"):
 //   * the rule is the profile's flag (index.js, 1.99abt), exactly: the newest session (by created - not the newest last_seen) whose
 //     country is 2 characters and not XX / T1, upper-cased when it's 2 letters, else none (no fall-back past a bad newest one);
-//     revoked sessions count; checked against the profile's own query for every account
+//     revoked sessions count; checked against the profile's own query for every account; review R-1: by created even when the
+//     newer sign-in was inserted first; review CF-1: a same-millisecond tie goes to the later row, here and on the profile
 //   * ?country=<CC> (any case) / none, with q, filter, sort and paging - total / pages follow it; anything else = any country
 //   * countries [{cc, n}] (most first, then by code) + no_country over EVERY account, whatever the request asks
 //   * admins see through a hidden flag and incognito (the owner's 2026-11-02 rule); still no IP / device / email / session detail
 //   * a database without sessions (or without its country column): no country for anyone, nothing breaks
-//   * the subquery searches sessions' index sessions_user; the card's picker + flag font + script
+//   * the subquery searches sessions' index sessions_user; review CF-2: the page's countries come from a second query by userId,
+//     never from the sorted SELECT (traced); the card's picker + flag font + script
 //   NODE_PATH=G:/PATV/node_modules TZ=UTC node --test test/members-country.test.js
 "use strict";
 const test = require("node:test");
@@ -81,6 +83,8 @@ const WANT = {
   m_hidden: "NL",    // hid the flag from visitors
   n_incog: "SE",     // incognito
   CFab12cd34: null,  // Pepe's chat-only account (a session would make it a website account)
+  o_order: "AT",     // review R-1: the newer sign-in (AT, 2 days ago) was INSERTED first - by created, not by insertion order (BE)
+  p_tie: "IT",       // review CF-1: two sign-ins in the same millisecond -> the later row (IT), here and on the profile
   boss: null,
 };
 
@@ -114,6 +118,8 @@ test.before(async () => {
   await mk("un", "n_incog", { age: 43, cf: "incog_login" }); await sess("un", "SE", 2);
   await runQuery(`INSERT INTO incognito_state (login, "on", updated) VALUES ('incog_login', 1, ?)`, [NOW - DAY]);
   await mk("cf1", "CFab12cd34", { email: "zzrandom", auto: "camfrog", cf: "froggy_login", pw: null, age: 44 });
+  await mk("uo", "o_order", { age: 45 }); await sess("uo", "AT", 2); await sess("uo", "BE", 10);
+  await mk("ut", "p_tie", { age: 46 }); await sess("ut", "PT", 5); await sess("ut", "IT", 5);
   // 55 more in the US (two pages of them), signed in on different days
   for (let i = 0; i < 55; i++) {
     const id = "us" + i;
@@ -134,7 +140,7 @@ test.before(async () => {
 });
 test.after(() => server && server.close());
 
-const TOTAL = 16 + 55;
+const TOTAL = 18 + 55;
 
 test("the rule: the newest sign-in's country (by created), skipping XX / T1 / none / not 2 characters; upper-cased; no fall-back past a bad one", async () => {
   const { rows, first } = await every("sort=username");
@@ -148,7 +154,7 @@ test("the rule: the newest sign-in's country (by created), skipping XX / T1 / no
 test("the same answer as the profile's own query (index.js) for every account", async () => {
   // the profile's flag, as index.js runs it (1.99abt) - pinned to its source below so the two can't drift apart unseen
   const PROFILE_SQL = `SELECT country FROM sessions WHERE user_id = ? AND country IS NOT NULL AND length(country) = 2
-                                     AND upper(country) NOT IN ('XX', 'T1') ORDER BY created DESC LIMIT 1`;
+                                     AND upper(country) NOT IN ('XX', 'T1') ORDER BY created DESC, rowid DESC LIMIT 1`;
   const flat = (s) => s.replace(/\s+/g, " ");
   const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
   assert.ok(flat(src).includes(flat(PROFILE_SQL)), "index.js still asks this (if the profile's rule changes, change members.js's too)");
@@ -160,6 +166,9 @@ test("the same answer as the profile's own query (index.js) for every account", 
   const { rows } = await every("");
   const ids = new Map((await getQuery("SELECT userId, username FROM users")).map((u) => [u.username, u.userId]));
   for (const r of rows) assert.equal(r.country, await profile(ids.get(r.username)), r.username);
+  // review CF-1 / R-1: the profile breaks a same-millisecond tie the same way (the later row), and goes by created, not insertion
+  assert.equal(await profile("ut"), "IT", "p_tie on the profile");
+  assert.equal(await profile("uo"), "AT", "o_order on the profile");
 });
 
 test("?country=: a code (any case) with paging; with q, filter and sort; total and pages follow it", async () => {
@@ -228,8 +237,8 @@ test("an invalid country is any country (like a bad sort / filter): the answer s
 });
 
 test("countries + no_country: every account's, most first then by code - the request doesn't change them", async () => {
-  const want = [{ cc: "US", n: 57 }, { cc: "DE", n: 2 }, { cc: "CA", n: 1 }, { cc: "ES", n: 1 }, { cc: "FR", n: 1 }, { cc: "GB", n: 1 },
-                { cc: "IE", n: 1 }, { cc: "NL", n: 1 }, { cc: "SE", n: 1 }];
+  const want = [{ cc: "US", n: 57 }, { cc: "DE", n: 2 }, { cc: "AT", n: 1 }, { cc: "CA", n: 1 }, { cc: "ES", n: 1 }, { cc: "FR", n: 1 },
+                { cc: "GB", n: 1 }, { cc: "IE", n: 1 }, { cc: "IT", n: 1 }, { cc: "NL", n: 1 }, { cc: "SE", n: 1 }];
   const j = (await api()).j;
   assert.deepEqual(j.countries, want);
   assert.equal(j.no_country, 5);
@@ -305,6 +314,29 @@ test("the country subquery searches sessions' user index (sessions_user) - for t
     assert.match(plan, /SEARCH s USING (COVERING )?INDEX sessions_user \(user_id=\?\)/, plan);
     assert.doesNotMatch(plan, /SCAN s\b/, "never a scan of sessions per account: " + plan);
   }
+});
+
+test("review CF-2: the page's countries come from a second query by userId - never from the sorted SELECT (a sort step would run it for every account)", async () => {
+  M._resetSchema();
+  const db = require(path.join(repo, "dbUtils")).db;
+  const seen = [];
+  const onTrace = (sql) => seen.push(String(sql));
+  db.on("trace", onTrace);
+  let pages;
+  try {
+    pages = {};
+    for (const q of ["sort=seen", "sort=level", "", "country=US&sort=seen"]) pages[q] = (await api(q)).j;
+  } finally { db.removeListener("trace", onTrace); }
+  const sorted = seen.filter((s) => /FROM users u[\s\S]*ORDER BY[\s\S]*LIMIT \S+ OFFSET/.test(s));
+  assert.equal(sorted.length, 4, "one sorted page query a request");
+  for (const s of sorted.slice(0, 3)) assert.doesNotMatch(s, /FROM sessions s/, "no country subquery in an unfiltered page's sorted SELECT");
+  assert.match(sorted[3], /FROM sessions s/, "?country= keeps it in WHERE (the filter has to)");
+  const byId = seen.filter((s) => /FROM users u WHERE u\.userId IN \(/.test(s) && /FROM sessions s/.test(s));
+  assert.equal(byId.length, 4, "each page's 50 rows get their countries in one query");
+  // and the answer is the same as before: every row's country is the rule's
+  assert.equal(pages["sort=seen"].rows.find((r) => r.username === "a_newer").country, "DE");
+  assert.ok(pages["country=US&sort=seen"].rows.every((r) => r.country === "US"));
+  assert.equal(pages[""].rows.length, 50);
 });
 
 test("the card: a country picker beside the search, the flag font, the new script; the script writes no HTML", async () => {

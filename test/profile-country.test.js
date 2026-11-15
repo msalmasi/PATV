@@ -17,7 +17,8 @@ test("a 'country' layout item: shown to visitors by default, hideable", () => {
 
 test("the profile reads the newest session's country (never XX / T1, never while incognito) and draws a flag", () => {
   const idx = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
-  assert.match(idx, /FROM sessions WHERE user_id = \? AND country IS NOT NULL[\s\S]{0,200}NOT IN \('XX', 'T1'\) ORDER BY created DESC LIMIT 1/);
+  // 1.99anx: a same-millisecond tie goes to the later row (rowid), as on 👥 All members (test/members-country.test.js)
+  assert.match(idx, /FROM sessions WHERE user_id = \? AND country IS NOT NULL[\s\S]{0,200}NOT IN \('XX', 'T1'\) ORDER BY created DESC, rowid DESC LIMIT 1/);
   assert.match(idx, /country: await \(async \(\) => \{\s*if \(!L\.show\("country"\)\) return null;[\s\S]{0,200}incognito/);
   const view = fs.readFileSync(path.join(__dirname, "..", "views", "profile.ejs"), "utf8");
   assert.match(view, /0x1F1E6 \+ c\.charCodeAt\(0\) - 65/);

@@ -30,10 +30,13 @@
 //               sessions.country is Cloudflare's CF-IPCountry at sign-in (sessions.place: only through our proxy, never XX / T1),
 //               refreshed while the session is used. NOT the newest last_seen: a member who signed in from abroad last week and is
 //               still using an older session from home shows the newer sign-in's country, like the profile. Equal created times
-//               (the same millisecond) go to the later row (rowid) - the profile leaves that tie to SQLite. Null = none on record:
-//               no session since 1.99wj (most of Pepe's chat accounts, members not seen since), or only XX / T1 / no-proxy ones.
+//               (the same millisecond) go to the later row (rowid) - here AND on the profile (its query says so too since the
+//               1.99anx review), so the two always agree. Null = none on record: no session since 1.99wj (most of Pepe's chat
+//               accounts, members not seen since), or only XX / T1 / no-proxy ones.
 //               One correlated subquery per account on sessions' index sessions_user (user_id, revoked_at) + a sort of that
-//               member's few sessions; the filter, the count and the page all run it on the server
+//               member's few sessions, all on the server: in WHERE for ?country= (the filter, the count and the page), in
+//               countries() for the picker, and for the page's own 50 rows a second query by userId (like methods) - never in
+//               the sorted SELECT, where a sort that needs a sort step (seen, level) would run it for every matching account
 //   methods     how the account can sign in: password (users.password_set = 1, or an older account with a real email and no 0
 //               marker), google / apple (sso_links), telegram (telegram_links), plex (plex_members linked), twitch / discord (the
 //               provider id on the row), camfrog (a linked Camfrog login - Pepe's !signin chat sign-in link)
@@ -165,6 +168,7 @@ function pieces(H, at) {
          WHERE s.user_id = u.userId AND s.country IS NOT NULL AND length(s.country) = 2 AND upper(s.country) NOT IN ('XX', 'T1')
          ORDER BY s.created DESC, s.rowid DESC LIMIT 1), '')`
     : "NULL";
+  // (the profile's query in index.js has the same tie-break: created DESC, rowid DESC - test/members-country.test.js pins both)
   const invited = C("invited_by");
   return { chat, deleted, deleting, banned, bannedArgs, archived, seenJoin, seenCol, countryCol,
            invitedJoin: invited ? "LEFT JOIN users iu ON iu.userId = u.invited_by" : "",
@@ -271,6 +275,20 @@ async function methodsOf(H, rows) {
   return out;
 }
 
+/**
+ * 1.99anx review: the countries of a page of accounts (Map userId -> CC | null) - a second query by userId (users' primary key),
+ * so the country subquery runs for these rows only, never for every account a sort step orders.
+ */
+async function countriesOf(P, rows) {
+  const out = new Map();
+  if (!rows.length || P.countryCol === "NULL") return out;
+  const ids = rows.map((r) => r.userId);
+  for (const r of await getQuery(`SELECT u.userId, ${P.countryCol} AS country FROM users u WHERE u.userId IN (${ids.map(() => "?").join(", ")})`, ids)) {
+    out.set(r.userId, r.country);
+  }
+  return out;
+}
+
 const CLASS_BADGE = { Admin: "admin", Staff: "staff", Assistant: "assistant" };
 /**
  * One page of the table. -> {page, pages, per, total, sort, dir, filter, q, country, rows} (see the header). opts: options() + {at}.
@@ -303,7 +321,7 @@ async function list(opts = {}) {
   const order = `${S.nullsLast ? `(${col} IS NULL), ` : ""}${col} ${dir}, ${S.tie} ${dir}`;
   const rows = await getQuery(`SELECT u.userId, u.username, u.displayname, u.created_at, u.level, u.class, u.twitchId, u.discordId,
         ${P.has("camfrogUsername") ? "u.camfrogUsername" : "NULL AS camfrogUsername"}, ${P.pwCol} AS password_set, ${P.autoCol} AS auto_source,
-        ${P.seenCol} AS seen, ${P.countryCol} AS country, ${P.invitedCol} AS invited_by_name,
+        ${P.seenCol} AS seen, ${P.invitedCol} AS invited_by_name,
         CASE WHEN ${P.has("email") ? "COALESCE(u.email, '') LIKE '%@%'" : "0"} THEN 1 ELSE 0 END AS email_at,
         CASE WHEN ${P.chat} THEN 1 ELSE 0 END AS is_chat,
         CASE WHEN ${P.deleted} THEN 1 ELSE 0 END AS is_deleted,
@@ -314,6 +332,7 @@ async function list(opts = {}) {
       FROM users u ${P.seenJoin} ${P.invitedJoin} ${W}
       ORDER BY ${order} LIMIT ? OFFSET ?`, [...P.bannedArgs, ...args, PER, (page - 1) * PER]);
   const M = await methodsOf(H, rows);
+  const CC = await countriesOf(P, rows);
   return {
     ...o, page, pages, per: PER, total,
     rows: rows.map((r) => {
@@ -328,10 +347,11 @@ async function list(opts = {}) {
       }
       if (r.is_invited) status.push("invited");
       const ms = M.get(r.userId) || new Set();
+      const cc = CC.get(r.userId);
       return {
         username: r.username, displayname: r.displayname && r.displayname !== r.username ? r.displayname : null,
         created: createdMs(r.created_at), seen: r.seen == null ? null : Number(r.seen) || null, level: Math.max(0, Math.floor(Number(r.level) || 0)),
-        country: typeof r.country === "string" && /^[A-Z]{2}$/.test(r.country) ? r.country : null,
+        country: typeof cc === "string" && /^[A-Z]{2}$/.test(cc) ? cc : null,
         methods: METHODS.filter((m) => ms.has(m)),
         chat_source: r.is_chat ? (r.auto_source ? "camfrog" : String(r.twitchId || "").trim() ? "twitch" : String(r.discordId || "").trim() ? "discord" : "bot") : null,
         invited_by: r.invited_by_name || null, status, gone: !!r.is_deleted,

@@ -30,6 +30,9 @@ git fetch origin && git push origin origin/staging:main
    | `blackjack/`                                       | blackjack                   |
    | `server.js`                                        | server                      |
    | `dbUtils.js`, `user.controller.js`                 | index, twitch, server       |
+   | `processguard.js`, `errorhandler.js`               | index, twitch, server       |
+   | `shutdown.js`, `sqlitecfg.js`                      | index, twitch, server       |
+   | `listen.js`                                        | index, server               |
    | `public/`, `uploads/`, `deploy/`, docs, `*.md`     | nothing                     |
    | anything else                                      | index                       |
 

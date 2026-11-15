@@ -1804,6 +1804,8 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
         xpForNextLevel: xpForNextLevel,
         // 1.99abt: 🏳️ the country they last signed in from (their newest sign-in session's Cloudflare country; "country"
         // layout item - members can hide it). Never "XX" (unknown) / "T1" (Tor), never while they're incognito (to others).
+        // 1.99anx: two sessions made in the same millisecond go to the later row (rowid) - the same rule as 👥 All members'
+        // country (members.js), so the admin list and the profile always agree.
         country: await (async () => {
           if (!L.show("country")) return null;
           if (!(req.user && req.user.userId === user.userId)) {
@@ -1811,7 +1813,7 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex|vault)
             if (inc && inc.on) return null;
           }
           const r = (await getQuery(`SELECT country FROM sessions WHERE user_id = ? AND country IS NOT NULL AND length(country) = 2
-                                     AND upper(country) NOT IN ('XX', 'T1') ORDER BY created DESC LIMIT 1`, [String(user.userId)]))[0];
+                                     AND upper(country) NOT IN ('XX', 'T1') ORDER BY created DESC, rowid DESC LIMIT 1`, [String(user.userId)]))[0];
           return r && /^[A-Za-z]{2}$/.test(r.country) ? String(r.country).toUpperCase() : null;
         })().catch(() => null),
         // 1.99xi: 🔥 the daily activity streak (streaks.js) - shown in the header like the level ("streak" layout item)
