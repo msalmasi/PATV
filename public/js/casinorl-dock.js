@@ -23,8 +23,11 @@
   }
   function accountLines(me) {
     return ((me && me.lines) || []).map(function (line) {
-      var parsed = grammar.parse(line.text.replace(/\s*·\s*/g, " "), { maxPairs: 20, minBet: 1 });
-      return parsed.ok ? parsed.bets : [];
+      // One paid Rebet can span several original submissions. Decode its recorded positions individually.
+      return line.text.split(" · ").flatMap(function (position) {
+        var parsed = grammar.parse(position, {maxPairs:20, minBet:1});
+        return parsed.ok ? parsed.bets : [];
+      });
     });
   }
   function receipt(bets) {

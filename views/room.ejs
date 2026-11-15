@@ -756,9 +756,11 @@
       </ul>
     <% } %>
   </section>
-  <% if ((canBoost_ && signedIn_) || (dockOn_ && !chatOnly_ && locals.roulette && locals.roulette.on)) { %><script src="/public/js/patamount.js?v=1" defer></script><% } %>
-  <% if (dockOn_ && !chatOnly_ && locals.roulette && locals.roulette.on) { %><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=1"><script defer src="/api/casino/rlbets.js?v=1"></script><script defer src="/public/js/casinorl-dock.js?v=1"></script><% } %>
-  <% if (canBoost_ && signedIn_) { %><script src="/public/js/pad-boost.js?v=2" defer></script><% } %>
+  <% if (canBoost_ && signedIn_) { %><script src="/public/js/patamount.js?v=1" defer></script><script src="/public/js/pad-boost.js?v=2" defer></script><% } %>
+  <% if (dockOn_ && !chatOnly_ && locals.roulette && locals.roulette.on) { %>
+    <% if (!(canBoost_ && signedIn_)) { %><script src="/public/js/patamount.js?v=1" defer></script><% } %>
+    <link rel="stylesheet" href="/public/css/casinorl-dock.css?v=1"><script defer src="/api/casino/rlbets.js?v=1"></script><script defer src="/public/js/casinorl-dock.js?v=1"></script>
+  <% } %>
   <script>
   (function () {
     'use strict';
