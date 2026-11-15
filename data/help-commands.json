@@ -23,7 +23,7 @@
    "id": "wallet",
    "label": "PAT & wallet",
    "icon": "👛",
-   "blurb": "Tipping, prizes, stashes, cosmetics and where your PAT goes."
+   "blurb": "Tipping, virtual prizes, stashes, cosmetics and where your PAT goes."
   },
   {
    "id": "markets",
@@ -84,6 +84,7 @@
   "game_trivia_enabled": "trivia",
   "game_heist_enabled": "heists",
   "game_turf_enabled": "turf wars",
+  "game_roulette_enabled": "roulette",
   "game_poker_enabled": "Hold'em",
   "game_blackjack_enabled": "blackjack",
   "game_bingo_enabled": "bingo",
@@ -773,7 +774,7 @@
     "Earning PAT"
    ],
    "summary": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia.",
-   "details": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia. Link your chat account on [publicaccess.tv](https://publicaccess.tv) to redeem for prizes like Discord Nitro and Camfrog Pro.",
+   "details": "Earn PAT by chatting in the room (enters you in automatic raffles), spinning the wheel, and winning trivia. Link your chat account on [publicaccess.tv](https://publicaccess.tv) to spend it in the virtual prize shop: in-game collectibles, roles, perks and boosts. PAT are points with no cash value.",
    "examples": [],
    "keywords": [
     "earn pat",
@@ -1036,7 +1037,7 @@
     "!tell"
    ],
    "summary": "Leave someone a message and Pepe hands it over the next time he sees them: when they chat, take the mic, or join a room he's in (in that room).",
-   "details": "Leave someone a message and Pepe hands it over **the next time he sees them**: when they chat, take the mic, or join a room he's in (in that room). `!relay tricon Check out the website updates!` **2,500 PAT** (admins free). `-p` delivers it by PM, `-mic` has Pepe read it out (+10,000 PAT). It has to be someone Pepe has actually seen, so typos don't eat your PAT. Messages wait up to 30 days; 10 waiting at a time. `!relay list` · `!relay cancel <#|all>` (no refund). Lines starting with `!relay` / `!tell` never reach a pad's chat on the website, and neither does your message: when Pepe hands it over in a room linked to a pad, the pad only shows that they had a message from you.",
+   "details": "Leave someone a message and Pepe hands it over **the next time he sees them**: when they chat, take the mic, or join a room he's in (in that room). `!relay tricon Check out the website updates!` **2,500 PAT** (admins free). `-p` delivers it by PM, `-mic` has Pepe read it out (+10,000 PAT). It has to be someone Pepe has actually seen, so typos don't eat your PAT. Messages wait up to 30 days (one that expires undelivered is refunded); 10 waiting at a time. `!relay list` · `!relay cancel <#|all>` (refunded if you cancel within 5 minutes of sending). Lines starting with `!relay` / `!tell` never reach a pad's chat on the website, and neither does your message: when Pepe hands it over in a room linked to a pad, the pad only shows that they had a message from you.",
    "examples": [
     "!relay tricon Check out the website updates!",
     "!relay list",
@@ -1159,7 +1160,7 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's home room by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` leaves you out of the website: \"someone\" in the room view, and your lines aren't shown. `!incognito on` hides who you are, not what you say: your lines show as \"someone\" (no name, avatar or looks). Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; `!bridge hide` also leaves your past lines there out, `!incognito` shows them as \"someone\"; `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`.",
    "examples": [
     "!bridge hide",
     "!incognito on",
@@ -1168,10 +1169,10 @@
    ],
    "keywords": [],
    "v2": {
-    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
+    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's home room by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` keeps your mic transcripts off the website. `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
    },
    "v2tx": {
-    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` blacks out only the words of your mic transcripts (your name still shows). `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
+    "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's home room by default) show their public chat, who's here, who's on the mic and the topic, read-only, to the pad's viewers (its access setting) on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there, nor lines starting with a command that carries a code, password or private note (`!msg`, `!message`, `!verify`, `!verifypad`, `!joinroom`, `!padfine`, `!relay` / `!tell`) or a privacy switch (`!incognito` / `!forgetme`, `!bridge`, `!transcripts`, `!remember` - and Pepe's answers to them). `!bridge hide` makes you **hidden** on the website: a random frog name, and your messages and mic transcripts show only as a blacked-out bar. `!incognito on` hides who you are, not what you say: your lines show under a random frog name (no name, avatar or looks). If you were just seen under your name in a room, you show as \"someone\" there for 15 minutes, then under a frog name. PATV administrators and the pad's owner can reveal who is behind a frog name and read hidden lines, for moderation; every reveal is logged. Neither one mutes you: your voice is still heard in the website's room audio unless the pad owner turns audio off. Both change only what the website shows, not what Pepe remembers - that's `!remember off`. Mic transcripts show in the feed too. Bridged rooms' chat can be kept on the pad per its tier and settings; lines said while hidden show there as a bar and incognito ones under your frog name (older lines keep the rules they were said under); `!transcripts off` blacks out only the words of your mic transcripts (your name still shows). `!bridge show` works by PM to Pepe only (a room line can't prove who typed it); `!bridge hide` typed in a room covers the name it shows - PM it to cover your login. Admins: `!bridge stickers on|off` (off by default: show room stickers on the pad and allow website users to send Pepe's available stickers here; sending also needs relay on), `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming. Messages typed on the pad reach the room in about a second (paced so the room isn't flooded); `!bridge fast off` (admins) falls back to the slower sync-only relay. If Pepe's own privacy record can't be read at a start, `!log` / `!search` / `!replay` in pad rooms pause (admins and mods get results by PM) until an admin has checked it: `!bridge privacy ok`."
    },
    "pc": {
     "camreveal": {
@@ -2462,6 +2463,48 @@
    "webchat": true
   },
   {
+   "id": "roulette",
+   "title": "!roulette · !rl · single-zero wheel",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!roulette",
+    "!rl"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!rl <bet> <amount> [<bet> <amount> ...]",
+    "!rl start",
+    "!rl bets | clear | undo | again | go",
+    "!rl status | limits | last | fair | help",
+    "!rl end | advertise <room> | unadvertise <room>"
+   ],
+   "summary": "Play the single-zero roulette wheel with PAT points.",
+   "details": "A wheel has 37 pockets (0 through 36). Each spin is independent. PAT are points with no cash value. A straight pays 35 to 1. Bet on a split, street, trio, corner, first four, six line, dozen, column, or one of the 1-to-1 bets (red/black, odd/even, low/high). Zero loses all 1-to-1 bets.\nType a position followed by a whole PAT amount. For example, **!rl red 500 17-18 100** places a line on red and the split in one request. **!rl 7,17,27 100** places 100 on each number. For the second dozen use **!rl d2 100**. Acknowledgements for bets are private. The default minimum is 100 per position, with up to 5,000 on a straight. Use **!rl limits** for the current limits.\nUse **!rl start** in a room running the site's casino, or play the lobby wheel on the web. **!rl bets** lists your slips. **!rl undo** refunds the last open line and **!rl clear** requests every open line back, subject to the wheel’s bank limit. After betting closes, new lines queue for the next spin and clear drops the queued line. **!rl again** repeats the last slip once. **!rl go** spins a wheel you bet on alone; **!spin** is the separate prize wheel. **!rl fair** links to the proof.\nA bet belongs to the account linked to your chat login, or the account Pepe makes for you. If Pepe cannot confirm you in the room, PM him the command. A PM bets on the wheel of the room you are in.",
+   "examples": [
+    "To place 500 PAT on red, type !rl red 500.",
+    "To ask for your lines, type !rl bets.",
+    "To check the last proof, type !rl fair."
+   ],
+   "keywords": [
+    "roulette",
+    "wheel",
+    "single zero",
+    "straight",
+    "split",
+    "dozen",
+    "column"
+   ],
+   "gates": [
+    "game_roulette_enabled"
+   ],
+   "web": {
+    "label": "Roulette on the web",
+    "url": "/casino/roulette"
+   },
+   "webchat": true
+  },
+  {
    "id": "sng",
    "title": "!sng · new · join · leave · info",
    "category": "games",
@@ -2584,7 +2627,7 @@
     "!poker"
    ],
    "summary": "The publicaccess.tv casino's open tables, as links: host, stakes, seats, 💎 for High Roller tables.",
-   "details": "Lists the open **publicaccess.tv casino** tables (blackjack and Hold'em; `!poker` lists Hold'em only) as short links: host, stakes or blinds, seats taken, 💎 for High Roller tables, up to 5 plus the lobby link. Open 🏁 Sit & Gos come after them (up to 3: seats, buy-in + fee, registered or the level and players left - see `!sng`). Tables in any room and web-only ones. Pepe also posts this line when you ask for a game with no table in your room (`!bj`, `!holdem`, `!bj status`). At most once every 2 minutes per room.",
+   "details": "Lists the open **publicaccess.tv casino** tables (blackjack and Hold'em; `!poker` lists Hold'em only) as short links: host, stakes or blinds, seats taken, 💎 for High Roller tables, up to 5 plus the lobby link. Open 🏁 Sit & Gos come after them (up to 3: seats, buy-in + fee, registered or the level and players left - see `!sng`). Tables in any room and web-only ones. Pepe also posts this line when you ask for a game with no table in your room (`!bj`, `!holdem`, `!bj status`). At most once every 2 minutes per room.\nThe site casino also runs single-zero roulette. Use !tables for open wheels and !rl help for bets.",
    "examples": [
     "!tables",
     "!poker"
@@ -3150,8 +3193,8 @@
    "syntax": [
     "!prizes [page]"
    ],
-   "summary": "The publicaccess.tv prize store, from chat — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance.",
-   "details": "The **publicaccess.tv prize store**, from chat — Plex invites, Discord Nitro, Camfrog Pro, gift cards and the rest — cheapest first, with your balance. `!prizes 2` for the next page. Sold-out prizes stay on the list (marked **SOLD OUT**), so a prize's number doesn't change when something sells out — learn the # of the one you're saving for. The whole store is also at [publicaccess.tv/shop](https://publicaccess.tv/shop).",
+   "summary": "The publicaccess.tv virtual prize shop, from chat — in-game collectibles, roles, perks and boosts — cheapest first, with your balance.",
+   "details": "The **publicaccess.tv virtual prize shop**, from chat — in-game collectibles, roles, perks and boosts — cheapest first, with your balance. `!prizes 2` for the next page. Sold-out prizes stay on the list (marked **SOLD OUT**), so a prize's number doesn't change when something sells out — learn the # of the one you're saving for. The whole shop is also at [publicaccess.tv/shop](https://publicaccess.tv/shop). Everything in it is a virtual item for use on PATV: nothing is shipped, and PAT has no cash value.",
    "examples": [
     "!prizes 2"
    ],
@@ -3160,7 +3203,7 @@
     "rewards"
    ],
    "web": {
-    "label": "The prize shop on the website",
+    "label": "The virtual prize shop on the website",
     "url": "/shop"
    },
    "webchat": true
@@ -3179,8 +3222,8 @@
    "syntax": [
     "!redeem [#|name]"
    ],
-   "summary": "Buy a prize with PAT.",
-   "details": "Buy a prize with PAT. `!redeem 3` (the number from `!prizes`) or part of its name; Pepe tells you the price and what you have, then `!redeem yes` within 90 seconds buys it (`!redeem no` to back out). It's the same purchase as on the website — same stock, same balance — and PlantBaked gets in touch to deliver it. Not the same as `!shop`/`!buy`, which is the heist item shop.\n**Roles** (Scout, Curator, High Roller) are delivered on the spot — on Discord if you've linked it — and you can only own each once. **💎 High Roller** opens Pepe's **High Roller tables**: blackjack at 100,000–1,000,000 a hand (`!bj start hr`) and Hold'em at 100K/200K up to 5M/10M blinds (`!holdem start 100k/200k`), with the High Roller chips. Everyone plays to the same table limits; High Roller tables are High Rollers only.",
+   "summary": "Get a virtual prize with PAT.",
+   "details": "Get a virtual prize with PAT. `!redeem 3` (the number from `!prizes`) or part of its name; Pepe tells you the price and what you have, then `!redeem yes` within 90 seconds buys it (`!redeem no` to back out). It's the same purchase as on the website — same stock, same balance — and it lands in your PATV collection; nothing is shipped. Not the same as `!shop`/`!buy`, which is the heist item shop.\n**Roles** (Scout, Curator, High Roller) are delivered on the spot — on Discord if you've linked it — and you can only own each once. **💎 High Roller** opens Pepe's **High Roller tables**: blackjack at 100,000–1,000,000 a hand (`!bj start hr`) and Hold'em at 100K/200K up to 5M/10M blinds (`!holdem start 100k/200k`), with the High Roller chips. Everyone plays to the same table limits; High Roller tables are High Rollers only.",
    "examples": [
     "!redeem 3",
     "!redeem yes",
@@ -3188,12 +3231,12 @@
    ],
    "keywords": [
     "buy a prize",
-    "nitro",
-    "gift card",
-    "camfrog pro"
+    "virtual prize",
+    "in-game item",
+    "collectible"
    ],
    "web": {
-    "label": "Buy prizes in the website's shop",
+    "label": "Virtual prizes in the website's shop",
     "url": "/shop"
    },
    "webchat": true
@@ -3326,12 +3369,12 @@
    "syntax": [
     "!redeem"
    ],
-   "summary": "Learn how to redeem your PAT for real prizes.",
-   "details": "Learn how to redeem your PAT for real prizes. Sign up at [publicaccess.tv](https://publicaccess.tv), link your chat account, and your balance syncs automatically.",
+   "summary": "Learn how to spend your PAT on virtual prizes.",
+   "details": "Learn how to spend your PAT on virtual prizes: in-game collectibles, roles, perks and boosts. Sign up at [publicaccess.tv](https://publicaccess.tv), link your chat account, and your balance syncs automatically. PAT are points with no cash value.",
    "examples": [],
    "keywords": [],
    "web": {
-    "label": "Buy prizes in the website's shop",
+    "label": "Virtual prizes in the website's shop",
     "url": "/shop"
    },
    "webchat": true
@@ -3491,7 +3534,7 @@
    "details": "A **fine** takes PAT out of a pad's vault and sends it where the PAT Routing row `fine_pad` says (the Federal Reserve by default, like every fine; a fine can never go to a pad vault or an owner). A **move** takes PAT out of one pad vault and puts it in another (the other vault's cap applies). Both need a reason and a confirm step (`!padfine confirm <code>` within 2 minutes); the whole amount or nothing. The pad is its room id, its address or its title. The pad's owner gets a notice with the reason, every move is in the admin audit log and in both pads' vault history, and the PAT supply doesn't change. `!padfine log` lists the latest ones. Also on the website: Pads admin, \"Pad vault fines & transfers\". Lines starting with `!padfine` or `!padmove` never reach a pad's chat on the website, nor does the confirm code in Pepe's answer. Pad vault fines and moves are moderation: Pepe's admins (and site Admins on the website, with their password) run them - not only the owners.",
    "examples": [
     "!padfine DRAMA_CENTRAL 500k spamming paid commands to farm the vault",
-    "!padmove DRAMA_CENTRAL PepeFrog.Room 10M one-off move approved by the owner"
+    "!padmove DRAMA_CENTRAL The_Swamp 10M one-off move approved by the owner"
    ],
    "keywords": [
     "fine pad",
@@ -3851,7 +3894,7 @@
     "!raffle buy <id> [how many]"
    ],
    "summary": "🎫 PAT Raffles: see the open raffles and buy tickets - anyone verified can run one on publicaccess.tv.",
-   "details": "🎫 **PAT Raffles** run on publicaccess.tv: someone puts up a prize (PAT, a Prize Shop item or a custom prize), sets a ticket price, and a **provably fair** draw picks the winner - on a date (if the minimum is sold) or the moment a target number of tickets is sold. **!raffle** lists the open ones (🏛️ official house raffles first), **!raffle 12** shows one, **!raffle buy 12 5** buys 5 tickets as your linked PATV account. Every ticket is held in escrow until the draw; a raffle that doesn't draw by its expiry refunds every ticket in full. You can't buy tickets in your own raffle (or a linked account's). The winner gets the prize, the creator the ticket sales minus a 10% fee (to the House); an official raffle's tickets all go to the House. Pepe announces new raffles, milestones and the draw in the raffle's pad room and Pepe's Pad (official ones in every room). Run your own, see the proof of every draw: [publicaccess.tv/raffles](https://publicaccess.tv/raffles). PAT are points with no cash value. (Not the automatic chat raffle - chatting still enters you in that one.)",
+   "details": "🎫 **PAT Raffles** run on publicaccess.tv: someone puts up a prize (PAT, a virtual prize shop item or a custom prize), sets a ticket price, and a **provably fair** draw picks the winner - on a date (if the minimum is sold) or the moment a target number of tickets is sold. **!raffle** lists the open ones (🏛️ official house raffles first), **!raffle 12** shows one, **!raffle buy 12 5** buys 5 tickets as your linked PATV account. Every ticket is held in escrow until the draw; a raffle that doesn't draw by its expiry refunds every ticket in full. You can't buy tickets in your own raffle (or a linked account's). The winner gets the prize, the creator the ticket sales minus a 10% fee (to the House); an official raffle's tickets all go to the House. Pepe announces new raffles, milestones and the draw in the raffle's pad room and Pepe's home room (official ones in every room). Run your own, see the proof of every draw: [publicaccess.tv/raffles](https://publicaccess.tv/raffles). PAT are points with no cash value. (Not the automatic chat raffle - chatting still enters you in that one.)",
    "examples": [
     "!raffle",
     "!raffle 12",
@@ -5943,7 +5986,7 @@
     "!casino backend all status"
    ],
    "summary": "Where this room's blackjack and Hold'em run: Pepe's own tables or the publicaccess.tv casino backend, where web players can sit at the same table. Switched per room on publicaccess.tv › Admin › Backends (owners).",
-   "details": "Shows whether **this room's** blackjack and Hold'em run on Pepe's own tables or on the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). **all status** lists every room Pepe is in and the **new rooms** default. Since 2026-10-21 the switch itself (a room, the new-rooms default, or every room) is on publicaccess.tv › Admin › Backends, for Pepe's owners only (the casino holds points); Pepe follows it within a minute, and a room with a table still open on his own engine switches once that table ends. In chat `!casino backend on|off|all on|off|default on|off` only answers with where to switch it - except while publicaccess.tv can't switch it (no Admin › Backends there yet, or Pepe follows nothing from it): then Pepe's owners switch it here as before (`on|off` in the room, `all on|off`, `default on|off`, `!backend all on|off`), and while the site isn't answering Pepe an owner can hand rooms back to Pepe's own tables here (`off` only). On a Pepe with no publicaccess.tv site set up every table stays Pepe's own. Pepe's admin panel shows the same, read-only (Website & Feed → Backends).",
+   "details": "Shows whether **this room's** blackjack and Hold'em run on Pepe's own tables or on the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). **all status** lists every room Pepe is in and the **new rooms** default. Since 2026-10-21 the switch itself (a room, the new-rooms default, or every room) is on publicaccess.tv › Admin › Backends, for Pepe's owners only (the casino holds points); Pepe follows it within a minute, and a room with a table still open on his own engine switches once that table ends. In chat `!casino backend on|off|all on|off|default on|off` only answers with where to switch it - except while publicaccess.tv can't switch it (no Admin › Backends there yet, or Pepe follows nothing from it): then Pepe's owners switch it here as before (`on|off` in the room, `all on|off`, `default on|off`, `!backend all on|off`), and while the site isn't answering Pepe an owner can hand rooms back to Pepe's own tables here (`off` only). On a Pepe with no publicaccess.tv site set up every table stays Pepe's own. Pepe's admin panel shows the same, read-only (Website & Feed → Backends).\nThe site casino also runs single-zero roulette. Use !tables for open wheels and !rl help for bets.",
    "examples": [
     "!casino backend status",
     "!casino backend all status"
@@ -6248,7 +6291,7 @@
     "!redlist grant on|off|auto"
    ],
    "summary": "This room's red list, the list automod works from; add `-all` to change the list every room shares.",
-   "details": "With no arguments it shows this room's list (or the shared one, if the room has no list of its own). Someone in a time-out for abusing their powers can't be added back until it ends. **Pad owners** keep their own room's list too (here or on publicaccess.tv: the pad's **Manage → 🟥 Red list**). It only works where Pepe can give admin - he has to be the room's Camfrog owner, which today is only Pepe's Pad (`!redlist grant on|off|auto`, Pepe admins: auto = a room named after him). Elsewhere the list is kept but 'red me' says Pepe can't give admin there.",
+   "details": "With no arguments it shows this room's list (or the shared one, if the room has no list of its own). Someone in a time-out for abusing their powers can't be added back until it ends. **Pad owners** keep their own room's list too (here or on publicaccess.tv: the pad's **Manage → 🟥 Red list**). It only works where Pepe can give admin - he has to be the room's Camfrog owner, which by default is only his home room (`!redlist grant on|off|auto`, Pepe admins: auto = a room named after him). Elsewhere the list is kept but 'red me' says Pepe can't give admin there.",
    "examples": [],
    "keywords": []
   },
@@ -6517,7 +6560,7 @@
     "!automkt [weight sports|prices|news|trending <0-10> | marquee on|off | pad <pad id>|default]"
    ],
    "summary": "Pepe's auto markets: markets and pools he opens himself about real-world events.",
-   "details": "**Auto markets.** Pepe opens a few prediction markets and betting pools a week by himself about real-world events: **sports** fixtures (who wins, from ESPN's scoreboard: NFL, NBA, MLB, NHL, Premier League, UFC), **prices** (will Bitcoin / the S&P 500 be above a round level at a set time, from Coinbase / Yahoo Finance) and **news** (clear yes/no questions written from BBC and NPR headlines). Each one has exact resolution criteria, a source link, a close time BEFORE the event starts and a resolution time, and is tagged 🤖 auto on [/markets](https://publicaccess.tv/markets). Sports and prices settle from the same data source; news questions go to Pepe's AI judge with the criteria. Postponed, cancelled or unreadable ones are voided (pools refund every stake) or handed to the admins. Markets are seeded by the Market maker vault like any other (a weekly cap; no seed = a yes/no pool instead), and never about deaths, violence, elections, private people, adult or illegal topics, or anything players could influence.\n\n`!automkt` shows the status; `on` / `off` switches it (off by default); `now [n]` makes n right away; `preview` shows what's next without creating anything; `list` the review queue and the latest; `approve <id>` / `reject <id> [why]` the ones waiting for review (by default news questions wait for an admin's OK); `count <n>` = how many a week; `mode news|all|none` = which ones need review; `cat sports|prices|news on|off`.\n\n**Trending** (off by default; `!automkt trending on|off`): Pepe looks at the busiest topics on Polymarket's public data a few times a day and uses them as IDEAS only - he writes his own question, his own resolution criteria and date and links an official source (never a prediction-market site); anything too close to their wording, or about politics, war, people's health, minors or anything else off-limits, is thrown away. Trending ones wait for review like news ones. Pepe never opens a market AND a pool (or a poll) about the same topic: he checks every live market, pool and poll and remembers recent topics for 30 days. The type fits the question: yes/no = a market, one winner out of several = a pool, an opinion = a room poll (`!automkt polls on|off`, one at a time, open `pollhours` hours), mixed so the feed isn't all one kind. `polyevery <h>` = how often the trending list is refreshed (default 6 h). `weight <category> <0-10>` sets the mix (0 = never; sports is low by default), `marquee on|off` keeps sports to finals, championships, the postseason and numbered UFC cards (no single regular matches - on by default), and `pad <pad id>|default` picks the pad they all go to (default: Pepe's Pad). Each one closes at (15 minutes before) its event, never days earlier. Every announcement links to the item's page. The same controls are in the admin panel (Games, **Auto markets**) and on the website at /admin/markets.",
+   "details": "**Auto markets.** Pepe opens a few prediction markets and betting pools a week by himself about real-world events: **sports** fixtures (who wins, from ESPN's scoreboard: NFL, NBA, MLB, NHL, Premier League, UFC), **prices** (will Bitcoin / the S&P 500 be above a round level at a set time, from Coinbase / Yahoo Finance) and **news** (clear yes/no questions written from BBC and NPR headlines). Each one has exact resolution criteria, a source link, a close time BEFORE the event starts and a resolution time, and is tagged 🤖 auto on [/markets](https://publicaccess.tv/markets). Sports and prices settle from the same data source; news questions go to Pepe's AI judge with the criteria. Postponed, cancelled or unreadable ones are voided (pools refund every stake) or handed to the admins. Markets are seeded by the Market maker vault like any other (a weekly cap; no seed = a yes/no pool instead), and never about deaths, violence, elections, private people, adult or illegal topics, or anything players could influence.\n\n`!automkt` shows the status; `on` / `off` switches it (off by default); `now [n]` makes n right away; `preview` shows what's next without creating anything; `list` the review queue and the latest; `approve <id>` / `reject <id> [why]` the ones waiting for review (by default news questions wait for an admin's OK); `count <n>` = how many a week; `mode news|all|none` = which ones need review; `cat sports|prices|news on|off`.\n\n**Trending** (off by default; `!automkt trending on|off`): Pepe looks at the busiest topics on Polymarket's public data a few times a day and uses them as IDEAS only - he writes his own question, his own resolution criteria and date and links an official source (never a prediction-market site); anything too close to their wording, or about politics, war, people's health, minors or anything else off-limits, is thrown away. Trending ones wait for review like news ones. Pepe never opens a market AND a pool (or a poll) about the same topic: he checks every live market, pool and poll and remembers recent topics for 30 days. The type fits the question: yes/no = a market, one winner out of several = a pool, an opinion = a room poll (`!automkt polls on|off`, one at a time, open `pollhours` hours), mixed so the feed isn't all one kind. `polyevery <h>` = how often the trending list is refreshed (default 6 h). `weight <category> <0-10>` sets the mix (0 = never; sports is low by default), `marquee on|off` keeps sports to finals, championships, the postseason and numbered UFC cards (no single regular matches - on by default), and `pad <pad id>|default` picks the pad they all go to (default: Pepe's home room). Each one closes at (15 minutes before) its event, never days earlier. Every announcement links to the item's page. The same controls are in the admin panel (Games, **Auto markets**) and on the website at /admin/markets.",
    "examples": [
     "!automkt",
     "!automkt on",
@@ -6766,7 +6809,7 @@
     "!alerts"
    ],
    "summary": "How big moments — a heist forming, a turf invasion, the jackpot cracking, a big win — reach each room.",
-   "details": "How big moments — a **heist** forming, a **turf invasion**, the **jackpot** cracking, a **big win** — reach each room. An alert is an event, not a sound: it can arrive by any combination of **three channels**, each switched separately.\n\n**Channels (per room):** `!alerts sound on|off` a sting through the mic · `!alerts tts on|off` Pepe says it out loud · `!alerts text on|off` a line in chat. `!alerts on|off` is the master switch — off and this room gets nothing at all. Like every settings command these change **the room you typed them in**; add `-global` or `-all` to widen.\n\n**Scope (per event, global):** `!alerts heist room` keeps a heist alert in the room it started in. `!alerts heist global` also tells every other room where it's kicking off, by tab name — \"a heist is forming in Pepe's Pad\". A room with alerts switched off stays quiet either way, so one room can opt out of the noise entirely.\n\n**Voice:** `!alerts voice <name>` gives spoken alerts their own voice in this room, so an alert cuts through instead of sounding like everything else Pepe says. `!alerts voice random` re-rolls one each time, `!alerts voice default` goes back to the room's usual voice. Per room, like the channels.\n\n**Force the mic:** `!alerts jackpot force on` lets that alert **bump whoever is on the mic** so the sting or spoken line actually gets heard, rather than queueing and being dropped if no slot frees up. It cuts someone off mid-sentence, so it's set per event and off by default — worth it for the jackpot, rarely for anything else. Text alerts never need a mic slot and are unaffected.\n\n**Notes:** spoken alerts need TTS on in that room — if it's off they simply don't play there, whatever this is set to. The text channel doesn't repeat itself in the room the event happened in (that room already posts its own announcement); it writes the \"it's happening over there\" line into the other rooms. `!alerts test <type>` fires one to check your setup, and `!alerts` on its own shows where everything stands. All of it is in the admin panel too.",
+   "details": "How big moments — a **heist** forming, a **turf invasion**, the **jackpot** cracking, a **big win** — reach each room. An alert is an event, not a sound: it can arrive by any combination of **three channels**, each switched separately.\n\n**Channels (per room):** `!alerts sound on|off` a sting through the mic · `!alerts tts on|off` Pepe says it out loud · `!alerts text on|off` a line in chat. `!alerts on|off` is the master switch — off and this room gets nothing at all. Like every settings command these change **the room you typed them in**; add `-global` or `-all` to widen.\n\n**Scope (per event, global):** `!alerts heist room` keeps a heist alert in the room it started in. `!alerts heist global` also tells every other room where it's kicking off, by tab name — \"a heist is forming in Houseplants\". A room with alerts switched off stays quiet either way, so one room can opt out of the noise entirely.\n\n**Voice:** `!alerts voice <name>` gives spoken alerts their own voice in this room, so an alert cuts through instead of sounding like everything else Pepe says. `!alerts voice random` re-rolls one each time, `!alerts voice default` goes back to the room's usual voice. Per room, like the channels.\n\n**Force the mic:** `!alerts jackpot force on` lets that alert **bump whoever is on the mic** so the sting or spoken line actually gets heard, rather than queueing and being dropped if no slot frees up. It cuts someone off mid-sentence, so it's set per event and off by default — worth it for the jackpot, rarely for anything else. Text alerts never need a mic slot and are unaffected.\n\n**Notes:** spoken alerts need TTS on in that room — if it's off they simply don't play there, whatever this is set to. The text channel doesn't repeat itself in the room the event happened in (that room already posts its own announcement); it writes the \"it's happening over there\" line into the other rooms. `!alerts test <type>` fires one to check your setup, and `!alerts` on its own shows where everything stands. All of it is in the admin panel too.",
    "examples": [
     "!alerts sound on|off",
     "!alerts tts on|off",
@@ -7159,7 +7202,7 @@
     "unmap <window name>"
    ],
    "summary": "When Pepe is in more than one room, set which room's window is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening.",
-   "details": "When Pepe is in more than one room, set which room's **window** is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening. **It's also the main-stage room:** the stream shows Pepe's room window, so pinning a room clicks its tab, the publicaccess.tv homepage shows that room as On stage, and its live room page plays the stream above the chat. Only rooms Pepe is in; it waits while a game is running (add `force` to move it anyway); Pepe's mic and music don't block it. Site admins can do the same from the homepage stage. `!activeroom` alone shows the setting; `!activeroom auto` follows whichever tab is open. `!activeroom <tab label>=<room>` tells Pepe which tab belongs to which room when the two are named differently. (Alias: `!winroom`.)\n\n**Room names:** Pepe learns each room's name from its window (\"Pepe's Pad\" is PepeFrog.Room) and uses it everywhere he names a room - his own replies, the casino's room list on the website, alerts. `!activeroom names` lists every room's id, the name he uses and each window name he has learned; a name that is another room's id, or the Camfrog client's own window, is marked ignored and never used. `!activeroom unmap <window name>` forgets a wrong one.\n\n**Auto-switch:** with Auto-switch room tab on in the admin panel, Pepe changes tabs himself instead of refusing — a window-driven command just runs in the room it was typed in. Spoken audio (`!say`, `-mic` replies, sponsor reads) **queues**: the tab is switched immediately before each clip takes the mic, so several people speaking from different rooms play one after another in the right rooms rather than fighting over the tab. Pinning a room with `!activeroom` disables auto-switching.",
+   "details": "When Pepe is in more than one room, set which room's **window** is targeted by window-driven actions — his own mic button, the participant-list read, and cam opening. **It's also the main-stage room:** the stream shows Pepe's room window, so pinning a room clicks its tab, the publicaccess.tv homepage shows that room as On stage, and its live room page plays the stream above the chat. Only rooms Pepe is in; it waits while a game is running (add `force` to move it anyway); Pepe's mic and music don't block it. Site admins can do the same from the homepage stage. `!activeroom` alone shows the setting; `!activeroom auto` follows whichever tab is open. `!activeroom <tab label>=<room>` tells Pepe which tab belongs to which room when the two are named differently. (Alias: `!winroom`.)\n\n**Room names:** Pepe learns each room's name from its window (\"Houseplants\" is plant_based_chatting) and uses it everywhere he names a room - his own replies, the casino's room list on the website, alerts. `!activeroom names` lists every room's id, the name he uses and each window name he has learned; a name that is another room's id, or the Camfrog client's own window, is marked ignored and never used. `!activeroom unmap <window name>` forgets a wrong one.\n\n**Auto-switch:** with Auto-switch room tab on in the admin panel, Pepe changes tabs himself instead of refusing — a window-driven command just runs in the room it was typed in. Spoken audio (`!say`, `-mic` replies, sponsor reads) **queues**: the tab is switched immediately before each clip takes the mic, so several people speaking from different rooms play one after another in the right rooms rather than fighting over the tab. Pinning a room with `!activeroom` disables auto-switching.",
    "examples": [
     "!activeroom",
     "!activeroom auto",
@@ -7311,7 +7354,7 @@
     "!roomswitch [room]"
    ],
    "summary": "Switch the Camfrog window to a room's tab, without stealing focus or bringing Camfrog to the front.",
-   "details": "Switch the Camfrog window to a room's tab, without stealing focus or bringing Camfrog to the front. Reports whether the switch was **verified** (the window title actually changed) — the safe way to test auto-switching before enabling it. A room's tab label and its room id are unrelated strings (\"Pepe's Pad\" vs \"PepeFrog.Room\"); if the label was never learned, map it with `!activeroom <tab label>=<room>`. (Alias: `!switchroom`.)",
+   "details": "Switch the Camfrog window to a room's tab, without stealing focus or bringing Camfrog to the front. Reports whether the switch was **verified** (the window title actually changed) — the safe way to test auto-switching before enabling it. A room's tab label and its room id are unrelated strings (\"Houseplants\" vs \"plant_based_chatting\"); if the label was never learned, map it with `!activeroom <tab label>=<room>`. (Alias: `!switchroom`.)",
    "examples": [
     "!activeroom <tab label>=<room>",
     "!switchroom"
@@ -7420,9 +7463,9 @@
     "!activeroom <tab label>=<room>"
    ],
    "summary": "Maps a Camfrog tab to a room.",
-   "details": "**Maps a Camfrog tab to a room.** The room id from the network (\"PepeFrog.Room\") and the label Camfrog prints on the tab (\"Pepe's Pad\") are unrelated strings, so Pepe has to be told which is which — e.g. `!activeroom Pepe's Pad=PepeFrog.Room`. He learns most of these on his own once he's seen a room's window, but a room he's never had open won't be switchable until it's mapped. If `!roomswitch` reports it only had the room id to try, this is the fix. `!roomtabs` shows the exact labels to use.",
+   "details": "**Maps a Camfrog tab to a room.** The room id from the network (\"The_Swamp\") and the label Camfrog prints on the tab (\"The Swamp\") are unrelated strings, so Pepe has to be told which is which — e.g. `!activeroom The Swamp=The_Swamp`. He learns most of these on his own once he's seen a room's window, but a room he's never had open won't be switchable until it's mapped. If `!roomswitch` reports it only had the room id to try, this is the fix. `!roomtabs` shows the exact labels to use.",
    "examples": [
-    "!activeroom Pepe's Pad=PepeFrog.Room"
+    "!activeroom The Swamp=The_Swamp"
    ],
    "keywords": []
   },
@@ -7897,7 +7940,7 @@
     "!econ profilevaults on|off"
    ],
    "summary": "Switch the economy v2 layers, the pad vaults and the room payout recipe on or off, with the recipe's parts: watch-minute pay, convoys, mic-challenge prizes, pad top-ups and profile vaults.",
-   "details": "`!econ layers on|off` switches the economy v2 layers. `!econ roomvaults on|off`: pad vaults (economy v2 E-3) - room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on. `!econ recipe` is the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg` (slice % + games_unpaid: saved on the website).\n\nThe recipe's parts: `!econ vwm [status [YYYY-MM-DD]]|on|off` pays the streamer slice on verified watch-minutes (E-5); `!econ convoys on|off` puts payouts of 25k+ on hittable convoys (E-7); `!econ challenges on|off|cfg` holds mic-challenge prizes from the pad vault, with prize gates and open-round entry fees (E-8); pad top-ups: `!econ activitypads preview|on|off`; profile vaults: `!econ profilevaults on|off`.",
+   "details": "`!econ layers on|off` switches the economy v2 layers. `!econ roomvaults on|off`: pad vaults (economy v2 E-3) - room spending goes 50/50 to Fort Knox and the pad's vault; needs the layers on. `!econ roomvaults rekeys` lists the pad re-keys (a pad's vault follows it to a new room id); `!econ roomvaults sweep <id>` moves what landed in the old id's vault after a re-key into the pad's vault too. `!econ recipe` is the room payout recipe: `cutover` [confirm <id>], `on|off`, `preview [room]`, `run`, `cfg` (slice % + games_unpaid: saved on the website).\n\nThe recipe's parts: `!econ vwm [status [YYYY-MM-DD]]|on|off` pays the streamer slice on verified watch-minutes (E-5); `!econ convoys on|off` puts payouts of 25k+ on hittable convoys (E-7); `!econ challenges on|off|cfg` holds mic-challenge prizes from the pad vault, with prize gates and open-round entry fees (E-8); pad top-ups: `!econ activitypads preview|on|off`; profile vaults: `!econ profilevaults on|off`.",
    "examples": [
     "!econ layers on",
     "!econ recipe preview"
@@ -8197,6 +8240,30 @@
    "keywords": []
   },
   {
+   "id": "identity",
+   "title": "!identity [show|status|set|rotate]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!identity"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!identity",
+    "!identity status",
+    "!identity set login=<login> home=<room id> name=\"<room name>\" [window=<Camfrog name>]",
+    "!identity rotate login=<login> window=<the room's name in Camfrog> name=\"<room name>\" [home=<room id>] [slug=<address>]",
+    "!identity rotate confirm <code>",
+    "!identity rotate resume [<key>]"
+   ],
+   "summary": "Pepe's Camfrog account and home room on this Pepe - and moving both to a new account / room.",
+   "details": "Shows which Camfrog login Pepe runs as (signed in, configured, Camfrog's last sign-in) and his **home room** (id + name), the rooms and logins he had before, and the last rotation. **When the Camfrog account behind Pepe is rotated** (a new login and its own room): sign Camfrog in as the new account, then PM Pepe `!identity rotate login=<NewLogin> window=<the room's name as Camfrog shows it> name=\"<what Pepe calls it>\"` (`slug=` for a different pad address). **A Camfrog room has an ID and a name:** Pepe's own room's ID is always `<NewLogin>.Room` (that's the default `home=`); `window=` is the name you see in Camfrog's window title and type into Join Room (e.g. The_Swamp). A home that isn't the new login's own room needs `anyroom`. He answers with a plan - what moves: the home pad on publicaccess.tv (its title, its address - old links keep working - and its vault), the room's settings, his room memories, and what he says about his home - and a code; `!identity rotate confirm <code>` applies it (within 15 minutes), step by step, then \"🪪 done\". `!identity status` shows the steps; if one stopped part-way, `!identity rotate resume` plans the rest (then confirm) - every step can be re-run. `set` changes the config only (a new home id while the site's house pad or the old home still holds its settings is a rotation). The login must be the one Camfrog is signed in with (`force` overrides). Changes are **PM-only** for admins by role; the admin panel's System › 🪪 card does the same.",
+   "examples": [
+    "!identity rotate login=Pepe_Frog window=The_Swamp name=\"The Swamp\""
+   ],
+   "keywords": []
+  },
+  {
    "id": "reloadbot",
    "title": "!reloadbot [full] · !reload",
    "category": "admin",
@@ -8228,9 +8295,9 @@
     "!joinroom <room> [-p <password>] [-save]"
    ],
    "summary": "Send Pepe into a room by its name (e.g.",
-   "details": "Send Pepe into a room by its name (e.g. `!joinroom Pepe's Pad`). `-p` gives a password — **PM** it to him so the room doesn't see it (a `!joinroom` line never reach a pad's chat on the website). `-save` adds the room to his auto-join list so he rejoins it after a restart or a kick.",
+   "details": "Send Pepe into a room by its name (e.g. `!joinroom Houseplants`). `-p` gives a password — **PM** it to him so the room doesn't see it (a `!joinroom` line never reach a pad's chat on the website). `-save` adds the room to his auto-join list so he rejoins it after a restart or a kick.",
    "examples": [
-    "!joinroom Pepe's Pad"
+    "!joinroom Houseplants"
    ],
    "keywords": []
   },
@@ -8795,5 +8862,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "85ec4d503e4743f2"
+ "hash": "9db2801256a651c3"
 }
