@@ -51,7 +51,7 @@ function allowed(viewer, settings) {
   if (!viewer) return false;
   return m === "everyone" || (m === "staff" && !!viewer.admin);
 }
-const gameOf = (T) => (T && T.game === "holdem" ? "holdem" : "bj");
+const gameOf = (T) => (T && T.game === "roulette" ? "roulette" : T && T.game === "holdem" ? "holdem" : "bj");
 /** the theme a table SHOWS: its own, or classic whenever the switch is off / the id is unknown */
 function themeOf(T, settings) {
   if (mode(settings) === "off" || !T) return DEFAULT;

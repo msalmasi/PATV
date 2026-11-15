@@ -14,7 +14,9 @@ const { runQuery, getQuery } = require("../dbUtils");
 
 const WINDOW_MS = 7 * 24 * 3600 * 1000;
 
+const WINDOWS = { hm_timeout: WINDOW_MS, rl_intro: null };
 const NOTICES = {
+  rl_intro: () => ({ id: "rl_intro", text: "PAT are points with no cash value. Each spin is independent. The wheel has a single zero and straight up pays 35 to 1." }),
   hm_timeout: (settings) => {
     const n = Number(settings && settings.hm_sitout_mins);
     const mins = Number.isInteger(n) && n >= 1 ? n : 10;
@@ -45,7 +47,7 @@ async function since(id, now) {
 /** At boot: start the windows (casino/service.js ensure()). */
 async function stamp(now) {
   await ensure();
-  for (const id of Object.keys(NOTICES)) await since(id, now);
+  for (const id of Object.keys(WINDOWS)) if (WINDOWS[id] !== null) await since(id, now);
 }
 
 /** {id, mins, text} the ONE time `uid` should see notice `id` (inside its window), else null. Never throws. */
@@ -53,7 +55,7 @@ async function take(id, uid, now, settings) {
   try {
     if (!NOTICES[id] || !uid) return null;
     await ensure();
-    if (now >= (await since(id, now)) + WINDOW_MS) return null;
+    if (WINDOWS[id] !== null && now >= (await since(id, now)) + WINDOWS[id]) return null;
     const r = await runQuery("INSERT OR IGNORE INTO casino_notice_seen (userId, notice, at) VALUES (?, ?, ?)", [String(uid), id, now]);
     return r && r.changes === 1 ? NOTICES[id](settings) : null;
   } catch (e) {

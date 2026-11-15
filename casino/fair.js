@@ -56,4 +56,16 @@ function verify(rec) {
   return { ok: commitmentOk && shoeOk, commitment_ok: commitmentOk, shoe_ok: shoeOk, shoe };
 }
 
-module.exports = { newServerSeed, newClientSeed, commitment, shuffleShoe, verify, words, below };
+function spinPocket(serverSeed, clientSeed, round) {
+  return below(words(serverSeed, clientSeed, round), 37);
+}
+
+function verifySpin(rec) {
+  if (!rec || !rec.server_seed) return { ok: false, reason: "the seed isn't revealed yet" };
+  const commitmentOk = commitment(rec.server_seed) === rec.commitment;
+  const pocket = spinPocket(rec.server_seed, rec.client_seed, rec.round);
+  const pocketOk = !!rec.shoe && rec.shoe.pockets === 37 && rec.shoe.pocket === pocket;
+  return { ok: commitmentOk && pocketOk, commitment_ok: commitmentOk, pocket_ok: pocketOk, pocket };
+}
+
+module.exports = { newServerSeed, newClientSeed, commitment, shuffleShoe, verify, words, below, spinPocket, verifySpin };

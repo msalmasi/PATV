@@ -44,13 +44,13 @@ async function house(key, spinId, userId, amount) {
 const houseBalance = () => funding.jackpotPot();
 
 /** Before `profit` leaves the House: book the Fed flash claim if it would go below its hard floor (once per key). */
-async function flashCover(key, profit) {
+async function flashCover(key, profit, flow = "blackjack") {
   profit = Math.trunc(Number(profit));
   if (!(profit > 0)) return { used: false };
-  const prev = await getQuery("SELECT claimId, amount FROM reserve_claims WHERE flow = 'flash:house:blackjack' AND meta LIKE ?",
-                              [`%"ref":"${key}"%`]).catch(() => []);
+  const prev = await getQuery("SELECT claimId, amount FROM reserve_claims WHERE flow = ? AND meta LIKE ?",
+                              ["flash:house:" + flow, `%"ref":"${key}"%`]).catch(() => []);
   if (prev.length) return { used: true, gap: prev[0].amount, replay: true };
-  return funding.houseFlashCover("blackjack", profit, null, "blackjack payout", key);
+  return funding.houseFlashCover(flow, profit, null, flow + " payout", key);
 }
 
 const isDone = txDone;

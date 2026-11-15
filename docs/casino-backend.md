@@ -1,5 +1,26 @@
 # Casino backend: blackjack and hold'em on the site
 
+## Roulette (handoff 37, phase 1)
+
+The lobby wheel and room wheels share one single-zero, 37-pocket ruleset. Each spin is independent. A straight pays 35 to 1, and zero loses all six even-chance bets. PAT are points with no cash value. The separate prize wheel still uses its own commands.
+
+### Money
+
+A wheel publishes its seed commitment in `casino_rounds` before accepting the first line. The first charge opens a 25-second window. Each line debits its entire stake under `crl:<table>:s<spin>:<uid>:b<opno>`. The wheel records an intent before debiting, then saves the line, held balance and caller’s replay response. Recovery refunds an interrupted charge with the original key plus `:refund`. Undo, clear and an early room close journal the keys first and use that same refund key for each line. A refunded line leaves both the book and escrow before settlement.
+
+The bank admits a new book only when its worst net payout fits the shared budget. The default budget is the lesser of 2,000,000 PAT and 10% of the House above its hard floor. Subtract the other wheels’ positive worst payouts before admission. Removing a hedge also checks this budget. Limits and timing are configurable in the Roulette card on the Games admin page. The switch defaults to off on every environment.
+
+At the deadline the wheel draws and durably records the pocket before broadcasting it. The animation lasts eight seconds. A restart resumes that pocket or settles it immediately if the landing time has passed. An expired betting window receives a fresh full window after restart. Each player receives their whole return once at `crl:<table>:s<spin>:<uid>:pay`. The sum of players’ net losses enters the House under `:house+`; the sum of their net winnings leaves under `:house-`, using the spin prefix without a user ID. Before writing an outstanding outgoing leg, check for an existing `flash:house:roulette` claim by the same reference. Replay skips an existing House leg. Player returns plus the incoming House leg less the outgoing leg equal charged stakes less refunds.
+
+Settlement applies keyed spin counters, streaks and win rewards, then reveals the seed, publishes the result and clears held PAT. After five seconds the next commitment appears. A bet queued while spinning replaces the player’s prior queue and is validated and charged once the next window opens. A narrower switch leaves paid lines in play and drops an ineligible queued line. Closing an unused commitment reveals its seed and records a null result.
+
+### The contract (web + Pepe)
+
+- `GET /casino/roulette` opens the current lobby wheel. `GET /api/casino/roulette/pad/:slug` returns the signed-in viewer’s room wheel or the lobby wheel with `{ok, table, here}`.
+- `GET /api/casino/t/:id` exposes the wheel phase, committed spin, deadlines, public seats and aggregate stakes, last 20 pockets, last result and masked log. During the spin, `spin` carries its number, colour and absolute landing timestamp. Only `me` carries the caller’s lines, queued line, last slip, own net and notice. The proof route exposes the immutable seed at reveal and verifies the first unbiased HMAC word modulo 37.
+- `POST /api/casino/t/:id/act` uses the existing signed-in JSON/fetch and idempotency protections. A bet supplies one `line` (up to 160 characters) or up to 20 `{b,a}` pairs. Use a position followed by a whole PAT amount, e.g. `red 500 17-18 100`. The grammar supports straights, comma lists, splits, streets/trios, corners/first four, six lines, dozens, columns, and even-chance bets. The service validates the complete slip before charging. `undo`, `clear`, `rebet` and the sole bettor’s `go` use the same endpoint.
+- The authenticated bot poll opts in with `games: ["roulette"]`. It then receives `roulette` (open wheels), `roulette_on` (audience), `lobby.roulette`, wheel tables and wheel events. Other pollers omit them. The bot action endpoint takes `game: "roulette"`, an idempotency key and at most one 160-character argument (64 for adverts), with at most six position/amount pairs in room chat. Additional verbs are `start`, `bets`, `limits`, `last`, `fair`, `status`, `help`, `end`, `advertise` and `unadvertise`. Room acknowledgements for bets are private.
+
 ## Sit & Go tournaments (handoff 22, phase 1)
 
 A sit & go is one Hold'em table (`casino/holdem.js`, game `"holdem"`) with a `tourney` block; `casino/tourney.js` owns that block

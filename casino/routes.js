@@ -2,6 +2,7 @@
 //
 // Web (a signed-in PATV account; no Camfrog link needed). Table routes work for both games ("bj" aliases kept):
 //   GET  /casino/blackjack[/t/:id], /casino/holdem[/t/:id]    the pages (lobby + table)
+//   GET  /casino/roulette[/t/:id], /api/casino/roulette/pad/:slug  the single-zero wheel and Room Dock lookup
 //   GET  /api/casino/lobby                  open tables (both games), the rooms a table can be pushed to, the switches
 //   GET  /api/casino/t/:id                  one table's public state + the viewer's own seat (Hold'em: ONLY their own hole
 //                                            cards); per-user, never cached
@@ -55,9 +56,9 @@ const svc = require("./service");
 const rewards = require("./rewards");
 const themes = require("./themes");       // 1.99amf h20: the table themes (the lobby's picker flag, the table page's theme files)
 
-const WEB_VERBS = new Set(["bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
+const WEB_VERBS = new Set(["undo", "clear", "go", "rebet", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
                            "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand"]);
-const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
+const BOT_VERBS = new Set(["undo", "clear", "bets", "limits", "last", "start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
                            "sit", "buyin", "buy", "join", "cashout", "next", "check", "call", "fold", "allin", "all-in", "raise", "cards",
@@ -146,6 +147,7 @@ async function history(tableId, limit) {
 
 function register(app, { isBotToken, addUser, discordBridge }) {
   svc.setDiscordBridge(discordBridge);     // h22 phase 2: the tournament channel posts (index.js discordBridge)
+  app.get("/api/casino/rlbets.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "rlbets.js")));
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
   // 1.99alq train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
   // when it opens; a script looping on it was unlimited database work)
@@ -211,6 +213,22 @@ function register(app, { isBotToken, addUser, discordBridge }) {
   app.get("/casino/holdem", addUser, page("holdem"));
   app.get("/casino/holdem/t/:id", addUser, page("holdem"));
 
+  app.get(["/casino/roulette", "/casino/roulette/t/:id"], addUser, async (req, res) => {
+    res.set({ "Cache-Control": "private, no-store", "X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'" });
+    await svc.boot();
+    const st = await svc.loadSettings(), uid = req.user?.userId;
+    const allowed = !(await svc.RL.shut({ uid }));
+    const id = req.params.id, table = id && svc.getTable(id);
+    if (allowed && !id) {
+      const wheel = await svc.locked(() => svc.RL.ensureLobby());
+      if (wheel) return res.redirect("/casino/roulette/t/" + wheel.id);
+    }
+    if (id && (!table || !allowed || (table.lobby && table.status === "closed"))) return res.redirect("/casino/roulette");
+    if (table && table.game !== "roulette") return res.redirect(svc.link(table).replace(/^https?:\/\/[^/]+/, ""));
+    res.render("casino-rl", { title: "Roulette", user: req.user?.username || null, signedIn: !!uid, theme: "classic",
+      tableId: table?.id || null, rouletteOn: allowed, bjOn: st.bj_enabled, hmOn: st.hm_enabled });
+  });
+
   app.get("/casino/fair/:id/:round", addUser, async (req, res) => {
     res.render("casino-fair", { user: req.user ? req.user.username : null, title: "Casino fairness",
                                 tableId: ID.test(req.params.id) ? req.params.id : "", round: Math.trunc(Number(req.params.round) || 0) });
@@ -237,19 +255,36 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       const qi = svc.S.stream.queue.indexOf(row.id);
       return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
     });
-    res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
-               stream: svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
+    const roulette = await svc.RL.lobby(actor?.uid);
+    res.json({ roulette, enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
+               stream: !roulette.on && svc.getTable(svc.S.stream.table)?.game === "roulette" ? null : svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
                themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st),   // 1.99amf h20: may this viewer pick a theme
                mtt: await svc.MT.lobby(actor ? actor.uid : null) });                                                         // (h22 phase 2: the 🏆 block)
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
+
+  app.get("/api/casino/roulette/pad/:slug", addUser, async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    await svc.boot();
+    if (!req.user?.userId || await svc.RL.shut({ uid: req.user.userId })) return res.status(404).json({ ok: false });
+    const bridge = require("../bridge"), R = bridge.bySlug(req.params.slug);
+    let wheel;
+    if (R && bridge.liveBridged(R.id) && (await chatpads.gate(req.user, req.params.slug, netOf(req))).ok) {
+      const local = svc.tableForRoom(R.id);
+      if (local?.game === "roulette") wheel = local;
+    }
+    const here = !!wheel;
+    if (!wheel) wheel = await svc.locked(() => svc.RL.ensureLobby());
+    if (!wheel) return res.status(404).json({ ok: false });
+    res.json({ ok: true, table: wheel.id, here });
+  });
 
   app.get(["/api/casino/t/:id", "/api/casino/bj/t/:id"], addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    if (!T || (T.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId }))) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
     const mtt = svc.isMttTable(T);
@@ -282,7 +317,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!people.rateOk("u:" + req.user.userId)) return res.status(429).json({ ok: false, error: "Slow down." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    if (!T || (T.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId }))) return res.status(404).json({ ok: false, error: "That table has closed." });
     try {
       await svc.refreshVeil(T);        // 1.99ajw casino2 rework: the same masks as the table view (casino/veil.js)
       const pads = await people.padsFor(T, req.user, netOf(req));
@@ -300,7 +335,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!people.rateOk("p" + key)) return res.status(429).json({ ok: false, error: "Slow down." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    if (!T || (T.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId }))) return res.status(404).json({ ok: false, error: "That table has closed." });
     try { const pads = await people.padsFor(T, req.user || null, netOf(req)); res.json({ ok: true, pads, more: await chatpads.more(T, req.user || null, pads) }); }
     catch (e) { console.error("[casino] pads:", e); res.status(500).json({ ok: false, pads: [] }); }
   });
@@ -315,7 +350,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!chatpads.rateOk(key)) return res.status(429).json({ ok: false, error: "Slow down." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
+    if (!T || (T.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId }))) return res.status(404).json({ ok: false, error: "That table has closed." });
     const q = req.query || {}, user = req.user && req.user.userId ? req.user : null;
     try {
       if (q.slug != null) return res.json({ ok: true, pad: await chatpads.one(T, user, String(q.slug), netOf(req)) });
@@ -324,10 +359,12 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     } catch (e) { console.error("[casino] chatpads:", e); res.status(500).json({ ok: false, pads: [] }); }
   });
 
-  app.get("/api/casino/t/:id/history", async (req, res) => {
+  app.get("/api/casino/t/:id/history", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     try {
+      const T = svc.getTable(req.params.id);
+      if (T?.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId })) return res.status(404).json({ ok: false });
       res.json({ ok: true, rounds: await history(req.params.id, req.query.limit) });
     } catch (e) {
       console.error("[casino] history:", e);
@@ -530,7 +567,15 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const verb = String(b.verb || "").toLowerCase();
     const idem = String(b.idem || "");
     if (!ID.test(req.params.id) || !WEB_VERBS.has(verb) || !IDEM.test(idem)) return res.status(400).json({ ok: false, error: "That can't be done." });
-    const args = b.amount == null ? [] : [String(b.amount).slice(0, 14)];
+    let args = b.amount == null ? [] : [String(b.amount).slice(0, 14)];
+    if (verb === "bet" && svc.getTable(req.params.id)?.game === "roulette") {
+      if (typeof b.line === "string" && b.line.length <= 160 && b.bets == null) args = [b.line];
+      else if (b.line == null && Array.isArray(b.bets) && b.bets.length > 0 && b.bets.length <= 20 &&
+        b.bets.every(x => x && typeof x.b === "string" && /^[^\s;]{1,24}$/u.test(x.b) &&
+          ["string", "number"].includes(typeof x.a) && /^[^\s;]{1,14}$/u.test(String(x.a)))) {
+        args = [b.bets.map(x => x.b + " " + x.a).join(" ")];
+      } else return res.status(400).json({ ok: false, error: "Use a bet line or up to 20 positions." });
+    }
     const out = await svc.act(actor, verb, args, { table: req.params.id }, `web-${actor.uid}-${idem}`);
     res.json(out);
   });
@@ -617,6 +662,15 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       const base = svc.link({ id: "x", game: "bj" }).replace(/\/casino\/blackjack\/t\/x$/, "");
       out.open = svc.openList();
       out.lobby = { bj: base + svc.frontPath(st, "bj"), holdem: base + svc.frontPath(st, "holdem") };
+      if (Array.isArray(b.games) && b.games.includes("roulette")) {
+        out.roulette = svc.RL.openList();
+        out.roulette_on = st.casino_roulette;
+        out.lobby.roulette = base + "/casino/roulette";
+      } else {
+        out.events = out.events.filter(e => e.data?.game !== "roulette");
+        if (out.tables[out.stream]?.game === "roulette") out.stream = null;
+        for (const [id, table] of Object.entries(out.tables)) if (table.game === "roulette") delete out.tables[id];
+      }
       out.sng = svc.TN.openList();           // h22: the open sit & gos (each one's table in `tables` carries its `tourney` block)
       // h22 review: the Sit & Go switch as it stands for everyone (off | staff | everyone; "off" while Hold'em on the site is off) - Pepe's
       // answer in a room whose casino runs on his own tables (no pointer to a web lobby that shows no Sit & Go section)
@@ -643,10 +697,15 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const room = b.room ? String(b.room).slice(0, 64) : null;
     if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;
-    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
+    const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : b.game === "roulette" ? "roulette" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
     // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's
     // table if they sit there, then the only tournament table they sit at (svc.tourneyTableFor); seated at more than one: use the web
     let mttBare = false;
+    if (!table && room && game !== "mtt") {
+      await svc.boot();
+      const local = svc.tableForRoom(room);
+      if (local?.game === "roulette") table = local.id;
+    }
     if (!table && room && (game === "holdem" || game === null) && TURN_VERBS.has(verb)) {
       await svc.boot();
       const f = svc.tourneyTableFor(u.userId, room, { turnOnly: game === null });     // (a game-less !bet / !stand: only where it's their turn)
@@ -658,7 +717,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
                     username: u.username, camfrog: b.camfrog ? String(b.camfrog).slice(0, 40) : u.camfrogUsername || null, via: "room",
                     iph: null, admin: !!b.admin, room };
     // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
-    const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : 24;
+    const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : game === "roulette" ? 160 : 24;
+    if (game === "roulette" && b.args != null && (!Array.isArray(b.args) || b.args.length > 1 ||
+        b.args.some(x => typeof x !== "string" || x.length > argMax))) return res.status(400).json({ ok: false, pm: true, reply: "Bet line too long or malformed." });
     const args = Array.isArray(b.args) ? b.args.slice(0, game === "sng" ? 5 : 2).map((x) => String(x).slice(0, argMax)) : [];   // (h22: !sng new <seats> <buy-in> [turbo] [at N])
     const out = await svc.act(actor, verb, args, { room, table, game: mttBare ? "holdem" : game }, `cf-${idem}`);
     // (h22 phase 2) a bare verb at an MTT table: quiet on success (the next PM is the feedback), an error comes back as a PM

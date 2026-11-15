@@ -2068,7 +2068,7 @@ function embedClosed(req, res, slug) {
     "<meta name=\"robots\" content=\"noindex\"><title>" + esc(t("pad.embed.closed_title", "Chat")) + "</title><style>body{margin:0;padding:16px;font:14px/1.45 system-ui,sans-serif;" +
     "background:#111;color:#ddd}a{color:#ffd740}</style></head><body><p>" + esc(t("pad.embed.closed", "This pad's chat isn't open to you here right now.")) + "</p>" +
     "<p><a href=\"/p/" + encodeURIComponent(slug) + "\" target=\"_top\">" + esc(t("pad.embed.closed_pad", "Go to the pad")) + "</a></p>" +
-    "<script>try{if(parent!==window&&parent.location.origin===location.origin&&/^\\/casino\\/(?:blackjack|holdem)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname))" +
+    "<script>try{if(parent!==window&&parent.location.origin===location.origin&&/^\\/casino\\/(?:blackjack|holdem|roulette)\\/t\\/[0-9a-f]{10}$/.test(parent.location.pathname))" +
     "parent.postMessage({t:'patv-chat:closed',why:'gate'},location.origin)}catch(e){}</script></body></html>");
 }
 
@@ -2683,6 +2683,10 @@ function register(app, { isBotToken, addUser }) {
     // the price), for a signed-in viewer who may see this pad's live room, while the Dock is theirs; medialib decides again on every play.
     // onair: staff who run Pepe's on-air (onair.operate) may also put it on his stream - not on the pad that already shows his stream.
     // (review F9: only on a pad whose stage can take a library slot at all - the main stage on and the pad has slots)
+    let roulette = null;
+    if (signedIn && liveOpen && adultGate === "ok" && require("./paddock").viewerOn(req.user)) {
+      if (!(await require("./casino/service").RL.shut({ uid: req.user.userId }))) roulette = { on: true };
+    }
     let plexPlay = null;
     const stageTakes = !!(roomStage && roomStage.enabled && roomStage.room && Number(roomStage.room.slot_count) > 0);
     if (signedIn && liveOpen && adultGate === "ok" && stageTakes && require("./paddock").viewerOn(req.user)) {
@@ -2726,6 +2730,7 @@ function register(app, { isBotToken, addUser }) {
       adultNext: "/p/" + encodeURIComponent(slug),
       onairAdmin: SP.can(req.user, "onair.operate"),   // 1.99ack: onair.operate (siteperms.js); 1.99aan: + Staff (the ✂ Cut / 📺 Play bar); 1.99aag: 📺 "Put on Pepe's cam" in the cam popover (onair-cam.js)
       padDockOn: dockOn_,
+      roulette,
       plexPlay,      // 1.99ajw casino2: the Dock's 📼 Play from Plex (null = not offered)
       vt: vt_,   // 1.99ajh dockpop: the viewer tag the Dock's windows compare (dock-link.js) - only for the Room Dock (review)
       avsyncOn: require("./avsync").viewerOn(req.user),   // review fix: lip sync's av-sync.js only while its mode applies to this viewer (off: no polling)

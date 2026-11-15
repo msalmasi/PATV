@@ -66,7 +66,7 @@ function classify(r, staked) {
   }
   if (sid === null) return { kind: "site", dir, name: amt > 0 ? "web blackjack" : "web blackjack / rewards" };
   if (sid.startsWith("bj:")) return { kind: "site", dir, name: "web blackjack" };
-  if (sid.startsWith("cbj:") || sid.startsWith("chm:")) return { kind: "site", dir, name: "casino tables" };   // chm: hold'em rake (1.99lv)   // 1.99lj: the casino backend (casino/money.js)
+  if (sid.startsWith("cbj:") || sid.startsWith("chm:") || sid.startsWith("crl:")) return { kind: "site", dir, name: "casino tables" };   // chm: hold'em rake (1.99lv)   // 1.99lj: the casino backend (casino/money.js)
   if (sid.startsWith("lotto:")) return { kind: "site", dir, name: "lotto (tickets / fixed prizes)" };   // 1.99ml: lotto/service.js
   if (sid.startsWith("fund:")) return { kind: "site", dir, name: "funded: " + (sid.slice(5).split(":")[0] || "reward") };
   if (sid.startsWith("shop-order:")) return { kind: "site", dir, name: "store boosts" };

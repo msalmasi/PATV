@@ -30,8 +30,10 @@ const rewards = require("./rewards");     // 1.99mj/1.99mw: every seat's achieve
 const V = require("./veil");              // 1.99ajw casino2 rework: a veiled player is masked at the table (the owner, 2026-11-04)
 const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); the service itself is installed with Hold'em below (TN)
 const themes = require("./themes");       // 1.99amf h20: the card tables' themes (presentation only; casino_themes switch)
+const RLCFG = require("./roulette");
 const MTCFG = require("./mtt");           // h22 phase 2 (1.99amj): the scheduled tournaments' settings (pure); the service is MT below
 
+// Roulette shares the locked action, tick, recovery, privacy and stream paths. Its own service owns each spin.
 // ── the rules (Pepe's BJ_* constants) ──
 // 1.99ov: the table maximum is 100,000 (was 10,000) and the High Roller role no longer lifts it. High Rollers get their own
 // TABLES instead (T.high_stakes, 💎): bets HR_MIN_BET..HR_MAX_BET, only High Rollers open / sit / bet there, anyone watches.
@@ -56,7 +58,7 @@ const S = {
   tables: new Map(),           // id -> table (open, plus closed ones lingering for the page)
   rooms: new Map(),            // room id -> {id, name, ts}: rooms Pepe serves with the backend on (his poll heartbeat)
   waiters: new Set(),          // pending long-polls
-  settings: { bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto", casino_sng: "off", casino_mtt: "off",
+  settings: { casino_roulette: "off", bj_enabled: null, hm_enabled: null, max_tables: 0, bj_front: "auto", hm_front: "auto", casino_sng: "off", casino_mtt: "off",
               bj_min_bet: C.MIN_BET, bj_max_bet: C.MAX_BET, bj_hr_min_bet: C.HR_MIN_BET, bj_hr_max_bet: C.HR_MAX_BET },
   stream: { table: null, by: null, ts: 0, queue: [] },   // 1.99lv: the ONE table on Pepe's stream + the FIFO queue
   settingsAt: 0,
@@ -74,7 +76,7 @@ function siteBase() {
     .replace(/\/+$/, "");
 }
 const dropLine = (name, it) => `🎁 ${name} found a cosmetic: ${it.name}${it.rarity ? " (" + String(it.rarity).toUpperCase() + ")" : ""}! ${siteBase()}/cosmetics`;
-const link = (T) => `${siteBase()}/casino/${T.game === "holdem" ? "holdem" : "blackjack"}/t/${T.id}`;
+const link = (T) => `${siteBase()}/casino/${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "holdem" : "blackjack"}/t/${T.id}`;
 const fairLink = (T, n) => `${siteBase()}/casino/fair/${T.id}/${n}`;
 
 // ── the mutex ──
@@ -169,6 +171,7 @@ async function loadSettings(force) {
   Object.assign(S.settings, SNGCFG.readSettings(kv));
   // h22 phase 2: casino_mtt (off | staff | everyone, default off) + mtt_* (a bad row = its default)
   Object.assign(S.settings, MTCFG.readMttSettings(kv));
+  Object.assign(S.settings, RLCFG.readSettings(kv));
   S.settingsAt = clock();
   return S.settings;
 }
@@ -178,8 +181,9 @@ const HM_QOL_LISTS = { hm_presets_pot: "33,50,75,100,150", hm_presets_bb: "2.5,3
 const validPresetList = (v) => typeof v === "string" && /^\d+(?:\.\d+)?(?:,\d+(?:\.\d+)?){0,7}$/.test(v) && v.split(",").every((n) => Number(n) > 0 && Number(n) <= 1000);
 async function setSetting(key, value, actor) {
   if (/h2b/i.test(String(key))) throw new Error("the H2b date is a code constant, not a setting");     // (h22 phase 2: casino/mttbudget.js H2B_AT)
-  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS, MTCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
+  if (!["bj_enabled", "hm_enabled", "max_tables", "bj_front", "hm_front", "casino_themes"].concat(LIMIT_KEYS, Object.keys(HM_QOL_NUMBERS), Object.keys(HM_QOL_LISTS), SNGCFG.SETTING_KEYS, MTCFG.SETTING_KEYS, RLCFG.SETTING_KEYS).includes(key)) throw new Error("unknown setting");
   let sngValue = SNGCFG.SETTING_KEYS.includes(key) ? SNGCFG.checkSetting(key, value) : null;     // h22: validated + normalised (throws)
+  if (RLCFG.SETTING_KEYS.includes(key)) sngValue = RLCFG.checkSetting(key, value, await loadSettings(true));
   if (MTCFG.SETTING_KEYS.includes(key)) { sngValue = MTCFG.checkMttSetting(key, value); await MT.checkAsync(key, sngValue); }   // h22 phase 2
   const qolNumber = Object.hasOwn(HM_QOL_NUMBERS, key), qolList = Object.hasOwn(HM_QOL_LISTS, key);
   if (qolNumber && (!Number.isInteger(Number(value)) || Number(value) < (key === "hm_sitout_mins" ? 1 : 0) || Number(value) > 3600)) throw new Error("invalid Hold'em timer");
@@ -226,7 +230,7 @@ async function emit(T, kind, text, extra) {
   // 1.99ox: every room the table plays in hears it (an event can name its own rooms: a push / a room leaving)
   const rs = roomsOf(T);
   // 1.99ajw casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
-  const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
+  const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, T.game === "roulette" ? { game: "roulette" } : {}, extra || {});
   const quiet = isMttTable(T) && !rs.length && !(Array.isArray(data.rooms) && data.rooms.length);
   if (!quiet) {
     const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
@@ -565,6 +569,7 @@ async function afterRound(T) {
 }
 
 async function closeTable(T, reason) {
+  if (T.game === "roulette") return RL.closeTable(T, reason);
   await refundHeld(T, null, "table closed");
   T.status = "closed";
   T.closed_at = clock();
@@ -621,6 +626,13 @@ async function tickOnce() {
       if (T.closed_at && t - T.closed_at > (T.tourney ? TN.SNG.LINGER_MS : C.CLOSED_LINGER_MS)) S.tables.delete(T.id);   // (h22: a sit & go's results stay up a while)
       continue;
     }
+    if (T.game === "roulette") {
+      if (RL.due(T)) await locked(async () => {
+        try { await RL.tick(T); await RL.ensureLobby(); }
+        catch (e) { await RL.restore(T); console.error("[casino] roulette deadline:", e); }
+      });
+      continue;
+    }
     if (T.game === "holdem") {
       if (!HM.due(T)) continue;
       await locked(async () => {
@@ -642,6 +654,7 @@ async function tickOnce() {
       }
     });
   }
+  if (S.settings.casino_roulette !== "off") await locked(() => RL.ensureLobby());
   await locked(() => streamTick()).catch((e) => console.error("[casino] stream:", e));
   if (MT.due()) await locked(() => MT.tick()).catch((e) => console.error("[casino] mtt:", e));     // h22 phase 2: the scheduled tournaments' clock
   // housekeeping: old events
@@ -650,6 +663,7 @@ async function tickOnce() {
 
 // ── boot & recovery ──
 async function recover(T) {
+  if (T.game === "roulette") return RL.recover(T);
   if (T.game === "holdem") return HM.recover(T);
   // a stake caught between its intent and the table: refund it if it was charged (nobody loses a stake to a crash)
   if (T.intent) {
@@ -701,10 +715,14 @@ async function boot({ tick = true } = {}) {
       let T;
       try { T = JSON.parse(r.state); } catch (e) { continue; }
       S.tables.set(T.id, T);
+    }
+    // Every open book contributes to the shared bank limit during recovery.
+    for (const T of S.tables.values()) {
       await locked(() => recover(T)).catch((e) => console.error(`[casino] recover ${T.id}:`, e));
     }
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
     await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
+    await locked(() => RL.ensureLobby());
     if (tick && !S.tick) {
       let busy = false;
       S.tick = setInterval(() => {
@@ -734,18 +752,20 @@ const R = (ok, reply, extra) => Object.assign({ ok, reply }, extra || {});
 
 async function cmdStart(actor, room, game, blinds, words) {
   const st = await loadSettings();
-  if (game === "holdem" ? !st.hm_enabled : !st.bj_enabled) {
-    return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
-  }
-  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && !isMttTable(t));   // (h22 phase 2: MTT tables don't count)
+  const open = Array.from(S.tables.values()).filter((t) => t.status === "open" && !isMttTable(t) && !t.lobby);   // (h22 phase 2: MTT tables don't count)
   const here = room ? open.find((t) => roomsOf(t).includes(room)) : null;      // one table per room (either game; 1.99ox: any attached room)
   if (here) {
     // (h22 review: a sit & go here isn't "!sit to join" - a buy-in amount is no entry there)
-    return R(false, here.tourney ? "a 🏁 Sit & Go is open here (one table per room) — !sng info shows it."
+    return R(false, here.game === "roulette" ? "A roulette wheel is open here — !rl status."
+                    : here.tourney ? "a 🏁 Sit & Go is open here (one table per room) — !sng info shows it."
                     : here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
                                              : "a blackjack table is already open — !bet to play.");
   }
+  if (game !== "roulette" && (game === "holdem" ? !st.hm_enabled : !st.bj_enabled)) {
+    return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
+  }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
+  if (game === "roulette") return RL.start(actor, room);
   // 1.99amf h20: a theme word anywhere after start (casino/themes.js decide: off = dropped with a note; an unknown word refused)
   const tp = themes.pick(words || (blinds ? [blinds] : []), (w) => /^\d/.test(w) || HR_WORDS.includes(w.toLowerCase()));
   const tm = themes.mode(st);
@@ -990,6 +1010,17 @@ async function run(actor, verb, args, opts) {
     if (actor.uid && !rateOk(actor.uid)) return R(false, "Slow down a little.");
     return MT.run(actor, verb, Array.isArray(args) ? args : [], opts);
   }
+  const target = opts.table ? S.tables.get(opts.table) : null;
+  if (opts.game === "roulette" || (target?.game === "roulette" && actor.via === "web" && !opts.game)) {
+    if (actor.uid && !rateOk(actor.uid)) return R(false, "Slow down a little.", { pm: true });
+    try { return await RL.run(actor, verb, args, opts); }
+    catch (e) { await RL.restore(target); throw e; }
+  }
+  if (target?.game === "roulette") {
+    if (["start", "open", "new"].includes(verb)) return cmdStart(actor, opts.room, opts.game === "holdem" ? "holdem" : "bj");
+    if (verb === "help") return R(true, opts.game === "holdem" ? HM.HELP : HELP);
+    return R(false, "A roulette wheel is open here — use !rl.", { pm: true });
+  }
   const alias = { open: "start", new: "start", go: "deal", wager: "bet", auto: "autobet", rebet: "autobet", close: "end", stop: "end",
                   quit: "leave", insure: "insurance", stay: "stand", dd: "double", table: "status", info: "status", show: "status",
                   rules: "help", how: "help", "": "status" };
@@ -1065,7 +1096,8 @@ async function act(actor, verb, args, opts, key) {
       const tt = opts && opts.table ? S.tables.get(opts.table) : null;
       const mt = opts && (opts.game === "mtt" || isMttTable(tt));
       const tn = opts && (opts.game === "sng" || (tt && tt.tourney));
-      out = R(false, mt ? "something went wrong — !mtt me shows whether you're in." : tn ? "something went wrong — !sng shows whether you're registered." : "something went wrong — nothing was charged.");
+      const wheel = opts?.game === "roulette" || tt?.game === "roulette";
+      out = R(false, wheel ? "Wheel interrupted. Check your bets before trying again." : mt ? "something went wrong — !mtt me shows whether you're in." : tn ? "something went wrong — !sng shows whether you're registered." : "something went wrong — nothing was charged.");
       const prev2 = await getQuery("SELECT response FROM casino_actions WHERE key = ?", [key]);
       if (prev2.length) return Object.assign(JSON.parse(prev2[0].response), { replayed: true });     // (an MTT op committed its answer)
     }
@@ -1108,6 +1140,8 @@ async function push(tableId, room, actor, mode) {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
     if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)
+    if (T.lobby) return R(false, "The lobby wheel stays on the web.");
+    if (T.game === "roulette" && await RL.shut(actor)) return R(false, "The wheel is closed.");
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can move it.");
     const cur = roomsOf(T);
     if (room && mode !== "remove") {
@@ -1117,7 +1151,7 @@ async function push(tableId, room, actor, mode) {
       if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.id !== T.id && roomsOf(t).includes(room))) return R(false, "That room already has a casino table.");
       if (cur.length >= MAX_ROOMS) return R(false, `A table can play in up to ${MAX_ROOMS} rooms at once.`);
       setRooms(T, cur.concat([room]));
-      const how = T.tourney ? TN.howText(T) : T.game === "holdem"
+      const how = T.game === "roulette" ? "a roulette wheel — use !rl to bet" : T.tourney ? TN.howText(T) : T.game === "holdem"
         ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
@@ -1193,7 +1227,7 @@ function bjView(T) {
 }
 
 function publicView(T) {
-  const v = T.game === "holdem" ? HM.publicView(T) : bjView(T);
+  const v = T.game === "roulette" ? RL.publicView(T) : T.game === "holdem" ? HM.publicView(T) : bjView(T);
   v.on_stream = S.stream.table === T.id;
   const qi = S.stream.queue.indexOf(T.id);
   v.stream_queue = qi >= 0 ? qi + 1 : null;
@@ -1205,6 +1239,7 @@ async function meView(T, uid) {
   const u = await userRow(uid);
   if (!u) return null;
   const base = { name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: require("../siteperms").can(u, "casino.admin") };
+  if (T && T.game === "roulette") return Object.assign(base, await RL.meView(T, uid));
   if (T && T.game === "holdem") return Object.assign(base, await HM.meView(T, uid, u));
   const e = T ? T.eng : null;
   const cur = e ? E.currentHand(e) : null;
@@ -1219,7 +1254,7 @@ async function meView(T, uid) {
 }
 
 function lobby() {
-  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney).map((T) => {    // (h22: sit & gos are TN.lobby's)
+  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney && t.game !== "roulette").map((T) => {    // (h22: sit & gos are TN.lobby's)
     const room = T.room ? S.rooms.get(T.room) : null;
     const base = { id: T.id, host: V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
@@ -1259,7 +1294,7 @@ async function streamAdvance() {
     S.stream.table = id; S.stream.ts = clock(); S.stream.by = "queue";
     const T = S.tables.get(id);
     T.last_activity = Math.max(T.last_activity || 0, clock());
-    await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+    await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
     break;
   }
   await streamSave();
@@ -1294,6 +1329,7 @@ async function stream(tableId, on, actor, override) {
   return locked(async () => {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
+    if (T.game === "roulette" && ((T.lobby && !actor.admin) || await RL.shut(actor))) return R(false, "The lobby stream is managed by an admin.");
     if (isMttTable(T) && !(actor.admin && override)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2: only an admin's override)
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can put it on the stream.");
     if (!on) {
@@ -1308,7 +1344,7 @@ async function stream(tableId, on, actor, override) {
       S.stream.queue = S.stream.queue.filter((x) => x !== T.id);
       Object.assign(S.stream, { table: T.id, by: actor.name, ts: clock() });
       T.last_activity = Math.max(T.last_activity || 0, clock());
-      await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+      await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
       await streamSave();
       return R(true, "It's on Pepe's stream.");
     }
@@ -1317,7 +1353,7 @@ async function stream(tableId, on, actor, override) {
       Object.assign(S.stream, { table: T.id, by: actor.name + " (admin)", ts: clock() });
       T.last_activity = Math.max(T.last_activity || 0, clock());
       await emit(cur, "stream", "📺 An admin moved Pepe's stream to another table — this one is next in line.", { on: false });
-      await emit(T, "stream", `📺 This ${T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
+      await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
       await streamSave();
       return R(true, "It's on Pepe's stream (override).");
     }
@@ -1341,6 +1377,7 @@ const MAX_ADVERTS = 10;
 const advertsOf = (T) => (Array.isArray(T.adverts) ? T.adverts : []);
 const advertList = (T) => advertsOf(T).map((id) => ({ id, name: roomName(id) }));
 function advertText(T) {
+  if (T.game === "roulette") return "A roulette wheel is open. Play on the web: " + link(T);
   if (T.tourney) return `📣 🏁 Sit & Go at ${T.host.name}'s table — ${TN.howText(T)}. Play on the web: ${link(T)}`;   // h22
   const hm = T.game === "holdem";
   const stakes = hm ? `blinds ${fmt(T.eng.sb)}/${fmt(T.eng.bb)}` : `bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}`;
@@ -1358,6 +1395,8 @@ function findRoom(q) {
 }
 /** on: advertise the table in `room` (posts the line now); off: stop. Host or admin. */
 async function advertiseIn(T, room, actor, on) {
+  if (T?.lobby) return R(false, "The lobby wheel stays on the web.");
+  if (T?.game === "roulette" && await RL.shut(actor)) return R(false, "The wheel is closed.");
   if (!T || T.status !== "open") return R(false, "That table has closed.");
   if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)
   if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can advertise it.");
@@ -1402,7 +1441,7 @@ async function advertRepeat(T) {
 
 /** 1.99pc: every open table, short (Pepe lists them as links when someone asks for a game in chat) */
 function openList() {
-  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney).map((T) => {   // (h22: sit & gos: TN.openList)
+  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney && t.game !== "roulette").map((T) => {   // (h22: sit & gos: TN.openList)
     const hm = T.game === "holdem";
     return { id: T.id, game: hm ? "holdem" : "bj", host: T.host ? V.camName(T, T.host.uid, T.host.name) : null, high_stakes: !!T.high_stakes, url: link(T),
              players: T.eng.seats.length, max_seats: hm ? HM.HC.MAX_SEATS : C.MAX_SEATS,
@@ -1467,7 +1506,8 @@ async function fairRecord(tableId, round) {
   await ensure();
   const r = (await getQuery("SELECT * FROM casino_rounds WHERE table_id = ? AND round_no = ?", [tableId, Math.trunc(Number(round) || 0)]))[0];
   if (!r) return null;
-  const rec = { table: r.table_id, round: r.round_no, commitment: r.commitment, client_seed: r.client_seed, num_decks: r.num_decks,
+  const game = S.tables.get(tableId)?.game || (await getQuery("SELECT game FROM casino_tables WHERE id = ?", [tableId]))[0]?.game;
+  const rec = { game, table: r.table_id, round: r.round_no, commitment: r.commitment, client_seed: r.client_seed, num_decks: r.num_decks,
                 server_seed: r.revealed ? r.server_seed : null, shoe: r.revealed && r.shoe ? JSON.parse(r.shoe) : null,
                 results: r.revealed && r.results ? JSON.parse(r.results) : null, created: r.created, dealt: r.dealt, revealed: r.revealed };
   // 1.99ajw casino2 rework (casino/veil.js): a veiled player in the round reads as their label / "someone" (never the players column)
@@ -1477,9 +1517,10 @@ async function fairRecord(tableId, round) {
     rec.results = (await V.maskRounds(r.table_id, [{ results: rec.results, players }]))[0].results;
   }
   if (rec.server_seed) {
-    const v = fair.verify({ commitment: rec.commitment, server_seed: rec.server_seed, client_seed: rec.client_seed, round: rec.round,
+    const v = game === "roulette" ? fair.verifySpin(rec) : fair.verify({ commitment: rec.commitment, server_seed: rec.server_seed, client_seed: rec.client_seed, round: rec.round,
                             num_decks: rec.num_decks, shoe: rec.shoe });
     rec.verified = v.ok;
+    if (game === "roulette") Object.assign(rec, { pocket: v.pocket, pocket_ok: v.pocket_ok, commitment_ok: v.commitment_ok });
   }
   return rec;
 }
@@ -1550,6 +1591,8 @@ const ROUTE = {
   outAtDeal: (T, uid) => { const k = routeOf(T); return !!(k && k.outAtDeal && k.outAtDeal(T, uid)); },
   outNow: (T, uid) => { const k = routeOf(T); return k && k.outNow ? k.outNow(T, uid) : null; },
 };
+const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
+  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart });
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
@@ -1672,7 +1715,7 @@ function limits() {
 }
 
 module.exports = {
-  C, S, HM, TN, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, TN, RL, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   MT, isMttTable, tourneyTableFor, streamTake, setDiscordBridge, tourneyKind,    // h22 phase 2: the scheduled tournaments
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
