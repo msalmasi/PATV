@@ -40,7 +40,8 @@ var CAPS = [
   ["auth.signin_methods", "accounts", "admin", "privacy"],
   ["auth.invites", "accounts", "admin", null],                  // 1.99anv: sign-ups open / invite-only, the invite tiers + price, every invite (invites.js)
   ["accounts.members", "accounts", "admin", "privacy"],         // 1.99anv: 👥 All members on /admin/users - every account, sortable, no emails / IPs (members.js);
-                                                                // locked (review): its search matches any account's Camfrog login, hidden room activity too
+                                                                // locked (review): its search matches any account's Camfrog login, hidden room activity too;
+                                                                // 1.99anx: + the country they last signed in from, through a hidden flag / incognito
   ["auth.guest_access", "accounts", "admin", null],             // 1.99anv: 🚪 Guest access - which sections signed-out visitors can open (guestaccess.js)
   ["profile.see_private", "accounts", "admin", "privacy"],
   ["history.lookup", "accounts", "staff", "privacy"],           // anyone's PAT history (1.99acl: locked)

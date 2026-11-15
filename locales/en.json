@@ -13785,7 +13785,7 @@
   "sethub.st.unlimited": "Unlimited",
   "shop.cat.item.site_invite": "One extra invite: a one-time link that lets one new person make a PATV account. It’s added to your invites the moment you buy it - or to theirs, as a gift. A site pass with no cash value.",
   "siteperm.k.auth.invites": "Sign-ups open / invite-only, the invite tiers and price, every invite",
-  "siteperm.k.accounts.members": "All members: every account with its sign-up date, last visit, level and sign-in methods (no emails or IPs)",
+  "siteperm.k.accounts.members": "All members: every account with its sign-up date, last visit, level, sign-in methods and the country they last signed in from (no emails or IPs)",
   "guest.title": "Sign in to see {!section}",
   "guest.lead": "This part of PATV is for signed-in members right now. Signing in only takes a moment.",
   "guest.signin": "Sign in",
@@ -13820,5 +13820,9 @@
   "guest.s.help": "PepeFrog commands",
   "guest.s.howpat": "How PAT works",
   "guest.s.search": "Search",
-  "siteperm.k.auth.guest_access": "Guest access: which sections signed-out visitors can open (and see in the navbar)"
+  "siteperm.k.auth.guest_access": "Guest access: which sections signed-out visitors can open (and see in the navbar)",
+  "admmembers.country_label": "Country they last signed in from",
+  "admmembers.any_country": "Any country",
+  "admmembers.no_country": "No country on record",
+  "admmembers.country_help": "The <b>flag</b> after a name is the country they last signed in from (their newest sign-in with a known country, as on their profile) - shown here even when they hid it from visitors or are incognito. The numbers in the country list count every account: the search and the buttons do not change them."
 }

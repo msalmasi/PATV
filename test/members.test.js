@@ -6,7 +6,8 @@
 //   * the filters (all / website / chat-only / banned / deleted) and the counts (total, website, chat-only, new in 7 / 30 days)
 //   * chat-only = Pepe's Camfrog auto accounts + the Twitch / Discord bots' accounts nobody signed in to on the website (invites.chatOnly)
 //   * the columns: sign-in methods, invited by, status badges, last seen from sessions / welcome_activity
-//   * privacy: no email, IP or device in the answer; the sort indexes exist
+//   * privacy: no email, IP, device or session detail in the answer (1.99anx: but the country code - test/members-country.test.js);
+//     the sort indexes exist
 //   NODE_PATH=G:/PATV/node_modules TZ=UTC node --test test/members.test.js
 "use strict";
 const test = require("node:test");
@@ -94,7 +95,8 @@ test.before(async () => {
   await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at) VALUES ('dl2', 'scheduled', ?, ?)", [NOW - DAY, NOW + 6 * DAY]);
   // last seen: web2 via welcome_activity only, web1 via a session (newer than its welcome day)
   await runQuery("INSERT INTO welcome_activity (userId, day) VALUES ('web2', '2026-11-10')");
-  await runQuery("INSERT INTO sessions (id, user_id, created, last_seen, expires, ip, method) VALUES ('s-w1', 'web1', ?, ?, ?, '203.0.113.9', 'password')", [NOW - 2 * DAY, NOW - 600e3, NOW + 89 * DAY]);
+  // (1.99anx: its country, for the privacy pin - the country code is the one session detail the table shows)
+  await runQuery("INSERT INTO sessions (id, user_id, created, last_seen, expires, ip, country, method) VALUES ('s-w1', 'web1', ?, ?, ?, '203.0.113.9', 'GB', 'password')", [NOW - 2 * DAY, NOW - 600e3, NOW + 89 * DAY]);
   await runQuery("INSERT INTO welcome_activity (userId, day) VALUES ('web1', '2026-11-01')");
 
   const express = require("express");
@@ -229,12 +231,21 @@ test("columns: sign-in methods, invited by, status badges, chat source", async (
   assert.deepEqual(r("leaving_soon").status, ["deleting"]);
 });
 
-test("privacy: no email, IP or device anywhere in the answer", async () => {
-  for (const q of ["", "sort=seen", "filter=chat", "filter=deleted", "q=alice", "page=2"]) {
-    const txt = JSON.stringify((await api(q)).j);
-    assert.doesNotMatch(txt, /@example\.com|zzrandom|nonsense|203\.0\.113|10\.9\.8\.7|Chrome on Windows/, q || "default");
-    assert.doesNotMatch(txt, /"(email|ip|device|userId|user_id|password_set|country|session)":/, q || "default");
+// 1.99anx, deliberately changed: "country" was on the forbidden list - it is now an allowed field (the 2-letter code the profile's
+// flag shows, owner 2026-11-14; test/members-country.test.js has the rest). Everything else about a session still never leaves:
+// its id, IP, device, sign-in method, times.
+test("privacy: no email, IP, device or session detail anywhere in the answer - the country code is the one thing from a session", async () => {
+  for (const q of ["", "sort=seen", "filter=chat", "filter=deleted", "q=alice", "page=2", "country=GB", "country=none"]) {
+    const j = (await api(q)).j;
+    const txt = JSON.stringify(j);
+    assert.doesNotMatch(txt, /@example\.com|zzrandom|nonsense|203\.0\.113|10\.9\.8\.7|Chrome on Windows|s-w1|s-cf2|s-dc1/, q || "default");
+    assert.doesNotMatch(txt, /"(email|ip|device|device_key|userId|user_id|password_set|session|session_id|sessions|sid|last_seen|revoked_at|method)":/, q || "default");
+    for (const r of j.rows) assert.ok(r.country === null || /^[A-Z]{2}$/.test(r.country), (q || "default") + ": " + r.username + "'s country is a code or null");
   }
+  const gb = (await api("country=GB")).j;
+  assert.deepEqual(gb.rows.map((r) => [r.username, r.country]), [["alice", "GB"]]);
+  assert.deepEqual(gb.countries, [{ cc: "GB", n: 1 }]);
+  assert.equal(gb.no_country, gb.counts.total - 1);
 });
 
 test("the sort indexes exist on users (created_at, level, username NOCASE) and the created sort uses one", async () => {
