@@ -8668,6 +8668,7 @@
   "js.casino.rl_totals": "{players} players · {pat} PAT this spin",
   "js.casino.rl_net": "Your net {n} PAT",
   "js.casino.rl_fair_how": "Each spin is committed before bets open. After the result, open its proof to check the pocket in your browser.",
+  "js.casino.rl_room_wheel": "Room wheel",
   "js.casino.rl_lobby": "Lobby wheel",
   "js.casino.rl_zero": "0 · Zero",
   "js.casino.rl_red_word": "{n} ◆ Red",

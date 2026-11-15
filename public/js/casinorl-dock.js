@@ -296,25 +296,50 @@
       recent = element("p", "rl-recent"),
       field = element("div", "rl-quick");
     var open = element("a", "rl-table-link", T("rl_full_table", "Open full table"));
+    var account = element("div");
     open.hidden = true;
-    box.append(state, recent, field, open);
+    box.append(state, recent, field, open, account);
     if (opts.linked) box.append(element("p", "", T("rl_type_hint", "You can also type !rl red 500 in this chat.")));
+    function leaveWheel() {
+      if (widget) widget.close();
+      widget = null;
+      id = null;
+      field.replaceChildren();
+      account.replaceChildren();
+      recent.textContent = "";
+      open.hidden = true;
+      open.removeAttribute("href");
+    }
     async function refresh() {
       if (shut) return;
+      var generation = ++latest;
       try {
-        if (!id) {
-          var where = await (
-            await fetch("/api/casino/roulette/pad/" + encodeURIComponent(opts.slug), { credentials: "same-origin" })
-          ).json();
-          if (shut) return;
-          if (!where.ok || !/^[a-f0-9]{10}$/.test(where.table)) {
-            state.textContent = where.error || T("rl_off", "Roulette isn't open yet.");
-            return;
-          }
+        var where = await (
+          await fetch("/api/casino/roulette/pad/" + encodeURIComponent(opts.slug), {
+            credentials: "same-origin",
+            cache: "no-store",
+          })
+        ).json();
+        if (shut || generation !== latest) return;
+        if (!where.ok || !/^[a-f0-9]{10}$/.test(where.table)) {
+          leaveWheel();
+          state.textContent = where.error || T("rl_off", "Roulette isn't open yet.");
+          return;
+        }
+        if (id && id !== where.table) leaveWheel();
+        var resp = await fetch("/api/casino/t/" + where.table, { credentials: "same-origin", cache: "no-store" });
+        var d = await resp.json();
+        if (shut || generation !== latest) return;
+        if (!d.ok || d.table.status !== "open") {
+          leaveWheel();
+          state.textContent = d.error || T("closed", "That table has closed.");
+          return;
+        }
+        if (!widget) {
           id = where.table;
           open.href = "/casino/roulette/t/" + id;
           open.hidden = false;
-          widget = controls(box, { id: id, refresh: refresh, compact: true });
+          widget = controls(account, { id: id, refresh: refresh, compact: true });
           outside.forEach(function (p) {
             field.append(
               button(p[1], function () {
@@ -323,22 +348,8 @@
             );
           });
         }
-        var generation = ++latest;
-        var resp = await fetch("/api/casino/t/" + id, { credentials: "same-origin" }),
-          d = await resp.json();
-        if (generation !== latest) return;
-        if (shut) return;
-        if (!d.ok) {
-          if (resp.status === 404) {
-            shut = true;
-            if (widget) widget.close();
-            field.hidden = true;
-            box.querySelector(".rl-controls").hidden = true;
-          }
-          state.textContent = d.error || T("closed", "That table has closed.");
-          return;
-        }
-        state.textContent = phase(d.table);
+        state.textContent =
+          (where.here ? T("rl_room_wheel", "Room wheel") : T("rl_lobby", "Lobby wheel")) + " · " + phase(d.table);
         recent.textContent = d.table.history
           .slice(-5)
           .map(function (r) {
@@ -347,7 +358,7 @@
           .join(" · ");
         widget.update(d);
       } catch (_) {
-        if (!shut) state.textContent = T("net_fail", "Couldn't reach the table. Try again.");
+        if (!shut && generation === latest) state.textContent = T("net_fail", "Couldn't reach the table. Try again.");
       }
     }
     async function poll() {
