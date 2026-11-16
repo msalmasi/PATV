@@ -246,6 +246,40 @@ test("ranks, invites, kicks, tags, limits - Pepe's rules", async () => {
   assert.equal(b.body.gang.officers.includes("foamy"), true);
 });
 
+// banfix review (siteban.js): Pepe's !gang ops act for a linked account without a session - a site-banned account founds, joins and
+// banks into no gang (by its userId, or only its member key: a Camfrog login / a member row); it can still get out (decline, leave,
+// defect, withdraw, hand over, disband). Pepe's own ops never ask.
+test("banfix review: a site-banned account can't found, join or deposit into a gang through Pepe; it can still decline / leave", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername) VALUES ('u-tee', 'tee', 'x', 90000, 'tee_cf')");
+  assert.equal((await op({ op: "invite", key: "bf-inv-0001", actor: "tricon", target: "tee_cf" })).body.ok, true, "invited before the ban");
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u-tee', '', 'tee', 'spam', 'staff', ?, NULL), ('u-zoltar', '', 'CFzoltar', 'spam', 'staff', ?, NULL)",
+                 [Date.now(), Date.now()]);
+  SB.forget();
+  const t0 = await bal("u-tee");
+  const gangs0 = (await getQuery("SELECT COUNT(*) AS n FROM gangs"))[0].n;
+  for (const b of [{ op: "create", key: "bf-crt-0001", member: "tee_cf", userId: "u-tee", name: "Spam Crew", tag: "SPAM", fee: 5000, legs: [["reserve", 5000]] },
+                   { op: "accept", key: "bf-acc-0001", member: "tee_cf", username: "tee" },
+                   { op: "deposit", key: "bf-dep-0001", member: "tee_cf", amount: 1000 },                 // the member key alone (a Camfrog login)
+                   { op: "tag", key: "bf-tag-0001", actor: "zoltar", tag: "ZZZ" }]) {                       // a member row's account (zoltar -> u-zoltar)
+    const r = await op(b);
+    assert.equal(r.body.ok, false, b.op);
+    assert.equal(r.body.code, "banned", JSON.stringify(r.body));
+    assert.match(r.body.error, /banned/);
+  }
+  assert.equal(await bal("u-tee"), t0, "no founding fee");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM gangs"))[0].n, gangs0, "no gang");
+  // getting out isn't refused: the invite is declined; a leave reaches the engine (not a member - its own answer)
+  const d = await op({ op: "decline", key: "bf-dcl-0001", member: "tee_cf" });
+  assert.equal(d.body.ok, true, JSON.stringify(d.body));
+  assert.equal(d.body.declined, true);
+  assert.notEqual((await op({ op: "leave", key: "bf-lv-00001", member: "tee_cf" })).body.code, "banned");
+  await runQuery("DELETE FROM feed_bans WHERE user_id IN ('u-tee', 'u-zoltar')");
+  SB.forget();
+});
+
 test("spend (a gang upgrade) and move (turf legs): keyed, the treasury can't go below 0, the gang must exist", async () => {
   const t0 = (await G.stateAll()).gangs.aa11bb22.treasury;
   const r0 = await P.balance("reserve");

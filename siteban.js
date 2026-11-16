@@ -37,6 +37,12 @@
 //                chat shop (shop.purchasePrize), the chat wheel spin, the queued web actions Pepe claims (actions.js,
 //                bounties.js - failed at ban time and skipped at claim), a chat sign-in link (chatsignin.issue). Telegram's
 //                bridge already treats a site-banned account as tier 'none' (telegram.tierOf).
+//                banfix review: + the capital cluster (capital/service.act - CAPITAL_OK), the gangs (/api/gangs/bot/op - GANG_OK),
+//                Pepe's generic charges (/api/wager/charge, /api/pat/charge - a fine / clawback passes: SYSTEM_CHARGE_RE), !boost;
+//                and the BACKSTOP: ledger.post refuses a requireCover debit of a locked account unless opts.system (E_SITE_BANNED)
+//     starting   banfix review: startLock = the ban, else a pending deletion PATV staff scheduled (whatever D3 says) - what the
+//                bot paths, every escrow stake (E_DELETION_PENDING) and the "who may be named as judge / opponent" checks of a
+//                new wager / pool / capital market ask, so nothing new holds a staff deletion off (partyText never says why)
 //   not here     a refund, a payout, a settlement or the deletion job - credits and system moves never ask (an expiring bounty
 //                still refunds a banned poster; an admin-scheduled deletion of a banned account runs at its time).
 // Constants at the top are the knobs (D1..D4 in the banfix notes); docs/sessions.md "Site bans".
@@ -50,11 +56,14 @@ const SHOW_REASON = true;                   // D4: the ban's reason is part of t
 const CACHE_MS = 5000;                      // the same 5 s as sessions.js: a change by another process lands within this
 const CACHE_MAX = 20000;
 const REVOKE_EVERY_MS = 30000;              // the gate's revokeAll for a locked account, at most this often per account (one process)
-// D2: what a banned account may still do through Pepe - wind down what it already has open (never start or add to anything)
+// D2: what a banned account may still do through Pepe - wind down what it already has open (never start or add to anything).
+// banfix review: + a judge's / a poster's call on what OTHER people hold - settle a wager or pool it judges (a judge never holds a
+// position in it: wagers.create / pools.bet refuse that), resolve or reject the claims on its own bounty (the hunters are paid
+// out of the pot that is there; nothing is added) - so the people who aren't banned get the payout they won, not a refund.
 const WIND_DOWN = Object.freeze({
-  bounties: Object.freeze(["cancel", "void"]),
-  wagers: Object.freeze(["decline", "cancel"]),
-  pools: Object.freeze(["cancel"]),
+  bounties: Object.freeze(["cancel", "void", "resolve", "reject"]),
+  wagers: Object.freeze(["decline", "cancel", "settle"]),
+  pools: Object.freeze(["cancel", "settle"]),
   loans: Object.freeze(["decline", "cancel", "repay", "forgive"]),
 });
 const HOLD_OK_REASONS = Object.freeze(new Set(["loan-repayment"]));   // escrow holds that pay what is owed (a repayment, the due-date collection)
@@ -63,6 +72,19 @@ const CASINO_OK = Object.freeze(new Set(["", "help", "rules", "how", "fair", "in
   "limits", "last", "bets", "cards", "hand", "hole", "leave", "quit", "cashout", "fold", "stand", "stay", "sitout", "unregister", "unadvertise",
   "unadvert"]));
 const STASH_OK = Object.freeze(new Set(["withdraw", "close"]));
+// banfix review (bot paths): the capital cluster's and the gangs' verbs a banned account may still send through Pepe - getting out
+// (sell a position, cancel its own market, a judge's call on positions others hold, repay, unstake; leave / defect / take its
+// allowance out of the treasury / hand the gang over / disband it). Pepe's own verbs (actor.pepe / the 'pepe' ops) never ask.
+const CAPITAL_OK = Object.freeze({
+  markets: Object.freeze(["sell", "cancel", "settle"]),
+  reserve: Object.freeze(["repay"]),
+  vaults: Object.freeze(["unstake"]),
+});
+const GANG_OK = Object.freeze(new Set(["decline", "leave", "defect", "withdraw", "boss", "disband"]));
+const GANG_PEPE_OPS = Object.freeze(new Set(["spend", "move", "patch"]));
+// Pepe's generic charges (/api/wager/charge, /api/pat/charge) that are NOT the account acting: a moderator's fine, a market
+// re-settle's clawback, Room Wars' rehearsal return - they still go through for a banned account
+const SYSTEM_CHARGE_RE = /^(modfine|rw-rehearsal-return)$|clawback/i;
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -129,11 +151,38 @@ async function lockOf(userId, { fresh = false } = {}) {
   if (cache.size > CACHE_MAX) for (const k of [...cache.keys()].slice(0, cache.size - CACHE_MAX / 2)) cache.delete(k);
   return stillOn(lock, t);
 }
-/** A ban / unban / merge in this process: the next read is fresh. No id = everyone. */
+/** A ban / unban / merge / deletion scheduled or cancelled in this process: the next read is fresh. No id = everyone. */
 function forget(userId) {
-  if (userId == null) { cache.clear(); return; }
+  if (userId == null) { cache.clear(); delCache.clear(); return; }
   cache.delete(String(userId));
+  delCache.delete(String(userId));
 }
+
+// ── banfix review (finding 2): what may START something ──
+const delCache = new Map();                  // userId -> {lock, at}
+/** A pending ADMIN-scheduled deletion of this account, whatever D3 says (cached CACHE_MS): {kind:'deletion', execute_at} | null. */
+async function deletionLock(userId) {
+  const id = String(userId == null ? "" : userId);
+  if (!id) return null;
+  const t = now();
+  const c = delCache.get(id);
+  if (c && t - c.at < CACHE_MS) return c.lock;
+  const lock = await adminDeletion(id);
+  delCache.set(id, { lock, at: t });
+  if (delCache.size > CACHE_MAX) for (const k of [...delCache.keys()].slice(0, delCache.size - CACHE_MAX / 2)) delCache.delete(k);
+  return lock;
+}
+/** What stops this account STARTING anything - a new escrow stake, a game, a market, a gang, a paid Pepe command - or being
+ *  named as someone's judge / opponent: its site ban (lockOf), else a pending deletion PATV staff scheduled (nobody - the member
+ *  while they can still sign in, or a friend naming them - can put new things in the way of that deletion; winding down what is
+ *  already open still works). -> lock | null. Throws on a database error (callers decide). */
+async function startLock(userId) {
+  return (await lockOf(userId)) || (await deletionLock(userId));
+}
+/** Is this Pepe charge reason one that isn't the account acting (a fine, a clawback - SYSTEM_CHARGE_RE)? */
+const systemCharge = (reason) => SYSTEM_CHARGE_RE.test(String(reason || ""));
+/** Is this capital verb one a banned account may still send (CAPITAL_OK)? */
+const capitalOk = (engine, verb) => (CAPITAL_OK[engine] || []).includes(String(verb || "").toLowerCase());
 
 // ── the words ──
 const whenText = (ms) => new Date(Number(ms)).toISOString().slice(0, 16).replace("T", " ") + " UTC";
@@ -166,10 +215,14 @@ async function assertSignIn(user, req) {
 const isRefusal = (e) => !!e && (e.code === "banned" || e.code === "network");
 /** What a bot route answers for a locked account (every family's field: escrow `error`, casino `reply`, polls `msg`). */
 function botRefusal(lock) {
-  const text = english()("siteban.bot");
-  return { ok: false, code: "banned", error: text, reply: text, msg: text, until: lock && lock.kind === "ban" ? lock.until : null };
+  const text = botText(lock);
+  return { ok: false, code: lock && lock.kind === "deletion" ? "deleting" : "banned", error: text, reply: text, msg: text, message: text,
+           until: lock && lock.kind === "ban" ? lock.until : null };
 }
-const botText = () => english()("siteban.bot");
+/** The bot paths' one line (English: Pepe shows it in chat). A pending staff deletion has its own words. */
+const botText = (lock) => english()(lock && lock.kind === "deletion" ? "siteban.bot_deletion" : "siteban.bot");
+/** The refusal when someone names this account as a judge / opponent - never says why (a ban or a deletion is not theirs to know). */
+const partyText = (name) => english()("siteban.party", { name: String(name || "").replace(/^@+/, "").slice(0, 60) || "?" });
 /** Is this escrow game verb one a banned account may still use (wind down what it has open)? */
 const windDownOk = (game, verb) => (WIND_DOWN[game] || []).includes(String(verb || "").toLowerCase());
 
@@ -227,5 +280,7 @@ function flashMiddleware(req, res, next) {
 
 module.exports = { activeBan, lockOf, forget, message, signInError, assertSignIn, isRefusal, botRefusal, botText, windDownOk, flashMiddleware, whenText,
                    dropQueued, lockedRows, QUEUED_FAIL,
+                   deletionLock, startLock, systemCharge, capitalOk, partyText,                          // banfix review
                    EXEMPT_MIN_RANK, ADMIN_DELETION_LOCKS, SHOW_REASON, CACHE_MS, REVOKE_EVERY_MS, WIND_DOWN, HOLD_OK_REASONS, CASINO_OK, STASH_OK,
-                   _setClock: (f) => { clock = f || (() => Date.now()); }, _clear: () => cache.clear() };
+                   CAPITAL_OK, GANG_OK, GANG_PEPE_OPS, SYSTEM_CHARGE_RE,
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _clear: () => { cache.clear(); delCache.clear(); } };

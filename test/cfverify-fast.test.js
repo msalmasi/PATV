@@ -318,3 +318,50 @@ test("completeCamfrogLink (the !signup claim page) still returns after the whole
   assert.equal(Number((await row("cl-me")).points_balance), 42);
   assert.equal((await row("cl-me")).camfrogUsername, "claimcf");
 });
+
+// banfix review (siteban.js): a !verify from another account never takes a Camfrog name off an account that is site-banned (Pepe would
+// resolve the name to the new account and every chat command would work again; the ban doesn't follow - padbans.linked carries only
+// pad_login_bans) or that PATV staff scheduled for deletion (an auto account's merge would escape it: its rows and PAT would live on,
+// the deletion would end as "gone"). Nothing is touched - staff decide; the !signup claim page says the same. And no merge path at all
+// moves an account under a staff deletion (accountMerge.moveUserRows refuses it before any write).
+test("banfix review: !verify can't take a Camfrog name from a banned account or one staff are deleting; no merge escapes a staff deletion", async () => {
+  await ready;
+  const SB = require(path.join(repo, "siteban"));
+  const AM = require(path.join(repo, "accountMerge"));
+  await user("bv-me", { username: "bvreal", balance: 5 });
+  await user("bv-ban", { username: "bvbanned", balance: 900, cf: "bancf" });              // a real account, banned
+  await user("bv-auto", { username: "CFbvauto", balance: 300, cf: "autobancf" });         // an auto account, banned
+  await user("bv-del", { username: "CFbvdel", balance: 400, cf: "delcf" });               // an auto account staff are deleting
+  for (const id of ["bv-ban", "bv-auto"]) {
+    await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, '', ?, 'spam', 'staff', ?, NULL)", [id, id, Date.now()]);
+  }
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth) VALUES ('bv-del', 'scheduled', ?, ?, 'admin:someadmin', 'admin')",
+                 [Date.now(), Date.now() + 14 * 86400000]);
+  SB.forget();
+  for (const [cf, holder, code, word] of [["bancf", "bv-ban", "BVCODE01", /banned/], ["autobancf", "bv-auto", "BVCODE02", /banned/], ["delcf", "bv-del", "BVCODE03", /scheduled for deletion/]]) {
+    await pending("bv-me", cf, code);
+    const r = await verify(code, cf);
+    assert.equal(r.status, 403, JSON.stringify(r.out));
+    assert.match(r.out.error, word);
+    assert.match(r.out.error, /contact PATV staff/);
+    assert.equal((await row(holder)).camfrogUsername, cf, "the name stays where it is");
+    assert.equal(await exists(holder), true, "not merged");
+    assert.equal((await row("bv-me")).camfrogUsername, null);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pending_camfrog_links WHERE code = ?", [code]))[0].n, 0, "the code is spent");
+  }
+  assert.equal(Number((await row("bv-me")).points_balance), 5, "nothing merged in");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM camfrog_link_jobs WHERE user_id = 'bv-me'"))[0].n, 0, "no link job");
+  // the !signup claim page's path (completeCamfrogLink) refuses the same way, as a refusal it can show
+  await assert.rejects(uc.completeCamfrogLink("bv-me", "delcf"), (e) => e.refuse === true && e.code === "deleting");
+  await assert.rejects(uc.completeCamfrogLink("bv-me", "bancf"), (e) => e.refuse === true && e.code === "banned");
+  // every merge path: moveUserRows refuses an account under a staff deletion before writing anything
+  await assert.rejects(D.tx(() => AM.moveUserRows("bv-del", "bv-me")), (e) => e.code === "E_DELETION_PENDING");
+  assert.equal(await exists("bv-del"), true);
+  // lifted / cancelled: the names move as before
+  await runQuery("DELETE FROM feed_bans WHERE user_id IN ('bv-ban', 'bv-auto')");
+  await runQuery("UPDATE account_deletions SET state = 'cancelled' WHERE user_id = 'bv-del'");
+  SB.forget();
+  const r = await uc.completeCamfrogLink("bv-me", "delcf");
+  assert.equal(r.merged, true);
+  assert.equal(await exists("bv-del"), false);
+});

@@ -61,7 +61,7 @@
               <button type="button" data-fa="r-dismiss" title="It doesn't break the Terms: un-hide it and close the reports">Dismiss</button>
               <button type="button" data-fa="r-false" title="Dismiss, and count it against the reporters (enough bad-faith reports pause their reporting)">Dismiss · bad faith</button>
               <button type="button" class="bad" data-fa="r-remove">Remove <%= g.comment ? 'comment' : 'post' %></button>
-              <button type="button" class="bad" data-fa="r-ban">Remove + ban author…</button>
+              <button type="button" class="bad" data-fa="r-ban"><%- t('feedadm.r_ban') %></button>
               <% if (!g.comment) { %><button type="button" data-fa="nsfw"><%= p.nsfw ? 'Unmark NSFW' : 'Mark NSFW' %></button><% } %>
               <% if (abuseOk) { %><button type="button" data-safety="details" <%- g.comment ? 'data-comment="' + g.commentId + '"' : 'data-post="' + p.id + '"' %>>🛡 View details</button><% } %>
               <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporter<%= new Set(g.reports.map((r) => r.reporter_id)).size === 1 ? '' : 's' %> the outcome (inbox)</label>
@@ -84,7 +84,7 @@
         <div class="fa-acts">
           <button type="button" data-fa="u-dismiss">Dismiss</button>
           <button type="button" data-fa="u-false">Dismiss · bad faith</button>
-          <button type="button" class="bad" data-fa="u-ban">Ban from the feed…</button>
+          <button type="button" class="bad" data-fa="u-ban"><%- t('feedadm.u_ban') %></button>
           <% if (abuseOk) { %><button type="button" data-safety="details" data-user-id="<%= g.userId %>">🛡 View details</button><% } %><% if (acctOk) { %> <a href="/admin/accounts?u=<%= encodeURIComponent(g.username) %>">🔐 Account security</a><% } %>
           <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporters the outcome</label>
         </div>
@@ -112,7 +112,7 @@
           <button type="button" data-dmfa="dismiss">Dismiss</button>
           <button type="button" data-dmfa="false">Dismiss · bad faith</button>
           <button type="button" class="bad" data-dmfa="remove">Remove message</button>
-          <button type="button" class="bad" data-dmfa="ban">Remove + ban sender…</button>
+          <button type="button" class="bad" data-dmfa="ban"><%- t('feedadm.dm_ban') %></button>
           <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporter<%= new Set(g.reports.map((r) => r.reporter)).size === 1 ? '' : 's' %> the outcome</label>
         </div>
       </div>
@@ -244,17 +244,19 @@
   <% } %>
 
   <section class="fa-card" id="bans">
-    <h2>Feed bans</h2>
+    <%# banfix review: a ban with no pad (room_id '') IS the site ban (siteban.js) - the words say what it does %>
+    <h2><%- t('feedadm.bans_title') %></h2>
+    <p class="mut"><%- t('feedadm.bans_help') %></p>
     <form id="faBan" class="fa-inline">
       <input name="user" placeholder="username or Camfrog name" required aria-label="User">
       <input name="days" type="number" min="0" max="3650" placeholder="days (0 = forever)" aria-label="Days">
       <input name="reason" placeholder="reason" maxlength="200" aria-label="Reason">
-      <button type="submit" class="btn-s">Ban from the whole feed</button>
+      <button type="submit" class="btn-s"><%- t('feedadm.ban_site_btn') %></button>
     </form>
     <% if (!bans.length) { %><p class="mut">Nobody is banned.</p><% } else { %>
-      <div class="fa-scroll"><table class="fa-t" aria-label="Feed bans"><thead><tr><th>User</th><th>Where</th><th>Until</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
+      <div class="fa-scroll"><table class="fa-t" aria-label="<%= t('feedadm.bans_title') %>"><thead><tr><th>User</th><th>Where</th><th>Until</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
         <% bans.forEach((b) => { const R = roomsById.get(b.room_id); %>
-          <tr><td><%= b.username %></td><td><%= b.room_id ? (R ? R.title : b.room_id) : 'whole feed' %></td><td><%= b.until ? new Date(b.until).toISOString().slice(0, 10) : 'forever' %></td>
+          <tr><td><%= b.username %></td><td><%= b.room_id ? (R ? R.title : b.room_id) : t('feedadm.where_site') %></td><td><%= b.until ? new Date(b.until).toISOString().slice(0, 10) : 'forever' %></td>
               <td><%= b.reason || '' %></td><td><%= b.by %></td><td><button type="button" data-fa="unban" data-uid="<%= b.user_id %>" data-room="<%= R ? R.slug : '' %>">Lift</button></td></tr>
         <% }) %>
       </tbody></table></div>
@@ -313,8 +315,8 @@
   </section>
 </main>
 <script src="/public/js/feed-safety.js?v=4" defer></script>
-<script src="/public/js/feed-admin.js?v=3" defer></script>
-<% if (dmOk) { %><script src="/public/js/dm-admin.js?v=3" defer></script><% } %>
+<script src="/public/js/feed-admin.js?v=4" defer></script>
+<% if (dmOk) { %><script src="/public/js/dm-admin.js?v=4" defer></script><% } %>
 <% if (typeof chatReports !== 'undefined' && Array.isArray(chatReports)) { %><script src="/public/js/chatlog-reports.js?v=3" defer></script><% } %><%# CL6 %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <%- include('partials/admin-close') %>

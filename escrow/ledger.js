@@ -223,19 +223,21 @@ async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via
   if (!REF_RE.test(String(ref || ""))) throw new Refuse(400, "Bad request (ref).", "E_BAD_REF");
   if (!account) throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");
   if (casino && account.casino_banned) throw new Refuse(403, "Banned from the casino.", "E_CASINO_BANNED");
+  // banfix review (finding 2): nor while PATV staff have its deletion scheduled (siteban.startLock) - a new hold would keep that
+  // deletion 'held' - E_DELETION_PENDING
   {
     const SB = require("../siteban");
-    if (account.userId && !SB.HOLD_OK_REASONS.has(String(reason || "")) && (await SB.lockOf(account.userId))) {
-      throw new Refuse(403, SB.botText(), "E_SITE_BANNED");
-    }
+    const lock = account.userId && !SB.HOLD_OK_REASONS.has(String(reason || "")) ? await SB.startLock(account.userId) : null;
+    if (lock) throw new Refuse(403, SB.botText(lock), lock.kind === "deletion" ? "E_DELETION_PENDING" : "E_SITE_BANNED");
   }
   const id = hid ? String(hid) : await nextSiteId();
   if (!HID_RE.test(id)) throw new Refuse(400, "Bad request (hold id).", "E_BAD_HID");
   const clash = (await getQuery("SELECT id, key FROM escrow_holds WHERE id = ?", [id]))[0];
   if (clash) throw new Refuse(409, `hold ${id} already exists`, "E_DUP_HOLD");
   const ledger = require("../ledger");
+  // system: the lock was asked just above (a repayment passes it) - ledger.post's own site-ban backstop doesn't ask again
   const d = await ledger.post(account.userId, -amt, String(reason || "escrow").slice(0, 40),
-                              { requireCover: true, counterparty: await cpName(cp), source: `escrow:${kindOf(ref)}` });
+                              { requireCover: true, system: true, counterparty: await cpName(cp), source: `escrow:${kindOf(ref)}` });
   if (!d.ok) {
     if (d.code === ledger.E_INSUFFICIENT) throw new Refuse(402, "insufficient PAT", "E_INSUFFICIENT_PAT");
     throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");

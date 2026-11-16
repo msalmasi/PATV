@@ -2325,6 +2325,12 @@ app.post("/api/wager/charge", async (req, res) => {
     if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
       return reply(403, { ok: false, error: "casino_banned" });
     }
+    // banfix review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - is charged for nothing it
+    // starts (a duel / brawl stake, a paid command, heist gear); a fine or a clawback (siteban.systemCharge) still goes through
+    if (!siteBan.systemCharge(reason)) {
+      const lock = await siteBan.startLock(userId);
+      if (lock) return reply(403, { ok: false, error: lock.kind === "deletion" ? "deleting" : "banned", code: lock.kind === "deletion" ? "deleting" : "banned", message: siteBan.botText(lock) });
+    }
     // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW (1.99ga: ledger.post).
     const cp = await resolveCounterparty(req.body.counterparty);
     // 1.99ne: a paid command's charge that Pepe routes into his pools carries `route` + an idempotency key: the
@@ -2341,7 +2347,7 @@ app.post("/api/wager/charge", async (req, res) => {
       }
       return reply(200, { ok: true, route_key: rkey });
     }
-    const debit = await ledger.post(userId, -amount, reason, { requireCover: true, counterparty: cp, source: "wager/charge" });
+    const debit = await ledger.post(userId, -amount, reason, { requireCover: true, system: siteBan.systemCharge(reason), counterparty: cp, source: "wager/charge" });
     if (!debit.ok) {
       return debit.code === ledger.E_INSUFFICIENT
         ? reply(402, { ok: false, error: "insufficient" })

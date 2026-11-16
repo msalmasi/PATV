@@ -633,7 +633,14 @@ const _jsonOr = (s, d) => { try { const v = JSON.parse(s); return v == null ? d 
 const _linkJob = async (id) => (await getQuery('SELECT * FROM camfrog_link_jobs WHERE id = ?', [id]))[0] || null;
 const _jobAnswer = (job) => Object.assign(_jsonOr(job.result, {}), job.state === 'merge' ? { pending: true } : {});
 
-/** Step 1 (one transaction). -> {jobId, result} | {spent: true} (a !verify of the same code was there first) */
+/** banfix review: the refusal of a link whose Camfrog name another account holds that is site-banned / being deleted by staff
+ *  (English: Pepe says it in chat; the !signup claim page shows it). */
+function _linkRefusal(code) {
+  const T = require('./i18n-core')(require('./locales/en.json'), null, 'en');
+  return Object.assign(new Error(T(code === 'deleting' ? 'cflink.err.deleting' : 'cflink.err.banned')), { refuse: true, code, status: 403 });
+}
+/** Step 1 (one transaction). -> {jobId, result} | {spent: true} (a !verify of the same code was there first) |
+ *  {refused: 'banned' | 'deleting'} (banfix review: another account has the name and is site-banned / being deleted by staff) */
 async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
   const cfLower = String(camfrogUsername).toLowerCase().trim();
   await _linkReady();
@@ -644,6 +651,17 @@ async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
     if (code) {
       const d = await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code]);
       if (!d || !d.changes) return { spent: true };
+    }
+    // banfix review: a Camfrog name another account holds stays there while that account is site-banned (the !verify would take the
+    // chat identity - and its Camfrog badges - off the ban: Pepe resolves the name to the new account, and padbans.linked carries only
+    // pad_login_bans) or PATV staff have its deletion scheduled (a merge of an auto account would escape it; providermerge refuses
+    // both the same way). Nothing is touched - staff decide. (The code is spent: a new one after staff have looked.)
+    {
+      const SB = require('./siteban');
+      for (const h of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
+        if (await SB.lockOf(h.userId, { fresh: true })) return { refused: 'banned' };
+        if (await require('./providermerge').adminDeletionPending(h.userId)) return { refused: 'deleting' };
+      }
     }
     // 1.99bm: an archived account on this name gets its balance back first, so the merge carries it
     for (const r of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
@@ -872,6 +890,7 @@ function startCamfrogLinkJobs({ everyMs = 60000 } = {}) {
  *  autoescrow.redeemClaim). Throws when the merge failed (the link stands; the job tick retries the merge). */
 async function completeCamfrogLink(userId, camfrogUsername) {
   const a = await _linkNow(userId, camfrogUsername);
+  if (a.refused) throw _linkRefusal(a.refused);           // banfix review: the name's account is banned / being deleted by staff
   const r = (await runCamfrogLinkJob(a.jobId)) || a.result;
   return { merged: !!r.merged, addedBalance: r.addedBalance || 0, addedXp: r.addedXp || 0, unlinkedFrom: r.unlinkedFrom || null };
 }
@@ -1016,6 +1035,10 @@ async function verifyCamfrogLink(req, res) {
 
     // the link itself, committed (the code is spent in the same transaction)
     const a = await _linkNow(entry.userId, entry.camfrogUsername, { code: C });
+    if (a.refused) {                                 // banfix review: the name's account is site-banned / being deleted by staff
+      console.log(`[CF-VERIFY] ${who}: refused (${a.refused}) - the account that has the name stays as it is`);
+      return res.status(403).json({ error: _linkRefusal(a.refused).message, code: a.refused });
+    }
     if (a.spent) {                                   // a !verify of the same code got there first
       const again = await _linkReplay(C, who);
       if (again) {

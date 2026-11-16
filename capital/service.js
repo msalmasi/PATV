@@ -42,6 +42,8 @@ async function act(engine, body) {
   if (E.READS.includes(verb)) return Object.assign({ ok: true }, await E.read(verb, actor, args));
   const idem = body.idem ? String(body.idem) : null;
   if (idem && !IDEM_RE.test(idem)) return { ok: false, code: "bad_request", error: "bad idem" };
+  const lock = await startLockOf(engine, verb, actor, args);
+  if (lock) return require("../siteban").botRefusal(lock);
   const key = `${engine}:${idem || "u-" + crypto.randomBytes(9).toString("hex")}`;
   let out;
   try {
@@ -63,8 +65,26 @@ async function act(engine, body) {
   if (!out.dup) publishSoon();
   return out;
 }
+/**
+ * banfix review (siteban.js): the account an action is FOR - the actor, or for Pepe's market create the creator he opens it for -
+ * starts nothing while it is site-banned or PATV staff have its deletion scheduled (siteban.startLock): no market, no buy, no
+ * loan, no stake - from chat or the website. Getting out still works (siteban.CAPITAL_OK: sell, cancel, a judge's settle, repay,
+ * unstake); Pepe's own verbs (an auto market, an AI ruling, the protocol's capital) never ask. -> lock | null
+ */
+async function startLockOf(engine, verb, actor, args) {
+  const SB = require("../siteban");
+  if (SB.capitalOk(engine, verb)) return null;
+  let acct = null;
+  if (actor.pepe) {
+    if (!(engine === "markets" && verb === "create") || args.auto || !args.creator || C.same(args.creator, actor.login)) return null;
+    acct = await C.account({ login: String(args.creator) });
+  } else {
+    acct = await C.account({ userId: actor.userId, username: actor.username, login: actor.login });
+  }
+  return acct && acct.userId ? SB.startLock(acct.userId) : null;
+}
 function refuseCode(c) {
-  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_INSUFFICIENT: "pool_short", E_STASH: "stash_short" })[c]
+  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_INSUFFICIENT: "pool_short", E_STASH: "stash_short", E_SITE_BANNED: "banned" })[c]
     || String(c || "failed").toLowerCase();
 }
 

@@ -319,6 +319,14 @@ async function charge({ key, username, amount, reason, counterparty, route, legs
   if (split.reduce((t, [, a]) => t + a, 0) !== amt) throw new Refuse(400, "The legs don't add up to the amount.", "E_BAD_LEGS");
   const u = await userByName(username);
   if (!u) throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");
+  // banfix review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - pays for nothing it starts
+  // (a paid command, heist gear, a gang founding); a fine or a clawback (siteban.systemCharge) still goes through
+  const SB = require("./siteban");
+  const sys = SB.systemCharge(reason);
+  if (!sys) {
+    const lock = await SB.startLock(u.userId);
+    if (lock) throw new Refuse(403, SB.botText(lock), lock.kind === "deletion" ? "E_DELETION_PENDING" : "E_SITE_BANNED");
+  }
   const lottoSvc = await lottoIsService();
   const ledger = require("./ledger");
   return tx(async () => {
@@ -327,7 +335,7 @@ async function charge({ key, username, amount, reason, counterparty, route, legs
     if (dup) return Object.assign(dup, { replayed: true });
     await requireLiveInTx();
     const d = await ledger.post(u.userId, -amt, String(reason || "command").slice(0, 40),
-                                { requireCover: true, counterparty: counterparty || undefined, source: "pat/charge" });
+                                { requireCover: true, system: sys, counterparty: counterparty || undefined, source: "pat/charge" });
     if (!d.ok) {
       throw new Refuse(d.code === ledger.E_INSUFFICIENT ? 402 : 404, d.code === ledger.E_INSUFFICIENT ? "insufficient PAT" : "no account",
                        d.code === ledger.E_INSUFFICIENT ? "E_INSUFFICIENT_PAT" : "E_TARGET_NOT_FOUND");

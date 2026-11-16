@@ -225,15 +225,18 @@ async function poolBalance(k) {
   return P().balance(k);
 }
 /** A wallet move in the open transaction: debit with requireCover (-> Refuse E_INSUFFICIENT_PAT) or credit (follows a merge). */
-async function wallet(userId, amount, type, { counterparty = null, source = "capital" } = {}) {
+// banfix review: a debit of a site-banned account is refused (ledger.post's backstop: E_SITE_BANNED) unless `system` - a loan
+// repayment or the collection (reserve takePayment), a re-settle's clawback: what it owes, not something it starts.
+async function wallet(userId, amount, type, { counterparty = null, source = "capital", system = false } = {}) {
   const ledger = require("../ledger");
   const a = Math.trunc(Number(amount));
   if (!a) return { ok: true, transactionId: null };
   const r = await ledger.post(userId, a, String(type).slice(0, 40),
-                              a < 0 ? { requireCover: true, counterparty: counterparty || undefined, source }
+                              a < 0 ? { requireCover: true, system: !!system, counterparty: counterparty || undefined, source }
                                     : { resolveMerged: true, counterparty: counterparty || undefined, source });
   if (!r.ok) {
     if (r.code === ledger.E_INSUFFICIENT) throw new Refuse(402, "insufficient PAT", "E_INSUFFICIENT_PAT");
+    if (r.code === ledger.E_SITE_BANNED) throw new Refuse(403, require("../siteban").botText(), "E_SITE_BANNED");
     throw new Refuse(404, "Couldn't find the PAT account.", "E_TARGET_NOT_FOUND");
   }
   return r;

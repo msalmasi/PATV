@@ -655,3 +655,117 @@ test("banfix: a staff deletion on hold says nothing about signing in, and the ad
   await D.tick();
   assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'bh_mem' ORDER BY id DESC"))[0].state, "done", "runs once it's clear");
 });
+
+// banfix review (finding 7): the hold notices are plain text (the inbox shows them as text, Telegram too) - a blocker label with an
+// apostrophe or an ampersand, and a username with one, come out as typed, never as HTML entities
+test("banfix review: the staff-deletion hold notices show apostrophes and ampersands as typed (no &#39; / &amp;)", async () => {
+  await setup();
+  await user("ht_adm", { username: "htadmin", class: "Admin" });
+  await user("ht_mem", { username: "o'neil", bal: 5 });
+  const t0 = clockAt;
+  await D.schedule({ userId: "ht_mem", username: "o'neil" }, { by: "admin:ht_adm", reauth: "admin", reason: "spam" });
+  // what got in the way after it was scheduled: a pad with an ampersand, a gang ("You're in a gang")
+  await runQuery("INSERT INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id) VALUES ('ht-pad', 'htpad', 'Bob & Co', 'user', 'ht_mem')");
+  await runQuery("INSERT INTO gang_members (member_key, gid, rank, userId, seq, joined) VALUES ('u:ht_mem', 'g1', 'member', 'ht_mem', 0, 1)");
+  clockAt = t0 + 15 * DAY;
+  await D.tick();
+  const mine = (await getQuery("SELECT body FROM inbox WHERE user_id = 'ht_mem' AND title = 'Your account deletion is on hold'"))[0];
+  assert.match(mine.body, /Your pad “Bob & Co”/);
+  assert.match(mine.body, /You're in a gang/);
+  assert.doesNotMatch(mine.body, /&#39;|&amp;|&quot;/);
+  const told = (await getQuery("SELECT body FROM inbox WHERE user_id = 'ht_adm' AND title = 'A deletion you scheduled is on hold'"))[0];
+  assert.match(told.body, /^The deletion of @o'neil's account is on hold: .*You're in a gang/);
+  assert.doesNotMatch(told.body, /&#39;|&amp;/);
+  await runQuery("DELETE FROM rooms_registry WHERE room_id = 'ht-pad'");
+  await runQuery("DELETE FROM gang_members WHERE userId = 'ht_mem'");
+  await D.tick();
+});
+
+// banfix review (finding 10): a site-banned member's OWN deletion on hold - they can't sign in (siteban.js), so the notice doesn't tell
+// them to; a member who isn't banned still gets the "sign in to close these" advice
+test("banfix review: a banned member's own held deletion never says to sign in; an unbanned member's still does", async () => {
+  await setup();
+  const SB = require(path.join(repo, "siteban"));
+  await user("hl_ban", { username: "hlbanned", bal: 5 });
+  await user("hl_ok", { username: "hlok", bal: 5 });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('hl_ban', '', 'hlbanned', 'spam', 'staff', ?, NULL)", [clockAt]);
+  SB.forget("hl_ban");
+  const t0 = clockAt;
+  for (const [id, name] of [["hl_ban", "hlbanned"], ["hl_ok", "hlok"]]) {
+    await D.schedule({ userId: id, username: name }, { by: "self", reauth: "password" });
+    await runQuery("INSERT INTO escrow_holds (key, ref, kind, login, username, user_id, amount, state, created) VALUES (?, 'BT88', 'bounty', 'x', ?, ?, 5, 'held', 1)", ["hl-" + id, name, id]);
+  }
+  clockAt = t0 + 15 * DAY;
+  await D.tick();
+  const note = async (id) => (await getQuery("SELECT body FROM inbox WHERE user_id = ? AND title = 'Your account deletion is on hold'", [id]))[0].body;
+  const b = await note("hl_ban");
+  assert.doesNotMatch(b, /sign in/i, "a banned member can't sign in");
+  assert.match(b, /It runs once these are closed or their deadlines pass\./);
+  assert.match(await note("hl_ok"), /Sign in to close these/);
+  await runQuery("UPDATE escrow_holds SET state = 'refunded' WHERE key IN ('hl-hl_ban', 'hl-hl_ok')");
+  await D.tick();
+});
+
+// banfix review (finding 6): deletions held for good (a banned member can't close what's in the way) never starve the job - a due
+// 'scheduled' deletion runs on the next tick however many held ones are older; the held ones all still get their turn
+test("banfix review: 20+ held deletions don't keep a newer due one from running", async () => {
+  await setup();
+  await user("st_adm", { username: "stadmin", class: "Admin" });
+  const t0 = clockAt;
+  for (let i = 0; i < 21; i++) {
+    const id = "st_h" + i;
+    await user(id, { username: "stuck" + i, bal: 1 });
+    await D.schedule({ userId: id, username: "stuck" + i }, { by: "admin:st_adm", reauth: "admin", reason: "spam" });
+    await runQuery("INSERT INTO escrow_holds (key, ref, kind, login, username, user_id, amount, state, created) VALUES (?, 'BT90', 'bounty', 'x', ?, ?, 1, 'held', 1)", ["st-" + id, "stuck" + i, id]);
+  }
+  clockAt = t0 + 15 * DAY;
+  await D.tick();                                          // all 21 are due: 20 tried (held), the 21st on the next tick
+  clockAt += 60000;
+  await D.tick();
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM account_deletions WHERE user_id LIKE 'st_h%' AND state = 'held'"))[0].n, 21, "every held one had its turn");
+  await user("st_new", { username: "stucknew", bal: 1 });
+  await D.schedule({ userId: "st_new", username: "stucknew" }, { by: "admin:st_adm", reauth: "admin", reason: "spam" });
+  clockAt += 15 * DAY;
+  await D.tick();
+  assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'st_new' ORDER BY id DESC"))[0].state, "done", "the newer one ran first");
+  await runQuery("UPDATE escrow_holds SET state = 'refunded' WHERE key LIKE 'st-%'");
+  await D.tick(); await D.tick();
+});
+
+// banfix review (finding 9): an admin schedules the deletion of a member who already asked for it themselves - the member's pending
+// request becomes staff's (not "Already scheduled"), so signing in no longer cancels it; its date stays; a second admin request is refused
+test("banfix review: staff take over a member's own pending request - a sign-in can't cancel it after that", async () => {
+  await setup();
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  const addUser = (req, res, next) => { const id = req.get("x-test-user"); if (id) req.user = { userId: id }; next(); };
+  D.register(app, { addUser });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((r) => srv.once("listening", r));
+  const base = "http://127.0.0.1:" + srv.address().port;
+  const post = (p, body) => fetch(base + p, { method: "POST", body: JSON.stringify(body),
+    headers: { "x-test-user": "ad_adm", origin: base, "content-type": "application/json", "x-requested-with": "fetch" } }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  try {
+    await user("ad_adm", { username: "adadmin", class: "Admin" });
+    await user("ad_mem", { username: "admember", bal: 5 });
+    await D.schedule({ userId: "ad_mem", username: "admember" }, { by: "self", reauth: "password" });
+    const own = await D.pendingOf("ad_mem");
+    const r = await post("/api/admin/users/ad_mem/delete", { confirm: "admember", reason: "spam account" });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.adopted, own.id);
+    assert.equal(r.body.execute_at, Number(own.execute_at), "the member's date stays");
+    const row = (await getQuery("SELECT requested_by, reauth, reason, state FROM account_deletions WHERE id = ?", [own.id]))[0];
+    assert.deepEqual([row.requested_by, row.reauth, row.reason, row.state], ["admin:ad_adm", "admin", "spam account", "scheduled"]);
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM account_deletions WHERE user_id = 'ad_mem'"))[0].n, 1, "no second row");
+    assert.equal(await D.cancelOnSignIn("ad_mem", "password"), false, "a sign-in can't cancel it now");
+    assert.equal((await D.pendingOf("ad_mem")).state, "scheduled");
+    assert.ok((await getQuery("SELECT 1 FROM inbox WHERE user_id = 'ad_mem' AND ref = ?", ["acctdel:adopt:" + own.id])).length, "the member is told");
+    assert.ok((await getQuery("SELECT 1 FROM admin_audit WHERE action = 'account.delete' AND target_id = 'ad_mem'")).length, "audited");
+    const again = await post("/api/admin/users/ad_mem/delete", { confirm: "admember", reason: "spam account" });
+    assert.equal(again.status, 409);
+    assert.equal(again.body.code, "E_PENDING");
+  } finally {
+    await new Promise((res) => srv.close(res));
+  }
+});

@@ -150,4 +150,4 @@ function emailLinkable(row, idCol, providerId) {
   return !row[idCol] || String(row[idCol]) === String(providerId);
 }
 
-module.exports = { mergeProviderAccount, emailLinkable, NON_BLOCKING };
+module.exports = { mergeProviderAccount, emailLinkable, adminDeletionPending, NON_BLOCKING };

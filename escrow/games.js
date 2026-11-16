@@ -140,9 +140,11 @@ async function act(game, body) {
   // banfix: a site-banned account (siteban.js) starts or adds to nothing - from Pepe's chat (!bounty / !wager / !pool / !loan) or a
   // website form; it may still wind down what it has open (siteban.WIND_DOWN: cancel, decline, repay, forgive). Pepe's own verbs
   // (actor.pepe: an evidence check, an auto-resolve, a spec) never ask. Every stake is refused once more in holdInTx.
+  // banfix review: startLock - a pending deletion PATV staff scheduled starts nothing new either (a claim, an accept, a bet would
+  // hold that deletion off); the same wind-down verbs stay allowed.
   if (!actor.pepe && !require("../siteban").windDownOk(game, verb)) {
     const acct = await actorAccount(actor);
-    const lock = acct && acct.userId ? await require("../siteban").lockOf(acct.userId) : null;
+    const lock = acct && acct.userId ? await require("../siteban").startLock(acct.userId) : null;
     if (lock) return require("../siteban").botRefusal(lock);
   }
   const key = idem ? `act:${game}:${idem}` : null;
@@ -170,7 +172,7 @@ async function act(game, body) {
   return out;
 }
 function refuseCode(c) {
-  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_CASINO_BANNED: "banned", E_SITE_BANNED: "banned", E_NOT_HELD: "changed",
+  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_CASINO_BANNED: "banned", E_SITE_BANNED: "banned", E_DELETION_PENDING: "deleting", E_NOT_HELD: "changed",
             E_POOLS_NOT_LIVE: "pools_not_live", E_INSUFFICIENT: "pool_short" })[c] || String(c || "failed").toLowerCase();
 }
 

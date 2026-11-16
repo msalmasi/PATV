@@ -1012,8 +1012,9 @@ async function renewOne(s, t = now(), { force = false } = {}) {
     if (!done) return "dup";
   } catch (e) {
     const err = mapEscrow(e);
-    // banfix: a site-banned fan's renewal is refused (escrow holdInTx E_SITE_BANNED) - it runs out like an unpaid one (grace, then lapsed)
-    if (!(err && (err.code === "E_INSUFFICIENT_PAT" || err.code === "E_CAP" || err.code === "E_SITE_BANNED"))) { console.error(`[creators] renew #${s.id}:`, e.message); return "skip"; }
+    // banfix: a site-banned fan's renewal is refused (escrow holdInTx E_SITE_BANNED; review: E_DELETION_PENDING while PATV staff have its
+    // deletion scheduled - a new hold would keep that deletion held) - it runs out like an unpaid one (grace, then lapsed)
+    if (!(err && (err.code === "E_INSUFFICIENT_PAT" || err.code === "E_CAP" || err.code === "E_SITE_BANNED" || err.code === "E_DELETION_PENDING"))) { console.error(`[creators] renew #${s.id}:`, e.message); return "skip"; }
     if (t >= graceEnd) return end("lapsed", `⭐ Your subscription to ${cu.username} ended`, `The renewal (${fmt(plan.price)} PAT) couldn't be paid within the ${CONFIG.grace_days}-day grace. Subscribe again any time.`);
     const k = "grace:" + s.paid_through;
     if (s.notified !== k) {
@@ -1295,7 +1296,7 @@ async function clawback(actor, ledgerId, note) {
     taken = Math.min(bal, r.creator_share);
     if (taken > 0) {
       const L = require("./ledger");
-      const d = await L.post(r.creator_id, -taken, "creator clawback", { requireCover: true, source: "creators", note: cleanLine(note, 80) || null });
+      const d = await L.post(r.creator_id, -taken, "creator clawback", { requireCover: true, system: true, source: "creators", note: cleanLine(note, 80) || null });
       if (!d.ok) taken = 0;
     }
   }

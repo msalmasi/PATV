@@ -290,17 +290,73 @@ test("wagers: create from chat and from the website form; decline / cancel / voi
   assert.equal(await bal("u2"), bb1 + 1000);
 });
 
+// banfix review (siteban.js): a deletion PATV staff scheduled can't be held off by new wagers - nobody names a site-banned account or
+// one under a staff deletion as opponent or judge (an open wager naming them is a deletion blocker - staleaccounts "wager"), and the
+// account under a staff deletion starts none and puts up no stake (escrow holdInTx E_DELETION_PENDING); a member's OWN pending request
+// doesn't count. A banned judge can still settle the wager it judges (siteban.WIND_DOWN): the winner is paid, not refunded.
+test("banfix review: no banned / staff-deleting opponent or judge; no new stake under a staff deletion; a banned judge still settles", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS account_deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, state TEXT, requested_at INTEGER, execute_at INTEGER,
+                  requested_by TEXT, reauth TEXT, reason TEXT, held_reason TEXT, held_at INTEGER, cancelled_at INTEGER, cancel_via TEXT, done_at INTEGER)`);
+  for (const [id, name, b, cf] of [["u6", "tee", 20000, "tee_cf"], ["u7", "del", 20000, "del_cf"], ["u8", "own", 20000, "own_cf"]]) {
+    await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, class) VALUES (?, ?, 'x', ?, ?, 'pleb')", [id, name, b, cf]);
+  }
+  // a live wager tee judges (before the ban)
+  const w = await act("wagers", "create", actor("ann_cf", "ann"), { opponent: { login: "bob_cf" }, judge: { login: "tee_cf" }, amount: 1000, terms: "the frogs win", secs: 7200 }, "idem-bfr-1");
+  assert.equal(w.body.ok, true, JSON.stringify(w.body));
+  assert.equal((await act("wagers", "accept", actor("bob_cf", "bob"), { ref: w.body.ref }, "idem-bfr-2")).body.ok, true);
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u6', '', 'tee', 'spam', 'staff', ?, NULL)", [Date.now()]);
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth) VALUES ('u7', 'scheduled', ?, ?, 'admin:u4', 'admin')",
+                 [Date.now(), Date.now() + 14 * 86400000]);
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth) VALUES ('u8', 'scheduled', ?, ?, 'self', 'password')",
+                 [Date.now(), Date.now() + 14 * 86400000]);
+  SB.forget();
+  const a0 = await bal("u1");
+  // nobody names them - as judge or as opponent; the words never say why
+  for (const [args, idem] of [[{ opponent: { login: "bob_cf" }, judge: { login: "tee_cf" } }, "idem-bfr-3"], [{ opponent: { login: "tee_cf" }, judge: { login: "carol_cf" } }, "idem-bfr-4"],
+                              [{ opponent: { login: "bob_cf" }, judge: { login: "del_cf" } }, "idem-bfr-5"], [{ opponent: { login: "del_cf" }, judge: { login: "carol_cf" } }, "idem-bfr-6"]]) {
+    const r = await act("wagers", "create", actor("ann_cf", "ann"), Object.assign({ amount: 1000, terms: "a friendly hold-off " + idem, secs: 7200 }, args), idem);
+    assert.equal(r.body.ok, false, idem);
+    assert.equal(r.body.code, "bad_party", JSON.stringify(r.body));
+    assert.doesNotMatch(r.body.error, /banned|delet/i, "never says why");
+  }
+  assert.equal(await bal("u1"), a0, "nothing held");
+  // the account under a staff deletion starts nothing (code 'deleting') and puts up no stake, whoever asks
+  const d = await act("wagers", "create", actor("del_cf", "del"), { opponent: { login: "bob_cf" }, judge: { login: "carol_cf" }, amount: 1000, terms: "one more", secs: 7200 }, "idem-bfr-7");
+  assert.equal(d.body.code, "deleting", JSON.stringify(d.body));
+  const acct = await L.accountFor({ userId: "u7" });
+  await assert.rejects(L.tx(() => L.holdInTx({ key: "bfr-direct-1", hid: null, account: acct, amount: 100, ref: "W999", reason: "wager-stake", via: "site" })),
+                       (e) => e.code === "E_DELETION_PENDING");
+  assert.equal(await bal("u7"), 20000);
+  // a member's OWN pending request (signing in cancels that one) doesn't stop anything
+  const o = await act("wagers", "create", actor("own_cf", "own"), { opponent: { login: "bob_cf" }, judge: { login: "carol_cf" }, amount: 1000, terms: "my own", secs: 7200 }, "idem-bfr-8");
+  assert.equal(o.body.ok, true, JSON.stringify(o.body));
+  assert.equal((await act("wagers", "cancel", actor("own_cf", "own"), { ref: o.body.ref }, "idem-bfr-9")).body.ok, true);
+  // the banned judge's call still pays the winner (not a refund at the deadline)
+  const s = await act("wagers", "settle", actor("tee_cf", "tee"), { ref: w.body.ref, outcome: "ann_cf" }, "idem-bfr-10");
+  assert.equal(s.body.ok, true, JSON.stringify(s.body));
+  assert.equal(s.body.wager.status, "won");
+  assert.ok(await bal("u1") > a0, "the winner is paid");
+  await runQuery("DELETE FROM feed_bans WHERE user_id = 'u6'");
+  await runQuery("DELETE FROM account_deletions WHERE user_id IN ('u7', 'u8')");
+  SB.forget();
+});
+
 test("wagers: rollback hands the records back (keyed); the ledger rollback waits for it", async () => {
-  await act("wagers", "create", actor("ann_cf", "ann"), { opponent: { login: "bob_cf" }, judge: { login: "carol_cf" }, amount: 1000, terms: "stays open", secs: 7200 }, "idem-c9");
+  // (banfix review: the id this create gets - the test above made wagers too)
+  const c9 = await act("wagers", "create", actor("ann_cf", "ann"), { opponent: { login: "bob_cf" }, judge: { login: "carol_cf" }, amount: 1000, terms: "stays open", secs: 7200 }, "idem-c9");
+  const id9 = Number(String(c9.body.ref).replace(/^W/, ""));
   assert.equal((await post("/api/escrow/admin/rollback", { key: "er-0001" })).body.code, "E_GAMES_LIVE");
   const rb = await post("/api/escrow/admin/game-rollback", { game: "wagers", key: "gr-w-1" });
   assert.equal(rb.body.ok, true, JSON.stringify(rb.body));
   assert.equal(rb.body.count, 1);
   assert.equal(rb.body.sum, 1000);
-  assert.ok(rb.body.records.find((r) => r.id === 9 && r.status === "offered"));
+  assert.ok(rb.body.records.find((r) => r.id === id9 && r.status === "offered"));
   assert.equal((await post("/api/escrow/admin/game-rollback", { game: "wagers", key: "gr-w-1" })).body.dup, true);
   assert.equal(await G.gameLive("wagers"), false);
-  assert.equal((await act("wagers", "accept", actor("bob_cf", "bob"), { ref: "W9" }, "idem-a9")).body.code, "not_live");
+  assert.equal((await act("wagers", "accept", actor("bob_cf", "bob"), { ref: c9.body.ref }, "idem-a9")).body.code, "not_live");
   // now the ledger: every held stake goes back, the table holds nothing
   const s0 = (await supply()).total;
   const held = await L.heldTotal();

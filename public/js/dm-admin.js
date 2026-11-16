@@ -2,6 +2,7 @@
 // "Read" fetches ONE reported message + its safety record (the server logs the read first). Text goes in with textContent only.
 (function () {
   'use strict';
+  var _t = function (k, d, v) { return window.__t ? window.__t(k, d, v) : String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   function api(url, body) {
     return fetch(url, {
       method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
@@ -82,11 +83,17 @@
     var tell = row.querySelector('input[name=tell]');
     var body = { message: id, action: act, notify: !tell || tell.checked };
     if (act === 'ban') {
-      var r = window.prompt('Remove the message and ban @' + row.getAttribute('data-user') + ' from the feed and messages.\nReason:', 'reported direct message');
+      // banfix review: this ban is a SITE ban (siteban.js) - said so; a mistyped number of days is asked again, never "for good"
+      var r = window.prompt(_t('js.dmadm.remove_ban_line', 'Remove the message and site-ban @{name} - they are signed out everywhere and can\'t sign in until it ends.', { name: row.getAttribute('data-user') }) + '\nReason:', 'reported direct message');
       if (r === null) return;
-      var d = window.prompt('Ban for how many days? (0 = forever)', '7');
-      if (d === null) return;
-      body.reason = r; body.days = parseInt(d, 10) || 0;
+      var d;
+      for (;;) {
+        d = window.prompt(_t('js.feedadm.days_q', 'Site ban for how many days? (0 = for good)'), '7');
+        if (d === null) return;
+        if (/^\s*\d{1,4}\s*$/.test(d)) break;
+        window.alert(_t('js.feedadm.days_bad', 'Type a whole number of days (0 = for good).'));
+      }
+      body.reason = r; body.days = parseInt(d, 10);
     }
     if (act === 'false' && !window.confirm('Dismiss as made in bad faith?')) return;
     b.disabled = true;

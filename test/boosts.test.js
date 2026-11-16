@@ -303,3 +303,24 @@ test("pages: the Pads guide shows Trending (front pick + runners-up with their b
     assert.doesNotMatch(src, /★ Get featured|Get featured<\/b>|feature=1|Paid featuring costs/, v + " has no paid-featuring copy");
   }
 });
+
+// banfix review (siteban.js): Pepe's chat !boost acts for the linked account without a session (/api/rooms/boost) - a site-banned
+// account boosts nothing (boost() itself refuses it, so the website's form too); nothing is charged; once lifted it can again
+test("banfix review: a site-banned account can't boost a pad (chat or web) - nothing charged", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  const u = await mkUser({ username: "spammer" });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, '', 'spammer', 'spam', 'staff', ?, NULL)", [u.userId, T]);
+  SB.forget(u.userId);
+  const b0 = await bal(u.userId);
+  for (const via of ["chat", "web"]) {
+    await assert.rejects(B.boost(u, "Quiet.Room", { amount: 5000, ref: ref(), via }), (e) => e.refuse && e.status === 403 && /banned/.test(e.message));
+  }
+  assert.equal(await bal(u.userId), b0, "nothing charged");
+  await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [u.userId]);
+  SB.forget(u.userId);
+  const ok = await B.boost(u, "Quiet.Room", { amount: 5000, ref: ref(), via: "chat" });
+  assert.equal(ok.dup, false);
+  assert.equal(await bal(u.userId), b0 - 5000);
+});

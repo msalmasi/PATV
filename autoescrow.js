@@ -462,6 +462,8 @@ async function redeemClaim(token, me, { now = Date.now(), link = null } = {}) {
   try { res = await doLink(String(me.userId), r.login); }
   catch (e) {
     await runQuery("UPDATE auto_escrow_claimlinks SET used_at = NULL, used_by = NULL WHERE token_hash = ? AND used_by = ?", [h, String(me.userId)]).catch(() => {});
+    // banfix review: the name's account is site-banned / being deleted by staff (user.controller._linkRefusal) - said on the page
+    if (e && e.refuse && (e.code === "banned" || e.code === "deleting")) return { ok: false, error: e.message };
     throw e;                                       // the link still works for a retry
   }
   const rel = await releaseSafe(me.userId, "claim link");          // afterMerge already did it when there was a merge: a no-op then

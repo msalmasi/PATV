@@ -814,6 +814,7 @@ async function chargeService({ userId, username, title, price, source, note, hol
         const b = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]))[0];
         throw new Refuse(402, `That costs ${price.toLocaleString()} PAT and you have ${((b && b.points_balance) || 0).toLocaleString()}.`);
       }
+      if (r.code === "E_SITE_BANNED") throw new Refuse(403, require("./siteban").botText());   // banfix review (ledger.post's backstop)
       throw new Refuse(404, "We couldn't find your account.");
     }
     if (owner) await move(owner.userId, price, `store sale: ${title} to ${username} (${source || "website"})`);
@@ -842,6 +843,9 @@ async function chargeRenewal({ userId, username, prizeId, title, price, note, in
     const r = await require("./ledger").post(userId, -price, `purchase of ${title}`, { requireCover: true, source: "shop subscription" });
     if (!r.ok) {
       if (r.code === "E_INSUFFICIENT") throw new Refuse(402, `That costs ${price.toLocaleString()} PAT.`);
+      // banfix review: a site-banned subscriber's renewal (ledger.post E_SITE_BANNED) runs out like an unpaid one (grace, then
+      // lapsed - subscriptions.js), like a banned fan's creator renewal
+      if (r.code === "E_SITE_BANNED") throw new Refuse(402, require("./siteban").botText());
       throw new Refuse(404, "We couldn't find the account.");
     }
     if (owner) await move(owner.userId, price, `store sale: ${title} to ${username} (subscription)`);

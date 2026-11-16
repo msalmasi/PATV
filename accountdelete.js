@@ -394,6 +394,7 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
       recordings = { logins: w.length, by_hand: w.length - MR.askable(w).length };
     } catch (e) { /* the counts are a courtesy */ }
   }
+  try { require("./siteban").forget(u.userId); } catch (e) { /* the 5 s cache lands it anyway */ }   // banfix review: startLock sees it now
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
   // banfix: staff's request says so - signing in doesn't cancel it (cancelOnSignIn leaves it alone)
   const viaAdmin = /^admin:/.test(String(by));
@@ -410,6 +411,31 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
   }
   console.log(`[acctdel] ${u.username} scheduled for ${new Date(at).toISOString()} (by ${by})`);
   return { ok: true, execute_at: at, ...(recordings ? { delete_recordings: true, recordings } : {}) };
+}
+
+/**
+ * banfix review (finding 9): an admin schedules the deletion of an account whose member already asked for it themselves - the
+ * member's pending request becomes staff's (requested_by 'admin:<id>', reauth 'admin', staff's reason), so a sign-in no longer
+ * cancels it (cancelOnSignIn). Its date and its choices (hide lines, remove public messages, recordings) stay as the member set
+ * them; held or scheduled, the job carries on. One conditional UPDATE in a transaction (a sign-in that cancelled it first wins:
+ * nothing to adopt). -> {ok, execute_at, adopted: id} | null (nothing of the member's own pending)
+ */
+async function adoptOwn(u, { by, reason = null } = {}) {
+  await init();
+  const p = await pendingOf(u.userId);
+  if (!p || byAdmin(p)) return null;
+  const r = await tx(() => runQuery(`UPDATE account_deletions SET requested_by = ?, reauth = 'admin', reason = ? WHERE id = ? AND state IN ('scheduled','held')
+                                     AND (requested_by IS NULL OR requested_by NOT LIKE 'admin:%')`,
+                                    [String(by).slice(0, 80), reason ? String(reason).slice(0, 200) : null, p.id]));
+  if (!r || !r.changes) return null;
+  try { require("./siteban").forget(u.userId); } catch (e) { /* the 5 s cache lands it anyway */ }
+  await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
+  const tr = tOf(u.userId);
+  await require("./inbox").addSafe(u.userId, { kind: "system", title: tr("acctdel.notice.admin_title"),
+    body: tr("acctdel.notice.admin_body", { date: new Date(Number(p.execute_at)).toISOString().slice(0, 10) }), link: "/settings/account#delete",
+    ref: `acctdel:adopt:${p.id}` });
+  console.log(`[acctdel] ${u.username}'s own request #${p.id} is staff's now (by ${by}), still for ${new Date(Number(p.execute_at)).toISOString()}`);
+  return { ok: true, execute_at: Number(p.execute_at), adopted: p.id };
 }
 
 /** A sign-in during the grace period cancels the member's OWN deletion request (sessions.signIn). banfix: never one PATV staff
@@ -446,7 +472,7 @@ async function routeBalanceInTx(userId, key) {
   const amount = Math.floor(Number(u && u.points_balance) || 0);   // sub-1 dust stays on the row (still counted in supply)
   if (!(amount > 0)) return null;
   const ledger = require("./ledger");
-  const d = await ledger.post(userId, -amount, "account-deleted", { requireCover: true, note: `routed: ${FLOW}`, source: "accountdelete" });
+  const d = await ledger.post(userId, -amount, "account-deleted", { requireCover: true, system: true, note: `routed: ${FLOW}`, source: "accountdelete" });
   if (!d.ok) throw new Error(`account-deleted debit refused: ${d.code}`);
   const sh = await shares();
   const legs = require("./autoescrow").split(sh, amount);
@@ -703,9 +729,18 @@ async function execute(userId, { force = false } = {}) {
           body: ta("acctdel.alert.held_body", { name: u0.username, why }), link: "/admin/accounts", ref: `acctdel:held-admin:${reqRow.id}` });
       }
     } else if (first) {
-      await require("./inbox").addSafe(uid, { kind: "system", title: "Your account deletion is on hold",
-        body: `We couldn't delete your account yet: ${why}. Sign in to close these (signing in cancels the deletion; ask again afterwards).`,
-        link: "/settings/account#delete", ref: `acctdel:held:${reqRow.id}` });
+      // banfix review (finding 10): a site-banned member can't sign in (siteban.js), so the "sign in to close these" advice is left out
+      let locked = null;
+      try { locked = await require("./siteban").lockOf(uid); } catch (e) { locked = null; }
+      if (locked) {
+        const tr = tOf(uid);
+        await require("./inbox").addSafe(uid, { kind: "system", title: tr("acctdel.notice.held_title"), body: tr("acctdel.notice.held_locked_body", { why }),
+          link: "/settings/account#delete", ref: `acctdel:held:${reqRow.id}` });
+      } else {
+        await require("./inbox").addSafe(uid, { kind: "system", title: "Your account deletion is on hold",
+          body: `We couldn't delete your account yet: ${why}. Sign in to close these (signing in cancels the deletion; ask again afterwards).`,
+          link: "/settings/account#delete", ref: `acctdel:held:${reqRow.id}` });
+      }
     }
     return { ok: false, state: "held", block: b.block };
   }
@@ -1120,7 +1155,10 @@ async function tick() {
   if (ticking) return ticking;
   ticking = (async () => {
     await init();
-    const due = await getQuery("SELECT user_id FROM account_deletions WHERE state IN ('scheduled','held') AND execute_at <= ? ORDER BY execute_at LIMIT 20", [now()]);
+    // banfix review (finding 6): due 'scheduled' rows first, then the held ones least recently tried first (execute() stamps held_at
+    // on every try) - a pile of deletions held for good (a banned member can't close what's in the way) never starves a newer one
+    const due = await getQuery(`SELECT user_id FROM account_deletions WHERE state IN ('scheduled','held') AND execute_at <= ?
+                                ORDER BY CASE state WHEN 'scheduled' THEN 0 ELSE 1 END, COALESCE(held_at, 0), execute_at, id LIMIT 20`, [now()]);
     for (const d of due) { try { await execute(d.user_id); } catch (e) { console.error(`[acctdel] execute ${d.user_id}:`, e.message); } }
     try { await sweepTombstones(); } catch (e) { console.error("[acctdel] sweep:", e.message); }
     try { await retryForget(); } catch (e) { console.error("[acctdel] forget retry:", e.message); }
@@ -1211,6 +1249,16 @@ function register(app, { addUser }) {
       await require("./staffrank").assert(me, target.userId);
       if (String((req.body || {}).confirm || "").trim() !== target.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
       if (String((req.body || {}).reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");   // 1.99wl
+      // banfix review (finding 9): the member's OWN pending request becomes staff's (a sign-in can't cancel it any more); one staff
+      // already scheduled is "Already scheduled"
+      const own = await pendingOf(target.userId);
+      if (own && !byAdmin(own)) {
+        const r = await adoptOwn(target, { by: "admin:" + me.userId, reason: (req.body || {}).reason });
+        if (r) {
+          await require("./adminaudit").record(me, "account.delete", target, { execute_at: r.execute_at, adopted: r.adopted }, (req.body || {}).reason);
+          return res.json(r);
+        }
+      }
       if (await pendingOf(target.userId)) throw new Refuse(409, "Already scheduled.", "E_PENDING");
       const b = await blockers(target.userId);
       if (b.block.length) throw new Refuse(409, "Some things have to be closed first.", "E_BLOCKED", { block: b.block });
@@ -1234,12 +1282,13 @@ function register(app, { addUser }) {
       const r = await runQuery("UPDATE account_deletions SET state = 'cancelled', cancelled_at = ?, cancel_via = ? WHERE id = ? AND state IN ('scheduled','held')",
                                [now(), "admin:" + me.userId, d.id]);
       if (r && r.changes) await require("./adminaudit").record(me, "account.delete_cancel", { userId: d.user_id, username: d.username }, { id: d.id }, String(b.reason).slice(0, 200));
+      if (r && r.changes) { try { require("./siteban").forget(d.user_id); } catch (e) { /* the 5 s cache lands it anyway */ } }   // banfix review
       res.json({ ok: !!(r && r.changes) });
     } catch (e) { fail(res, e); }
   });
 }
 
-module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, byAdmin, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
+module.exports = { hubRow, init, register, blockers, request, schedule, adoptOwn, cancelOnSignIn, byAdmin, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
                    removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
                    loginWindowsOf,                                                                        // S1 V4 review 2

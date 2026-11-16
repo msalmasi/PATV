@@ -37,6 +37,24 @@ scheduled for deletion (a merge would escape it). A non-banned account under a s
 the 14 days (`siteban.ADMIN_DELETION_LOCKS` off); it can't cancel it, and anything it opens in between holds the job (the
 admin is told).
 
+banfix review - nothing new holds a staff deletion off, and nothing escapes it:
+- **No new games around it.** While a staff deletion is pending the account puts up no new escrow stake
+  (`E_DELETION_PENDING`) and Pepe's bot paths start nothing for it (`siteban.startLock`: games, markets, loans, gangs,
+  paid charges); nobody can name it - or a site-banned account - as a new wager's opponent or judge, a pool's judge or a
+  market's judge (a friend re-creating a 30-day wager naming it kept the deletion on hold for good). What is already open
+  ends at its own deadline (wagers <= 30 days, pools after their grace, bounties at theirs), then the job runs; a pad, a
+  card subscription or a creator page still needs a human (the admin is told).
+- **No merge escapes it.** `accountMerge.moveUserRows` refuses an account with a pending staff deletion before writing
+  anything (`E_DELETION_PENDING`) - the Camfrog `!verify` merge, a duplicate merge, a provider merge; a `!verify` of a
+  Camfrog name an account under a staff deletion (or a site ban) holds is refused outright ("please contact PATV staff").
+- **Staff take over a member's own request.** `POST /api/admin/users/:id/delete` on an account whose member already asked
+  for deletion turns that request into staff's (`requested_by admin:<id>`, its date and choices kept, audited as
+  `account.delete` with `adopted`) - a sign-in can't cancel it after that. One staff already scheduled is "Already scheduled".
+- **The job's order.** Due `scheduled` rows run before `held` ones, and held ones least recently tried first, so deletions
+  held for good never starve a newer one.
+- **The words.** A banned member's own request on hold doesn't say "sign in" (they can't); the hold notices are plain text
+  (a blocker with an apostrophe shows as typed).
+
 Existing rows cancelled by a sign-in before this change (`requested_by LIKE 'admin:%' AND state = 'cancelled' AND
 cancel_via LIKE 'sign-in:%'`) are not revived: an admin schedules them again (a new 14-day grace; the route refuses while
 blockers - open bounties, wagers... - remain: void them, or wait for their deadlines).

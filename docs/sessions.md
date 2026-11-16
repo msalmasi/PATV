@@ -81,12 +81,30 @@ account lock:
   sign-in form shows it). Every authenticated page, API and write - bounties, the feed, DMs, stories, comments, the
   casino, markets, uploads, the chat ticket - is refused as for any signed-out visitor. Signed-out visitors are untouched.
 - **Bots acting for the account refuse it too** (no session involved): Pepe's escrow games (`escrow/games.act`: bounties,
-  wagers, pools, loans - only the wind-down verbs cancel / decline / repay / forgive stay; Pepe's own verbs always run),
-  every escrow stake (`escrow/ledger.holdInTx` `E_SITE_BANNED` - a loan repayment still goes), the casino / lotto / stash
-  / raffle / creator bot routers, `!tip` (Pepe / Discord), the chat shop, the chat wheel spin, the queued web actions Pepe
-  claims (failed at ban time and skipped at claim; Pepe's `privacy.*` jobs always run), a chat sign-in link. The Telegram
-  bridge already treated a site ban as tier `none`. Credits, refunds and settlements never ask (an expiring bounty
-  refunds a banned poster; an admin-scheduled deletion of a banned account runs at its time).
+  wagers, pools, loans - only the wind-down verbs stay: cancel / decline / repay / forgive, and a judge's or poster's call
+  on what OTHER people hold - settle a wager / pool it judges, resolve / reject claims on its own bounty - so the winners
+  are paid instead of refunded; Pepe's own verbs always run), every escrow stake (`escrow/ledger.holdInTx` `E_SITE_BANNED`
+  - a loan repayment still goes), the capital cluster (`capital/service.act`: no buy, no market Pepe opens for it, no
+  loan, no stake - sell / cancel / a judge's settle / repay / unstake stay), the gangs (`/api/gangs/bot/op`: no founding,
+  joining, inviting, depositing - decline / leave / defect / withdraw / hand over / disband stay), Pepe's generic charges
+  (`/api/wager/charge` - duel / brawl stakes, paid commands, heist gear - and `/api/pat/charge`; a fine or a clawback,
+  `siteban.systemCharge`, still goes), `!boost`, the casino / lotto / stash / raffle / creator bot routers, `!tip`
+  (Pepe / Discord), the chat shop, the chat wheel spin, the queued web actions Pepe claims (failed at ban time and
+  skipped at claim; Pepe's `privacy.*` jobs always run), a chat sign-in link. The Telegram bridge already treated a site
+  ban as tier `none`. Credits, refunds and settlements never ask (an expiring bounty refunds a banned poster; an
+  admin-scheduled deletion of a banned account runs at its time).
+- **The ledger backs them all up** (banfix review): `ledger.post` refuses a debit the account has to cover itself
+  (`requireCover` - a spend, a stake, a buy, a fee) for a site-banned account, whoever asks (`E_SITE_BANNED`), so a bot
+  path that forgot to ask still moves nothing. `opts.system` is "not the account acting" and is never asked: the deletion
+  job's routing, a creator clawback, a loan repayment / the collection, a market re-settle's clawback, a fine through
+  Pepe's charges, a stake the escrow ledger already checked. A banned subscriber's store / creator renewal runs out like
+  an unpaid one (grace, then lapsed).
+- **Nobody can name them** (banfix review): a new wager, pool or capital market refuses a site-banned account - or one
+  PATV staff scheduled for deletion - as its opponent or judge (an open game naming them would keep that deletion on
+  hold); the refusal never says why.
+- **A !verify can't take the Camfrog name off a banned account** (or one staff are deleting): the name stays (Pepe would
+  resolve it to the new account; the ban doesn't follow a name), "please contact PATV staff"; the `!signup` claim page the
+  same. No merge path moves an account staff scheduled for deletion (`accountMerge.moveUserRows` `E_DELETION_PENDING`).
 - **Ends on time.** Every read compares `until` with the clock (a cached lock too); no manual step. The lock is cached 5 s
   per account; `feedstore.ban` / `unban`, `padbans.linked` and a merge forget it at once. Sign-in reads it fresh.
 - **Admins can't be locked out (D1).** The Admin class and the owner (`classRank >= 3`) are exempt, so a stray ban can't
@@ -94,12 +112,21 @@ account lock:
   can ban an Admin - to lock an Admin out, remove the Admin class first. Staff and Assistants can be locked out.
 - **Merges.** A Twitch / Discord conflict merge refuses a site-banned account (`banned`) or one staff scheduled for deletion
   (`deleting`) - "please contact staff".
+- **A pending staff deletion starts nothing new** (banfix review, `siteban.startLock`): with D3 off a NON-banned account
+  under a staff deletion can still sign in, but it puts up no new escrow stake (`E_DELETION_PENDING`), and the bot paths
+  above start nothing for it (code `deleting`) - so nothing new holds the deletion off. What it can still open through the
+  website without PAT (a pad, a shop listing ...) holds the job and the admin is told; D3 on closes that too (it can't
+  sign in at all).
+- **The /feed/admin words** (banfix review): a ban there with no pad IS this site ban, so the buttons, prompts and the
+  table say "Site ban" / "whole site" and what it does; a mistyped number of days is asked again (it used to become
+  "for good").
 - **Knobs** (constants at the top of `siteban.js`): `EXEMPT_MIN_RANK` (D1), the wind-down verbs `WIND_DOWN` / `CASINO_OK` /
-  `STASH_OK` (D2), `ADMIN_DELETION_LOCKS` (D3, off: a pending staff-scheduled deletion of a NON-banned account doesn't lock
-  it out - it can sign in but can't cancel it), `SHOW_REASON` (D4).
-- **Not covered yet** (follow-up): bot paths outside those routers that act for a linked account - the Discord bot's buy-in /
-  bonus routes, Twitch channel points, Pepe's market / GTF / PvP routes. A ledger-level spend backstop (`ledger.post`
-  debits) would cover them; it needs a system-source allow-list (the deletion's routing debit, policy, staff grants).
+  `STASH_OK` / `CAPITAL_OK` / `GANG_OK` (D2), `SYSTEM_CHARGE_RE` (Pepe's charges that aren't the account acting),
+  `ADMIN_DELETION_LOCKS` (D3, off: a pending staff-scheduled deletion of a NON-banned account doesn't lock it out - it can
+  sign in but can't cancel it, and starts nothing new), `SHOW_REASON` (D4).
+- **Not covered yet** (follow-up): debits that skip `requireCover` or the ledger (raw balance updates - the remaining ones
+  are system moves today), the Discord bot's buy-in / bonus routes and Twitch channel points beyond what the ledger
+  backstop catches, and GTF's bot routes that write no PAT.
 
 ## New-device notices
 

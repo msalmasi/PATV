@@ -1370,6 +1370,27 @@ async function webAct(userId, body) {
   throw new Refuse(400, "Unknown action.", "E_OP");
 }
 
+/**
+ * banfix review (siteban.js): the account a chat !gang op is for - Pepe sends its userId / username, else the member key (a Camfrog
+ * login, or "u:<id>") - starts nothing while it is site-banned or PATV staff have its deletion scheduled (siteban.startLock): no
+ * gang founded, joined, invited into, deposited to. Getting out still works (siteban.GANG_OK: decline, leave, defect, withdraw its
+ * allowance, hand the gang over, disband); Pepe's own ops (spend / move / patch) never ask. -> lock | null
+ */
+async function botOpLock(op, b) {
+  const SB = require("./siteban");
+  if (SB.GANG_OK.has(op) || SB.GANG_PEPE_OPS.has(op)) return null;
+  let uid = null;
+  if (b.userId || b.username) { const u = await userFor({ userId: b.userId, username: b.username }); uid = u ? u.userId : null; }
+  const key = !uid ? low(b.member || b.actor || "") : "";
+  if (!uid && key) {
+    const m = await memberRow(key);
+    if (m && m.userId) uid = m.userId;
+    else if (key.startsWith("u:")) uid = key.slice(2);
+    else uid = ((await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = ? LIMIT 1", [key]))[0] || {}).userId || null;
+  }
+  return uid ? SB.startLock(uid) : null;
+}
+
 // ── routes ──
 function register(app, { isBotToken, addUser, patSupply }) {
   if (patSupply) supplyFn = patSupply;
@@ -1400,9 +1421,11 @@ function register(app, { isBotToken, addUser, patSupply }) {
     if (b.since_rev !== undefined && Number(b.since_rev) === r) return { ok: true, live: await live(), enabled: await enabled(), rev: r, same: true };
     return Object.assign({ ok: true, live: await live(), enabled: await enabled(), rev: r }, (await live()) ? await stateAll() : {});
   }));
-  app.post("/api/gangs/bot/op", bot((b) => {
+  app.post("/api/gangs/bot/op", bot(async (b) => {
     const fn = OPS[String(b.op || "")];
     if (!fn) throw new Refuse(400, "unknown op", "E_OP");
+    const lock = await botOpLock(String(b.op), b);
+    if (lock) return require("./siteban").botRefusal(lock);
     return fn(b);
   }));
   app.post("/api/gangs/bot/op-status", bot(async (b) => ({ ok: true, result: await settledOpStatus(b.key) })));   // PO-0b: committed, in order

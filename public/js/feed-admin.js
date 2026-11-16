@@ -1,6 +1,17 @@
 // feed-admin.js — /feed/admin (1.99bv): settings, report triage, feed bans.
 (function () {
   'use strict';
+  var _t = function (k, d, v) { return window.__t ? window.__t(k, d, v) : String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  // banfix review: a feed ban with no pad IS a site ban (siteban.js) - the prompts say so; a mistyped number of days is asked again
+  // instead of becoming "for good" (parseInt('a week') || 0 was a permanent site ban)
+  function askDays(q) {
+    for (;;) {
+      var d = window.prompt(q, '7');
+      if (d === null) return null;
+      if (/^\s*\d{1,4}\s*$/.test(d)) return parseInt(d, 10);
+      window.alert(_t('js.feedadm.days_bad', 'Type a whole number of days (0 = for good).'));
+    }
+  }
   function api(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
@@ -34,7 +45,7 @@
     else if (act === 'delete') { var why = window.prompt('Reason (the author is told):', ''); if (why !== null) api('/api/feed/posts/' + id + '/delete', { reason: why }).then(done, oops); }
     else if (act === 'nsfw') api('/api/feed/posts/' + id + '/admin', { nsfw: /^Mark/.test(b.textContent) }).then(done, oops);
     else if (act === 'ban') {
-      var days = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting on the feed for how many days? (0 = forever)', '7');
+      var days = askDays(_t('js.feedadm.ban_days_q', 'Site-ban {name} for how many days? (0 = for good) They are signed out everywhere and can\'t sign in until it ends.', { name: b.getAttribute('data-user') }));
       if (days !== null) api('/api/feed/ban', { user: '@' + b.getAttribute('data-user'), days: days, reason: 'reported post' }).then(done, oops);
     } else if (act === 'unban') api('/api/feed/unban', { userId: b.getAttribute('data-uid'), room: b.getAttribute('data-room') || '' }).then(done, oops);
     // 1.99cc: outcomes on a report target (post / comment) or a reported account; "tell" = inbox notice to the reporters
@@ -43,14 +54,14 @@
       var tell = tgt.querySelector('input[name=tell]');
       var what = act.slice(2), body = { action: what, notify: !tell || tell.checked };
       if (what === 'remove' || what === 'ban') {
-        var r = window.prompt((what === 'ban' ? 'Remove it and ban ' + tgt.getAttribute('data-user') + ' from the feed.\n' : 'Remove it.\n') + 'Reason (the author is told):', '');
+        var r = window.prompt((what === 'ban' ? _t('js.feedadm.remove_ban_line', 'Remove it and site-ban {name} - they are signed out everywhere and can\'t sign in until it ends.', { name: tgt.getAttribute('data-user') }) + '\n' : 'Remove it.\n') + 'Reason (the author is told):', '');
         if (r === null) return;
         body.reason = r;
       }
       if (what === 'ban') {
-        var d = window.prompt('Ban for how many days? (0 = forever)', '7');
+        var d = askDays(_t('js.feedadm.days_q', 'Site ban for how many days? (0 = for good)'));
         if (d === null) return;
-        body.days = parseInt(d, 10) || 0;
+        body.days = d;
       }
       if (what === 'false' && !window.confirm('Dismiss as made in bad faith? It counts against the reporter(s); enough of these pause their reporting.')) return;
       b.disabled = true;

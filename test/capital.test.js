@@ -700,6 +700,68 @@ test("1.99ajw quick1: a stake into a vault at its staker limit is refused BEFORE
   }
 });
 
+// banfix review (siteban.js; the reviewer's probe): Pepe's capital ops act for a linked account without a session - a site-banned
+// account (or one PATV staff scheduled for deletion) starts nothing there: no buy, no market Pepe opens FOR it, no loan, no stake,
+// never named as a market's judge; it can still get out (sell, repay, unstake). The wallet debit itself refuses it too (ledger.post).
+test("banfix review: a site-banned account buys, borrows, stakes and opens nothing through Pepe; it can still sell; never a judge", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS account_deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, state TEXT, requested_at INTEGER, execute_at INTEGER,
+                  requested_by TEXT, reauth TEXT, reason TEXT)`);
+  for (const [id, name, cf] of [["u10", "dee", "dee_cf"], ["u11", "del", "del_cf"]]) {
+    await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, level, created_at) VALUES (?, ?, 'x', 300000, ?, 5, '2026-01-01 00:00:00')", [id, name, cf]);
+  }
+  const DEE = { login: "dee_cf", username: "dee", userId: "u10", via: "room", room: "PepeLab" };
+  const DEL = { login: "del_cf", username: "del", userId: "u11", via: "room", room: "PepeLab" };
+  const s0 = (await supply()).total;
+  const bought = await op("markets", "buy", DEE, { ref: "M10", option: "yes", amount: 10000 }, "bf-buy-0001");
+  assert.equal(bought.body.ok, true, JSON.stringify(bought.body));
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u10', '', 'dee', 'spam', 'staff', ?, NULL)", [Date.now()]);
+  SB.forget("u10");
+  const d0 = await bal("u10");
+  const next0 = await C.meta("seq:market").catch(() => null);
+  for (const [engine, verb, args, idem] of [["markets", "buy", { ref: "M10", option: "no", amount: 10000 }, "bf-buy-0002"],
+                                           ["reserve", "borrow", { amount: 5000, term: "7d" }, "bf-borrow-01"],
+                                           ["vaults", "stake", { vault: "bank", amount: 5000 }, "bf-stake-001"]]) {
+    const r = await op(engine, verb, DEE, args, idem);
+    assert.equal(r.body.ok, false, `${engine} ${verb}`);
+    assert.equal(r.body.code, "banned", JSON.stringify(r.body));
+  }
+  // Pepe opening a market FOR the banned account (the reviewer's M10-style probe) - refused, no market, no seed
+  const mm0 = await P.balance("mm");
+  const c = await op("markets", "create", PEPE, { question: "Will the spam stop?", options: ["yes", "no"], secs: 86400, judge: { login: "bob_cf" }, creator: "dee_cf", room: "PepeLab" }, "bf-create-01");
+  assert.equal(c.body.code, "banned", JSON.stringify(c.body));
+  assert.equal(await P.balance("mm"), mm0, "no seed moved");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM markets WHERE json_extract(data, '$.creator') = 'dee_cf'"))[0].n, 0, "no public market row");
+  // nobody names the banned account as a judge (never says why)
+  const j = await op("markets", "create", PEPE, { question: "Who wins the raffle?", options: ["red", "blue"], secs: 86400, judge: { login: "dee_cf" }, creator: "carl_cf", room: "PepeLab" }, "bf-create-02");
+  assert.equal(j.body.code, "bad_judge", JSON.stringify(j.body));
+  assert.doesNotMatch(j.body.error, /banned|delet/i);
+  assert.equal(await C.meta("seq:market").catch(() => null), next0, "no market id used");
+  assert.equal(await bal("u10"), d0, "nothing charged");
+  // the wallet debit itself refuses it (a path that forgot to ask); a repayment (system) still goes
+  await assert.rejects(C.wallet("u10", -100, "market-buy"), (e) => e.code === "E_SITE_BANNED");
+  // getting out still works: the banned account sells its position
+  const sold = await op("markets", "sell", DEE, { ref: "M10", option: "yes" }, "bf-sell-0001");
+  assert.equal(sold.body.ok, true, JSON.stringify(sold.body));
+  assert.ok(await bal("u10") > d0, "paid for the shares");
+  // a deletion PATV staff scheduled: starts nothing either (code 'deleting'); its own request (self) doesn't count
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth) VALUES ('u11', 'scheduled', ?, ?, 'admin:u9', 'admin')",
+                 [Date.now(), Date.now() + 14 * 86400000]);
+  SB.forget("u11");
+  assert.equal((await op("markets", "buy", DEL, { ref: "M10", option: "no", amount: 1000 }, "bf-buy-0003")).body.code, "deleting");
+  await runQuery("UPDATE account_deletions SET requested_by = 'self' WHERE user_id = 'u11'");
+  SB.forget("u11");
+  const own = await op("markets", "buy", DEL, { ref: "M10", option: "no", amount: 1000 }, "bf-buy-0004");
+  assert.equal(own.body.ok, true, JSON.stringify(own.body));
+  assert.equal((await op("markets", "sell", DEL, { ref: "M10", option: "no" }, "bf-sell-0002")).body.ok, true);
+  await runQuery("DELETE FROM account_deletions WHERE user_id = 'u11'");
+  await runQuery("DELETE FROM feed_bans WHERE user_id = 'u10'");
+  SB.forget();
+  assert.equal((await supply()).total, s0, "the supply total doesn't move");
+});
+
 test("rollback: the pots go back to Pepe under one key, everything is handed back, the supply total doesn't move", async () => {
   const s0 = (await supply()).total;
   const potSum = Number((await getQuery("SELECT COALESCE(SUM(balance),0) AS t FROM pools WHERE key LIKE 'market:%'"))[0].t);

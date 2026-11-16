@@ -228,6 +228,9 @@ function tx(fn) { return require("./mainstage")._tx(fn); }
 async function boost(user, roomId, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in to boost a pad.");
+  // banfix review (siteban.js): a site-banned account boosts nothing - Pepe's chat !boost acts for the linked account without a
+  // session (the website's form never gets here for one: the session gate signs it out)
+  { const SB = require("./siteban"); const lock = await SB.lockOf(user.userId); if (lock) throw new Refuse(403, SB.botText(lock)); }
   const C = CONFIG;
   if (!C.pay) throw new Refuse(403, "Boosting is switched off right now.");
   const rooms = require("./rooms");

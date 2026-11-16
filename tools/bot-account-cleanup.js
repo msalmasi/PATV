@@ -87,7 +87,7 @@ async function cleanup(u) {
     const bal = Number((await getQuery("SELECT points_balance FROM users WHERE userId = ?", [u.userId]))[0].points_balance) || 0;
     const amt = Math.floor(bal);
     if (amt > 0) {
-      const r = await ledger.post(u.userId, -amt, "bot account cleanup", { requireCover: true, source: "bot-account-cleanup" });
+      const r = await ledger.post(u.userId, -amt, "bot account cleanup", { requireCover: true, system: true, source: "bot-account-cleanup" });
       if (!r.ok) throw new Error(`ledger refused the debit: ${r.code}`);
       await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                      ["botclean-" + uuidv4(), "bot_cleanup", u.userId, `bot account cleanup: ${LOGIN} -> Federal Reserve`.slice(0, 120), -amt]);

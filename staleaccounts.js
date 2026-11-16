@@ -621,6 +621,8 @@ async function _mergeDuplicateLocked(dupId, primaryId) {
     const d = (await getQuery("SELECT * FROM users WHERE userId = ?", [dupId]))[0];
     const p = (await getQuery("SELECT * FROM users WHERE userId = ?", [primaryId]))[0];
     if (!d || !p) return null;
+    // banfix review: never a copy PATV staff scheduled for deletion (the merge would escape it - accountMerge.moveUserRows refuses it too)
+    if (await require("./providermerge").adminDeletionPending(dupId)) return null;
     const { balance: bal, toReserve, toMain } = await dupSplit(dupId);
     if (toMain < 0) return null;
     // ids leave the copy before they land on the primary (unique Camfrog / Twitch / Discord indexes);

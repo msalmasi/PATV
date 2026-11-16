@@ -397,6 +397,33 @@ test("1.99th: Pepe's auto pools carry `auto` (display table too) and skip the pe
   assert.equal(r.body.pool.auto, undefined);
 });
 
+// banfix review (siteban.js): nobody names a site-banned account (or one PATV staff scheduled for deletion) as a pool's judge - an open
+// pool it judges holds that deletion off (staleaccounts "market creator/judge") - and a banned judge's call still pays the winners
+// (siteban.WIND_DOWN pools: settle - a judge never bets), so they aren't refunded after the grace instead
+test("banfix review: no banned judge for a new pool; a banned judge still settles the pool it judges", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, class) VALUES ('u9', 'jay', 'x', 0, 'jay_cf', 'pleb')");
+  const c = await act("create", actor("ann_cf", "ann"), { question: "Will jay call it right?", judge: { login: "jay_cf" }, secs: 3600 });
+  assert.equal(c.body.ok, true, JSON.stringify(c.body));
+  assert.equal((await act("bet", actor("ann_cf", "ann"), { ref: c.body.ref, option: "yes", amount: 1000 })).body.ok, true);
+  assert.equal((await act("bet", actor("bob_cf", "bob"), { ref: c.body.ref, option: "no", amount: 1000 })).body.ok, true);
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u9', '', 'jay', 'spam', 'staff', ?, NULL)", [Date.now()]);
+  SB.forget("u9");
+  const n = await act("create", actor("ann_cf", "ann"), { question: "Another one for jay?", judge: { login: "jay_cf" }, secs: 3600 });
+  assert.equal(n.body.ok, false);
+  assert.equal(n.body.code, "bad_judge", JSON.stringify(n.body));
+  assert.doesNotMatch(n.body.error, /banned|delet/i, "never says why");
+  const a0 = await bal("u1");
+  const s = await act("settle", actor("jay_cf", "jay"), { ref: c.body.ref, outcome: "yes" });
+  assert.equal(s.body.ok, true, JSON.stringify(s.body));
+  assert.equal(s.body.kind, "settled");
+  assert.ok(await bal("u1") > a0 + 1000, "the winner is paid out of the losing side");
+  await runQuery("DELETE FROM feed_bans WHERE user_id = 'u9'");
+  SB.forget("u9");
+});
+
 test("rollback: the records go back to Pepe (keyed), the stakes stay on the ledger", async () => {
   const c = await act("create", actor("ann_cf", "ann"), { question: "Stays open?", judge: { login: "carol_cf" }, secs: 3600 });
   await act("bet", actor("bob_cf", "bob"), { ref: c.body.ref, option: "no", amount: 1200 });

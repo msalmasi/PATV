@@ -777,6 +777,13 @@ async function moveUserRows(fromId, toId, opts = {}) {
     const busy = await getQuery("SELECT 1 FROM casino_mtt_entries WHERE user_id IN (?, ?) AND (state IN ('held','playing') OR overlay_due > 0) LIMIT 1", [fromId, toId]);
     if (busy.length) throw Object.assign(new Error("has a poker tournament in progress - merge after it ends"), { code: "E_TOURNEY_ACTIVE", status: 409 });
   }
+  // banfix review: never an account PATV staff scheduled for deletion (account_deletions requested_by 'admin:<id>', pending) - its
+  // rows and PAT would live on in the other account and the deletion would end as "gone" (account_deletions.user_id is 'keep'):
+  // every merge path (the Camfrog !verify merge, a duplicate merge, a provider merge). Staff cancel the deletion first. Before any write.
+  if (await tableExists("account_deletions")) {
+    const del = await getQuery("SELECT 1 FROM account_deletions WHERE user_id = ? AND state IN ('scheduled','held') AND requested_by LIKE 'admin:%' LIMIT 1", [fromId]);
+    if (del.length) throw Object.assign(new Error("is scheduled for deletion by PATV staff - cancel that first"), { code: "E_DELETION_PENDING", status: 409 });
+  }
   const names = { from: opts.fromUsername || null, to: opts.toUsername || null };
   if (!names.from || !names.to) {
     for (const r of await getQuery("SELECT userId, username FROM users WHERE userId IN (?, ?)", [fromId, toId])) {

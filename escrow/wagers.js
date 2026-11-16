@@ -85,6 +85,12 @@ async function create(actor, a, t) {
   const account = await G().actorAccount(actor);
   if (!account) return fail("no_account", "Couldn't find a PAT account.");
   if (account.casino_banned) return fail("banned", "You're banned from the casino, so no wagers.");
+  // banfix review (finding 2): never an opponent or judge who is site-banned or whose deletion PATV staff scheduled - an open wager
+  // naming them would hold that deletion off (staleaccounts "wager"); the words never say why
+  for (const p of aiJudge ? [opp] : [opp, judge]) {
+    const pa = await G().actorAccount({ login: p.login, username: p.user || undefined });
+    if (pa && pa.userId && (await require("../siteban").startLock(pa.userId))) return fail("bad_party", require("../siteban").partyText(p.login));
+  }
   const mine = (await G().list(GAME, LIVE)).filter((w) => G().isWho(actor, { login: w.creator, user: (w.users || {}).creator }));
   if (mine.length >= MAX_OPEN) return fail("max_open", `You already have ${mine.length} open wagers — settle some first.`, { open: mine.length });
   const twin = mine.find((w) => G().same(w.opponent, opp.login) && w.amount === amount && normText(w.terms) === normText(terms) && t.nowS - w.created < DUP_SECS);

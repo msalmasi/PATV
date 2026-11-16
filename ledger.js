@@ -30,6 +30,7 @@ const E_TARGET_NOT_FOUND = "E_TARGET_NOT_FOUND";
 const E_INSUFFICIENT = "E_INSUFFICIENT";
 const E_BAD_AMOUNT = "E_BAD_AMOUNT";
 const E_NO_PAT_FOR_DOLLARS = "E_NO_PAT_FOR_DOLLARS";   // 1.99ans: nopat.js
+const E_SITE_BANNED = "E_SITE_BANNED";                 // banfix review: a site-banned account's own debit (siteban.js)
 
 let readyP = null;
 let cols = null;               // optional transactions columns this database has: {counterparty, note}
@@ -82,7 +83,8 @@ const userExists = async (id) => !!id && (await getQuery("SELECT 1 FROM users WH
 
 /**
  * Credit (points > 0) or debit (points < 0) `userId` and log it, or write nothing.
- * opts: counterparty, note, transactionId, requireCover (a debit only if the balance covers it),
+ * opts: counterparty, note, transactionId, requireCover (a debit only if the balance covers it - banfix review: and never for a
+ *       site-banned account unless opts.system, E_SITE_BANNED), system,
  *       resolveMerged (follow account_merges when userId is gone), source (for the log line).
  * Returns {ok:true, userId, transactionId} or {ok:false, code, userId}.
  */
@@ -113,6 +115,18 @@ async function postIn(userId, amount, type, opts) {
   }
   const txId = opts.transactionId || uuidv4();
   const cover = opts.requireCover && amount < 0;
+  // banfix review (siteban.js): a debit the account itself has to cover (requireCover: a spend, a stake, a buy, a fee) is refused
+  // for a site-banned account, whoever asks - the backstop behind each bot path's own check (Pepe's charges, the capital markets,
+  // gangs, and any later one). opts.system = not the account acting (a loan repayment, a clawback, the deletion job's routing,
+  // a check made by the caller itself): never asked. A failed read lets it through (the paths' own checks still stand).
+  if (cover && !opts.system && target) {
+    let lock = null;
+    try { lock = await require("./siteban").lockOf(target); } catch (e) { console.error(`[ledger] site-ban check for ${target}:`, e.message); }
+    if (lock) {
+      console.warn(`[ledger] refused ${type} ${amount} for ${target}: site-banned${opts.source ? ` (${opts.source})` : ""}`);
+      return { ok: false, code: E_SITE_BANNED, userId: target };
+    }
+  }
   // a column added after the first look (tipNoteReady adds note / counterparty) - look again
   if ((opts.note !== undefined && !(cols && cols.note)) || (opts.counterparty !== undefined && !(cols && cols.counterparty))) {
     const c2 = (await getQuery("SELECT name FROM pragma_table_info('transactions')")).map((r) => r.name);
@@ -171,4 +185,4 @@ async function postOrThrow(userId, points, type, opts = {}) {
 }
 
 module.exports = { post, postOrThrow, reverse, recordMerge, resolveUserId, ensure, userExists,
-                   E_TARGET_NOT_FOUND, E_INSUFFICIENT, E_BAD_AMOUNT, E_NO_PAT_FOR_DOLLARS };
+                   E_TARGET_NOT_FOUND, E_INSUFFICIENT, E_BAD_AMOUNT, E_NO_PAT_FOR_DOLLARS, E_SITE_BANNED };
