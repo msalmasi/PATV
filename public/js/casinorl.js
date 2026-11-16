@@ -46,8 +46,9 @@
     narrow = W.matchMedia("(max-width:639px)"),
     wide = W.matchMedia("(min-width:900px) and (pointer:fine)"),
     reducedMq = W.matchMedia("(prefers-reduced-motion:reduce)");
+  var quick = false; //                      (O11: this viewer's ⚡ Quick spin - set from localStorage below)
   function reduced() {
-    return !!reducedMq.matches;
+    return !!reducedMq.matches || quick;
   }
   var store = {
     get: function (s, k) {
@@ -66,6 +67,7 @@
     },
   };
   showOthers = store.get("localStorage", "rl-others") !== "0";
+  quick = store.get("localStorage", "rl-quick") === "1";
   function color(n) {
     return R.pocketColor(n);
   }
@@ -105,7 +107,7 @@
   R.outside.forEach(function (p) {
     if (/^(?:[dc][123]|low|high)$/.test(p[0])) felt[p[0]] = p[1];      // (red / even ... read as they are)
   });
-  /** a spot in the felt's words: "17 ● Black", "Split 17–20", "1–12", "◆ Red" */
+  /** a spot in the felt's words: "17 ● Black", "17–20", "1–12", "◆ Red" (the hover line and the spoken name add its kind) */
   function spotWords(token) {
     var p = G.positions[token];
     if (!p) return token;
@@ -123,7 +125,7 @@
     sound("rl_" + type);
   }
   if (WH && WH.mount && canvas && canvas.getContext) {
-    wheel = WH.mount(canvas, { palette: "classic", tilt: wide.matches ? 38 : 0, onEvent: cue });
+    wheel = WH.mount(canvas, { palette: "classic", tilt: wide.matches ? 38 : 0, onEvent: cue, reduced: quick ? true : undefined });
     on(wide, "change", function () {
       if (wheel) wheel.setTilt(wide.matches ? 38 : 0);
     });
@@ -134,7 +136,7 @@
     bowlSeen = true;
   if (WH && WH.mount && floatBox && W.IntersectionObserver && bowl) {
     var fc = floatBox.querySelector("canvas");
-    if (fc && fc.getContext) floater = WH.mount(fc, { compact: true, palette: "classic" });
+    if (fc && fc.getContext) floater = WH.mount(fc, { compact: true, palette: "classic", reduced: quick ? true : undefined });
     new W.IntersectionObserver(function (es) {
       bowlSeen = es.length ? es[es.length - 1].isIntersecting : true;
       floatShown();
@@ -669,7 +671,7 @@
       if (me && me.net > 0) {
         Object.keys(lay).forEach(function (k) {
           if (lay[k].mine && G.positions[k].nums.indexOf(n) >= 0) (nodes[k] || []).slice(0, 1).forEach(function (b) {
-            CZ.pop(b, "+" + CZ.short(lay[k].mine * (G.positions[k].odds + 1)), "win");
+            CZ.pop(b, "+" + CZ.short(lay[k].mine * G.positions[k].odds), "win");      // (what the spot won: its odds)
           });
         });
       }
@@ -933,6 +935,21 @@
       box.innerHTML = html;
     }
   }
+  // O11: a per-viewer ⚡ Quick spin - the ball simply fades into its pocket at the landing (the wheel's reduced-motion path), and the
+  // result moment keeps its highlight without the motion; remembered in this browser
+  var quickBtn = $("rl-quick");
+  function paintQuick() {
+    if (quickBtn) quickBtn.setAttribute("aria-pressed", String(quick));
+  }
+  paintQuick();
+  on(quickBtn, "click", function () {
+    quick = !quick;
+    store.set("localStorage", "rl-quick", quick ? "1" : "0");
+    paintQuick();
+    // (null: back to following prefers-reduced-motion)
+    if (wheel && wheel.setReduced) wheel.setReduced(quick ? true : null);
+    if (floater && floater.setReduced) floater.setReduced(quick ? true : null);
+  });
   on($("rl-statsbtn"), "click", function () {
     if (last) stats(last.table);
     CZ.openSheet("rl-stats");

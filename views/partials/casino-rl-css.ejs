@@ -476,6 +476,11 @@
 .rl-trail li {
   display: flex;
 }
+#rl-quick[aria-pressed="true"] {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ds-on-gold);
+}
 .rl-trail small {
   margin-inline-start: auto;
   color: rgba(255, 255, 255, 0.75);
@@ -783,6 +788,7 @@
   #cz-dock {
     position: sticky;
     bottom: 0;
+    max-height: 42vh;
     max-height: 42dvh;
     overflow: auto;
   }

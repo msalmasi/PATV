@@ -114,7 +114,7 @@ function page(opts) {
       el("p", "rl-tip"), el("div", "rl-race"), el("ol", "rl-history"), el("button", "rl-statsbtn"),
     ]),
     el("div", "cz-meta"), el("div", "cz-watchbar"), el("section", "rl-players"), el("div", "cz-dock"), el("p", "rl-session"),
-    el("nav", "rl-wheels"), el("span", "rl-proof"), el("div", "rl-float"), el("button", "cz-histbtn"),
+    el("nav", "rl-wheels"), el("span", "rl-proof"), el("div", "rl-float"), el("button", "cz-histbtn"), el("button", "rl-quick"),
     el("dialog", "rl-stats", [el("div", "rl-stats-b")]),
   ]);
   const $ = (id) => [root, ...root.all()].find((e) => e.attrs.id === id || e.id === id) || null;
@@ -130,9 +130,10 @@ function page(opts) {
   W.CustomEvent = function (type, init) { this.type = type; this.detail = init && init.detail; };
   W.matchMedia = (q) => ({ matches: !!(opts.media && opts.media[q]), addEventListener() {} });
   if (opts.session) W.sessionStorage = opts.session;
+  if (opts.local) W.localStorage = opts.local;
   const calls = [];
   const wheelApi = {};
-  for (const k of ["setSkew", "spin", "rest", "idle", "setTilt", "setPalette"]) wheelApi[k] = (...a) => { calls.push([k, ...a]); return wheelApi; };
+  for (const k of ["setSkew", "spin", "rest", "idle", "setTilt", "setPalette", "setReduced"]) wheelApi[k] = (...a) => { calls.push([k, ...a]); return wheelApi; };
   W.PATVRlWheel = { WHEEL: RLW.WHEEL, mount: (c, o) => { calls.push(["mount", c === canvas, o]); return wheelApi; } };
   const fill = (d, v) => String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m));
   const pops = [],
@@ -282,7 +283,7 @@ test("contract 8 / O13(2) / O13(3): the croupier's lines, the result moment and 
   assert.ok(P.spots("26")[0].children.some((c) => c.classList.contains("rl-burst")), "a straight-up hit's gold burst");
   // the pops come a moment later, over the winners' seats only (the stub's querySelector finds no seat: none here) and my winning spots
   for (const t of P.W.timers.filter((x) => !x.done && x.ms === 350)) { t.done = true; t.fn(); }
-  assert.ok(P.pops.some((p) => p[1] === "+3.6K" && p[2] === "win"), "26 straight up: 100 x 36");
+  assert.ok(P.pops.some((p) => p[1] === "+3.5K" && p[2] === "win"), "26 straight up: 100 at 35 to 1");
   assert.ok(P.pops.every((p) => p[2] === "win"));
   // a page that OPENS on a result: no rake, no burst, no pops (and the event once)
   const Q = page();
@@ -560,4 +561,28 @@ test("O13(4): the roulette cues in casino-sound.js - off by default, only after 
   assert.equal(made, 0, "no audio before a gesture and the toggle");
   W.CZSound.update("classic", { game: "bj" });
   assert.equal(btn.hidden, true, "a classic card table still has none");
+});
+
+test("O11: the per-viewer ⚡ Quick spin - the wheel's reduced path and no result motion, remembered in this browser", () => {
+  const kept = {};
+  const local = { getItem: (k) => (k in kept ? kept[k] : null), setItem: (k, v) => { kept[k] = String(v); } };
+  const P = page({ local });
+  assert.equal(P.calls.find((c) => c[0] === "mount")[2].reduced, undefined, "off: the wheel follows prefers-reduced-motion");
+  const q = P.$("rl-quick");
+  assert.equal(q.getAttribute("aria-pressed"), "false");
+  q.click();
+  assert.equal(q.getAttribute("aria-pressed"), "true");
+  assert.deepEqual(P.calls.at(-1), ["setReduced", true]);
+  assert.equal(kept["rl-quick"], "1");
+  const me = { seat: "s1", lines: [{ text: "26 100", amount: 100 }], staked: 100 };
+  const chips = [seat("Mia", "s1", [["26", 100]])],
+    felt = [{ t: "26", n: 100, k: 1 }];
+  P.CZ.render(view("spinning", me, { spin: { round_no: 7, number: 26, started_at: Date.now(), ends_at: Date.now() + 12000, secs: 12 }, seats: chips, felt }));
+  P.CZ.render(view("result", me, { last_round: { round_no: 7, number: 26 }, seats: chips, felt }));
+  assert.ok(!P.$("rl-board").classList.contains("raking"), "no rake");
+  assert.ok(P.spots("26")[0].classList.contains("won"), "the highlight stays");
+  const Q = page({ local });
+  assert.equal(Q.calls.find((c) => c[0] === "mount")[2].reduced, true, "a reload keeps it");
+  q.click();
+  assert.deepEqual(P.calls.at(-1), ["setReduced", null], "off again: back to the system setting");
 });

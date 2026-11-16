@@ -8419,6 +8419,8 @@
   "casino.rl.stats": "Stats",
   "casino.rl.stats_h": "The last spins",
   "casino.rl.players": "Players",
+  "casino.rl.quick": "Quick spin",
+  "casino.rl.quick_help": "The ball goes straight into its pocket when the spin lands: no wheel animation.",
   "casino.rl.audience": "Who can play",
   "casino.rl.save": "Save roulette settings",
   "casino.rl.saved": "Saved",
