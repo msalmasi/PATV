@@ -16,15 +16,30 @@ it with ledger care, because it is supply.
 3. **Typed confirmation**: the username, exactly.
 4. **Scheduled, 14 days of grace.** Every device is signed out at once (`sessions.revokeAll`, including cookies from
    before sessions existed - the cutoff) and a notice is filed. **Signing in again by any method during the grace
-   period cancels the deletion** (`sessions.signIn` -> `cancelOnSignIn`, with a notice).
+   period cancels the member's own request** (`sessions.signIn` -> `cancelOnSignIn`, with a notice) - never one PATV staff
+   scheduled (see below).
 5. **The job** (`tick()`, every 10 minutes) runs a request that is due. It checks the blockers again; anything new
    (the person kept playing in chat) puts the request on **hold** (one notice, retried every tick; a sign-in still
-   cancels). Then it settles what is automatic and runs the deletion in **one database transaction**.
+   cancels the member's own request). Then it settles what is automatic and runs the deletion in **one database transaction**.
 
 **Admins, staff and moderators** (a class other than a member, or an admin / staff / moderator role) are refused on the
 self-service page: another admin schedules it - `POST /api/admin/users/:id/delete {confirm: <username>, reason}` (not for
 your own account; audit-logged as `account.delete`), with the same grace, blockers and job. Admins can list and cancel
 requests: `GET /api/admin/account-deletions`, `POST /api/admin/account-deletions/:id/cancel`.
+
+**A deletion PATV staff scheduled** (`requested_by` `admin:<id>`) is never cancelled by the member signing in, or by
+anything else they do (banfix, owner report 2026-11-16: a banned account signed back in twice and cancelled both). Only an
+admin cancels it. Its notice says "Signing in doesn't cancel it - only PATV staff can"; a hold's notice gives no sign-in
+advice, and the admin who scheduled it gets an inbox notice once per hold ("A deletion you scheduled is on hold", with
+what is in the way). It runs at its time whether or not anyone signs in - also for a **site-banned** account, which can't
+sign in at all (`siteban.js`, docs/sessions.md "Site bans"). A Twitch / Discord conflict merge refuses an account staff
+scheduled for deletion (a merge would escape it). A non-banned account under a staff deletion can still sign in during
+the 14 days (`siteban.ADMIN_DELETION_LOCKS` off); it can't cancel it, and anything it opens in between holds the job (the
+admin is told).
+
+Existing rows cancelled by a sign-in before this change (`requested_by LIKE 'admin:%' AND state = 'cancelled' AND
+cancel_via LIKE 'sign-in:%'`) are not revived: an admin schedules them again (a new 14-day grace; the route refuses while
+blockers - open bounties, wagers... - remain: void them, or wait for their deadlines).
 
 ## What blocks it, what is settled automatically
 

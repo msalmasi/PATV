@@ -97,7 +97,7 @@
     e.preventDefault();
     act('aaDelForm', 'aaDelMsg', '/api/admin/users/' + encodeURIComponent(cur.user.userId) + '/delete',
         { reason: $('aaDelWhy').value, confirm: $('aaDelConfirm').value },
-        _t('js.admacct.delete_q', "Schedule @{name}'s account for deletion in 14 days? They are signed out everywhere now; signing in cancels it.", { name: cur.user.username }));
+        _t('js.admacct.delete_q2', "Schedule @{name}'s account for deletion in 14 days? They are signed out everywhere now. Signing back in doesn't cancel it - only an admin can.", { name: cur.user.username }));
   });
   if ($('aaCancelBtn')) $('aaCancelBtn').addEventListener('click', function () {
     if (!cur || !cur.deletion || !cur.deletion.id) return;

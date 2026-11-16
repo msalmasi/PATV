@@ -583,3 +583,75 @@ test("S1 F13: POST /api/account/delete signs this browser out with the chat swee
     await new Promise((res) => srv.close(res));
   }
 });
+
+// banfix (owner 2026-11-16: "if I schedule a banned account for deletion, they can keep signing back in to prevent deletion"): a deletion
+// PATV staff scheduled is never cancelled by a sign-in (a site-banned account can't sign in at all - siteban.js), its notices never say
+// "sign in to cancel", it runs at its time, and a hold tells the admin who scheduled it; the member's OWN request keeps its grace.
+test("banfix: an admin-scheduled deletion survives sign-in (a banned account can't sign in at all) and runs at its time; a member's own still cancels", async () => {
+  await setup();
+  const SB = require(path.join(repo, "siteban"));
+  await user("bf_adm", { username: "bfadmin", class: "Admin" });
+  await user("bf_ban", { username: "bfbanned", bal: 700 });
+  await user("bf_ok", { username: "bfnotbanned", bal: 5 });
+  await user("bf_self", { username: "bfself", bal: 5 });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('bf_ban', '', 'bfbanned', 'spam', 'bfadmin', ?, NULL)", [clockAt]);
+  SB.forget("bf_ban");
+  const t0 = clockAt;
+  await D.schedule({ userId: "bf_ban", username: "bfbanned" }, { by: "admin:bf_adm", reauth: "admin", reason: "spam account" });
+  await D.schedule({ userId: "bf_ok", username: "bfnotbanned" }, { by: "admin:bf_adm", reauth: "admin", reason: "asked by email" });
+  await D.schedule({ userId: "bf_self", username: "bfself" }, { by: "self", reauth: "password" });
+  // the notices: staff's never promise "sign in to cancel"; the member's own still does
+  const notice = async (id) => (await getQuery("SELECT title, body FROM inbox WHERE user_id = ? AND ref LIKE 'acctdel:req:%' ORDER BY id DESC LIMIT 1", [id]))[0];
+  const nb = await notice("bf_ban");
+  assert.equal(nb.title, "Your account is scheduled for deletion");
+  assert.match(nb.body, /PATV staff scheduled your PATV account for deletion on \d{4}-\d\d-\d\d\. Every device was signed out\. Signing in doesn't cancel it/);
+  assert.doesNotMatch(nb.body, /sign in again|that cancels it/i);
+  assert.match((await notice("bf_self")).body, /Just sign in again before then - that cancels it\./);
+  // the banned account: every sign-in refused before anything (no session, the deletion untouched)
+  const res = { cookie() {}, clearCookie() {} };
+  const req = () => ({ get: () => "", cookies: {} });
+  await assert.rejects(S.signIn(req(), res, { userId: "bf_ban", username: "bfbanned", class: "pleb" }, "password"), (e) => e.code === "banned");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sessions WHERE user_id = 'bf_ban'"))[0].n, 0);
+  // a non-banned account under a staff deletion signs in (D3 off) - and the deletion stays
+  await S.signIn(req(), res, { userId: "bf_ok", username: "bfnotbanned", class: "pleb" }, "google");
+  let row = (await getQuery("SELECT state, cancel_via FROM account_deletions WHERE user_id = 'bf_ok'"))[0];
+  assert.deepEqual([row.state, row.cancel_via], ["scheduled", null], "a sign-in never cancels staff's deletion");
+  assert.equal(await D.cancelOnSignIn("bf_ok", "password"), false);
+  assert.equal(await D.cancelOnSignIn("bf_ban", "password"), false);
+  // the member's own request: a sign-in still cancels it
+  await S.signIn(req(), res, { userId: "bf_self", username: "bfself", class: "pleb" }, "plex");
+  row = (await getQuery("SELECT state, cancel_via FROM account_deletions WHERE user_id = 'bf_self'"))[0];
+  assert.deepEqual([row.state, row.cancel_via], ["cancelled", "sign-in:plex"]);
+  // the date: both staff deletions run - the banned account's too (nobody signed in, nothing was needed)
+  clockAt = t0 + 15 * DAY;
+  await D.tick();
+  for (const id of ["bf_ban", "bf_ok"]) {
+    assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = ? ORDER BY id DESC", [id]))[0].state, "done", id);
+  }
+  assert.match((await getQuery("SELECT username FROM users WHERE userId = 'bf_ban'"))[0].username, /^deleted-/, "pseudonymised");
+  assert.equal(await bal("bf_ban"), 0, "the balance was routed");
+});
+
+test("banfix: a staff deletion on hold says nothing about signing in, and the admin who scheduled it is told (once)", async () => {
+  await setup();
+  await user("bh_adm", { username: "bhadmin", class: "Admin" });
+  await user("bh_mem", { username: "bhmember", bal: 5 });
+  const t0 = clockAt;
+  await D.schedule({ userId: "bh_mem", username: "bhmember" }, { by: "admin:bh_adm", reauth: "admin", reason: "spam" });
+  await runQuery("INSERT INTO escrow_holds (key, ref, kind, login, username, user_id, amount, state, created) VALUES ('bh-1', 'BT77', 'bounty', 'x', 'bhmember', 'bh_mem', 5, 'held', 1)");
+  clockAt = t0 + 15 * DAY;
+  await D.tick();
+  await D.tick();
+  assert.equal((await D.pendingOf("bh_mem")).state, "held");
+  const mine = await getQuery("SELECT title, body FROM inbox WHERE user_id = 'bh_mem' AND title = 'Your account deletion is on hold'");
+  assert.equal(mine.length, 1);
+  assert.match(mine[0].body, /PATV staff scheduled this deletion - it runs once these are closed\./);
+  assert.doesNotMatch(mine[0].body, /sign in/i);
+  const told = await getQuery("SELECT title, body, link FROM inbox WHERE user_id = 'bh_adm' AND title = 'A deletion you scheduled is on hold'");
+  assert.equal(told.length, 1, "the admin is told once");
+  assert.match(told[0].body, /@bhmember's account is on hold: .+\. It is tried again every 10 minutes\./);
+  assert.equal(told[0].link, "/admin/accounts");
+  await runQuery("UPDATE escrow_holds SET state = 'refunded' WHERE key = 'bh-1'");
+  await D.tick();
+  assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'bh_mem' ORDER BY id DESC"))[0].state, "done", "runs once it's clear");
+});

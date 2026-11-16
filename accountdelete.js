@@ -7,7 +7,11 @@
 //                                         for admins / staff / moderators (another admin schedules it: POST /api/admin/users/:id/delete)
 //                                         and while anything blocks. Schedules the deletion GRACE_MS (14 days) ahead, signs every
 //                                         device out (sessions.revokeAll) and files a notice.
-//   3. the grace: signing in again - any method - cancels it (sessions.signIn -> cancelOnSignIn) with a notice
+//   3. the grace: signing in again - any method - cancels the member's OWN request (sessions.signIn -> cancelOnSignIn) with a
+//                                         notice. banfix: a deletion PATV staff scheduled (requested_by 'admin:<id>') is never
+//                                         cancelled by a sign-in (or anything the member does) - only an admin cancels it (POST
+//                                         /api/admin/account-deletions/:id/cancel); a site-banned account can't sign in at all
+//                                         (siteban.js), and the job below runs at its time whether or not anyone signs in
 //   4. the job (tick(), every 10 minutes): a due request runs execute(): blockers again (anything new -> 'held', retried; a
 //                                         sign-in still cancels), the automatic settlements, then ONE transaction: the remaining
 //                                         balance routed by the PAT Routing row "account_deleted" (default: the Fed), the profile
@@ -145,6 +149,14 @@ async function run(t, columns, sql, params) {
 async function pendingOf(userId) {
   await init();
   return (await getQuery("SELECT * FROM account_deletions WHERE user_id = ? AND state IN ('scheduled','held') ORDER BY id DESC LIMIT 1", [String(userId)]))[0] || null;
+}
+/** banfix: a request PATV staff made (POST /api/admin/users/:id/delete: requested_by 'admin:<id>') - never cancelled by a sign-in. */
+const byAdmin = (row) => !!row && /^admin:/.test(String(row.requested_by || ""));
+const adminIdOf = (row) => (byAdmin(row) ? String(row.requested_by).slice("admin:".length) : null);
+/** The member's language for a notice (i18n.js saved preference, else English). */
+function tOf(userId) {
+  try { const I = require("./i18n"); return I.tFor(I.getPref(String(userId)) || "en"); }
+  catch (e) { return require("./i18n-core")(require("./locales/en.json"), null, "en"); }
 }
 async function isDeleted(userId) {
   await init();
@@ -383,21 +395,32 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
     } catch (e) { /* the counts are a courtesy */ }
   }
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
-  await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
-    body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out.` +
-          (recordings ? " Your mic recordings will be deleted with it (you ticked Also delete my mic recordings)." : "") +
-          " Changed your mind? Just sign in again before then - that cancels it.",
-    link: "/settings/account#delete", ref: `acctdel:req:${t}` });
+  // banfix: staff's request says so - signing in doesn't cancel it (cancelOnSignIn leaves it alone)
+  const viaAdmin = /^admin:/.test(String(by));
+  if (viaAdmin) {
+    const tr = tOf(u.userId);
+    await require("./inbox").addSafe(u.userId, { kind: "system", title: tr("acctdel.notice.admin_title"),
+      body: tr("acctdel.notice.admin_body", { date: new Date(at).toISOString().slice(0, 10) }), link: "/settings/account#delete", ref: `acctdel:req:${t}` });
+  } else {
+    await require("./inbox").addSafe(u.userId, { kind: "system", title: "Your account is scheduled for deletion",
+      body: `Your PATV account will be deleted on ${new Date(at).toISOString().slice(0, 10)}. Every device was signed out.` +
+            (recordings ? " Your mic recordings will be deleted with it (you ticked Also delete my mic recordings)." : "") +
+            " Changed your mind? Just sign in again before then - that cancels it.",
+      link: "/settings/account#delete", ref: `acctdel:req:${t}` });
+  }
   console.log(`[acctdel] ${u.username} scheduled for ${new Date(at).toISOString()} (by ${by})`);
   return { ok: true, execute_at: at, ...(recordings ? { delete_recordings: true, recordings } : {}) };
 }
 
-/** A sign-in during the grace period cancels the deletion (sessions.signIn). */
+/** A sign-in during the grace period cancels the member's OWN deletion request (sessions.signIn). banfix: never one PATV staff
+ *  scheduled (requested_by 'admin:<id>') - it stays, and runs at its time. -> cancelled? */
 async function cancelOnSignIn(userId, method) {
   await init();
   const p = await pendingOf(userId);
   if (!p) return false;
-  const r = await runQuery("UPDATE account_deletions SET state = 'cancelled', cancelled_at = ?, cancel_via = ? WHERE id = ? AND state IN ('scheduled','held')",
+  if (byAdmin(p)) { console.log(`[acctdel] ${userId} signed in (${method}): the deletion staff scheduled stays (#${p.id})`); return false; }
+  const r = await runQuery(`UPDATE account_deletions SET state = 'cancelled', cancelled_at = ?, cancel_via = ? WHERE id = ? AND state IN ('scheduled','held')
+                            AND (requested_by IS NULL OR requested_by NOT LIKE 'admin:%')`,
                            [now(), "sign-in:" + String(method || "?").slice(0, 20), p.id]);
   if (!r || !r.changes) return false;
   await require("./inbox").addSafe(userId, { kind: "system", title: "Account deletion cancelled",
@@ -667,7 +690,19 @@ async function execute(userId, { force = false } = {}) {
     const why = b.block.map((x) => x.label).join("; ").slice(0, 500);
     const first = reqRow.state !== "held";
     await runQuery("UPDATE account_deletions SET state = 'held', held_reason = ?, held_at = ? WHERE id = ?", [why, now(), reqRow.id]);
-    if (first) {
+    if (first && byAdmin(reqRow)) {
+      // banfix: staff's request - no "sign in" advice (a sign-in doesn't cancel it; a banned account can't sign in), and the admin
+      // who scheduled it is told, once per hold, what is in the way
+      const tr = tOf(uid);
+      await require("./inbox").addSafe(uid, { kind: "system", title: tr("acctdel.notice.held_title"), body: tr("acctdel.notice.held_admin_body", { why }),
+        link: "/settings/account#delete", ref: `acctdel:held:${reqRow.id}` });
+      const adminId = adminIdOf(reqRow);
+      if (adminId) {
+        const ta = tOf(adminId);
+        await require("./inbox").addSafe(adminId, { kind: "system", title: ta("acctdel.alert.held_title"),
+          body: ta("acctdel.alert.held_body", { name: u0.username, why }), link: "/admin/accounts", ref: `acctdel:held-admin:${reqRow.id}` });
+      }
+    } else if (first) {
       await require("./inbox").addSafe(uid, { kind: "system", title: "Your account deletion is on hold",
         body: `We couldn't delete your account yet: ${why}. Sign in to close these (signing in cancels the deletion; ask again afterwards).`,
         link: "/settings/account#delete", ref: `acctdel:held:${reqRow.id}` });
@@ -1204,7 +1239,7 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
+module.exports = { hubRow, init, register, blockers, request, schedule, cancelOnSignIn, byAdmin, execute, tick, sweepTombstones, retryForget, routeBalanceInTx, shares,
                    pendingOf, isDeleted, elevated, Refuse, FLOW, FORGET_KIND, GRACE_MS, NAME_COLUMNS, DELETE_ROWS,
                    removeOffered, removeWaitUntil, privacyCopy, retryRemovePublic, REMOVE_EVERY_MS,      // S1 V4
                    loginWindowsOf,                                                                        // S1 V4 review 2
