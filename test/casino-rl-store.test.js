@@ -418,3 +418,172 @@ test("boot audit: a stake debit of the open spin with no row is refunded once an
   assert.equal(await held(), 600);
   assert.equal(await total(), start);
 });
+
+// ── review fixes ──
+test("migration: the previous build's undo and clear in the open spin are no finding - their refunded stakes get record rows, nothing moves", async () => {
+  const start = await total();
+  const prev = prevBuild([
+    { open: "pad-mig5" },
+    { act: ["$0", "a", "bet", "red 500"] },
+    { act: ["$0", "a", "bet", "black 300"] },
+    { act: ["$0", "a", "undo"] },
+    { act: ["$0", "b", "bet", "odd 100"] },
+    { act: ["$0", "b", "bet", "even 200"] },
+    { act: ["$0", "b", "clear"] },
+    { act: ["$0", "c", "bet", "d1 100"] },
+  ]);
+  const id = prev.opened[0];
+  assert.equal((await refunds()).length, 3, "that build refunded a's undone line and b's two cleared ones");
+  const flagged = store.flags.length;
+  let T = await restart(id);
+  assert.deepEqual(store.flags.slice(flagged), [], "no audit finding (and so no ops alert)");
+  assert.equal((await refunds()).length, 3, "nothing refunded again");
+  assert.deepEqual(
+    (await lines(id)).map((l) => [l.user_id, l.amount, l.state, l.why]),
+    [
+      ["a", 500, "live", null],
+      ["a", 300, "refunded", "migrated"],
+      ["b", 100, "refunded", "migrated"],
+      ["b", 200, "refunded", "migrated"],
+      ["c", 100, "live", null],
+    ],
+  );
+  assert.deepEqual(T.escrowed, { a: 500, c: 100 });
+  assert.equal(await held(), 600);
+  assert.equal(await total(), start);
+  T = await restart(id);
+  assert.deepEqual(store.flags.slice(flagged), []);
+  assert.equal((await lines(id)).length, 5);
+});
+
+test("boot audit with roulette off and no wheel open: rows the previous build refunded are closed, and the supply never counts them", async () => {
+  const T = await room("pad-off"),
+    L = lobby();
+  const start = await total();
+  expect(await act(T, "a", "bet", "red 500"));
+  expect(await act(T, "b", "bet", "odd 300"));
+  expect(await act(L, "c", "bet", "17 200"));
+  await svc.setSetting("casino_roulette", "off");
+  // the CI rolls back with roulette off: that build refunds the mirror and closes both wheels
+  const prev = prevBuild([{ tick: 1000 }]);
+  assert.deepEqual(prev.tables.filter((t) => t.status === "open"), []);
+  for (const uid of ["a", "b", "c"]) assert.equal(prev.cash[uid], 500000);
+  assert.equal(prev.heldJson, 0);
+  assert.deepEqual((await rows("SELECT state FROM casino_rl_lines")).map((r) => r.state), ["live", "live", "live"]);
+  assert.equal(await held(), 0, "a live row whose refund exists holds nothing, before any audit");
+  assert.equal(await total(), start);
+  // the next deploy boots with roulette still off and no wheel open: the audit runs all the same
+  const flagged = store.flags.length;
+  await svc.boot({ tick: false });
+  assert.deepEqual([...svc.S.tables.values()].filter((t) => t.status === "open"), []);
+  assert.deepEqual(store.flags.slice(flagged).map((f) => f.kind), Array(3).fill("live_with_refund"));
+  assert.deepEqual((await rows("SELECT state FROM casino_rl_lines")).map((r) => r.state), ["refunded", "refunded", "refunded"]);
+  assert.equal((await refunds()).length, 3, "nothing refunded twice");
+  assert.equal(await held(), 0);
+  assert.equal(await total(), start);
+});
+
+test("a queued line while the wheel spins is its queue row, not a header write; a restart keeps it (and a clearing); the landing's header takes it over", async () => {
+  let T = await room("pad-q");
+  const start = await total();
+  expect(await act(T, "a", "bet", "red 500"));
+  await tick(betMs());
+  assert.equal(T.eng.phase, "spinning");
+  const header = async () => ({ ...(await rows("SELECT rev, updated, length(state) AS n FROM casino_tables WHERE id=?", [T.id]))[0] });
+  const drawn = await header();
+  assert.match(expect(await act(T, "b", "bet", "17 300")).reply, /Queued for the next spin/);
+  expect(await act(T, "c", "bet", "odd 200"));
+  expect(await act(T, "c", "clear"));
+  expect(await act(T, "d", "bet", "red 100"));
+  assert.match(expect(await act(T, "d", "bet", "black 100")).reply, /Replaced your queued line/);
+  assert.deepEqual(await header(), drawn, "the drawn header (the mirror's full book) is not rewritten for a queued line");
+  const q = await rows("SELECT user_id, bets, length(bets) + length(profile) AS n FROM casino_rl_queue WHERE table_id=? ORDER BY user_id", [T.id]);
+  assert.deepEqual(q.map((r) => [r.user_id, r.bets]), [["b", '[["17",300]]'], ["c", null], ["d", '[["black",100]]']]);
+  assert.ok(q.every((r) => r.n == null || r.n < 400), "a queued action writes a few hundred bytes");
+  T = await restart(T.id);
+  assert.equal(T.eng.phase, "spinning");
+  assert.deepEqual(Object.keys(T.eng.pending).sort(), ["b", "d"]);
+  assert.equal(T.players.b.name, "Playerb", "a player the drawn header never saw gets their profile back");
+  assert.equal((await svc.RL.meView(T, "d")).pending, "black 100");
+  await tick(spinMs());
+  assert.equal(T.eng.phase, "result");
+  assert.deepEqual(await rows("SELECT * FROM casino_rl_queue WHERE table_id=?", [T.id]), [], "the landing's header carries them");
+  assert.deepEqual(Object.keys((await stateOf(T.id)).eng.pending).sort(), ["b", "d"]);
+  T = await restart(T.id);
+  assert.deepEqual(Object.keys(T.eng.pending).sort(), ["b", "d"]);
+  await tick(resultMs());
+  assert.equal(T.eng.round_no, 2);
+  assert.deepEqual(
+    (await lines(T.id)).filter((l) => l.round_no === 2).map((l) => [l.user_id, l.amount, l.state]),
+    [["b", 300, "live"], ["d", 100, "live"]],
+  );
+  assert.equal(await cash("b"), 499700);
+  assert.equal(await cash("c"), 500000);
+  assert.equal(await total(), start);
+});
+
+test("rollback mid-spin with queued lines: the previous build lands the spin and loses only the queued lines (never charged); rolling forward never brings them back", async () => {
+  let T = await room("pad-q2");
+  const start = await total();
+  expect(await act(T, "a", "bet", "red 500"));
+  await tick(betMs());
+  expect(await act(T, "b", "bet", "17 300"));
+  const prev = prevBuild([{ tick: spinMs() }, { tick: resultMs() }]);
+  assert.equal(prev.tables.find((t) => t.id === T.id).round_no, 2);
+  assert.equal(prev.cash.b, 500000, "the queued line was never charged");
+  T = await restart(T.id);
+  assert.deepEqual(T.eng.pending, {});
+  expect(await act(T, "c", "bet", "odd 100"));
+  await tick(betMs());
+  assert.equal(T.eng.phase, "spinning");
+  T = await restart(T.id);
+  assert.deepEqual(T.eng.pending, {}, "an earlier spin's queue rows never come back");
+  await tick(spinMs());
+  assert.deepEqual(await rows("SELECT * FROM casino_rl_queue WHERE table_id=?", [T.id]), []);
+  assert.equal(await cash("b"), 500000);
+  assert.equal(await total(), start);
+});
+
+test("the first line's 'Bets are open' goes out after its commit: a bet rolled back at its answer leaves no event a poll can read", async () => {
+  const T = await room("pad-ev");
+  const cursor = svc.S.lastSeq;
+  svc.S.hooks.crash = "rl:answer";
+  const waiting = svc.poll(cursor, 300);
+  assert.equal((await act(T, "a", "bet", "red 500")).ok, false);
+  const got = await waiting;
+  assert.deepEqual(got.events, [], "the poll read no event of the rolled-back bet");
+  assert.equal(got.cursor, cursor);
+  assert.equal(svc.S.lastSeq, cursor, "and the cursor never moved past it");
+  svc.S.hooks.crash = null;
+  expect(await act(T, "a", "bet", "red 500"));
+  const next = await svc.poll(cursor, 0);
+  assert.deepEqual(next.events.map((e) => [e.kind, e.data.text]), [["line", "🛞 Bets are open."]]);
+  assert.ok(next.events[0].seq > cursor);
+  await tick(betMs());
+  assert.ok((await stateOf(T.id)).log.some((l) => /Bets are open/.test(l.text)), "its log line rides the next save");
+});
+
+test("a landing rolled back after its result line: the poll cursor goes back to the last committed event, and the retry's line reaches the poll", async () => {
+  const T = await room("pad-ev2");
+  expect(await act(T, "a", "bet", "red 500"));
+  await tick(betMs());
+  const cursor = svc.S.lastSeq; // ("No more bets")
+  svc.S.hooks.crash = "rl:result";
+  await tick(spinMs());
+  assert.equal(T.eng.phase, "spinning", "the landing rolled back whole");
+  assert.equal(svc.S.lastSeq, cursor, "the rolled-back result line is not the cursor");
+  const stale = await svc.poll(cursor + 1, 0); // (a poll that read the uncommitted line)
+  assert.equal(stale.cursor, cursor, "is answered from the last committed event");
+  svc.S.hooks.crash = null;
+  await tick(0);
+  assert.equal(T.eng.phase, "result");
+  const next = await svc.poll(stale.cursor, 0);
+  assert.deepEqual(next.events.map((e) => e.kind), ["result"]);
+});
+
+test("the row reads of a boot and a restore are index seeks: a wheel's MAX(opno), the book's keys", async () => {
+  await store.ensure();
+  const plan = async (q, p) => (await rows("EXPLAIN QUERY PLAN " + q, p)).map((r) => r.detail).join(" | ");
+  assert.match(await plan("SELECT MAX(opno) AS n FROM casino_rl_lines WHERE table_id = ?", ["x"]), /USING (COVERING )?INDEX casino_rl_lines_opno \(table_id=\?\)/);
+  assert.match(await plan("SELECT key FROM casino_rl_lines WHERE key IN (?, ?)", ["a", "b"]), /USING (COVERING )?INDEX sqlite_autoindex_casino_rl_lines_1 \(key=\?\)/);
+});

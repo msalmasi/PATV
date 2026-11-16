@@ -37,8 +37,9 @@ async function putSnapshot(pools) {
 async function casinoHeld() {
   let n = 0;
   // O2 (casino/rlstore.js): a roulette line is a casino_rl_lines row, and PAT is held only while it is 'live' (its stake
-  // charged, not refunded or settled yet - each flip commits with its money). The wheels' JSON (T.escrowed) is only a
-  // mirror for a rolled-back build; it is summed instead only on a database that has no rows table yet.
+  // charged, not refunded or settled yet - each flip commits with its money; a live row a rolled-back build refunded or
+  // settled from the mirror is left out until the boot audit closes it). The wheels' JSON (T.escrowed) is only a mirror
+  // for a rolled-back build; it is summed instead only on a database that has no rows table yet.
   let wheels = null;
   try { wheels = await require("./casino/rlstore").held(); } catch (e) { wheels = null; }
   if (wheels !== null) n += wheels;

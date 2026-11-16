@@ -754,6 +754,8 @@ async function boot({ tick = true } = {}) {
     for (const T of S.tables.values()) {
       await locked(() => recover(T)).catch((e) => console.error(`[casino] recover ${T.id}:`, e));
     }
+    // O2 (casino/rlstore.js audit): the roulette rows of wheels that are not open are checked once per boot, open wheels or not
+    await locked(() => RL.bootAudit()).catch((e) => console.error("[casino] roulette audit:", e));
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
     await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
     // (1.99aof MONEY-6 / SECURITY-4: one failed lobby creation never leaves boot rejected - boot() is memoized; the tick retries it)

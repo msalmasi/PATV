@@ -57,7 +57,7 @@ for (const step of ["intent", "charge", "row", "answer"])
     assert.equal(await total(), before);
   });
 
-for (const verb of ["undo", "clear", "end"])
+for (const verb of ["undo", "clear"])
   test("an interrupted " + verb + " rolls back whole: no line refunded, both still ride; the retry refunds each once", async () => {
     let T = await room();
     expect(await act(T, "a", "bet", "red 500"));
@@ -72,7 +72,6 @@ for (const verb of ["undo", "clear", "end"])
     assert.equal(T.eng.book.length, 2);
     assert.equal((await refunds()).length, 0, "the first credit rolled back with its flip");
     assert.deepEqual((await lines(T.id)).map((l) => l.state), ["live", "live"]);
-    if (verb === "end") assert.equal(T.closing, true, "the close itself was committed before its refunds");
     expect(await act(T, "a", verb));
     assert.equal((await refunds()).length, verb === "undo" ? 1 : 2);
     assert.deepEqual((await lines(T.id)).map((l) => l.state), verb === "undo" ? ["live", "refunded"] : ["refunded", "refunded"]);
@@ -82,14 +81,113 @@ for (const verb of ["undo", "clear", "end"])
       await tick(spinMs());
       assert.deepEqual((await lines(T.id)).map((l) => l.state), ["settled", "refunded"]);
     }
-    if (verb === "end") assert.equal(T.status, "closed");
     T = await restart(T.id);
     assert.equal((await refunds()).length, verb === "undo" ? 1 : 2, "a restart refunds nothing again");
     assert.equal(await held(), 0);
     assert.equal(await total(), before);
   });
 
-const inLand = ["payouts", "house+", "flash", "house-", "round"];
+// (review) A host's end is committed as owed (T.ending, with T.closing) before its refunds: one interrupted at a refund (the
+// refund's transaction rolls back whole) or at the reveal (the refunds committed, the wheel still open) is finished by the
+// next tick, or by the boot after a restart - before the bet deadline, and the spin is never drawn instead.
+for (const step of ["refund", "reveal"])
+  for (const after of ["tick", "restart"])
+    test("an end interrupted at its " + step + " is finished by the next " + after + ": each line refunded once, never drawn", async () => {
+      let T = await room();
+      expect(await act(T, "b", "bet", "red 500"));
+      expect(await act(T, "c", "bet", "black 300"));
+      const before = await total();
+      interrupt(step);
+      assert.equal((await act(T, "a", "end")).ok, false);
+      assert.equal(T.status, "open", "the live wheel is still open");
+      assert.equal(T.closing, true, "the close itself committed before its refunds");
+      assert.equal(T.ending, "host", "and is owed");
+      assert.equal(await held(), step === "refund" ? 800 : 0);
+      assert.equal((await refunds()).length, step === "refund" ? 0 : 2, "a refund rolls back whole; a reveal leaves its refunds");
+      assert.equal(svc.RL.due(T), true, "a close that is owed is due at once (not at the bet deadline)");
+      if (after === "restart") T = await restart(T.id);
+      else {
+        svc.S.hooks.crash = null;
+        await tick(1000);
+      }
+      assert.equal(T.status, "closed");
+      assert.equal(T.ending, undefined);
+      assert.equal(T.round.pocket, undefined, "never drawn");
+      assert.equal((await rows("SELECT * FROM transactions WHERE type='roulette payout'")).length, 0);
+      assert.equal(await cash("b"), 500000);
+      assert.equal(await cash("c"), 500000);
+      assert.equal((await refunds()).length, 2);
+      assert.deepEqual((await lines(T.id)).map((l) => [l.state, l.why]), [["refunded", "end"], ["refunded", "end"]]);
+      assert.equal((await rows("SELECT * FROM casino_events WHERE table_id=? AND kind='closed'", [T.id])).length, 1);
+      const rec = await svc.fairRecord(T.id, 1);
+      assert.ok(rec.server_seed, "the unused commitment is revealed, once the close is done");
+      await tick(betMs() + spinMs());
+      assert.equal(T.status, "closed");
+      T = await restart(T.id);
+      assert.equal((await refunds()).length, 2, "nothing is refunded twice");
+      assert.equal(await held(), 0);
+      assert.equal(await total(), before);
+    });
+test("while its close is owed a wheel takes no bet and the sole bettor's go never draws it", async () => {
+  const T = await room();
+  expect(await act(T, "a", "bet", "red 500"));
+  interrupt("refund");
+  assert.equal((await act(T, "a", "end")).ok, false);
+  svc.S.hooks.crash = null;
+  assert.match((await act(T, "b", "bet", "odd 100")).reply, /closes after this spin/);
+  assert.equal((await act(T, "a", "go")).ok, false);
+  assert.equal(T.eng.phase, "betting");
+  assert.equal(T.round.pocket, undefined);
+  await tick(1000);
+  assert.equal(T.status, "closed");
+  assert.equal(await cash("a"), 500000);
+  assert.equal(await cash("b"), 500000);
+});
+test("an end after the bet deadline still plays the spin, then closes (a close after this spin is not owed)", async () => {
+  const T = await room();
+  const p = fair.spinPocket(T.round.seed, T.client_seed, 1);
+  expect(await act(T, "b", "bet", p + " 100"));
+  move(betMs());
+  expect(await act(T, "a", "end"));
+  assert.equal(T.closing, true);
+  assert.equal(T.ending, undefined);
+  await tick(0);
+  assert.equal(T.eng.phase, "spinning");
+  await tick(spinMs());
+  assert.equal(await cash("b"), 503500);
+  await tick(svc.S.settings.rl_result_secs * 1000);
+  assert.equal(T.status, "closed");
+});
+// (review) FAIR-1: a copy whose retirement was interrupted (here at its refund, during boot) stays a copy: due at once, it
+// takes no bet, is never drawn (its seed was stripped), and the next tick retires it.
+test("a copied wheel whose retirement was interrupted is never drawn: the next tick retires it", async () => {
+  let T = await room("pad-copy");
+  expect(await act(T, "b", "bet", "red 100"));
+  const before = await total();
+  svc.stop();
+  await sql("UPDATE casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) WHERE id = ?", [T.id]);
+  interrupt("refund");
+  await svc.boot({ tick: false });
+  svc.S.hooks.crash = null;
+  T = svc.getTable(T.id);
+  assert.equal(T.status, "open", "its retirement rolled back");
+  assert.equal(await held(), 100);
+  assert.equal(svc.RL.due(T), true);
+  assert.match((await act(T, "c", "bet", "odd 100")).reply, /closes after this spin/);
+  assert.equal((await act(T, "b", "go")).ok, false);
+  assert.equal(T.round.pocket, undefined);
+  await tick(betMs());
+  assert.equal(T.status, "closed");
+  assert.equal(T.round.pocket, undefined, "never drawn");
+  assert.equal(await cash("b"), 500000);
+  assert.equal(await cash("c"), 500000);
+  assert.equal((await rows("SELECT * FROM transactions WHERE type='roulette payout'")).length, 0);
+  assert.equal((await svc.fairRecord(T.id, 1)).server_seed, null, "never revealed");
+  assert.equal(await held(), 0);
+  assert.equal(await total(), before);
+});
+
+const inLand = ["payouts", "house+", "flash", "house-", "round", "result"];
 for (const step of ["predraw", "draw", ...inLand, "rewards"])
   test("restart after " + step + " preserves the committed pocket and conservation", async () => {
     let T = await room();

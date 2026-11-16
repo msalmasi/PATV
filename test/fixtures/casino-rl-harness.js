@@ -90,6 +90,7 @@ async function fresh() {
   for (const name of [
     "casino_tables",
     "casino_rl_lines",
+    "casino_rl_queue",
     "casino_rounds",
     "casino_events",
     "casino_actions",

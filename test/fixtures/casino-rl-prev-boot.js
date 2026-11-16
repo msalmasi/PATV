@@ -1,7 +1,7 @@
 // O2 release A (rollback safety) - test/casino-rl-store.test.js's PREVIOUS BUILD, in its own process (dbUtils opens ./myapp.db):
 // the roulette service of the release before per-bet storage (1.99aof: test/fixtures/casino-rl-prev-roulette.js.txt is
 // casino/roulette.js at 84952cc0, byte for byte; service.js / money.js / ledger.js are the ones it shipped with, unchanged
-// by O2) boots on the database this build wrote - what the site CI's automatic rollback does - and runs a few steps.
+// by O2 but for service boot()'s RL.bootAudit() call, stubbed below) boots on the database this build wrote - what the site CI's automatic rollback does - and runs a few steps.
 //   node test/fixtures/casino-rl-prev-boot.js <dir with myapp.db> <clock ms> <steps JSON>
 // steps: [{open: room}, {act: [tableId | "$0" (the first wheel opened here), uid, verb, line]}, {tick: ms}, {move: ms},
 // {crash: "rl:<step>" | null} (that build's own crash points)] - prints one JSON line: the wheels, the wallets, what that
@@ -24,6 +24,9 @@ prev._compile(fs.readFileSync(path.join(__dirname, "casino-rl-prev-roulette.js.t
 prev.loaded = true;
 require.cache[target] = prev;
 const svc = require(path.join(repo, "casino/service"));
+// (O2 added one line to service.js boot(): RL.bootAudit(). The previous build's service has no such call and its roulette
+// no such function - a no-op here, as it was there.)
+if (typeof svc.RL.bootAudit !== "function") svc.RL.bootAudit = async () => {};
 const veil = require(path.join(repo, "casino/veil"));
 const { getQuery } = require(path.join(repo, "dbUtils"));
 require(path.join(repo, "casino/rewards")).hooks.updateLevel = async () => {};

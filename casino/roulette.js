@@ -168,6 +168,8 @@ function install(core) {
   const settledLines = new WeakMap(); // T -> {round, lines}: the spin that landed, while its result is up (frozenLines)
   let auditedBoot;
   const openRound = (T) => (T.round && T.round.settle !== "done" ? T.round.no : null);
+  // FAIR-1: a wheel copied from another database (retireCopy) - never drawn or revealed here
+  const copyOf = (T) => !!(T.copied || (T.round && !T.round.seed));
   // Release A (rlstore.js header): JSON.stringify(T) - service.save - writes what the previous build can act on. Before the
   // draw the book goes out as a refund that build runs at its boot (T.stakes + a refund intent marked mirror; a spin
   // nobody has seen drawn is void); from the draw on the full book goes out (it lands the spin as this build would).
@@ -201,6 +203,16 @@ function install(core) {
     syncStakes(T);
     if (T.eng.phase === "result" && T.round) settledLines.set(T, { round: T.round.no, lines: await store.lines(T.id, T.round.no, "settled") });
     else settledLines.delete(T);
+    // while the wheel spins its header is not rewritten for a queued line (saveAnswer): the changes made since the saved
+    // header go back on (a queued line, or its clearing; a player the header never saw gets their profile back)
+    if (T.eng.phase === "spinning" && T.round)
+      for (const q of await store.queued(T.id, T.round.no, T.rev)) {
+        if (!q.bets) delete T.eng.pending[q.uid];
+        else {
+          T.eng.pending[q.uid] = { bets: q.bets };
+          if (!T.players[q.uid] && q.profile) T.players[q.uid] = q.profile;
+        }
+      }
     // a slip an older build saved (full bet objects) becomes the compact one
     for (const [uid, slip] of Object.entries(T.eng.lastslip || {})) if (Array.isArray(slip) && slip.length) T.eng.slips[uid] = packSlip(slip);
     T.eng.lastslip = {};
@@ -219,7 +231,12 @@ function install(core) {
     reconciled.add(T);
     report(since);
   }
-  // once per boot (the first wheel this process reads): the live rows of wheels that are not open
+  // once per boot (the first wheel this process reads, or service boot() after the wheels recover - bootAudit - when no
+  // wheel is open: roulette off and every wheel closed after a rollback): the live rows of wheels that are not open
+  async function bootAudit() {
+    await store.ensure();
+    await auditOnce();
+  }
   async function auditOnce() {
     if (auditedBoot === S.booted) return;
     auditedBoot = S.booted;
@@ -259,6 +276,10 @@ function install(core) {
   // A transaction failed after an in-memory edit: the durable header and the caches of the rows come back before the next
   // admission, tick or refund observes that edit.
   async function restore(T) {
+    // (review) an event the failed transaction wrote rolled back with it: Pepe's poll cursor is the last committed event
+    // again (service.emit advanced it before the commit), so the retry's event - its seq reused - is not skipped
+    const m = await getQuery("SELECT MAX(seq) AS s FROM casino_events").catch(() => null);
+    if (m) S.lastSeq = (m[0] && m[0].s) || 0;
     if (!T) return;
     const row = (await getQuery("SELECT state FROM casino_tables WHERE id=?", [T.id]))[0];
     if (!row) return;
@@ -481,24 +502,33 @@ function install(core) {
     }
     return null;
   }
-  // the header and the act key's answer together (no PAT moves: a queued line, a cleared queued line)
+  // the header and the act key's answer together (no PAT moves: a queued line, a cleared queued line). (O2, review) While
+  // the wheel spins its header carries the drawn book for release A's mirror (~1 MB on a full wheel), so it is not
+  // rewritten for a queued line: the player's queued line - or its clearing - is their casino_rl_queue row, committed with
+  // the answer (rlstore.queue). The landing's header takes the queued lines over; load() puts them back after a restart.
   async function saveAnswer(T, out, uid, key) {
+    await store.ensure();
+    const spinning = T.eng.phase === "spinning" && !!T.round && !!uid;
     try {
       await tx(async () => {
-        await save(T);
+        if (spinning) {
+          const q = T.eng.pending[uid];
+          await store.queue(T.id, T.round.no, uid, q ? q.bets : null, q ? T.players[uid] || null : null, T.rev, key, clock());
+        } else await save(T);
         if (key) await answer(T, key, uid, out);
       });
     } catch (e) {
       await restore(T);
       throw e;
     }
+    if (spinning) wake(T); // (after the commit, as save's own wake would have been)
     return out;
   }
   async function place(T, actor, bets, key, queued = false) {
     await hydrate(T);
     const why = (await gate(actor)) || (await checkSeat(T, actor));
     if (why) return reply(false, why);
-    if (T.closing) return reply(false, "🛞 This wheel closes after this spin — no new bets.");
+    if (T.closing || copyOf(T)) return reply(false, "🛞 This wheel closes after this spin — no new bets.");
     const e = T.eng,
       uid = actor.uid;
     if (["result", "spinning"].includes(e.phase)) {
@@ -542,7 +572,8 @@ function install(core) {
       opno = T.opno + 1,
       line = { uid, bets, amount, key: spinKey(T) + ":" + uid + ":b" + opno };
     crash("intent");
-    let ans;
+    let ans,
+      announce = [];
     try {
       ans = await tx(async () => {
         const charge = await money.charge(line.key, uid, amount, "roulette bet");
@@ -563,9 +594,9 @@ function install(core) {
         if (e.phase === "idle") {
           e.phase = "betting";
           T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
-          // the first line's "Bets are open" commits with it (no second write of the wheel)
-          const rooms = roomsOf(T).filter((id) => annDue(T, "open_ts", id));
-          if (rooms.length) await emit(T, "line", "🛞 Bets are open.", { rooms });
+          // the first line's "Bets are open" goes out once the line has committed (below; no second write of the wheel -
+          // the next save carries its log line): a poll never reads an event of a transaction that can still roll back
+          announce = roomsOf(T).filter((id) => annDue(T, "open_ts", id));
         }
         const out = reply(
           true,
@@ -587,6 +618,10 @@ function install(core) {
       if (err.code === "E_KEY") T.opno = Math.max(T.opno, opno); // (never offered again: rlstore.strays settles it at boot)
       throw err;
     }
+    if (ans && announce.length)
+      await emit(T, "line", "🛞 Bets are open.", { rooms: announce }).catch((err) =>
+        console.error("[casino] roulette " + T.id + " bets-open line:", err.message),
+      );
     return ans || reply(false, "The stake could not be charged. Check your available PAT.");
   }
   function dropLines(T, keys) {
@@ -628,8 +663,10 @@ function install(core) {
       throw err;
     }
   }
-  // (the draw's first step) the cached book must be the open spin's live rows: the draw freezes that set
+  // (the draw's first step) the cached book must be the open spin's live rows: the draw freezes that set. A wheel whose
+  // close is owed (T.ending: its refund or reveal failed) or a copy is never drawn - recover() finishes it first.
   async function discardRefunded(T) {
+    if (T.ending || copyOf(T)) throw Error("Roulette wheel " + T.id + " is closing: not drawn");
     await hydrate(T);
     const n = openRound(T),
       rows = n == null ? [] : await store.liveKeys(T.id, n),
@@ -748,6 +785,7 @@ function install(core) {
         }
         crash("house-");
         await store.settle(T.id, r.no, clock());
+        await store.unqueue(T.id); // (the header below carries the queued lines again)
         if (quiet) {
           e.book = [];
           syncStakes(T);
@@ -801,6 +839,7 @@ function install(core) {
         e.phase = "result";
         T.dl = { result: clock() + S.settings.rl_result_secs * 1000 };
         await emit(T, "result", text);
+        crash("result");
         await save(T);
       });
     } catch (err) {
@@ -838,37 +877,47 @@ function install(core) {
       return;
     }
     // Bets stop (committed) before anything is revealed: a reader can see the unused seed while the reveal's
-    // transaction is open, and a reveal that fails must leave a wheel that takes no bet on that round.
-    if (!T.closing) {
+    // transaction is open, and a reveal that fails must leave a wheel that takes no bet on that round. (O2, review) The
+    // same save marks the close as owed (T.ending): a refund or reveal that fails, or a restart in between, is resumed by
+    // the next tick or boot (recover) before the wheel could draw - nothing else journals it now.
+    if (!T.closing || !T.ending) {
       T.closing = true;
+      T.ending = reason || "closed";
       await save(T);
     }
     await hydrate(T); // (O2) the book is the live rows before the close refunds them
     if (T.eng.book.length) await refund(T, T.eng.book, "end", null, null);
-    await tx(async () => {
-      // every unused commitment is revealed: the current round when it never spun, and the next spin committed at a draw
-      const unused = [T.round.settle ? null : T.round, T.next && T.next.seed ? T.next : null].filter(Boolean);
-      for (const u of unused)
-        await runQuery(
-          "UPDATE casino_rounds SET server_seed=?,shoe=?,revealed=? WHERE table_id=? AND round_no=?",
-          [
-            u.seed,
-            JSON.stringify({ pocket: fair.spinPocket(u.seed, T.client_seed, u.no), pockets: 37 }),
-            clock(),
-            T.id,
-            u.no,
-          ],
-        );
-      T.next = null;
-      T.last_revealed = T.round.no;
-      T.status = "closed";
-      T.closed_at = clock();
-      T.dl = {};
-      for (const [uid, line] of Object.entries(T.eng.pending)) tell(T, uid, line.bets, "the wheel closed.");
-      T.eng.pending = {};
-      await emit(T, "closed", CLOSED[reason] || "🛞 The roulette wheel closed.", { reason });
-      await save(T);
-    });
+    try {
+      await tx(async () => {
+        // every unused commitment is revealed: the current round when it never spun, and the next spin committed at a draw
+        const unused = [T.round.settle ? null : T.round, T.next && T.next.seed ? T.next : null].filter(Boolean);
+        for (const u of unused)
+          await runQuery(
+            "UPDATE casino_rounds SET server_seed=?,shoe=?,revealed=? WHERE table_id=? AND round_no=?",
+            [
+              u.seed,
+              JSON.stringify({ pocket: fair.spinPocket(u.seed, T.client_seed, u.no), pockets: 37 }),
+              clock(),
+              T.id,
+              u.no,
+            ],
+          );
+        crash("reveal");
+        T.next = null;
+        T.last_revealed = T.round.no;
+        T.status = "closed";
+        T.closed_at = clock();
+        T.dl = {};
+        delete T.ending; // (the close it marked is done)
+        for (const [uid, line] of Object.entries(T.eng.pending)) tell(T, uid, line.bets, "the wheel closed.");
+        T.eng.pending = {};
+        await emit(T, "closed", CLOSED[reason] || "🛞 The roulette wheel closed.", { reason });
+        await save(T);
+      });
+    } catch (err) {
+      await restore(T); // (the wheel stays open with its close owed: the next tick or boot resumes it)
+      throw err;
+    }
     streamGone(T.id);
   }
   const CLOSED = {
@@ -952,6 +1001,8 @@ function install(core) {
       now = clock();
     return (
       !!T.intent ||
+      !!T.ending ||
+      copyOf(T) ||
       (e.phase === "betting" && now >= T.dl.bet) ||
       (e.phase === "spinning" && now >= T.dl.land) ||
       (e.phase === "result" && now >= T.dl.result) ||
@@ -966,7 +1017,8 @@ function install(core) {
   }
   async function tick(T) {
     if (T.status !== "open" || !due(T)) return;
-    if (T.intent || !reconciled.has(T)) return recover(T); // (O2: a wheel whose rows this process hasn't read yet)
+    // (O2: a wheel whose rows this process hasn't read yet; review: a close that is owed, a copy to retire)
+    if (T.intent || T.ending || copyOf(T) || !reconciled.has(T)) return recover(T);
     if (T.eng.phase === "spinning") return land(T);
     if (T.eng.phase === "betting") return draw(T);
     if (T.eng.phase === "result") return advance(T);
@@ -1043,7 +1095,7 @@ function install(core) {
   }
   async function recover(T) {
     await hydrateAll(T); // (O2) every open wheel's rows, before this one acts
-    if (T.copied || (T.round && !T.round.seed)) return retireCopy(T);
+    if (copyOf(T)) return retireCopy(T);
     await finishIntent(T);
     await strayStakes(T);
     // (O2) the rewards follow the landing's commit: a restart while its result is up runs them again (each one is keyed)
@@ -1052,6 +1104,9 @@ function install(core) {
       await require("./rewards")
         .rouletteSpin(T, landed.round, engine.settle(landed.lines, T.round.pocket), T.round.pocket, landed.lines)
         .catch((e) => console.error("[casino] roulette rewards:", e.message));
+    // (review) a close that began and did not finish (its refund or reveal failed, or a restart cut it) finishes now,
+    // before anything else: a wheel its host ended never plays the spin instead
+    if (T.ending && T.eng.phase !== "spinning") return closeTable(T, T.ending);
     if (T.eng.phase === "betting" && T.dl.bet <= clock()) {
       T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
       await save(T);
@@ -1304,6 +1359,7 @@ function install(core) {
     restore,
     privateNotes,
     frozenLines,
+    bootAudit,
     HELP,
   };
 }

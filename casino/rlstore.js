@@ -26,8 +26,11 @@
 // frozen mirror) gets its rows, and every live row is checked against the ledger - one whose :refund exists is marked
 // refunded (an older build refunded it, or a bug: flagged), one of an earlier spin that landed is settled, one of an
 // earlier spin that never landed is refunded. audit() does the same for live rows of wheels that are not open, and
-// strays() refunds a stake debit of the open spin that has no row (an older build's interrupted placement). Every finding
-// is a flag: logged, kept in `flags`, and filed once per boot as an ops alert by roulette.js.
+// strays() refunds a stake debit of the open spin that has no row and no refund (an older build's interrupted placement;
+// one it refunded - its undo or clear - only gets its record row). Every finding is a flag: logged, kept in `flags`, and
+// filed once per boot as an ops alert by roulette.js. audit() runs once per boot whether or not a wheel is open.
+// casino_rl_queue (queue() below) holds a queued line changed while its wheel spins - no PAT - so the drawn header is not
+// rewritten for one.
 "use strict";
 const { runQuery, getQuery, tx, inTx } = require("../dbUtils");
 const money = require("./money");
@@ -44,6 +47,12 @@ async function ddl() {
     state TEXT NOT NULL CHECK (state IN ('live', 'refunded', 'settled')), why TEXT, act_key TEXT, created INTEGER, closed INTEGER)`);
   await runQuery("CREATE INDEX IF NOT EXISTS casino_rl_lines_round ON casino_rl_lines (table_id, round_no, state)");
   await runQuery("CREATE INDEX IF NOT EXISTS casino_rl_lines_live ON casino_rl_lines (table_id) WHERE state = 'live'");
+  // (review) maxOpno: a wheel's MAX(opno) is one index seek, not a walk over every row the wheel ever had
+  await runQuery("CREATE INDEX IF NOT EXISTS casino_rl_lines_opno ON casino_rl_lines (table_id, opno)");
+  // (review) a queued line changed while the wheel spins (queue() below): one row per wheel and player, no PAT
+  await runQuery(`CREATE TABLE IF NOT EXISTS casino_rl_queue (
+    table_id TEXT NOT NULL, user_id TEXT NOT NULL, round_no INTEGER NOT NULL, rev INTEGER NOT NULL, bets TEXT, profile TEXT,
+    act_key TEXT, created INTEGER, PRIMARY KEY (table_id, user_id))`);
 }
 /** The table and its indexes. Memoized only outside a transaction (inside one the DDL commits or rolls back with it). */
 async function ensure() {
@@ -114,11 +123,52 @@ async function maxOpno(tableId) {
   const r = await getQuery("SELECT MAX(opno) AS n FROM casino_rl_lines WHERE table_id = ?", [tableId]);
   return Number(r[0] && r[0].n) || 0;
 }
-/** PAT held on the wheels (supply.casinoHeld) */
+/** PAT held on the wheels (supply.casinoHeld). A live row whose :refund was credited (an older build refunded it from the
+ *  mirror) or whose spin landed (an older build settled it) holds nothing: the boot audit closes it, and the supply never
+ *  counts that PAT twice meanwhile. */
 async function held() {
-  const r = await getQuery("SELECT COALESCE(SUM(amount), 0) AS n FROM casino_rl_lines WHERE state = 'live'");
+  const r = await getQuery(
+    `SELECT COALESCE(SUM(l.amount), 0) AS n FROM casino_rl_lines l WHERE l.state = 'live'
+       AND NOT EXISTS (SELECT 1 FROM transactions x WHERE x.transactionId = l.key || ':refund')
+       AND NOT EXISTS (SELECT 1 FROM casino_rounds r WHERE r.table_id = l.table_id AND r.round_no = l.round_no AND r.results IS NOT NULL)`,
+  );
   return Math.max(0, Math.floor(Number(r[0] && r[0].n) || 0));
 }
+
+// ── a queued line while the wheel spins (review: no ~1 MB header write per queued action) ──
+// From the draw to the landing the wheel's JSON carries the drawn book (release A's mirror), so roulette.js does not rewrite
+// it for a queued line: the player's queued line - or its clearing (bets NULL) - is this row, written with the act key's
+// answer. rev = the saved header's rev the change was made on: any later header save (the landing, a close) carries the
+// change, so a row counts only while its rev >= the saved header's rev and its spin is the one in the air. No PAT: a queued
+// line is charged when betting opens. (A rolled-back build never reads these rows: it loses those queued lines, nothing else.)
+async function queue(tableId, roundNo, uid, bets, profile, rev, actKey, now) {
+  await runQuery(
+    "INSERT OR REPLACE INTO casino_rl_queue (table_id, user_id, round_no, rev, bets, profile, act_key, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [tableId, uid, roundNo, Number(rev) || 0, bets ? pack(bets) : null, profile ? JSON.stringify(profile) : null, actKey || null, now],
+  );
+}
+/** the queued-line changes made on the saved header (rev) of the spin in the air -> [{uid, bets | null, profile | null}] */
+async function queued(tableId, roundNo, rev) {
+  const rows = await getQuery(
+    "SELECT user_id, bets, profile FROM casino_rl_queue WHERE table_id = ? AND round_no = ? AND rev >= ? ORDER BY created",
+    [tableId, roundNo, Number(rev) || 0],
+  );
+  const out = [];
+  for (const r of rows) {
+    let bets = null,
+      profile = null;
+    try {
+      bets = r.bets == null ? null : unpack(r.bets);
+      profile = r.profile ? JSON.parse(r.profile) : null;
+    } catch (_) {
+      continue; // (a position this build doesn't know: that queued line is dropped)
+    }
+    out.push({ uid: r.user_id, bets, profile });
+  }
+  return out;
+}
+/** the header carries the wheel's queued lines again (the landing's transaction) */
+const unqueue = (tableId) => runQuery("DELETE FROM casino_rl_queue WHERE table_id = ?", [tableId]);
 
 function flag(kind, data) {
   const f = { kind, ...data, ts: Date.now() };
@@ -164,7 +214,13 @@ async function reconcile(T, openRound, now) {
   const book = Array.isArray(T.eng && T.eng.book) ? T.eng.book : [];
   return tx(async () => {
     let inserted = 0;
-    const have = new Set(book.length ? (await getQuery("SELECT key FROM casino_rl_lines WHERE table_id = ?", [T.id])).map((r) => r.key) : []);
+    // (review) the book's own keys by primary key - not every key the wheel ever had
+    const keys = book.map((l) => l && l.key).filter((k) => typeof k === "string"),
+      have = new Set();
+    for (let i = 0; i < keys.length; i += 200) {
+      const part = keys.slice(i, i + 200);
+      for (const r of await getQuery("SELECT key FROM casino_rl_lines WHERE key IN (" + part.map(() => "?").join(", ") + ")", part)) have.add(r.key);
+    }
     for (const l of book) {
       const k = l && parseKey(l.key);
       if (!k || k.table !== T.id || !(l.amount > 0) || have.has(l.key)) continue;
@@ -190,7 +246,8 @@ async function reconcile(T, openRound, now) {
   });
 }
 
-/** Live rows of wheels that are not open (closed, or gone): nothing will refund or settle them. One transaction. */
+/** Live rows of wheels that are not open (closed, or gone): nothing will refund or settle them. Run once per boot whether
+ *  or not any wheel is open (roulette.js bootAudit). One transaction; queued-line rows of wheels not open go with it. */
 async function audit(now) {
   await ensure();
   return tx(async () => {
@@ -198,18 +255,23 @@ async function audit(now) {
       "SELECT l.* FROM casino_rl_lines l LEFT JOIN casino_tables t ON t.id = l.table_id WHERE l.state = 'live' AND (t.id IS NULL OR t.status != 'open')",
     );
     for (const r of rows) await resolve(r, now, "audit");
+    await runQuery("DELETE FROM casino_rl_queue WHERE table_id NOT IN (SELECT id FROM casino_tables WHERE status = 'open')");
     return rows.length;
   });
 }
 
 /**
- * Stake debits of the open spin with no row (an older build charged them and stopped before its book had them): each is
- * refunded by its own key and gets a 'refunded' row for the record. Caller's transaction. -> [{key, uid, amount}]
+ * Stake debits of the open spin with no row. One an older build already refunded (its undo or clear of a line in this
+ * spin: the line left that build's book, so reconcile gave it no row) gets its 'refunded' row for the record ('migrated')
+ * and is no finding. One with no refund (an older build charged it and stopped before its book had it) is refunded by its
+ * own key, gets a 'refunded' row ('restart') and is flagged. Caller's transaction. -> [{key, uid, amount, moved}]
  */
 async function strays(tableId, roundNo, now) {
   const prefix = "crl:" + tableId + ":s" + roundNo + ":";
   const debits = await getQuery(
-    `SELECT t.transactionId AS key, t.userId AS uid, t.points FROM transactions t
+    `SELECT t.transactionId AS key, t.userId AS uid, t.points,
+            EXISTS (SELECT 1 FROM transactions r WHERE r.transactionId = t.transactionId || ':refund') AS refunded
+       FROM transactions t
       WHERE t.transactionId GLOB ? AND t.points < 0 AND NOT EXISTS (SELECT 1 FROM casino_rl_lines l WHERE l.key = t.transactionId)`,
     [prefix.replace(/[*?[\]]/g, (c) => "[" + c + "]") + "*"],
   );
@@ -218,11 +280,16 @@ async function strays(tableId, roundNo, now) {
     const k = parseKey(d.key);
     if (!k || k.table !== tableId || k.round !== roundNo) continue;
     const amount = -Number(d.points);
+    if (d.refunded) {
+      await insert(tableId, roundNo, { key: d.key, uid: k.uid, bets: [], amount }, k.opno, null, now, "refunded", "migrated");
+      out.push({ key: d.key, uid: k.uid, amount, moved: false });
+      continue;
+    }
     const paid = await money.credit(d.key + ":refund", d.uid, amount, "roulette refund (restart)");
     if (!paid.ok) throw Error("Stake recovery pending");
     await insert(tableId, roundNo, { key: d.key, uid: k.uid, bets: [], amount }, k.opno, null, now, "refunded", "restart");
-    flag("stray_stake_refunded", { key: d.key, table: tableId, round: roundNo, amount });
-    out.push({ key: d.key, uid: k.uid, amount });
+    if (!paid.replay) flag("stray_stake_refunded", { key: d.key, table: tableId, round: roundNo, amount });
+    out.push({ key: d.key, uid: k.uid, amount, moved: !paid.replay });
   }
   return out;
 }
@@ -242,6 +309,9 @@ module.exports = {
   liveKeys,
   maxOpno,
   held,
+  queue,
+  queued,
+  unqueue,
   reconcile,
   audit,
   strays,
