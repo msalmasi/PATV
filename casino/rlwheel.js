@@ -20,14 +20,15 @@
 //   equals the canonical one (the rotor geometry repeats every pocket).
 // - Exact landing (whole-pocket relabel): the ball settles in geometric slot s of the idle rotor; showing the rotor shifted by
 //   k = (WHEEL.indexOf(pocket) - s) mod 37 whole pockets leaves every fret, hop and bounce unchanged and puts the server's
-//   number under the ball. The shift ramps in only while the ball is still on the backtrack (it cannot touch the rotor),
-//   which reads as the croupier's flick; the rotor never runs backwards.
+//   number under the ball. The shift ramps in only while the ball is still on the backtrack (it cannot touch the rotor), and
+//   always FORWARD as the croupier's flick: the rotor jumps ahead at the launch and coasts back down to its idle speed at a
+//   constant deceleration (offset = off * x(2 - x)); it never slows below idle, never re-accelerates and never runs backwards.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.PATVRlWheel = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
-  var VERSION = 1;
+  var VERSION = 2;
   // European single-zero order (clockwise seen from above) - the same as casino/rlengine.js WHEEL; reds as casino/rlbets.js
   var WHEEL = Object.freeze([
     0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7,
@@ -48,7 +49,15 @@
     SPAN_MIN = 4000, //             a shorter spin is planned as a 4 s one already under way (the ball is seen mid-track)
     SPAN_MAX = 30000, //            a longer one keeps the ball in the croupier's hand until 30 s before land_at
     FIT_MIN = 4000,
-    FIT_MAX = 20000;
+    FIT_MAX = 20000,
+    DEFAULT_SPIN_MS = 12000, //     D6's rl_spin_secs default: a spin with no start time and no length is taken as this long
+    RAMP_PART = 0.6, //             the flick runs over this part of the track time...
+    RAMP_MIN = 5, //                ...at least this long (s; a short track is flicked over all of it but its last 300 ms)...
+    RAMP_MAX = 8, //                ...at most this long (s)
+    LATE_RAMP_MS = 1200, //         mount(): a viewer who learns of the spin late flicks to the plan's ramp end, or this long
+    LATE_RAMP_MIN_MS = 500, //      ...and with less ramp time than this left, the rotor takes its place behind the ball's fade-in
+    BACK_MS = 8000, //              mount(): after the result the shift eases back to the server-time angle over 8 s (<= 1.3x)
+    CACHE_N = 4; //                 plans kept (a lobby or a dock shows a few wheels at once)
   var GEOM = Object.freeze({
     rim: 1, //        outer edge of the wooden bowl
     trackOut: 0.955, // outer wall of the ball track
@@ -75,7 +84,9 @@
     G_Z = 24, //         gravity for hops (height z)
     K_POCKET = 900, //   pocket floor: radial spring to the rest radius...
     C_POCKET = 30, //    ...and its damping
-    SETTLE_W = 22; //    settle spring (critically damped), rad/s
+    SETTLE_W = 22, //    settle spring (critically damped), rad/s
+    RIM_CURL = GEOM.numIn + 0.02, // the number ring's outer part curls up toward the rotor rim...
+    K_RIM = 400; //      ...this steeply (an inward push growing with the distance past RIM_CURL)
   // mount(): a re-measured server-clock skew within SKEW_JUMP_MS is slewed in at <= 5% clock speed (no visible jump)
   var SKEW_SLEW = 0.05,
     SKEW_JUMP_MS = 1500;
@@ -156,6 +167,23 @@
   function smooth(x) {
     return x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   }
+  // the croupier's flick: the extra speed starts at its top and falls linearly to zero (a constant deceleration)
+  function flick(x) {
+    return x <= 0 ? 0 : x >= 1 ? 1 : x * (2 - x);
+  }
+  // is the point (x, y) (tangential, radial offsets from a diamond's centre) within b of the drawn rhombus |x|/hx + |y|/hy <= 1?
+  // Exact (the rhombus grown by the ball's radius), + - * / only
+  function nearRhomb(x, y, hx, hy, b) {
+    if (x < 0) x = -x;
+    if (y < 0) y = -y;
+    if (x / hx + y / hy <= 1) return true;
+    var s = ((hx - x) * hx + y * hy) / (hx * hx + hy * hy); //   the nearest point on the edge (hx, 0) - (0, hy)
+    if (s < 0) s = 0;
+    else if (s > 1) s = 1;
+    var ex = x - (hx - s * hx),
+      ey = y - s * hy;
+    return ex * ex + ey * ey <= b * b;
+  }
 
   // ── the canonical after-track simulation: cone, diamonds, rotor, hops, rattle, settle ──
   // Time 0 = the ball leaves the track at world angle P.thetaE with speed U_CRIT; the rotor's angle then is P.rho (mod one
@@ -170,7 +198,8 @@
       L = r * r * -U_CRIT, // angular momentum per mass (ball runs counter-clockwise: negative)
       muL = P.muL,
       n = 0,
-      cool = 0,
+      cool = 0, //   after a knock the same diamond is skipped this long (s); the next one is always checked
+      lastKd = 1e9,
       hits = 0,
       hops = 0,
       rattles = 0,
@@ -204,17 +233,19 @@
         }
       }
       if (cool > 0) cool = cool - DT;
-      else {
-        var a = th - D_FIRST,
-          kd = Math.floor(a / D_STEP + 0.5),
-          da = a - kd * D_STEP,
+      var a = th - D_FIRST,
+        kd = Math.floor(a / D_STEP + 0.5);
+      if (!(cool > 0 && kd === lastKd)) {
+        var da = a - kd * D_STEP,
           radial = (kd & 1) === 0,
-          hr = (radial ? D_LONG : D_SHORT) + B,
-          ht = (radial ? D_SHORT : D_LONG) + B,
-          dr = r - GEOM.diamond;
-        if (dr < hr && dr > -hr && da * r < ht && da * r > -ht) {
+          hR = radial ? D_LONG : D_SHORT, // the drawn rhombus: radial half-length...
+          hT = radial ? D_SHORT : D_LONG, // ...and tangential half-width
+          dr = r - GEOM.diamond,
+          dt = da * r;
+        if (dr < hR + B && dr > -hR - B && dt < hT + B && dt > -hT - B && nearRhomb(dt, dr, hT, hR, B)) {
           hits++;
           cool = 0.16;
+          lastKd = kd;
           var rough = rnd();
           if (radial) {
             // its long side faces the ball's run: a hard angular knock and a kick outward
@@ -285,6 +316,8 @@
         phi = phi + wr * DT;
         wr = wr * (1 - 0.25 * DT);
         vr = vr * (1 - 0.8 * DT) - 0.6 * DT;
+        // skimming the number ring (lower than a third of the ball): its slope and the curl up to the rim still steer it
+        if (r > GEOM.numIn && z < 0.01) vr = vr - (G_RING + (r > RIM_CURL ? K_RIM * (r - RIM_CURL) : 0)) * DT;
         r = r + vr * DT;
         if (z <= 0) {
           z = 0;
@@ -294,9 +327,13 @@
           var jl = Math.floor(phi / PITCH + 0.5),
             lim = PITCH / 2 - (B + GEOM.fret) / r,
             xl = phi - jl * PITCH;
-          if (r <= GEOM.numIn) {
-            if (xl > lim) phi = jl * PITCH + lim;
-            else if (xl < -lim) phi = jl * PITCH - lim;
+          if (r <= GEOM.numIn && (xl > lim || xl < -lim)) {
+            // it came down on a fret: a glancing bounce off its top, nudged toward the middle of the pocket below
+            // (never a sideways snap into the pocket)
+            var vg = 0.25 + 0.25 * rnd();
+            if (vz < vg) vz = vg;
+            z = 1e-4;
+            wr = wr + (xl > 0 ? -0.4 : 0.4);
           }
         }
       } else if (r > GEOM.numIn) {
@@ -304,6 +341,7 @@
         phi = phi + wr * DT;
         wr = wr * (1 - P.muN * DT);
         vr = (vr - G_RING * DT) * (1 - 1.5 * DT);
+        if (r > RIM_CURL) vr = vr - K_RIM * (r - RIM_CURL) * DT; //  the ring curls up to the rim: it rolls back, no wall
         r = r + vr * DT;
       } else {
         // on a pocket floor: the frets
@@ -315,7 +353,10 @@
           lm = PITCH / 2 - (B + GEOM.fret) / r,
           xp = phi - j * PITCH;
         if ((xp > lm && wr > 0) || (xp < -lm && wr < 0)) {
-          var v = (wr < 0 ? -wr : wr) * r;
+          var v = (wr < 0 ? -wr : wr) * r,
+            // back to the contact point only when it is just past it (this step's travel): a ball rolling in off the number
+            // ring above a fret keeps its place and bounces from there - never a sideways snap
+            back = (xp > 0 ? xp - lm : -lm - xp) <= (wr < 0 ? -wr : wr) * DT * 1.5;
           if (v > vHop) {
             hops++;
             vz = 0.25 + P.hopK * v * (0.45 + 0.4 * rnd());
@@ -323,13 +364,13 @@
             z = 1e-4;
             if (rnd() < P.pRev) {
               // a ricochet: the fret throws it back the way it came
-              phi = j * PITCH + (xp > 0 ? lm : -lm);
+              if (back) phi = j * PITCH + (xp > 0 ? lm : -lm);
               wr = -wr * P.eRev * (0.7 + 0.3 * rnd());
             } else wr = wr * P.eHop * (0.8 + 0.18 * rnd());
-            vr = vr + (rnd() - 0.25) * 0.4 * v;
+            vr = vr + (rnd() - 0.5) * 0.25 * v; //   a fret throws it a little in or out, no bias to the rim
           } else {
             rattles++;
-            phi = j * PITCH + (xp > 0 ? lm : -lm);
+            if (back) phi = j * PITCH + (xp > 0 ? lm : -lm);
             wr = -wr * P.eBack * (0.55 + 0.4 * rnd());
             if (v > 0.3) {
               vz = 0.1 * v * rnd();
@@ -343,8 +384,9 @@
         }
       }
       if (r > GEOM.rotor - B) {
-        r = GEOM.rotor - B;
+        // the rim: a ball going out comes back; one still rolling in off the stator keeps its place (no inward snap)
         if (vr > 0) vr = -0.4 * vr;
+        if (r > GEOM.rotor) r = GEOM.rotor;
       } else if (r < GEOM.pocketIn + B) {
         r = GEOM.pocketIn + B;
         if (vr < 0) vr = -0.4 * vr;
@@ -427,21 +469,48 @@
     return 0.5 * (lo + hi);
   }
 
+  // the plan's rotor shift at t: 0 until the launch, then the forward flick up to p.off (in [0, 2pi)) by p.rampTo
   function offsetAt(p, t) {
     if (!p || t <= p.rampFrom) return 0;
     if (t >= p.rampTo) return p.off;
-    return p.off * smooth((t - p.rampFrom) / (p.rampTo - p.rampFrom));
+    return p.off * flick((t - p.rampFrom) / (p.rampTo - p.rampFrom));
   }
-  // a rotor shift (rad) the same as `want` mod 2pi, starting from `from`: forward (with the rotor), or a gentle slow-down
-  // when that is short enough that the rotor still visibly turns forward the whole time
-  function rampTarget(from, want, durMs) {
-    var d = norm(want - from),
-      back = d - TAU,
-      dur = Math.max(0.2, durMs / 1000);
-    return from + ((1.5 * -back) / dur <= 0.6 * OMEGA ? back : d);
+  // a rotor shift (rad) the same as `want` mod 2pi, starting from `from`: forward (with the rotor, < one turn), or with
+  // `near` the shorter way round (the slow ease back to the server-time angle while bets are open)
+  function rampTarget(from, want, near) {
+    var d = norm(want - from);
+    if (near && d > Math.PI) d -= TAU;
+    return from + d;
+  }
+  // what a spin of startedAt -> landAt is shaped like (shared by plan() and replay())
+  function shapeOf(startedAt, landAt) {
+    var span = clamp(landAt - startedAt, SPAN_MIN, SPAN_MAX),
+      effMs = span - LEAD_MS, //                    launch -> settle, before the pocket alignment
+      fit = clamp(landAt - startedAt, FIT_MIN, FIT_MAX);
+    return {
+      span: span,
+      effMs: effMs,
+      fit: fit,
+      life: (fit - FIT_MIN) / (FIT_MAX - FIT_MIN),
+      maxSteps: Math.floor(((effMs - POCKET_MS) / 1000 - 1.0) / DT), // the track keeps >= 1 s whatever the variants do
+    };
   }
 
-  var cache = { key: "", plan: null };
+  // the last CACHE_N plans, most recent first (every poll asks for the same spin again)
+  var cache = [],
+    builds = 0;
+  function cached(key) {
+    for (var i = 0; i < cache.length; i++)
+      if (cache[i].key === key) {
+        var e = cache[i];
+        if (i) {
+          cache.splice(i, 1);
+          cache.unshift(e);
+        }
+        return e.plan;
+      }
+    return null;
+  }
   /**
    * plan({tableId, round, pocket, startedAt, landAt}) -> the whole spin, pure and deterministic.
    *   frames: Float32Array, 60 Hz from t0, 4 per frame [rotorOffset, r, theta, z] (theta world, [0, 2pi))
@@ -454,23 +523,26 @@
     var landAt = Number(o.landAt);
     if (!isFinite(landAt)) throw new TypeError("rlwheel.plan: landAt");
     var startedAt = Number(o.startedAt);
-    if (!isFinite(startedAt)) startedAt = landAt - 12000;
+    if (!isFinite(startedAt)) startedAt = landAt - DEFAULT_SPIN_MS;
     var tableId = o.tableId == null ? "" : String(o.tableId),
       round = o.round == null ? "" : String(o.round);
-    var key = [VERSION, tableId, round, pocket, startedAt, landAt].join("|");
-    if (cache.key === key) return cache.plan;
+    var key = [VERSION, tableId, round, pocket, startedAt, landAt].join("|"),
+      hit = cached(key);
+    if (hit) return hit;
+    builds++;
 
     var seed = seedOf(tableId, round),
-      span = clamp(landAt - startedAt, SPAN_MIN, SPAN_MAX),
+      sh = shapeOf(startedAt, landAt),
+      span = sh.span,
       t0 = landAt - span,
-      effMs = span - LEAD_MS, //                    launch -> settle, before the pocket alignment
-      fit = clamp(landAt - startedAt, FIT_MIN, FIT_MAX),
-      life = (fit - FIT_MIN) / (FIT_MAX - FIT_MIN),
+      effMs = sh.effMs,
+      fit = sh.fit,
+      life = sh.life,
       target = postTarget(fit),
       trackMin = 1.25 + life,
       hiBand = Math.min(target * 1.16, (effMs - POCKET_MS) / 1000 - trackMin),
       loBand = Math.min(target * 0.84, hiBand - 0.2);
-    var maxSteps = Math.floor(((effMs - POCKET_MS) / 1000 - 1.0) / DT); // the track keeps >= 1 s whatever the variants do
+    var maxSteps = sh.maxSteps;
     var rec = { r: new Float64Array(maxSteps + 2), th: new Float64Array(maxSteps + 2), z: new Float64Array(maxSteps + 2) },
       best = null,
       bestErr = Infinity,
@@ -514,7 +586,7 @@
     var settleAt = exitAt + tPost * 1000,
       entryAt = exitAt + R.entry * DT * 1000,
       rampFrom = t0,
-      rampTo = t0 + 1000 * clamp(0.45 * tTrack, 0.9, 3.2);
+      rampTo = t0 + 1000 * clamp(RAMP_PART * tTrack, RAMP_MIN, RAMP_MAX);
     if (rampTo > exitAt - 300) rampTo = Math.max(t0 + 200, exitAt - 300);
     var p = {
       v: VERSION,
@@ -540,7 +612,7 @@
       n: 0,
       frames: null,
     };
-    p.off = rampTarget(0, -k * PITCH, rampTo - rampFrom);
+    p.off = ((N - k) % N) * PITCH; //                  the same as -k pockets, reached going forward: [0, 2pi)
     // 60 Hz frames: the track from the backward integration (grid-aligned to t0: frame i = step 4i), the rest from the record
     var nF = Math.ceil((settleAt - t0) / FRAME_MS) + 2,
       F = new Float32Array(nF * 4),
@@ -578,9 +650,18 @@
     }
     p.n = nF;
     p.frames = F;
-    cache.key = key;
-    cache.plan = p;
+    cache.unshift({ key: key, plan: p });
+    if (cache.length > CACHE_N) cache.length = CACHE_N;
     return p;
+  }
+  // the chosen variant's after-track record at the integrator's full 240 Hz (tests and tuning probes; never needed to draw)
+  function replay(p) {
+    var sh = shapeOf(p.startedAt, p.landAt),
+      rec = { r: new Float64Array(sh.maxSteps + 2), th: new Float64Array(sh.maxSteps + 2), z: new Float64Array(sh.maxSteps + 2) },
+      rnd = mulberry32(variantSeed(p.seed, p.variant)),
+      P = variantParams(rnd, sh.life),
+      res = postSim(rnd, P, rec, sh.maxSteps);
+    return { rec: rec, res: res, P: P };
   }
 
   /**
@@ -654,10 +735,12 @@
       };
     var pocket = Number(pick(sp && sp.number, v.pocket, v.number)),
       landAt = Number(pick(sp && sp.ends_at, v.landAt, v.land_at, v.ends_at)),
-      secs = Number(pick(sp && sp.secs, v.secs, v.rules && v.rules.spin_secs, v.limits && v.limits.spin_secs)),
+      // the spin length: the view's spin, its rules, or its settings snapshot (limits() = the rl_* settings; an OBS
+      // payload's limits.spin is the per-spin bet cap in PAT, never a time, so it is not read)
+      secs = Number(pick(sp && sp.secs, v.secs, v.rules && v.rules.spin_secs, v.limits && v.limits.rl_spin_secs)),
       startedAt = Number(pick(sp && sp.started_at, v.startedAt, v.started_at));
     if (!(pocket >= 0 && pocket <= 36 && Math.floor(pocket) === pocket) || !isFinite(landAt) || landAt <= 0) return null;
-    if (!isFinite(startedAt) || startedAt <= 0) startedAt = landAt - (secs > 0 ? secs : 8) * 1000;
+    if (!isFinite(startedAt) || startedAt <= 0) startedAt = landAt - (secs > 0 ? secs * 1000 : DEFAULT_SPIN_MS);
     return {
       tableId: String(pick(v.tableId, v.table_id, v.table, v.id) || ""),
       round: String(pick(sp && sp.round_no, v.round, v.round_no) || ""),
@@ -1008,11 +1091,12 @@
    * mount(canvas, {compact, reduced, palette, tilt, t, onEvent}) -> a live wheel on a <canvas>, drawn by server time.
    *   setSkew(ms)  ms = local clock - server clock (CZ.skew(), the OBS payload's skew_ms); the wheel shows server time
    *                Date.now() - ms (a re-measured skew within 1.5 s is slewed in, so poll jitter never jumps the ball)
-   *   idle([siteNow])  bets open: no ball (fades out), the rotor's shift eases back to zero
-   *   spin(view)   a table view with .spin, an OBS payload or plan() arguments; joins mid-flight by server time
+   *   idle([siteNow])  bets open: no ball (fades out), the rotor's shift eases back to zero over BACK_MS
+   *   spin(view)   a table view with .spin, an OBS payload or plan() arguments; joins mid-flight by server time (the rotor
+   *                flicks forward to the plan's shift by the plan's ramp end; too close to the drop it is simply placed)
    *   rest(pocket) the result: the ball sits in that pocket (finishes a running spin within 300 ms; the server wins)
    *   destroy()
-   * Options: compact (mini wheel: no numbers, no ghosts), reduced (true/false; unset = follow prefers-reduced-motion),
+   * Options: compact (mini wheel: no numbers, no speed streak), reduced (true/false; unset = follow prefers-reduced-motion),
    * palette ('classic' | 'hr' | {colours}), tilt (deg: the canvas gets a CSS rotateX and hops lift toward the far side),
    * t(key, default, vars) for the aria labels (default window.__t('js.casino.' + key)), onEvent(type, detail) for sound
    * cues: launch, drop, diamond, rotor, hop, settle.
@@ -1035,7 +1119,7 @@
       plan: null, //      the spin being shown (also while it rests, and while the ball fades out after)
       key: "",
       pocket: null, //    the pocket the ball rests in (rest mode)
-      ramp: null, //      the rotor's shift easing: {t0, t1, from, to} in server ms
+      ramp: null, //      the rotor's shift easing: {t0, t1, from, to, near} in server ms
       base: 0, //         the shift outside a ramp
       warp: null, //      the result came before the animation was done: {a, b, pa, pb}
       fade: null, //      the ball's opacity: {t0, t1, a, b}
@@ -1044,6 +1128,7 @@
       pal: paletteOf(opts.palette),
       forced: opts.reduced === true || opts.reduced === false ? opts.reduced : null,
       raf: 0,
+      rafT: false, //     st.raf came from the setTimeout fallback (cancel it with clearTimeout, never an animation frame id)
       dead: false,
       onScreen: true,
       size: 0,
@@ -1053,6 +1138,8 @@
       label: "",
       f: {},
       g: {},
+      px: [0, 0, 0, 0, 0], // the speed streak's points (reused every paint)
+      py: [0, 0, 0, 0, 0],
     };
     function reduced() {
       return st.forced !== null ? st.forced : !!(mq && mq.matches);
@@ -1112,7 +1199,7 @@
       }
     }
 
-    // ── the rotor: idle angle from server time + this wheel's shift (the plan's relabel, eased in and out) ──
+    // ── the rotor: idle angle from server time + this wheel's shift (the plan's relabel flicked in, eased out after) ──
     function offAt(t) {
       var rp = st.ramp;
       if (!rp) return st.base;
@@ -1122,14 +1209,17 @@
         return st.base;
       }
       if (t <= rp.t0) return rp.from;
-      return rp.from + (rp.to - rp.from) * smooth((t - rp.t0) / (rp.t1 - rp.t0));
+      var x = (t - rp.t0) / (rp.t1 - rp.t0);
+      return rp.from + (rp.to - rp.from) * (rp.near ? smooth(x) : flick(x));
     }
-    function rampTo(t0, t1, want, t) {
+    // from the shift shown at t to `want` (mod 2pi) over t0..t1: a forward flick, or with `near` a gentle ease either way
+    function rampTo(t0, t1, want, t, near) {
       var cur = norm(offAt(t));
-      st.ramp = { t0: t0, t1: t1, from: cur, to: rampTarget(cur, want, t1 - t0) };
+      st.ramp = { t0: t0, t1: t1, from: cur, to: rampTarget(cur, want, !!near), near: !!near };
     }
     function rotorAt(t) {
-      return reduced() ? 0 : norm(idleAngle(t) + offAt(t));
+      var o = offAt(t); //                           (always advanced: a shift must finish under reduced motion too)
+      return reduced() ? 0 : norm(idleAngle(t) + o);
     }
     function alphaAt(t) {
       var fd = st.fade;
@@ -1148,13 +1238,17 @@
     }
 
     // ── layout: the canvas's CSS box x min(devicePixelRatio, 2); the static layers are drawn once per size ──
+    function dprNow() {
+      return Math.min(2, Math.max(1, (win && win.devicePixelRatio) || 1));
+    }
     function layout() {
       if (st.L) return true;
       if (!ctx || !doc) return false;
       var css = canvas.clientWidth || 0;
+      if (!css && st.css && !(canvas.style && canvas.style.width)) css = st.css; //  detached, laid out before: the same box
       if (!css && canvas.width && !(canvas.style && canvas.style.width)) css = canvas.width; // detached: its own size
       if (!css) return false;
-      var dpr = Math.min(2, Math.max(1, (win && win.devicePixelRatio) || 1)),
+      var dpr = dprNow(),
         size = Math.max(32, Math.round(css * dpr)),
         c = size / 2,
         R = c * 0.975,
@@ -1195,6 +1289,31 @@
     function relayout() {
       st.L = null;
       kick();
+    }
+    // a new CSS size or a new pixel ratio (browser zoom, a move to another monitor) redraws the layers at the new resolution
+    function refit() {
+      if (st.dead) return;
+      var css = (canvas && canvas.clientWidth) || 0;
+      if (css && Math.max(32, Math.round(css * dprNow())) !== st.size) relayout();
+    }
+    var dq = null; //                                  matchMedia('(resolution: <current>dppx)'), re-armed after each change
+    function unwatchDpr() {
+      if (!dq) return;
+      if (dq.removeEventListener) dq.removeEventListener("change", onDpr);
+      else if (dq.removeListener) dq.removeListener(onDpr);
+      dq = null;
+    }
+    function watchDpr() {
+      unwatchDpr();
+      if (st.dead || !win || !win.matchMedia) return;
+      dq = win.matchMedia("(resolution: " + ((win.devicePixelRatio || 1) + "") + "dppx)");
+      if (!dq) return;
+      if (dq.addEventListener) dq.addEventListener("change", onDpr);
+      else if (dq.addListener) dq.addListener(onDpr);
+    }
+    function onDpr() {
+      watchDpr();
+      refit();
     }
 
     // ── where the ball is at server time t (null: not on the wheel) ──
@@ -1252,34 +1371,74 @@
         alpha = alphaAt(t);
       if (b && red && st.plan && st.mode !== "idle" && st.pocket === null) alpha = alpha * clamp((t - st.plan.landAt) / 400, 0, 1);
       if (b && alpha > 0.01) {
-        var lift = st.tilt ? Math.tan((st.tilt * Math.PI) / 180) : 0,
+        var rad = (st.tilt * Math.PI) / 180,
+          lift = st.tilt ? Math.tan(rad) : 0,
+          sq = st.tilt ? 1 / Math.cos(rad) : 1, //   the CSS rotateX squashes the canvas by cos(tilt): a sphere stays round
           x = c + R * b.r * Math.sin(b.theta),
           y = c - R * b.r * Math.cos(b.theta),
-          z = b.z > 0 ? b.z : 0;
-        if (!L.compact && b.phase !== "settled" && !red) {
-          // ghost balls at speed: where it was 5, 10, 15 and 20 ms ago
-          for (var j = 1; j <= 4; j++) {
-            var gb = ballAt(t - 5 * j, st.g);
-            if (!gb || gb.phase === "settled") break;
-            var hx = c + R * gb.r * Math.sin(gb.theta),
-              hy = c - R * gb.r * Math.cos(gb.theta) - (gb.z > 0 ? gb.z : 0) * R * lift;
-            if (j === 1 && (hx - x) * (hx - x) + (hy - y) * (hy - y) < L.br * L.br * 0.3) break;
-            g.globalAlpha = alpha * (j === 1 ? 0.3 : j === 2 ? 0.18 : j === 3 ? 0.1 : 0.05);
-            g.drawImage(L.ball, hx - L.bs / 2, hy - L.bs / 2);
-          }
-          g.globalAlpha = 1;
-        }
-        var up = z * R * lift,
-          sc = 1 + 0.15 * Math.min(1, z / 0.04),
-          off = L.br * (0.22 + 2.4 * z * (lift ? 0.4 : 1)),
+          z = b.z > 0 ? b.z : 0,
+          up = z * R * lift;
+        if (!L.compact && b.phase !== "settled" && !red) streak(g, t, x, y - up, alpha, lift);
+        // the shadow lies on the wheel, lit from the top left: it slides away and softens as the ball rises
+        var sc = 1 + 0.15 * Math.min(1, z / 0.04),
+          off = L.br * 0.22 + z * R * (lift ? 0.35 : 0.8),
+          sw = L.ss * (1 + Math.min(0.5, z * 8)),
           bw = L.bs * sc;
-        g.globalAlpha = alpha * (1 - Math.min(0.6, z * 9));
-        g.drawImage(L.shadow, x + off - L.ss / 2, y + off - L.ss / 2);
+        g.globalAlpha = alpha * (1 - Math.min(0.7, z * 12));
+        g.drawImage(L.shadow, x + off - sw / 2, y + off - sw / 2, sw, sw);
         g.globalAlpha = alpha;
-        g.drawImage(L.ball, x - bw / 2, y - up - bw / 2, bw, bw);
+        g.drawImage(L.ball, x - bw / 2, y - up - (bw * sq) / 2, bw, bw * sq);
         g.globalAlpha = 1;
       }
       cues(t, b);
+    }
+    // motion blur at speed: one tapered band along where the ball was over the last 20 ms (full ball width at the ball,
+    // a point at the tail, fading out toward it) - not a row of separate ghost balls
+    function streak(g, t, x, y, alpha, lift) {
+      var L = st.L,
+        c = L.c,
+        R = L.R,
+        px = st.px,
+        py = st.py,
+        n = 1,
+        j;
+      px[0] = x;
+      py[0] = y;
+      for (j = 1; j <= 4; j++) {
+        var gb = ballAt(t - 5 * j, st.g);
+        if (!gb || gb.phase === "settled") break;
+        px[n] = c + R * gb.r * Math.sin(gb.theta);
+        py[n] = c - R * gb.r * Math.cos(gb.theta) - (gb.z > 0 ? gb.z : 0) * R * lift;
+        n++;
+      }
+      if (n < 2) return;
+      var ex = px[n - 1] - x,
+        ey = py[n - 1] - y;
+      if (ex * ex + ey * ey < L.br * L.br * 0.5) return; //   too slow to blur
+      var w = L.br * 0.9;
+      g.beginPath();
+      for (var side = 1; side >= -1; side -= 2)
+        for (var k = 0; k < n; k++) {
+          var i = side > 0 ? k : n - 1 - k,
+            a = i > 0 ? i - 1 : 0,
+            b2 = i < n - 1 ? i + 1 : n - 1,
+            dx = px[a] - px[b2],
+            dy = py[a] - py[b2],
+            len = Math.sqrt(dx * dx + dy * dy) || 1,
+            h = (w * (n - 1 - i)) / (n - 1) * side,
+            qx = px[i] - (dy / len) * h,
+            qy = py[i] + (dx / len) * h;
+          if (side > 0 && k === 0) g.moveTo(qx, qy);
+          else g.lineTo(qx, qy);
+        }
+      g.closePath();
+      var lg = g.createLinearGradient(px[n - 1], py[n - 1], x, y);
+      lg.addColorStop(0, "rgba(255,252,240,0)");
+      lg.addColorStop(1, "rgba(255,252,240,.34)");
+      g.globalAlpha = alpha;
+      g.fillStyle = lg;
+      g.fill();
+      g.globalAlpha = 1;
     }
     // sound cues: only when they are fresh (a background tab catching up, or a page that just opened, stays quiet)
     function cues(t, b) {
@@ -1306,7 +1465,7 @@
     // ── the clock: every frame while anything moves; under reduced motion only for a fade or the land_at moment ──
     function nextWake(t) {
       if (!ctx || !st.onScreen) return -1; //                   IntersectionObserver kicks it back on
-      if (!reduced() || st.fade || st.ramp) return 0;
+      if (!reduced() || st.fade) return 0; //   (a rotor shift is never seen under reduced motion: setReduced(false) kicks)
       var p = st.plan;
       if (p && st.mode !== "idle" && t < p.landAt + 450) return t < p.landAt - 40 ? p.landAt - 20 : 0;
       return -1;
@@ -1322,7 +1481,10 @@
       var w = nextWake(t);
       if (w < 0 || st.dead) return;
       if (w === 0) {
-        if (!st.raf) st.raf = win && win.requestAnimationFrame ? win.requestAnimationFrame(loop) : setTimeout(loop, 16);
+        if (!st.raf) {
+          st.rafT = !(win && win.requestAnimationFrame);
+          st.raf = st.rafT ? setTimeout(loop, 16) : win.requestAnimationFrame(loop);
+        }
       } else {
         clearTimeout(timer);
         timer = setTimeout(kick, Math.max(0, w - t));
@@ -1347,16 +1509,19 @@
           st.mode = "idle";
           st.warp = null;
           if (shown && !reduced()) {
-            // the croupier takes the ball (it fades), then the rotor eases back to its plain server-time angle
+            // the croupier takes the ball (it fades), then the rotor eases back to its plain server-time angle (the same on
+            // every screen) - slowly, the shorter way round, so it stays within ~0.7x-1.3x of its idle speed
             st.fade = { t0: t, t1: t + 350, a: alphaAt(t), b: 0 };
-            rampTo(t + 350, t + 1650, 0, t);
+            rampTo(t + 350, t + 350 + BACK_MS, 0, t, true);
           } else {
             st.fade = null;
             st.plan = null;
             st.key = "";
             st.pocket = null;
-            st.ramp = null;
-            st.base = 0;
+            if (reduced()) {
+              st.ramp = null;
+              st.base = 0;
+            } else rampTo(t, t + BACK_MS, 0, t, true); //   a shift still showing eases back too (never a jump)
           }
           setLabel();
         }
@@ -1366,23 +1531,28 @@
       spin: function (view) {
         var a = spinArgs(view);
         if (!a) return null;
-        var p = plan(a),
-          key = [a.tableId, a.round, a.pocket, a.startedAt, a.landAt].join("|"),
-          t = now();
+        var key = [a.tableId, a.round, a.pocket, a.startedAt, a.landAt].join("|");
         if (key === st.key && st.plan && st.mode !== "idle") {
-          kick(); //                                  the same spin again (every poll): keep going
+          kick(); //                                  the same spin again (every poll): keep going, no plan() call
           return st.plan;
         }
+        var p = plan(a),
+          t = now();
         st.plan = p;
         st.key = key;
         st.pocket = null;
         st.mode = "spin";
         st.warp = null;
-        if (t <= p.rampFrom + 60) rampTo(p.rampFrom, p.rampTo, p.off, t);
-        else if (t < p.exitAt - 450) rampTo(t, Math.min(t + 900, p.exitAt - 300), p.off, t); // late: catch up on the track
+        if (t <= p.rampFrom) rampTo(p.rampFrom, p.rampTo, p.off, t);
         else {
-          st.ramp = null; //                           joined after the drop: nothing on screen to keep continuous
-          st.base = norm(p.off);
+          // late (a poll brings the spin 0-1.5 s after started_at): flick from what is shown now, ending where the plan's own
+          // flick ends - every screen then shows the same rotor from p.rampTo - or a little later, never after the drop
+          var end = Math.min(p.exitAt - 300, Math.max(p.rampTo, t + LATE_RAMP_MS));
+          if (end - t >= LATE_RAMP_MIN_MS) rampTo(t, end, p.off, t);
+          else {
+            st.ramp = null; //                         too late for a flick: the rotor takes its place behind the ball's fade-in
+            st.base = norm(p.off);
+          }
         }
         var from = t > p.t0 ? t : p.t0;
         st.fade = { t0: from, t1: from + (t > p.t0 + 200 ? 220 : 140), a: 0, b: 1 };
@@ -1416,10 +1586,12 @@
       destroy: function () {
         st.dead = true;
         if (st.raf) {
-          if (win && win.cancelAnimationFrame) win.cancelAnimationFrame(st.raf);
-          clearTimeout(st.raf);
+          // an animation frame id and a timer id are separate counters: cancel each only with its own call
+          if (st.rafT) clearTimeout(st.raf);
+          else if (win && win.cancelAnimationFrame) win.cancelAnimationFrame(st.raf);
         }
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
+        timer = 0;
         st.raf = 0;
         if (ro) ro.disconnect();
         if (io) io.disconnect();
@@ -1427,7 +1599,8 @@
           if (mq.removeEventListener) mq.removeEventListener("change", kick);
           else if (mq.removeListener) mq.removeListener(kick);
         }
-        if (win && win.removeEventListener) win.removeEventListener("resize", relayout);
+        unwatchDpr();
+        if (win && win.removeEventListener) win.removeEventListener("resize", refit);
       },
       /** the per-viewer Quick spin toggle: true / false, or null to follow prefers-reduced-motion again */
       setReduced: function (on) {
@@ -1474,13 +1647,14 @@
       if (mq.addEventListener) mq.addEventListener("change", kick);
       else if (mq.addListener) mq.addListener(kick);
     }
+    // the CSS box (ResizeObserver) and the pixel ratio (a resolution media query, plus window resize, which zoom also fires):
+    // a fixed-size canvas changes only its devicePixelRatio when zoomed or moved to another monitor
     if (win && win.ResizeObserver && canvas && canvas.nodeType === 1) {
-      ro = new win.ResizeObserver(function () {
-        var css = canvas.clientWidth || 0;
-        if (css && Math.round(css * Math.min(2, Math.max(1, win.devicePixelRatio || 1))) !== st.size) relayout();
-      });
+      ro = new win.ResizeObserver(refit);
       ro.observe(canvas);
-    } else if (win && win.addEventListener) win.addEventListener("resize", relayout);
+    }
+    if (win && win.addEventListener) win.addEventListener("resize", refit);
+    watchDpr();
     if (win && win.IntersectionObserver && canvas && canvas.nodeType === 1) {
       io = new win.IntersectionObserver(function (es) {
         st.onScreen = es.length ? es[es.length - 1].isIntersecting : true;
@@ -1500,6 +1674,8 @@
     OMEGA: OMEGA,
     IDLE_PERIOD_MS: IDLE_PERIOD_MS,
     LEAD_MS: LEAD_MS,
+    DEFAULT_SPIN_MS: DEFAULT_SPIN_MS,
+    BACK_MS: BACK_MS,
     GEOM: GEOM,
     colorOf: colorOf,
     seedOf: seedOf,
@@ -1514,6 +1690,13 @@
     PALETTES: PALETTES,
     LABELS: LABELS,
     _rampTarget: rampTarget,
-    _sim: { postSim: postSim, variantParams: variantParams, postTarget: postTarget, variantSeed: variantSeed },
+    _sim: { postSim: postSim, variantParams: variantParams, postTarget: postTarget, variantSeed: variantSeed, replay: replay, nearRhomb: nearRhomb },
+    /** test hooks: drop the plan cache; how many plans were built (not served from the cache) so far */
+    _clearCache: function () {
+      cache.length = 0;
+    },
+    _builds: function () {
+      return builds;
+    },
   };
 });

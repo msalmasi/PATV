@@ -1,7 +1,8 @@
 // casino/rlwheel.js - the shared roulette wheel and ball (roulette v2, O11). Cosmetic only, but it must ALWAYS show the
 // server's pocket: every pocket x 20 public seeds x D in {4, 8, 12, 20} s lands in the right pocket at the right time, the
 // plan is deterministic (golden vectors, shared with the bot's OBS test), time only moves forward, the rotor never runs
-// backwards, the relabel shift happens while the ball is still on the backtrack, and nothing is seeded from a secret.
+// backwards, the relabel shift happens while the ball is still on the backtrack (a forward flick that only coasts down, for
+// on-time and late viewers alike), the ball never passes through a diamond or teleports, and nothing is seeded from a secret.
 // Regenerate the vectors (only when the model changes on purpose, with VERSION bumped): RLWHEEL_WRITE_VECTORS=1 node --test test/casino-rlwheel.test.js
 "use strict";
 const { test } = require("node:test");
@@ -135,7 +136,7 @@ test("never derived from a secret: no seed / commitment inputs, extra fields cha
   assert.match(SRC, /never from round\.seed \/ next\.seed/, "the header says so");
   const args = { tableId: "0f1e2d3c4b", round: 9, pocket: 32, startedAt: BASE + 11, landAt: BASE + 12011 };
   const a = W.plan(args);
-  W.plan({ ...args, round: 10 }); //                                 (clear the one-entry cache)
+  W._clearCache();
   const b = W.plan({ ...args, seed: "f".repeat(64), next: { seed: "e".repeat(64) }, commitment: "a".repeat(64), client_seed: "00" });
   assert.notEqual(a, b);
   assert.deepEqual(Buffer.from(a.frames.buffer), Buffer.from(b.frames.buffer));
@@ -223,15 +224,105 @@ test("time only moves forward: phases in order, the rotor never runs backwards, 
   );
 });
 
-test("the rotor ramp: forward, or a gentle slow-down that still turns forward", () => {
-  for (let k = 0; k < 37; k++)
-    for (const dur of [200, 900, 1500, 3200]) {
-      const to = W._rampTarget(0, -k * W.PITCH, dur);
-      assert.ok(Math.abs(norm(to) - norm(-k * W.PITCH)) < 1e-9 || Math.abs(Math.abs(norm(to) - norm(-k * W.PITCH)) - TAU) < 1e-9);
-      assert.ok(to > -TAU && to < TAU);
-      const peak = (1.5 * Math.abs(to)) / (dur / 1000); // smoothstep's top speed
-      if (to < 0) assert.ok(peak <= 0.6 * W.OMEGA + 1e-9, "a slow-down keeps the rotor turning forward");
+test("the rotor relabel: a forward flick that only coasts down - never slower than idle, never re-accelerating", () => {
+  for (let k = 0; k < 37; k++) {
+    const want = -k * W.PITCH;
+    for (const from of [0, 1, 4.5]) {
+      const fwd = W._rampTarget(from, want, false), near = W._rampTarget(from, want, true);
+      for (const to of [fwd, near]) assert.ok(Math.abs(Math.sin((to - want) / 2)) < 1e-9, "the same angle mod 2pi");
+      assert.ok(fwd >= from && fwd < from + TAU, "forward, less than one turn");
+      assert.ok(Math.abs(near - from) <= Math.PI + 1e-9, "the ease back goes the shorter way");
     }
+  }
+  SEEDS.slice(0, 8).forEach((sd, si) =>
+    DURATIONS.forEach((D, di) => {
+      for (const pocket of [0, 5, 13, 26, 36]) {
+        const startedAt = startOf(si, di), p = W.plan({ ...sd, pocket, startedAt, landAt: startedAt + D }), tag = `${sd.tableId} D=${D} ${pocket}`;
+        assert.ok(p.off >= 0 && p.off < TAU, tag + " off in [0, 2pi)");
+        if (D >= 8000) assert.ok(p.rampTo - p.t0 >= 4900, tag + " a long, gentle flick: " + (p.rampTo - p.t0));
+        let prevOff = 0, prevRate = Infinity;
+        for (let t = p.t0 + 10; t <= p.rampTo + 50; t += 10) {
+          const o = W.frame(p, t).offset, rate = (o - prevOff) / 0.01;
+          assert.ok(o >= prevOff - 1e-12, tag + " the shift never goes back");
+          if (t > p.t0) assert.ok(rate <= prevRate + 1e-6, tag + " the extra speed only falls (no re-acceleration)");
+          prevOff = o;
+          prevRate = rate;
+        }
+        // top extra speed = 2 off / ramp: within 1.2x idle for D >= 8 s (the rotor peaks at <= 2.2x idle)
+        if (D >= 8000) assert.ok((2 * p.off) / ((p.rampTo - p.t0) / 1000) <= 1.25 * W.OMEGA, tag);
+      }
+    }),
+  );
+});
+
+// the chosen variant's 240 Hz record (cone, diamonds, rotor), for the physics checks below
+const D_STEP = TAU / 8, D_FIRST = TAU / 16, D_LONG = 0.05, D_SHORT = 0.017;
+function distToRhomb(x, y, hx, hy) {
+  x = Math.abs(x);
+  y = Math.abs(y);
+  let s = ((hx - x) * hx + y * hy) / (hx * hx + hy * hy);
+  s = Math.max(0, Math.min(1, s));
+  const d = Math.hypot(x - (hx - s * hx), y - s * hy);
+  return x / hx + y / hy <= 1 ? -d : d;
+}
+function physicsRuns(count) {
+  const runs = [];
+  for (const D of [4000, 12000, 20000])
+    for (let s = 0; s < count; s++) {
+      const startedAt = BASE + s * 7919, p = W.plan({ tableId: "t" + (s % 7), round: s, pocket: s % 37, startedAt, landAt: startedAt + D });
+      runs.push({ D, s, p, ...W._sim.replay(p) });
+    }
+  return runs;
+}
+const RUNS = physicsRuns(150);
+
+test("diamonds: the ball never rolls flat through one, and every knock starts at the drawn rhombus", () => {
+  const G = W.GEOM, B = G.ball;
+  let flat = 0, knocks = 0, early = 0, first = "";
+  for (const { rec, res, D, s } of RUNS) {
+    for (let i = 1; i <= res.entry; i++) {
+      const r = rec.r[i], th = rec.th[i], z = rec.z[i];
+      const kd = Math.floor((th - D_FIRST) / D_STEP + 0.5), ac = D_FIRST + kd * D_STEP;
+      const dx = r * Math.sin(th) - G.diamond * Math.sin(ac), dy = -r * Math.cos(th) + G.diamond * Math.cos(ac);
+      const radialOff = dx * Math.sin(ac) - dy * Math.cos(ac), tanOff = dx * Math.cos(ac) + dy * Math.sin(ac);
+      const radial = (((kd % 8) + 8) % 8) % 2 === 0, d = distToRhomb(tanOff, radialOff, radial ? D_SHORT : D_LONG, radial ? D_LONG : D_SHORT);
+      if (z === 0 && d < 0 && !flat++) first = `D=${D} s=${s} step ${i}`;
+      if (z === 1e-4 && rec.z[i - 1] === 0) {
+        knocks++;
+        if (d - B > 0.1 * B) early++; //               (the integrator is polar: a few hundredths of a ball radius of slack)
+      }
+    }
+  }
+  assert.equal(flat, 0, "the ball's centre inside a diamond on the ground, first at " + first);
+  assert.ok(knocks > RUNS.length, "diamonds are hit: " + knocks);
+  assert.equal(early, 0, "no knock off thin air beside the rhombus");
+  // the exact test: the rhombus grown by the ball's radius
+  const nr = W._sim.nearRhomb;
+  assert.equal(nr(0, 0.05 + 0.029 - 1e-6, 0.017, 0.05, 0.029), true, "at the tip");
+  assert.equal(nr(0, 0.05 + 0.029 + 1e-6, 0.017, 0.05, 0.029), false, "just past the tip");
+  assert.equal(nr(0.017 + 0.029 * 0.95, 0.05 * 0.05, 0.017, 0.05, 0.029), true, "beside the waist");
+  assert.equal(nr(0.04, 0.06, 0.017, 0.05, 0.029), false, "inside the old hit box, but clear of the rhombus");
+});
+
+test("on the rotor: no sideways teleports at a landing or off the number ring, and the rim is a slope, not a wall", () => {
+  const G = W.GEOM, B = G.ball, DT = 1 / 240, om = W.OMEGA * DT;
+  let teleports = 0, walls = 0, worst = 0;
+  for (const { rec, res, D, s } of RUNS) {
+    const ph = (i) => rec.th[i] - om * i; //              in the rotor's frame: the ball against the frets
+    const d = (k) => (Math.abs(ph(k) - ph(k - 1)) * rec.r[k]) / B;
+    for (let i = res.entry + 2; i < res.n - 1; i++) {
+      // a step that moves the ball much further than the steps either side of it
+      const di = d(i), nb = Math.max(d(i - 1), d(i + 1));
+      if (di > 0.3 && di > 4 * nb) teleports++, (worst = Math.max(worst, di));
+      const v0 = (rec.r[i - 1] - rec.r[i - 2]) / DT, v1 = (rec.r[i] - rec.r[i - 1]) / DT;
+      if (rec.r[i - 1] >= G.rotor - B - 0.004 && v0 > 0 && v1 < 0 && v0 - v1 > 0.3) walls++;
+      assert.ok(rec.r[i] <= G.rotor + 1e-9, `D=${D} s=${s} r ${rec.r[i]}`);
+    }
+    // entering the rotor carries the radius on (no inward snap of a ball radius at the rim)
+    assert.ok(Math.abs(rec.r[res.entry + 1] - rec.r[res.entry]) < 0.6 * B, `D=${D} s=${s} entry`);
+  }
+  assert.equal(teleports, 0, "teleports up to " + worst.toFixed(2) + " ball radii");
+  assert.ok(walls <= RUNS.length * 0.06, "rim bounces " + walls + " in " + RUNS.length + " spins");
 });
 
 test("golden vectors: plans are bit-for-bit what the fixture says (the bot's OBS test reads the same file)", () => {
@@ -267,7 +358,7 @@ test("golden vectors: plans are bit-for-bit what the fixture says (the bot's OBS
 test("deterministic across runs and callers; frame() is a pure function of server time (late joiners)", () => {
   const args = { tableId: "77aa88bb99", round: 5, pocket: 0, startedAt: BASE + 3, landAt: BASE + 12003 };
   const a = W.plan(args);
-  W.plan({ ...args, pocket: 1 });
+  W._clearCache();
   const b = W.plan(args);
   assert.notEqual(a, b);
   assert.deepEqual(Buffer.from(a.frames.buffer), Buffer.from(b.frames.buffer));
@@ -282,6 +373,12 @@ test("deterministic across runs and callers; frame() is a pure function of serve
   assert.equal(a.fps, 60);
   assert.equal(a.frames.length, a.n * 4);
   assert.ok(a.t0 + (a.n - 1) * (1000 / 60) >= a.settleAt);
+  // the plan cache holds a few spins (a lobby or a dock shows several wheels): alternating between them builds nothing new
+  W._clearCache();
+  const tables = ["aa", "bb", "cc", "dd"].map((id, i) => ({ tableId: id, round: 3, pocket: i, startedAt: BASE, landAt: BASE + 12000 }));
+  const first = tables.map((x) => W.plan(x)), built = W._builds();
+  for (let i = 0; i < 40; i++) assert.equal(W.plan(tables[i % 4]), first[i % 4]);
+  assert.equal(W._builds(), built, "no rebuild while polls alternate between four tables");
 });
 
 test("idle rotor: a function of server time only, one turn per IDLE_PERIOD_MS", () => {
@@ -326,11 +423,20 @@ test("odd spin lengths and inputs still land exactly", () => {
 test("spinArgs reads every shape a consumer has: table view, OBS payload, cz:rl-spin detail, plan args", () => {
   const view = { id: "ab12cd34ef", spin: { round_no: 7, number: 17, color: "black", ends_at: BASE + 12000, started_at: BASE, secs: 12 } };
   assert.deepEqual(W.spinArgs(view), { tableId: "ab12cd34ef", round: "7", pocket: 17, startedAt: BASE, landAt: BASE + 12000 });
-  // an older server: no started_at -> land_at minus the spin length (spin.secs, rules.spin_secs, else 8 s)
+  // an older server: no started_at -> land_at minus the spin length (spin.secs, rules.spin_secs, the limits() settings
+  // snapshot's rl_spin_secs, else D6's 12 s - the same default plan() takes, so both paths draw the same spin)
   const old = { id: "ab12cd34ef", rules: { spin_secs: 10 }, spin: { round_no: 7, number: 17, color: "black", ends_at: BASE + 12000 } };
   assert.equal(W.spinArgs(old).startedAt, BASE + 2000);
   delete old.rules;
-  assert.equal(W.spinArgs(old).startedAt, BASE + 4000);
+  old.limits = { rl_min_bet: 100, rl_spin_secs: 9, rl_bet_secs: 25 }; //   casino/roulette.js limits(): the rl_* settings
+  assert.equal(W.spinArgs(old).startedAt, BASE + 3000);
+  delete old.limits;
+  assert.equal(W.spinArgs(old).startedAt, BASE + 12000 - W.DEFAULT_SPIN_MS);
+  assert.equal(W.DEFAULT_SPIN_MS, 12000);
+  assert.equal(W.spinArgs(old).startedAt, W.plan({ tableId: "ab12cd34ef", round: 7, pocket: 17, landAt: BASE + 12000 }).startedAt);
+  // an OBS v2 payload's limits.spin is the per-spin bet cap (PAT), never a time
+  const capOnly = { action: "state", v: 2, table_id: "ab12cd34ef", round_no: 7, phase: "spinning", land_at: BASE + 12000, number: 17, limits: { min: 100, straight: 2500, outside: 50000, spin: 100000 } };
+  assert.equal(W.spinArgs(capOnly).startedAt, BASE + 12000 - W.DEFAULT_SPIN_MS);
   const obs = { action: "state", v: 2, table_id: "ab12cd34ef", round_no: 7, phase: "spinning", started_at: BASE, land_at: BASE + 12000, number: 17, skew_ms: 40 };
   assert.deepEqual(W.spinArgs(obs), { tableId: "ab12cd34ef", round: "7", pocket: 17, startedAt: BASE, landAt: BASE + 12000 });
   const ev = { table: "ab12cd34ef", round: 7, pocket: 17, startedAt: BASE, landAt: BASE + 12000 };
@@ -347,17 +453,22 @@ test("spinArgs reads every shape a consumer has: table view, OBS payload, cz:rl-
 });
 
 // ── mount(): the browser build in a vm with a fake window, document and 2D context ──
-function browser({ reduced = false, css = 320, dpr = 3 } = {}) {
+// raf: false = no requestAnimationFrame (the setTimeout fallback); observers: a ResizeObserver like every target browser
+function browser({ reduced = false, css = 320, dpr = 3, raf = true, observers = true } = {}) {
   let clock = BASE;
-  const frames = [], timers = [], made = [];
+  const frames = [], timers = [], made = [], cleared = [], winL = {}, media = {};
   const gradient = () => ({ addColorStop() {} });
   function context(owner) {
     const calls = [];
-    const ctx = new Proxy({ calls, owner }, {
+    const state = { calls, owner, paints: 0 };
+    const ctx = new Proxy(state, {
       get(target, key) {
         if (key in target) return target[key];
         if (key === "createRadialGradient" || key === "createLinearGradient") return gradient;
-        return (...args) => { calls.push([key, ...args]); };
+        return (...args) => {
+          if (key === "clearRect") (calls.length = 0), state.paints++; //   keep one paint's calls (last() reads from the last clearRect)
+          calls.push([key, ...args]);
+        };
       },
       set(target, key, value) { calls.push(["set:" + String(key), value]); return true; },
     });
@@ -371,18 +482,27 @@ function browser({ reduced = false, css = 320, dpr = 3 } = {}) {
     return el;
   }
   const doc = { createElement: () => { const c = canvasEl(); made.push(c); return c; } };
-  const mq = { matches: reduced, addEventListener() {}, removeEventListener() {} };
+  // one MediaQueryList per query, with its listeners (prefers-reduced-motion, the resolution watch)
+  const matchMedia = (q) => (media[q] = media[q] || { query: q, matches: /reduced-motion/.test(q) ? reduced : false, ls: [],
+    addEventListener(type, fn) { this.ls.push(fn); }, removeEventListener(type, fn) { this.ls = this.ls.filter((f) => f !== fn); } });
+  const mq = matchMedia("(prefers-reduced-motion: reduce)");
+  let ids = 0;
   const g = {
     Date: { now: () => clock },
     devicePixelRatio: dpr,
     document: doc,
-    matchMedia: () => mq,
-    requestAnimationFrame: (fn) => { frames.push(fn); return frames.length; },
+    matchMedia,
     cancelAnimationFrame: () => {},
-    setTimeout: (fn, ms) => { timers.push([clock + ms, fn]); return timers.length; },
-    clearTimeout: () => {},
+    // animation frames and timers count from 1 on separate counters, like a browser's
+    setTimeout: (fn, ms) => { timers.push([clock + ms, fn, ++ids]); return ids; },
+    clearTimeout: (id) => { cleared.push(id); for (let i = timers.length - 1; i >= 0; i--) if (timers[i][2] === id) timers.splice(i, 1); },
+    addEventListener: (type, fn) => { (winL[type] = winL[type] || []).push(fn); },
+    removeEventListener: (type, fn) => { winL[type] = (winL[type] || []).filter((f) => f !== fn); },
     Math, Object, String, Number, Array, Float32Array, Float64Array, Buffer, isFinite, TypeError, Infinity, Proxy,
   };
+  let rafIds = 0;
+  if (raf) g.requestAnimationFrame = (fn) => { frames.push(fn); return ++rafIds; };
+  if (observers) g.ResizeObserver = class { constructor(fn) { this.fn = fn; } observe() {} disconnect() {} };
   g.window = g;
   g.self = g;
   const ctx = vm.createContext(g);
@@ -390,32 +510,55 @@ function browser({ reduced = false, css = 320, dpr = 3 } = {}) {
   const cv = canvasEl();
   cv.clientWidth = css;
   cv.ownerDocument = doc;
-  return {
-    W: ctx.PATVRlWheel, cv, made, mq,
+  const B = {
+    W: ctx.PATVRlWheel, cv, made, mq, media, winL, cleared, g,
     set(t) { clock = t; },
     get now() { return clock; },
+    get pendingRaf() { return frames.length ? rafIds : 0; },
+    get paints() { return cv.ctx.paints; },
     // run animation frames until (server) time t, 16 ms apart
     run(t, step = 16) {
       while (clock < t) {
         clock = Math.min(t, clock + step);
         const fs = frames.splice(0);
         fs.forEach((fn) => fn(clock));
-        for (const [at, fn] of timers.splice(0)) if (at <= clock) fn(); else timers.push([at, fn]);
+        for (const tm of timers.splice(0)) if (tm[0] <= clock) tm[1](); else timers.push(tm);
       }
     },
-    // the last rotor angle and ball drawn on the main canvas: {rotor, ball: {x, y, w} | null}
+    // the last rotor angle and ball drawn on the main canvas: {rotor, ball: {x, y, w, h, alpha} | null, shadow, streak, ghosts}
     last() {
-      const calls = cv.ctx.calls;
-      let i = calls.length - 1;
-      while (i >= 0 && calls[i][0] !== "clearRect") i--;
-      const paint = calls.slice(i), ballCv = made[Math.floor((made.length - 1) / 5) * 5 + 3]; // the newest layer set's ball
+      const paint = cv.ctx.calls, set = Math.floor((made.length - 1) / 5) * 5, ballCv = made[set + 3], shadowCv = made[set + 4];
       const rot = paint.find((c) => c[0] === "rotate");
       const balls = paint.filter((c) => c[0] === "drawImage" && c[1] === ballCv && c.length === 6);
       const b = balls.length ? balls[balls.length - 1] : null;
       const alpha = b ? [...paint.slice(0, paint.indexOf(b))].reverse().find((c) => c[0] === "set:globalAlpha") : null;
-      return { rotor: rot ? rot[1] : null, ball: b ? { x: b[2] + b[4] / 2, y: b[3] + b[5] / 2, w: b[4], alpha: alpha ? alpha[1] : 1 } : null, ghosts: paint.filter((c) => c[0] === "drawImage" && c[1] === ballCv && c.length === 4).length };
+      const sh = paint.filter((c) => c[0] === "drawImage" && c[1] === shadowCv).pop();
+      return {
+        rotor: rot ? rot[1] : null,
+        ball: b ? { x: b[2] + b[4] / 2, y: b[3] + b[5] / 2, w: b[4], h: b[5], alpha: alpha ? alpha[1] : 1 } : null,
+        shadow: sh ? { x: sh[2] + (sh.length === 6 ? sh[4] : shadowCv.width) / 2, y: sh[3] + (sh.length === 6 ? sh[5] : shadowCv.height) / 2 } : null,
+        streak: paint.filter((c) => c[0] === "fill").length, //   the motion-blur band (the only fill on the main canvas)
+        ghosts: paint.filter((c) => c[0] === "drawImage" && c[1] === ballCv && c.length === 4).length,
+      };
+    },
+    // the drawn rotor's speed over the next frames, in multiples of the idle speed: {peak, min}
+    rotorSpeeds(until, step = 16) {
+      let prev = B.last().rotor, peak = 0, min = Infinity;
+      for (let t = B.now + step; t <= until; t += step) {
+        B.run(t, step);
+        const r = B.last().rotor;
+        let d = r - prev;
+        if (d < -Math.PI) d += TAU;
+        else if (d > Math.PI) d -= TAU;
+        prev = r;
+        const x = d / (step / 1000) / W.OMEGA;
+        peak = Math.max(peak, x);
+        min = Math.min(min, x);
+      }
+      return { peak, min };
     },
   };
+  return B;
 }
 // the pocket under a drawn ball (canvas pixels), given the rotor angle that was drawn
 function drawnPocket(B, d) {
@@ -445,20 +588,21 @@ test("mount: draws a top-down wheel by server time, DPR capped at 2, role=img wi
   B.run(B.now + 800);
   d = B.last();
   assert.ok(d.ball && d.ball.alpha > 0.99);
-  assert.ok(d.ghosts > 0, "ghost balls at speed");
+  assert.equal(d.streak, 1, "one motion-blur streak at speed");
+  assert.equal(d.ghosts, 0, "not a row of ghost balls");
   // after the settle the drawn ball sits in pocket 17, and the drawn rotor matches the plan's
   B.run(p.settleAt + 50);
   d = B.last();
   assert.equal(drawnPocket(B, d), 17);
   assert.ok(Math.abs(norm(d.rotor - W.frame(p, B.now).rotor)) < 1e-9 || Math.abs(norm(d.rotor - W.frame(p, B.now).rotor) - TAU) < 1e-9);
-  assert.equal(d.ghosts, 0);
+  assert.equal(d.streak, 0);
   m.rest(17);
   assert.equal(B.cv.attrs["aria-label"], "Roulette wheel: the ball landed on 17 black");
   B.run(B.now + 3000);
   assert.equal(drawnPocket(B, B.last()), 17, "it rides the rotor in its pocket");
-  // bets open again: the ball fades out, the rotor eases back to the plain server-time angle
+  // bets open again: the ball fades out, the rotor eases back to the plain server-time angle (slowly: BACK_MS)
   m.idle();
-  B.run(B.now + 2000);
+  B.run(B.now + 350 + W.BACK_MS + 50);
   d = B.last();
   assert.equal(d.ball, null);
   const back = norm(d.rotor - W.idleAngle(B.now));
@@ -478,7 +622,14 @@ test("mount: the same spin every poll doesn't restart; a late view catches up on
   let prev = null, maxStep = 0;
   for (let t = B.now; t < p.landAt + 500; t += 16) {
     B.run(t);
-    if (t % 1000 < 16) assert.equal(m.spin(view), p, "the same spin again");
+    if (t % 1000 < 16) {
+      // the same spin again (every poll): no plan() call at all, even with the module's plan cache gone (another wheel
+      // on the page filled it)
+      B.W._clearCache();
+      const built = B.W._builds();
+      assert.equal(m.spin(view), p, "the same spin again");
+      assert.equal(B.W._builds(), built, "a repeated poll builds no plan");
+    }
     const d = B.last();
     if (prev !== null) {
       let step = d.rotor - prev;
@@ -488,10 +639,55 @@ test("mount: the same spin every poll doesn't restart; a late view catches up on
     }
     prev = d.rotor;
   }
-  assert.ok(maxStep < 0.3, "no jump, " + maxStep);
+  // the catch-up flick ends with the plan's own: at most 3x the idle speed (one 16 ms frame at 3x idle = 0.1 rad)
+  assert.ok(maxStep <= 3 * W.OMEGA * 0.016, "a gentle catch-up, " + (maxStep / (W.OMEGA * 0.016)).toFixed(2) + "x idle");
   assert.equal(drawnPocket(B, B.last()), 0);
   assert.equal(m.state().phase, "settled");
   m.destroy();
+});
+
+test("mount: late viewers (a 1 Hz poll) see the same gentle flick - never a whip, never a slow-down; very late ones a placed rotor", () => {
+  for (const D of [8000, 12000, 20000])
+    for (const late of [0, 50, 100, 300, 600, 1000, 1400])
+      for (const pocket of [0, 9, 18, 27, 36]) {
+        const B = browser({ dpr: 1 }), m = B.W.mount(B.cv, {});
+        B.run(BASE + 300 + pocket * 13);
+        const start = B.now;
+        B.run(start + late);
+        const p = m.spin({ tableId: "1a7e" + D, round: pocket, pocket, startedAt: start, landAt: start + D }), tag = `D=${D} late ${late} pocket ${pocket}`;
+        const v = B.rotorSpeeds(p.exitAt);
+        assert.ok(v.peak <= 3, tag + " peak " + v.peak.toFixed(2) + "x idle");
+        assert.ok(v.min >= 0.99, tag + " slowest " + v.min.toFixed(2) + "x idle (a flick only coasts down)");
+        B.run(p.landAt + 20);
+        assert.equal(drawnPocket(B, B.last()), pocket, tag);
+      }
+  // the shortest spin, and a page opened close to the drop: still exact (a placed rotor behind the ball's fade-in)
+  for (const [D, late] of [[4000, 0], [4000, 700], [4000, 1100], [12000, 8800], [12000, 9300]]) {
+    const B = browser({ dpr: 1 }), m = B.W.mount(B.cv, {});
+    B.run(BASE + 300);
+    const start = B.now;
+    B.run(start + late);
+    const p = m.spin({ tableId: "edge", round: late, pocket: 23, startedAt: start, landAt: start + D });
+    assert.ok(B.rotorSpeeds(p.exitAt).min >= 0.99 || late > 0, "an on-time 4 s spin flicks forward too");
+    B.run(p.landAt + 20);
+    assert.equal(drawnPocket(B, B.last()), 23, `D=${D} late ${late}`);
+  }
+});
+
+test("mount: after the result the rotor eases back to the server-time angle within ~0.7x-1.3x of idle (no lurch)", () => {
+  for (const pocket of [0, 4, 11, 19, 26, 33, 36]) {
+    const B = browser({ dpr: 1 }), m = B.W.mount(B.cv, {});
+    B.run(BASE + 300);
+    const start = B.now, p = m.spin({ tableId: "ba5e", round: pocket, pocket, startedAt: start, landAt: start + 12000 });
+    B.run(p.landAt);
+    m.rest(pocket);
+    B.run(p.landAt + 4000);
+    m.idle();
+    const v = B.rotorSpeeds(B.now + 350 + W.BACK_MS + 100);
+    assert.ok(v.peak <= 1.35 && v.min >= 0.65, `pocket ${pocket}: ${v.min.toFixed(2)}x-${v.peak.toFixed(2)}x idle`);
+    const back = norm(B.last().rotor - W.idleAngle(B.now));
+    assert.ok(Math.min(back, TAU - back) < 1e-9, "every screen shows the same idle wheel again");
+  }
 });
 
 test("mount: poll-to-poll skew jitter is slewed in (the ball never jumps); a big correction applies at once", () => {
@@ -581,6 +777,42 @@ test("mount: reduced motion - a still wheel, the ball fades into the pocket at l
   m.destroy();
 });
 
+test("mount: reduced motion sleeps - it repaints around land_at only, not 60 times a second for a shift nobody sees", () => {
+  const B = browser({ reduced: true });
+  const m = B.W.mount(B.cv, {});
+  B.run(BASE + 300);
+  const start = B.now, p = m.spin({ tableId: "deaf000002", round: 1, pocket: 5, startedAt: start, landAt: start + 12000 });
+  const a = B.paints;
+  B.run(p.landAt - 50);
+  const during = B.paints - a;
+  m.rest(5);
+  B.run(p.landAt + 4000);
+  const after = B.paints - a - during;
+  assert.ok(during <= 20, "repaints during a 12 s spin: " + during);
+  assert.ok(after <= 45, "repaints over the land_at fade and a 4 s result: " + after);
+  assert.equal(drawnPocket(B, B.last()), 5);
+  // Quick spin switched on while the rotor eases back after a result: the wheel goes still and sleeps
+  const C = browser();
+  const n = C.W.mount(C.cv, {});
+  C.run(BASE + 300);
+  const s2 = C.now, q = n.spin({ tableId: "deaf000003", round: 2, pocket: 9, startedAt: s2, landAt: s2 + 12000 });
+  C.run(q.landAt);
+  n.rest(9);
+  C.run(q.landAt + 4000);
+  n.idle();
+  C.run(C.now + 500);
+  n.setReduced(true);
+  const b = C.paints;
+  C.run(C.now + 10000);
+  assert.ok(C.paints - b <= 3, "repaints over 10 s of Quick spin: " + (C.paints - b));
+  n.setReduced(false); //                                            back on: it turns at the server-time angle again
+  C.run(C.now + 32);
+  const back = norm(C.last().rotor - W.idleAngle(C.now));
+  assert.ok(Math.min(back, TAU - back) < 1e-9);
+  m.destroy();
+  n.destroy();
+});
+
 test("mount: sound cues in order while watching, none from a background tab catching up", () => {
   const B = browser();
   const seen = [];
@@ -615,7 +847,7 @@ test("mount: tilt, palettes, compact mini wheel, and no crash without a canvas c
   assert.equal(B.cv.style.transform, "");
   const p = m.spin({ tableId: "aa", round: 1, pocket: 4, startedAt: B.now, landAt: B.now + 6000 });
   B.run(B.now + 400);
-  assert.equal(B.last().ghosts, 0, "the mini wheel draws no ghosts");
+  assert.equal(B.last().ghosts + B.last().streak, 0, "the mini wheel draws no speed streak");
   m.setPalette({ red: "#ff0000" });
   B.run(p.landAt);
   assert.equal(drawnPocket(B, B.last()), 4);
@@ -625,6 +857,139 @@ test("mount: tilt, palettes, compact mini wheel, and no crash without a canvas c
   none.spin({ tableId: "a", round: 1, pocket: 2, startedAt: BASE, landAt: BASE + 8000 });
   none.rest(2);
   none.destroy();
+});
+
+// the highest hop on the rotor in a plan: {t, z}
+function hopPeak(p) {
+  let best = { t: 0, z: 0 };
+  for (let i = 0; i < p.n; i++) {
+    const t = p.t0 + (i * 1000) / 60;
+    if (t > p.entryAt && t < p.settleAt && p.frames[i * 4 + 3] > best.z) best = { t, z: p.frames[i * 4 + 3] };
+  }
+  return best;
+}
+
+test("mount: a hop shows top-down - the shadow slides away from the ball by about its height (phones)", () => {
+  let checked = 0;
+  for (let round = 1; round <= 30 && checked < 5; round++) {
+    const B = browser({ css: 320, dpr: 2 }); //                   a phone: top-down, 640 device px
+    const m = B.W.mount(B.cv, {});
+    B.run(BASE + 100);
+    const start = B.now, p = m.spin({ tableId: "4097", round, pocket: round % 37, startedAt: start, landAt: start + 12000 });
+    const peak = hopPeak(p);
+    if (peak.z < 0.04) continue;
+    checked++;
+    B.run(peak.t - 8);
+    m.paint(peak.t);
+    const d = B.last(), R = (B.cv.width / 2) * 0.975, br = R * W.GEOM.ball;
+    const dx = d.shadow.x - d.ball.x, dy = d.shadow.y - d.ball.y;
+    assert.ok(dx >= 0.8 * peak.z * R && dy >= 0.8 * peak.z * R, `the shadow moved ${(dx / br).toFixed(2)} ball radii at z = ${peak.z.toFixed(3)}`);
+    assert.ok(dx >= br, "at least a ball radius at the top of a real hop");
+    m.destroy();
+  }
+  assert.ok(checked >= 3, "found hops to look at: " + checked);
+});
+
+test("mount: under the desktop tilt the ball stays round (its sprite is pre-stretched by 1/cos(tilt)); the shadow lies flat", () => {
+  for (const tilt of [0, 38, 40]) {
+    const B = browser({ css: 460, dpr: 1 });
+    const m = B.W.mount(B.cv, { tilt });
+    B.run(BASE + 100);
+    const p = m.spin({ tableId: "711", round: tilt, pocket: 8, startedAt: B.now, landAt: B.now + 12000 });
+    B.run(p.settleAt + 100);
+    const d = B.last(), want = tilt ? 1 / Math.cos((tilt * Math.PI) / 180) : 1;
+    assert.ok(Math.abs(d.ball.h / d.ball.w - want) < 1e-9, `tilt ${tilt}: ${d.ball.h / d.ball.w}`);
+    assert.ok(Math.abs(d.shadow.y - d.shadow.x - (d.ball.y - d.ball.x)) < 1e-6, "the shadow is offset equally across and down (not stretched)");
+    assert.equal(drawnPocket(B, d), 8, "the stretch keeps the ball's centre");
+    m.destroy();
+  }
+});
+
+test("mount: the speed streak is one tapered band that fades toward the tail, only at speed", () => {
+  const B = browser({ css: 320, dpr: 2 });
+  const m = B.W.mount(B.cv, {});
+  B.run(BASE + 100);
+  const start = B.now, p = m.spin({ tableId: "5717", round: 2, pocket: 30, startedAt: start, landAt: start + 12000 });
+  B.run(start + 1500); //                                          on the backtrack at speed
+  const d = B.last(), paint = B.cv.ctx.calls;
+  assert.equal(d.streak, 1);
+  assert.equal(d.ghosts, 0, "no separate ghost balls");
+  const fillAt = paint.findIndex((c) => c[0] === "fill"), ballAt = paint.findIndex((c) => c[0] === "drawImage" && c.length === 6 && c[4] === d.ball.w);
+  assert.ok(fillAt >= 0 && fillAt < ballAt, "drawn under the ball");
+  // the band's outline: about a ball wide at the head, a point at the tail
+  const pts = paint.slice(paint.findIndex((c) => c[0] === "beginPath"), fillAt).filter((c) => c[0] === "moveTo" || c[0] === "lineTo");
+  assert.ok(pts.length >= 6, "a polygon along the path: " + pts.length);
+  const R = (B.cv.width / 2) * 0.975, br = R * W.GEOM.ball, head = Math.hypot(pts[0][1] - pts[pts.length - 1][1], pts[0][2] - pts[pts.length - 1][2]);
+  assert.ok(head > 1.5 * br && head < 2.2 * br, "head width " + (head / br).toFixed(2) + " ball radii");
+  const mid = pts.length / 2, tail = Math.hypot(pts[mid - 1][1] - pts[mid][1], pts[mid - 1][2] - pts[mid][2]);
+  assert.ok(tail < 1e-6, "a point at the tail");
+  B.run(p.settleAt + 50);
+  assert.equal(B.last().streak, 0, "none once the ball sits still");
+  m.destroy();
+});
+
+test("mount: a new pixel ratio (zoom, another monitor) redraws the layers at the new resolution", () => {
+  const B = browser({ css: 300, dpr: 1 }); //                       a ResizeObserver is there, like every target browser
+  const m = B.W.mount(B.cv, {});
+  B.run(BASE + 50);
+  assert.equal(B.cv.width, 300);
+  const q1 = Object.keys(B.media).find((q) => /resolution/.test(q));
+  assert.ok(q1, "watches the pixel ratio");
+  B.g.devicePixelRatio = 2; //                                     moved to a 2x screen: the CSS box is unchanged
+  B.media[q1].ls.slice().forEach((fn) => fn({ matches: false }));
+  B.run(B.now + 32);
+  assert.equal(B.cv.width, 600, "redrawn at 2x");
+  assert.equal(B.media[q1].ls.length, 0, "the old query is released");
+  const q2 = Object.keys(B.media).find((q) => /resolution/.test(q) && q !== q1);
+  assert.ok(q2 && B.media[q2].ls.length === 1, "and the new ratio is watched");
+  B.g.devicePixelRatio = 1.5; //                                   browser zoom also fires window resize
+  (B.winL.resize || []).forEach((fn) => fn());
+  B.run(B.now + 32);
+  assert.equal(B.cv.width, 450);
+  const made = B.made.length;
+  (B.winL.resize || []).forEach((fn) => fn()); //                  nothing changed: no redraw
+  B.run(B.now + 32);
+  assert.equal(B.made.length, made);
+  m.destroy();
+  assert.equal((B.winL.resize || []).length, 0, "destroy() unhooks the resize listener");
+  assert.ok(Object.values(B.media).every((x) => /reduced-motion/.test(x.query) || x.ls.length === 0), "and the pixel-ratio watch");
+  // a detached canvas (thumbnails) keeps its size across relayouts
+  const C = browser({ css: 0, dpr: 2 });
+  C.cv.width = 200;
+  C.cv.height = 200;
+  const n = C.W.mount(C.cv, {});
+  n.paint(BASE);
+  const w = C.cv.width;
+  n.setPalette("hr");
+  n.paint(BASE + 16);
+  n.setPalette("classic");
+  n.paint(BASE + 32);
+  assert.equal(C.cv.width, w, "no growth on relayout");
+  n.destroy();
+});
+
+test("mount: destroy() cancels an animation frame with cancelAnimationFrame only (never clearTimeout with its id)", () => {
+  const B = browser();
+  const m = B.W.mount(B.cv, {});
+  B.run(BASE + 100);
+  m.spin({ tableId: "de57", round: 1, pocket: 3, startedAt: B.now, landAt: B.now + 8000 });
+  B.run(B.now + 200);
+  const raf = B.pendingRaf;
+  assert.ok(raf > 0, "a frame is pending");
+  B.cleared.length = 0;
+  m.destroy();
+  assert.ok(!B.cleared.includes(raf), "clearTimeout(" + raf + ") would cancel an unrelated page timer");
+  // without requestAnimationFrame the fallback timer is cleared
+  const C = browser({ raf: false });
+  const n = C.W.mount(C.cv, {});
+  n.spin({ tableId: "de57", round: 2, pocket: 3, startedAt: C.now, landAt: C.now + 8000 });
+  C.run(C.now + 100);
+  C.cleared.length = 0;
+  n.destroy();
+  assert.ok(C.cleared.length >= 1, "the fallback timer is cleared");
+  const ticks = C.paints;
+  C.run(C.now + 500);
+  assert.equal(C.paints, ticks, "nothing runs after destroy()");
 });
 
 test("aria labels: English defaults equal locales/en.json, and a page's __t translates them", () => {
