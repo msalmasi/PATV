@@ -130,7 +130,8 @@ const GROUPS = Object.freeze([
     sec: "play", home: "/casino",
     pages: [pre("/casino"), re("^/(?:tables|poker|blackjack|bj)/?$")],
     apis: [pre("/api/casino"), re("^/api/tables/state/?$")],
-    not: [re("^/api/casino/sizing\\.js$"), re("^/(?:api/)?casino/admin(?:/|$)"), re("^/api/casino/bot(?:/|$)")] },
+    // sizing.js and rlwheel.js (the roulette wheel module) are loaded by signed-out OBS overlays too
+    not: [re("^/api/casino/(?:sizing|rlwheel)\\.js$"), re("^/(?:api/)?casino/admin(?:/|$)"), re("^/api/casino/bot(?:/|$)")] },
   { key: "bounties", label: "🎯 Bounties",
     covers: "/bounties and every bounty; bounty share cards; the feed's live bounty cards.",
     sec: "play", home: "/bounties", embeds: ["bt"],

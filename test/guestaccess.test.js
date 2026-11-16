@@ -101,7 +101,7 @@ const NEVER = [
   "/api/prizes", "/api/achievements", "/api/stats/supply", "/api/leaderboard", "/api/rankings/top", "/api/jackpot", "/api/pokernow/games",
   "/api/cosmetics/catalog", "/api/u/bob/avatar", "/api/u/bob/balance", "/api/users/twitch/123",
   "/admin", "/admin/users", "/pads/admin", "/rooms/admin", "/stage/admin", "/feed/admin", "/shop/admin", "/api/admin/members", "/api/pads/admin/config",
-  "/api/feed/admin/details", "/api/casino/admin/mtt", "/api/casino/sizing.js", "/sb/audio/x.mp3",
+  "/api/feed/admin/details", "/api/casino/admin/mtt", "/api/casino/sizing.js", "/api/casino/rlwheel.js", "/sb/audio/x.mp3",
   "/settings/account", "/support",
 ];
 
