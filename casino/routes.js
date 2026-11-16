@@ -3,7 +3,7 @@
 // Web (a signed-in PATV account; no Camfrog link needed). Table routes work for both games ("bj" aliases kept):
 //   GET  /casino/blackjack[/t/:id], /casino/holdem[/t/:id]    the pages (lobby + table)
 //   GET  /casino/roulette[/t/:id], /api/casino/roulette/pad/:slug  the single-zero wheel and Room Dock lookup
-//   GET  /api/casino/lobby                  open tables (both games), the rooms a table can be pushed to, the switches
+//   GET  /api/casino/lobby                  open tables (both games; + the roulette wheels with ?rl=1), the rooms a table can be pushed to, the switches
 //   GET  /api/casino/t/:id                  one table's public state + the viewer's own seat (Hold'em: ONLY their own hole
 //                                            cards); per-user, never cached
 //   POST /api/casino/open                   {game: bj|holdem, blinds?, theme?, idem}  open a web-only table (1.99amf h20: theme = a
@@ -11,7 +11,7 @@
 //   POST /api/casino/t/:id/act              {verb, amount?, idem}; at a roulette wheel (hand-off 37) a bet is {verb: "bet", line, idem} (one
 //                                            bet line, up to 160 characters) or {verb: "bet", bets: [{b, a}] (1-20 position / amount pairs), idem}
 //   POST /api/casino/t/:id/push             {room|null, mode: add|remove}  attach / detach a Camfrog room Pepe serves (1.99ox: several at once; null = web only; host or admin)
-//   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
+//   POST /api/casino/t/:id/stream           {on, override?, pin?}  Pepe's stream: one table at a time, FIFO queue, admin override (+ an admin's pin of a wheel)
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
 //   GET  /api/casino/t/:id/people           1.99ajw casino2: the seats for the person menu + the table's pads (signed in; casino/people.js)
@@ -276,9 +276,13 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     for (const T of Array.from(svc.S.tables.values())) if (T.status === "open" && !svc.isMttTable(T)) await svc.refreshVeil(T);   // (h22 phase 2: not the MTT tables - a page each)
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
     // roulette2 (contract 3): svc.lobby() lists the open roulette wheels too - dropped here while roulette is shut for this viewer
-    // (RL.lobby(uid).on: the audience gate is async, so it stays in the route); `roulette` itself stays for one release
+    // (RL.lobby(uid).on: the audience gate is async, so it stays in the route); `roulette` itself stays for one release.
+    // (review) Only for a page that asks (?rl=1 - the lobby script that draws a wheel's card): today's lobby script draws every row
+    // that isn't Hold'em as a Blackjack card, so an older page (a tab left open across the deploy) never gets them. Release B drops
+    // this opt-in with the other one-release shims.
     const roulette = await svc.RL.lobby(actor?.uid);
-    const tables = svc.lobby().filter((row) => row.game !== "roulette" || roulette.on).map((row) => {
+    const wheelRows = roulette.on && !!req.query && req.query.rl === "1";
+    const tables = svc.lobby().filter((row) => row.game !== "roulette" || wheelRows).map((row) => {
       const T = svc.getTable(row.id);
       const n = T ? T.last_revealed || T.last_hand_revealed || null : null;
       const qi = svc.S.stream.queue.indexOf(row.id);
@@ -323,7 +327,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const mtt = svc.isMttTable(T);
     const wheel = T.game === "roulette";
     if (wheel) await svc.RL.bankRefresh(T);
-    const ck = mtt ? `${T.id}:${T.rev}` : wheel ? `${T.id}:${T.rev}:${svc.S.stream.table === T.id ? 1 : 0}:${svc.S.stream.queue.indexOf(T.id)}` : null;
+    // (review: svc.viewKey - rev + a save / restore generation + who is masked now: a rolled-back step's rev handed out again, or an
+    // unseated host turning incognito, is never served from the old entry)
+    const ck = mtt || wheel ? svc.viewKey(T) : null;
     let pub = ck && tcache.get(T.id);
     if (!(pub && pub.k === ck && Date.now() - pub.at < 1000)) {
       const table = svc.publicView(T);
@@ -651,8 +657,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     const b = req.body || {};
-    // (roulette2 D7: an admin's roulette wheel goes up pinned unless {pin: false})
-    res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override, b.pin === false ? false : undefined));
+    // (roulette2 D7: an admin's roulette wheel goes up pinned only with {pin: true} - review: a plain stream keeps the idle drop)
+    res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override, b.pin === true));
   });
 
   app.get("/api/casino/fair/:id/:round", addUser, async (req, res) => {
@@ -714,6 +720,10 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       out.lobby = { bj: base + svc.frontPath(st, "bj"), holdem: base + svc.frontPath(st, "holdem") };
       if (Array.isArray(b.games) && b.games.includes("roulette")) {
         out.roulette = svc.RL.openList();
+        // (review) a Pepe from before state_after names a wheel by its room or "Lobby" and lists the first two: he gets the lobby and
+        // the wheels in a room only (a web wheel - 💎 ones too - would read as a second "Lobby" and could push the real one out)
+        const newer = b.state_after != null || (Array.isArray(b.rooms) && b.rooms.some((r) => r && typeof r === "object" && r.games));
+        if (!newer) out.roulette = out.roulette.filter((w) => w.lobby || (w.rooms && w.rooms.length));
         out.roulette_on = st.casino_roulette;
         // 1.99aof (SUITES-2): a room player's queued line refused when betting opened, or dropped by a close - PM'd by Pepe as a
         // private_mtt "notice" (each key once, only down that player's own room; never an event)
@@ -755,7 +765,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (lock) return res.json(require("../siteban").botRefusal(lock));
     }
     const room = b.room ? String(b.room).slice(0, 64) : null;
-    if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);
+    if (room) svc.noteRooms([{ id: room, name: b.room_name || room }], { keepGames: true });   // (roulette2: the poll's games flags stay)
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;
     const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : b.game === "roulette" ? "roulette" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
     // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's

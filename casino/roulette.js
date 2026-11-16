@@ -183,6 +183,7 @@ function install(core) {
   const isHighRoller = core.isHighRoller || (async () => false);
   const advertList = core.advertList || (() => []);
   const streamHandOff = core.streamHandOff || (() => false);
+  const viewMoved = core.viewMoved || (() => {});
   const HR_ONLY_PLAY =
     core.HR_ONLY_PLAY ||
     "💎 this is a High Roller table: only High Rollers can play here (the role is in the prize store — !prizes). You can watch.";
@@ -378,6 +379,7 @@ function install(core) {
     if (!row) return;
     adopt(T, JSON.parse(row.state));
     bind(T);
+    viewMoved(T); // roulette2 WP3 (review): its rev went back - a view cached for the rolled-back state is never served again
     if (reconciled.has(T)) await load(T);
   }
   function pruneInactive(T) {
@@ -530,6 +532,7 @@ function install(core) {
   // synchronous view, and never through available() (its hydrate can write; the views run without the casino lock). Its own
   // House read: available()'s cache is the bank's, invalidated by each landing.
   const bankCache = new Map(); // table id -> {at, value}
+  const BANK_SHOWN_MS = 10000; // (rules: older than this, bank_straight is null)
   let viewHouse = null;
   async function bankRefresh(T) {
     if (!T || T.game !== "roulette" || T.status !== "open") return null;
@@ -1309,11 +1312,13 @@ function install(core) {
   }
   const spinStart = (T) => T.dl.start || T.dl.land - S.settings.rl_spin_secs * 1000;
   // roulette2 O7: the rules object - the same lim(T) the checks read, the timers, and the bank's straight headroom (bankRefresh's
-  // cached figure: null until it has been worked out)
+  // cached figure: null until it has been worked out, and null again once it is BANK_SHOWN_MS old - review: a wheel nobody has
+  // viewed on the web for hours never shows that old figure; the web view and Pepe's poll refresh it first)
   function rules(T) {
     const L = lim(T),
       s = S.settings,
-      hit = bankCache.get(T.id);
+      c = bankCache.get(T.id),
+      hit = c && c.at <= clock() && clock() - c.at < BANK_SHOWN_MS ? c : null;
     return {
       min: L.min,
       caps: { ...L.caps },
@@ -1449,26 +1454,29 @@ function install(core) {
   }
   // Pepe's poll (`roulette`) and the lobby's wheel list - roulette2 (contract 5): + the tier, the limits and the clock
   function openList() {
-    return open().map((T) => {
-      const L = lim(T);
-      return {
-        id: T.id,
-        url: link(T),
-        rooms: roomsOf(T),
-        room_name: roomList(T)[0]?.name || null,
-        players: T.eng.seats.length,
-        phase: T.eng.phase,
-        lobby: T.lobby,
-        tier: high(T) ? "hr" : "main",
-        high_stakes: high(T),
-        min_bet: L.min,
-        max_straight: L.caps.straight,
-        max_spin: L.max_spin,
-        deadline: T.dl.bet || null,
-        land_at: T.dl.land || null,
-        slot: T.lobby ? T.slot || "main" : null,
-      };
-    });
+    // (review) the lobby wheel first (then in the order they opened): a client that shows the first few always shows it
+    return open()
+      .sort((a, b) => !!b.lobby - !!a.lobby)
+      .map((T) => {
+        const L = lim(T);
+        return {
+          id: T.id,
+          url: link(T),
+          rooms: roomsOf(T),
+          room_name: roomList(T)[0]?.name || null,
+          players: T.eng.seats.length,
+          phase: T.eng.phase,
+          lobby: T.lobby,
+          tier: high(T) ? "hr" : "main",
+          high_stakes: high(T),
+          min_bet: L.min,
+          max_straight: L.caps.straight,
+          max_spin: L.max_spin,
+          deadline: T.dl.bet || null,
+          land_at: T.dl.land || null,
+          slot: T.lobby ? T.slot || "main" : null,
+        };
+      });
   }
   // the casino lobby's row for a wheel (contract 3): service.lobby() adds the shared fields (host, rooms, adverts, url, stream)
   function lobbyRow(T) {

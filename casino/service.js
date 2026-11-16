@@ -225,8 +225,21 @@ async function writeSetting(key, value, actor) {
 }
 
 // ── persistence ──
+// roulette2 WP3 (review): the key the web routes cache a table's public view under (casino/routes.js, up to 1 s) - one key never
+// names two different states. rev alone can: a step that saved inside its transaction and then rolled back (restore) hands the next
+// save that same rev again, so a view built in between (an uncharged line's chips on the felt) would be served as the later state.
+// So + a generation that every save and every roulette restore bumps (memory only, never sent), + who is masked now (an unseated
+// person - a web wheel's host - turning incognito changes the view and no rev), + a wheel's place on the stream.
+const viewGens = new WeakMap();
+const viewMoved = (T) => { if (T && typeof T === "object") viewGens.set(T, (viewGens.get(T) || 0) + 1); };
+function viewKey(T) {
+  const masked = Object.keys(T.veil || {}).filter((u) => V.masked(T, u)).sort().join(",");
+  const k = `${T.id}:${T.rev}:${viewGens.get(T) || 0}:${masked}`;
+  return T.game === "roulette" ? `${k}:${S.stream.table === T.id ? 1 : 0}:${S.stream.queue.indexOf(T.id)}` : k;
+}
 async function save(T) {
   T.rev = (T.rev || 0) + 1;
+  viewMoved(T);
   T.updated = clock();
   await runQuery(`INSERT INTO casino_tables (id, game, status, room, host, state, rev, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET status = excluded.status, room = excluded.room, state = excluded.state,
@@ -916,7 +929,7 @@ async function cmdStart(actor, room, game, blinds, words) {
     if (ws.some((w) => !HR_WORDS.includes(w))) return R(false, "usage: !rl start  (or !rl start hr for a 💎 High Roller wheel)", { pm: true });
     if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN, { pm: true });
     if (!room) {
-      const mine = open.find((t) => t.game === "roulette" && t.web && t.host && t.host.uid === actor.uid);
+      const mine = webWheelOf(actor.uid);
       if (mine) return R(false, "You already have a roulette wheel open — close it before you open another.", { table: mine.id, url: link(mine), pm: true });
     }
     if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`, { pm: true });
@@ -1284,6 +1297,10 @@ function setRooms(T, list) {
 }
 const roomName = (id) => { const r = S.rooms.get(id); return r ? r.name : id; };
 const MAX_ROOMS = 6;
+// roulette2 D1 (review): a host's roulette wheel ON THE WEB - one opened there (T.web, wherever it plays now) or any of theirs that
+// plays in no room (a room wheel moved back to the web). At most one per host: a web open and a move back to the web both ask.
+const onWeb = (t) => !!t && t.game === "roulette" && t.status === "open" && !t.lobby && (t.web || !roomsOf(t).length);
+const webWheelOf = (uid, but) => Array.from(S.tables.values()).find((t) => t !== but && onWeb(t) && t.host && t.host.uid === uid) || null;
 // 1.99sk: a room hears a table's push (or its "left this room" notice) at most once per this long - remove / re-add can't spam
 const PUSH_ANNOUNCE_MS = 10 * 60 * 1000;
 /** true (and the clock restarts) when `room` may hear another `key` announcement from table T */
@@ -1305,6 +1322,14 @@ function rlPushText(T, also) {
   const k = rlStakes(T);
   return `🛞 ${T.host.name}'s ${k.hr ? "💎 High Roller " : ""}roulette wheel is playing in this room now — !rl red ${Math.max(500, k.min)} to bet ` +
          `(min ${fmt(k.min)} PAT a bet, up to ${fmt(k.max)} PAT per player a spin${k.hr ? "; High Rollers only, anyone can watch" : ""}). Also on the web: ${link(T)}${also || ""}`;
+}
+
+// roulette2 D1 (review): a room wheel going back to the web (its last room detached) becomes its host's web wheel - refused while
+// that host has another one on the web (else "!rl start" + "back to the web" would open any number of them)
+function twoOnWeb(T, actor) {
+  if (!webWheelOf(T.host.uid, T)) return null;
+  return R(false, actor.uid === T.host.uid ? "You already have a roulette wheel on the web — close it first."
+                                           : "Its host already has a roulette wheel on the web — close one first.");
 }
 
 /** Push a table to a Camfrog room. mode "add" (the default): attach one more room; "remove": detach that room;
@@ -1349,14 +1374,17 @@ async function push(tableId, room, actor, mode) {
                            : "Announced in the room.", { rooms: roomsOf(T) });
     } else if (room) {
       if (!cur.includes(room)) return R(false, "It isn't playing in that room.");
+      if (cur.length === 1 && T.game === "roulette" && !T.web) { const no = twoOnWeb(T, actor); if (no) return no; }
       if (annDue(T, "unpush_ts", room)) await emit(T, "unpushed", `This table left this room — play on at ${link(T)}`, { rooms: [room] });   // 1.99sk: same clock
       setRooms(T, cur.filter((x) => x !== room));
     } else {
       if (!cur.length) return R(true, "It was already web-only.");
+      if (T.game === "roulette" && !T.web) { const no = twoOnWeb(T, actor); if (no) return no; }
       const due = cur.filter((x) => annDue(T, "unpush_ts", x));
       if (due.length) await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: due });
       setRooms(T, []);                       // 1.99pc: a web-only table keeps its place on Pepe's stream
     }
+    if (T.game === "roulette" && !roomsOf(T).length) T.web = true;     // roulette2 D1 (review): its host's one web wheel from now on
     await save(T);
     return R(true, T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
   });
@@ -1524,7 +1552,7 @@ async function streamTick() {
   }
 }
 /** on: ask for the stream (host or admin; admins may override), off: leave it / the queue.
- *  roulette2 D7: an admin who puts a roulette wheel there PINS it (pin false: not) - exempt from the 5-minute idle drop */
+ *  roulette2 D7: an admin who puts a roulette wheel there with pin true PINS it - exempt from the 5-minute idle drop */
 async function stream(tableId, on, actor, override, pin) {
   await boot();
   return locked(async () => {
@@ -1539,7 +1567,7 @@ async function stream(tableId, on, actor, override, pin) {
       streamGone(T.id);
       return R(true, had ? "Off the stream." : "It wasn't on the stream.");
     }
-    const pinIt = T.game === "roulette" && !!actor.admin && pin !== false;
+    const pinIt = T.game === "roulette" && !!actor.admin && pin === true;     // (review: opt-in - a plain admin stream keeps the idle drop)
     const PINNED = " Pinned: it stays there until it closes or is taken off.";
     const pinned = () => { if (pinIt) S.stream.pin = true; else delete S.stream.pin; return pinIt ? { pinned: true } : {}; };
     if (S.stream.table === T.id) {
@@ -1668,8 +1696,9 @@ function openList() {
 
 // ── Pepe's long-poll ──
 // roulette2 O6(d) (contract 5): a room entry may carry games: {bj, holdem, roulette} - that room's game toggles in Pepe
-// (_feature_on('_game_*_enabled')). Kept per room until a heartbeat brings new flags (an entry without them - an older Pepe, or
-// the bot act route's own note - keeps what the poll said); unknown = on, as before.
+// (_feature_on('_game_*_enabled')). Pepe's poll says them each heartbeat: an entry without them (an older Pepe - a rollback) clears
+// them, so unknown = on, as before. Only the bot act route's own note of a room ({keepGames: true}: it never carries flags) keeps
+// what the last poll said.
 const GAMES = ["bj", "holdem", "roulette"];
 const GAME_NAME = { bj: "Blackjack", holdem: "Hold'em", roulette: "Roulette" };
 function gamesOf(g) {
@@ -1680,13 +1709,13 @@ function gamesOf(g) {
 }
 /** a room Pepe said has `game` switched off (never true for a room whose flags are unknown) */
 const gameOff = (r, game) => !!(r && r.games && r.games[game] === false);
-function noteRooms(rooms) {
-  const t = clock();
+function noteRooms(rooms, opts) {
+  const t = clock(), keep = !!(opts && opts.keepGames);
   for (const r of Array.isArray(rooms) ? rooms.slice(0, 50) : []) {
     if (!r || typeof r !== "object") continue;
     const id = String(r.id || "").slice(0, 64);
     if (!/^[\w .'&!@#()\-]{1,64}$/.test(id)) continue;
-    const games = gamesOf(r.games) || (S.rooms.get(id) || {}).games || null;
+    const games = gamesOf(r.games) || (keep ? (S.rooms.get(id) || {}).games : null) || null;
     S.rooms.set(id, Object.assign({ id, name: String(r.name || id).replace(/[\u0000-\u001f]/g, " ").slice(0, 64), ts: t }, games ? { games } : {}));
   }
 }
@@ -1699,15 +1728,25 @@ function freshRooms(game) {
 }
 
 async function roomTables() {
-  const tables = {}, priv = {};
+  const list = [];
   for (const T of S.tables.values()) {
     if (!roomsOf(T).length && S.stream.table !== T.id) continue;      // 1.99pc: + the stream table, wherever it plays
     // 1.99ajw casino2 rework: Pepe's OBS board draws this state - a veiled player is masked here, at the source (casino/veil.js)
     if (T.status === "open") await refreshVeil(T);
-    tables[T.id] = publicView(T);
-    if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
+    // roulette2 WP3 (review): a wheel's rules.bank_straight as of now (read-only, at most every 5 s) - not whatever its last web view left
+    if (T.game === "roulette" && T.status === "open") await RL.bankRefresh(T);
+    list.push(T);
   }
-  return { tables, private: priv };
+  // roulette2 WP3 (review): the views are built in ONE locked step (synchronous, after the awaits above), so none is of a step still in
+  // its transaction - a line that rolls back never reaches the board (D5: its chips on the felt) under a rev the next save hands out again
+  return locked(() => {
+    const tables = {}, priv = {};
+    for (const T of list) {
+      tables[T.id] = publicView(T);
+      if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
+    }
+    return { tables, private: priv };
+  });
 }
 
 /** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. The `private` part
@@ -1852,7 +1891,8 @@ const ROUTE = {
 const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
   dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); },
   // roulette2 WP3: the 💎 High Roller role + its text (D1/D2), a wheel's adverts for its view (D4), the stream hand-over at a lobby rotation (D7)
-  isHighRoller, HR_ONLY_PLAY, advertList: (T) => advertList(T), streamHandOff: (from, to) => streamHandOff(from, to) });
+  isHighRoller, HR_ONLY_PLAY, advertList: (T) => advertList(T), streamHandOff: (from, to) => streamHandOff(from, to),
+  viewMoved });        // (review: a restore is a new state for the view cache - viewKey)
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
@@ -1983,5 +2023,5 @@ module.exports = {
   MT, isMttTable, tourneyTableFor, streamTake, setDiscordBridge, tourneyKind,    // h22 phase 2: the scheduled tournaments
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
-  refreshVeil, myHands,  // the routes re-read a table's veils before they answer
+  refreshVeil, myHands, viewKey,  // the routes re-read a table's veils before they answer
 };

@@ -460,7 +460,7 @@ test("D4: Host Tools on a web wheel - push (up to 6 rooms, not where roulette is
   assert.deepEqual(svc.publicView(W).adverts, [{ id: "pad-u", name: "Pad U" }]);
   assert.match(JSON.parse((await rows("SELECT data FROM casino_events WHERE table_id=? AND kind='advert'", [W.id]))[0].data).text, /^📣 🛞 Roulette at Playera's wheel/);
   // the bot act route's own note of a room (no flags) keeps the poll's flags
-  svc.noteRooms([{ id: "pad-q", name: "Pad Q" }]);
+  svc.noteRooms([{ id: "pad-q", name: "Pad Q" }], { keepGames: true });
   assert.equal(svc.freshRooms("roulette").find((r) => r.id === "pad-q").off, true);
   // stream: its host may (not pinned: the 5-minute idle drop applies)
   const s = await api("/api/casino/t/" + W.id + "/stream", "a", { on: true });
@@ -482,7 +482,7 @@ test("D4: Host Tools on a web wheel - push (up to 6 rooms, not where roulette is
 test("D7: an admin-pinned wheel stays on Pepe's stream past the idle drop; a lobby rotation hands the slot and the pin to its successor", async () => {
   const L = lobby();
   const admin = { ...actor("a"), admin: true };
-  const on = expect(await svc.stream(L.id, true, admin, false));
+  const on = expect(await svc.stream(L.id, true, admin, false, true));
   assert.equal(on.pinned, true);
   assert.match(on.reply, /Pinned/);
   assert.equal(svc.S.stream.pin, true);
@@ -552,9 +552,17 @@ test("contract 3: the casino lobby lists every open wheel in the shared row shap
   const member = (await api("/api/casino/lobby", "c")).body;
   assert.equal(member.tables.filter((x) => x.game === "roulette").length, 0);
   assert.equal(member.roulette.on, false);
-  const staff = (await api("/api/casino/lobby", "a")).body;
+  assert.equal((await api("/api/casino/lobby?rl=1", "c")).body.tables.filter((x) => x.game === "roulette").length, 0, "shut: none, asked or not");
+  const staff = (await api("/api/casino/lobby?rl=1", "a")).body;
   assert.equal(staff.tables.filter((x) => x.game === "roulette").length, 3);
   assert.equal(staff.roulette.on, true);
+  // (review) a page that doesn't ask (today's lobby script draws every row that isn't Hold'em as a Blackjack card): no wheel rows -
+  // the wheels are in `roulette` as before
+  const older = (await api("/api/casino/lobby", "a")).body;
+  assert.equal(older.tables.filter((x) => x.game === "roulette").length, 0);
+  assert.equal(older.roulette.on, true);
+  assert.ok(older.roulette.wheels.length >= 3);
+  assert.equal((await api("/api/casino/bj/lobby?rl=1", "a")).body.tables.filter((x) => x.game === "roulette").length, 3, "the old path alias too");
   assert.ok(staff.roulette.wheels.length >= 3);
   assert.equal(staff.limits.roulette.hr.min_bet, 1000);
   // home (the same box for everyone): only while roulette is open to everyone, only a wheel with people on it
@@ -565,4 +573,159 @@ test("contract 3: the casino lobby lists every open wheel in the shared row shap
   assert.deepEqual(listed.map((x) => x.id), [R.id]);
   assert.equal(listed[0].href, "/casino/roulette/t/" + R.id);
   assert.deepEqual(listed[0].seats.sort(), ["Playera", "Playerc"]);
+});
+
+test("D1 (review): a room wheel moved back to the web is its host's web wheel - never a second one, whoever moves it", async (t) => {
+  const api = await server(t);
+  await sql("UPDATE users SET class='Admin' WHERE userId='d'");
+  svc.noteRooms([{ id: "pad-x", name: "Pad X" }, { id: "pad-y", name: "Pad Y" }, { id: "pad-v", name: "Pad V" }]);
+  // "!rl start" in a room, then Host Tools' "back to the web": a web open is refused then (it names that wheel)
+  const R1 = svc.getTable(expect(await openRoom("a", "pad-x")).table);
+  assert.equal(R1.web, false);
+  const back = await api("/api/casino/t/" + R1.id + "/push", "a", { room: null });
+  assert.equal(back.body.ok, true);
+  assert.equal(back.body.reply, "The table is web-only now.");
+  assert.equal(R1.web, true, "its host's web wheel from now on");
+  const web = await api("/api/casino/open", "a", { game: "roulette", idem: "rv-open-1" });
+  assert.equal(web.status, 409);
+  assert.match(web.body.reply, /already have a roulette wheel open/);
+  assert.equal(web.body.table, R1.id);
+  // pushed into a room again it stays their web wheel (as one opened on the web does)
+  expect(await svc.push(R1.id, "pad-y", actor("a")));
+  assert.equal((await api("/api/casino/open", "a", { game: "roulette", idem: "rv-open-2" })).status, 409);
+  // a second room wheel can't go back to the web while the first is there: not "web only", not by removing its last room, not by an admin
+  const R2 = svc.getTable(expect(await openRoom("a", "pad-x")).table);
+  assert.equal((await svc.push(R2.id, null, actor("a"))).reply, "You already have a roulette wheel on the web — close it first.");
+  assert.equal((await svc.push(R2.id, "pad-x", actor("a"), "remove")).reply, "You already have a roulette wheel on the web — close it first.");
+  assert.equal((await api("/api/casino/t/" + R2.id + "/push", "d", { room: null })).body.reply, "Its host already has a roulette wheel on the web — close one first.");
+  assert.deepEqual(svc.roomsOf(R2), ["pad-x"], "it stays in its room");
+  assert.equal(R2.web, false);
+  // with two rooms, removing one that isn't its last is fine
+  expect(await svc.push(R2.id, "pad-v", actor("a")));
+  expect(await svc.push(R2.id, "pad-v", actor("a"), "remove"));
+  assert.deepEqual(svc.roomsOf(R2), ["pad-x"]);
+  // the first one closed, the second may go back to the web - and is then the one
+  svc.S.rate.clear();
+  expect(await act(R1, "a", "end"));
+  assert.equal(R1.status, "closed");
+  expect(await svc.push(R2.id, "pad-x", actor("a"), "remove"));
+  assert.equal(R2.web, true);
+  assert.equal((await openWeb("a")).ok, false);
+  // a wheel on the web with no rooms and no web flag (an older build's room wheel moved back) counts too
+  const R3 = svc.getTable(expect(await openRoom("c", "pad-w")).table);
+  Object.assign(R3, { rooms: [], room: null, web: false });
+  const c = await openWeb("c");
+  assert.equal(c.ok, false);
+  assert.equal(c.table, R3.id);
+  // nobody ends up with two on the web
+  for (const uid of ["a", "c"]) assert.equal(wheels().filter((w) => !w.lobby && w.host.uid === uid && (w.web || !svc.roomsOf(w).length)).length, 1, uid);
+});
+
+test("(review) the view cache never serves a rolled-back step's view as a later state (svc.viewKey: rev + generation)", async (t) => {
+  const api = await server(t);
+  const R = await room("pad-k");
+  expect(await act(R, "a", "bet", "red 500"));
+  // b's bet saves inside its transaction and then throws: a view built in that window shows b's uncharged line under rev N+1
+  let inside = null;
+  const grab = () => {
+    if (!inside) inside = { key: svc.viewKey(R), rev: R.rev, felt: svc.publicView(R).felt };
+  };
+  svc.S.waiters.add(grab); // (save's wake runs it synchronously, inside the transaction)
+  svc.S.hooks.crash = "rl:answer";
+  const failed = await act(R, "b", "bet", "17 1000");
+  svc.S.hooks.crash = null;
+  svc.S.waiters.delete(grab);
+  assert.equal(failed.ok, false);
+  assert.ok(inside, "a view was built inside the transaction");
+  assert.ok(inside.felt.some((f) => f.t === "17"), "it showed b's uncharged line");
+  assert.equal(await cash("b"), 500000, "b was never charged");
+  assert.equal(R.rev, inside.rev - 1, "rolled back: the rev went back");
+  assert.notEqual(svc.viewKey(R), inside.key, "rolled back: never that key");
+  // the next real step hands out the same rev again - under another key
+  expect(await act(R, "c", "bet", "black 300"));
+  assert.equal(R.rev, inside.rev, "the same rev again");
+  assert.notEqual(svc.viewKey(R), inside.key, "a rev handed out again is a new key");
+  const v = (await api("/api/casino/t/" + R.id, "d")).body.table;
+  assert.deepEqual(v.felt.map((f) => f.t).sort(), ["black", "red"], "the charged lines only");
+  // Pepe's poll builds its views in one locked step: none is of a step still in its transaction
+  const polled = (await svc.poll(-1, 0)).tables[R.id];
+  assert.deepEqual(polled.felt.map((f) => f.t).sort(), ["black", "red"]);
+});
+
+test("(review) Pepe's poll never draws a step still in its transaction: its views are built under the casino lock", async () => {
+  const R = await room("pad-j");
+  expect(await act(R, "a", "bet", "red 500"));
+  await svc.RL.bankRefresh(R); // (fresh: the poll's own bank refresh answers at once)
+  h.move(3000); // (the poll's veil refresh is due: it asks who is incognito - and b's bet starts right then)
+  let step = null,
+    inTx;
+  const saved = new Promise((ok) => (inTx = ok));
+  h.veil._hooks.kind = async () => {
+    if (!step) {
+      step = true;
+      svc.S.waiters.add(() => inTx()); // (b's save wakes it, inside the transaction)
+      svc.S.hooks.crash = "rl:answer";
+      step = act(R, "b", "bet", "17 1000");
+      await saved; // the poll goes on while b's bet is saved and not yet committed (it then rolls back)
+    }
+    return null;
+  };
+  const polled = (await svc.poll(-1, 0)).tables[R.id];
+  const failed = await step;
+  svc.S.hooks.crash = null;
+  assert.equal(failed.ok, false, "b's bet rolled back");
+  assert.equal(await cash("b"), 500000);
+  assert.deepEqual(polled.felt, [{ t: "red", n: 500, k: 1 }], "never b's uncharged line");
+  assert.equal(polled.rev, R.rev);
+});
+
+test("(review) someone unseated turning incognito (a web wheel's host) is masked on the very next view, though no rev changed", async (t) => {
+  const api = await server(t);
+  const W = svc.getTable(expect(await openWeb("b")).table);
+  const first = (await api("/api/casino/t/" + W.id, "c")).body.table;
+  assert.equal(first.host, "Playerb");
+  const rev = W.rev;
+  h.veil._hooks.kind = async (keys) => (Array.isArray(keys) && keys.includes("u:b") ? "incognito" : null);
+  h.move(5000); // (a veil refresh re-reads at most every 2 s)
+  const t0 = Date.now();
+  const next = (await api("/api/casino/t/" + W.id, "c")).body.table;
+  assert.ok(Date.now() - t0 < 1000, "within the cache's second");
+  assert.equal(W.rev, rev, "nothing saved");
+  assert.notEqual(next.host, "Playerb");
+  assert.ok(!JSON.stringify(next).includes("Playerb"), "the cached view with the name is not served");
+});
+
+test("D7 (review): an admin's stream pins a wheel only when asked ({pin: true}); a plain one keeps the idle drop, so the queue moves", async (t) => {
+  const api = await server(t);
+  await sql("UPDATE users SET class='Admin' WHERE userId='d'");
+  const L = lobby();
+  const W = svc.getTable(expect(await openWeb("b")).table);
+  const on = (await api("/api/casino/t/" + L.id + "/stream", "d", { on: true })).body;
+  assert.equal(on.ok, true);
+  assert.equal(on.pinned, undefined);
+  assert.ok(!svc.S.stream.pin, "not pinned");
+  assert.equal((await api("/api/casino/t/" + W.id + "/stream", "b", { on: true })).body.queued, 1);
+  svc.S.stream.ts = L.last_activity = h.time();
+  await tick(5 * 60 * 1000 + 1000);
+  assert.equal(svc.S.stream.table, W.id, "the idle lobby left the slot: the queued wheel has it");
+  // asked for: pinned, it stays past the idle drop
+  const pinned = (await api("/api/casino/t/" + L.id + "/stream", "d", { on: true, override: true, pin: true })).body;
+  assert.equal(pinned.pinned, true);
+  assert.equal(svc.S.stream.pin, true);
+  await tick(6 * 60 * 1000);
+  assert.equal(svc.S.stream.table, L.id);
+});
+
+test("(review) rules.bank_straight is never an old figure: null once 10 s old; Pepe's poll works it out itself", async (t) => {
+  const api = await server(t);
+  const R = await room("pad-bk");
+  const v1 = (await api("/api/casino/t/" + R.id, "c")).body.table;
+  assert.equal(v1.rules.bank_straight, 5000, "the wheel's straight cap: the bank has room");
+  // the bank shrinks (another wheel's book, the House, an admin's cap) while nobody views this wheel on the web
+  await svc.setSetting("rl_spin_cap", 35000);
+  h.move(60 * 1000);
+  assert.equal(svc.publicView(R).rules.bank_straight, null, "an old figure is not shown");
+  const polled = (await svc.poll(-1, 0)).tables[R.id];
+  assert.equal(polled.rules.bank_straight, 1000, "the poll's own read-only refresh");
+  assert.equal(svc.publicView(R).rules.bank_straight, 1000);
 });

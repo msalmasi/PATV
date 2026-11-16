@@ -153,10 +153,57 @@ test("contract 5 over HTTP: state_after in, state_seq + now out; rooms' game fla
   assert.equal(oldRoom.games, undefined, "no flags invented");
   assert.equal(oldRoom.off, false);
   expect(await svc.push(W.id, "pad-old", actor("a")));
-  // his room heartbeat without flags keeps the flags a newer poll sent for that room
-  await poll({ after: old.j.cursor, wait: 0, rooms: [{ id: "pad-off", name: "Pad Off" }] });
+  // (review) a rollback to an older Pepe: his heartbeat for a room carries no flags - they are cleared (unknown = on, as before),
+  // never left refusing that room until the site restarts. The bot act route's own note of a room (no flags) keeps the poll's.
+  await poll({ after: old.j.cursor, wait: 0, rooms: [{ id: "pad-off", name: "Pad Off", games: { bj: false, holdem: false, roulette: false } }] });
   assert.equal(svc.freshRooms("roulette").find((r) => r.id === "pad-off").off, true);
+  assert.equal((await svc.push(W.id, "pad-off", actor("a"))).reply, "Roulette is off in that room.");
+  svc.noteRooms([{ id: "pad-off", name: "Pad Off" }], { keepGames: true });
+  assert.equal(svc.freshRooms("roulette").find((r) => r.id === "pad-off").off, true, "the act route's note keeps them");
+  await poll({ after: old.j.cursor, wait: 0, rooms: [{ id: "pad-off", name: "Pad Off" }] });
+  const cleared = svc.freshRooms("roulette").find((r) => r.id === "pad-off");
+  assert.equal(cleared.games, undefined, "an older Pepe's heartbeat clears them");
+  assert.equal(cleared.off, false);
+  expect(await svc.push(W.id, "pad-off", actor("a")));
+  const C = svc.getTable(expect(await svc.act(actor("c", "room"), "start", [], { room: "pad-bj2", game: "bj" }, "poll-bj-open-2")).table);
+  expect(await svc.advertise(C.id, "pad-off", actor("c"), true));
   // a later heartbeat with flags replaces them
+  await poll({ after: old.j.cursor, wait: 0, rooms: [{ id: "pad-off", name: "Pad Off", games: { roulette: false } }] });
+  assert.equal(svc.freshRooms("roulette").find((r) => r.id === "pad-off").off, true);
   await poll({ after: old.j.cursor, wait: 0, rooms: [{ id: "pad-off", name: "Pad Off", games: { roulette: true } }] });
   assert.equal(svc.freshRooms("roulette").find((r) => r.id === "pad-off").off, false);
+});
+
+test("(review) an older Pepe's roulette[] holds only the wheels he can name - the lobby (first) and the wheels in a room", async (t) => {
+  const express = require("express"),
+    app = express();
+  app.use(express.json());
+  require("../casino/routes").register(app, { isBotToken: (x) => x === "localtest", addUser: (q, r, next) => ((q.user = null), next()) });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((ok) => srv.once("listening", ok));
+  t.after(() => srv.close());
+  const poll = async (body) =>
+    (await fetch("http://127.0.0.1:" + srv.address().port + "/api/casino/bot/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "localtest", after: -1, wait: 0, games: ["roulette"], ...body }),
+    })).json();
+  // two web wheels opened before a lobby rotation, then the new lobby (inserted last), then a room wheel
+  const W1 = svc.getTable(expect(await openWeb("a")).table);
+  const W2 = svc.getTable(expect(await openWeb("b")).table);
+  const L0 = h.lobby();
+  svc.S.tables.delete(L0.id); // (the lobby wheel re-inserted last, as a rotation's successor is)
+  svc.S.tables.set(L0.id, L0);
+  const R = await room("pad-z");
+  // what 815a3db does: wheels[:2], each "room_name or 'Lobby'"
+  const label = (w) => (w.room_name || "Lobby") + (w.lobby ? " [lobby]" : "");
+  const old = await poll({ rooms: [{ id: "pad-z", name: "Pad Z" }] });
+  assert.deepEqual(old.roulette.map((w) => w.id), [L0.id, R.id], "the lobby and the room wheel only - lobby first");
+  assert.deepEqual(old.roulette.slice(0, 2).map(label), ["Lobby [lobby]", "Pad Z"]);
+  // a newer Pepe (state_after, or rooms with flags) gets every open wheel, the lobby first
+  for (const body of [{ state_after: 0, rooms: [] }, { rooms: [{ id: "pad-z", name: "Pad Z", games: { roulette: true } }] }]) {
+    const j = await poll(body);
+    assert.equal(j.roulette[0].id, L0.id);
+    assert.deepEqual(new Set(j.roulette.map((w) => w.id)), new Set([L0.id, W1.id, W2.id, R.id]));
+  }
 });
