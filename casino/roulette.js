@@ -115,6 +115,7 @@ function install(core) {
     advertCmd,
     advertRepeat,
     cmdStart,
+    wake,
   } = core;
   const reply = (ok, message, extra) => ({ ok, reply: message, pm: true, ...extra });
   const open = () => Array.from(S.tables.values()).filter((t) => t.game === "roulette" && t.status === "open");
@@ -141,15 +142,18 @@ function install(core) {
   function crash(step) {
     if (S.hooks.crash === "rl:" + step) throw Error("Interrupted roulette " + step);
   }
+  // The live table object takes another state's fields (the object itself stays: S.tables and the callers hold it).
+  function adopt(T, saved) {
+    for (const key of Object.keys(T)) if (!Object.hasOwn(saved, key)) delete T[key];
+    Object.assign(T, saved);
+  }
   // Journalled operations may fail after an in-memory edit but before the SQLite transaction commits.
   // Load the durable book before the next admission, tick or refund observes that edit.
   async function restore(T) {
     if (!T) return;
     const row = (await getQuery("SELECT state FROM casino_tables WHERE id=?", [T.id]))[0];
     if (!row) return;
-    const saved = JSON.parse(row.state);
-    for (const key of Object.keys(T)) if (!Object.hasOwn(saved, key)) delete T[key];
-    Object.assign(T, saved);
+    adopt(T, JSON.parse(row.state));
   }
   function pruneInactive(T) {
     const e = T.eng;
@@ -330,6 +334,7 @@ function install(core) {
   async function place(T, actor, bets, key, queued = false) {
     const why = (await gate(actor)) || (await checkSeat(T, actor));
     if (why) return reply(false, why);
+    if (T.closing) return reply(false, "🛞 This wheel closes after this spin — no new bets.");
     const e = T.eng,
       uid = actor.uid;
     if (["result", "spinning"].includes(e.phase)) {
@@ -453,20 +458,14 @@ function install(core) {
       return;
     }
     crash("predraw");
-    const e = T.eng,
-      r = T.round;
-    r.pocket = fair.spinPocket(r.seed, T.client_seed, r.no);
-    e.phase = "spinning";
-    T.dl = { land: clock() + S.settings.rl_spin_secs * 1000 };
+    // The pocket is public only once its draw has committed. Every reader (the web poll, Pepe's long-poll, the OBS
+    // board) reads the live table without the casino lock, so the spinning state is saved from a copy and reaches the
+    // live table after COMMIT. A draw that fails leaves the live wheel betting as it was: nobody saw its pocket.
+    const r = { ...T.round, pocket: fair.spinPocket(T.round.seed, T.client_seed, T.round.no) },
+      dl = { land: clock() + S.settings.rl_spin_secs * 1000 },
+      next = { ...T, round: r, eng: { ...T.eng, phase: "spinning" }, dl };
     const players = Object.keys(T.escrowed).map((uid) => ({ uid, name: T.players[uid].name }));
     await tx(async () => {
-      await save(T);
-      await runQuery("UPDATE casino_rounds SET players=?,dealt=? WHERE table_id=? AND round_no=?", [
-        JSON.stringify(players),
-        clock(),
-        T.id,
-        r.no,
-      ]);
       await emit(
         T,
         "line",
@@ -476,7 +475,17 @@ function install(core) {
           fmt(sum(Object.values(T.escrowed))) +
           " PAT on the wheel.",
       );
+      await save(next);
+      await runQuery("UPDATE casino_rounds SET players=?,dealt=? WHERE table_id=? AND round_no=?", [
+        JSON.stringify(players),
+        clock(),
+        T.id,
+        r.no,
+      ]);
     });
+    Object.assign(T, { round: r, dl, rev: next.rev, updated: next.updated });
+    T.eng.phase = "spinning";
+    wake(T);
     crash("draw");
     await advertRepeat(T);
   }
@@ -586,11 +595,13 @@ function install(core) {
       await save(T);
       return;
     }
-    if (T.eng.book.length) {
+    // Bets stop (committed) before anything is revealed: a reader can see the unused seed while the reveal's
+    // transaction is open, and a reveal that fails must leave a wheel that takes no bet on that round.
+    if (!T.closing) {
       T.closing = true;
       await save(T);
-      await refund(T, T.eng.book, "end", null, null);
     }
+    if (T.eng.book.length) await refund(T, T.eng.book, "end", null, null);
     await tx(async () => {
       if (!T.round.settle)
         await runQuery(

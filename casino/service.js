@@ -1598,7 +1598,7 @@ const ROUTE = {
   outNow: (T, uid) => { const k = routeOf(T); return k && k.outNow ? k.outNow(T, uid) : null; },
 };
 const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
-  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart });
+  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T)) wake(); } });
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
