@@ -620,7 +620,9 @@ is followed). Before, settle logged it and went on, so the payout was lost. Now 
 (`cbj:<table>:r<n>:<uid>:pay`; the key is looked up first, so it lands once, ever) every `C.OWED_RETRY_MS` (10
 minutes) on the table's clock, at every boot, and before the table closes. The table keeps playing meanwhile, but it is
 never closed with a payout owed: `closeTable` keeps it open and frozen (`T.closing`: no new bets, queued bets or
-autobets, no deadline but the owed payout's clock, `!bj end` says why), and the payout that lands closes it. A staging
+autobets, and no new round - the betting window's bets are refunded and leave the engine, and `!bj deal` / `beginRound`
+deal nothing on a closing table; no deadline but the owed payout's clock; `!bj end` says why), and the payout that
+lands closes it. A staging
 copy's retire (`casino/retire.js`) pays what is owed by its key. **A hand in progress survives a restart**: the table is reloaded, the deadline
 of the current decision is re-armed (if it passed while the site was down, the player gets a fresh 30 s rather than
 an instant time-out), and play continues.

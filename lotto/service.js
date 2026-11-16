@@ -347,8 +347,9 @@ async function pay(D) {
 // A staging refresh (deploy/refresh-staging-db.sh, then deploy/keep-staging-tables.js DRAW_SCRUB on the copy) blanks the secret server_seed
 // of every draw still selling or closed and marks it flags.copied: prod may still sell that draw, and its seed with the tickets digest IS
 // its numbers - staging must never close, draw or publish it. Such a draw (copied, or with no seed: prod's always have one, openDraw /
-// importState) is out of play here (buy, forceDraw and the tick skip it) and void at boot (after recover finished the purchases a crash
-// caught) and on the tick: each purchase of it goes back by the lotto's own refund key, <key>:refund (credited strictly - looked up first,
+// importState) is out of play here (buy, forceDraw and the tick skip it; recover leaves a purchase of it a crash caught to the void) and
+// void at boot and on the tick: each purchase of it - 'done', or 'charging' (charged, its shares moved or not: a copy taken inside
+// finishPurchase) - goes back by the lotto's own refund key, <key>:refund (credited strictly - looked up first,
 // so never twice), and the shares it moved come back out by their own keys, <key>:pot:refund out of the pot and <key>:house:refund out of
 // the House - all three and the purchase's state in ONE transaction. Then the draw is 'void' - QUIET: no lotto_events row (staging's Pepe
 // never announces prod's draw), no notice, no history row, its seed never revealed (fairRecord shows one only for a drawn / paid draw) - and
@@ -472,6 +473,10 @@ async function recover() {
       continue;
     }
     const D = rowToDraw((await getQuery("SELECT * FROM lotto_draws WHERE draw = ?", [pu.draw]))[0]);
+    // roulette2 WP7 review: a purchase of a draw COPIED from another database is left to the void (retireCopies -> voidCopy), which gives
+    // back the cost AND whichever shares it moved - the late refund below gives back only the cost (a copy taken inside finishPurchase,
+    // its shares moved: PAT made), and the void would then skip it as refunded
+    if (isCopy(D)) continue;
     if (D && D.state === "selling" && nowSec() < D.close_at) await finishPurchase(pu);
     else await refundPurchase(pu, "lotto-late-refund");
   }

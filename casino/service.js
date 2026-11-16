@@ -424,6 +424,9 @@ function forget(T, uid) {
 }
 
 async function beginRound(T) {
+  // roulette2 WP7 review: a table that waits for an owed payout before it closes deals no round (cmdDeal, the bet clock, autobets) - its
+  // window's stakes went back at the close (closeTable), so a deal would pay or collect on PAT nobody holds
+  if (T.closing) return false;
   if (T.eng.phase !== "betting") return false;
   await placeAutobets(T);
   if (!E.hasBet(T.eng)) return false;
@@ -677,6 +680,12 @@ async function closeTable(T, reason) {
   // taking no new bets (seatChecks), no autobets and no queued bets, with no deadline but the owed payout's clock (payOwed closes it)
   if (owedCount(T) && (await retryOwed(T, true))) {
     T.closing = reason || T.closing || "closed";
+    // (review: the window's bets refunded above leave the engine too - only a stake whose refund was refused, kept in T.stakes for the
+    //  close's next try, keeps its bet; beginRound deals nothing on a closing table either way)
+    if (["betting", "idle"].includes(T.eng.phase)) {
+      for (const uid of Object.keys(T.eng.bets || {})) if (!(T.stakes || []).some((s) => s.uid === uid)) delete T.eng.bets[uid];
+      T.eng.insurance = {};
+    }
     T.autobet = [];
     T.pending = {};
     T.dl = { bet: null, ins: null, turn: null };
@@ -1018,6 +1027,8 @@ async function cmdAutobet(T, actor, arg) {
 }
 
 async function cmdDeal(T) {
+  // roulette2 WP7 review: a frozen table (a payout still owed, its close asked for) deals no new round
+  if (T.closing) return R(false, "this table is closing — no new rounds (it closes once a payout still owed goes through).");
   if (T.eng.phase !== "betting") return R(false, "not in the betting phase right now.");
   if (!(await beginRound(T))) return R(false, "no bets yet — !bet <amount> first.");
   await save(T);

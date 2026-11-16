@@ -381,6 +381,45 @@ test("a copied lotto draw whose sales had CLOSED (its tickets digest public, its
   assert.equal((await drawRow(d + 1)).state, "selling", "the next draw opens");
 });
 
+test("a copied draw's purchase the copy caught mid-finish (charged, both shares moved, not done), staging booting past its close: back once by the void with both shares - never by recover's late refund", async () => {
+  // (review of WP7: boot's recover() refunded such a purchase by the late-refund path - the cost back, the pot and House shares kept: PAT
+  //  made - and the void then skipped it as 'refunded')
+  const d = (await LS.info(null)).draw;
+  const D0 = await drawRow(d);
+  assert.equal(D0.state, "selling");
+  assert.equal((await lottoBuy("ann", 2)).ok, true);
+  const pu = (await rows("SELECT * FROM lotto_purchases WHERE draw = ? AND userId = ? ORDER BY created DESC, key DESC LIMIT 1", [d, U("ann")]))[0];
+  assert.ok(pu.pot > 0 && pu.cost > pu.pot);
+  assert.equal(await one("SELECT COUNT(*) AS n FROM lotto_purchases WHERE draw = ? AND state IN ('done', 'charging')", [d]), 1);
+  // the copy was taken inside finishPurchase: the charge and both shares booked, the purchase not yet 'done'
+  await sql("UPDATE lotto_purchases SET state = 'charging' WHERE key = ?", [pu.key]);
+  const start = await total();
+  const annBal = await bal(U("ann"));
+  const pot0 = await LS.potBalance();
+  const house0 = await one("SELECT COALESCE(SUM(amount),0) AS n FROM jackpot_rakes");
+  await scrubDraw(d);
+  NOW = (Number(D0.close_at) + 60) * 1000;                          // staging boots past the copied draw's close
+  LS.stop();
+  await LS.boot({ tick: false });
+  const V = await drawRow(d);
+  assert.equal(V.state, "void");
+  assert.equal(V.white, null, "never drawn");
+  assert.deepEqual((await rows("SELECT points, type FROM transactions WHERE transactionId = ?", [pu.key + ":refund"])).map((x) => [x.points, x.type]),
+                   [[pu.cost, "lotto-refund"]], "refunded once, by the void");
+  assert.equal((await rows("SELECT state FROM lotto_purchases WHERE key = ?", [pu.key]))[0].state, "refunded");
+  assert.equal(await bal(U("ann")), annBal + pu.cost);
+  assert.equal(await LS.potBalance(), pot0 - pu.pot, "the pot share back");
+  assert.equal(await one("SELECT COALESCE(SUM(amount),0) AS n FROM jackpot_rakes"), house0 - (pu.cost - pu.pot), "the House share back");
+  assert.equal(await total(), start, "no PAT made");
+  // again: nothing moves
+  LS.stop();
+  await LS.boot({ tick: false });
+  await LS.tick();
+  assert.equal(await one("SELECT COUNT(*) AS n FROM transactions WHERE transactionId = ?", [pu.key + ":refund"]), 1);
+  assert.equal(await total(), start);
+  assert.equal((await LS.fairRecord(d)).server_seed, null);
+});
+
 test("the scrub: only open raffles and unrevealed draws, can run twice (refresh-staging-db.sh runs prod's list and staging's), and a copy of an old prod without the tables is fine", async () => {
   assert.deepEqual(K.DRAW_SCRUB.map((s) => [s.table, s.what]), [["raffles", "raffle seeds"], ["lotto_draws", "lotto seeds"]]);
   // what counts as a copy: an open raffle with no seed; a selling / closed lotto draw with no seed OR marked copied

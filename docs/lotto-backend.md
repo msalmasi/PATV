@@ -64,9 +64,10 @@ Every movement has a deterministic key and is looked up before it is made:
 - **Concurrency.** One mutex covers every mutation, and a tick every 5 s closes sales, draws and pays.
 - **A staging copy** (roulette2 WP7). The staging refresh blanks the `server_seed` of every draw still selling or
   closed and sets `flags.copied` (`deploy/keep-staging-tables.js`), because prod may still be selling that draw. Such a
-  draw is never sold into, closed, drawn or published on staging (`buy`, `forceDraw` and the tick skip it). Boot (after
-  recovery) and the tick void it: each purchase is refunded by `<key>:refund` (type `lotto-refund`, credited only if
-  that key isn't there yet), and its shares come back by `<key>:pot:refund` and `<key>:house:refund`, all in one
+  draw is never sold into, closed, drawn or published on staging (`buy`, `forceDraw` and the tick skip it, and boot's
+  recovery leaves a purchase of it that is still `charging` to the void). Boot and the tick void it: each purchase,
+  `done` or `charging`, is refunded by `<key>:refund` (type `lotto-refund`, credited only if that key isn't there
+  yet), and whichever of its shares had moved come back by `<key>:pot:refund` and `<key>:house:refund`, all in one
   transaction per purchase. The draw becomes `void`, with no event, notice or history row, and its seed is never
   revealed. A fresh draw of staging's own then opens on the same schedule. A refused credit leaves the draw copied and
   out of play until a later tick can refund it.

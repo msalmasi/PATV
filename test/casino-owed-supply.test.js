@@ -225,6 +225,55 @@ test("a table is never closed with a payout owed: it stays open, frozen (no new 
   assert.equal(await total(), start);
 });
 
+test("a frozen table (its close asked for in a betting window while a payout is owed) deals no round on the bets it refunded - not by a bettor, a stranger or a restart", async () => {
+  // (review of WP7: closeTable's frozen branch refunded the window's stakes but left them in the engine, and !bj deal dealt them - a win
+  //  paid a stake nobody held, a loss put one into the House from nothing)
+  await fresh();
+  const start = await total();
+  const { t, key } = await refusedRound();                           // Ann's payout owed; round 2's betting window open
+  const b0 = await bal("u2");
+  ok(await A(bob, "bet", ["1000"], { table: t }));
+  assert.equal(await bal("u2"), b0 - 1000);
+  const end = await A(bob, "end", [], { table: t });
+  assert.equal(end.ok, false);
+  assert.match(end.reply, /still owed/);
+  let T = get(t);
+  assert.equal(T.status, "open");
+  assert.equal(T.closing, "closed by Bob");
+  assert.equal(await bal("u2"), b0, "Bob's bet went back");
+  assert.deepEqual(T.stakes, []);
+  assert.deepEqual(T.eng.bets, {}, "the refunded bet left the engine too");
+  assert.deepEqual((await row(t)).s.eng.bets, {}, "and the saved table");
+  assert.equal(await total(), start);
+  const refused = async () => {
+    for (const who of [bob, cat]) {                                  // the bettor, and a stranger who never sat
+      const r = await A(who, "deal", [], { table: t });
+      assert.equal(r.ok, false, `${who.name}'s deal`);
+      assert.match(r.reply, /closing/);
+    }
+    assert.equal(get(t).eng.phase, "betting");
+    assert.equal(get(t).eng.round_no, 1, "no round dealt");
+    assert.equal((await A(bob, "stand", [], { table: t })).ok, false);
+    assert.equal(await bal("u2"), b0);
+    assert.deepEqual(await keys(`cbj:${t}:r2:u2:pay`), [], "nothing paid on the refunded bet");
+    assert.equal(await total(), start, "no PAT made or lost");
+  };
+  await refused();
+  await restart();
+  T = get(t);
+  assert.equal(T.closing, "closed by Bob");
+  await refused();
+  // the payout lands on its clock: the table closes, and Bob's bet is not refunded a second time
+  await back("u1", "Ann");
+  await later(601);
+  assert.deepEqual(await keys(key), [2000]);
+  assert.equal(get(t).status, "closed");
+  const refunds = await getQuery("SELECT points FROM transactions WHERE transactionId LIKE ? AND transactionId LIKE '%:refund'", [`cbj:${t}:r2:u2:%`]);
+  assert.deepEqual(refunds.map((r) => r.points), [1000], "Bob's bet refunded exactly once");
+  assert.equal(await bal("u2"), b0);
+  assert.equal(await total(), start);
+});
+
 test("a restart while a payout is owed tries it at once; a crash mid-settle settles again (owed again, the same key) - paid once either way", async () => {
   // (1) owed at a restart: the boot pays it at once
   await fresh();
