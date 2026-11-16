@@ -99,7 +99,8 @@ test("UI-13 / UI-9 / UI-3: an idle ring holds a dash, the small links and inputs
   assert.match(felt, /\.rl-more a \{[^}]*min-height: 44px/);
   assert.match(felt, /grid-template-rows: repeat\(3, minmax\(44px, 1fr\)\)/);
   assert.match(felt, /@media \(pointer: coarse\) and \(min-width: 640px\) \{\s*\.rl-modes \{\s*display: flex;[\s\S]*?\.rl-grid \.edge \{\s*display: none;/);
-  assert.match(lobby, /#cz-roulette > a \{[^}]*min-height: 44px/);
+  // (roulette2 WP5a: the lobby's bare roulette link is gone - each wheel is a table card with Play / Watch buttons, casino-lobby.test.js)
+  assert.doesNotMatch(lobby, /#cz-roulette/);
   assert.match(read("public/js/casinorl.js"), /matchMedia\("\(max-width:639px\), \(pointer:coarse\)"\)/);
 });
 
@@ -149,7 +150,7 @@ test("UI-6 / UI-7 / UI-8 / UI-12 / UI-14: sign-in prompt, plural counts, spoken 
   assert.deepEqual(en["js.casino.rl_totals"], { one: "{players} player · {pat} PAT this spin", other: "{players} players · {pat} PAT this spin" });
   assert.deepEqual(en["js.casino.rl_lobby_status"], { one: "{n} player · {phase}", other: "{n} players · {phase}" });
   assert.match(page, /count: t\.totals\.players/);
-  assert.match(ui, /count: wheel\.players/);
+  assert.match(ui, /count: players \}/, "roulette2 WP5a: the lobby's wheel card counts its players with a plural");
   assert.match(page, /spot: p\.kind === "straight" \? word\(\+token\) : felt\[token\] \|\| token,\s*kind: kinds\[p\.kind\]/);
   for (const k of ["rl_trio", "rl_first_four", "rl_dozen", "rl_column", "rl_even_money", "lobby_sub_rl", "lobby_tag_rl"]) assert.ok(en["js.casino." + k], k);
   assert.match(en["js.casino.lobby_tag_rl"], /roulette/);

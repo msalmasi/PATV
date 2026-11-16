@@ -5,6 +5,7 @@
     action buttons with a countdown ring tied to the server's deadline, deal / flip animations and payout pops, a history sheet,
     spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinobj.js. %>
 <%- include('partials/casino-css') %>
+<link rel="stylesheet" href="/public/css/casino-chips.css?v=1"><%# roulette2 O9: the casino's chips (.chip, .pile, .stack, the one .chipbtn, .rl-pocket) - right after casino-css, where they were %>
 <%# 1.99ajw casino2: the Room Dock's person menu on the seats (room-mod.js + the 💸 Tip modal pad-tip.js; pad-dock.css body.cz-pm = its look) %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10">
 <link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><%# 1.99ajy dockmedia: v9 (the Room Dock's Now playing / stage media bar rules; the same file as the pad); pausebars: v11 (the pad's current file - dock3 v10 + no mic bars while paused); ptttoast review F1 1.99ana: v12 (the character counter beside the field, not under the tool row); relaymic review F2 1.99anh: v13 (⏳ on the icon-only talk button during the release tail) %>
@@ -46,15 +47,7 @@
   .stakebox { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
   .stakebox .amt { font: 700 30px/1 var(--ds-font); color: var(--goldt); font-variant-numeric: tabular-nums; min-width: 90px; text-align: center; }
   .chipbtns { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-  .chipbtn { position: relative; display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: transparent;
-             font: 700 13px/1 var(--ds-font); color: #111; transition: transform .1s; }
-  .chipbtn .chip { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .chipbtn span.l { position: relative; z-index: 1; padding: 3px 5px; border-radius: 999px; background: rgba(255,255,255,.92); }
-  .chipbtn.hr span.l { background: rgba(0,0,0,.82); color: #ffe082; box-shadow: 0 0 0 1px rgba(255,215,64,.75); }
-  .chipbtn span.l { z-index: 2; }
-  .chipbtn:hover { transform: translateY(-3px); }
-  .chipbtn:active { transform: translateY(1px); }
-  .chipbtn[disabled] { opacity: .35; cursor: not-allowed; transform: none; }
+  /* (the chip buttons themselves: .chipbtn in public/css/casino-chips.css - roulette2 O9) */
   /* 1.99sk/1.99sm: the custom bet box under the chip rack (ds field: label, input group, hint / error) */
   .custombet { display: grid; gap: var(--ds-sp-1h); max-width: 420px; margin: var(--ds-sp-3) auto 0; }
   .custombet .ds-label { color: var(--mut); }
@@ -74,7 +67,6 @@
     .hands { --hw: 28px; }
     .plate .nm { max-width: 96px; }
     .bj-rules { font-size: 10px; letter-spacing: .1em; }
-    .chipbtn { width: 52px; height: 52px; }
   }
 </style>
 <main class="ds-page flow cz" id="cb" data-game="bj" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>" data-user="<%= signedIn && user ? user : '' %>">
@@ -154,7 +146,8 @@
   <% } %>
 </main>
 <% if (tableId) { %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if (signedIn) { %><script src="/public/js/block-sheet.js?v=3"></script><% } %><% } %><%# 1.99ajw casino2 rework: room-mod v16 (1.99ajn padppl - the menu's 🚫 Block / ✅ Unblock) + its sheet %>
-<script src="/public/js/casino-ui.js?v=14"></script><%# 1.99aof: v14 (startTable opts.first - the wheel's one-time notice); h22: v10 (the Sit & Go lobby section, the same file as the Hold'em page); 1.99amf h20: v11 (CZ.theme, the lobby's theme picker - rebased on h22's v10); h22 phase 2: v12 (one above both sides' v11) %>
+<% if (!tableId) { %><script src="/api/casino/rlbets.js?v=2"></script><% } %><%# roulette2 O4: the lobby's wheel cards colour their pockets from PATVRlBets.red %>
+<script src="/public/js/casino-ui.js?v=15"></script><%# roulette2 WP5a: v15 (the lobby's 🛞 Roulette tab, wheel cards and Open a wheel); 1.99aof: v14 (startTable opts.first - the wheel's one-time notice); h22: v10 (the Sit & Go lobby section, the same file as the Hold'em page); 1.99amf h20: v11 (CZ.theme, the lobby's theme picker - rebased on h22's v10); h22 phase 2: v12 (one above both sides' v11) %>
 <% if (locals.theme && theme !== 'classic') { %><script src="/public/js/casino-sound.js?v=2"></script><% } %>
 <script src="/public/js/patamount.js?v=1"></script>
 <script src="/public/js/casinobj.js?v=9"></script><%# 1.99amf h20: v9 (CZ.theme in render) %>

@@ -1,0 +1,126 @@
+/* public/css/casino-chips.css - roulette2 O9 (contract 9): the casino's chips, ONE set for every table and the Room Dock.
+   Loaded by views/casino-bj.ejs, casino-hm.ejs, casino-rl.ejs (right after the casino-css partial, so the cascade is the one the
+   rules had inside it) and views/room.ejs (the pad's Room Dock roulette sheet).
+
+   - .chip (+ c500 / c1k / c5k / c25k / cmax, and the 💎 High Roller chips c100k / c500k / c1m / c5m with .hrc), .pile, .stack (.hr):
+     moved here unchanged from views/partials/casino-css.ejs (casino-ui.js pileHTML / stackHTML / chipCls draw them).
+   - .chipbtn: the ONE chip button (it replaces blackjack's .chipbtn and Hold'em's .rchip, both moved here unchanged) - markup:
+       <button type="button" class="chipbtn[ hr][ sm]" data-add="500"><span class="chip c500" aria-hidden="true"></span><span class="l">500</span></button>
+     .hr = a 💎 chip (its label in gold on black); .sm = the small rack (Hold'em's raise rack, 46 px).
+   - .rl-pocket.red | .black | .zero: a roulette pocket (the same rules as WP0's public/css/casinorl-dock.css, duplicated here so the
+     lobby's wheel cards have them; the colour class always comes from PATVRlBets.red - the client says "zero", never "green").
+
+   Scope: the chip rules apply inside the casino pages (.cz), the Room Dock's roulette controls (.rl-controls) and any container
+   marked .cz-chipset - never to the site's other ".chip" classes (the pad's moderation fine buttons are "pm-btn chip", stage.css has
+   its own). :where() keeps every selector at the specificity it had before the move, so nothing that overrode it changes
+   (casino-themes.css .cz-theme-saloon .chip, the Hold'em pot's .pot .main .pile). */
+
+/* ── chips ── */
+:where(.cz, .rl-controls, .cz-chipset) .chip { --c: #f4f4f4; --e: #1f5aa6; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; flex: none;
+        background: radial-gradient(circle, var(--c) 0 44%, var(--e) 45% 52%, var(--c) 53% 62%, transparent 63%),
+                    repeating-conic-gradient(var(--e) 0 15deg, var(--c) 15deg 30deg);
+        box-shadow: 0 2px 0 rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.25); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c500 { --c: #7b3fbf; --e: #f3e6ff; } :where(.cz, .rl-controls, .cz-chipset) .chip.c1k { --c: #f2c230; --e: #6a4b00; }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c5k { --c: #d32f2f; --e: #ffe0e0; }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c25k { --c: #222; --e: #ffd740; } :where(.cz, .rl-controls, .cz-chipset) .chip.cmax { --c: #0f7a5a; --e: #dfffe9; }
+/* (--goldt is the casino pages' gold text; the Room Dock has the design system's) */
+:where(.cz, .rl-controls, .cz-chipset) .stack { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: 999px; background: rgba(0,0,0,.55);
+         font: 700 12px/1 var(--ds-font); color: var(--goldt, var(--ds-gold-text)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+:where(.cz, .rl-controls, .cz-chipset) .stack .chip { width: 16px; height: 16px; }
+/* 1.99ov: 💎 High Roller chips (only High Rollers and High Roller tables see them): 100K onyx & gold, 500K solid gold, 1M platinum
+   with a diamond inlay, 5M black diamond with an iridescent edge. A sheen (::after) and, on 1M / 5M, a cut diamond (::before). */
+:where(.cz, .rl-controls, .cz-chipset) .chip.hrc { position: relative; overflow: hidden; box-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 0 1px rgba(255,215,64,.75), 0 0 9px rgba(255,200,60,.45); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.hrc::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+                   background: linear-gradient(135deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 38%, rgba(255,255,255,0) 62%, rgba(255,255,255,.18) 100%); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c100k { background: radial-gradient(circle, #151515 0 36%, #e8c45a 37% 41%, #0b0b0b 42% 56%, #e8c45a 57% 60%, transparent 61%),
+                          repeating-conic-gradient(#f5d77a 0 9deg, #0d0d0d 9deg 30deg); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c500k { background: radial-gradient(circle, #ffe9a3 0 18%, #c9971c 19% 36%, #3a2600 37% 40%, #f4c542 41% 56%, #3a2600 57% 60%, transparent 61%),
+                          repeating-conic-gradient(#1a1100 0 8deg, #f6cf55 8deg 30deg); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c1m { background: radial-gradient(circle, #f7fbff 0 30%, #9fb3c8 31% 35%, #e6edf5 36% 56%, #5d7590 57% 60%, transparent 61%),
+                        repeating-conic-gradient(#2b3a4d 0 8deg, #dfe8f2 8deg 22.5deg); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c5m { background: radial-gradient(circle, #0a0a12 0 52%, transparent 53%),
+                        conic-gradient(from 0deg, #ff6ad5, #ffd36a, #6affc8, #6ac8ff, #c86aff, #ff6ad5);
+            box-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 0 1px #fff, 0 0 12px rgba(200,140,255,.75); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c1m::before, :where(.cz, .rl-controls, .cz-chipset) .chip.c5m::before {
+                                       content: ""; position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; transform: translate(-50%, -50%);
+                                       clip-path: polygon(50% 0, 100% 38%, 50% 100%, 0 38%); z-index: 1;
+                                       background: linear-gradient(160deg, #ffffff 0%, #bfe9ff 35%, #6fb6ff 60%, #e9f7ff 100%); }
+:where(.cz, .rl-controls, .cz-chipset) .chip.c5m::before { background: linear-gradient(160deg, #ffffff 0%, #ffd6f4 30%, #b98cff 60%, #e9f7ff 100%); }
+/* a pile: a few chips of the amount stacked up (largest on top), 3px apart */
+:where(.cz, .rl-controls, .cz-chipset) .pile { position: relative; display: inline-block; flex: none; width: 16px; height: calc(16px + (var(--n, 1) - 1) * 3px); }
+:where(.cz, .rl-controls, .cz-chipset) .pile .chip { position: absolute; left: 0; bottom: calc(var(--i) * 3px); width: 16px; height: 16px; }
+:where(.cz, .rl-controls, .cz-chipset) .stack.hr { background: linear-gradient(180deg, rgba(28,22,6,.92), rgba(0,0,0,.85)); color: #ffe9a3;
+                                                   box-shadow: 0 0 0 1px rgba(255,215,64,.6), 0 0 12px rgba(255,200,60,.3); }
+
+/* ── the chip button: tap a chip to add it (blackjack's bet rack, Hold'em's raise rack, the roulette rack) ── */
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn { position: relative; display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: transparent;
+           font: 700 13px/1 var(--ds-font); color: #111; transition: transform .1s; }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn .chip { position: absolute; inset: 0; width: 100%; height: 100%; }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn span.l { position: relative; z-index: 2; padding: 3px 5px; border-radius: 999px; background: rgba(255,255,255,.92); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.hr span.l { background: rgba(0,0,0,.82); color: #ffe082; box-shadow: 0 0 0 1px rgba(255,215,64,.75); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn:hover { transform: translateY(-3px); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn:active { transform: translateY(1px); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn[disabled] { opacity: .35; cursor: not-allowed; transform: none; }
+@media (max-width: 600px) {
+  :where(.cz, .rl-controls, .cz-chipset) .chipbtn { width: 52px; height: 52px; }
+}
+/* .sm: the small rack (Hold'em's raise; was .rchip): 46 px at every width, a lighter lift, no press dip */
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm { width: 46px; height: 46px; font-size: 11px; }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm span.l { padding: 2px 4px; }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm.hr span.l { box-shadow: 0 0 0 1px rgba(255,215,64,.7); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm:hover { transform: translateY(-2px); }
+:where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm:active:not(:hover) { transform: none; }
+
+/* ── a roulette pocket (roulette2 O8): the wheel's history strip and sheet, the Room Dock's recent line, the lobby's wheel cards.
+   The number is the text; the felt's ◆ / ● glyph under it is the cue that isn't colour (the aria-label says the colour as a
+   word); the newest pocket is larger, with a gold ring. ── */
+.rl-pocket {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 1.9em;
+  min-height: 2.15em;
+  padding: 1px 0.3em;
+  border-radius: 6px;
+  color: #fff;
+  font: 700 13px/1.15 var(--ds-font, system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  vertical-align: middle;
+}
+.rl-pocket::after {
+  font: 10px/1 system-ui, sans-serif;
+}
+.rl-pocket.red {
+  background: #c62828;
+}
+.rl-pocket.red::after {
+  content: "◆";
+}
+.rl-pocket.black {
+  background: #141418;
+  box-shadow: inset 0 0 0 1px #555;
+}
+.rl-pocket.black::after {
+  content: "●";
+}
+.rl-pocket.zero {
+  background: #1e7f4f;
+}
+.rl-pocket.newest {
+  font-size: 16px;
+  min-width: 2.2em;
+  box-shadow: 0 0 0 2px #f4cd81;
+}
+.rl-pocket.black.newest {
+  box-shadow:
+    inset 0 0 0 1px #555,
+    0 0 0 2px #f4cd81;
+}
+@media (forced-colors: active) {
+  .rl-pocket {
+    forced-color-adjust: none;
+  }
+}

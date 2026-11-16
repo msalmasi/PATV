@@ -291,7 +291,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     res.json({ roulette, enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
                stream: !roulette.on && svc.getTable(svc.S.stream.table)?.game === "roulette" ? null : svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
                themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st),   // 1.99amf h20: may this viewer pick a theme
-               mtt: await svc.MT.lobby(actor ? actor.uid : null) });                                                         // (h22 phase 2: the 🏆 block)
+               mtt: await svc.MT.lobby(actor ? actor.uid : null),                                                            // (h22 phase 2: the 🏆 block)
+               now: svc.S.hooks.now() });   // roulette2 WP5a: the server's clock - the lobby's wheel countdowns (deadline / land_at) and Sit & Go clocks
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 

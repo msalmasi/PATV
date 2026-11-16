@@ -1,6 +1,7 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', {title:t('casino.rl.title'),user:user}) %>
 <%- include('partials/casino-css') %>
+<link rel="stylesheet" href="/public/css/casino-chips.css?v=1">
 <%- include('partials/casino-rl-css') %>
 <link rel="stylesheet" href="/public/css/room-mod.css?v=10"><link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><link rel="stylesheet" href="/public/css/flair.css?v=5"><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=3">
 <main class="ds-page flow cz rl-page" id="cb" data-game="roulette" data-table="<%= tableId || '' %>" data-signed="<%= signedIn?'1':'' %>" data-user="<%= signedIn && user ? user:'' %>">

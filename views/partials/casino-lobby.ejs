@@ -1,12 +1,11 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# views/partials/casino-lobby.ejs - D10: the casino lobby, shared by /casino/blackjack and /casino/holdem (the page's game is the
     first tab): open tables of both games (seats taken, stakes, the Camfrog room each is pushed to, stream, fairness), Join /
-    Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn. %>
+    Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn.
+    roulette2 O4/O5 (WP5a): roulette is the third game here - a 🛞 Roulette tab (#roulette picks it; shown while roulette is open to
+    this viewer), the wheels as table cards (the always-on lobby wheel first, 💎 wheels in the High Roller section), and "Open a
+    wheel" / a 💎 roulette sub-section in the open cards. The old "Roulette · N players" box above the hero is gone. %>
 <section id="cz-lobby" hidden>
-  <div id="cz-roulette" class="tcard" hidden>
-    <a href="/casino/roulette"><strong>🛞 <%= t('casino.rl.title') %></strong></a>
-    <span id="cz-wheel-status"></span>
-  </div>
   <div class="lob-hero">
     <div class="lob-suits" aria-hidden="true"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></div>
     <h1><%- t('casino.lobby_hero') %></h1>
@@ -19,8 +18,9 @@
   </div>
 
   <div class="lob-tabs" role="tablist" aria-label="<%- t('casino.tabs') %>">
-    <% const tabs = [['all', t('casino.tab_all')], ['bj', '<span class="ds-ic" aria-hidden="true">🂡</span>' + t('casino.bj_title')], ['holdem', '<span class="ds-ic" aria-hidden="true">🃏</span>' + t('casino.hm_title')]]; %>
-    <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"><%- label %></button><% } %>
+    <% const tabs = [['all', t('casino.tab_all')], ['bj', '<span class="ds-ic" aria-hidden="true">🂡</span>' + t('casino.bj_title')], ['holdem', '<span class="ds-ic" aria-hidden="true">🃏</span>' + t('casino.hm_title')],
+                     ['roulette', '<span class="ds-ic" aria-hidden="true">🛞</span>' + t('casino.rl.title')]]; %>
+    <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"<%= k === 'roulette' ? ' hidden' : '' %>><%- label %></button><% } %>
   </div>
   <div class="lob-grid" id="cz-tables" aria-live="off"></div>
 
@@ -53,6 +53,13 @@
         <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-hm-go"><%- t('casino.open_hm') %></button>
         <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
       </div>
+      <%# roulette2 D1 (WP5a): open a web wheel you host - at most one at a time; POST /api/casino/open {game: "roulette"} (casino-ui.js) %>
+      <div class="tcard rl" id="cz-open-rl" hidden>
+        <div class="tcard-h"><span class="ic" aria-hidden="true">🛞</span><div><b><%- t('casino.rl.title') %></b><small><%- t('casino.rl.rules') %></small></div></div>
+        <p id="cz-rlmax"><%- t('casino.rl.open_note') %></p>
+        <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-rl-go"><%- t('casino.rl.open_go') %></button>
+        <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
+      </div>
       <%# 1.99sk: the 💎 card, redesigned - a full-width card: head (title + the 💎 chips teaser, shown to everyone), then
           blackjack and Hold'em as two separate sub-sections (side by side from 720px): each with its label, its limits and
           its button; the Hold'em blinds as a pill grid. The pickers / buttons are for High Rollers; everyone else gets the
@@ -77,6 +84,12 @@
               <p class="fine" id="cz-hrbuy"></p>
             </div>
             <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrhm-go" aria-label="<%- t('casino.open_hrhm') %>"><%- t('casino.hr_open_go') %></button></div>
+          </section>
+          <%# roulette2 D2 (WP5a): a 💎 High Roller wheel - its limits for everyone, the button for High Rollers %>
+          <section class="hrgame" id="cz-hrsec-rl" aria-labelledby="cz-hrsec-rl-h" hidden>
+            <h3 class="hrgame-h" id="cz-hrsec-rl-h"><span class="ds-ic" aria-hidden="true">🛞</span><%- t('casino.rl.title') %></h3>
+            <p class="hrgame-lim" id="cz-hrrl"></p>
+            <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrrl-go" aria-label="<%- t('casino.rl.open_hr') %>"><%- t('casino.rl.open_go') %></button></div>
           </section>
         </div>
         <p class="hrcard-lock" id="cz-hr-locked"><%- t('casino.hr_locked') %> <a href="/shop"><%- t('casino.hr_store') %></a></p>

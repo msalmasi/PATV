@@ -298,7 +298,7 @@
     const sig = set.map((c) => c[0]).join();
     if (box.dataset.v !== sig) {
       box.dataset.v = sig;
-      box.innerHTML = set.map(([v, c]) => `<button type="button" class="rchip${/hrc/.test(c) ? " hr" : ""}" data-add="${v}" aria-label="${esc(T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
+      box.innerHTML = set.map(([v, c]) => `<button type="button" class="chipbtn sm${/hrc/.test(c) ? " hr" : ""}" data-add="${v}" aria-label="${esc(T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
         `<span class="chip ${c}" aria-hidden="true"></span><span class="l">${esc(CZ.short(v))}</span></button>`).join("");
     }
   }

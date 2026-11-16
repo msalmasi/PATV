@@ -6,12 +6,15 @@
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
 // h22 phase 2 (1.99amj): a scheduled tournament's table polls every 2 s while it isn't your turn (1 s on your turn, 5 s hidden).
+// roulette2 WP5a: roulette is the lobby's third game - its 🛞 tab (#roulette), the wheels as table cards (wheelCard), "Open a wheel".
 (function () {
   "use strict";
   const root = document.getElementById("cb");
   if (!root) return;
   const $ = (id) => document.getElementById(id);
-  const T = (k, d, v) => (window.__t ? window.__t("js.casino." + k, d, v) : String(d).replace(/\{!?(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m)));
+  // (without the page's __t - a test's vm - a plural default {"one", "other"} picks by vars.count as __t does in English)
+  const T = (k, d, v) => (window.__t ? window.__t("js.casino." + k, d, v)
+    : String(d && typeof d === "object" ? (v && Number(v.count) === 1 && d.one != null ? d.one : d.other) : d).replace(/\{!?(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m)));
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const lang = document.documentElement.lang || "en";
   const fmt = (n) => { try { return Math.trunc(Number(n) || 0).toLocaleString(lang); } catch (e) { return String(Math.trunc(Number(n) || 0)); } };
@@ -429,37 +432,106 @@
       `${t.proof ? `<a class="tag green" href="${esc(t.proof)}">🔐 ${esc(T("fair_short", "Fair"))}</a>` : ""}</div>` +
       `<div class="acts">${join}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
   }
+  // ── roulette2 O4 (WP5a): a 🛞 wheel's card - the table card's markup (.tcard / .tcard-h / .meta / .acts) with the wheel's own lines:
+  // "Pepe's wheel" (the always-on lobby wheel) or "{host}'s wheel", the live phase + its countdown (the lobby answer's deadline /
+  // land_at on the server's clock), the last pockets in the felt's colours where the seat dots go, who's on the layout, the limits
+  // (the per-spin maximum spelled out), 💎, rooms / web, 📺, 🔐 Fair; Play + 👁 Watch. Display only: nothing here moves PAT, and the
+  // host is the server's masked name (V.hostName).
+  const RL_RED = () => (window.PATVRlBets && Array.isArray(window.PATVRlBets.red) ? window.PATVRlBets.red : null);
+  /** a pocket's colour class from the client's red list (PATVRlBets.red - never the server's "green" for 0); "" when it isn't loaded */
+  function pocketColor(n) {
+    const red = RL_RED();
+    if (!red) return "";
+    return n === 0 ? "zero" : red.indexOf(n) >= 0 ? "red" : "black";
+  }
+  function pocketWord(n) {
+    const c = pocketColor(n);
+    return c === "zero" ? T("rl_pocket_zero", "{n} green", { n }) : c === "red" ? T("rl_pocket_red", "{n} red", { n }) : c === "black" ? T("rl_pocket_black", "{n} black", { n }) : String(n);
+  }
+  function pocketHTML(n, newest) {
+    const w = pocketWord(n), c = pocketColor(n);
+    return `<span class="rl-pocket${c ? " " + c : ""}${newest ? " newest" : ""}" role="img" aria-label="${esc(w)}" title="${esc(w)}">${esc(n)}</span>`;
+  }
+  const outcomeWord = (n) => (n === 0 ? T("rl_zero", "0 · Zero") : pocketColor(n) === "red" ? T("rl_red_word", "{n} ◆ Red", { n }) : pocketColor(n) === "black" ? T("rl_black_word", "{n} ● Black", { n }) : String(n));
+  const lastPockets = (t) => (Array.isArray(t.last) ? t.last : []).filter((n) => Number.isInteger(n) && n >= 0 && n <= 36);
+  /** the wheel's live line (HTML): Bets open (· its countdown once the first chip starts the clock) / No more bets · the landing / Result · the pocket */
+  function wheelPhase(t) {
+    const cd = (dl) => (Number(dl) > 0 ? ` · <b data-rldl="${Number(dl)}"></b>` : "");
+    if (t.phase === "spinning") return esc(T("rl_spinning", "No more bets")) + cd(t.land_at);
+    if (t.phase === "result") {
+      const l = lastPockets(t), n = l.length ? l[l.length - 1] : null;
+      return esc(T("rl_result", "Result")) + (n != null ? " · " + esc(outcomeWord(n)) : "");
+    }
+    return esc(T("rl_open", "Bets open")) + (t.phase === "betting" ? cd(t.deadline) : "");
+  }
+  function wheelCard(t, me) {
+    const hr = !!t.high_stakes;
+    const url = "/casino/roulette/t/" + encodeURIComponent(t.id);
+    const title = t.lobby ? T("rl_wheel_pepe", "Pepe's wheel") : T("rl_wheel_of", "{host}'s wheel", { host: t.host });
+    const last = lastPockets(t).slice(-8).reverse();                     // newest first, with the gold ring
+    const pockets = last.length ? last.map((n, i) => pocketHTML(n, i === 0)).join("") : `<span class="none">${esc(T("rl_no_spins", "No spins yet"))}</span>`;
+    const players = Number(t.players) || 0;
+    const tally = T("rl_card_tally", { "one": "{n} player · {pat} PAT on the layout", "other": "{n} players · {pat} PAT on the layout" },
+                    { n: fmt(players), pat: fmt(t.staked), count: players });
+    const limits = T("rl_card_limits", "Min {min} · Straight {straight} · {spin} a spin", { min: fmt(t.min_bet), straight: fmt(t.max_straight), spin: fmt(t.max_bet) });
+    const rs = t.rooms && t.rooms.length ? t.rooms : t.room ? [{ id: t.room, name: t.room_name || t.room }] : [];
+    const where = (rs.length ? rs.map((r) => `<span class="tag blue">🐸 ${esc(r.name)}</span>`).join("") : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`) +
+      (t.adverts || []).map((r) => `<span class="tag" title="${esc(T("advertised_in", "Advertised in {room}", { room: r.name }))}">📣 ${esc(r.name)}</span>`).join("");
+    const full = !!t.max_seats && players >= t.max_seats;
+    const locked = hr && !(me && me.high_roller);              // a 💎 wheel: everyone else can only watch
+    const play = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
+      : `<a class="cz-btn gold sm" href="${url}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("rl_play", "Play"))}</a>`;
+    return `<article class="tcard rl${hr ? " hr" : ""}" aria-label="${esc(title)}">` +
+      `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : "🛞"}</span><div><b>${esc(title)}</b>` +
+      `<small>${esc(T("g_rl", "Single-zero roulette"))} · ${wheelPhase(t)}</small></div></div>` +
+      `<div class="rl-last" role="group" aria-label="${esc(T("rl_recent", "Last spins"))}">${pockets}</div>` +
+      `<p class="rl-tally">${esc(tally)}</p>` +
+      `<div class="meta"><span class="tag gold">${esc(limits)}</span>${hr ? `<span class="tag hr">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}` +
+      `${t.lobby ? `<span class="tag">${esc(T("rl_lobby", "Lobby wheel"))}</span>` : ""}${where}` +
+      `${t.on_stream ? `<span class="tag red">📺 ${esc(T("on_stream", "On Pepe's stream"))}</span>` : t.stream_queue ? `<span class="tag">📺 #${t.stream_queue}</span>` : ""}` +
+      `${t.proof ? `<a class="tag green" href="${esc(t.proof)}">🔐 ${esc(T("fair_short", "Fair"))}</a>` : ""}</div>` +
+      `<div class="acts">${play}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
+  }
+  const cardFor = (t, me) => (t.game === "roulette" ? wheelCard(t, me) : tableCard(t, me));
+  const TABS = ["all", "bj", "holdem", "roulette"];
+  const isLobbyWheel = (t) => t.game === "roulette" && !!t.lobby;
   const blindsLabel = (sb, bb) => (sb >= 100000 ? `${short(sb)}/${short(bb)}` : `${fmt(sb)}/${fmt(bb)}`);
+  /** innerHTML only when it changed (a 4 s poll with nothing new keeps the cards - and the focus - as they are) */
+  function fill(el, html) { if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; } }
   function renderLobby() {
     const j = lobbyData;
     if (!j) return;
-    const wheelCard = $("cz-roulette");
-    if (wheelCard) {
-      const wheel = j.roulette && j.roulette.lobby;
-      wheelCard.hidden = !(j.roulette && j.roulette.on);
-      const phase = wheel && (wheel.phase === "spinning" ? T("rl_spinning", "No more bets") : wheel.phase === "result" ? T("rl_result", "Result") : T("rl_open", "Bets open"));
-      $("cz-wheel-status").textContent = wheel ? T("rl_lobby_status", { "one": "{n} player · {phase}", "other": "{n} players · {phase}" }, { n: wheel.players, phase, count: wheel.players }) : "";
-      // 1.99aof (UI-12): with the wheel on, the lobby's header and hero name it too
-      if (j.roulette && j.roulette.on) {
-        const sub = document.querySelector(".cz-brand small"), tag = document.querySelector("#cz-lobby .lob-hero p");
-        if (sub && !tableId) sub.textContent = T("lobby_sub_rl", "Blackjack, Hold'em and roulette with your PAT");
-        if (tag) tag.textContent = T("lobby_tag_rl", "Blackjack, No-Limit Hold'em and single-zero roulette with your PAT. Play right here, or push a table to a pad's chat room so room players sit at the same felt. Every shuffle and every spin is provably fair. For fun only: PAT is points with no cash value, and every win is paid in PAT.");
-      }
+    // roulette2 O4: roulette is a game of the lobby while it's open to this viewer (the lobby answer's roulette.on; the server drops
+    // the wheel rows otherwise): its tab, its cards, its open cards
+    const rlOn = !!(j.roulette && j.roulette.on);
+    if (!rlOn && lobbyTab === "roulette") lobbyTab = game;
+    const rlTab = document.querySelector('.lob-tabs button[data-tab="roulette"]');
+    if (rlTab) { rlTab.hidden = !rlOn; rlTab.parentNode.classList.toggle("four", rlOn); }     // (.four: a phone's 2 x 2 switcher)
+    // 1.99aof (UI-12): with the wheel on, the lobby's header and hero name it too
+    if (rlOn) {
+      const sub = document.querySelector(".cz-brand small"), tag = document.querySelector("#cz-lobby .lob-hero p");
+      if (sub && !tableId) sub.textContent = T("lobby_sub_rl", "Blackjack, Hold'em and roulette with your PAT");
+      if (tag) tag.textContent = T("lobby_tag_rl", "Blackjack, No-Limit Hold'em and single-zero roulette with your PAT. Play right here, or push a table to a pad's chat room so room players sit at the same felt. Every shuffle and every spin is provably fair. For fun only: PAT is points with no cash value, and every win is paid in PAT.");
     }
-    const all = j.tables || [];
+    // (an older answer, or roulette shut: no wheel rows)
+    const all = (j.tables || []).filter((t) => rlOn || t.game !== "roulette");
     const me = j.me || null;
     const hr = !!(me && me.high_roller);
     const lim = j.limits || { bj: { min_bet: 100, max_bet: 100000, hr_min_bet: 100000, hr_max_bet: 1000000 }, holdem: { hr_ladder: [] } };
-    const inTab = (t) => lobbyTab === "all" || (lobbyTab === "holdem" ? t.game === "holdem" : t.game !== "holdem");
-    const list = all.filter((t) => inTab(t) && !t.high_stakes);
-    const hrList = all.filter((t) => inTab(t) && t.high_stakes);
+    const inTab = (t) => lobbyTab === "all" || (lobbyTab === "holdem" ? t.game === "holdem" : lobbyTab === "roulette" ? t.game === "roulette" : t.game !== "holdem" && t.game !== "roulette");
+    // the lobby wheel first ("all" and the roulette tab), the rest as the server lists them
+    const ordered = all.slice().sort((a, b) => isLobbyWheel(b) - isLobbyWheel(a));
+    const list = ordered.filter((t) => inTab(t) && !t.high_stakes);
+    const hrList = ordered.filter((t) => inTab(t) && t.high_stakes);
     for (const b of document.querySelectorAll(".lob-tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === lobbyTab));
-    $("cz-tables").innerHTML = list.length ? list.map((t) => tableCard(t, me)).join("")
+    fill($("cz-tables"), list.length ? list.map((t) => cardFor(t, me)).join("")
       : `<div class="lob-empty">${esc(lobbyTab === "holdem" ? T("none_hm", "No Hold'em table is open. Open one and others can join you.")
                                  : lobbyTab === "bj" ? T("none_bj", "No blackjack table is open. Open one and others can join you.")
-                                 : T("none_all", "No tables are open right now. Open one and others can join you."))}</div>`;
-    $("cz-hrtables").innerHTML = hrList.length ? hrList.map((t) => tableCard(t, me)).join("")
-      : `<div class="lob-empty">${esc(hr ? T("none_hr_mine", "No High Roller table is open. Open one below.") : T("none_hr", "No High Roller table is open right now."))}</div>`;
+                                 : lobbyTab === "roulette" ? T("none_rl", "No wheel is open right now. Open one and others can join you.")
+                                 : T("none_all", "No tables are open right now. Open one and others can join you."))}</div>`);
+    fill($("cz-hrtables"), hrList.length ? hrList.map((t) => cardFor(t, me)).join("")
+      : `<div class="lob-empty">${esc(hr ? T("none_hr_mine", "No High Roller table is open. Open one below.") : T("none_hr", "No High Roller table is open right now."))}</div>`);
+    tickSng();                                                   // (a new card's countdown shows at once, not on the next tick)
     $("cz-stat-tables").querySelector("b").textContent = fmt(all.length);
     $("cz-stat-players").querySelector("b").textContent = fmt(all.reduce((s, t) => s + (t.players || 0), 0));
     $("cz-stat-rooms").querySelector("b").textContent = fmt((j.rooms || []).length);
@@ -467,7 +539,11 @@
     // open a table: only signed in, only while that game's switch is on
     $("cz-open-bj").hidden = !j.enabled;
     $("cz-open-hm").hidden = !j.hm_enabled;
-    $("cz-open-wrap").hidden = !j.enabled && !j.hm_enabled;
+    const rlOpen = $("cz-open-rl");
+    if (rlOpen) rlOpen.hidden = !rlOn;
+    $("cz-open-wrap").hidden = !j.enabled && !j.hm_enabled && !rlOn;
+    const rlLim = (lim.roulette || null);
+    if (rlOn && rlLim && $("cz-rlmax")) $("cz-rlmax").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlLim.min_bet), spin: fmt(rlLim.max_spin) });
     for (const b of document.querySelectorAll(".cz-openbtn")) b.hidden = !signed;
     for (const b of document.querySelectorAll(".cz-signin")) b.hidden = signed;
     $("cz-bjmax").textContent = T("bj_limits_n", "Bets {min}–{max} PAT.", { min: fmt(lim.bj.min_bet), max: fmt(lim.bj.max_bet) });
@@ -494,7 +570,8 @@
       for (const b of tb.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.th === lobbyTheme));
       const cur = tlist.find((x) => x.id === lobbyTheme);
       $("cz-themenote").textContent = !cur || cur.default ? "" : T("theme_note", "Looks only: the rules, the cards, the odds and every PAT amount stay the same.") +
-        (cur.games.includes("bj") ? "" : " " + T("theme_bj_classic", "Blackjack tables open in Classic for now."));
+        (cur.games.includes("bj") ? "" : " " + T("theme_bj_classic", "Blackjack tables open in Classic for now.")) +
+        (rlOn ? " " + T("theme_rl_classic", "Roulette wheels open in Classic.") : "");   // (roulette2: a wheel opens classic - the server takes no theme)
     }
     // the 💎 card: High Rollers open tables from it; everyone else sees what it is and where the role comes from
     // 1.99sk: two sub-sections (blackjack / Hold'em), each with its limits for everyone; the pickers and buttons (.hr-only)
@@ -504,7 +581,13 @@
     const ladder = (lim.holdem.hr_ladder || []).map(([s, b]) => `${s}/${b}`);
     $("cz-hrsec-bj").hidden = !j.enabled;
     $("cz-hrsec-hm").hidden = !j.hm_enabled || !ladder.length;
-    $("cz-open-hr").classList.toggle("one", $("cz-hrsec-bj").hidden !== $("cz-hrsec-hm").hidden);
+    // roulette2 D2: the 💎 wheel's sub-section (its limits from limits.roulette.hr) while roulette is open to this viewer
+    const hrRl = $("cz-hrsec-rl"), rlHr = rlLim && rlLim.hr ? rlLim.hr : null;
+    if (hrRl) hrRl.hidden = !rlOn || !rlHr;
+    if (hrRl && !hrRl.hidden) $("cz-hrrl").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlHr.min_bet), spin: fmt(rlHr.max_spin) });
+    const shownSecs = ["cz-hrsec-bj", "cz-hrsec-hm", "cz-hrsec-rl"].filter((id) => $(id) && !$(id).hidden).length;
+    $("cz-open-hr").classList.toggle("one", shownSecs === 1);
+    $("cz-open-hr").classList.toggle("three", shownSecs === 3);
     $("cz-hrbj").textContent = T("bj_limits_n", "Bets {min}–{max} PAT.", { min: fmt(lim.bj.hr_min_bet), max: fmt(lim.bj.hr_max_bet) });
     if (ladder.length) {
       const [l0, lN] = [lim.holdem.hr_ladder[0], lim.holdem.hr_ladder[lim.holdem.hr_ladder.length - 1]];
@@ -528,7 +611,12 @@
   // idempotency key: a double click never holds twice) and Watch. Hidden on the blackjack tab and while the switch is off (unless one
   // is still open - leaving it always works).
   const mmss = (ms) => { const n = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
-  function tickSng() { const now = Date.now() - skew; for (const el of document.querySelectorAll("[data-sngdl]")) el.textContent = mmss(Number(el.dataset.sngdl) - now); }
+  // (roulette2 WP5a: + a wheel card's countdown, [data-rldl] - the lobby answer's `now` sets the skew)
+  function tickSng() {
+    const now = Date.now() - skew;
+    for (const el of document.querySelectorAll("[data-sngdl]")) el.textContent = mmss(Number(el.dataset.sngdl) - now);
+    for (const el of document.querySelectorAll("[data-rldl]")) el.textContent = mmss(Number(el.dataset.rldl) - now);
+  }
   setInterval(tickSng, 1000);
   const medal = (i) => ["🥇", "🥈", "🥉"][i] || "#" + (i + 1);
   const prizeTags = (prizes) => (prizes || []).map((p, i) => `<span class="tag" aria-label="${esc(T("sng_place_prize", "Place {n}: {amount} PAT", { n: i + 1, amount: fmt(p) }))}">${medal(i)} ${fmt(p)}</span>`).join("");
@@ -575,7 +663,7 @@
     const sg = j.sng || null;
     sngData = sg;
     const list = sg ? sg.list || [] : [];
-    sec.hidden = !sg || (!sg.on && !list.length) || lobbyTab === "bj";
+    sec.hidden = !sg || (!sg.on && !list.length) || lobbyTab === "bj" || lobbyTab === "roulette";
     if (sec.hidden) return;
     // (review: Register / Create / "Create one" only for who may enter - can_create; staff only: a member watches)
     const html = list.length ? list.map((r) => sngCard(r, sg)).join("")
@@ -664,24 +752,47 @@
   }
   async function lobby() {
     try {
-      lobbyData = await (await fetch("/api/casino/lobby", { credentials: "same-origin" })).json();
+      // roulette2 (contract 3): ?rl=1 - this script draws a wheel's row as a wheel card (an older page gets none); `now` = the
+      // server's clock for the wheels' countdowns
+      lobbyData = await (await fetch("/api/casino/lobby?rl=1", { credentials: "same-origin" })).json();
+      if (lobbyData && lobbyData.now) setSkew(lobbyData.now);
       renderLobby();
     } catch (e) { toast(T("lobby_fail", "Couldn't load the tables."), true); }
   }
-  /** g: "bj" | "holdem"; high: a 💎 High Roller table */
+  /** g: "bj" | "holdem" | "roulette"; high: a 💎 High Roller table / wheel */
+  const OPEN_BTN = { bj: ["cz-open-bj-go", "cz-open-hrbj-go"], holdem: ["cz-open-hm-go", "cz-open-hrhm-go"], roulette: ["cz-open-rl-go", "cz-open-hrrl-go"] };
   async function openTable(g, high) {
-    const btn = high ? $(g === "holdem" ? "cz-open-hrhm-go" : "cz-open-hrbj-go") : $(g === "holdem" ? "cz-open-hm-go" : "cz-open-bj-go");
+    const btn = $(OPEN_BTN[g][high ? 1 : 0]);
+    if (!btn || btn.disabled) return;
     btn.disabled = true;
-    const body = { game: g === "holdem" ? "holdem" : "bj", idem: idem() };
+    // roulette2 D1 (contract 4): {game: "roulette", hr?} opens a web wheel the viewer hosts (one at a time; 💎 for High Rollers) -
+    // the server answers 200 {ok, table} or 409 with the reason (already hosting one, the High Roller role, the casino full)
+    const body = { game: g === "holdem" ? "holdem" : g === "roulette" ? "roulette" : "bj", idem: idem() };
     if (g === "holdem") body.blinds = high ? hrBlinds : blinds;
     else if (high) body.hr = true;
-    // 1.99amf h20: the picked theme, for a game it's drawn for (the server checks the switch and the viewer again)
+    // 1.99amf h20: the picked theme, for a game it's drawn for (the server checks the switch and the viewer again); a wheel opens classic
     const th = lobbyData && lobbyData.themes && lobbyData.themes.pick ? (lobbyData.themes.list || []).find((x) => x.id === lobbyTheme) : null;
-    if (th && !th.default && th.games.includes(g === "holdem" ? "holdem" : "bj")) body.theme = th.id;
-    const j = await post("/api/casino/open", body);
-    btn.disabled = false;
-    if (j.ok && j.table) location.href = (g === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + j.table + (g === "holdem" ? "?sit=1" : "#bet");
-    else toast(j.reply || j.error || T("open_fail", "Couldn't open a table."), true);
+    if (g !== "roulette" && th && !th.default && th.games.includes(g === "holdem" ? "holdem" : "bj")) body.theme = th.id;
+    let j = {};
+    try { j = await post("/api/casino/open", body); } catch (e) { j = {}; } finally { btn.disabled = false; }
+    if (j.ok && j.table) {
+      location.href = g === "roulette" ? "/casino/roulette/t/" + encodeURIComponent(j.table)
+                    : (g === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + j.table + (g === "holdem" ? "?sit=1" : "#bet");
+    } else toast(j.reply || j.error || (g === "roulette" ? T("rl_open_fail", "Couldn't open a wheel.") : T("open_fail", "Couldn't open a table.")), true);
+  }
+  /** roulette2 (WP5a): #all / #bj / #holdem / #roulette picks the lobby's tab (the page's own game when none); a tab you pick is
+   *  written back (replaceState: no history entry), so Back from a table lands on the same tab */
+  function hashTab() {
+    const h = String((typeof location !== "undefined" && location.hash) || "").replace(/^#/, "").toLowerCase();
+    return TABS.includes(h) ? h : null;
+  }
+  function writeTab() {
+    try {
+      if (typeof history === "undefined" || !history.replaceState) return;
+      const cur = hashTab();
+      if (lobbyTab === game ? !cur : cur === lobbyTab) return;
+      history.replaceState(history.state, "", lobbyTab === game ? location.pathname + location.search : "#" + lobbyTab);
+    } catch (e) { /* (a sandboxed frame) */ }
   }
   function pickBlinds(box, set) {
     box.addEventListener("click", (e) => {
@@ -694,9 +805,11 @@
   }
   function startLobby() {
     $("cz-lobby").hidden = false;
+    lobbyTab = hashTab() || game;               // (roulette2: #roulette - the roulette tab once the lobby says roulette is open to you)
     for (const b of document.querySelectorAll(".lob-tabs button")) {
-      b.addEventListener("click", () => { lobbyTab = b.dataset.tab; renderLobby(); });
+      b.addEventListener("click", () => { lobbyTab = b.dataset.tab; writeTab(); renderLobby(); });
     }
+    if (window.addEventListener) window.addEventListener("hashchange", () => { const h = hashTab(); if (h && h !== lobbyTab) { lobbyTab = h; renderLobby(); } });
     pickBlinds($("cz-blinds"), (v) => { blinds = v; });
     pickBlinds($("cz-hrblinds"), (v) => { hrBlinds = v; });
     if ($("cz-themes")) $("cz-themes").addEventListener("click", (e) => { const b = e.target.closest("button[data-th]"); if (b) { lobbyTheme = b.dataset.th; renderLobby(); } });
@@ -704,6 +817,8 @@
     $("cz-open-hm-go").addEventListener("click", () => openTable("holdem"));
     $("cz-open-hrbj-go").addEventListener("click", () => openTable("bj", true));
     $("cz-open-hrhm-go").addEventListener("click", () => openTable("holdem", true));
+    if ($("cz-open-rl-go")) $("cz-open-rl-go").addEventListener("click", () => openTable("roulette"));
+    if ($("cz-open-hrrl-go")) $("cz-open-hrrl-go").addEventListener("click", () => openTable("roulette", true));
     wireSng();                                                // h22
     lobby();
     let tm = setInterval(lobby, 4000);
