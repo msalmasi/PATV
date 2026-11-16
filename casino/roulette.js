@@ -569,7 +569,7 @@ function install(core) {
     await tx(async () => {
       await runQuery(
         "UPDATE casino_rounds SET shoe=?,results=?,server_seed=?,revealed=? WHERE table_id=? AND round_no=?",
-        [JSON.stringify({ pocket: p, pockets: 37 }), JSON.stringify(last), r.seed, clock(), T.id, r.no],
+        [JSON.stringify({ pocket: p, pockets: 37 }), JSON.stringify(last), r.seed ?? null, clock(), T.id, r.no],
       );
       crash("round");
       for (const uid of Object.keys(results)) e.lastslip[uid] = combinedSlip(own(T, uid));
@@ -679,7 +679,7 @@ function install(core) {
     await queuedLines(T);
     await save(T);
   }
-  async function recover(T) {
+  async function finishIntent(T) {
     if (T.intent?.refund) await finishRefund(T);
     else if (T.intent) {
       const it = T.intent;
@@ -690,6 +690,28 @@ function install(core) {
       T.intent = null;
       await save(T);
     }
+  }
+  // FAIR-1 (1.99aoe): a wheel copied from another database - deploy/keep-staging-tables.js strips an open wheel's secret
+  // seed from a staging copy and marks it `copied`. That database's wheel may still take bets on this very round (the
+  // lobby can wait a day for its first bet), so the copy is never played or revealed here: a drawn spin's keyed payouts
+  // finish (its pocket was already shown there), every line on its book is refunded, and it closes with its commitment
+  // unrevealed.
+  async function retireCopy(T) {
+    await finishIntent(T);
+    if (T.round?.settle === "pending") await land(T);
+    if (T.eng.book.length) await refund(T, T.eng.book, "copy", null, null);
+    if (T.round) delete T.round.pocket;
+    T.eng.phase = "idle";
+    T.eng.pending = {};
+    T.status = "closed";
+    T.closed_at = clock();
+    T.dl = {};
+    await save(T);
+    console.log("[casino] " + T.id + ": a roulette wheel copied from another database closed unrevealed");
+  }
+  async function recover(T) {
+    if (T.copied || (T.round && !T.round.seed)) return retireCopy(T);
+    await finishIntent(T);
     if (T.eng.phase === "betting" && T.dl.bet <= clock()) {
       T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
       await save(T);

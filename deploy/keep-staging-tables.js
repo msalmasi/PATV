@@ -85,6 +85,13 @@ const SCRUB = [
   { table: "feed_voices", col: "alias", sql: "UPDATE main.feed_voices SET logins = '  ' WHERE alias IS NOT NULL AND logins IS NOT NULL AND logins <> '  '" },
   { table: "sb_clips", col: "subject_alias", sql: "UPDATE main.sb_clips SET subject_login = NULL WHERE subject_alias IS NOT NULL AND subject_login IS NOT NULL" },
 ];
+// 1.99aoe (review FAIR-1): an open roulette wheel keeps the secret seed of the round it takes bets on in casino_tables.state
+// (round.seed) - and prod's lobby wheel can wait up to a day on that round. Staging would play the copied wheel or reveal
+// its unused commitment at its public, sign-in-free /api/casino/fair while prod still takes bets on the same round. So the
+// copy never keeps that seed: it is removed (with a pre-committed next one) and the wheel is marked `copied`; staging's
+// casino closes a copied wheel at boot (casino/roulette.js retireCopy: its book refunded, its commitment never revealed).
+const CASINO_SCRUB = "UPDATE main.casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) " +
+                     "WHERE game = 'roulette' AND status = 'open' AND json_valid(state)";
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 
@@ -158,6 +165,10 @@ async function scrub(db) {
     if (!(await tableSql(db, "main", s.table)) || !(await columns(db, "main", s.table)).includes(s.col)) continue;
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0 });
+  }
+  if (await tableSql(db, "main", "casino_tables")) {                       // 1.99aoe FAIR-1: no open wheel's seed in the copy
+    const r = await run(db, CASINO_SCRUB);
+    out.push({ table: "casino_tables", scrubbed: r.changes || 0 });
   }
   return out;
 }

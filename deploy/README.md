@@ -95,7 +95,9 @@ prod's. It keeps the old copy as `myapp.db.previous`. The per-environment tables
 spans; prod's `hub_outbox` rows are dropped, and with them prod's `hub_hidden_h` set and inbound seam nonces - emptied
 before the outbox, because prod's triggers come along with the copy; 1.99add: also `hub_hidden_meta` and `hub_hidden_held`,
 while `hub_hidden_set` keeps prod's rows, so people hidden on prod stay hidden on staging). 1.99acm: prod's unfinished "Download my data" jobs
-are marked expired in the copy, so staging never zips prod members' data. If that can't be done, staging keeps its old
+are marked expired in the copy, so staging never zips prod members' data. 1.99aoe: every open roulette wheel's secret seed
+is removed from the copy and the wheel marked `copied` - staging closes it at boot (its book refunded, its commitment never
+revealed), so staging can never play or publish a round prod's wheel is still taking bets on. If that can't be done, staging keeps its old
 database. Wave 2 WP-5: the script also runs the staging checkout's `keep-staging-tables.js` when it differs from prod's, so the
 union of both lists stays staging's own (after a prod rollback, prod's older list may lack a table staging has, such as
 `evidence_clips`). A prod checkout older than WP-5 doesn't do this: after such a rollback, run the staging checkout's copy instead,
