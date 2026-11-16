@@ -438,7 +438,13 @@
       const wheel = j.roulette && j.roulette.lobby;
       wheelCard.hidden = !(j.roulette && j.roulette.on);
       const phase = wheel && (wheel.phase === "spinning" ? T("rl_spinning", "No more bets") : wheel.phase === "result" ? T("rl_result", "Result") : T("rl_open", "Bets open"));
-      $("cz-wheel-status").textContent = wheel ? T("rl_lobby_status", "{n} players · {phase}", { n: wheel.players, phase }) : "";
+      $("cz-wheel-status").textContent = wheel ? T("rl_lobby_status", { "one": "{n} player · {phase}", "other": "{n} players · {phase}" }, { n: wheel.players, phase, count: wheel.players }) : "";
+      // 1.99aoe (UI-12): with the wheel on, the lobby's header and hero name it too
+      if (j.roulette && j.roulette.on) {
+        const sub = document.querySelector(".cz-brand small"), tag = document.querySelector("#cz-lobby .lob-hero p");
+        if (sub && !tableId) sub.textContent = T("lobby_sub_rl", "Blackjack, Hold'em and roulette with your PAT");
+        if (tag) tag.textContent = T("lobby_tag_rl", "Blackjack, No-Limit Hold'em and single-zero roulette with your PAT. Play right here, or push a table to a pad's chat room so room players sit at the same felt. Every shuffle and every spin is provably fair. For fun only: PAT is points with no cash value, and every win is paid in PAT.");
+      }
     }
     const all = j.tables || [];
     const me = j.me || null;
@@ -925,10 +931,18 @@
    *  opts.first: a query string for the first request only (1.99aoe: the wheel's "?notice=1" - its one-time notice) */
   function startTable(render, opts) {
     $("cz-table").hidden = false;
-    let stopped = false, busy = false, timer = null, lastD = null, first = (opts && opts.first) || "";
-    async function refresh() {
-      if (busy) return;
-      busy = true;
+    let stopped = false, running = null, again = null, timer = null, lastD = null, first = (opts && opts.first) || "";
+    // 1.99aoe (UI-14): a refresh asked for while one is out (a move's "show me now") runs once more after it, so it resolves on a
+    // state from after the call - a stale answer never repaints a just-placed chip away
+    function refresh() {
+      if (running) {
+        if (!again) again = running.then(() => { again = null; return refresh(); });
+        return again;
+      }
+      running = load().finally(() => { running = null; });
+      return running;
+    }
+    async function load() {
       try {
         const q = first;
         first = "";
@@ -955,7 +969,6 @@
         balance(d.me ? d.me.balance : null);
         watching(d.watching);
       } catch (e) { /* the next tick tries again */ }
-      finally { busy = false; }
     }
     // (h22 phase 2: a scheduled tournament's table polls every 2 s while it isn't your turn - many players poll the same tables)
     const slow = () => !!(lastD && lastD.table && lastD.table.tourney && lastD.table.tourney.kind === "mtt" && !(lastD.me && lastD.me.my_turn));

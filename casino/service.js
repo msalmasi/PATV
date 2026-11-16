@@ -768,7 +768,7 @@ async function cmdStart(actor, room, game, blinds, words) {
   const here = room ? open.find((t) => roomsOf(t).includes(room)) : null;      // one table per room (either game; 1.99ox: any attached room)
   if (here) {
     // (h22 review: a sit & go here isn't "!sit to join" - a buy-in amount is no entry there)
-    return R(false, here.game === "roulette" ? "A roulette wheel is open here — !rl status."
+    return R(false, here.game === "roulette" ? "a 🛞 roulette wheel is open here (one table per room) — !rl help"
                     : here.tourney ? "a 🏁 Sit & Go is open here (one table per room) — !sng info shows it."
                     : here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
                                              : "a blackjack table is already open — !bet to play.");
@@ -1152,7 +1152,7 @@ async function push(tableId, room, actor, mode) {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
     if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)
-    if (T.lobby) return R(false, "The lobby wheel stays on the web.");
+    if (T.lobby) return R(false, "The lobby wheel stays on the web — open a room wheel with !rl start.");
     if (T.game === "roulette" && await RL.shut(actor)) return R(false, "The wheel is closed.");
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can move it.");
     const cur = roomsOf(T);
@@ -1407,7 +1407,7 @@ function findRoom(q) {
 }
 /** on: advertise the table in `room` (posts the line now); off: stop. Host or admin. */
 async function advertiseIn(T, room, actor, on) {
-  if (T?.lobby) return R(false, "The lobby wheel stays on the web.");
+  if (T?.lobby) return R(false, "The lobby wheel stays on the web — open a room wheel with !rl start.");
   if (T?.game === "roulette" && await RL.shut(actor)) return R(false, "The wheel is closed.");
   if (!T || T.status !== "open") return R(false, "That table has closed.");
   if (isMttTable(T)) return R(false, "Tournament tables are run by the tournament.");      // (h22 phase 2)

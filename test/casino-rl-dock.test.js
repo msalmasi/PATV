@@ -102,3 +102,56 @@ test("UI-13 / UI-9 / UI-3: an idle ring holds a dash, the small links and inputs
   assert.match(lobby, /#cz-roulette > a \{[^}]*min-height: 44px/);
   assert.match(read("public/js/casinorl.js"), /matchMedia\("\(max-width:639px\), \(pointer:coarse\)"\)/);
 });
+
+function postBodies(D) {
+  return D.W.fetched.filter((f) => f.opts && f.opts.method === "POST").map((f) => JSON.parse(f.opts.body));
+}
+test("UI-4 / UI-5 / UI-11: a burst of chips goes as one line; mid-spin chips join the queued line; slips read in the felt's words", async () => {
+  let me = { lines: [{ text: "c2 100 · low 100", amount: 200 }], staked: 200, pending: null };
+  let phase = "betting";
+  const D = await dock({
+    pad: () => ({ ok: true, table: LOBBY, here: false }),
+    table: () => view(LOBBY, phase, me),
+  });
+  const W = D.W;
+  W.fetch = ((orig) => async (url, opts) => (opts && opts.method === "POST" ? (W.fetched.push({ url, opts }), { status: 200, json: async () => ({ ok: true, reply: "ok" }) }) : orig(url, opts)))(W.fetch);
+  assert.equal(D.q(".rl-own").textContent, "Column 2 100 · 1–18 100", "UI-11: the felt's labels, not c2 / low");
+  const red = D.box.querySelectorAll("button").find((b) => b.textContent === "◆ Red"),
+    odd = D.box.querySelectorAll("button").find((b) => b.textContent === "Odd");
+  red.click();
+  odd.click();
+  const t = W.timers.filter((x) => !x.done).pop();
+  assert.equal(t.ms, 900, "UI-4: the batch waits 900 ms after the last chip (it was 300)");
+  t.done = true;
+  await t.fn();
+  await W.settle();
+  assert.deepEqual(postBodies(D).at(-1).bets, [{ b: "red", a: "100" }, { b: "odd", a: "100" }], "one line for the burst");
+  // UI-5: mid-spin the queued line comes along with the new chip
+  phase = "spinning";
+  me = { lines: [], staked: 300, pending: "black 200 · 17 100" };
+  await W.tick();
+  await W.settle();
+  assert.match(D.q(".rl-own").textContent, /Next spin: black 200 · 17 100/);
+  red.click();
+  const t2 = W.timers.filter((x) => !x.done && x.ms === 900).pop();
+  t2.done = true;
+  await t2.fn();
+  await W.settle();
+  assert.deepEqual(postBodies(D).at(-1).bets, [{ b: "black", a: "200" }, { b: "17", a: "100" }, { b: "red", a: "100" }]);
+});
+
+test("UI-6 / UI-7 / UI-8 / UI-12 / UI-14: sign-in prompt, plural counts, spoken labels, lobby copy, a refresh that waits for a fresh state", () => {
+  const read = (f) => fs.readFileSync(path.join(repo, f), "utf8");
+  const page = read("public/js/casinorl.js"),
+    ui = read("public/js/casino-ui.js"),
+    en = JSON.parse(read("locales/en.json"));
+  assert.match(page, /if \(!CZ\.signed\) \{[\s\S]{0,200}login\.href = "\/login"[\s\S]{0,200}T\("watching_signin"/);
+  assert.deepEqual(en["js.casino.rl_totals"], { one: "{players} player · {pat} PAT this spin", other: "{players} players · {pat} PAT this spin" });
+  assert.deepEqual(en["js.casino.rl_lobby_status"], { one: "{n} player · {phase}", other: "{n} players · {phase}" });
+  assert.match(page, /count: t\.totals\.players/);
+  assert.match(ui, /count: wheel\.players/);
+  assert.match(page, /spot: p\.kind === "straight" \? word\(\+token\) : felt\[token\] \|\| token,\s*kind: kinds\[p\.kind\]/);
+  for (const k of ["rl_trio", "rl_first_four", "rl_dozen", "rl_column", "rl_even_money", "lobby_sub_rl", "lobby_tag_rl"]) assert.ok(en["js.casino." + k], k);
+  assert.match(en["js.casino.lobby_tag_rl"], /roulette/);
+  assert.match(ui, /if \(running\) \{\s*if \(!again\) again = running\.then/);
+});

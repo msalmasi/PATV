@@ -21,7 +21,7 @@ test("MONEY-1: Rebet while a spin is in the air repeats that spin's slip (queued
   assert.equal((await svc.meView(T, "a")).last_slip, "red 100");
   const out = expect(await act(T, "a", "rebet"));
   assert.match(out.reply, /red 100/);
-  assert.doesNotMatch(out.reply, /17 5000/);
+  assert.doesNotMatch(out.reply, /17 5,?000/);
   await tick(8000);
   assert.equal((await svc.meView(T, "a")).last_slip, "red 100", "at the result: the spin that landed");
   const landed = await cash("a");

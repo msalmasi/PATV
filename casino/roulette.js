@@ -77,7 +77,12 @@ const HELP =
   "🛞 Use !rl with a bet and an amount, like red 500, 17 100, or 17-18 100. Try bets, undo, clear, again, limits, last, fair, go or end. !rl go spins a wheel you bet on alone. !spin is the separate prize wheel.";
 const sum = (list) => list.reduce((a, b) => a + b, 0);
 const amountOf = (bets) => sum(bets.map((b) => b.amount));
-const describe = (bets) => bets.map((b) => grammar.token(b) + " " + b.amount).join(" · ");
+// UI-11: a web reply names dozens, columns and low / high as the felt does; Pepe's (and every text the page parses back -
+// meView lines, the queued line, the last slip) keeps the tokens. SUITES-9: amounts read like the totals (1,000).
+const LABELS = { d1: "1st dozen", d2: "2nd dozen", d3: "3rd dozen", c1: "column 1", c2: "column 2", c3: "column 3", low: "1–18", high: "19–36" };
+const label = (token, web) => (web && LABELS[token]) || token;
+const thousands = (n) => Math.trunc(Number(n) || 0).toLocaleString("en-US");
+const describe = (bets, web) => bets.map((b) => label(grammar.token(b), web) + " " + thousands(b.amount)).join(" · ");
 function pocketText(p) {
   if (p === 0) return "🟢 0 — zero";
   return (
@@ -89,9 +94,9 @@ function pocketText(p) {
     (p % 2 ? "odd" : "even") +
     " · " +
     (p <= 18 ? "low" : "high") +
-    " · dozen " +
-    Math.ceil(p / 12) +
-    " · column " +
+    " · " +
+    ["1st", "2nd", "3rd"][Math.ceil(p / 12) - 1] +
+    " dozen · column " +
     (((p - 1) % 3) + 1)
   );
 }
@@ -308,14 +313,14 @@ function install(core) {
   }
   // The per-position, position-count and per-spin limits of a line on top of the player's lines (none for a queued
   // line: it opens the player's next spin). -> {why} | {amounts: token -> the player's total on it}
-  function lineLimits(bets, lines) {
+  function lineLimits(bets, lines, web) {
     const s = S.settings,
       amounts = new Map();
     for (const b of lines.flatMap((l) => l.bets)) amounts.set(b.token, (amounts.get(b.token) || 0) + b.amount);
     for (const b of bets) {
       const amount = (amounts.get(b.token) || 0) + b.amount;
       if (!Number.isSafeInteger(b.amount) || b.amount < s.rl_min_bet || amount > capFor(b))
-        return { why: "The limit on " + b.token + " is " + fmt(capFor(b)) + " PAT, minimum " + fmt(s.rl_min_bet) + "." };
+        return { why: "The limit on " + label(b.token, web) + " is " + fmt(capFor(b)) + " PAT, minimum " + fmt(s.rl_min_bet) + "." };
       amounts.set(b.token, amount);
     }
     if (amounts.size > s.rl_max_positions || sum([...amounts.values()]) > s.rl_max_spin)
@@ -329,7 +334,7 @@ function install(core) {
     if (!own(T, uid).length && Object.keys(T.escrowed).length >= s.rl_max_players)
       return "The wheel has reached its player limit.";
     if ((e.actions[uid] || 0) >= s.rl_max_lines) return "You've reached the action limit this spin.";
-    const limited = lineLimits(bets, own(T, uid));
+    const limited = lineLimits(bets, own(T, uid), actor.via === "web");
     if (limited.why) return limited.why;
     const { closed, room } = await available(T);
     if (closed) return "The wheel's bank is closed right now.";
@@ -385,7 +390,7 @@ function install(core) {
         return reply(false, "🛞 This wheel closes after this spin — no new bets. !rl start opens a new one then.");
       if (!e.pending[uid] && Object.keys(e.pending).length >= S.settings.rl_max_players)
         return reply(false, "The next spin is full.");
-      const limited = lineLimits(bets, []);
+      const limited = lineLimits(bets, [], actor.via === "web");
       if (limited.why) return reply(false, limited.why);
       const u = await userRow(uid);
       if (!u || !(Number(u.points_balance) >= amountOf(bets)))
@@ -398,8 +403,8 @@ function install(core) {
         T,
         reply(
           true,
-          (previous ? "Replaced your queued line: " : "Queued for the next spin: ") +
-            describe(bets) +
+          (previous ? "⏳ Replaced your queued line: " : "⏳ Queued for the next spin: ") +
+            describe(bets, actor.via === "web") +
             " (charged when betting opens).",
         ),
         uid,
@@ -439,7 +444,7 @@ function install(core) {
     const ans = reply(
       true,
       "✅ On the wheel: " +
-        describe(bets) +
+        describe(bets, actor.via === "web") +
         " — " +
         fmt(T.escrowed[uid]) +
         " PAT on this spin from you (spins in " +
@@ -977,7 +982,7 @@ function install(core) {
       return reply(true, "Wheel closed.", { quiet: true, pm: false });
     }
     if (verb === "advertise" || verb === "unadvertise") {
-      if (T.lobby) return reply(false, "The lobby wheel stays on the web.");
+      if (T.lobby) return reply(false, "The lobby wheel stays on the web — open a room wheel with !rl start.");
       const out = await advertCmd(T, actor, verb, args);
       return { ...out, quiet: out.ok, pm: !out.ok };
     }

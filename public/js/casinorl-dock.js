@@ -30,12 +30,22 @@
       });
     });
   }
+  // UI-11: a slip reads in the felt's words (1–12, Column 2, 1–18), not the grammar's tokens (d1, c2, low)
   function receipt(bets) {
     return bets
       .map(function (b) {
-        return b.token + " " + b.amount.toLocaleString();
+        return (feltName[b.token] || b.token) + " " + b.amount.toLocaleString();
       })
       .join(" · ");
+  }
+  function shown(text) {
+    var bets = String(text || "")
+      .split(" · ")
+      .flatMap(function (position) {
+        var parsed = grammar.parse(position, { maxPairs: 20, minBet: 1 });
+        return parsed.ok ? parsed.bets : [];
+      });
+    return bets.length ? receipt(bets) : text;
   }
   function phase(t) {
     if (t.phase === "idle" || t.phase === "betting") return T("rl_open", "Bets open");
@@ -63,6 +73,11 @@
     ["c2", T("rl_col", "Column {n}", { n: 2 })],
     ["c3", T("rl_col", "Column {n}", { n: 3 })],
   ];
+  // (the coded tokens only - red / black / even / odd read as they are)
+  var feltName = {};
+  outside.forEach(function (p) {
+    if (/^(?:[dc][123]|low|high)$/.test(p[0])) feltName[p[0]] = p[1];
+  });
   function controls(box, opts) {
     var chip = 100,
       snapshot = null,
@@ -175,9 +190,9 @@
       input.disabled = !eligible();
       previewLine();
       var texts = ((me && me.lines) || []).map(function (l) {
-        return l.text;
+        return shown(l.text);
       });
-      if (me && me.pending) texts.push(T("rl_queued", "Next spin: {line}", { line: me.pending }));
+      if (me && me.pending) texts.push(T("rl_queued", "Next spin: {line}", { line: shown(me.pending) }));
       // UI-2: the Dock sheet has no felt or net line of its own - its result says the player's own net here
       if (opts.compact && me && t.phase === "result" && typeof me.net === "number")
         texts.unshift(T("rl_net", "Your net {n} PAT", { n: (me.net > 0 ? "+" : "") + me.net.toLocaleString() }));
@@ -219,14 +234,31 @@
         }
       }
     }
+    // UI-5: one queued line per player, and a new one replaces it - while the wheel spins (or shows its result) the felt's
+    // chips are added to the queued line and sent as one
+    function queuedBets() {
+      var me = snapshot && snapshot.me,
+        t = snapshot && snapshot.table;
+      if (!me || !me.pending || !t || (t.phase !== "spinning" && t.phase !== "result")) return [];
+      return accountLines({ lines: [{ text: me.pending }] })[0].map(function (b) {
+        return { b: b.token, a: String(b.amount) };
+      });
+    }
     function flush() {
       if (busy || stopped || !pending.length) return;
-      flight = pending.splice(0, 20);
-      void send("bet", { bets: flight });
+      var queued = queuedBets();
+      if (queued.length >= 20) queued = [];
+      flight = pending.splice(0, 20 - queued.length);
+      void send("bet", { bets: queued.concat(flight) });
     }
+    // UI-4: chips placed in a burst go as one line (each line is one of the spin's actions, rl_max_lines): the batch waits
+    // BATCH_MS after the last chip, 20 chips go at once, and a window about to close is never missed
+    var BATCH_MS = 900;
     function schedule() {
       clearTimeout(timer);
-      timer = setTimeout(flush, 300);
+      var t = snapshot && snapshot.table,
+        left = t && t.phase === "betting" && t.deadline ? t.deadline - (Date.now() - clock) - 1500 : BATCH_MS;
+      timer = setTimeout(flush, Math.max(0, Math.min(BATCH_MS, left)));
     }
     function place(token) {
       if (!available()) return;
@@ -240,7 +272,10 @@
       }
       pending.push({ b: token, a: String(chip) });
       updateControls();
-      schedule();
+      if (pending.length >= 20) {
+        clearTimeout(timer);
+        flush();
+      } else schedule();
     }
     function undoPosition(token) {
       var lines = accountLines(snapshot && snapshot.me),

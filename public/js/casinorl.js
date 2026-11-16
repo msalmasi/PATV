@@ -101,6 +101,19 @@
     corner: T("rl_corner", "Corner"),
     line: T("rl_six", "Line"),
   };
+  var kinds = Object.assign(
+    {
+      trio: T("rl_trio", "Trio"),
+      first_four: T("rl_first_four", "First four"),
+      dozen: T("rl_dozen", "Dozen"),
+      column: T("rl_column", "Column"),
+    },
+    names,
+  );
+  var felt = {};
+  R.outside.forEach(function (p) {
+    if (/^(?:[dc][123]|low|high)$/.test(p[0])) felt[p[0]] = p[1];      // (red / even ... read as they are)
+  });
   function choose(n) {
     if (!compact.matches || mode === "straight") {
       controls.place(String(n));
@@ -279,9 +292,10 @@
       var st = own[token] || 0,
         p = G.positions[token],
         amount = st + (unpaid[token] || 0);
+      // UI-8: what a screen reader says - the felt's own words, never the internal kind or token (first_four, d1, c2)
       var label = T("rl_position", "{spot}, {kind} pays {odds} to 1, your bet {n} PAT", {
-        spot: p.kind === "straight" ? word(+token) : token,
-        kind: p.kind,
+        spot: p.kind === "straight" ? word(+token) : felt[token] || token,
+        kind: kinds[p.kind] || T("rl_even_money", "Even money"),
         odds: p.odds,
         n: CZ.fmt(st),
       });
@@ -330,10 +344,11 @@
       rotor.style.transform = "rotate(" + angle + "deg)";
     }
     $("rl-totals").hidden = !!result;
-    $("rl-totals").textContent = T("rl_totals", "{players} players · {pat} PAT this spin", {
-      players: t.totals.players,
-      pat: CZ.fmt(t.totals.staked),
-    });
+    $("rl-totals").textContent = T(
+      "rl_totals",
+      { "one": "{players} player · {pat} PAT this spin", "other": "{players} players · {pat} PAT this spin" },
+      { players: t.totals.players, pat: CZ.fmt(t.totals.staked), count: t.totals.players },
+    );
     var net =
       result && me && typeof me.net === "number"
         ? T("rl_net", "Your net {n} PAT", { n: (me.net > 0 ? "+" : "") + CZ.fmt(me.net) })
@@ -378,6 +393,16 @@
     );
   drawWheel();
   paintBoard();
+  // UI-6: a signed-out viewer watches - say so, with the way in (the blackjack table's words)
+  if (!CZ.signed) {
+    var signin = document.createElement("p"),
+      login = document.createElement("a");
+    signin.className = "rl-signin";
+    login.href = "/login";
+    login.textContent = T("signin_play", "Sign in to play");
+    signin.append("👁 " + T("watching_signin", "You're watching.") + " ", login);
+    $("cz-dock").append(signin);
+  }
   controls = R.controls($("cz-dock"), {
     id: CZ.tableId,
     refresh: function () {
