@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Roulette wheel demo</title>
+<style>
+  :root { --felt0: #0a3a1f; --felt1: #12673a; --rail: #5a3418; --gold: #e8c46a; --txt: #eef5ef; --mut: #a9bfae;
+          --panel: rgba(8, 20, 13, .72); --line: rgba(126, 224, 138, .22); color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { min-height: 100vh; background: radial-gradient(ellipse at 50% 20%, var(--felt1), var(--felt0) 70%) fixed; color: var(--txt);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+  main { max-width: 1160px; margin: 0 auto; padding: 18px 16px 40px; }
+  h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: .01em; }
+  p.lede { margin: 0 0 16px; color: var(--mut); max-width: 70ch; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--gold); }
+  .wheel { display: block; width: min(100%, 460px); aspect-ratio: 1; margin: 0 auto; }
+  .tiltbox { perspective: 1200px; padding: 6px 0 0; }
+  .mini { width: min(40vw, 160px); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 0 0 10px; }
+  label { color: var(--mut); font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+  select, input[type=range] { accent-color: var(--gold); }
+  select { background: #0c2416; color: var(--txt); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+  button { font: inherit; font-weight: 600; color: #1d1405; background: linear-gradient(180deg, #f4d58a, #c99a3e); border: 0; border-radius: 9px;
+           padding: 9px 14px; cursor: pointer; touch-action: manipulation; }
+  button.ghost { background: transparent; color: var(--txt); border: 1px solid var(--line); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 14px; }
+  dt { color: var(--mut); }
+  dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  #log { margin: 8px 0 0; padding: 0; list-style: none; font: 13px/1.5 ui-monospace, Consolas, monospace; color: var(--mut); min-height: 6em; }
+  .minirow { display: flex; gap: 16px; align-items: center; margin-top: 12px; }
+  .minirow .wheel { margin: 0; flex: none; }
+  .note { color: var(--mut); font-size: 13px; margin: 10px 0 0; }
+  #err { background: #5a1212; border-radius: 10px; padding: 10px 12px; }
+  @media (max-width: 720px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+    .tiltcard { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Roulette wheel demo</h1>
+  <p class="lede">A preview of the shared wheel and ball module (<code>/api/casino/rlwheel.js</code>). Nothing here is a real
+    table: the pocket is picked on this page, no PAT moves, and on a real table the server decides the pocket before the ball is shown.</p>
+  <p id="err" hidden>The wheel module did not load.</p>
+  <div class="stage">
+    <section class="card" aria-labelledby="h-top">
+      <h2 id="h-top">Top-down (phones)</h2>
+      <canvas id="w-big" class="wheel"></canvas>
+      <div class="row" style="margin-top:12px">
+        <label>Pocket <select id="pocket"><option value="r">Random</option></select></label>
+        <label>Spin length <input id="secs" type="range" min="4" max="20" step="1" value="12"> <span id="secs-v">12 s</span></label>
+      </div>
+      <div class="row">
+        <button id="b-spin" type="button">Spin</button>
+        <button id="b-late" type="button" class="ghost">Join mid-spin</button>
+        <button id="b-early" type="button" class="ghost">Result arrives early</button>
+        <button id="b-idle" type="button" class="ghost">Bets open</button>
+      </div>
+      <div class="row">
+        <label><input id="auto" type="checkbox"> Auto-cycle</label>
+        <label><input id="reduced" type="checkbox"> Reduced motion</label>
+        <label>Look <select id="pal"><option value="classic">Classic</option><option value="hr">High Roller</option></select></label>
+      </div>
+    </section>
+    <section class="card tiltcard" aria-labelledby="h-tilt">
+      <h2 id="h-tilt">Tilted (desktop, CSS rotateX)</h2>
+      <div class="tiltbox"><canvas id="w-tilt" class="wheel"></canvas></div>
+    </section>
+    <section class="card" aria-labelledby="h-plan">
+      <h2 id="h-plan">This spin</h2>
+      <dl>
+        <dt>Phase</dt><dd id="o-phase">bets open</dd>
+        <dt>Pocket</dt><dd id="o-pocket">-</dd>
+        <dt>Settles</dt><dd id="o-settle">-</dd>
+        <dt>Slot / shift</dt><dd id="o-sk">-</dd>
+        <dt>Diamonds / hops</dt><dd id="o-dh">-</dd>
+        <dt>plan()</dt><dd id="o-ms">-</dd>
+      </dl>
+      <ul id="log" aria-live="off"></ul>
+      <div class="minirow">
+        <canvas id="w-mini" class="wheel mini"></canvas>
+        <p class="note">Compact mini wheel (the phone's pinned wheel while the big one is scrolled away).</p>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/api/casino/rlwheel.js?v=1"></script>
+<script src="/public/js/rlwheel-demo.js?v=1"></script>
+</body>
+</html>

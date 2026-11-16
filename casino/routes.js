@@ -162,6 +162,7 @@ async function history(tableId, limit) {
 function register(app, { isBotToken, addUser, discordBridge }) {
   svc.setDiscordBridge(discordBridge);     // h22 phase 2: the tournament channel posts (index.js discordBridge)
   app.get("/api/casino/rlbets.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "rlbets.js")));
+  app.get("/api/casino/rlwheel.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "rlwheel.js")));
   app.get("/api/casino/sizing.js", (req, res) => res.type("application/javascript").sendFile(path.join(__dirname, "sizing.js")));
   // 1.99alq train3 verify: every call scans the account's finished rounds - HANDS_PER_MIN a minute per account (the panel asks
   // when it opens; a script looping on it was unlimited database work)
