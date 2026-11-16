@@ -8439,6 +8439,7 @@
   "casino.fair.rl_client": "Client seed",
   "casino.fair.rl_server": "Revealed server seed",
   "casino.fair.rl_pocket": "Recorded pocket",
+  "casino.fair.rl_result": "Paid result",
   "casino.fair.rl_wait": "Waiting for the seed reveal.",
   "casino.fair.rl_verified": "Verified. The seed matches the commitment and rebuilds the recorded pocket.",
   "casino.fair.rl_mismatch": "Mismatch. The published record could not be verified.",

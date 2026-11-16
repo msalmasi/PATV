@@ -222,13 +222,17 @@ async function save(T) {
                   ON CONFLICT(id) DO UPDATE SET status = excluded.status, room = excluded.room, state = excluded.state,
                     rev = excluded.rev, updated = excluded.updated`,
                  [T.id, T.game, T.status, T.room, T.host.uid, JSON.stringify(T), T.rev, T.created, T.updated]);
-  if (!mttQuiet(T)) wake();
+  if (!mttQuiet(T) && !quietWheel(T)) wake();
 }
 // h22 phase 2: a scheduled tournament's table plays in no room - its events reach nobody but its own log (the only reader of casino_events
 // is Pepe's poll, rooms only), and Pepe's long-poll is woken for it only when it is on the stream slot or a room player sits there
 const isMttTable = (T) => !!(T && T.tourney && T.tourney.kind === "mtt");
 const mttQuiet = (T, extra) => isMttTable(T) && !roomsOf(T).length && !(extra && Array.isArray(extra.rooms) && extra.rooms.length) &&
                                S.stream.table !== T.id && !T.eng.seats.some((k) => (T.players[k] || {}).via === "room");
+// 1.99aoe (ENGINE-6): a web-only wheel (the lobby, or a room wheel with no room left) - its events reach no room, so nothing of it is for
+// Pepe's poll (rooms only) unless it is on the stream slot: no casino_events row (below) and no early wake of his long-poll
+const quietWheel = (T, extra) => !!T && T.game === "roulette" && !roomsOf(T).length && !(extra && Array.isArray(extra.rooms) && extra.rooms.length) &&
+                                 S.stream.table !== T.id;
 
 // ── events (the cursor Pepe long-polls; public only) ──
 async function emit(T, kind, text, extra) {
@@ -237,7 +241,7 @@ async function emit(T, kind, text, extra) {
   const rs = roomsOf(T);
   // 1.99ajw casino2 rework (casino/veil.js): Pepe's Camfrog line - a masked player who plays from the website is their label there too
   const data = Object.assign({ text: text ? V.maskText(T, String(text), { webOnly: true, fresh: true }) : "" }, rs.length > 1 ? { rooms: rs } : {}, T.game === "roulette" ? { game: "roulette" } : {}, extra || {});
-  const quiet = isMttTable(T) && !rs.length && !(Array.isArray(data.rooms) && data.rooms.length);
+  const quiet = (isMttTable(T) || T.game === "roulette") && !rs.length && !(Array.isArray(data.rooms) && data.rooms.length);
   if (!quiet) {
     const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
                              [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
@@ -248,7 +252,7 @@ async function emit(T, kind, text, extra) {
     T.log.push({ ts, text: V.maskText(T, String(text), { fresh: true }).slice(0, 240) });   // (verify: fresh - the labels in force)
     if (T.log.length > C.LOG_KEEP) T.log.splice(0, T.log.length - C.LOG_KEEP);
   }
-  if (!mttQuiet(T, extra)) wake();
+  if (!mttQuiet(T, extra) && !quietWheel(T, extra)) wake();
 }
 /** h22 phase 2: an event that belongs to no table (a scheduled tournament's room line: table_id = the tournament's id, kind "mtt") */
 async function emitRaw(tableId, room, kind, data) {
@@ -660,7 +664,8 @@ async function tickOnce() {
       }
     });
   }
-  if (S.settings.casino_roulette !== "off") await locked(() => RL.ensureLobby());
+  // (1.99aoe MONEY-6 / ENGINE-7: a failing lobby creation never skips the stream and tournament steps; the next tick tries again)
+  if (S.settings.casino_roulette !== "off") await locked(() => RL.ensureLobby()).catch((e) => console.error("[casino] lobby wheel:", e));
   await locked(() => streamTick()).catch((e) => console.error("[casino] stream:", e));
   if (MT.due()) await locked(() => MT.tick()).catch((e) => console.error("[casino] mtt:", e));     // h22 phase 2: the scheduled tournaments' clock
   // housekeeping: old events
@@ -728,7 +733,8 @@ async function boot({ tick = true } = {}) {
     }
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
     await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
-    await locked(() => RL.ensureLobby());
+    // (1.99aoe MONEY-6 / SECURITY-4: one failed lobby creation never leaves boot rejected - boot() is memoized; the tick retries it)
+    await locked(() => RL.ensureLobby()).catch((e) => console.error("[casino] lobby wheel:", e));
     if (tick && !S.tick) {
       let busy = false;
       S.tick = setInterval(() => {
@@ -1598,7 +1604,7 @@ const ROUTE = {
   outNow: (T, uid) => { const k = routeOf(T); return k && k.outNow ? k.outNow(T, uid) : null; },
 };
 const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
-  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T)) wake(); } });
+  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); } });
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),

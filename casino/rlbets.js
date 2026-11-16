@@ -153,10 +153,17 @@
             return refusal("The bet comes first.", amountWord + " " + word);
           var first = Number(word.split("-")[0]);
           if (word.indexOf("-") >= 0 && Number.isInteger(first) && first >= 0 && first <= 36) {
-            var splits = Object.keys(positions).filter(function (k) {
-              var p = positions[k];
-              return p.kind === "split" && p.nums.indexOf(first) >= 0;
-            });
+            var other = function (k) {
+              return positions[k].nums[0] === first ? positions[k].nums[1] : positions[k].nums[0];
+            };
+            var splits = Object.keys(positions)
+              .filter(function (k) {
+                var p = positions[k];
+                return p.kind === "split" && p.nums.indexOf(first) >= 0;
+              })
+              .sort(function (a, b) {
+                return other(a) - other(b);
+              });
             return refusal(
               "Invalid combination: " + word,
               "Splits on " + first + ": " + splits.join(", ") + ".",
@@ -169,6 +176,9 @@
         }
         if (amountWord == null) return refusal("How much on " + word + "?", word + " " + minimum);
         var amount = getAmount().parse(amountWord);
+        // an amount written as one (digits, thousands groups, k / m / b) that the parser can't hold is too large, not small
+        if (Number.isNaN(amount) && /^(?:\d{1,3}(?:,\d{3})+|\d+(?:_\d+)*)(?:\.\d+)?[kmb]?$/i.test(amountWord))
+          return refusal("Amount too large.", "Try a smaller amount.");
         if (!Number.isSafeInteger(amount) || amount < minimum) {
           var split = lookup(word + "-" + amountWord);
           return refusal(

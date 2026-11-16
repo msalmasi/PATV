@@ -75,6 +75,15 @@ const QUIET_VERBS = new Set(["check", "call", "fold", "raise", "bet", "allin", "
 const IDEM = /^[\w:.\-]{8,100}$/;
 const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
 
+// 1.99aoe (SECURITY-7): the Room Dock's pad lookup per account - its 2 s poll plus a refresh after each action fit well inside
+const PAD_N = 30, PAD_MS = 10000, padHits = new Map();
+function padRateOk(uid) {
+  const now = Date.now(), q = (padHits.get(uid) || []).filter((t) => now - t < PAD_MS);
+  if (q.length >= PAD_N) { padHits.set(uid, q); return false; }
+  q.push(now); padHits.set(uid, q);
+  if (padHits.size > 5000) padHits.delete(padHits.keys().next().value);
+  return true;
+}
 /** tablechat: the request's network for a network ban (netban.reqNet - the trusted proxy's address only; null = unknown) */
 function netOf(req) { try { return require("../netban").reqNet(req); } catch (e) { return null; } }
 function clientIp(req) {
@@ -265,6 +274,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
 
   app.get("/api/casino/roulette/pad/:slug", addUser, async (req, res) => {
     res.set("Cache-Control", "private, no-store");
+    if (req.user?.userId && !padRateOk(req.user.userId)) return res.status(429).json({ ok: false, error: "Slow down." });
     await svc.boot();
     if (!req.user?.userId || await svc.RL.shut({ uid: req.user.userId })) return res.status(404).json({ ok: false });
     const bridge = require("../bridge"), R = bridge.bySlug(req.params.slug);
@@ -274,7 +284,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (local?.game === "roulette") wheel = local;
     }
     const here = !!wheel;
-    if (!wheel) wheel = await svc.locked(() => svc.RL.ensureLobby());
+    // (1.99aoe SECURITY-7: the open lobby is read without the casino lock; the lock is taken only to open one)
+    if (!wheel) wheel = svc.RL.openLobby() || await svc.locked(() => svc.RL.ensureLobby());
     if (!wheel) return res.status(404).json({ ok: false });
     res.json({ ok: true, table: wheel.id, here });
   });
@@ -364,8 +375,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     res.set("Cache-Control", "no-store");
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     try {
-      const T = svc.getTable(req.params.id);
-      if (T?.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId })) return res.status(404).json({ ok: false });
+      // (1.99aoe SECURITY-3: a wheel that has left memory is still a wheel - its game from casino_tables)
+      const game = svc.getTable(req.params.id)?.game || (await getQuery("SELECT game FROM casino_tables WHERE id = ?", [req.params.id]).catch(() => []))[0]?.game;
+      if (game === "roulette" && await svc.RL.shut({ uid: req.user?.userId })) return res.status(404).json({ ok: false });
       res.json({ ok: true, rounds: await history(req.params.id, req.query.limit) });
     } catch (e) {
       console.error("[casino] history:", e);
@@ -611,10 +623,14 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override));
   });
 
-  app.get("/api/casino/fair/:id/:round", async (req, res) => {
+  app.get("/api/casino/fair/:id/:round", addUser, async (req, res) => {
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false });
     const rec = await svc.fairRecord(req.params.id, req.params.round);
     if (!rec) return res.status(404).json({ ok: false, error: "No such round." });
+    // 1.99aoe (SECURITY-3): a staff-only wheel's spins answer only the people its gate lets in, like its table view. Switched
+    // off, every past spin stays verifiable (the proof links already posted in rooms keep working).
+    if (rec.game === "roulette" && (await svc.loadSettings()).casino_roulette === "staff" && await svc.RL.shut({ uid: req.user?.userId }))
+      return res.status(404).json({ ok: false, error: "No such round." });
     res.json(Object.assign({ ok: true }, rec));
   });
 

@@ -81,9 +81,11 @@
       if (!j.server_seed) { check.textContent = <%- JSON.stringify(t('casino.fair.rl_wait')).replace(/</g,'\\u003c') %>; return; }
       label(<%- JSON.stringify(t('casino.fair.rl_server')).replace(/</g,'\\u003c') %>, j.server_seed);
       label(<%- JSON.stringify(t('casino.fair.rl_pocket')).replace(/</g,'\\u003c') %>, j.shoe && j.shoe.pocket);
+      if (j.results) label(<%- JSON.stringify(t('casino.fair.rl_result')).replace(/</g,'\\u003c') %>, j.results.number);
       var hash = hex(await crypto.subtle.digest("SHA-256", enc.encode(j.server_seed)));
       var spin = await pocket(j.server_seed, j.client_seed, j.round);
-      var matches = hash === j.commitment && j.shoe && j.shoe.pockets === 37 && spin === j.shoe.pocket;
+      // (1.99aoe FAIR-5: and the paid result - the number the history shows - is that pocket; a closed wheel's unused seed has none)
+      var matches = hash === j.commitment && j.shoe && j.shoe.pockets === 37 && spin === j.shoe.pocket && (j.results == null || j.results.number === spin);
       check.className = matches ? "ok" : "bad";
       check.textContent = matches ? <%- JSON.stringify(t('casino.fair.rl_verified')).replace(/</g,'\\u003c') %> : <%- JSON.stringify(t('casino.fair.rl_mismatch')).replace(/</g,'\\u003c') %>;
       return;

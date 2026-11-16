@@ -204,3 +204,138 @@ test("ENGINE-5: a full room wheel says it closes after this spin; its closed lin
   assert.match(T.log.at(-1).text, /it reached 35 players/);
   await h.sql("DELETE FROM users WHERE userId LIKE 'full%'");
 });
+
+test("MONEY-3 / MONEY-4 / SECURITY-5: a bank refusal offers only an amount that is then taken; limits rounds the bank's headroom", async () => {
+  const T = await room();
+  expect(await act(T, "a", "bet", "17 5000"));          // pocket 17 owes 175,000
+  await svc.setSetting("rl_spin_cap", 200000);
+  const lim = await act(T, "b", "limits");
+  assert.match(lim.reply, /straight up to 700,/, "(200,000 - 175,000) / 35 = 714, rounded down to the 100 minimum");
+  const r1 = await act(T, "b", "bet", "17 5000");
+  assert.match(r1.reply, /at most 700 more on 17/);
+  expect(await act(T, "b", "bet", "17 700"));
+  await svc.setSetting("rl_spin_cap", 100000);           // the bank shrinks below the book's worst pocket
+  const r2 = await act(T, "c", "bet", "red 100");
+  assert.equal(r2.ok, false);
+  assert.match(r2.reply, /can't take more on red/, "no offer the limits or the bank would refuse");
+  const r3 = await act(T, "c", "bet", "17 100");
+  assert.match(r3.reply, /can't take more on 17/);
+});
+
+test("MONEY-5: an amount too large to hold is refused as too large, not as below the minimum", () => {
+  const grammar = require("../casino/rlbets");
+  for (const line of ["17 9007199254740993", "17 999999999999b", "red 99999999999999999"]) {
+    const r = grammar.parse(line, { minBet: 100, maxPairs: 6 });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "Amount too large.", line);
+  }
+  assert.match(grammar.parse("17 50", { minBet: 100 }).error, /minimum is 100/);
+  assert.equal(grammar.parse("17-19 100").hint, "Splits on 17: 14-17, 16-17, 17-18, 17-20.", "SUITES-9: in order");
+});
+
+test("MONEY-6 / SECURITY-4 / ENGINE-7: one failed lobby creation at boot or in a tick never takes the casino down", async () => {
+  svc.stop();
+  await h.sql("UPDATE casino_tables SET status='closed'");
+  await h.sql("CREATE TRIGGER rl_lobby_fail BEFORE INSERT ON casino_rounds BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+  try {
+    await svc.boot({ tick: false });
+    await svc.tickOnce();
+  } finally {
+    await h.sql("DROP TRIGGER rl_lobby_fail");
+  }
+  await svc.boot({ tick: false });
+  await svc.tickOnce();
+  assert.ok(h.lobby(), "the next tick opened the lobby");
+  expect(await act(null, "b", "start", null, { room: "pad-z", via: "room", game: "roulette" }));
+});
+
+test("MONEY-8: one player's failing reward write doesn't skip the next players' rewards", async () => {
+  const T = await room();
+  expect(await act(T, "d", "bet", "red 100"));
+  await tick(25000);
+  await tick(8000);
+  await tick(5000);
+  await h.sql("CREATE TRIGGER rl_rw_fail BEFORE INSERT ON casino_ach_counts WHEN NEW.userId = 'b' BEGIN SELECT RAISE(ABORT, 'busy'); END");
+  try {
+    for (const u of ["a", "b", "c"]) expect(await act(T, u, "bet", "red 100"));
+    await tick(25000);
+    await tick(8000);
+  } finally {
+    await h.sql("DROP TRIGGER rl_rw_fail");
+  }
+  const n = async (uid) => (await h.rows("SELECT n FROM casino_ach_counts WHERE userId=? AND metric='rl_spins'", [uid]))[0]?.n || 0;
+  assert.equal(await n("a"), 1);
+  assert.equal(await n("c"), 1);
+});
+
+test("ENGINE-6: a web-only lobby spin writes no event rows and never wakes Pepe's long-poll", async () => {
+  const L = h.lobby();
+  const before = (await h.rows("SELECT COUNT(*) AS n FROM casino_events"))[0].n;
+  let woke = 0;
+  const w = () => { woke++; svc.S.waiters.add(w); };
+  svc.S.waiters.add(w);
+  try {
+    for (const u of ["a", "b"]) expect(await act(L, u, "bet", "red 100"));
+    await tick(25000);
+    await tick(8000);
+    await tick(5000);
+  } finally {
+    svc.S.waiters.delete(w);
+  }
+  assert.equal(L.last_round.round_no, 1);
+  assert.equal(woke, 0);
+  assert.equal((await h.rows("SELECT COUNT(*) AS n FROM casino_events"))[0].n, before);
+  const R = await room();
+  const w2 = () => { woke++; };
+  svc.S.waiters.add(w2);
+  expect(await act(R, "a", "bet", "red 100"));
+  assert.ok(woke > 0, "a room wheel still wakes him");
+});
+
+test("FAIR-5: a proof whose paid result differs from the rebuilt pocket is not verified (server and page)", async () => {
+  const fair = h.fair;
+  const seed = fair.newServerSeed(),
+    client = fair.newClientSeed(),
+    p = fair.spinPocket(seed, client, 1);
+  const rec = { server_seed: seed, commitment: fair.commitment(seed), client_seed: client, round: 1, shoe: { pocket: p, pockets: 37 } };
+  assert.equal(fair.verifySpin({ ...rec, results: { number: p } }).ok, true);
+  assert.equal(fair.verifySpin({ ...rec, results: null }).ok, true, "a closed wheel's unused seed has no result");
+  assert.equal(fair.verifySpin({ ...rec, results: { number: (p + 1) % 37 } }).ok, false);
+  const page = require("node:fs").readFileSync(require("node:path").join(h.repo, "views", "casino-fair.ejs"), "utf8");
+  assert.match(page, /spin === j\.shoe\.pocket && \(j\.results == null \|\| j\.results\.number === spin\)/);
+  assert.match(page, /t\('casino\.fair\.rl_result'\)/);
+});
+
+test("SECURITY-3 / SECURITY-7: a staff-only wheel's proofs and history answer only staff; the pad lookup is rate-limited", async () => {
+  const path = require("node:path");
+  const express = require(path.join(h.repo, "node_modules", "express"));
+  const app = express();
+  app.use(express.json());
+  app.use((q, r, next) => { const id = q.get("x-user"); q.user = id ? { userId: id, username: "player" + id } : null; next(); });
+  require(path.join(h.repo, "casino", "routes")).register(app, { isBotToken: () => false, addUser: (q, r, n) => n() });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((ok) => srv.once("listening", ok));
+  const get = (p, user) => fetch("http://127.0.0.1:" + srv.address().port + p, { headers: user ? { "x-user": user } : {} }).then((r) => r.status);
+  try {
+    const W = await room();
+    expect(await act(W, "c", "bet", "red 300"));
+    await tick(25000);
+    await tick(8000);
+    await svc.setSetting("casino_roulette", "staff");
+    assert.equal(await get("/api/casino/fair/" + W.id + "/1"), 404);
+    assert.equal(await get("/api/casino/fair/" + W.id + "/1", "b"), 404);
+    assert.equal(await get("/api/casino/fair/" + W.id + "/1", "a"), 200, "staff (a)");
+    svc.S.tables.delete(W.id);
+    assert.equal(await get("/api/casino/t/" + W.id + "/history"), 404, "out of memory, still a wheel");
+    assert.equal(await get("/api/casino/t/" + W.id + "/history", "a"), 200);
+    await svc.setSetting("casino_roulette", "off");
+    assert.equal(await get("/api/casino/fair/" + W.id + "/1"), 200, "switched off, past spins stay verifiable");
+    await svc.setSetting("casino_roulette", "everyone");
+    const codes = [];
+    for (let i = 0; i < 40; i++) codes.push(await get("/api/casino/roulette/pad/no-such-pad-" + i, "d"));
+    assert.ok(codes.slice(0, 30).every((c) => c === 200), "30 in 10 s pass (the Dock's 2 s poll and its refreshes)");
+    assert.ok(codes.slice(30).every((c) => c === 429));
+  } finally {
+    srv.close();
+  }
+});

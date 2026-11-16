@@ -228,6 +228,8 @@ function install(core) {
       );
     return reply(true, "Wheel open.", { table: T.id, pm: false, quiet: true });
   }
+  // the open lobby wheel, if there is one (no write, no lock)
+  const openLobby = () => (S.settings.casino_roulette === "off" ? null : open().find((t) => t.lobby) || null);
   async function ensureLobby() {
     if (S.settings.casino_roulette === "off") return null;
     let T = open().find((t) => t.lobby);
@@ -323,15 +325,30 @@ function install(core) {
     if (limited.why) return limited.why;
     const { closed, room } = await available(T);
     if (closed) return "The wheel's bank is closed right now.";
-    const base = engine.lossVector(e.book),
-      next = engine.lossVector(e.book.concat({ uid, bets }));
+    const next = engine.lossVector(e.book.concat({ uid, bets }));
     if (engine.worst(next) > room) {
+      // MONEY-3: the most the bet on the worst pocket could be (the rest of the line as typed) - within its own limits,
+      // rounded down to the minimum (decision 10), and offered only when a line with it is admitted. A worst pocket the
+      // line doesn't cover isn't lowered by more of it: nothing to offer.
       const peak = next.indexOf(engine.worst(next)),
-        b = bets.find((b) => b.nums.includes(peak)) || bets[0];
-      const more = Math.floor(engine.maxMore(base, b, room) / s.rl_min_bet) * s.rl_min_bet;
+        b = bets.find((x) => x.nums.includes(peak));
+      let more = 0;
+      if (b) {
+        const rest = e.book.concat({ uid, bets: bets.filter((x) => x !== b) }),
+          total = sum([...limited.amounts.values()]);
+        const head = Math.min(
+          engine.maxMore(engine.lossVector(rest), b, room),
+          capFor(b) - (limited.amounts.get(b.token) - b.amount),
+          s.rl_max_spin - (total - b.amount),
+        );
+        more = Math.floor(head / s.rl_min_bet) * s.rl_min_bet;
+        if (more < s.rl_min_bet || engine.worst(engine.lossVector(rest.concat({ uid, bets: [{ ...b, amount: more }] }))) > room)
+          more = 0;
+      }
+      const token = (b || bets[0]).token;
       return more > 0
-        ? "🏦 The wheel can take at most " + fmt(more) + " more on " + b.token + " this spin."
-        : "🏦 The wheel can't take more on " + b.token + " this spin.";
+        ? "🏦 The wheel can take at most " + fmt(more) + " more on " + token + " this spin."
+        : "🏦 The wheel can't take more on " + token + " this spin.";
     }
     return null;
   }
@@ -978,16 +995,14 @@ function install(core) {
           (e.pending[uid] ? " · Queued: " + describe(e.pending[uid].bets) : ""),
       );
     if (verb === "limits") {
-      const a = await available(T);
-      const room = Math.max(
-        0,
-        Math.min(
-          S.settings.rl_max_straight,
-          ...Array.from({ length: 37 }, (_, p) =>
-            engine.maxMore(engine.lossVector(e.book), engine.positions[p], a.room),
-          ),
-        ),
+      const a = await available(T),
+        min = S.settings.rl_min_bet;
+      // MONEY-4 / SECURITY-5: the bank's headroom rounded down to the minimum, as a refusal says it (decision 10) - the
+      // exact figure would track the worst pocket's liability, other players' chips, to 35 PAT
+      const bank = Math.min(
+        ...Array.from({ length: 37 }, (_, p) => engine.maxMore(engine.lossVector(e.book), engine.positions[p], a.room)),
       );
+      const room = Math.max(0, Math.min(S.settings.rl_max_straight, Math.floor(bank / min) * min));
       return reply(
         true,
         "Minimum " +
@@ -1032,6 +1047,7 @@ function install(core) {
     openList,
     closeTable,
     ensureLobby,
+    openLobby,
     gate,
     shut,
     restore,

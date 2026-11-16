@@ -133,18 +133,23 @@ async function winReward(T, key, uid, won) {
 async function rouletteSpin(T, round, results, pocket) {
   for (const [uid, result] of Object.entries(results)) {
     const key = ["crl", T.id, "s" + round, uid].join(":");
-    const straight = T.eng.book.some(line => line.uid === uid && line.bets.some(b => b.kind === "straight" && b.nums[0] === pocket));
-    // The marker and both counters commit together; there are no roulette catalog rewards.
-    await ensure();
-    await require("../dbUtils").tx(async () => {
-      if (!(await once(key + ":counts"))) return;
-      for (const metric of straight ? ["rl_spins", "rl_straight_wins"] : ["rl_spins"]) {
-        await runQuery("INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, 1, ?) " +
-          "ON CONFLICT(userId, metric) DO UPDATE SET n = n + 1, updated = excluded.updated", [uid, metric, hooks.now()]);
-      }
-    });
-    if (await once(key + ":streak")) await require("../streaks").note(uid, "game");
-    if (result.net > 0) await winReward(T, key, uid, result.net);
+    // 1.99aoe (MONEY-8): one player's failing write never skips the players after them (each step is keyed: once())
+    try {
+      const straight = T.eng.book.some(line => line.uid === uid && line.bets.some(b => b.kind === "straight" && b.nums[0] === pocket));
+      // The marker and both counters commit together; there are no roulette catalog rewards.
+      await ensure();
+      await require("../dbUtils").tx(async () => {
+        if (!(await once(key + ":counts"))) return;
+        for (const metric of straight ? ["rl_spins", "rl_straight_wins"] : ["rl_spins"]) {
+          await runQuery("INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, 1, ?) " +
+            "ON CONFLICT(userId, metric) DO UPDATE SET n = n + 1, updated = excluded.updated", [uid, metric, hooks.now()]);
+        }
+      });
+      if (await once(key + ":streak")) await require("../streaks").note(uid, "game");
+      if (result.net > 0) await winReward(T, key, uid, result.net);
+    } catch (e) {
+      console.error("[casino] roulette rewards " + key + ":", e.message);
+    }
   }
 }
 
