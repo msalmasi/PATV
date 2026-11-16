@@ -372,3 +372,63 @@ test("UI-10 / SUITES-3: switched off mid-window, the riding player keeps the vie
     srv.close();
   }
 });
+
+test("SUITES-5: the lobby's host reads Pepe; last_activity moves on a charge and a landing; the seed column stays NULL until the reveal; end in every phase", async () => {
+  const L = h.lobby();
+  assert.equal(svc.publicView(L).host, "Pepe");
+  assert.equal((await svc.meView(L, "a")).host, false, "nobody hosts the lobby");
+  const T = await room();
+  const seedCol = async (n) => (await h.rows("SELECT server_seed, revealed FROM casino_rounds WHERE table_id=? AND round_no=?", [T.id, n]))[0];
+  assert.deepEqual(await seedCol(1), { server_seed: null, revealed: null }, "the column, not just fairRecord, holds no seed before the reveal");
+  h.move(1000);
+  const t0 = T.last_activity;
+  expect(await act(T, "b", "bet", "red 100"));
+  assert.ok(T.last_activity > t0, "a charged line");
+  await tick(25000);
+  assert.equal((await seedCol(1)).server_seed, null, "spinning: still no seed");
+  const t1 = T.last_activity;
+  await tick(8000);
+  assert.ok(T.last_activity > t1, "a landed spin");
+  assert.equal((await seedCol(1)).server_seed, T.round.seed);
+  // end: idle (closes now) / betting (refunds, closes) / spinning and result (closes after the spin)
+  const idle = await room("pad-i");
+  expect(await act(idle, "a", "end"));
+  assert.equal(idle.status, "closed");
+  const betting = await room("pad-j");
+  expect(await act(betting, "c", "bet", "red 100"));
+  expect(await act(betting, "a", "end"));
+  assert.equal(betting.status, "closed");
+  assert.equal(await cash("c"), 500000, "refunded");
+  const spinning = await room("pad-k");
+  expect(await act(spinning, "c", "bet", "red 100"));
+  await tick(25000);
+  assert.equal(spinning.eng.phase, "spinning");
+  assert.match(expect(await act(spinning, "a", "end")).reply, /after this spin/);
+  await tick(8000);
+  assert.equal(spinning.eng.phase, "result");
+  assert.match(expect(await act(spinning, "a", "end")).reply, /after this spin/);
+  await tick(5000);
+  assert.equal(spinning.status, "closed");
+});
+
+test("SUITES-5: blackjack rounds still verify through the fair record next to roulette", async () => {
+  await svc.setSetting("bj_enabled", "1");
+  const W = await room();
+  expect(await act(W, "b", "bet", "red 100"));
+  await tick(25000);
+  await tick(8000);
+  assert.equal((await svc.fairRecord(W.id, 1)).verified, true);
+  const out = expect(await act(null, "c", "start", null, { room: "pad-bj", via: "room", game: "bj" }));
+  const B = svc.getTable(out.table);
+  assert.equal(B.game, "bj");
+  expect(await svc.act(h.actor("c", "room"), "bet", ["100"], { table: B.id, room: "pad-bj", game: "bj" }, "rl-bj-bet-1"));
+  for (let i = 0; i < 12 && !B.last_round; i++) {
+    const cur = B.turn && B.turn.uid;
+    if (cur) await svc.act(h.actor(cur, "room"), "stand", [], { table: B.id, room: "pad-bj", game: "bj" }, "rl-bj-stand-" + i);
+    await tick(31000);
+  }
+  assert.ok(B.last_round, "the blackjack round finished");
+  const rec = await svc.fairRecord(B.id, B.last_round.round_no || 1);
+  assert.equal(rec.game, "bj");
+  assert.equal(rec.verified, true);
+});

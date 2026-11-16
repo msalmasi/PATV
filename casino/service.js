@@ -19,6 +19,12 @@
 //     kind "mtt" (the ROUTE below sends them there): run() sends game "mtt" there, casino_mtt off | staff | everyone + mtt_* live with the other
 //     settings, the MTT tick runs in tickOnce, their tables refuse push / advertise / a host's stream, aren't counted by max_tables, and the
 //     stream slot gives the final table its place (streamTake: a tournament table on the slot is never pre-empted).
+//   * hand-off 37 (1.99aoe): 🛞 single-zero ROULETTE (casino/roulette.js, RL; docs/casino-backend.md) - the always-open lobby wheel (web
+//     only, host "Pepe", rotates daily or at 35 people) and room wheels (!rl start, one table per room), house-banked against one shared
+//     bank budget, provably fair per spin. run() sends game "roulette" (and a web verb at a wheel) to RL.run; the same mutex, ledger,
+//     veil, stream slot and recovery; casino_roulette off | staff | everyone + rl_* live with the other settings. A drawn pocket is
+//     shown only after its draw commits; a copied wheel (a staging refresh) closes unrevealed at boot; a web-only wheel is quiet for
+//     Pepe's poll (quietWheel); queued-line refusals reach a room player as a private_mtt notice (RL.privateNotes, routes.js poll).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("../dbUtils");

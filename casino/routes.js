@@ -8,7 +8,8 @@
 //                                            cards); per-user, never cached
 //   POST /api/casino/open                   {game: bj|holdem, blinds?, theme?, idem}  open a web-only table (1.99amf h20: theme = a
 //                                            casino/themes.js id; the lobby's `themes.pick` says whether this viewer may pick one)
-//   POST /api/casino/t/:id/act              {verb, amount?, idem}
+//   POST /api/casino/t/:id/act              {verb, amount?, idem}; at a roulette wheel (hand-off 37) a bet is {verb: "bet", line, idem} (one
+//                                            bet line, up to 160 characters) or {verb: "bet", bets: [{b, a}] (1-20 position / amount pairs), idem}
 //   POST /api/casino/t/:id/push             {room|null, mode: add|remove}  attach / detach a Camfrog room Pepe serves (1.99ox: several at once; null = web only; host or admin)
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
@@ -34,6 +35,9 @@
 //                                            ach_want: [camfrog]} - the casino's gang rep for Pepe + his achievement counts (rewards.js)
 //   POST /api/casino/bot/act                {room|table, username, camfrog, name, game?, verb, args, idem, channel, admin}
 //                                            h22: game "sng" = !sng (verbs "" / list, new, join, leave, info, cancel, help; up to 5 args);
+//                                            hand-off 37: game "roulette" = !rl / !roulette - at most ONE argument (the bet line, 160
+//                                            characters; 64 for an advert's room); a room's wheel is the room's table (found after the
+//                                            turn-first lookup below, so a tournament player's bare verb still reaches their turn)
 //                                            the poll adds `sng` (the open sit & gos) and each sit & go table's view has `tourney`;
 //                                            review: + `sng_on` (the switch: off | staff | everyone; "off" while Hold'em is off)
 // h22 phase 2 (1.99amj) 🏆 SCHEDULED tournaments (casino/mtt.js; each one's tables are /casino/holdem/t/:id with table.tourney.kind "mtt"):
@@ -46,7 +50,8 @@
 //   POST /api/casino/admin/mtt {id?, ...fields} create (repeat makes a series) / edit · /api/casino/admin/mtt/:id/<op> (cancel, void, pause,
 //        resume, start, delay, max, stream, overlay-retry) · /api/casino/admin/mtt/:id/entry/:n/(refund|dq) · GET /api/casino/admin/mtt[/:id[/log]]
 //   bot act game "mtt" (!mtt / !tourney; up to 2 args); a room player's bare Hold'em verb goes to the table where it's their turn first
-//   (svc.tourneyTableFor); the poll reads `scene` {held} and answers `private_mtt` (cards / turn prompts / notice PMs) + `mtt_on`.
+//   (svc.tourneyTableFor) - also beside a roulette wheel; the poll reads `scene` {held} and answers `private_mtt` (cards / turn prompts /
+//   notice PMs; 1.99aoe: + roulette queued-line notices for a poll with games ["roulette"]) + `mtt_on`.
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
 "use strict";
