@@ -51,7 +51,7 @@
 //        resume, start, delay, max, stream, overlay-retry) · /api/casino/admin/mtt/:id/entry/:n/(refund|dq) · GET /api/casino/admin/mtt[/:id[/log]]
 //   bot act game "mtt" (!mtt / !tourney; up to 2 args); a room player's bare Hold'em verb goes to the table where it's their turn first
 //   (svc.tourneyTableFor) - also beside a roulette wheel; the poll reads `scene` {held} and answers `private_mtt` (cards / turn prompts /
-//   notice PMs; 1.99aoe: + roulette queued-line notices for a poll with games ["roulette"]) + `mtt_on`.
+//   notice PMs; 1.99aof: + roulette queued-line notices for a poll with games ["roulette"]) + `mtt_on`.
 // Web POSTs are JSON with X-Requested-With: fetch (a cross-site form can't send them). Telegram never reaches here:
 // gambling stays off the Telegram bridge (channel "telegram" is refused).
 "use strict";
@@ -80,7 +80,7 @@ const QUIET_VERBS = new Set(["check", "call", "fold", "raise", "bet", "allin", "
 const IDEM = /^[\w:.\-]{8,100}$/;
 const HANDS_PER_MIN = 20;          // 1.99alq train3 verify: GET /api/casino/me/hands per account a minute
 
-// 1.99aoe (SECURITY-7): the Room Dock's pad lookup per account - its 2 s poll plus a refresh after each action fit well inside
+// 1.99aof (SECURITY-7): the Room Dock's pad lookup per account - its 2 s poll plus a refresh after each action fit well inside
 const PAD_N = 30, PAD_MS = 10000, padHits = new Map();
 function padRateOk(uid) {
   const now = Date.now(), q = (padHits.get(uid) || []).filter((t) => now - t < PAD_MS);
@@ -289,7 +289,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (local?.game === "roulette") wheel = local;
     }
     const here = !!wheel;
-    // (1.99aoe SECURITY-7: the open lobby is read without the casino lock; the lock is taken only to open one)
+    // (1.99aof SECURITY-7: the open lobby is read without the casino lock; the lock is taken only to open one)
     if (!wheel) wheel = svc.RL.openLobby() || await svc.locked(() => svc.RL.ensureLobby());
     if (!wheel) return res.status(404).json({ ok: false });
     res.json({ ok: true, table: wheel.id, here });
@@ -300,7 +300,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    // (1.99aoe UI-10 / SUITES-3: switched off, a player with PAT on the wheel still sees it land - RL.viewShut)
+    // (1.99aof UI-10 / SUITES-3: switched off, a player with PAT on the wheel still sees it land - RL.viewShut)
     if (!T || (T.game === "roulette" && await svc.RL.viewShut(T, req.user?.userId))) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
@@ -317,7 +317,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (ck) { tcache.set(T.id, pub); if (tcache.size > 500) tcache.delete(tcache.keys().next().value); }
     }
     const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms() };
-    // only the viewer's own seat / cards (1.99aoe: ?notice=1 - the wheel's page / Dock showing its one-time notice - may take it; a poll never writes)
+    // only the viewer's own seat / cards (1.99aof: ?notice=1 - the wheel's page / Dock showing its one-time notice - may take it; a poll never writes)
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId, { notice: req.query && req.query.notice === "1" }) : null;
     if (mtt && req.user && req.user.userId) svc.MT.seen(req.user.userId);                    // (h22 phase 2: start presence)
     out.watching = noteViewer(T, req);
@@ -381,7 +381,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     res.set("Cache-Control", "no-store");
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     try {
-      // (1.99aoe SECURITY-3: a wheel that has left memory is still a wheel - its game from casino_tables)
+      // (1.99aof SECURITY-3: a wheel that has left memory is still a wheel - its game from casino_tables)
       const game = svc.getTable(req.params.id)?.game || (await getQuery("SELECT game FROM casino_tables WHERE id = ?", [req.params.id]).catch(() => []))[0]?.game;
       if (game === "roulette" && await svc.RL.shut({ uid: req.user?.userId })) return res.status(404).json({ ok: false });
       res.json({ ok: true, rounds: await history(req.params.id, req.query.limit) });
@@ -633,7 +633,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false });
     const rec = await svc.fairRecord(req.params.id, req.params.round);
     if (!rec) return res.status(404).json({ ok: false, error: "No such round." });
-    // 1.99aoe (SECURITY-3): a staff-only wheel's spins answer only the people its gate lets in, like its table view. Switched
+    // 1.99aof (SECURITY-3): a staff-only wheel's spins answer only the people its gate lets in, like its table view. Switched
     // off, every past spin stays verifiable (the proof links already posted in rooms keep working).
     if (rec.game === "roulette" && (await svc.loadSettings()).casino_roulette === "staff" && await svc.RL.shut({ uid: req.user?.userId }))
       return res.status(404).json({ ok: false, error: "No such round." });
@@ -688,7 +688,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (Array.isArray(b.games) && b.games.includes("roulette")) {
         out.roulette = svc.RL.openList();
         out.roulette_on = st.casino_roulette;
-        // 1.99aoe (SUITES-2): a room player's queued line refused when betting opened, or dropped by a close - PM'd by Pepe as a
+        // 1.99aof (SUITES-2): a room player's queued line refused when betting opened, or dropped by a close - PM'd by Pepe as a
         // private_mtt "notice" (each key once, only down that player's own room; never an event)
         out.private_mtt = (out.private_mtt || []).concat(svc.RL.privateNotes());
         out.lobby.roulette = base + "/casino/roulette";
@@ -726,7 +726,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : b.game === "roulette" ? "roulette" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
     // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's
     // table if they sit there, then the only tournament table they sit at (svc.tourneyTableFor); seated at more than one: use the web
-    // (1.99aoe review ENGINE-2 / SUITES-1: a room's roulette wheel is that room's table like any other - found by the fallback below,
+    // (1.99aof review ENGINE-2 / SUITES-1: a room's roulette wheel is that room's table like any other - found by the fallback below,
     // AFTER the turn-first lookup, so a tournament player's bare !call / !fold beside a wheel still reaches their tournament table;
     // a game-less !bet that is nobody's turn then gets the wheel's "use !rl" answer)
     let mttBare = false;

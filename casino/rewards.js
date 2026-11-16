@@ -133,7 +133,7 @@ async function winReward(T, key, uid, won) {
 async function rouletteSpin(T, round, results, pocket) {
   for (const [uid, result] of Object.entries(results)) {
     const key = ["crl", T.id, "s" + round, uid].join(":");
-    // 1.99aoe (MONEY-8): one player's failing write never skips the players after them (each step is keyed: once())
+    // 1.99aof (MONEY-8): one player's failing write never skips the players after them (each step is keyed: once())
     try {
       const straight = T.eng.book.some(line => line.uid === uid && line.bets.some(b => b.kind === "straight" && b.nums[0] === pocket));
       // The marker and both counters commit together; there are no roulette catalog rewards.

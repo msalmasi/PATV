@@ -1,5 +1,5 @@
 "use strict";
-// 1.99aoe review fix FAIR-1: a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then deploy/keep-staging-tables.js on
+// 1.99aof review fix FAIR-1: a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then deploy/keep-staging-tables.js on
 // the copy) must never let staging play or publish the seed of a round prod's wheel is still taking bets on. Prod's lobby wheel
 // has a line on its round; a room wheel sits idle on its committed round. The copy keeps neither seed (not even in its free
 // pages); staging (its own process: test/fixtures/casino-rl-staging-boot.js) boots 11 minutes later, refunds the copied book,

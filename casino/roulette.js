@@ -820,7 +820,7 @@ function install(core) {
       await save(T);
     }
   }
-  // FAIR-1 (1.99aoe): a wheel copied from another database - deploy/keep-staging-tables.js strips an open wheel's secret
+  // FAIR-1 (1.99aof): a wheel copied from another database - deploy/keep-staging-tables.js strips an open wheel's secret
   // seed from a staging copy and marks it `copied`. That database's wheel may still take bets on this very round (the
   // lobby can wait a day for its first bet), so the copy is never played or revealed here: a drawn spin's keyed payouts
   // finish (its pocket was already shown there), every line on its book is refunded, and it closes with its commitment

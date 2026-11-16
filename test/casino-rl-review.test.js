@@ -1,5 +1,5 @@
 "use strict";
-// 1.99aoe roulette review fixes (handoff 37 integration review): one test per finding, invented accounts a..d.
+// 1.99aof roulette review fixes (handoff 37 integration review): one test per finding, invented accounts a..d.
 const test = require("node:test"),
   assert = require("node:assert/strict");
 const h = require("./fixtures/casino-rl-harness");

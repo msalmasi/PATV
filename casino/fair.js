@@ -64,7 +64,7 @@ function verifySpin(rec) {
   if (!rec || !rec.server_seed) return { ok: false, reason: "the seed isn't revealed yet" };
   const commitmentOk = commitment(rec.server_seed) === rec.commitment;
   const pocket = spinPocket(rec.server_seed, rec.client_seed, rec.round);
-  // (1.99aoe FAIR-5: the paid result - the number the history and the result line show - must be that pocket too)
+  // (1.99aof FAIR-5: the paid result - the number the history and the result line show - must be that pocket too)
   const pocketOk = !!rec.shoe && rec.shoe.pockets === 37 && rec.shoe.pocket === pocket &&
                    (rec.results == null || rec.results.number === pocket);
   return { ok: commitmentOk && pocketOk, commitment_ok: commitmentOk, pocket_ok: pocketOk, pocket };

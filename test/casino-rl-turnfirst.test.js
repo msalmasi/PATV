@@ -1,4 +1,4 @@
-// 1.99aoe review fix ENGINE-2 / SUITES-1: a room player whose TOURNAMENT turn it is types a bare !fold / !call / !check (Pepe sends
+// 1.99aof review fix ENGINE-2 / SUITES-1: a room player whose TOURNAMENT turn it is types a bare !fold / !call / !check (Pepe sends
 // game "holdem") in a room that has an open roulette room wheel. POST /api/casino/bot/act still resolves the MTT table turn-first (as
 // beside a blackjack or Hold'em cash table), never "A roulette wheel is open here — use !rl.". A non-turn game-less !bet in the
 // wheel's room still gets the !rl pointer. (Before the fix the wheel lookup ran before the turn-first block.)

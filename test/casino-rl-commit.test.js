@@ -1,5 +1,5 @@
 "use strict";
-// 1.99aoe review fixes (ENGINE-1, MONEY-2, FAIR-2, SECURITY-1, SUITES-10): a spin's pocket is readable only after its draw
+// 1.99aof review fixes (ENGINE-1, MONEY-2, FAIR-2, SECURITY-1, SUITES-10): a spin's pocket is readable only after its draw
 // has committed, and a wheel stops taking bets (committed) before it reveals an unused seed. Readers are modelled as they
 // run on the site: outside the casino lock - a poller sampling the public view between I/O callbacks (GET /api/casino/t/:id,
 // the OBS board) and a waiter woken by save() (Pepe's long-poll). A failing write inside the draw / close transaction is

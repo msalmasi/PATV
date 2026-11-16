@@ -439,7 +439,7 @@
       wheelCard.hidden = !(j.roulette && j.roulette.on);
       const phase = wheel && (wheel.phase === "spinning" ? T("rl_spinning", "No more bets") : wheel.phase === "result" ? T("rl_result", "Result") : T("rl_open", "Bets open"));
       $("cz-wheel-status").textContent = wheel ? T("rl_lobby_status", { "one": "{n} player · {phase}", "other": "{n} players · {phase}" }, { n: wheel.players, phase, count: wheel.players }) : "";
-      // 1.99aoe (UI-12): with the wheel on, the lobby's header and hero name it too
+      // 1.99aof (UI-12): with the wheel on, the lobby's header and hero name it too
       if (j.roulette && j.roulette.on) {
         const sub = document.querySelector(".cz-brand small"), tag = document.querySelector("#cz-lobby .lob-hero p");
         if (sub && !tableId) sub.textContent = T("lobby_sub_rl", "Blackjack, Hold'em and roulette with your PAT");
@@ -928,11 +928,11 @@
   }
 
   /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it.
-   *  opts.first: a query string for the first request only (1.99aoe: the wheel's "?notice=1" - its one-time notice) */
+   *  opts.first: a query string for the first request only (1.99aof: the wheel's "?notice=1" - its one-time notice) */
   function startTable(render, opts) {
     $("cz-table").hidden = false;
     let stopped = false, running = null, again = null, timer = null, lastD = null, first = (opts && opts.first) || "";
-    // 1.99aoe (UI-14): a refresh asked for while one is out (a move's "show me now") runs once more after it, so it resolves on a
+    // 1.99aof (UI-14): a refresh asked for while one is out (a move's "show me now") runs once more after it, so it resolves on a
     // state from after the call - a stale answer never repaints a just-placed chip away
     function refresh() {
       if (running) {
@@ -948,7 +948,7 @@
         first = "";
         const r = await fetch(`/api/casino/t/${tableId}${q}`, { credentials: "same-origin" });
         if (r.status === 404) {
-          // 1.99aoe (ENGINE-4): a rotated lobby wheel that has left memory - the lobby page opens the current one
+          // 1.99aof (ENGINE-4): a rotated lobby wheel that has left memory - the lobby page opens the current one
           if (game === "roulette" && lastD && lastD.table && lastD.table.lobby) { stopped = true; location.replace("/casino/roulette"); return; }
           toast(T("closed", "That table has closed."), true);
           stopped = true;

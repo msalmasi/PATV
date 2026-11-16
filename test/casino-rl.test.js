@@ -107,7 +107,7 @@ test("one room, switch narrowing, dispatch, host authority and lobby rotation", 
   assert.equal(await cash("b"), after);
   assert.equal(T.eng.pending.b, undefined);
   await svc.setSetting("casino_roulette", "everyone");
-  // 1.99aoe (ENGINE-3): a poll never takes the one-time notice; the page's / Dock's first request asks for it
+  // 1.99aof (ENGINE-3): a poll never takes the one-time notice; the page's / Dock's first request asks for it
   assert.equal((await svc.meView(L, "a")).notice, null);
   const empty = await svc.meView(L, "a", { notice: true });
   assert.ok(empty.notice);

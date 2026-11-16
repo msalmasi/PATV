@@ -1,5 +1,5 @@
 "use strict";
-// 1.99aoe roulette review fixes - the Room Dock sheet (public/js/casinorl-dock.js mount + controls) in a vm with a little DOM
+// 1.99aof roulette review fixes - the Room Dock sheet (public/js/casinorl-dock.js mount + controls) in a vm with a little DOM
 // (test/fixtures/mini-dom.js) and a scripted network: what the sheet shows and which wheel it follows.
 const test = require("node:test"),
   assert = require("node:assert/strict");

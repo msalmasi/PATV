@@ -19,7 +19,7 @@
 //     kind "mtt" (the ROUTE below sends them there): run() sends game "mtt" there, casino_mtt off | staff | everyone + mtt_* live with the other
 //     settings, the MTT tick runs in tickOnce, their tables refuse push / advertise / a host's stream, aren't counted by max_tables, and the
 //     stream slot gives the final table its place (streamTake: a tournament table on the slot is never pre-empted).
-//   * hand-off 37 (1.99aoe): 🛞 single-zero ROULETTE (casino/roulette.js, RL; docs/casino-backend.md) - the always-open lobby wheel (web
+//   * hand-off 37 (1.99aof): 🛞 single-zero ROULETTE (casino/roulette.js, RL; docs/casino-backend.md) - the always-open lobby wheel (web
 //     only, host "Pepe", rotates daily or at 35 people) and room wheels (!rl start, one table per room), house-banked against one shared
 //     bank budget, provably fair per spin. run() sends game "roulette" (and a web verb at a wheel) to RL.run; the same mutex, ledger,
 //     veil, stream slot and recovery; casino_roulette off | staff | everyone + rl_* live with the other settings. A drawn pocket is
@@ -235,7 +235,7 @@ async function save(T) {
 const isMttTable = (T) => !!(T && T.tourney && T.tourney.kind === "mtt");
 const mttQuiet = (T, extra) => isMttTable(T) && !roomsOf(T).length && !(extra && Array.isArray(extra.rooms) && extra.rooms.length) &&
                                S.stream.table !== T.id && !T.eng.seats.some((k) => (T.players[k] || {}).via === "room");
-// 1.99aoe (ENGINE-6): a web-only wheel (the lobby, or a room wheel with no room left) - its events reach no room, so nothing of it is for
+// 1.99aof (ENGINE-6): a web-only wheel (the lobby, or a room wheel with no room left) - its events reach no room, so nothing of it is for
 // Pepe's poll (rooms only) unless it is on the stream slot: no casino_events row (below) and no early wake of his long-poll
 const quietWheel = (T, extra) => !!T && T.game === "roulette" && !roomsOf(T).length && !(extra && Array.isArray(extra.rooms) && extra.rooms.length) &&
                                  S.stream.table !== T.id;
@@ -670,7 +670,7 @@ async function tickOnce() {
       }
     });
   }
-  // (1.99aoe MONEY-6 / ENGINE-7: a failing lobby creation never skips the stream and tournament steps; the next tick tries again)
+  // (1.99aof MONEY-6 / ENGINE-7: a failing lobby creation never skips the stream and tournament steps; the next tick tries again)
   if (S.settings.casino_roulette !== "off") await locked(() => RL.ensureLobby()).catch((e) => console.error("[casino] lobby wheel:", e));
   await locked(() => streamTick()).catch((e) => console.error("[casino] stream:", e));
   if (MT.due()) await locked(() => MT.tick()).catch((e) => console.error("[casino] mtt:", e));     // h22 phase 2: the scheduled tournaments' clock
@@ -739,7 +739,7 @@ async function boot({ tick = true } = {}) {
     }
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
     await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
-    // (1.99aoe MONEY-6 / SECURITY-4: one failed lobby creation never leaves boot rejected - boot() is memoized; the tick retries it)
+    // (1.99aof MONEY-6 / SECURITY-4: one failed lobby creation never leaves boot rejected - boot() is memoized; the tick retries it)
     await locked(() => RL.ensureLobby()).catch((e) => console.error("[casino] lobby wheel:", e));
     if (tick && !S.tick) {
       let busy = false;

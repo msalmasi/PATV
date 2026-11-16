@@ -150,7 +150,7 @@ test("strings: every js.casino.* default in the page scripts equals locales/en.j
       if (seen.has(key)) assert.equal(seen.get(key), def, key + " has one English text");
       seen.set(key, def);
     }
-    // 1.99aoe: a plural default ({"one": ..., "other": ...}, picked by vars.count) equals its en.json plural object
+    // 1.99aof: a plural default ({"one": ..., "other": ...}, picked by vars.count) equals its en.json plural object
     for (const m of src.matchAll(/\bT\(\s*"([a-z0-9_]+)",\s*(\{\s*"one":\s*"(?:[^"\\]|\\.)*",\s*"other":\s*"(?:[^"\\]|\\.)*"\s*\})/g))
       assert.deepEqual(en["js.casino." + m[1]], JSON.parse(m[2]), `${f}: js.casino.${m[1]} plural default matches en.json`);
     assert.doesNotMatch(src, /\bT\((?!\s*")/, f + ": T() keys are literals (the i18n sync finds them)");

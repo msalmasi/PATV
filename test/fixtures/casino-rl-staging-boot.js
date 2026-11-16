@@ -1,4 +1,4 @@
-// 1.99aoe (review FAIR-1) - test/casino-rl-staging.test.js's STAGING side, in its own process (dbUtils opens ./myapp.db):
+// 1.99aof (review FAIR-1) - test/casino-rl-staging.test.js's STAGING side, in its own process (dbUtils opens ./myapp.db):
 // boots the casino on a refreshed copy of "prod" (VACUUM INTO + deploy/keep-staging-tables.js, done by the test) 11 minutes
 // after the copy (room wheels are past rl_idle_close_mins), then does what staging routinely does: someone bets on every open
 // wheel, the wheels spin, an admin switches roulette off. Prints one JSON line: every server seed staging's public

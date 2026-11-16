@@ -1,7 +1,7 @@
 // test/fixtures/mini-dom.js - the little DOM the roulette Room Dock controls (public/js/casinorl-dock.js) need, for vm tests
 // with no browser: elements with children / text / attributes / dataset / listeners / style, querySelector(All) for simple
 // selectors (tag, .class, [attr], tag.class, comma lists), and a run(src, globals) that evaluates a browser script with a fake
-// window. Not a DOM implementation - just enough for these tests (1.99aoe roulette review fixes).
+// window. Not a DOM implementation - just enough for these tests (1.99aof roulette review fixes).
 "use strict";
 const vm = require("vm");
 
