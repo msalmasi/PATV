@@ -8,6 +8,7 @@
 const path = require("path");
 const [dir, idsArg, nowArg] = process.argv.slice(2);
 const repo = path.resolve(__dirname, "../..");
+if (require.main !== module || !dir) return;        // (a fixture: loaded on its own it does nothing)
 process.chdir(dir);
 process.env.STAGING = "1";
 const svc = require(path.join(repo, "casino/service"));

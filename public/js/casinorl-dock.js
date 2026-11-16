@@ -71,6 +71,7 @@
       timer,
       stopped = false,
       busy = false,
+      lastNote = null,
       clock = 0;
     var root = element("div", "rl-controls"),
       chipRow = element("div", "rl-chips"),
@@ -177,6 +178,9 @@
         return l.text;
       });
       if (me && me.pending) texts.push(T("rl_queued", "Next spin: {line}", { line: me.pending }));
+      // UI-2: the Dock sheet has no felt or net line of its own - its result says the player's own net here
+      if (opts.compact && me && t.phase === "result" && typeof me.net === "number")
+        texts.unshift(T("rl_net", "Your net {n} PAT", { n: (me.net > 0 ? "+" : "") + me.net.toLocaleString() }));
       mine.textContent = texts.length ? texts.join("  /  ") : "";
       if (opts.paint) opts.paint(accountLines(me), pending.concat(flight));
     }
@@ -276,10 +280,25 @@
             (snapshot.table.phase !== d.table.phase && d.table.phase === "result"))
         )
           feedback.textContent = "";
+        // UI-2 / SUITES-2: why a queued line wasn't placed (refused when betting opened, or dropped by a close)
+        var note = (d.me && d.me.private_note) || null;
+        if (note && note !== lastNote) feedback.textContent = note;
+        lastNote = note;
         snapshot = d;
         clock = d.now ? Date.now() - Number(d.now) : 0;
         updateControls();
         countdown();
+      },
+      // SUITES-6: the player still has PAT on this wheel (a line, a queued line, or the result of their spin is up)
+      riding: function () {
+        var me = snapshot && snapshot.me,
+          t = snapshot && snapshot.table;
+        return !!(
+          me &&
+          t &&
+          t.status === "open" &&
+          (me.staked > 0 || me.pending || (t.phase === "result" && typeof me.net === "number"))
+        );
       },
       close: function () {
         stopped = true;
@@ -293,6 +312,7 @@
     var shut = false,
       timer,
       id,
+      idHere = false,
       widget,
       latest = 0;
     var state = element("p", "rl-state", T("rl_loading", "Loading wheel…")),
@@ -332,11 +352,14 @@
           state.textContent = where.error || T("rl_off", "Roulette isn't open yet.");
           return;
         }
-        if (id && id !== where.table) leaveWheel();
+        // SUITES-6: while the member's line rides on this wheel (or its result is up) the sheet stays on it - a room wheel
+        // opening in the pad's room takes over after that
+        var target = id && id !== where.table && widget && widget.riding() ? id : where.table;
+        if (id && id !== target) leaveWheel();
         // the first request of this sheet may take the one-time intro notice, which the sheet then shows (its polls never do)
         var ask = asked ? "" : "?notice=1";
         asked = true;
-        var resp = await fetch("/api/casino/t/" + where.table + ask, { credentials: "same-origin", cache: "no-store" });
+        var resp = await fetch("/api/casino/t/" + target + ask, { credentials: "same-origin", cache: "no-store" });
         var d = await resp.json();
         if (d.ok && d.me && d.me.notice && d.me.notice.id === "rl_intro") {
           intro.textContent = T(
@@ -352,7 +375,8 @@
           return;
         }
         if (!widget) {
-          id = where.table;
+          id = target;
+          idHere = !!where.here;
           open.href = "/casino/roulette/t/" + id;
           open.hidden = false;
           widget = controls(account, { id: id, refresh: refresh, compact: true });
@@ -365,7 +389,7 @@
           });
         }
         state.textContent =
-          (where.here ? T("rl_room_wheel", "Room wheel") : T("rl_lobby", "Lobby wheel")) + " · " + phase(d.table);
+          ((target === where.table ? where.here : idHere) ? T("rl_room_wheel", "Room wheel") : T("rl_lobby", "Lobby wheel")) + " · " + phase(d.table);
         recent.textContent = d.table.history
           .slice(-5)
           .map(function (r) {
