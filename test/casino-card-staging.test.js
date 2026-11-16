@@ -3,11 +3,13 @@
 // deploy/keep-staging-tables.js on the copy) must never let staging play, or publish, a blackjack shoe / dealer hole card or a Hold'em deck /
 // hole card prod is still playing. Prod has blackjack tables in the betting window, mid-round after insurance + split + double and mid-round on
 // a real shoe, cash Hold'em tables between hands (the next hand's seed committed) and mid-hand, a running Sit & Go mid-hand and a registering
-// one. The copy keeps none of their seeds or cards (not even in its free pages); staging (its own process:
+// one, and players who asked for their hole cards (!cards: the reply is cached in casino_actions). The copy - built the way prod's older
+// refresh script builds it, a plain VACUUM INTO - keeps none of their seeds or cards (not even in its free pages); staging (its own process:
 // test/fixtures/casino-card-staging-boot.js) boots 11 minutes later and retires every copy - every escrowed PAT back exactly once, nothing
 // revealed, no table line, nothing playable - and a second boot changes nothing. Then the restart variants in this process (a decided round
-// paid by its keys, the intents, the rake, a hand in play, a crash mid-retire, a refused credit), fair.js's no-seed guard and the Hold'em
-// cash-out fix (a refused credit kept the stack lost).
+// paid by its keys, the intents, the rake, a hand in play, a crash mid-retire, a refused credit), fair.js's (and the seating draw's) no-seed
+// guard and the Hold'em cash-out fix (a refused credit kept the stack lost) - which never stops the table's clock (review): the seat sits out
+// and its sit-out clock tries again, the hand's wrap-up and the other deadlines run on, and a table is never closed with a stack on it.
 //   NODE_PATH=G:/PATV/node_modules node --test test/casino-card-staging.test.js      (uses a temp DB)
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -84,6 +86,8 @@ async function fresh() {
                    "escrow_holds", "escrow_moves", "escrow_meta", "casino_ach_counts", "casino_reward_done", "casino_notice_seen"]) {
     await sql(`DELETE FROM ${t}`).catch(() => {});
   }
+  // (an account a failed test left deleted comes back - every test starts from the same ten)
+  for (const id of USERS) await sql("INSERT OR IGNORE INTO users (userId, username, displayname, password, points_balance) VALUES (?, ?, ?, 'x', 100000)", [id, who(id).username, who(id).name]);
   await sql("UPDATE users SET points_balance = 100000, casino_banned = 0");
   await sql("DELETE FROM jackpot_rakes");
   await sql("INSERT INTO jackpot_rakes (jackpotId, spinId, amount) VALUES ('seed', 'seed', 10000000)");
@@ -117,19 +121,30 @@ test.before(async () => {
 });
 test.after(() => svc.stop());
 
-async function refresh() {
+/** a staging refresh. opts.plain: the copy built by a plain VACUUM INTO - prod's refresh-staging-db.sh one release behind staging (staging
+ *  gets a release first) or rolled back past roulette2 WP1: stale row bytes stay in the copy's page slack, and only the keep step's rebuild
+ *  (deploy/keep-staging-tables.js, from staging's checkout) clears them */
+async function refresh(opts) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "card-staging-"));
   const old = path.join(dir, "myapp.db"), copy = path.join(dir, "myapp.db.new");
   await new Promise((res, rej) => {
     const d = new sqlite3.Database(old, (e) => (e ? rej(e) : d.exec("CREATE TABLE staging_marker (k TEXT)", (e2) => d.close(() => (e2 ? rej(e2) : res())))));
   });
   // as deploy/refresh-staging-db.sh copies prod: secure_delete ON for the copy's build (else stale row bytes stay in its page slack)
-  await sql("PRAGMA secure_delete = ON");
+  await sql(`PRAGMA secure_delete = ${opts && opts.plain ? "OFF" : "ON"}`);
   await sql(`VACUUM INTO '${copy.replace(/\\/g, "/")}'`);
+  await sql("PRAGMA secure_delete = OFF");
   const out = execFileSync(process.execPath, [path.join(repo, "deploy", "keep-staging-tables.js"), old, copy], { encoding: "utf8" });
   fs.renameSync(old, old + ".previous");
   fs.renameSync(copy, old);
   return { dir, out, file: old };
+}
+/** console.error lines while fn runs */
+async function capture(fn) {
+  const lines = [], ce = console.error;
+  console.error = (...a) => { lines.push(a.map((x) => (x && x.stack) || String(x)).join(" ")); };
+  try { await fn(); } finally { console.error = ce; }
+  return lines;
 }
 const fileRows = async (file, q) => {
   const d = new sqlite3.Database(file);
@@ -186,6 +201,16 @@ test("FAIR-1 for cards: a staging refresh keeps no open card table's seed or car
   ok(await act("u1", "end", [], { table: bX }));
   assert.equal(get(bX).status, "closed");
 
+  // roulette2 WP1 review: hole cards asked for (Pepe's !cards, the website's `cards`) - the reply is cached whole in casino_actions (the
+  // idempotent replay): for the hand in play at a cash table and a sit & go, prod's hole cards
+  const asked = [];
+  for (const [uid, tid] of [["u6", hB], ["u7", hB], ["u8", sA], ["u9", sA]]) {
+    const r = ok(await hmAct(uid, "cards", tid));
+    const mine = "Your hand: " + H.cardsStr(get(tid).eng.hole[uid]);
+    assert.ok(r.reply.includes(mine), r.reply);
+    asked.push(mine);
+  }
+  assert.equal((await rows("SELECT COUNT(*) AS n FROM casino_actions WHERE response LIKE '%Your hand:%'"))[0].n, 4);
   const ids = [bA, bB, bC, hA, hB, sA, sB];
   const P = Object.fromEntries(ids.map((id) => [id, get(id)]));
   const secrets = {};
@@ -205,11 +230,17 @@ test("FAIR-1 for cards: a staging refresh keeps no open card table's seed or car
   const prodTotal = await total();
   const revealedProd = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await revealed(id)])));
 
-  const { dir, out, file } = await refresh();
+  // (the copy built the way prod's older refresh script builds it - a plain VACUUM INTO: the keep step alone must leave no byte behind)
+  const { dir, out, file } = await refresh({ plain: true });
   assert.match(out, /casino_tables scrubbed 7 \(cards\)/, out);
+  assert.match(out, /casino_actions scrubbed 4 \(hole cards\)/, out);
+  assert.match(out, /the copy rebuilt$/m, out);
   const bytes = fs.readFileSync(file).toString("latin1");
   for (const [id, list] of Object.entries(secrets)) for (const s of list) assert.ok(!bytes.includes(s), "the copy still holds a seed of " + id);
   for (const [i, d] of deckBytes.entries()) { const at = bytes.indexOf(d); assert.ok(at < 0, "the copy still holds cards to come (" + i + "): " + bytes.slice(Math.max(0, at - 300), at + 80).replace(/[^ -~]/g, ".")); }
+  const buf = fs.readFileSync(file);
+  for (const mine of asked) assert.ok(!buf.includes(Buffer.from(mine, "utf8")), "the copy still holds hole cards asked for: " + mine);
+  assert.equal((await fileRows(file, "SELECT COUNT(*) AS n FROM casino_actions WHERE response LIKE '%Your hand:%'"))[0].n, 0);
   const copied = Object.fromEntries((await fileRows(file, "SELECT id, status, state FROM casino_tables")).map((r) => [r.id, { status: r.status, s: JSON.parse(r.state) }]));
   for (const id of ids) {
     const s = copied[id].s;
@@ -517,6 +548,12 @@ test("fair.js: a missing seed never deals - shuffleShoe / spinPocket / words thr
   assert.equal(fair.shuffleShoe(6, seed, "abc", 7).join(","), fair.shuffleShoe(6, seed, "abc", 7).join(","));
   assert.equal(fair.shuffleShoe(6, seed, "abc", 7).length, 312);
   assert.equal(fair.verify({ server_seed: null }).ok, false);
+  // (roulette2 WP1 review) the tournament seating draw too: Buffer.from("undefined", "hex") is an EMPTY HMAC key - a draw anyone can compute
+  const SEAT = require(path.join(repo, "casino", "mttseat"));
+  const ids = ["u3:1", "u1:1", "u2:1", "u4:1"];
+  for (const s of [undefined, null, "", 0, "undefined", "zz", "ab", "ab".repeat(15) + "a"]) assert.throws(() => SEAT.drawOrder(s, "start", ids), /no draw seed/, String(s));
+  assert.deepEqual(SEAT.drawOrder("ab".repeat(32), "start", ids), SEAT.drawOrder("ab".repeat(32), "start", ids.slice().reverse()));
+  assert.deepEqual(SEAT.drawOrder(SEAT.newSeed(), "start", ids).sort(), ids.slice().sort());
   // the engine path: a scrubbed blackjack table that somehow was NOT retired fails closed - it can't deal
   await fresh();
   const t = await bj("u1");
@@ -537,8 +574,10 @@ test("the Hold'em cash-out fix: a refused credit keeps the stack at the table (i
   await sql("DELETE FROM users WHERE userId = 'u2'");
   const r = await hmAct("u2", "stand", t);
   assert.equal(r.ok, false, "the cash-out didn't go through - and says so");
+  assert.match(r.reply, /cash-out didn't go through .* chips stay at the table/, r.reply);
   const T = get(t);
   assert.ok(T.eng.seats.includes("u2"), "the seat is kept");
+  assert.equal(T.qol.u2.out, true, "sitting out (never dealt in) - its sit-out clock tries again");
   assert.equal(T.eng.chips.u2, 2000, "and its stack");
   assert.equal(T.intent, null, "nothing for a restart to finish (the refused credit wrote nothing)");
   assert.equal((await rowState(t)).s.eng.chips.u2, 2000, "saved so");
@@ -558,7 +597,167 @@ test("the Hold'em cash-out fix: a refused credit keeps the stack at the table (i
   assert.ok(get(t).eng.seats.includes("u1"));
   assert.equal(get(t).eng.chips.u1, 2000);
   assert.equal(get(t).intent, null);
+  assert.equal(get(t).qol.u1.out, true, "sitting out: never dealt in while its cash-out waits");
   await sql("INSERT INTO users (userId, username, displayname, password, points_balance) VALUES (?, ?, ?, 'x', ?)", [row1.userId, row1.username, row1.displayname, row1.points_balance]);
   ok(await hmAct("u1", "stand", t));
   assert.equal(await bal("u1"), 100000);
+});
+
+// roulette2 WP1 review: a refused cash-out never stops a table's clock. It used to throw out of the tick's sit-out loop (every 250 ms, before
+// the turn / next-hand / idle deadlines: a live hand never timed out), out of the hand's wrap-up (no next hand, `leaving` never cleared, and
+// the player whose action ended the hand was told "something went wrong") and out of a close. Now the seat keeps its stack, sits out, and its
+// sit-out clock tries again once per period.
+const users = async (uid) => (await rows("SELECT * FROM users WHERE userId = ?", [uid]))[0];
+const putBack = (row) => sql("INSERT INTO users (userId, username, displayname, password, points_balance) VALUES (?, ?, ?, 'x', ?)", [row.userId, row.username, row.displayname, row.points_balance]);
+const refusedLines = (lines, uid) => lines.filter((l) => new RegExp(`cash-out \\d+ to ${uid} refused`).test(l));
+const thrown = (lines) => lines.filter((l) => /hold'em deadline|\[casino\] act:/.test(l));
+
+test("the cash-out fix never stops the clock: a sat-out seat whose credit is refused keeps its stack, is tried again once per sit-out period (never every tick), and the hand in play still times out", async () => {
+  await fresh();
+  const t = await hm("u1");
+  for (const u of ["u1", "u2", "u3"]) ok(await hmAct(u, "sit", t, ["2000"]));
+  ok(await hmAct("u3", "sitout", t));
+  const T = get(t);
+  await later(570);                                                 // u3's 10-minute sit-out limit is 30 s away
+  ok(await hmAct("u1", "deal", t));
+  const n0 = T.eng.hand_no;
+  assert.ok(T.eng.hand_active && !T.eng.players.includes("u3"));
+  const start = await total();
+  const row = await users("u3");
+  await sql("DELETE FROM users WHERE userId = 'u3'");
+  const errs = await capture(async () => { for (let i = 0; i < 180; i++) await later(1); });   // 3 minutes, a tick a second
+  assert.deepEqual(thrown(errs), [], "no tick threw");
+  assert.equal(refusedLines(errs, "u3").length, 1, "tried once when the sit-out limit ran out - not on every tick: " + errs.join(" | "));
+  assert.ok(T.eng.hand_no > n0, "the hand in play timed out and the next one was dealt");
+  assert.ok(T.eng.seats.includes("u3"), "the seat is kept");
+  assert.equal(T.eng.chips.u3, 2000, "with its stack");
+  assert.equal(T.qol.u3.out, true);
+  assert.ok(T.dl.sitout.u3 > NOW, "its sit-out clock runs again");
+  assert.equal((await rowState(t)).s.eng.chips.u3, 2000, "saved so");
+  // the next period: the account is back, the cash-out goes through - once
+  await putBack(row);
+  for (let i = 0; i < 100; i++) await later(5);
+  assert.ok(!T.eng.seats.includes("u3"), "cashed out by its sit-out clock");
+  assert.equal(await bal("u3"), 100000);
+  assert.equal((await txKeys(new RegExp(`^chm:${t}:u3:out:`))).length, 1);
+  assert.equal(await total(), start);
+});
+
+test("the cash-out fix never stops the clock: a seat leaving after the hand whose credit is refused - the hand's wrap-up still runs (next hand scheduled, nobody told \"something went wrong\")", async () => {
+  await fresh();
+  const t = await hm("u1");
+  for (const u of ["u1", "u2", "u3"]) ok(await hmAct(u, "sit", t, ["2000"]));
+  ok(await hmAct("u1", "deal", t));
+  const T = get(t);
+  const n0 = T.eng.hand_no;
+  ok(await hmAct("u3", "stand", t));                                // in the hand: cashed out when it ends
+  assert.ok(T.eng.leaving.includes("u3"));
+  const start = await total();
+  const row = await users("u3");
+  await sql("DELETE FROM users WHERE userId = 'u3'");
+  const errs = await capture(async () => {
+    for (let i = 0; i < 12 && T.eng.hand_active; i++) {
+      const a = H.currentActor(T.eng);
+      ok(await hmAct(a, H.toCall(T.eng, a) ? "fold" : "check", t));   // the action that ends the hand is answered ok
+    }
+  });
+  assert.deepEqual(thrown(errs), []);
+  assert.equal(refusedLines(errs, "u3").length, 1);
+  assert.equal(T.eng.hand_active, false);
+  assert.deepEqual(T.eng.leaving, [], "the leaving list is cleared");
+  assert.ok(T.dl.next > NOW, "the next hand is scheduled");
+  assert.ok(T.eng.seats.includes("u3") && T.eng.chips.u3 > 0, "the seat and its stack are kept");
+  assert.equal(T.qol.u3.out, true);
+  await later(16);
+  assert.ok(T.eng.hand_active && T.eng.hand_no === n0 + 1, "the next hand is dealt");
+  assert.ok(!T.eng.players.includes("u3"), "without the seat whose cash-out waits");
+  // !stand again once the account is back: paid, once
+  await putBack(row);
+  const chips = T.eng.chips.u3;
+  ok(await hmAct("u3", "stand", t));
+  assert.ok(!T.eng.seats.includes("u3"));
+  assert.equal(await bal("u3"), row.points_balance + chips);
+  assert.equal((await txKeys(new RegExp(`^chm:${t}:u3:out:`))).length, 1);
+  assert.equal(await total(), start);
+});
+
+test("the cash-out fix never closes a table with a stack on it: the host's !holdem end and the idle close leave a refused seat (sitting out) and the table open; it closes once that cash-out goes through", async () => {
+  // the host closes it
+  await fresh();
+  let t = await hm("u1");
+  ok(await hmAct("u1", "sit", t, ["2000"]));
+  ok(await hmAct("u2", "sit", t, ["2000"]));
+  let start = await total();
+  let row = await users("u2");
+  await sql("DELETE FROM users WHERE userId = 'u2'");
+  let errs;
+  let r;
+  errs = await capture(async () => { r = await hmAct("u1", "end", t); });
+  assert.deepEqual(thrown(errs), []);
+  assert.equal(r.ok, false);
+  assert.match(r.reply, /stays open/, r.reply);
+  let T = get(t);
+  assert.equal(T.status, "open");
+  assert.deepEqual(T.eng.seats, ["u2"]);
+  assert.equal(T.eng.chips.u2, 2000);
+  assert.equal(T.qol.u2.out, true);
+  assert.equal(await bal("u1"), 100000, "the host's own stack came back");
+  assert.equal((await rowState(t)).status, "open");
+  await putBack(row);
+  for (let i = 0; i < 70; i++) await later(10);                     // its sit-out clock (10 minutes): the cash-out goes through
+  assert.equal((await rowState(t)).status, "closed", "the last seat out closes it");
+  assert.equal(await bal("u2"), 100000);
+  assert.equal(await total(), start);
+  // the 5-minute idle close
+  await fresh();
+  t = await hm("u1");
+  ok(await hmAct("u1", "sit", t, ["2000"]));
+  ok(await hmAct("u2", "sit", t, ["2000"]));
+  start = await total();
+  row = await users("u2");
+  await sql("DELETE FROM users WHERE userId = 'u2'");
+  errs = await capture(async () => { for (let i = 0; i < 40; i++) await later(10); });
+  T = get(t);
+  assert.deepEqual(thrown(errs), []);
+  assert.equal(refusedLines(errs, "u2").length, 1, "tried once at the idle close, then by its sit-out clock: " + errs.join(" | "));
+  assert.equal(T.status, "open");
+  assert.deepEqual(T.eng.seats, ["u2"]);
+  assert.equal(T.qol.u2.out, true);
+  await putBack(row);
+  for (let i = 0; i < 70; i++) await later(10);
+  assert.equal((await rowState(t)).status, "closed");
+  assert.equal(await bal("u2"), 100000);
+  assert.equal(await total(), start);
+});
+
+test("the scrub blanks every cached `cards` reply - Pepe's !cards from a room and the website's, matched on the reply (any table_id): prod's hole cards never stay in the copy", async () => {
+  await fresh();
+  const roomie = (uid) => Object.assign(who(uid), { via: "room", camfrog: "TestFrog" + uid.slice(1), room: "RoomA" });
+  // as Pepe's /bot/act does (casino/routes.js): the room's table found by the room, the key cf-<idem>
+  const ract = (uid, verb, args) => { svc.S.rate.clear(); const T = svc.tableForRoom("RoomA"); return svc.act(roomie(uid), verb, args || [], { room: "RoomA", table: T ? T.id : null, game: "holdem" }, "cf-stg-" + ++k); };
+  const t = ok(await ract("u1", "start", ["25/50"])).table;
+  ok(await ract("u1", "sit", ["2000"]));
+  ok(await ract("u2", "sit", ["2000"]));
+  ok(await ract("u1", "deal"));
+  const r = ok(await ract("u1", "cards"));
+  const key = "cf-stg-" + k;
+  const mine = "Your hand: " + H.cardsStr(get(t).eng.hole.u1);
+  assert.ok(r.reply.includes(mine), r.reply);
+  ok(await hmAct("u2", "cards", t));                                // the website's `cards`
+  const theirs = "Your hand: " + H.cardsStr(get(t).eng.hole.u2);
+  // a cached reply stored without its table (the statement never relies on table_id)
+  const loose = "Your hand: " + H.cardsStr(["As", "Kd"]);
+  await sql("INSERT INTO casino_actions (key, table_id, userId, response, created) VALUES ('cf-stg-loose', NULL, 'u3', ?, ?)", [JSON.stringify({ ok: true, reply: "🂠 " + loose + " | Board: —", pm: true }), NOW]);
+  // and a cached reply that isn't JSON (never touched, never breaks the step)
+  await sql("INSERT INTO casino_actions (key, table_id, userId, response, created) VALUES ('cf-stg-bad', NULL, 'u3', 'Your hand: x', ?)", [NOW]);
+  const { file, dir } = await refresh();
+  const buf = fs.readFileSync(file);
+  for (const x of [mine, theirs, loose]) assert.ok(!buf.includes(Buffer.from(x, "utf8")), "the copy still holds " + x);
+  const got = (await fileRows(file, `SELECT response FROM casino_actions WHERE key = '${key}'`))[0];
+  assert.deepEqual(JSON.parse(got.response), { ok: true, reply: "", pm: true }, "the row stays, its reply blanked");
+  assert.equal((await fileRows(file, "SELECT response FROM casino_actions WHERE key = 'cf-stg-bad'"))[0].response, "Your hand: x");
+  // a second run (refresh-staging-db.sh can run two lists) changes nothing more
+  const again = execFileSync(process.execPath, [path.join(repo, "deploy", "keep-staging-tables.js"), file + ".previous", file], { encoding: "utf8" });
+  assert.match(again, /casino_actions scrubbed 0 \(hole cards\)/);
+  fs.rmSync(dir, { recursive: true, force: true });
 });

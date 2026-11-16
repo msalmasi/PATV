@@ -284,15 +284,24 @@ function install(core) {
     return R(true, `you bought in for ${fmt(amount)}.`, { quiet: true });
   }
 
-  /** Pay a seat's chips back as PAT and free the seat (intent first: a restart finishes it).
-   *  roulette2 WP1 (the cash-out fix): a REFUSED credit keeps the stack at the table - the seat stays, the intent is cleared (money.credit
-   *  writes no row when ledger.post refuses, so there is nothing for a restart to finish) and the cash-out throws, so the caller stops
-   *  there. Before, the intent was cleared and the seat stood all the same: the stack was lost. opts.quiet (a copied table's retire,
-   *  casino/retire.js): no table lines. */
+  /** roulette2 WP1 review (the cash-out fix): a seat whose cash-out credit was REFUSED keeps its stack and its seat, sitting out - never
+   *  dealt in, and its sit-out clock (hm_sitout_mins, tick below) tries the cash-out again once per period, never on every tick. */
+  function refusedOut(T, uid) {
+    const q = qos(T, uid);
+    q.out = true; q.since = clock(); q.back = null;
+    qos(T, uid);                                                    // the sit-out clock from now
+  }
+
+  /** Pay a seat's chips back as PAT and free the seat (intent first: a restart finishes it). -> true when the seat is free.
+   *  roulette2 WP1 (the cash-out fix): a REFUSED credit keeps the stack at the table - the seat stays (sitting out, retried by its
+   *  sit-out clock: refusedOut), the intent is cleared (money.credit writes no row when ledger.post refuses, so there is nothing for a
+   *  restart to finish) and this answers false: the caller goes on (the table's other deadlines keep running) and never closes the
+   *  table with it. Before, the intent was cleared and the seat stood all the same: the stack was lost. opts.quiet (a copied table's
+   *  retire, casino/retire.js): no table lines. */
   async function cashout(T, uid, busted, opts) {
-    if (T.tourney) return;                 // h22: tournament chips are never PAT - a sit & go seat is never cashed out
+    if (T.tourney) return true;            // h22: tournament chips are never PAT - a sit & go seat is never cashed out
     const e = T.eng;
-    if (!e.seats.includes(uid)) return;
+    if (!e.seats.includes(uid)) return true;
     const quiet = !!(opts && opts.quiet);
     const name = e.names[uid] || (T.players[uid] || {}).name || uid;
     const chips = e.chips[uid] || 0;
@@ -303,15 +312,16 @@ function install(core) {
       const r = await money.credit(key, uid, chips, "holdem cash-out");
       if (!r.ok) {
         T.intent = null;
+        refusedOut(T, uid);
         await save(T);
-        console.error(`[casino] ${T.id}: cash-out ${chips} to ${uid} refused (${r.code}) - the stack stays at the table`);
-        throw Object.assign(new Error(`the cash-out of ${uid}'s ${chips} chips was refused (${r.code})`), { code: r.code });
+        console.error(`[casino] ${T.id}: cash-out ${chips} to ${uid} refused (${r.code}) - the stack stays at the table (sitting out, tried again in ${setting("hm_sitout_mins", 10)} min)`);
+        return false;
       }
     }
     try { H.stand(e, uid); } catch (err) { /* seated in a live hand: the caller made sure it isn't */ }
     forgetSeat(T, uid);
     T.intent = null;
-    if (quiet) return;
+    if (quiet) return true;
     if (chips > 0) await emit(T, "line", `🚪 ${name} cashes out ${fmt(chips)} PAT.`);
     else if (busted) await emit(T, "line", `💸 ${name} busted out. !sit to rebuy.`);
     else await emit(T, "line", `🚪 ${name} leaves the table.`);
@@ -320,7 +330,9 @@ function install(core) {
       T.host = { uid: nh, name: e.names[nh] || (T.players[nh] || {}).name || nh };
       await emit(T, "line", `👑 ${T.host.name} is now the table host.`);
     }
+    return true;
   }
+  const REFUSED_REPLY = () => `your cash-out didn't go through — your chips stay at the table (sitting out). It's tried again in ${setting("hm_sitout_mins", 10)} minutes, or !stand to try now.`;
 
   async function standCmd(T, actor) {
     const e = T.eng;
@@ -331,7 +343,7 @@ function install(core) {
       return R(true, e.folded.includes(actor.uid) ? "you'll be cashed out when this hand ends."
                                                   : "you'll be cashed out when this hand ends (or !fold to leave sooner).");
     }
-    await cashout(T, actor.uid, false);
+    if (!(await cashout(T, actor.uid, false))) return R(false, REFUSED_REPLY());   // (roulette2 WP1 review: saved, seat kept)
     if (!e.seats.length) return closeTable(T, "table empty").then(() => R(true, "you left the table.", { quiet: true }));
     if (!e.hand_active && H.seatedWithChips(e).length < 2) T.dl.next = null;      // nobody left to deal to: wait, then close
     if (!e.hand_active && !T.dl.next) T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
@@ -581,10 +593,19 @@ function install(core) {
     return TN().afterHand(T, {});
   }
 
+  /** -> false when the table stays open (roulette2 WP1 review: a refused cash-out keeps its seat - never closed with PAT on it), true when closed */
   async function closeTable(T, reason) {
     if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
     for (const k of e.seats.slice()) await cashout(T, k, false);
+    if (e.seats.length) {
+      // every seat left holds a refused cash-out, sitting out (refusedOut): its sit-out clock tries again, and the last one out closes it
+      T.dl.next = null;
+      T.dl.idle = null;
+      await save(T);
+      console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - a cash-out was refused, the table stays open`);
+      return false;
+    }
     T.status = "closed";
     T.closed_at = clock();
     T.dl = { turn: null, next: null, idle: null };
@@ -592,6 +613,7 @@ function install(core) {
     await emit(T, "closed", `🃏 Hold'em table closed${reason ? " — " + reason : ""}.`, { reason: reason || null });
     await save(T);
     core.streamGone(T.id);
+    return true;
   }
 
   async function action(T, actor, verb, amountArg) {
@@ -644,7 +666,9 @@ function install(core) {
   async function end(T, actor) {
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "only the table starter or an admin can close it.");
     if (T.eng.hand_active) return R(false, "can't close mid-hand — let the hand finish first.");
-    await closeTable(T, `closed by ${actor.name}`);
+    if ((await closeTable(T, `closed by ${actor.name}`)) === false) {
+      return R(false, "the table stays open — a cash-out didn't go through, so those chips stay at the table (sitting out) until it goes through.");
+    }
     return R(true, "table closed.", { quiet: true });
   }
 
@@ -743,7 +767,10 @@ function install(core) {
   async function recover(T) {
     // roulette2 WP1 (FAIR-1 for cards): a cash table copied from another database (a staging refresh) is retired, never resumed
     // (casino/retire.js); a sit & go / tournament table's copy is retired by casino/tourney.js / casino/mtt.js (TN().recover below)
-    if (!T.tourney && RT.isCopy(T)) return RT.holdem(T, { S, clock, save, bookRake, cashout: (T2, k) => cashout(T2, k, false, { quiet: true }) });
+    if (!T.tourney && RT.isCopy(T)) return RT.holdem(T, { S, clock, save, bookRake, cashout: async (T2, k) => {
+      // (a refused credit: the retire stops there - the table stays open in the database, out of play, and the next boot tries again)
+      if (!(await cashout(T2, k, false, { quiet: true }))) throw Object.assign(new Error(`the cash-out of ${k}'s chips was refused`), { code: "E_REFUSED" });
+    } });
     if (T.tourney && (await TN().recover(T)) === "done") return;   // h22: registering / paying out / over - else the hand resumes below
     const e = T.eng;
     for (const uid of e.seats) qos(T,uid);
@@ -764,7 +791,9 @@ function install(core) {
           if (!e.seats.includes(it.uid)) forgetSeat(T, it.uid);
           console.log(`[casino] ${T.id}: cash-out ${it.key} finished after a restart`);
         } else {
-          // roulette2 WP1 (the cash-out fix): refused - nothing moved, so the stack stays at the table (it was stood up and lost before)
+          // roulette2 WP1 (the cash-out fix): refused - nothing moved, so the stack stays at the table (it was stood up and lost before),
+          // sitting out: its sit-out clock tries the cash-out again (refusedOut)
+          if (e.seats.includes(it.uid) && !(e.hand_active && e.players.includes(it.uid))) refusedOut(T, it.uid);
           console.error(`[casino] ${T.id}: cash-out ${it.key} refused after a restart (${r.code}) - the stack stays at the table`);
         }
       }

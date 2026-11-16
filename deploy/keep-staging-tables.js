@@ -98,6 +98,10 @@ const SCRUB = [
 // (casino/retire.js, casino/tourney.js, casino/mtt.js: every stake / stack / entry back by its key, nothing revealed, no table line).
 // A scheduled tournament's seating draw seed (casino_mtt seed.draw_seed, committed when registration opens, revealed at the finish) goes
 // from a registering / running / finishing one too. Ship with the retire and fair.js's no-seed guard (one release).
+// roulette2 WP1 review: and the hole cards a player asked for - Hold'em's `cards` reply ("🂠 Your hand: <hole cards> | Board: ...", Pepe's
+// !cards / !hand / !hole and the website's `cards`, at a cash, sit & go or tournament table) is cached whole in casino_actions.response (the
+// idempotent replay, service.act) - for the hand in play that is prod's hole cards. Its reply is blanked (the row stays: a replay of that
+// key answers an empty reply). Matched on the reply, not table_id: a command typed in a room can be stored with no table_id.
 // Each statement can run twice (refresh-staging-db.sh runs prod's list, then staging's when it differs): the second run changes nothing.
 const CASINO_SCRUB = [
   { table: "casino_tables", what: "roulette",
@@ -111,6 +115,9 @@ const CASINO_SCRUB = [
   { table: "casino_mtt", what: "tournaments",
     sql: "UPDATE main.casino_mtt SET state = json_set(json_remove(state, '$.seed.draw_seed'), '$.copied', 1) " +
          "WHERE status IN ('registering', 'running', 'finishing') AND json_valid(state)" },
+  { table: "casino_actions", what: "hole cards",
+    sql: "UPDATE main.casino_actions SET response = json_set(response, '$.reply', '') WHERE response LIKE '%Your hand:%' AND " +
+         "(CASE WHEN json_valid(response) THEN json_extract(response, '$.reply') END) LIKE '%Your hand:%'" },
 ];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
@@ -297,6 +304,14 @@ async function main(oldFile, newFile, sqlite3 = require("sqlite3")) {
       await run(db, "DETACH DATABASE old").catch(() => {});
     }
     await all(db, "PRAGMA main.journal_mode = DELETE");                     // the copy is moved next: no -wal beside it
+    // roulette2 WP1 review: the copy is rebuilt last. A copy built by a plain VACUUM INTO (refresh-staging-db.sh before roulette2 WP1 -
+    // prod's checkout runs it, and prod gets a release after staging, or rolls back past it) keeps stale row bytes in its page slack -
+    // prod's open tables' seeds and decks, chat text - where no scrub or secure_delete above reaches; the rebuild only ever sees the rows
+    // the copy has now (scrubbed), and every page of the file is rewritten. This script also runs from staging's checkout when it
+    // differs, so a staging release protects the copy whichever refresh script built it. (Staging is stopped meanwhile; a failed
+    // rebuild fails the refresh - staging keeps its old database.)
+    await run(db, "VACUUM");
+    res.vacuumed = true;
     return res;
   } finally {
     await new Promise((resolve) => db.close(() => resolve()));
@@ -308,7 +323,7 @@ if (require.main === module) {
   if (!oldFile || !newFile) { console.error("usage: node keep-staging-tables.js <staging's current DB> <the fresh copy>"); process.exit(2); }
   main(path.resolve(oldFile), path.resolve(newFile)).then((r) => {
     const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : x.scrubbed != null ? "scrubbed " + x.scrubbed + (x.what ? " (" + x.what + ")" : "") : "-" + x.cleared));
-    console.log((r.mode === "kept" ? "kept staging's own tables: " : "cleared prod's per-environment tables: ") + parts.join(", "));
+    console.log((r.mode === "kept" ? "kept staging's own tables: " : "cleared prod's per-environment tables: ") + parts.join(", ") + (r.vacuumed ? "; the copy rebuilt" : ""));
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 

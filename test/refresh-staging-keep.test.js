@@ -161,9 +161,10 @@ test("the lists cover every per-environment table, and the script runs it with s
   // copy's page slack, where the scrubs below (secure_delete ON in the copy) can't reach them
   assert.match(sh, /sqlite3 -cmd "\.timeout 30000" \/home\/PATV\/myapp\.db "PRAGMA secure_delete = ON; VACUUM INTO '\$S\/myapp\.db\.new';"/);
   // ... and every open casino table's secrets go from it: roulette wheels, the card tables (blackjack, Hold'em - cash, sit & go and
-  // tournament tables), the tournaments' seating draw seeds
-  assert.deepEqual(K.CASINO_SCRUB.map((s) => [s.table, s.what]), [["casino_tables", "roulette"], ["casino_tables", "cards"], ["casino_mtt", "tournaments"]]);
-  for (const s of K.CASINO_SCRUB) assert.match(s.sql, /^UPDATE main\.casino_(tables|mtt) SET state = json_set\(.*'\$\.copied', 1\) WHERE .*json_valid\(state\)$/);
+  // tournament tables), the tournaments' seating draw seeds, and (roulette2 WP1 review) the hole cards cached in casino_actions
+  assert.deepEqual(K.CASINO_SCRUB.map((s) => [s.table, s.what]), [["casino_tables", "roulette"], ["casino_tables", "cards"], ["casino_mtt", "tournaments"], ["casino_actions", "hole cards"]]);
+  for (const s of K.CASINO_SCRUB.filter((x) => x.table !== "casino_actions")) assert.match(s.sql, /^UPDATE main\.casino_(tables|mtt) SET state = json_set\(.*'\$\.copied', 1\) WHERE .*json_valid\(state\)$/);
+  assert.match(K.CASINO_SCRUB[3].sql, /^UPDATE main\.casino_actions SET response = json_set\(response, '\$\.reply', ''\) WHERE response LIKE '%Your hand:%' AND /);
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');
   assert.ok(stop > 0 && keep > stop && swap > keep, "stop -> keep -> swap");
   assert.match(sh, /if ! node "\$\(dirname "\$0"\)\/keep-staging-tables\.js" "\$S\/myapp\.db" "\$S\/myapp\.db\.new"; then[\s\S]{0,300}rm -f "\$S\/myapp\.db\.new"[\s\S]{0,120}pm2 start patv-staging[\s\S]{0,40}exit 1/,
@@ -347,6 +348,48 @@ test("CL2 fix-up: staging keeps its own live feed (bridge_feed, bridge_rooms), a
   assert.equal((await K.main(path.join(dir, "no-such-dir", "missing.db"), p9, sqlite3)).mode, "cleared");
   const b9 = fs.readFileSync(p9).toString("latin1");
   for (const w of ["prodfeedsecret", "prodarchivesecret"]) assert.ok(!b9.includes(w), w + " is gone (fallback)");
+});
+
+// roulette2 WP1 review: the keep step rebuilds the copy (VACUUM) last. refresh-staging-db.sh runs from PROD's checkout, so until prod has
+// roulette2 WP1 (staging gets a release first) - or after a prod rollback past it - the copy is built by a plain VACUUM INTO, which leaves
+// stale row bytes in the copy's page slack (a page that became an interior page keeps its old leaf cells): prod's open tables' seeds,
+// out of reach of every scrub and of secure_delete. The keep script also runs from staging's checkout when it differs, so its rebuild covers
+// that window.
+test("a copy built by a plain VACUUM INTO (prod's refresh script a release behind): after the keep step no open casino table's seed is left in the file, page slack included (both paths)", async () => {
+  const crypto = require("crypto");
+  for (const path2 of ["kept", "cleared"]) {
+    const src = path.join(dir, `vac-src-${path2}.db`), copy = path.join(dir, `vac-copy-${path2}.db`), stg = path.join(dir, `vac-stg-${path2}.db`);
+    const d = db(src);
+    await run(d, "PRAGMA journal_mode = WAL");
+    await run(d, "CREATE TABLE casino_tables (id TEXT PRIMARY KEY, game TEXT, status TEXT, room TEXT, host TEXT, state TEXT, rev INTEGER, created INTEGER, updated INTEGER)");
+    const seeds = [];
+    for (let i = 0; i < 40; i++) {
+      const seed = crypto.randomBytes(32).toString("hex");
+      seeds.push(seed);
+      const game = i % 2 ? "bj" : "holdem";
+      const st = game === "bj" ? { id: "t" + i, game, status: "open", round: { no: 3, seed, commitment: "c".repeat(64) }, eng: { phase: "betting", shoe: [], dealer: [] }, pad: "x".repeat(1000 + (i * 97) % 3000) }
+                               : { id: "t" + i, game, status: "open", next: { no: 4, seed, commitment: "c".repeat(64) }, eng: { deck: [], hole: {} }, pad: "y".repeat(1000 + (i * 89) % 3000) };
+      await run(d, "INSERT INTO casino_tables VALUES (?, ?, 'open', NULL, 'u', ?, 1, 0, 0)", ["t" + i, game, JSON.stringify(st)]);
+      st.pad += "z".repeat((i * 31) % 900);                                       // a live table's row grows
+      await run(d, "UPDATE casino_tables SET state = ? WHERE id = ?", [JSON.stringify(st), "t" + i]);
+    }
+    await run(d, `VACUUM INTO '${copy.split(path.sep).join("/")}'`);                // prod's older script: no secure_delete for the build
+    await close(d);
+    if (path2 === "kept") { await makeStaging(stg); }
+    const r = await K.main(path2 === "kept" ? stg : path.join(dir, "no-such-dir", "missing.db"), copy, sqlite3);
+    assert.equal(r.mode, path2);
+    assert.equal(r.vacuumed, true, "the copy is rebuilt");
+    assert.ok(r.tables.some((x) => x.what === "cards" && x.scrubbed === 40));
+    const bytes = fs.readFileSync(copy).toString("latin1");
+    const left = seeds.filter((x) => bytes.includes(x));
+    assert.deepEqual(left, [], path2 + ": seeds left in the copy's bytes");
+    const c = db(copy);
+    try {
+      assert.equal((await all(c, "PRAGMA integrity_check"))[0].integrity_check, "ok");
+      assert.equal((await all(c, "PRAGMA journal_mode"))[0].journal_mode, "delete", "no -wal beside the copy");
+      assert.equal((await all(c, "SELECT COUNT(*) AS n FROM casino_tables WHERE json_extract(state, '$.copied') = 1"))[0].n, 40);
+    } finally { await close(c); }
+  }
 });
 
 test("wave2 integration review (P4 / DARK-1 / T-2): prod's frog-name <-> login pairings never cross - a veiled exclusion row (vlogin + the frog name) goes from the copy, a frog-name clip's speaker logins are blanked; by-name rows and named clips stay prod's (both paths, and no bytes left behind)", async () => {

@@ -97,8 +97,14 @@ before the outbox, because prod's triggers come along with the copy; 1.99add: al
 while `hub_hidden_set` keeps prod's rows, so people hidden on prod stay hidden on staging). 1.99acm: prod's unfinished "Download my data" jobs
 are marked expired in the copy, so staging never zips prod members' data. 1.99aof: every open roulette wheel's secret seed
 is removed from the copy and the wheel marked `copied` - staging closes it at boot (its book refunded, its commitment never
-revealed), so staging can never play or publish a round prod's wheel is still taking bets on. If that can't be done, staging keeps its old
-database. Wave 2 WP-5: the script also runs the staging checkout's `keep-staging-tables.js` when it differs from prod's, so the
+revealed), so staging can never play or publish a round prod's wheel is still taking bets on. Roulette2 WP1: the card tables too -
+every open blackjack table (its round's seed, the live shoe, the dealer's hole card) and every open Hold'em table, cash, sit & go or
+tournament (the next and current hand's seed, the deck, every hole card), plus a registering or running tournament's seating draw seed and
+the hole cards a player asked for with `!cards` (the reply cached in `casino_actions`). Staging retires each copied table at boot without
+revealing it: every stake, stack and entry comes back by its own key, with no table line. The copy is built with `secure_delete` on, and the
+keep step rebuilds it (`VACUUM`) at the end, so no seed or card survives in the file's free space either. The rebuild comes from staging's
+own `keep-staging-tables.js`, which also runs when prod's checkout is a release behind, so a refresh between the staging and prod deploys is
+safe. If that can't be done, staging keeps its old database. Wave 2 WP-5: the script also runs the staging checkout's `keep-staging-tables.js` when it differs from prod's, so the
 union of both lists stays staging's own (after a prod rollback, prod's older list may lack a table staging has, such as
 `evidence_clips`). A prod checkout older than WP-5 doesn't do this: after such a rollback, run the staging checkout's copy instead,
 `bash /home/PATV-staging/deploy/refresh-staging-db.sh`.
