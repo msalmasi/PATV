@@ -260,7 +260,9 @@
                 ? t.result_until
                 : 0;
       var secs = Math.max(0, Math.ceil((end - (Date.now() - clock)) / 1000));
-      time.textContent = end ? secs + "s" : phase(t);
+      // UI-13: an idle wheel has no deadline - a dash keeps the ring round (the phase word is on the page / in the sheet)
+      time.textContent = end ? T("rl_secs", "{n}s", { n: secs }) : "–";
+      time.classList.toggle("idle", !end);
       var span =
         t.phase === "betting"
           ? t.limits.rl_bet_secs

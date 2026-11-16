@@ -264,6 +264,8 @@
   .lob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
   .tcard { display: flex; flex-direction: column; gap: 10px; padding: var(--ds-sp-4); border-radius: var(--ds-r-xl); min-width: 0; background: var(--panel); border: 1px solid var(--line); }
   .tcard.hm { border-color: rgba(120,160,255,.28); }
+  /* 1.99aoe (UI-9): the lobby's roulette card link is a 44 px tap target */
+  #cz-roulette > a { display: flex; align-items: center; min-height: 44px; }
   /* 1.99ov: the 💎 High Roller section of the lobby */
   .tcard.hr { border-color: rgba(255,215,64,.55); background: linear-gradient(180deg, rgba(40,32,8,.6), rgba(6,10,8,.85)); box-shadow: 0 0 22px rgba(255,200,60,.12); }
   .tcard.hr .tcard-h .ic { background: radial-gradient(circle at 35% 30%, #3a2e0a, #0b0903); border: 1px solid rgba(255,215,64,.6); }

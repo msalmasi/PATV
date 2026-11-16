@@ -21,7 +21,9 @@
     controls,
     lastSpin = 0,
     angle = 0;
-  var compact = W.matchMedia("(max-width:639px)"),
+  // UI-3: the phone's way of betting inside positions (modes + two taps) on any touch screen too (views/partials/casino-rl-css.ejs)
+  var compact = W.matchMedia("(max-width:639px), (pointer:coarse)"),
+    narrow = W.matchMedia("(max-width:639px)"),
     reduced = W.matchMedia("(prefers-reduced-motion:reduce)");
   function color(n) {
     return !n ? "zero" : G.red.indexOf(n) >= 0 ? "red" : "black";
@@ -254,7 +256,7 @@
         return;
       var token = e.target.dataset.token;
       if (!/^\d+$/.test(token)) return;
-      var delta = compact.matches
+      var delta = narrow.matches
         ? { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -3, ArrowDown: 3 }
         : { ArrowLeft: -3, ArrowRight: 3, ArrowUp: 1, ArrowDown: -1 };
       var dest = Math.max(0, Math.min(36, +token + delta[e.key]));

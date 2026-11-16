@@ -45,6 +45,8 @@
   outline-offset: 1px;
 }
 .rl-controls input {
+  box-sizing: border-box;
+  min-height: 44px;
   background: #111c15;
   border: 1px solid #819781;
   border-radius: 6px;
@@ -88,6 +90,12 @@
   font-variant-numeric: tabular-nums;
   background: conic-gradient(#efd08f calc(var(--left, 0) * 100%), #647165 0);
 }
+/* UI-13: no deadline (an idle wheel) - a dash in the round ring, the phase word is in the sheet's state line */
+.rl-timer.idle {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
 .rl-timer::before {
   content: "";
   position: absolute;
@@ -104,8 +112,10 @@
   grid-template-columns: repeat(3, 1fr);
 }
 .rl-table-link {
-  display: inline-block;
-  margin: 0.7em 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0.4em 0;
   color: #f4d88e;
 }
 @media (max-width: 639px) {

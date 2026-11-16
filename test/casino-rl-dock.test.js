@@ -83,3 +83,22 @@ test("ENGINE-3 / UI-1: the sheet's first table request asks for the intro notice
   assert.equal(D.q(".rl-intro").hidden, false);
   assert.match(D.q(".rl-intro").textContent, /no cash value/);
 });
+
+test("UI-13 / UI-9 / UI-3: an idle ring holds a dash, the small links and inputs are 44 px targets, touch screens get the modes", async () => {
+  const D = await dock({ pad: () => ({ ok: true, table: LOBBY, here: false }), table: () => view(LOBBY, "idle", {}) });
+  const ring = D.q(".rl-timer");
+  assert.equal(ring.textContent, "–");
+  assert.ok(ring.classList.contains("idle"));
+  const read = (f) => fs.readFileSync(path.join(repo, f), "utf8");
+  const dockCss = read("public/css/casinorl-dock.css"),
+    felt = read("views/partials/casino-rl-css.ejs"),
+    lobby = read("views/partials/casino-css.ejs");
+  assert.match(dockCss, /\.rl-controls input \{[^}]*min-height: 44px/);
+  assert.match(dockCss, /\.rl-table-link \{[^}]*min-height: 44px/);
+  assert.match(dockCss, /\.rl-timer\.idle \{[^}]*width: 44px;[^}]*height: 44px/);
+  assert.match(felt, /\.rl-more a \{[^}]*min-height: 44px/);
+  assert.match(felt, /grid-template-rows: repeat\(3, minmax\(44px, 1fr\)\)/);
+  assert.match(felt, /@media \(pointer: coarse\) and \(min-width: 640px\) \{\s*\.rl-modes \{\s*display: flex;[\s\S]*?\.rl-grid \.edge \{\s*display: none;/);
+  assert.match(lobby, /#cz-roulette > a \{[^}]*min-height: 44px/);
+  assert.match(read("public/js/casinorl.js"), /matchMedia\("\(max-width:639px\), \(pointer:coarse\)"\)/);
+});

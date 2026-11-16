@@ -100,7 +100,7 @@
 .rl-grid {
   display: grid;
   grid-template-columns: 0.9fr repeat(12, 1fr) 1.25fr;
-  grid-template-rows: repeat(3, minmax(42px, 1fr));
+  grid-template-rows: repeat(3, minmax(44px, 1fr));
   position: relative;
 }
 .rl-grid button,
@@ -226,6 +226,9 @@
 }
 .rl-more a {
   margin-inline-end: 0.65em;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 #rl-proof {
   overflow-wrap: anywhere;
@@ -324,6 +327,35 @@
   }
   .rl-trail small {
     font-size: 12px;
+  }
+}
+/* 1.99aoe (UI-3): a touch screen 640 px or wider (a phone in landscape, a tablet) keeps the wide felt but bets the phone's
+   way - the Split / Street / Corner / Line modes (two taps on numbers) instead of the 11-13 px edge targets, which a
+   finger misses onto a number (a straight bet charged at once). casinorl.js uses the same media query. */
+@media (pointer: coarse) and (min-width: 640px) {
+  .rl-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin: 0 0 8px;
+  }
+  .rl-modes button {
+    min-height: 44px;
+    padding: 0 0.65rem;
+    background: #0e392a;
+    border: 1px solid #b6cbb8;
+    color: white;
+    border-radius: 6px;
+  }
+  .rl-modes [aria-pressed="true"] {
+    background: #ffe1a1;
+    color: #2b2317;
+  }
+  .rl-grid .edge {
+    display: none;
+  }
+  .rl-outside button {
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

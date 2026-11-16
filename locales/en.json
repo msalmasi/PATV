@@ -8696,6 +8696,7 @@
   "js.casino.rl_full_table": "Open full table",
   "js.casino.rl_type_hint": "You can also type !rl red 500 in this chat.",
   "js.casino.rl_off": "Roulette isn't open yet.",
+  "js.casino.rl_secs": "{n}s",
   "js.casino.rl_intro": "PAT are points with no cash value. Each spin is independent. The wheel has a single zero and straight up pays 35 to 1.",
   "js.casino.fair_title": "Provably fair: the next shoe is fixed before anyone bets. Commitment {c}",
   "js.casino.commit_line_hm": "Hand #{n} commitment: {c} · client seed {s}",
