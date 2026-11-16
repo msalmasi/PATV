@@ -87,7 +87,23 @@ async function loadStats() {
     const csvc = require("./casino/service");
     const st = await csvc.loadSettings();
     out.tablesHref = csvc.frontPath(st, "lobby");
+    const wheels = [];
     for (const row of csvc.lobby()) {
+      // roulette2 (contract 3): the lobby lists the open roulette wheels too. This box is the same for every viewer, so a wheel is
+      // listed only while roulette is open to everyone, and only one with somebody on it or on Pepe's stream (the always-open
+      // lobby wheel waiting for its first bet isn't news); after the card tables, as 🛞 Roulette, linked to its own page
+      if (row.game === "roulette") {
+        if (st.casino_roulette !== "everyone") continue;
+        const T = csvc.getTable(row.id);
+        if (T) { try { await csvc.refreshVeil(T); } catch (e) { /* the view masks what it knows */ } }
+        const v = T ? csvc.publicView(T) : null;
+        const seats = ((v && v.seats) || []).filter((x) => x && x.name).map((x) => String(x.name));
+        if (!seats.length && !row.on_stream) continue;
+        wheels.push({ id: row.id, game: "Roulette", featured: false, on_stream: !!row.on_stream, high_stakes: !!row.high_stakes,
+          phase: (v && v.phase) || row.phase || "", room: row.room_name || "", seats,
+          href: "/casino/roulette/t/" + encodeURIComponent(row.id) });
+        continue;
+      }
       if (csvc.frontOf(st, row.game === "holdem" ? "holdem" : "bj") !== "patv") continue;
       const T = csvc.getTable(row.id);
       // 1.99ajw casino2 verify: the same masks as the table view - its veils re-read first (casino/veil.js; at most every 2 s per table)
@@ -98,6 +114,7 @@ async function loadStats() {
         seats: ((v && v.seats) || []).filter((x) => x && x.name).map((x) => String(x.name)),
         href: (row.game === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + encodeURIComponent(row.id) });
     }
+    out.tables.push(...wheels);
   } catch (e) { console.error("[home] casino tables:", e.message); }
   out.featured = out.tables.find((t) => t.featured) || out.tables.find((t) => t.on_stream) || out.tables[0] || null;
   const u = await one(`SELECT COUNT(*) AS n FROM users WHERE ${stale.LIVE()}`);

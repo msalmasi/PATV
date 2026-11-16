@@ -27,12 +27,25 @@ const DEFAULTS = {
   rl_bank_pct: 10,
   rl_spin_cap: 2000000,
   rl_bet_secs: 25,
-  rl_spin_secs: 8,
+  rl_spin_secs: 12, // roulette2 D6: 8 -> 12 s, so the ball drop (casino/rlwheel.js) reads as real (bounds 4-20 kept)
   rl_result_secs: 5,
   rl_idle_close_mins: 10,
+  // roulette2 D2: the 💎 High Roller wheels' limits (a wheel opened with !rl start hr / the web's High Roller card) - the same
+  // shapes as the rl_* ones above, and rl_hr_spin_cap, the High Roller wheels' share of the ONE House budget (available())
+  rl_hr_min_bet: 1000,
+  rl_hr_max_straight: 25000,
+  rl_hr_max_split: 50000,
+  rl_hr_max_street: 75000,
+  rl_hr_max_corner: 100000,
+  rl_hr_max_line: 150000,
+  rl_hr_max_outside: 250000,
+  rl_hr_max_spin: 500000,
+  rl_hr_spin_cap: 1000000,
 };
 const SETTING_KEYS = Object.keys(DEFAULTS);
-const caps = ["straight", "split", "street", "corner", "line", "outside"].map((k) => "rl_max_" + k);
+const POSITIONS = ["straight", "split", "street", "corner", "line", "outside"];
+const caps = POSITIONS.map((k) => "rl_max_" + k);
+const hrCaps = POSITIONS.map((k) => "rl_hr_max_" + k);
 const bounds = {
   rl_max_positions: [1, 60],
   rl_max_lines: [1, 60],
@@ -43,6 +56,7 @@ const bounds = {
   rl_spin_secs: [4, 20],
   rl_result_secs: [2, 30],
   rl_idle_close_mins: [2, 120],
+  rl_hr_spin_cap: [0, 10000000],
 };
 function valueOf(key, val) {
   if (key === "casino_roulette" && AUDIENCES.includes(val)) return val;
@@ -55,10 +69,21 @@ function valueOf(key, val) {
 function ordered(s) {
   return caps.every((k) => s[k] >= s.rl_min_bet && s[k] <= s.rl_max_spin);
 }
+// roulette2 D2: the High Roller set - each cap between its minimum and its per-spin maximum, and a straight's worst case (35 to 1)
+// inside the High Roller House cap, or not even one straight at the cap could ever be admitted
+function orderedHr(s) {
+  return (
+    hrCaps.every((k) => s[k] >= s.rl_hr_min_bet && s[k] <= s.rl_hr_max_spin) && s.rl_hr_max_straight * 35 <= s.rl_hr_spin_cap
+  );
+}
 function checkSetting(key, val, current = DEFAULTS) {
-  const value = valueOf(key, val);
-  if (!ordered({ ...DEFAULTS, ...current, [key]: value }))
-    throw Error("Position limits must be between the minimum bet and the spin maximum.");
+  const value = valueOf(key, val),
+    next = { ...DEFAULTS, ...current, [key]: value };
+  if (!ordered(next)) throw Error("Position limits must be between the minimum bet and the spin maximum.");
+  if (!orderedHr(next))
+    throw Error(
+      "High Roller position limits must be between the High Roller minimum bet and its spin maximum, and 35 times the straight limit must fit in the High Roller House cap.",
+    );
   return String(value);
 }
 function readSettings(kv) {
@@ -72,10 +97,40 @@ function readSettings(kv) {
       }
   }
   if (!ordered(s)) for (const k of [...caps, "rl_min_bet", "rl_max_spin"]) s[k] = DEFAULTS[k];
+  if (!orderedHr(s)) for (const k of [...hrCaps, "rl_hr_min_bet", "rl_hr_max_spin", "rl_hr_spin_cap"]) s[k] = DEFAULTS[k];
   return s;
 }
+// roulette2 D3: a wheel's limits - its tier's settings (normal, or 💎 High Roller) - as one object. Snapshotted into T.lim when each
+// spin opens (nextSeed), so an admin's edit never changes the limits inside a betting window; every check, the views, the limits
+// verb and the push / advert lines read it (lim(T) in install()).
+function tierLimits(s, high) {
+  const p = high ? "rl_hr_" : "rl_";
+  return {
+    tier: high ? "hr" : "main",
+    min: s[p + "min_bet"],
+    caps: Object.fromEntries(POSITIONS.map((k) => [k, s[p + "max_" + k]])),
+    max_spin: s[p + "max_spin"],
+    max_positions: s.rl_max_positions,
+    max_actions: s.rl_max_lines,
+    max_players: s.rl_max_players,
+  };
+}
+// which cap a position kind uses (the rules' `kinds`: trio -> street, first four -> corner, the rest of the outside bets -> outside)
+const KINDS = {
+  trio: "street",
+  first_four: "corner",
+  dozen: "outside",
+  column: "outside",
+  red: "outside",
+  black: "outside",
+  odd: "outside",
+  even: "outside",
+  low: "outside",
+  high: "outside",
+};
+const capKind = (kind) => KINDS[kind] || (POSITIONS.includes(kind) ? kind : "outside");
 const HELP =
-  "🛞 Use !rl with a bet and an amount, like red 500, 17 100, or 17-18 100. Try bets, undo, clear, again, limits, last, fair, go or end. !rl go spins a wheel you bet on alone. !spin is the separate prize wheel.";
+  "🛞 Use !rl with a bet and an amount, like red 500, 17 100, or 17-18 100. Try bets, undo, clear, again, limits, last, fair, go or end. !rl go spins a wheel you bet on alone. !rl start opens a wheel in this room (!rl start hr: a 💎 High Roller wheel). !spin is the separate prize wheel.";
 const sum = (list) => list.reduce((a, b) => a + b, 0);
 const amountOf = (bets) => sum(bets.map((b) => b.amount));
 // UI-11: a web reply names dozens, columns and low / high as the felt does; Pepe's (and every text the page parses back -
@@ -123,10 +178,48 @@ function install(core) {
     cmdStart,
     wake,
   } = core;
+  // roulette2 (WP3): the High Roller role and texts (service.js: blackjack's), a table's adverts, the stream slot's hand-over at a
+  // lobby rotation - optional, so an older core (a test's) still installs
+  const isHighRoller = core.isHighRoller || (async () => false);
+  const advertList = core.advertList || (() => []);
+  const streamHandOff = core.streamHandOff || (() => false);
+  const HR_ONLY_PLAY =
+    core.HR_ONLY_PLAY ||
+    "💎 this is a High Roller table: only High Rollers can play here (the role is in the prize store — !prizes). You can watch.";
   const reply = (ok, message, extra) => ({ ok, reply: message, pm: true, ...extra });
+  // roulette2 O7: a refusal with its code and numbers ({text, code, ...}); refuse() makes the reply - the text is the reply as before
+  const no = (text, code, extra) => ({ text, code, ...extra });
+  const refuse = (x) => {
+    if (typeof x === "string") return reply(false, x);
+    const { text, ...rest } = x;
+    return reply(false, text, rest);
+  };
   const open = () => Array.from(S.tables.values()).filter((t) => t.game === "roulette" && t.status === "open");
-  const limits = () =>
-    Object.fromEntries(SETTING_KEYS.filter((k) => k !== "casino_roulette").map((k) => [k, S.settings[k]]));
+  const high = (T) => !!(T && T.high_stakes);
+  // D3: the wheel's limits for its open spin - T.lim, taken when the spin opened (nextSeed). A wheel with no betting window
+  // open (idle, nothing charged) follows the settings as they are now, so an edit reaches a waiting lobby before its first bet.
+  function lim(T) {
+    if (!T || !T.eng) return tierLimits(S.settings, false);
+    const idle = T.eng.phase === "idle" && !(T.eng.book || []).length;
+    if (!T.lim || !T.lim.caps || idle) T.lim = tierLimits(S.settings, high(T));
+    return T.lim;
+  }
+  // publicView.limits: the rl_* map the page's placard reads (WP0), with THIS wheel's limits under the normal keys (a High
+  // Roller wheel's rl_min_bet is its own minimum) - plus the timers and the bank settings as they are
+  function limits(T) {
+    const out = Object.fromEntries(
+      SETTING_KEYS.filter((k) => k !== "casino_roulette" && !k.startsWith("rl_hr_")).map((k) => [k, S.settings[k]]),
+    );
+    if (!T) return out;
+    const L = lim(T);
+    out.rl_min_bet = L.min;
+    for (const k of POSITIONS) out["rl_max_" + k] = L.caps[k];
+    out.rl_max_spin = L.max_spin;
+    out.rl_max_positions = L.max_positions;
+    out.rl_max_lines = L.max_actions;
+    out.rl_max_players = L.max_players;
+    return out;
+  }
   const spinKey = (T) => "crl:" + T.id + ":s" + T.eng.round_no;
   let houseRead = null,
     houseAt = null;
@@ -309,6 +402,7 @@ function install(core) {
       pruneInactive(T);
       T.eng.actions = {};
       T.dl = {};
+      T.lim = tierLimits(S.settings, high(T)); // roulette2 D3: this spin's limits (an admin's edit applies from the next spin)
       if (!pre)
         await runQuery(
           "INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)",
@@ -317,13 +411,19 @@ function install(core) {
       await save(T);
     });
   }
-  async function start(actor, room, lobby = false) {
+  // roulette2 D1: opts.high = a 💎 High Roller wheel (fixed for its life; the caller checked the role), opts.slot = the house slot a
+  // lobby wheel fills ("main"). A wheel opened with room = null and not the lobby is a WEB wheel: its opener hosts it (Host Tools
+  // push / advertise / stream / close), it idle-closes like a room wheel, and it is quiet for Pepe until it plays in a room.
+  async function start(actor, room, lobby = false, opts = {}) {
     const T = {
       id: crypto.randomBytes(5).toString("hex"),
       game: "roulette",
       status: "open",
       room,
       lobby,
+      high_stakes: !!opts.high,
+      slot: lobby ? opts.slot || "main" : null,
+      web: !lobby && !room,
       host: { uid: actor.uid, name: actor.name },
       created: clock(),
       updated: clock(),
@@ -357,15 +457,28 @@ function install(core) {
     if (!lobby) V.enter(T, actor);
     await nextSeed(T);
     S.tables.set(T.id, T);
-    if (!lobby)
+    if (!lobby) {
+      const L = lim(T),
+        hr = T.high_stakes ? "💎 High Roller " : "";
       await emit(
         T,
         "opened",
         "🛞 " +
           actor.name +
-          " opened a roulette wheel — single zero, straight up pays 35 to 1. Bet with !rl and a bet and an amount (!rl help), or on the web: " +
+          " opened a " +
+          hr +
+          "roulette wheel — single zero, straight up pays 35 to 1, bets from " +
+          fmt(L.min) +
+          " PAT, up to " +
+          fmt(L.max_spin) +
+          " PAT per player a spin" +
+          (T.high_stakes ? " (High Rollers only; anyone can watch)" : "") +
+          ". " +
+          (room ? "Bet with !rl and a bet and an amount (!rl help), or on the web: " : "Play on the web: ") +
           link(T),
+        { high_stakes: !!T.high_stakes },
       );
+    }
     return reply(true, "Wheel open.", { table: T.id, pm: false, quiet: true });
   }
   // the open lobby wheel, if there is one (no write, no lock)
@@ -374,10 +487,25 @@ function install(core) {
     if (S.settings.casino_roulette === "off") return null;
     let T = open().find((t) => t.lobby);
     if (!T) {
-      const r = await start({ uid: "house", name: "Pepe" }, null, true);
+      const r = await start({ uid: "house", name: "Pepe" }, null, true, { slot: "main" });
       T = S.tables.get(r.table);
     }
     return T;
+  }
+  // roulette2 D2: the bank. ONE House budget for every open wheel: the lesser of rl_spin_cap and rl_bank_pct of the House above
+  // its hard floor. A wheel may take a book whose worst pocket fits what the OTHER open wheels' positive worst pockets leave of
+  // it; a 💎 High Roller wheel also only what the other High Roller wheels leave of rl_hr_spin_cap - so High Rollers can't starve
+  // the normal wheels. Invariant (checked at every admission and removal): sum over all open wheels of max(0, worst) <= budget,
+  // and sum over the High Roller wheels <= rl_hr_spin_cap. Pure: the House balance and the books are the caller's.
+  const exposure = (t) => (t.eng.book.length ? Math.max(0, engine.worst(engine.lossVector(t.eng.book))) : 0);
+  function bankRoom(T, house, wheels) {
+    const s = S.settings,
+      floor = require("../funding").state.monetary?.house_hard_floor ?? 5000000;
+    const budget = Math.min(s.rl_spin_cap, Math.floor(((house - floor) * s.rl_bank_pct) / 100));
+    const others = wheels.filter((t) => t !== T);
+    let room = budget - sum(others.map(exposure));
+    if (high(T)) room = Math.min(room, s.rl_hr_spin_cap - sum(others.filter(high).map(exposure)));
+    return { closed: house <= floor, room, budget };
   }
   async function available(T) {
     // (O2) every open wheel's cached book holds its live rows before the shared bank sums them
@@ -386,17 +514,42 @@ function install(core) {
       houseRead = await money.houseBalance();
       houseAt = clock();
     }
-    const floor = require("../funding").state.monetary?.house_hard_floor ?? 5000000;
-    const budget = Math.min(
-      S.settings.rl_spin_cap,
-      Math.floor(((houseRead - floor) * S.settings.rl_bank_pct) / 100),
-    );
-    const reserved = sum(
-      open()
-        .filter((t) => t !== T && t.eng.book.length)
-        .map((t) => Math.max(0, engine.worst(engine.lossVector(t.eng.book)))),
-    );
-    return { closed: houseRead <= floor, room: budget - reserved };
+    const { closed, room } = bankRoom(T, houseRead, open());
+    return { closed, room };
+  }
+  // The bank's headroom for one more straight, as the limits verb gives it (decision 10: rounded down to the minimum), capped
+  // at the wheel's straight limit
+  function bankStraight(T, room) {
+    const L = lim(T),
+      book = engine.lossVector(T.eng.book);
+    const bank = Math.min(...Array.from({ length: 37 }, (_, p) => engine.maxMore(book, engine.positions[p], room)));
+    return Math.max(0, Math.min(L.caps.straight, Math.floor(bank / L.min) * L.min));
+  }
+  // O7: rules.bank_straight for the views - computed here, in an async step that only READS (the House balance; every open
+  // wheel's cached book, once each has been read from its rows: else null), at most every 5 s per wheel. Never from the
+  // synchronous view, and never through available() (its hydrate can write; the views run without the casino lock). Its own
+  // House read: available()'s cache is the bank's, invalidated by each landing.
+  const bankCache = new Map(); // table id -> {at, value}
+  let viewHouse = null;
+  async function bankRefresh(T) {
+    if (!T || T.game !== "roulette" || T.status !== "open") return null;
+    const hit = bankCache.get(T.id);
+    if (hit && hit.at <= clock() && clock() - hit.at < 5000) return hit.value;
+    let value = null;
+    try {
+      const wheels = open();
+      if (wheels.every((t) => reconciled.has(t))) {
+        if (!viewHouse || viewHouse.at > clock() || clock() - viewHouse.at >= 5000)
+          viewHouse = { at: clock(), v: await money.houseBalance() };
+        const b = bankRoom(T, viewHouse.v, open());
+        value = b.closed ? 0 : bankStraight(T, b.room);
+      }
+    } catch (e) {
+      value = null;
+    }
+    bankCache.set(T.id, { at: clock(), value });
+    if (bankCache.size > 500) bankCache.delete(bankCache.keys().next().value);
+    return value;
   }
   function own(T, uid) {
     return T.eng.book.filter((l) => l.uid === uid);
@@ -415,14 +568,22 @@ function install(core) {
       return null; // a position this build doesn't know: no rebet
     }
   }
+  // where a new wheel opens, as a closing / full wheel's text says it: a room wheel's room types !rl start; a web wheel's host
+  // opens one from the casino lobby
+  const reopen = (T) =>
+    T.web && !roomsOf(T).length ? "a new one opens from the casino lobby" : "!rl start opens a new one";
+  // place() asks first, for every line it charges or queues - a bet, a rebet, a line queued while the wheel spins and the queued
+  // lines charged when betting opens (queuedLines): roulette2 D1's 💎 High Roller gate (HR_ONLY_PLAY, code E_HR) is here, so
+  // it covers all of them; anyone may watch a High Roller wheel
   async function checkSeat(T, actor) {
     const uid = actor.uid,
       e = T.eng;
+    if (high(T) && !(await isHighRoller(uid))) return no(HR_ONLY_PLAY, "E_HR");
     if (!e.seats.includes(uid)) {
       if (Object.keys(T.veil || {}).length >= 35 && !(T.veil || {})[uid])
         return T.lobby
           ? "This wheel is full for now — a fresh one opens after this spin."
-          : "This wheel is full — it closes after this spin, then !rl start opens a new one.";
+          : "This wheel is full — it closes after this spin, then " + reopen(T) + ".";
       const mine = await dupOf(uid);
       for (const k of e.seats) {
         const other = await dupOf(k);
@@ -444,37 +605,49 @@ function install(core) {
     T.eng.names[a.uid] = T.players[a.uid].name;
     T.eng.seen[a.uid] = clock();
   }
-  function capFor(b) {
-    const k = { trio: "street", first_four: "corner" }[b.kind] || b.kind;
-    return S.settings["rl_max_" + k] || S.settings.rl_max_outside;
-  }
+  // the wheel's cap on a position (D3: its spin's limits)
+  const capFor = (T, b) => lim(T).caps[capKind(b.kind)] || lim(T).caps.outside;
   // The per-position, position-count and per-spin limits of a line on top of the player's lines (none for a queued
-  // line: it opens the player's next spin). -> {why} | {amounts: token -> the player's total on it}
-  function lineLimits(bets, lines, web) {
-    const s = S.settings,
+  // line: it opens the player's next spin). -> {why} | {amounts: token -> the player's total on it}. O7: why carries its code
+  // and numbers (E_CAP {token, cap, have, min} - have: the player's chips on that spot before this line; E_POS {max};
+  // E_SPIN {max, have} - have: the player's total this spin before this line); the reply text is unchanged.
+  function lineLimits(T, bets, lines, web) {
+    const L = lim(T),
       amounts = new Map();
     for (const b of lines.flatMap((l) => l.bets)) amounts.set(b.token, (amounts.get(b.token) || 0) + b.amount);
+    const before = sum([...amounts.values()]);
     for (const b of bets) {
-      const amount = (amounts.get(b.token) || 0) + b.amount;
-      if (!Number.isSafeInteger(b.amount) || b.amount < s.rl_min_bet || amount > capFor(b))
-        return { why: "The limit on " + label(b.token, web) + " is " + fmt(capFor(b)) + " PAT, minimum " + fmt(s.rl_min_bet) + "." };
+      const had = amounts.get(b.token) || 0,
+        amount = had + b.amount,
+        cap = capFor(T, b);
+      if (!Number.isSafeInteger(b.amount) || b.amount < L.min || amount > cap)
+        return {
+          why: no("The limit on " + label(b.token, web) + " is " + fmt(cap) + " PAT, minimum " + fmt(L.min) + ".", "E_CAP", {
+            token: b.token,
+            cap,
+            have: had,
+            min: L.min,
+          }),
+        };
       amounts.set(b.token, amount);
     }
-    if (amounts.size > s.rl_max_positions || sum([...amounts.values()]) > s.rl_max_spin)
-      return { why: "That line exceeds your per-spin limit." };
+    if (amounts.size > L.max_positions) return { why: no("That line exceeds your per-spin limit.", "E_POS", { max: L.max_positions }) };
+    if (sum([...amounts.values()]) > L.max_spin)
+      return { why: no("That line exceeds your per-spin limit.", "E_SPIN", { max: L.max_spin, have: before }) };
     return { amounts };
   }
   async function checkLine(T, actor, bets) {
-    const s = S.settings,
+    const L = lim(T),
       e = T.eng,
       uid = actor.uid;
-    if (!own(T, uid).length && Object.keys(T.escrowed).length >= s.rl_max_players)
+    if (!own(T, uid).length && Object.keys(T.escrowed).length >= L.max_players)
       return "The wheel has reached its player limit.";
-    if ((e.actions[uid] || 0) >= s.rl_max_lines) return "You've reached the action limit this spin.";
-    const limited = lineLimits(bets, own(T, uid), actor.via === "web");
+    if ((e.actions[uid] || 0) >= L.max_actions)
+      return no("You've reached the action limit this spin.", "E_ACT", { max: L.max_actions });
+    const limited = lineLimits(T, bets, own(T, uid), actor.via === "web");
     if (limited.why) return limited.why;
     const { closed, room } = await available(T);
-    if (closed) return "The wheel's bank is closed right now.";
+    if (closed) return no("The wheel's bank is closed right now.", "E_BANK", { more: 0 });
     const next = engine.lossVector(e.book.concat({ uid, bets }));
     if (engine.worst(next) > room) {
       // MONEY-3: the most the bet on the worst pocket could be (the rest of the line as typed) - within its own limits,
@@ -488,17 +661,21 @@ function install(core) {
           total = sum([...limited.amounts.values()]);
         const head = Math.min(
           engine.maxMore(engine.lossVector(rest), b, room),
-          capFor(b) - (limited.amounts.get(b.token) - b.amount),
-          s.rl_max_spin - (total - b.amount),
+          capFor(T, b) - (limited.amounts.get(b.token) - b.amount),
+          L.max_spin - (total - b.amount),
         );
-        more = Math.floor(head / s.rl_min_bet) * s.rl_min_bet;
-        if (more < s.rl_min_bet || engine.worst(engine.lossVector(rest.concat({ uid, bets: [{ ...b, amount: more }] }))) > room)
+        more = Math.floor(head / L.min) * L.min;
+        if (more < L.min || engine.worst(engine.lossVector(rest.concat({ uid, bets: [{ ...b, amount: more }] }))) > room)
           more = 0;
       }
       const token = (b || bets[0]).token;
-      return more > 0
-        ? "🏦 The wheel can take at most " + fmt(more) + " more on " + token + " this spin."
-        : "🏦 The wheel can't take more on " + token + " this spin.";
+      return no(
+        more > 0
+          ? "🏦 The wheel can take at most " + fmt(more) + " more on " + token + " this spin."
+          : "🏦 The wheel can't take more on " + token + " this spin.",
+        "E_BANK",
+        { more, token },
+      );
     }
     return null;
   }
@@ -527,20 +704,21 @@ function install(core) {
   async function place(T, actor, bets, key, queued = false) {
     await hydrate(T);
     const why = (await gate(actor)) || (await checkSeat(T, actor));
-    if (why) return reply(false, why);
+    if (why) return refuse(why);
     if (T.closing || copyOf(T)) return reply(false, "🛞 This wheel closes after this spin — no new bets.");
     const e = T.eng,
       uid = actor.uid;
     if (["result", "spinning"].includes(e.phase)) {
       // A queued line is checked now as far as it can be (ENGINE-4 / SUITES-2): a room wheel that closes after this spin
       // opens no next spin, and the limits and the balance refuse it now with the reason. The bank and a balance spent
-      // meanwhile are checked when betting opens; a refusal then is told privately (queuedLines).
+      // meanwhile are checked when betting opens; a refusal then is told privately (queuedLines). (D3: the limits it is
+      // checked against now are this spin's; the next spin's own are checked when it is charged.)
       if (!T.lobby && rotation(T))
-        return reply(false, "🛞 This wheel closes after this spin — no new bets. !rl start opens a new one then.");
-      if (!e.pending[uid] && Object.keys(e.pending).length >= S.settings.rl_max_players)
+        return reply(false, "🛞 This wheel closes after this spin — no new bets. " + reopen(T)[0].toUpperCase() + reopen(T).slice(1) + " then.");
+      if (!e.pending[uid] && Object.keys(e.pending).length >= lim(T).max_players)
         return reply(false, "The next spin is full.");
-      const limited = lineLimits(bets, [], actor.via === "web");
-      if (limited.why) return reply(false, limited.why);
+      const limited = lineLimits(T, bets, [], actor.via === "web");
+      if (limited.why) return refuse(limited.why);
       const u = await userRow(uid);
       if (!u || !(Number(u.points_balance) >= amountOf(bets)))
         return reply(false, "You don't have enough available PAT for that line.");
@@ -563,7 +741,7 @@ function install(core) {
       );
     }
     const blocked = await checkLine(T, actor, bets);
-    if (blocked) return reply(false, blocked);
+    if (blocked) return refuse(blocked);
     if (e.phase === "betting" && clock() >= T.dl.bet)
       return reply(false, "No more bets — wait for the next spin.");
     // (O2) ONE transaction: the stake (ledger.post joins it), the line's row, the header and the act key's answer commit
@@ -869,7 +1047,9 @@ function install(core) {
     }
     return (T.eng.book || []).slice();
   }
-  async function closeTable(T, reason) {
+  // opts.keepStream (roulette2: a lobby rotation) - the stream slot is not freed here; succeed() hands it (and an admin's pin) to
+  // the successor wheel, or frees it when there is none
+  async function closeTable(T, reason, opts = {}) {
     if (T.status !== "open") return;
     if (T.eng.phase === "spinning") {
       T.closing = true;
@@ -911,35 +1091,41 @@ function install(core) {
         delete T.ending; // (the close it marked is done)
         for (const [uid, line] of Object.entries(T.eng.pending)) tell(T, uid, line.bets, "the wheel closed.");
         T.eng.pending = {};
-        await emit(T, "closed", CLOSED[reason] || "🛞 The roulette wheel closed.", { reason });
+        await emit(T, "closed", closedText(T, reason), { reason });
         await save(T);
       });
     } catch (err) {
       await restore(T); // (the wheel stays open with its close owed: the next tick or boot resumes it)
       throw err;
     }
-    streamGone(T.id);
+    if (!opts.keepStream) streamGone(T.id);
   }
-  const CLOSED = {
-    full: "🛞 The roulette wheel closed: it reached 35 players. !rl start opens a new one.",
-    rotated: "🛞 This lobby wheel closed; a fresh one is open.",
-  };
+  // the closed line: a full room wheel says !rl start, a full web wheel the casino lobby
+  function closedText(T, reason) {
+    if (reason === "full") return "🛞 The roulette wheel closed: it reached 35 players. " + reopen(T)[0].toUpperCase() + reopen(T).slice(1) + ".";
+    if (reason === "rotated") return "🛞 This lobby wheel closed; a fresh one is open.";
+    return "🛞 The roulette wheel closed.";
+  }
   const rotation = (T) =>
     Object.keys(T.veil || {}).length >= 35 || (T.lobby && clock() - T.created >= 86400000);
   async function advance(T) {
     const off = S.settings.casino_roulette === "off";
     if (T.closing || off || rotation(T)) {
       // ENGINE-4: the lobby rotates (a day, or 35 people) - its queued lines move to the fresh lobby wheel and are
-      // charged when its window opens; its page follows the successor (publicView next_table)
+      // charged when its window opens; its page follows the successor (publicView next_table). roulette2 (D7): its place on
+      // Pepe's stream - and an admin's pin - go to the successor too (succeed)
       const carry = T.lobby && !T.closing && !off ? T.eng.pending : {};
       if (Object.keys(carry).length) T.eng.pending = {};
-      await closeTable(T, T.closing || off ? "wheel finished" : T.lobby ? "rotated" : "full");
-      if (T.lobby && T.status === "closed" && !off) await succeed(T, carry);
+      const successor = T.lobby && !off;
+      await closeTable(T, T.closing || off ? "wheel finished" : T.lobby ? "rotated" : "full", { keepStream: successor });
+      if (successor && T.status === "closed") await succeed(T, carry);
       return;
     }
     await nextSeed(T);
     await queuedLines(T);
   }
+  // A closed lobby's successor: the same house slot, its queued lines, and its place on Pepe's stream (the slot or the queue,
+  // with an admin's pin) - or, with no successor, the stream place is freed as any close frees it
   async function succeed(T, carry) {
     let N = null;
     try {
@@ -948,15 +1134,18 @@ function install(core) {
       console.error("[casino] the next lobby wheel:", e.message);
     }
     if (!N || N === T) {
+      streamGone(T.id);
       for (const [uid, line] of Object.entries(carry)) tell(T, uid, line.bets, "the wheel closed.");
       await save(T);
       return;
     }
+    if (T.slot) N.slot = T.slot;
+    const streamed = streamHandOff(T.id, N.id);
     for (const [uid, line] of Object.entries(carry)) {
       N.players[uid] = N.players[uid] || T.players[uid];
       N.eng.pending[uid] = line;
     }
-    if (Object.keys(carry).length) await save(N);
+    if (Object.keys(carry).length || streamed) await save(N);
     T.successor = N.id;
     await save(T);
   }
@@ -1022,6 +1211,9 @@ function install(core) {
     if (T.eng.phase === "spinning") return land(T);
     if (T.eng.phase === "betting") return draw(T);
     if (T.eng.phase === "result") return advance(T);
+    // roulette2 (D7): an idle lobby wheel's rotation (a day, or 35 people) goes the way a landed one's does - its successor takes
+    // its slot, its queued lines and its place on Pepe's stream (advance -> succeed)
+    if (T.lobby && rotation(T) && !T.closing && S.settings.casino_roulette !== "off") return advance(T);
     if (
       T.closing ||
       S.settings.casino_roulette === "off" ||
@@ -1116,8 +1308,55 @@ function install(core) {
     if (due(T)) await tick(T);
   }
   const spinStart = (T) => T.dl.start || T.dl.land - S.settings.rl_spin_secs * 1000;
+  // roulette2 O7: the rules object - the same lim(T) the checks read, the timers, and the bank's straight headroom (bankRefresh's
+  // cached figure: null until it has been worked out)
+  function rules(T) {
+    const L = lim(T),
+      s = S.settings,
+      hit = bankCache.get(T.id);
+    return {
+      min: L.min,
+      caps: { ...L.caps },
+      kinds: { ...KINDS },
+      max_spin: L.max_spin,
+      max_positions: L.max_positions,
+      max_actions: L.max_actions,
+      max_players: L.max_players,
+      max_people: 35,
+      bet_secs: s.rl_bet_secs,
+      spin_secs: s.rl_spin_secs,
+      result_secs: s.rl_result_secs,
+      bank_straight: hit && hit.value != null ? hit.value : null,
+    };
+  }
+  // roulette2 D5 (O10 option C): the CHARGED lines of the wheel's spin (frozenLines: live while betting, frozen once drawn, the
+  // landed set while the result is up; never a queued line) - each seat's chips combined per position, and the felt's total
+  // and player count per position. Keyed by the seat only (V.seatOf / V.nameOf below): no account id.
+  function chipsOf(T) {
+    const bySeat = new Map(),
+      felt = new Map();
+    for (const l of frozenLines(T)) {
+      const mine = bySeat.get(l.uid) || new Map();
+      bySeat.set(l.uid, mine);
+      for (const b of l.bets) {
+        const t = b.token || grammar.token(b);
+        mine.set(t, (mine.get(t) || 0) + b.amount);
+        const f = felt.get(t) || { t, n: 0, who: new Set() };
+        f.n += b.amount;
+        f.who.add(l.uid);
+        felt.set(t, f);
+      }
+    }
+    return {
+      seat: (uid) => [...(bySeat.get(uid) || new Map())].slice(0, 60),
+      felt: [...felt.values()].map((f) => ({ t: f.t, n: f.n, k: f.who.size })),
+    };
+  }
   function publicView(T) {
-    const e = T.eng;
+    const e = T.eng,
+      L = lim(T),
+      chips = chipsOf(T),
+      result = e.phase === "result" && T.status === "open";
     return {
       id: T.id,
       game: "roulette",
@@ -1127,7 +1366,19 @@ function install(core) {
       host: T.lobby ? "Pepe" : V.hostName(T),
       rooms: roomList(T),
       room: T.room,
+      room_name: roomList(T)[0]?.name || null,
+      adverts: advertList(T),
       url: link(T),
+      // roulette2 (contract 2): the tier, the house slot (the lobby's), the look, the seats and the limits in the shared shape
+      tier: high(T) ? "hr" : "main",
+      high_stakes: high(T),
+      slot: T.lobby ? T.slot || "main" : null,
+      theme: "classic",
+      max_seats: L.max_players,
+      min_bet: L.min,
+      max_bet: L.max_spin,
+      rules: rules(T),
+      felt: chips.felt,
       phase: T.status === "closed" ? "closed" : e.phase,
       next_table: T.successor || null,
       round_no: e.round_no,
@@ -1154,45 +1405,94 @@ function install(core) {
               secs: (T.dl.land - spinStart(T)) / 1000,
             }
           : null,
-      seats: e.seats.map((uid) => ({
-        name: V.nameOf(T, uid, T.players[uid].name),
-        seat: V.seatOf(T, uid),
-        host: uid === T.host.uid,
-        staked: T.escrowed[uid] || 0,
-        ...(V.masked(T, uid) ? { veil: 1 } : {}),
-      })),
+      // (D5: staked = the seat's chips - the charged lines of this spin; while the result is up, the spin that landed - and net)
+      seats: e.seats.map((uid) => {
+        const mine = chips.seat(uid);
+        return {
+          name: V.nameOf(T, uid, T.players[uid].name),
+          seat: V.seatOf(T, uid),
+          host: uid === T.host.uid,
+          staked: sum(mine.map((c) => c[1])),
+          chips: mine,
+          ...(result ? { net: e.net?.[uid] ?? null } : {}),
+          ...(V.masked(T, uid) ? { veil: 1 } : {}),
+        };
+      }),
       totals: { players: Object.keys(T.escrowed).length, staked: sum(Object.values(T.escrowed)) },
       history: e.history.slice(),
       last_round: V.maskRound(T, T.last_round),
-      limits: limits(),
+      limits: limits(T),
       log: V.maskLog(T, T.log),
     };
   }
   // The one-time intro notice is taken (a write: casino_notice_seen) only when the caller will show it - the table page's
   // and the Room Dock's first request ask with ?notice=1; their 1-2 s polls are reads.
   async function meView(T, uid, opts = {}) {
+    const lines = own(T, uid),
+      perToken = {};
+    for (const b of lines.flatMap((l) => l.bets)) perToken[b.token] = (perToken[b.token] || 0) + b.amount;
     return {
       host: !T.lobby && T.host.uid === uid,
-      lines: own(T, uid).map((l) => ({ text: describe(l.bets), amount: l.amount })),
+      lines: lines.map((l) => ({ text: describe(l.bets), amount: l.amount })),
       staked: T.escrowed[uid] || 0,
       pending: T.eng.pending[uid] ? describe(T.eng.pending[uid].bets) : null,
       last_slip: lastSlip(T, uid) ? describe(lastSlip(T, uid)) : null,
-      room_left: Math.max(0, S.settings.rl_max_spin - (T.escrowed[uid] || 0)),
+      room_left: Math.max(0, lim(T).max_spin - (T.escrowed[uid] || 0)),
       net: T.eng.net?.[uid] ?? null,
       private_note: T.eng.notes?.[uid] || null,
       notice: opts.notice ? await require("./notices").take("rl_intro", uid, clock(), S.settings) : null,
+      // roulette2 (contract 2): the viewer's own seat id (as the seats list keys it), the role, and what they have used this spin
+      seat: T.eng.seats.includes(uid) ? V.seatOf(T, uid) : null,
+      high_roller: await isHighRoller(uid),
+      used: { positions: Object.keys(perToken).length, actions: T.eng.actions[uid] || 0, per_token: perToken },
     };
   }
+  // Pepe's poll (`roulette`) and the lobby's wheel list - roulette2 (contract 5): + the tier, the limits and the clock
   function openList() {
-    return open().map((T) => ({
-      id: T.id,
-      url: link(T),
-      rooms: roomsOf(T),
-      room_name: roomList(T)[0]?.name || null,
-      players: T.eng.seats.length,
-      phase: T.eng.phase,
-      lobby: T.lobby,
-    }));
+    return open().map((T) => {
+      const L = lim(T);
+      return {
+        id: T.id,
+        url: link(T),
+        rooms: roomsOf(T),
+        room_name: roomList(T)[0]?.name || null,
+        players: T.eng.seats.length,
+        phase: T.eng.phase,
+        lobby: T.lobby,
+        tier: high(T) ? "hr" : "main",
+        high_stakes: high(T),
+        min_bet: L.min,
+        max_straight: L.caps.straight,
+        max_spin: L.max_spin,
+        deadline: T.dl.bet || null,
+        land_at: T.dl.land || null,
+        slot: T.lobby ? T.slot || "main" : null,
+      };
+    });
+  }
+  // the casino lobby's row for a wheel (contract 3): service.lobby() adds the shared fields (host, rooms, adverts, url, stream)
+  function lobbyRow(T) {
+    const L = lim(T),
+      e = T.eng;
+    return {
+      game: "roulette",
+      phase: e.phase,
+      players: e.seats.length,
+      max_seats: L.max_players,
+      high_stakes: high(T),
+      tier: high(T) ? "hr" : "main",
+      theme: "classic",
+      round_no: e.round_no,
+      min_bet: L.min,
+      max_bet: L.max_spin,
+      max_straight: L.caps.straight,
+      lobby: !!T.lobby,
+      slot: T.lobby ? T.slot || "main" : null,
+      deadline: T.dl.bet || null,
+      land_at: T.dl.land || null,
+      staked: sum(Object.values(T.escrowed)),
+      last: e.history.slice(-8).map((x) => x.number),
+    };
   }
   async function lobby(uid) {
     const on = !(await shut({ uid }));
@@ -1202,11 +1502,14 @@ function install(core) {
   async function run(actor, verb, args, opts) {
     const T = opts.table && S.tables.get(opts.table);
     if (verb === "start") {
+      // roulette2 D1: "!rl start [hr]" in a room opens that room's wheel; the web's POST /api/casino/open {game: "roulette", hr}
+      // opens a WEB wheel (room null) hosted by the opener. cmdStart (service.js) checks one table per room, the one open web
+      // wheel per host, max_tables and the High Roller role (HR_ONLY_OPEN) before RL.start.
       const why = await gate(actor);
       if (why) return reply(false, why);
-      if (actor.via !== "room" || !opts.room)
-        return reply(false, "Open room wheels with !rl start in the room.");
-      return cmdStart(actor, opts.room, "roulette");
+      if (actor.via === "room" && !opts.room) return reply(false, "Open a room wheel with !rl start in the room.");
+      const words = (Array.isArray(args) ? args : []).map((w) => String(w || "")).filter(Boolean);
+      return cmdStart(actor, actor.via === "room" ? opts.room : null, "roulette", words[0], words);
     }
     if (T && T.game !== "roulette")
       return reply(
@@ -1237,7 +1540,7 @@ function install(core) {
       const parsed =
         verb === "rebet"
           ? { ok: !!lastSlip(T, uid), bets: lastSlip(T, uid), error: "No previous spin to repeat.", hint: "" }
-          : grammar.parse(args[0], { maxPairs: actor.via === "web" ? 20 : 6, minBet: S.settings.rl_min_bet });
+          : grammar.parse(args[0], { maxPairs: actor.via === "web" ? 20 : 6, minBet: lim(T).min });
       return parsed.ok ? place(T, actor, parsed.bets, key) : reply(false, parsed.error + " " + parsed.hint);
     }
     if (verb === "clear" || verb === "undo") {
@@ -1248,11 +1551,12 @@ function install(core) {
       }
       if (!lines.length || e.phase !== "betting" || clock() >= T.dl.bet)
         return reply(false, "No open line to refund.");
-      if ((e.actions[uid] || 0) >= S.settings.rl_max_lines)
-        return reply(false, "You've reached the action limit this spin.");
+      if ((e.actions[uid] || 0) >= lim(T).max_actions)
+        return refuse(no("You've reached the action limit this spin.", "E_ACT", { max: lim(T).max_actions }));
       const selected = verb === "clear" ? lines : lines.slice(-1);
+      // D2: a removal is checked against the same budget as an admission (a High Roller wheel's: its share too)
       if (!engine.removeOk(engine.lossVector(e.book), selected, (await available(T)).room))
-        return reply(false, "🏦 The wheel's bank can't let that line go this spin — it rides.");
+        return refuse(no("🏦 The wheel's bank can't let that line go this spin — it rides.", "E_BANK", { more: 0 }));
       if (clock() >= T.dl.bet) return reply(false, "No more bets — your lines ride.");
       return refund(T, selected, verb, uid, key);
     }
@@ -1264,7 +1568,7 @@ function install(core) {
     }
     if (verb === "end") {
       if (T.lobby || (T.host.uid !== uid && !actor.admin))
-        return reply(false, "Only a room wheel's host or an admin may close it.");
+        return reply(false, T.lobby ? "The lobby wheel stays open." : "Only the wheel's host or an admin may close it.");
       if (e.phase === "result" || e.phase === "spinning" || (e.phase === "betting" && clock() >= T.dl.bet)) {
         T.closing = true;
         await save(T);
@@ -1274,6 +1578,7 @@ function install(core) {
       return reply(true, "Wheel closed.", { quiet: true, pm: false });
     }
     if (verb === "advertise" || verb === "unadvertise") {
+      // D4: the lobby wheel is not advertised; a room wheel and a web wheel are, by their host or an admin (advertiseIn)
       if (T.lobby) return reply(false, "The lobby wheel stays on the web — open a room wheel with !rl start.");
       const out = await advertCmd(T, actor, verb, args);
       return { ...out, quiet: out.ok, pm: !out.ok };
@@ -1300,23 +1605,22 @@ function install(core) {
           (e.pending[uid] ? " · Queued: " + describe(e.pending[uid].bets) : ""),
       );
     if (verb === "limits") {
-      const a = await available(T),
-        min = S.settings.rl_min_bet;
       // MONEY-4 / SECURITY-5: the bank's headroom rounded down to the minimum, as a refusal says it (decision 10) - the
-      // exact figure would track the worst pocket's liability, other players' chips, to 35 PAT
-      const bank = Math.min(
-        ...Array.from({ length: 37 }, (_, p) => engine.maxMore(engine.lossVector(e.book), engine.positions[p], a.room)),
-      );
-      const room = Math.max(0, Math.min(S.settings.rl_max_straight, Math.floor(bank / min) * min));
+      // exact figure would track the worst pocket's liability, other players' chips, to 35 PAT. D3: this spin's limits.
+      const a = await available(T),
+        L = lim(T),
+        room = a.closed ? 0 : bankStraight(T, a.room);
       return reply(
         true,
-        "Minimum " +
-          fmt(S.settings.rl_min_bet) +
+        (high(T) ? "💎 High Roller wheel · " : "") +
+          "Minimum " +
+          fmt(L.min) +
           " PAT, straight up to " +
           fmt(room) +
           ", per spin " +
-          fmt(S.settings.rl_max_spin) +
+          fmt(L.max_spin) +
           ".",
+        { min: L.min, straight: room, max_spin: L.max_spin },
       );
     }
     if (verb === "status")
@@ -1361,6 +1665,11 @@ function install(core) {
     frozenLines,
     bootAudit,
     HELP,
+    // roulette2 (WP3): a wheel's spin limits (D3), its casino-lobby row, the views' cached bank figure, the bank's pure math
+    limOf: lim,
+    lobbyRow,
+    bankRefresh,
+    bankRoom,
   };
 }
-module.exports = { AUDIENCES, DEFAULTS, SETTING_KEYS, checkSetting, readSettings, install };
+module.exports = { AUDIENCES, DEFAULTS, SETTING_KEYS, POSITIONS, KINDS, checkSetting, readSettings, tierLimits, install };

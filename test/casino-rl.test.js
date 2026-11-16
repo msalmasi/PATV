@@ -149,10 +149,15 @@ test("liability shared across wheels, undo can be refused, caps and linked accou
   assert.equal(await cash("a"), 499500);
   await sql("INSERT INTO welcome_bonus (userId,dup_of) VALUES ('b','a')");
   assert.match((await act(L, "b", "bet", "black 100")).reply, /linked/);
+  // roulette2 D3: an admin's limit edit applies from a wheel's next spin - L's open spin keeps the limits it opened with, a spin
+  // that opens after the edit takes them
   await svc.setSetting("rl_max_positions", 1);
-  assert.match((await act(L, "a", "bet", "black 100")).reply, /limit/);
   await svc.setSetting("rl_max_players", 1);
-  assert.match((await act(L, "c", "bet", "black 100")).reply, /player limit/);
+  assert.equal(svc.RL.limOf(L).max_positions, 30);
+  const T2 = await room("pad-c");
+  expect(await act(T2, "d", "bet", "red 100"));
+  assert.match((await act(T2, "d", "bet", "black 100")).reply, /limit/);
+  assert.match((await act(T2, "c", "bet", "black 100")).reply, /player limit/);
   await sql("UPDATE users SET casino_banned=1 WHERE userId='a'");
   for (const verb of ["bet", "rebet", "clear", "undo", "go", "end"])
     assert.match((await act(L, "a", verb, "black 100")).reply, /banned/i);
@@ -239,6 +244,7 @@ test("masked winners remain private; real room players see their own room name; 
 });
 
 test("limits cap the accumulated position, complete spin and action count; same IP is a private flag", async () => {
+  await svc.setSetting("rl_max_lines", 2); // (roulette2 D3: before the wheel's spin opens - an edit applies from the next spin)
   const T = await room(),
     before = await total();
   for (const uid of ["b", "c"])
@@ -257,7 +263,6 @@ test("limits cap the accumulated position, complete spin and action count; same 
   assert.match((await act(T, "a", "bet", "17 100")).reply, /5,000/);
   expect(await act(T, "d", "bet", "red 50000 black 50000"));
   assert.match((await act(T, "d", "bet", "odd 100")).reply, /per-spin limit/);
-  await svc.setSetting("rl_max_lines", 2);
   expect(await act(T, "b", "bet", "red 100"));
   assert.match((await act(T, "b", "clear")).reply, /action limit/);
   let hit = false;

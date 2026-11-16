@@ -72,6 +72,9 @@ const S = {
   tick: null,
   booted: null,
   lastSeq: 0,
+  // roulette2 O12(b): the poll's level-triggered cursor - bumped by every wake() (a table state Pepe's poll draws changed). It
+  // starts at this process's start time, so a value from an earlier process (a restart) never equals one of this process's
+  stateSeq: Date.now(),
   hooks: { now },              // tests override the clock
   rate: new Map(),             // uid -> [timestamps]
 };
@@ -268,6 +271,7 @@ async function emitRaw(tableId, room, kind, data) {
   wake();
 }
 function wake() {
+  S.stateSeq += 1;          // roulette2 O12(b): a poll that last saw an older state_seq answers at once (poll: state_after) - no lost wake
   for (const w of Array.from(S.waiters)) { S.waiters.delete(w); w(); }
 }
 
@@ -903,8 +907,22 @@ async function cmdStart(actor, room, game, blinds, words) {
   if (game !== "roulette" && (game === "holdem" ? !st.hm_enabled : !st.bj_enabled)) {
     return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
   }
+  if (game === "roulette") {
+    // roulette2 D1: "!rl start [hr]" (room) / POST /api/casino/open {game: "roulette", hr} (web, room null). A 💎 High Roller wheel
+    // is for High Rollers to open (and, checkSeat, to play); a web wheel is at most ONE open per host (the always-on lobby is the
+    // house's); one table per room (above) and max_tables (below) as for every table.
+    const ws = (words || (blinds ? [blinds] : [])).map((w) => String(w || "").trim().toLowerCase()).filter(Boolean);
+    const high = ws.some((w) => HR_WORDS.includes(w));
+    if (ws.some((w) => !HR_WORDS.includes(w))) return R(false, "usage: !rl start  (or !rl start hr for a 💎 High Roller wheel)", { pm: true });
+    if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN, { pm: true });
+    if (!room) {
+      const mine = open.find((t) => t.game === "roulette" && t.web && t.host && t.host.uid === actor.uid);
+      if (mine) return R(false, "You already have a roulette wheel open — close it before you open another.", { table: mine.id, url: link(mine), pm: true });
+    }
+    if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`, { pm: true });
+    return RL.start(actor, room, false, { high });
+  }
   if (st.max_tables > 0 && open.length >= st.max_tables) return R(false, `the casino has ${open.length} tables open already — join one at /tables.`);
-  if (game === "roulette") return RL.start(actor, room);
   // 1.99amf h20: a theme word anywhere after start (casino/themes.js decide: off = dropped with a note; an unknown word refused)
   const tp = themes.pick(words || (blinds ? [blinds] : []), (w) => /^\d/.test(w) || HR_WORDS.includes(w.toLowerCase()));
   const tm = themes.mode(st);
@@ -1278,14 +1296,15 @@ function annDue(T, key, room) {
 
 // 1.99aoh: a roulette wheel's stakes as its push / advert lines name them - the smallest bet and the most one player may stake
 // on a spin (the rl_* settings the bet checks use). One place, so a per-wheel limit (High Roller, a per-spin snapshot) changes it once.
+// roulette2 WP3 (D2/D3): the wheel's OWN limits - its tier (💎 High Roller or normal) and the spin's snapshot (RL.limOf)
 function rlStakes(T) {
-  const st = S.settings;
-  return { min: Number(st.rl_min_bet) || 100, max: Number(st.rl_max_spin) || 100000, hr: !!(T && T.high_stakes) };
+  const L = T && T.game === "roulette" ? RL.limOf(T) : RLCFG.tierLimits(S.settings, !!(T && T.high_stakes));
+  return { min: Number(L.min) || 100, max: Number(L.max_spin) || 100000, straight: Number(L.caps && L.caps.straight) || 0, hr: !!(T && T.high_stakes) };
 }
 function rlPushText(T, also) {
   const k = rlStakes(T);
   return `🛞 ${T.host.name}'s ${k.hr ? "💎 High Roller " : ""}roulette wheel is playing in this room now — !rl red ${Math.max(500, k.min)} to bet ` +
-         `(min ${fmt(k.min)} PAT a bet, up to ${fmt(k.max)} PAT per player a spin). Also on the web: ${link(T)}${also || ""}`;
+         `(min ${fmt(k.min)} PAT a bet, up to ${fmt(k.max)} PAT per player a spin${k.hr ? "; High Rollers only, anyone can watch" : ""}). Also on the web: ${link(T)}${also || ""}`;
 }
 
 /** Push a table to a Camfrog room. mode "add" (the default): attach one more room; "remove": detach that room;
@@ -1304,10 +1323,14 @@ async function push(tableId, room, actor, mode) {
       if (cur.includes(room)) return R(true, "It's already playing there.", { rooms: cur });
       const r = S.rooms.get(room);
       if (!r || clock() - r.ts > C.ROOM_FRESH_MS) return R(false, "Pepe isn't in that room with the casino on right now.");
+      // roulette2 O6(d): Pepe's poll says which games each room has switched on (rooms[].games); he drops every roulette line in a
+      // room whose roulette toggle is off - so a wheel is refused there (an older Pepe sends no flags: allowed as before). (A card
+      // table's lines aren't gated by his toggles - unchanged.)
+      if (T.game === "roulette" && gameOff(r, "roulette")) return R(false, "Roulette is off in that room.");
       if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.id !== T.id && roomsOf(t).includes(room))) return R(false, "That room already has a casino table.");
       if (cur.length >= MAX_ROOMS) return R(false, `A table can play in up to ${MAX_ROOMS} rooms at once.`);
       setRooms(T, cur.concat([room]));
-      const how = T.tourney ? TN.howText(T) : T.game === "holdem"
+      const how = T.game === "roulette" ? null : T.tourney ? TN.howText(T) : T.game === "holdem"
         ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
@@ -1411,10 +1434,14 @@ async function meView(T, uid, opts) {
   });
 }
 
+// roulette2 (contract 3): + every open roulette wheel (the lobby wheel, the web and room wheels) in the shared row shape with its
+// roulette fields (RL.lobbyRow). The audience gate is the caller's (the lobby route drops them when RL.lobby(uid).on is false;
+// home.js shows them only while casino_roulette is "everyone").
 function lobby() {
-  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney && t.game !== "roulette").map((T) => {    // (h22: sit & gos are TN.lobby's)
+  return Array.from(S.tables.values()).filter((t) => t.status === "open" && !t.tourney).map((T) => {    // (h22: sit & gos are TN.lobby's)
     const room = T.room ? S.rooms.get(T.room) : null;
-    const base = { id: T.id, host: V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
+    const base = { id: T.id, host: T.game === "roulette" && T.lobby ? "Pepe" : V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
+    if (T.game === "roulette") return Object.assign(base, RL.lobbyRow(T));
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
     return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
                                  min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes,
@@ -1440,6 +1467,7 @@ async function streamLoad() {
     if (r[0]) {
       const v = JSON.parse(r[0].value);
       S.stream = { table: v.table || null, by: v.by || null, ts: Number(v.ts) || 0, queue: Array.isArray(v.queue) ? v.queue.slice(0, 50) : [] };
+      if (v.table && v.pin) S.stream.pin = true;        // roulette2 D7: an admin-pinned wheel stays pinned across a restart
     }
   } catch (e) { /* a fresh database */ }
 }
@@ -1449,7 +1477,7 @@ async function streamAdvance() {
   while (S.stream.queue.length) {
     const id = S.stream.queue.shift();
     if (!streamable(id)) continue;
-    S.stream.table = id; S.stream.ts = clock(); S.stream.by = "queue";
+    S.stream.table = id; S.stream.ts = clock(); S.stream.by = "queue"; delete S.stream.pin;
     const T = S.tables.get(id);
     T.last_activity = Math.max(T.last_activity || 0, clock());
     await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
@@ -1462,18 +1490,32 @@ function streamGone(id) {
   S.stream.queue = S.stream.queue.filter((x) => x !== id);
   if (S.stream.table === id) {
     S.stream.table = null;
+    delete S.stream.pin;
     streamAdvance().catch((e) => console.error("[casino] stream:", e));
   } else {
     streamSave().catch(() => {});
   }
 }
+/** roulette2 (D7): a lobby wheel's rotation - its successor takes its place on the stream (the slot, with an admin's pin, or its
+ *  place in the queue). -> true when it had one */
+function streamHandOff(from, to) {
+  let moved = false;
+  if (S.stream.table === from) { S.stream.table = to; S.stream.ts = clock(); moved = true; }
+  const i = S.stream.queue.indexOf(from);
+  if (i >= 0) { S.stream.queue[i] = to; moved = true; }
+  if (moved) streamSave().catch((e) => console.error("[casino] stream:", e));
+  return moved;
+}
 async function streamTick() {
   const id = S.stream.table;
   if (id) {
     const T = S.tables.get(id);
-    if (!streamable(id)) { S.stream.table = null; await streamAdvance(); return; }
-    if (clock() - Math.max(T.last_activity || 0, S.stream.ts || 0) > STREAM_IDLE_MS) {
+    if (!streamable(id)) { S.stream.table = null; delete S.stream.pin; await streamAdvance(); return; }
+    // roulette2 D7: a wheel an admin pinned there stays (the lobby can wait a while for its first bet); it leaves when it closes
+    // (its successor takes the pin), when it is taken off, or when another table takes the slot
+    if (!(S.stream.pin && T.game === "roulette") && clock() - Math.max(T.last_activity || 0, S.stream.ts || 0) > STREAM_IDLE_MS) {
       S.stream.table = null;
+      delete S.stream.pin;
       await emit(T, "stream", "📺 Off Pepe's stream — no round in 5 minutes.", { on: false });
       await streamAdvance();
     }
@@ -1481,8 +1523,9 @@ async function streamTick() {
     await streamAdvance();
   }
 }
-/** on: ask for the stream (host or admin; admins may override), off: leave it / the queue */
-async function stream(tableId, on, actor, override) {
+/** on: ask for the stream (host or admin; admins may override), off: leave it / the queue.
+ *  roulette2 D7: an admin who puts a roulette wheel there PINS it (pin false: not) - exempt from the 5-minute idle drop */
+async function stream(tableId, on, actor, override, pin) {
   await boot();
   return locked(async () => {
     const T = S.tables.get(tableId);
@@ -1496,24 +1539,32 @@ async function stream(tableId, on, actor, override) {
       streamGone(T.id);
       return R(true, had ? "Off the stream." : "It wasn't on the stream.");
     }
-    if (S.stream.table === T.id) return R(true, "It's on the stream already.");
+    const pinIt = T.game === "roulette" && !!actor.admin && pin !== false;
+    const PINNED = " Pinned: it stays there until it closes or is taken off.";
+    const pinned = () => { if (pinIt) S.stream.pin = true; else delete S.stream.pin; return pinIt ? { pinned: true } : {}; };
+    if (S.stream.table === T.id) {
+      if (pinIt && !S.stream.pin) { S.stream.pin = true; await streamSave(); return R(true, "It's on the stream already." + PINNED, { pinned: true }); }
+      return R(true, "It's on the stream already.", S.stream.pin ? { pinned: true } : {});
+    }
     const cur = S.stream.table && streamable(S.stream.table) ? S.tables.get(S.stream.table) : null;
     if (!cur) {
       S.stream.queue = S.stream.queue.filter((x) => x !== T.id);
       Object.assign(S.stream, { table: T.id, by: actor.name, ts: clock() });
+      const pn = pinned();
       T.last_activity = Math.max(T.last_activity || 0, clock());
       await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
       await streamSave();
-      return R(true, "It's on Pepe's stream.");
+      return R(true, "It's on Pepe's stream." + (pn.pinned ? PINNED : ""), pn);
     }
     if (override && actor.admin) {
       S.stream.queue = [cur.id].concat(S.stream.queue.filter((x) => x !== T.id && x !== cur.id));
       Object.assign(S.stream, { table: T.id, by: actor.name + " (admin)", ts: clock() });
+      const pn = pinned();
       T.last_activity = Math.max(T.last_activity || 0, clock());
       await emit(cur, "stream", "📺 An admin moved Pepe's stream to another table — this one is next in line.", { on: false });
       await emit(T, "stream", `📺 This ${T.game === "roulette" ? "roulette" : T.game === "holdem" ? "Hold'em" : "blackjack"} table is on Pepe's stream now.`, { on: true });
       await streamSave();
-      return R(true, "It's on Pepe's stream (override).");
+      return R(true, "It's on Pepe's stream (override)." + (pn.pinned ? PINNED : ""), pn);
     }
     if (!S.stream.queue.includes(T.id)) S.stream.queue.push(T.id);
     await streamSave();
@@ -1566,6 +1617,8 @@ async function advertiseIn(T, room, actor, on) {
   const r = findRoom(room) || (advertsOf(T).includes(room) ? { id: room, name: roomName(room) } : null);
   if (!r) return R(false, "Pepe isn't in that room with the casino on right now.");
   const cur = advertsOf(T);
+  // roulette2 O6(d): Pepe posts an advert only where that game's toggle is on - an advert into a room with it off would never be posted
+  if (on && gameOff(S.rooms.get(r.id), T.game)) return R(false, `${GAME_NAME[T.game] || "That game"} is off in that room.`);
   if (!on) {
     if (!cur.includes(r.id)) return R(false, "It isn't advertised there.");
     T.adverts = cur.filter((x) => x !== r.id);
@@ -1614,19 +1667,35 @@ function openList() {
 }
 
 // ── Pepe's long-poll ──
+// roulette2 O6(d) (contract 5): a room entry may carry games: {bj, holdem, roulette} - that room's game toggles in Pepe
+// (_feature_on('_game_*_enabled')). Kept per room until a heartbeat brings new flags (an entry without them - an older Pepe, or
+// the bot act route's own note - keeps what the poll said); unknown = on, as before.
+const GAMES = ["bj", "holdem", "roulette"];
+const GAME_NAME = { bj: "Blackjack", holdem: "Hold'em", roulette: "Roulette" };
+function gamesOf(g) {
+  if (!g || typeof g !== "object" || Array.isArray(g)) return null;
+  const out = {};
+  for (const k of GAMES) if (typeof g[k] === "boolean") out[k] = g[k];
+  return Object.keys(out).length ? out : null;
+}
+/** a room Pepe said has `game` switched off (never true for a room whose flags are unknown) */
+const gameOff = (r, game) => !!(r && r.games && r.games[game] === false);
 function noteRooms(rooms) {
   const t = clock();
   for (const r of Array.isArray(rooms) ? rooms.slice(0, 50) : []) {
     if (!r || typeof r !== "object") continue;
     const id = String(r.id || "").slice(0, 64);
     if (!/^[\w .'&!@#()\-]{1,64}$/.test(id)) continue;
-    S.rooms.set(id, { id, name: String(r.name || id).replace(/[\u0000-\u001f]/g, " ").slice(0, 64), ts: t });
+    const games = gamesOf(r.games) || (S.rooms.get(id) || {}).games || null;
+    S.rooms.set(id, Object.assign({ id, name: String(r.name || id).replace(/[\u0000-\u001f]/g, " ").slice(0, 64), ts: t }, games ? { games } : {}));
   }
 }
-function freshRooms() {
+/** the rooms Pepe serves now: {id, name, busy} (+ games when Pepe sent them; with game "roulette" - a wheel's - off: that room
+ *  has roulette off, so Host Tools greys it and push / advertise refuse it) */
+function freshRooms(game) {
   const t = clock();
-  return Array.from(S.rooms.values()).filter((r) => t - r.ts < C.ROOM_FRESH_MS).map((r) => ({ id: r.id, name: r.name,
-    busy: !!tableForRoom(r.id) }));
+  return Array.from(S.rooms.values()).filter((r) => t - r.ts < C.ROOM_FRESH_MS).map((r) => Object.assign({ id: r.id, name: r.name,
+    busy: !!tableForRoom(r.id) }, r.games ? { games: Object.assign({}, r.games) } : {}, game === "roulette" ? { off: gameOff(r, "roulette") } : {}));
 }
 
 async function roomTables() {
@@ -1644,8 +1713,13 @@ async function roomTables() {
 /** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. The `private` part
  *  (hole cards of room players, by Camfrog name) only ever goes to Pepe (bot token), never into an event.
  *  1.99aoh(a): + `now` (this server's clock, ms) so Pepe can place the site's deadlines (land_at, spin.started_at) on his own. */
-async function poll(after, waitMs) {
+async function poll(after, waitMs, stateAfter) {
   await boot();
+  // roulette2 O12(b) (contract 5): state_after - the state_seq of Pepe's last answer. A table state he draws changed since (any
+  // wake(), also one with no event row: a web-only wheel on the stream, a wake that found no waiter) answers at once instead of
+  // waiting; a value from another process (a restart) too. An older Pepe sends none: he waits as before.
+  const sa = stateAfter == null || stateAfter === "" || !Number.isFinite(Number(stateAfter)) ? null : Math.trunc(Number(stateAfter));
+  const changed = () => sa !== null && S.stateSeq !== sa;
   // 1.99aoh(a): the poll BARRIER. A locked step (a roulette draw, a deal) emits - and wakes this long-poll - INSIDE its
   // transaction, before its COMMIT and before the live table takes the new state (copy-then-commit). Woken there, a poll used to
   // read the uncommitted rows and draw roomTables() from the live table as it was BEFORE the step (a draw's board still "Place your
@@ -1664,11 +1738,13 @@ async function poll(after, waitMs) {
   // a client with no cursor yet (or one from another database - a staging refresh) starts from now: no replay
   if (Number(after) < 0 || Number(after) > S.lastSeq) {
     const { top } = await snapshot(null);
-    return Object.assign({ cursor: top, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [], now: clock() });
+    const seq = S.stateSeq;              // (read before the tables: a change while they are built is newer than this)
+    return Object.assign({ cursor: top, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [], now: clock(), state_seq: seq });
   }
   after = Math.max(0, Math.trunc(Number(after) || 0));
   let snap = await snapshot(after);
-  if (!snap.rows.length && waitMs > 0) {
+  // (no await between this check and the waiter's registration: a wake can't fall in between)
+  if (!snap.rows.length && waitMs > 0 && !changed()) {
     await new Promise((resolve) => {
       const done = () => { clearTimeout(tm); S.waiters.delete(done); resolve(); };
       const tm = setTimeout(done, waitMs);
@@ -1676,9 +1752,12 @@ async function poll(after, waitMs) {
     });
     snap = await snapshot(after);          // (the wake may have come from inside a locked step: let it commit - or roll back - first)
   }
+  // the state_seq this answer stands for: read after the barrier (every step that woke it has committed) and before the tables
+  // are built, so a change made while they are built (refreshVeil awaits) is newer than it - Pepe's next poll answers at once
+  const seq = S.stateSeq;
   const events = snap.rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
   return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, snap.top), events, stream: S.stream.table },
-                       await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []), now: clock() });
+                       await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []), now: clock(), state_seq: seq });
 }
 
 async function fairRecord(tableId, round) {
@@ -1771,7 +1850,9 @@ const ROUTE = {
   outNow: (T, uid) => { const k = routeOf(T); return k && k.outNow ? k.outNow(T, uid) : null; },
 };
 const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
-  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); } });
+  dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); },
+  // roulette2 WP3: the 💎 High Roller role + its text (D1/D2), a wheel's adverts for its view (D4), the stream hand-over at a lobby rotation (D7)
+  isHighRoller, HR_ONLY_PLAY, advertList: (T) => advertList(T), streamHandOff: (from, to) => streamHandOff(from, to) });
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
@@ -1889,8 +1970,12 @@ const HMENG = require("./hmengine");
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
   const [mn, mx] = bjLimits(false), [hmn, hmx] = bjLimits(true);
+  // roulette2 (contract 3): the roulette limits a NEW spin takes (normal, and 💎 High Roller with its share of the House budget)
+  const rl = RLCFG.tierLimits(S.settings, false), rh = RLCFG.tierLimits(S.settings, true);
   return { bj: { min_bet: mn, max_bet: mx, hr_min_bet: hmn, hr_max_bet: hmx },
-           holdem: { sb_cap: HM.HC.SB_CAP, bb_cap: HM.HC.BB_CAP, hr_ladder: HM.HC.HR_LADDER.map(([sb, bb]) => [sb, bb]) } };
+           holdem: { sb_cap: HM.HC.SB_CAP, bb_cap: HM.HC.BB_CAP, hr_ladder: HM.HC.HR_LADDER.map(([sb, bb]) => [sb, bb]) },
+           roulette: { min_bet: rl.min, max_spin: rl.max_spin, caps: rl.caps,
+                       hr: { min_bet: rh.min, max_spin: rh.max_spin, caps: rh.caps, spin_cap: S.settings.rl_hr_spin_cap } } };
 }
 
 module.exports = {

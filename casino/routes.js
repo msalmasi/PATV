@@ -61,8 +61,9 @@ const svc = require("./service");
 const rewards = require("./rewards");
 const themes = require("./themes");       // 1.99amf h20: the table themes (the lobby's picker flag, the table page's theme files)
 
+// (roulette2 O7: + "limits" - a wheel's limits with the bank's live straight headroom, as !rl limits gives them)
 const WEB_VERBS = new Set(["undo", "clear", "go", "rebet", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
-                           "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand"]);
+                           "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand", "limits"]);
 const BOT_VERBS = new Set(["undo", "clear", "bets", "limits", "last", "start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
@@ -274,13 +275,15 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     // 1.99ajw casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
     for (const T of Array.from(svc.S.tables.values())) if (T.status === "open" && !svc.isMttTable(T)) await svc.refreshVeil(T);   // (h22 phase 2: not the MTT tables - a page each)
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
-    const tables = svc.lobby().map((row) => {
+    // roulette2 (contract 3): svc.lobby() lists the open roulette wheels too - dropped here while roulette is shut for this viewer
+    // (RL.lobby(uid).on: the audience gate is async, so it stays in the route); `roulette` itself stays for one release
+    const roulette = await svc.RL.lobby(actor?.uid);
+    const tables = svc.lobby().filter((row) => row.game !== "roulette" || roulette.on).map((row) => {
       const T = svc.getTable(row.id);
       const n = T ? T.last_revealed || T.last_hand_revealed || null : null;
       const qi = svc.S.stream.queue.indexOf(row.id);
       return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
     });
-    const roulette = await svc.RL.lobby(actor?.uid);
     res.json({ roulette, enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
                stream: !roulette.on && svc.getTable(svc.S.stream.table)?.game === "roulette" ? null : svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
                themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st),   // 1.99amf h20: may this viewer pick a theme
@@ -315,8 +318,12 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!T || (T.game === "roulette" && await svc.RL.viewShut(T, req.user?.userId))) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
+    // roulette2 (D5): so is a roulette wheel's (every viewer of a busy wheel polls it every 1-2 s; the felt sums every line) - keyed
+    // also by its stream place; its bank figure (rules.bank_straight) is worked out first, read-only, at most every 5 s
     const mtt = svc.isMttTable(T);
-    const ck = mtt ? `${T.id}:${T.rev}` : null;
+    const wheel = T.game === "roulette";
+    if (wheel) await svc.RL.bankRefresh(T);
+    const ck = mtt ? `${T.id}:${T.rev}` : wheel ? `${T.id}:${T.rev}:${svc.S.stream.table === T.id ? 1 : 0}:${svc.S.stream.queue.indexOf(T.id)}` : null;
     let pub = ck && tcache.get(T.id);
     if (!(pub && pub.k === ck && Date.now() - pub.at < 1000)) {
       const table = svc.publicView(T);
@@ -327,7 +334,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       pub = { k: ck, at: Date.now(), table };
       if (ck) { tcache.set(T.id, pub); if (tcache.size > 500) tcache.delete(tcache.keys().next().value); }
     }
-    const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms() };
+    // (roulette2 O6(d): each room says whether this table's game is off there - Host Tools greys it, push refuses it)
+    const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms(T.game) };
     // only the viewer's own seat / cards (1.99aof: ?notice=1 - the wheel's page / Dock showing its one-time notice - may take it; a poll never writes)
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId, { notice: req.query && req.query.notice === "1" }) : null;
     if (mtt && req.user && req.user.userId) svc.MT.seen(req.user.userId);                    // (h22 phase 2: start presence)
@@ -409,6 +417,12 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const b = req.body || {};
     const idem = String(b.idem || "");
     if (!IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
+    // roulette2 D1 (contract 4): {game: "roulette", hr?} opens a WEB wheel the opener hosts (at most one open per host; 💎 for High
+    // Rollers only) - the client goes to /casino/roulette/t/<table>
+    if (b.game === "roulette") {
+      const out = await svc.act(actor, "start", b.hr ? ["hr"] : [], { room: null, game: "roulette" }, `web-${actor.uid}-${idem}`);
+      return res.status(out.ok ? 200 : 409).json(out);
+    }
     const game = b.game === "holdem" ? "holdem" : "bj";
     // 1.99ov: b.hr = a 💎 High Roller blackjack table (Hold'em: the ladder's blinds say it)
     const args = (game === "holdem" ? (b.blinds ? [String(b.blinds).slice(0, 24)] : []) : b.hr ? ["hr"] : [])
@@ -637,7 +651,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     const b = req.body || {};
-    res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override));
+    // (roulette2 D7: an admin's roulette wheel goes up pinned unless {pin: false})
+    res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override, b.pin === false ? false : undefined));
   });
 
   app.get("/api/casino/fair/:id/:round", addUser, async (req, res) => {
@@ -682,7 +697,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       const tables = Array.from(svc.S.tables.values());
       if (Array.isArray(b.ach_base) && b.ach_base.length) await rewards.setBases(b.ach_base, tables);
       if (Array.isArray(b.rep_ack) && b.rep_ack.length) await rewards.repAck(b.rep_ack);
-      const out = await svc.poll(b.after, wait);
+      // roulette2 O12(b) (contract 5): + state_after (the state_seq of his last answer) - a state that changed since answers at once
+      const out = await svc.poll(b.after, wait, b.state_after);
       // (review) a Pepe that doesn't know tournaments (an older build: no `scene` in his poll) gets neither their lines (he'd post them
       // ungated by the room's poker toggle) nor a tournament table on his board (he'd draw it as a Sit & Go)
       if (!b.scene || typeof b.scene !== "object") {
@@ -760,7 +776,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
                     iph: null, admin: !!b.admin, room };
     // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
     const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : game === "roulette" ? 160 : 24;
-    if (game === "roulette" && b.args != null && (!Array.isArray(b.args) || b.args.length > 1 ||
+    // (roulette2 D1: "!rl start hr" - Pepe passes up to two words after a start verb, like his CBJ_START_VERBS; one bet line otherwise)
+    const rlMaxArgs = ["start", "open", "new"].includes(verb) ? 2 : 1;
+    if (game === "roulette" && b.args != null && (!Array.isArray(b.args) || b.args.length > rlMaxArgs ||
         b.args.some(x => typeof x !== "string" || x.length > argMax))) return res.status(400).json({ ok: false, pm: true, reply: "Bet line too long or malformed." });
     const args = Array.isArray(b.args) ? b.args.slice(0, game === "sng" ? 5 : 2).map((x) => String(x).slice(0, argMax)) : [];   // (h22: !sng new <seats> <buy-in> [turbo] [at N])
     const out = await svc.act(actor, verb, args, { room, table, game: mttBare ? "holdem" : game }, `cf-${idem}`);
