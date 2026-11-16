@@ -137,6 +137,14 @@ async function act(game, body) {
   const idem = body.idem ? String(body.idem) : null;
   if (e.READS && e.READS.includes(verb)) return Object.assign({ ok: true }, await e.read(verb, actor, body.args || {}));
   if (idem && !IDEM_RE.test(idem)) return { ok: false, code: "bad_request", error: "bad idem" };
+  // banfix: a site-banned account (siteban.js) starts or adds to nothing - from Pepe's chat (!bounty / !wager / !pool / !loan) or a
+  // website form; it may still wind down what it has open (siteban.WIND_DOWN: cancel, decline, repay, forgive). Pepe's own verbs
+  // (actor.pepe: an evidence check, an auto-resolve, a spec) never ask. Every stake is refused once more in holdInTx.
+  if (!actor.pepe && !require("../siteban").windDownOk(game, verb)) {
+    const acct = await actorAccount(actor);
+    const lock = acct && acct.userId ? await require("../siteban").lockOf(acct.userId) : null;
+    if (lock) return require("../siteban").botRefusal(lock);
+  }
   const key = idem ? `act:${game}:${idem}` : null;
   let out;
   try {
@@ -162,7 +170,7 @@ async function act(game, body) {
   return out;
 }
 function refuseCode(c) {
-  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_CASINO_BANNED: "banned", E_NOT_HELD: "changed",
+  return ({ E_INSUFFICIENT_PAT: "insufficient", E_TARGET_NOT_FOUND: "no_account", E_CASINO_BANNED: "banned", E_SITE_BANNED: "banned", E_NOT_HELD: "changed",
             E_POOLS_NOT_LIVE: "pools_not_live", E_INSUFFICIENT: "pool_short" })[c] || String(c || "failed").toLowerCase();
 }
 

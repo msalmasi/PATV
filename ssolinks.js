@@ -330,6 +330,8 @@ function register(app, { addUser, authView }) {
       if (r.hint) req.flash("success", r.hint);          // 1.99ajw padppl rework: "Is <name> your Camfrog name? Link it in Settings…" (cfnames.nameHint)
       return res.redirect(home(r.user, p.next));
     } catch (e) {
+      // banfix: linked meanwhile to a site-banned account (siteban.js) - or a network ban: their own words
+      if (require("./siteban").isRefusal(e)) { delete req.session.ssoPending; req.flash("error", e.message); return res.redirect("/login"); }
       console.error("[sso] create:", e && e.message);
       return back(tr(req, "auth.err.register_failed", "Something went wrong creating your account. Please try again."));
     }

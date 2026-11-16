@@ -733,6 +733,11 @@ function register(app, { isBotToken, addUser, discordBridge }) {
                               [String(b.username || "")]))[0]
       || (b.username ? await require("../usernames").findUser(b.username, { cols: "userId, username, displayname, camfrogUsername, class" }) : null);
     if (!u) return res.json({ ok: false, reply: "no account found" });
+    // banfix: a site-banned account (siteban.js) only reads and gets out (leave, cash out, fold, stand - siteban.CASINO_OK)
+    if (!require("../siteban").CASINO_OK.has(verb)) {
+      const lock = await require("../siteban").lockOf(u.userId);
+      if (lock) return res.json(require("../siteban").botRefusal(lock));
+    }
     const room = b.room ? String(b.room).slice(0, 64) : null;
     if (room) svc.noteRooms([{ id: room, name: b.room_name || room }]);
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;

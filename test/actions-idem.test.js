@@ -119,3 +119,37 @@ test("the /act pages tag their forms with a key", () => {
   assert.match(p, /name = "idem"/);
   assert.match(p, /form\[action="\/act"\]/);
 });
+
+// banfix (siteban.js): a website action queued for Pepe by an account that is SITE-banned now is never handed out (failed, with the
+// reason), at claim time and at ban time (dropQueued); Pepe's privacy jobs for it (privacy.*) still are; other members' rows are untouched
+test("banfix: a site-banned account's queued web actions are failed, never claimed - its privacy jobs still are", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery("DELETE FROM pepe_actions");
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername) VALUES ('u3', 'banme', 'banme', 'x', 'banme_cf')");
+  const bountyRow = await actions.queue("u3", { kind: "cmd", args: ["bounty", "kick someone", "1000"], tag: "bounties", idem: "bfkey00000000001" });
+  const privRow = await actions.queue("u3", { kind: "privacy.incognito", args: ["on"], tag: "privacy" });
+  await actions.queue("u2", { kind: "cmd", args: ["bounty", "a fair one", "1000"], tag: "bounties", idem: "bfkey00000000002" });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, reason, until) VALUES ('u3', '', 'scams', NULL)");
+  SB.forget("u3");
+  const c = await claim();
+  const got = c.actions.map((a) => [a.user_id, a.kind]);
+  assert.deepEqual(got.sort(), [["u2", "cmd"], ["u3", "privacy.incognito"]].sort(), "the banned account's bounty is not handed to Pepe");
+  const mine = await rows("u3");
+  const b = mine.find((r) => r.kind === "cmd");
+  assert.equal(b.status, "failed");
+  assert.equal(b.message, SB.QUEUED_FAIL);
+  assert.match(b.message, /banned from PATV/);
+  assert.equal(mine.find((r) => r.kind === "privacy.incognito").status, "claimed");
+  assert.ok(bountyRow != null && privRow != null);
+  // at ban time (feedstore.ban / padbans.linked call it): pending rows failed at once, privacy jobs kept, nobody else's touched
+  await runQuery("DELETE FROM pepe_actions");
+  await actions.queue("u3", { kind: "cmd", args: ["lotto", "quick", "1"], tag: "lotto", idem: "bfkey00000000003" });
+  await actions.queue("u3", { kind: "privacy.incognito", args: ["off"], tag: "privacy" });
+  await actions.queue("u2", { kind: "cmd", args: ["lotto", "quick", "1"], tag: "lotto", idem: "bfkey00000000004" });
+  const d = await SB.dropQueued("u3");
+  assert.deepEqual(d, { actions: 1, bounties: 0 });
+  assert.deepEqual((await rows("u3")).map((r) => [r.kind, r.status]).sort(), [["cmd", "failed"], ["privacy.incognito", "pending"]]);
+  assert.equal((await rows("u2"))[0].status, "pending");
+});

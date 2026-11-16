@@ -174,3 +174,39 @@ test("the bot route needs the bot token; the token never reaches a log line", as
   const src = fs.readFileSync(path.join(repo, "chatsignin.js"), "utf8");
   assert.ok(!/console\.(log|warn|error)\([^)]*token/i.test(src), "no console line prints a token");
 });
+
+// banfix (siteban.js): a SITE-banned account (feed_bans room_id '') gets no link ("banned" - Pepe says it can't), and a ban made after
+// the link went out refuses it at the button with the ban's words - the account can't sign in any way
+test("banfix: a site-banned account gets no link, and a ban since the link went out refuses it at the button", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await user("bnd", { username: "banned1", cf: "bnd_cf" });
+  await user("bnl", { username: "banned2", cf: "bnl_cf" });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, reason, until) VALUES ('bnd', '', 'harassment', NULL)");
+  SB.forget("bnd");
+  assert.deepEqual(await CS.issue("bnd_cf"), { ok: false, reason: "banned" });
+  assert.equal((await getQuery("SELECT why FROM chat_signin_log WHERE user_id = 'bnd' ORDER BY id DESC LIMIT 1"))[0].why, "banned", "logged");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM chat_signin_tokens WHERE user_id = 'bnd'"))[0].n, 0, "no token made");
+  // a pad's ban is not a site ban: the link is made
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES ('bnl', 'pad-x', NULL)");
+  const t = tokenOf((await CS.issue("bnl_cf")).url);
+  assert.ok(t);
+  // then banned site-wide before pressing the button
+  const until = Date.now() + 3 * 86400000;
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES ('bnl', '', ?)", [until]);
+  const r = await post("/signin", { token: t });
+  assert.equal(r.status, 403);
+  const page = await r.text();
+  assert.match(page, /"error":"banned"/);
+  assert.match(page, /This account is banned from PATV until \d{4}-\d\d-\d\d \d\d:\d\d UTC\./);
+  assert.ok(!/jwt=[^;]/.test(r.headers.get("set-cookie") || ""), "no login cookie");
+  assert.equal((await getQuery("SELECT why FROM chat_signin_log WHERE user_id = 'bnl' AND kind = 'refused'"))[0].why, "banned");
+  // the page's view knows the case (plain text, escaped; no "sign in with a password" button)
+  const ejs = require("ejs");
+  const html = await ejs.renderFile(path.join(repo, "views", "chatSignin.ejs"), { user: null, error: "banned", done: null, message: "This account is banned from PATV. Reason: <b>x</b>" },
+                                    { views: [path.join(repo, "views")] });
+  assert.match(html, /This account is banned from PATV\. Reason: &lt;b&gt;x&lt;\/b&gt;/);
+  assert.match(html, /contact PATV staff/);
+  assert.doesNotMatch(html, /Sign in with a password/);
+});

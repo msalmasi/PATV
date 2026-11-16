@@ -29,6 +29,11 @@
 // cookie make ONE row, and that old token keeps mapping to it (revoking the row kills the old token too). A cookie
 // without a sid issued before the account's session_cutoffs.after is refused. See docs/sessions.md.
 //
+// banfix (site bans, siteban.js): a site-banned account (an active feed_bans row with room_id '') can't sign in - signIn refuses
+// it before anything is issued (code 'banned') - and the gate treats its valid cookie as a signed-out request from its next
+// request on, BEFORE the session check (no legacy conversion, no last_seen touch), and ends its sessions (revokeAll why 'ban', at
+// most every siteban.REVOKE_EVERY_MS per account). The Admin class and the owner are exempt (siteban.js D1).
+//
 // Routes (signed-in member; POSTs need a same-origin fetch with X-Requested-With: fetch):
 //   GET  /api/account/sessions                      -> {ok, sessions: [{id, current, device, country, ip, method, created,
 //                                                       last_seen, legacy_before}]}
@@ -270,11 +275,16 @@ async function isFresh(req, within = FRESH_MS) {
 // ── sign in: the one place a login cookie with a session is issued ──
 /**
  * Create the session, issue the cookie, send a new-device notice if it is one. `method` is one of METHODS; opts.signup =
- * the sign-in that created the account (no notice). Also cancels a pending account deletion (signing in cancels it).
- * -> the session id.
+ * the sign-in that created the account (no notice). Also cancels a pending account deletion the member asked for themselves
+ * (signing in cancels it - never one PATV staff scheduled: accountdelete.cancelOnSignIn). -> the session id.
+ * banfix: a site-banned account (siteban.js) is refused FIRST - an Error {status 403, code 'banned', until} whose message the
+ * caller shows (siteban.isRefusal) - so no session row, no cookie and no deletion cancel happen.
  */
 async function signIn(req, res, user, method, opts = {}) {
   const { issueLogin } = require("./middleware/loginCookie");
+  const SB = require("./siteban");
+  const lock = user && user.userId ? await SB.lockOf(user.userId, { fresh: true }) : null;
+  if (lock) throw SB.signInError(lock, req);
   // 1.99ajn padppl: a network ban (netban.js - dark until switched on) refuses EVERY sign-in from that network before anything is issued;
   // the caller shows the message (it never names an address). Staff and a ban's exempt accounts pass.
   if (req) {
@@ -370,6 +380,26 @@ function touchSeen(row, req, t) {
   try { const NB = require("./netban"); if (NB.isOn() && row.user_id) NB.note(row.user_id, req, "session").catch(() => {}); } catch (e) { /* never blocks */ }
 }
 
+/** banfix: a locked account's cookie reached the gate - end its sessions (and the cutoff for sid-less cookies), at most every
+ *  siteban.REVOKE_EVERY_MS per account in this process (parallel requests share one revokeAll, never a burst of hub rows); only
+ *  when there is something to end (a live row, or a sid-less cookie the cutoff must stop once the ban is over). */
+const ending = new Map();                       // userId -> {at, p}
+async function endLocked(userId, lock, legacy) {
+  const t = now();
+  const c = ending.get(userId);
+  if (c && t - c.at < require("./siteban").REVOKE_EVERY_MS) return c.p;
+  const p = (async () => {
+    await init();
+    const live = (await getQuery("SELECT 1 FROM sessions WHERE user_id = ? AND revoked_at IS NULL LIMIT 1", [userId])).length > 0;
+    if (!live && !legacy) return 0;
+    return revokeAll(userId, { why: lock && lock.kind === "deletion" ? "account deletion" : "ban" });
+  })();
+  ending.set(userId, { at: t, p });
+  if (ending.size > CACHE_MAX) for (const k of [...ending.keys()].slice(0, ending.size - CACHE_MAX / 2)) ending.delete(k);
+  p.catch(() => ending.delete(userId));
+  return p;
+}
+
 /** Middleware (index.js, right after cookie-parser): a revoked / expired / unknown session is a signed-out request. */
 const SKIP = /^\/(public|uploads)\/|^\/(healthz|favicon\.ico|apple-touch-icon)/;
 async function gate(req, res, next) {
@@ -379,6 +409,18 @@ async function gate(req, res, next) {
   let decoded = null;
   try { decoded = jwt.verify(token, process.env.SECRET_KEY); } catch (e) { decoded = null; }
   if (!decoded || !decoded.userId) return next();             // not a login we issued: every reader ignores it anyway
+  // banfix: a site-banned account (siteban.js) is signed out on this request, before the session is even looked at (an old
+  // sid-less cookie is never converted for it) - every reader below sees no login; its sessions end (endLocked)
+  let lock = null;
+  try { lock = await require("./siteban").lockOf(decoded.userId); }
+  catch (e) { console.error("[sessions] ban check failed (the session check alone decides this request):", e.message); }
+  if (lock) {
+    try { await endLocked(String(decoded.userId), lock, !decoded.sid); } catch (e) { console.error("[sessions] ban sign-out:", e.message); }
+    require("./middleware/loginCookie").clearLogin(res);
+    delete req.cookies.jwt;
+    req.siteLock = lock;
+    return next();
+  }
   try {
     const r = await check(decoded, token, req, res);
     if (r.ok) {
@@ -400,6 +442,8 @@ async function userIdOfToken(token) {
   let decoded = null;
   try { decoded = jwt.verify(token, process.env.SECRET_KEY); } catch (e) { return null; }
   if (!decoded || !decoded.userId) return null;
+  try { if (await require("./siteban").lockOf(decoded.userId)) return null; }      // banfix: a site-banned account (siteban.js)
+  catch (e) { console.error("[sessions] token ban check:", e.message); }
   try {
     if (decoded.sid) return valid(await load(sha(decoded.sid)), decoded.userId) ? String(decoded.userId) : null;
     const after = await cutoffOf(decoded.userId);
@@ -500,4 +544,4 @@ function register(app, { addUser }) {
 
 module.exports = { init, register, gate, check, create, revoke, revokeAll, revokeMethod, revokeForMerge, list, signIn, isFresh, isLive, userIdOfToken, describe,
                    notifyIfNew, cutoffOf, METHODS, LOGIN_MS, CACHE_MS, SEEN_EVERY_MS, FRESH_MS, sha,
-                   _setClock: (f) => { clock = f || (() => Date.now()); }, _clearCache: () => { cache.clear(); cutoffCache.clear(); } };
+                   _setClock: (f) => { clock = f || (() => Date.now()); }, _clearCache: () => { cache.clear(); cutoffCache.clear(); ending.clear(); } };

@@ -1205,3 +1205,31 @@ test("the last-method guard holds under concurrent unlinks: Apple + Google at on
     assert.match(fs.readFileSync(path.join(repo, f), "utf8"), /unlinkGuarded\(/, f + " unlinks through the guarded transaction");
   }
 });
+
+// banfix (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) can't sign
+// in with Apple: the hand-off is refused with the ban's own words (a network ban's too - it fell to "didn't work" before), nothing issued
+test("banfix: a site-banned account's Apple sign-in is refused at the hand-off - no login, the ban's own words; lifted, it works again", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  const b0 = browser("10.7.0.1");
+  T += 1000;
+  await appleSignIn(b0, { sub: "000111.banned.0099", email: "nobody@example.test", email_verified: "true" }, { user: { name: { firstName: "Bann" } } });
+  await b0.post("/auth/sso/create", { username: "bann_apple" });
+  assert.equal(b0.who(), "bann_apple");
+  const u = (await getQuery("SELECT userId FROM users WHERE username = 'bann_apple'"))[0];
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', NULL)", [u.userId]);
+  SB.forget(u.userId);
+  const before = (await getQuery("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", [u.userId]))[0].n;
+  const b = browser("10.7.0.2");
+  T += 1000;
+  const { cont } = await appleSignIn(b, { sub: "000111.banned.0099", email: "nobody@example.test" });
+  assert.equal(cont.location, "/login");
+  assert.equal(b.who(), null, "no login");
+  assert.match(await flashText(b), /This account is banned from PATV\./);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", [u.userId]))[0].n, before, "no session made");
+  await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [u.userId]);
+  SB.forget(u.userId);
+  const b2 = browser("10.7.0.3");
+  T += 1000;
+  await appleSignIn(b2, { sub: "000111.banned.0099", email: "nobody@example.test" });
+  assert.equal(b2.who(), "bann_apple");
+});

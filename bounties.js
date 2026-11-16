@@ -267,8 +267,15 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now();
     const found = await getQuery(`SELECT * FROM bounty_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
+    // banfix: an action of an account that is site-banned now (siteban.js) is failed, never handed to Pepe
+    const SB = require("./siteban");
+    const locked = await SB.lockedRows(found, { keepKind: () => false });
+    for (const id of locked) {
+      await runQuery("UPDATE bounty_actions SET status = 'failed', message = ?, updated = ? WHERE id = ? AND status IN ('pending','claimed')", [SB.QUEUED_FAIL, now, id]);
+    }
     const rows = [];
     for (const a of found) {
+      if (locked.has(a.id)) continue;
       const r = await runQuery(`UPDATE bounty_actions SET status = 'claimed', claimed = ?, updated = ?
                                 WHERE id = ? AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))`, [now, now, a.id, now - RECLAIM_MS]);
       if (r && r.changes === 1) rows.push(a);

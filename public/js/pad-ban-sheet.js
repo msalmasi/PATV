@@ -40,7 +40,7 @@
   var SCOPE_TXT = {
     bridge: function () { return [_t('js.ban.scope_bridge', 'Website bridge only'), _t('js.ban.scope_bridge_sub', 'Chat, commands, clips, cams and room audio from the website')]; },
     pad: function () { return [_t('js.ban.scope_pad', 'Whole pad'), _t('js.ban.scope_pad_sub', 'Feed posts, comments, stories, stage, chat and room audio')]; },
-    site: function () { return [_t('js.ban.scope_site', 'Whole site'), _t('js.ban.scope_site_sub', 'PATV staff: everywhere, and they are signed out')]; },
+    site: function () { return [_t('js.ban.scope_site', 'Whole site'), _t('js.ban.scope_site_sub2', 'PATV staff: everywhere - they are signed out and can\'t sign in until it ends')]; },
     vbridge: function () { return [_t('js.ban.scope_veil', 'Posting incognito in this pad'), _t('js.ban.scope_veil_sub', 'Every frog name they use here, now and later - chat, commands, clips and cams from the website. What they do under their own name doesn\'t change, and you never learn who it is.')]; },
     vsite: function () { return [_t('js.ban.scope_veil_site', 'Posting incognito in every pad'), _t('js.ban.scope_veil_site_sub', 'PATV staff: every frog name they use, in every pad')]; }
   };
@@ -216,7 +216,7 @@
           if (S.done) return;
           if (!a.ok) { B.out.className = 'psh-out bad'; B.out.textContent = a.error || _t('js.ban.failed', 'Not changed.'); again(B); return; }
           B.out.className = 'psh-out ok';
-          B.out.textContent = scope === 'site' && !pv.veil ? _t('js.ban.done_site', 'Done - they\'re banned site-wide and signed out.') : _t('js.ban.done', 'Done - it\'s in the pad\'s list of bans.');
+          B.out.textContent = scope === 'site' && !pv.veil ? _t('js.ban.done_site2', 'Done - they\'re banned site-wide, signed out, and can\'t sign in until it ends.') : _t('js.ban.done', 'Done - it\'s in the pad\'s list of bans.');
           S.later(1100);
           done(o, a);
         }).catch(function () { if (S.done) return; B.out.className = 'psh-out bad'; B.out.textContent = _t('js.ban.offline', 'Couldn\'t reach the site.'); again(B); });

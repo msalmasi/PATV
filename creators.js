@@ -1012,7 +1012,8 @@ async function renewOne(s, t = now(), { force = false } = {}) {
     if (!done) return "dup";
   } catch (e) {
     const err = mapEscrow(e);
-    if (!(err && (err.code === "E_INSUFFICIENT_PAT" || err.code === "E_CAP"))) { console.error(`[creators] renew #${s.id}:`, e.message); return "skip"; }
+    // banfix: a site-banned fan's renewal is refused (escrow holdInTx E_SITE_BANNED) - it runs out like an unpaid one (grace, then lapsed)
+    if (!(err && (err.code === "E_INSUFFICIENT_PAT" || err.code === "E_CAP" || err.code === "E_SITE_BANNED"))) { console.error(`[creators] renew #${s.id}:`, e.message); return "skip"; }
     if (t >= graceEnd) return end("lapsed", `⭐ Your subscription to ${cu.username} ended`, `The renewal (${fmt(plan.price)} PAT) couldn't be paid within the ${CONFIG.grace_days}-day grace. Subscribe again any time.`);
     const k = "grace:" + s.paid_through;
     if (s.notified !== k) {
@@ -1505,6 +1506,10 @@ async function botAct(b = {}) {
   }
   const me = await botAccount(b);
   if (!me) return { ok: false, code: "no_account", error: "No PAT account." };
+  if (verb === "subscribe") {                                                 // banfix: a site-banned account subscribes to nothing (siteban.js)
+    const lock = await require("./siteban").lockOf(me.userId);
+    if (lock) return require("./siteban").botRefusal(lock);
+  }
   if (verb === "subs") {
     const f = await fanSubs(me.userId);
     return { ok: true, subs: f.subs.filter((s) => ["active", "grace"].includes(s.status)).map((s) => ({ creator: s.creator, tier: s.tier, tierName: s.tierName, price: s.price,

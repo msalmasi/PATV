@@ -340,9 +340,17 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now();
     const found = await getQuery(`SELECT * FROM pepe_actions WHERE kind != 'table' AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
+    // banfix: a row queued by an account that is site-banned now (siteban.js) is failed, never handed out - except Pepe's privacy
+    // jobs (privacy.*: a deletion's forget / recordings, incognito), which protect the account and always run
+    const SB = require("./siteban");
+    const locked = await SB.lockedRows(found);
+    for (const id of locked) {
+      await runQuery("UPDATE pepe_actions SET status = 'failed', message = ?, updated = ? WHERE id = ? AND status IN ('pending','claimed')", [SB.QUEUED_FAIL, now, id]);
+    }
     // conditional: a row the TTL sweep expired in between stays expired (and isn't handed out)
     const rows = [];
     for (const a of found) {
+      if (locked.has(a.id)) continue;
       const r = await runQuery(`UPDATE pepe_actions SET status = 'claimed', claimed = ?, updated = ?
                                 WHERE id = ? AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))`, [now, now, a.id, now - RECLAIM_MS]);
       if (r && r.changes === 1) rows.push(a);

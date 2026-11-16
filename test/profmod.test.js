@@ -186,7 +186,7 @@ test("the view: an Admin group per role - the items its keys allow, status lines
   assert.match(menuOf(st), /class="pm-pop-gh pf-mod-gh" role="presentation" data-pfmod-cfg="[^"]+">Admin<\/div>/);
   assert.match(menuOf(st), /<button type="button" role="menuitem" class="pf-danger" data-pfmod="siteban">⛔ Site ban…<\/button>/);
   assert.doesNotMatch(menuOf(st), /data-safety="details"|\/admin\/accounts|\/admin\/comps|data-pfmod="(bridge|signout|cover)"/);
-  assert.match(st, /<script src="\/public\/js\/pad-ban-sheet\.js\?v=4" defer><\/script><script src="\/public\/js\/profile-mod\.js\?v=1" defer><\/script>/);
+  assert.match(st, /<script src="\/public\/js\/pad-ban-sheet\.js\?v=5" defer><\/script><script src="\/public\/js\/profile-mod\.js\?v=1" defer><\/script>/);
   assert.match(st, /<link rel="stylesheet" href="\/public\/css\/person-sheet\.css\?v=4"><script src="\/public\/js\/block-sheet\.js\?v=3" defer>/);
   const cfg = JSON.parse(menuOf(st).match(/data-pfmod-cfg="([^"]+)"/)[1].replace(/&#34;/g, '"').replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
   assert.deepEqual(Object.keys(cfg).sort(), ["bridge", "creator", "id", "ref", "siteBan", "slug", "stageBan", "u", "who"]);
@@ -615,13 +615,14 @@ test("the sheets: in-page PATVSheet confirms with reasons, never confirm(), text
   const bs = SRC("public/js/pad-ban-sheet.js");
   assert.match(bs, /var scopes = Array\.isArray\(o\.only\) \? pv\.scopes\.filter\(function \(sc\) \{ return o\.only\.indexOf\(sc\) >= 0; \}\) : pv\.scopes;/);
   assert.match(bs, /if \(only && want\('site'\) && cur\.site\) opts\.push\(\['site', cur\.site\]\);/);
-  assert.match(bs, /scope === 'site' && !pv\.veil \? _t\('js\.ban\.done_site', 'Done - they\\'re banned site-wide and signed out\.'\)/);
+  // banfix: a site ban also keeps them from signing in until it ends (siteban.js) - the sheet says so (a new key: every language re-translates)
+  assert.match(bs, /scope === 'site' && !pv\.veil \? _t\('js\.ban\.done_site2', 'Done - they\\'re banned site-wide, signed out, and can\\'t sign in until it ends\.'\)/);
   assert.equal((bs.match(/\bdone\(o, a\);/g) || []).length, 2, "after a ban and after a lift");
   assert.match(bs, /function done\(o, a\) \{ if \(typeof o\.onDone === 'function'\)/);
   // the chat's person menu is unchanged: no `only`, so every scope as before, and no site ban in its Lift
   assert.doesNotMatch(SRC("public/js/room-mod.js"), /only: \[/);
-  assert.match(SRC("views/room.ejs"), /pad-ban-sheet\.js\?v=4/);
+  assert.match(SRC("views/room.ejs"), /pad-ban-sheet\.js\?v=5/);
   // copy: en.json (en only)
   const en = JSON.parse(SRC("locales/en.json"));
-  for (const k of ["profile.mod.heading", "profile.mod.siteban", "js.pfmod.signout_body", "js.ban.done_site", "js.ban.lift_site_body"]) assert.ok(en[k], k);
+  for (const k of ["profile.mod.heading", "profile.mod.siteban", "js.pfmod.signout_body", "js.ban.done_site2", "js.ban.lift_site_body"]) assert.ok(en[k], k);
 });

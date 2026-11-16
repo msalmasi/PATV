@@ -380,6 +380,9 @@ async function saleHooksIdle() {
 async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost, giftTo, giftNote, giftAnon }) {
   try {
     await ready;
+    // banfix: a site-banned buyer (siteban.js) buys nothing - Discord's /chatshop, Pepe's Camfrog buy (the website's shop never gets
+    // here for one: the session gate signs it out)
+    if (userId && (await require("./siteban").lockOf(userId))) return { success: false, status: 403, message: require("./siteban").botText(), code: "banned" };
     const prizes = await getQuery(
       `SELECT prizeId, cost, prize, quantity, seller_id, status, buyer_prompt FROM prizes WHERE prizeId = ?`, [prizeId]);
     if (prizes.length === 0 || prizes[0].status === "removed") {

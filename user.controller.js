@@ -237,8 +237,10 @@ async function sendVerificationEmail(email, username, token) {
 
 // 1.99jr: the one way a sign-in finishes - password (loginUser) and Sign in with Plex (plexsso.js). Any sign-in gate
 // (a ban, 2FA) belongs HERE so every path gets it; today a sign-in brings an archived account back (1.99bm) and issues
-// the 90-day sliding login (middleware/loginCookie.js). Site restrictions (casino ban, feed bans, red list) are not
-// sign-in blocks - they're enforced where they apply, whichever way the member signed in.
+// the 90-day sliding login (middleware/loginCookie.js). banfix: a SITE ban (siteban.js: feed_bans with room_id '' - the
+// staff "Site ban") IS a sign-in block - refused here before anything runs (an archived banned account isn't brought back)
+// and again in sessions.signIn; the caller shows the message (siteban.isRefusal). The other restrictions (casino ban, pad
+// and feed bans of one pad, red list) are not sign-in blocks - they're enforced where they apply.
 // 1.99wj: the login is a server-side session (sessions.js: "Your devices", sign out everywhere) - `via` names the method.
 function methodOf(via) {
   const v = String(via || "").toLowerCase();
@@ -247,6 +249,7 @@ function methodOf(via) {
   return "password";
 }
 async function finishLogin(req, res, user, via, opts = {}) {
+  await require("./siteban").assertSignIn(user, req);         // banfix: a site-banned account stops here (nothing touched)
   await require("./staleaccounts").touch(user.userId, via || "sign-in");
   await require("./sessions").signIn(req, res, user, opts.method || methodOf(via), { signup: /sign-up|signup/i.test(String(via || "")) || !!opts.signup });
   return user;
@@ -347,7 +350,8 @@ async function loginUser(req, res) {
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
     // 1.99ajn padppl (review fix): a network ban's refusal (sessions.signIn, netban.js) is shown as itself on the form - it never names an address
-    if (err && err.code === "network") return back(err.message);
+    // banfix: a site ban's refusal (siteban.js) the same way - "This account is banned from PATV (until ...)"
+    if (require("./siteban").isRefusal(err)) return back(err.message);
     console.error("[auth] login error:", err && err.message);
     return back(req.t ? req.t('auth.err.login_failed') : "Something went wrong signing you in. Please try again.");
   }

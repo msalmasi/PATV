@@ -286,9 +286,10 @@ test("Telegram: \"I already have an account\" links after the password (only whe
   T += 1000;
   await tgSignIn(b3, tgAuth({ id: 7005, first_name: "Wes" }));
   await b3.post("/login", { username: "wes", password: PASSWORD, link_sso: "telegram" });
-  assert.equal(b3.who(), "wes", "the password sign-in itself works");
-  assert.equal(await TG.linkByTg("7005"), null, "but nothing is linked");
-  assert.match(await flashText(b3), /isn&#39;t available|isn't available/);
+  // banfix: a site ban is a sign-in block now (siteban.js) - the password sign-in itself is refused, so nothing can be linked
+  assert.equal(b3.who(), null, "the site ban refuses the password sign-in");
+  assert.equal(await TG.linkByTg("7005"), null, "nothing is linked");
+  assert.match(await flashText(b3), /This account is banned from PATV\./);
 });
 
 test("Telegram: a banned member already linked signs in exactly like with a password (the one finishLogin gate)", async () => {
@@ -554,4 +555,55 @@ test("Settings -> Account: Connections has a Google row (link / unlink) and the 
   assert.match(html, /\/api\/sso\/google\/unlink/);
   html = await ejs.renderFile(file, loc({ google: { on: false, linked: false } }));
   assert.doesNotMatch(html, /id="googleDiv"/, "hidden when Google isn't set up");
+});
+
+// banfix (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) is refused by
+// every SSO path: a linked Telegram / Google sign-in, and the sign-up page's "linked meanwhile" path - no login, the ban's own words
+test("banfix: a site-banned account can't sign in with Telegram or Google, nor through the sign-up page's 'already linked' path", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  const ban = await mkUser("banx");
+  await runQuery("INSERT INTO telegram_links (user_id, tg_id, handle, link_source, proof, linked_at) VALUES (?, '7100', 'banxtg', 'self', 'start_code', ?)", [ban.userId, T]);
+  await SSO.addLink("google", ban.userId, { subject: "g-100", proof: "oidc", email: null, name: "Banx" });
+  // before the ban: both work
+  let b = browser("10.9.0.1");
+  T += 1000;
+  await tgSignIn(b, tgAuth({ id: 7100, first_name: "Banx", username: "banxtg" }));
+  assert.equal(b.who(), "banx");
+  const until = Date.now() + 86400000;
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', ?)", [ban.userId, until]);
+  SB.forget(ban.userId);
+  // Telegram
+  b = browser("10.9.0.2");
+  T += 1000;
+  const tr = await tgSignIn(b, tgAuth({ id: 7100, first_name: "Banx", username: "banxtg" }));
+  assert.equal(tr.json.ok, false); assert.equal(tr.json.redirect, "/login");
+  assert.equal(b.who(), null, "no login");
+  assert.match(await flashText(b), /This account is banned from PATV until \d{4}-\d\d-\d\d \d\d:\d\d UTC\./);
+  // Google
+  b = browser("10.9.0.3");
+  const { cb } = await googleSignIn(b, { sub: "g-100", name: "Banx" });
+  assert.equal(cb.location, "/login");
+  assert.equal(b.who(), null);
+  assert.match(await flashText(b), /This account is banned from PATV/);
+  // the sign-up page: an unlinked Telegram identity parked, then linked to the banned account (another tab) before "create"
+  b = browser("10.9.0.4");
+  T += 1000;
+  assert.equal((await tgSignIn(b, tgAuth({ id: 7101, first_name: "Banx2" }))).json.redirect, "/auth/sso/new");
+  const banz = await mkUser("banz");
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', NULL)", [banz.userId]);
+  await runQuery("INSERT INTO telegram_links (user_id, tg_id, link_source, proof, linked_at) VALUES (?, '7101', 'self', 'start_code', ?)", [banz.userId, T]);
+  const c = await b.post("/auth/sso/create", { username: "banx_two" });
+  assert.equal(c.location, "/login");
+  assert.equal(b.who(), null);
+  assert.match(await flashText(b), /This account is banned from PATV/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM users WHERE username = 'banx_two'"))[0].n, 0, "no second account made for it");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", [ban.userId]))[0].n, 1, "only the session from before the ban");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", [banz.userId]))[0].n, 0, "none for the other banned account");
+  // the ban ends: Telegram signs in again by itself
+  await runQuery("UPDATE feed_bans SET until = ? WHERE user_id = ?", [Date.now() - 1, ban.userId]);
+  SB.forget(ban.userId);
+  b = browser("10.9.0.5");
+  T += 1000;
+  await tgSignIn(b, tgAuth({ id: 7100, first_name: "Banx", username: "banxtg", last_name: "again" }));
+  assert.equal(b.who(), "banx");
 });

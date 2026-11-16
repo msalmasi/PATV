@@ -956,6 +956,8 @@ async function logMerge({ via, from, to, pat = 0, xp = 0, report = {}, note = nu
  *  vested welcome held. Never throws. */
 async function afterMerge(toId, report = {}) {
   const loaded = (m) => Object.keys(require.cache).some((k) => k.endsWith(path.sep + m + ".js"));
+  // banfix: a site ban that moved here with feed_bans (NULL_WINS) locks the target out at once (siteban.js lock cache)
+  try { require("./siteban").forget(toId); } catch (e) { /* the 5 s cache lands it anyway */ }
   try { if (loaded("rooms")) await require("./rooms").loadCache(); } catch (e) { console.error("[MERGE] rooms cache:", e.message); }
   try { if (loaded("padaccess")) await require("./padaccess").load(); } catch (e) { console.error("[MERGE] pad cache:", e.message); }
   try { if (loaded("adultgate")) await require("./adultgate").load(); } catch (e) { console.error("[MERGE] adult gate:", e.message); }   // adultgate site

@@ -582,6 +582,6 @@
 <% if (locals.profileBlock || locals.profileMod) { %><link rel="stylesheet" href="/public/css/person-sheet.css?v=4"><script src="/public/js/block-sheet.js?v=3" defer></script><% } %>
 <%# profmod: the Admin group's sheets - the ⛔ ban sheet (scope site only) + profile-mod.js; 🔍 details is feed-safety.js's (loaded by the
     follow partial's Report item when the profile has its social block - never twice, or one click opens two panels) %>
-<% if (locals.profileMod) { %><script src="/public/js/pad-ban-sheet.js?v=4" defer></script><script src="/public/js/profile-mod.js?v=1" defer></script><% if (profileMod.may && profileMod.may.details && !soc) { %><script src="/public/js/feed-safety.js?v=4" defer></script><% } %><% } %>
+<% if (locals.profileMod) { %><script src="/public/js/pad-ban-sheet.js?v=5" defer></script><script src="/public/js/profile-mod.js?v=1" defer></script><% if (profileMod.may && profileMod.may.details && !soc) { %><script src="/public/js/feed-safety.js?v=4" defer></script><% } %><% } %>
 </body>
 </html>

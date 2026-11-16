@@ -142,10 +142,9 @@ async function account(userId) {
   return (await getQuery(`SELECT userId, username, class, ${pick("displayname")}, ${pick("camfrogUsername")}, ${pick("archived_at")} FROM users WHERE userId = ?`,
     [String(userId || "")]))[0] || null;
 }
+// banfix: the one site-ban rule (siteban.activeBan: feed_bans room_id '' that hasn't ended; a missing table = none)
 async function siteBanned(userId) {
-  try {
-    return !!(await getQuery("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = '' AND (until IS NULL OR until > ?)", [userId, NOW()]))[0];
-  } catch (e) { return false; }        // no feed_bans table yet
+  try { return !!(await require("./siteban").activeBan(userId, NOW())); } catch (e) { return false; }
 }
 function hasPass(userId) {
   try { return !!require("./premium").hasPass(userId); } catch (e) { return false; }

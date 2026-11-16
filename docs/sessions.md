@@ -10,12 +10,13 @@ row says whether it is still allowed.
 
 - **One place issues logins:** `sessions.signIn(req, res, user, method)` - password and sign-up, Google, Apple, Plex, Telegram,
   Discord, Twitch, the `!signin` chat link, and `!signup` claim links (a sign-in / sign-up that started from `/claim/...`).
-  It creates the row, issues the cookie, cancels a pending account deletion and files the new-device notice.
+  It refuses a site-banned account first (see Site bans), then creates the row, issues the cookie, cancels a pending account
+  deletion the member asked for themselves (never one PATV staff scheduled) and files the new-device notice.
 - **One place checks them:** `sessions.gate`, mounted right after cookie-parser in `index.js`. A JWT whose session is
-  missing, revoked, expired or someone else's is a signed-out request: the cookie is cleared and `req.cookies.jwt`
-  removed, so every later reader (addUser, the inbox bell, the DM stream, the language / time zone / welcome
-  middlewares, the Twitch / Discord link callbacks) sees no login. `hlsauth.js` (nginx auth_request, before
-  cookie-parser) asks `sessions.userIdOfToken`.
+  missing, revoked, expired or someone else's - or whose account is site-banned (checked first) - is a signed-out
+  request: the cookie is cleared and `req.cookies.jwt` removed, so every later reader (addUser, the inbox bell, the DM
+  stream, the language / time zone / welcome middlewares, the Twitch / Discord link callbacks) sees no login.
+  `hlsauth.js` (nginx auth_request, before cookie-parser) asks `sessions.userIdOfToken`.
 - **Cache:** rows are cached in memory for 5 s. A revocation in the site process is immediate; one written by another
   process (a CLI tool) lands within 5 s. `last_seen` / `expires` / IP are written at most every 5 minutes per session.
 - **Expiry:** unchanged policy - 90 days, sliding: `expires` = last activity + 90 days (the cookie keeps renewing daily
@@ -53,14 +54,52 @@ Each live session: device, method, country / IP, last active, signed in, "This d
 | Password reset by email | Every session (and the cutoff) |
 | Removing a sign-in method (Google, Apple, Plex, Telegram...) | Nothing is signed out - the page says so and points at Your devices |
 | Apple says the member stopped using Sign in with Apple (`consent-revoked`), or deleted the Apple Account (`account-deleted`) - `/auth/apple/notifications`, applesso.js | The sessions signed in with Apple **before Apple's event time** (`sessions.revokeMethod(..., { before })`); the others stay, and so does an Apple sign-in made after it (a new authorization). Each notification is applied once (`apple_notices`) |
-| Site-wide ban by staff (feed ban with no pad) | Every session; a pad owner's ban doesn't |
+| Site-wide ban by staff (feed ban with no pad) | Every session - and no new sign-in by any method until the ban ends (see Site bans); a pad owner's ban doesn't |
+| A site ban written without a sign-out (`padbans.linked`, an account merge, a CLI tool) | Every session, on the account's next request (the gate) |
 | Admin "sign out everywhere" | `POST /api/admin/users/:id/sessions/revoke` (Admin, audit-logged) |
 | Account merge | The merged-away account's sessions are revoked, never moved (`accountMerge.moveUserRows`; `sessions.user_id` is a `keep` rule) |
 | Account deletion requested | Every session |
 | Logout | That session |
 
-There is no account-level sign-in ban on the site (bans are feature restrictions); the staff feed ban is the closest
-and now signs the account out.
+## Site bans (banfix, `siteban.js`)
+
+Owner report 2026-11-16: a site-banned account kept posting bounties, and kept signing back in, which cancelled the
+deletion staff had scheduled for it. A **site ban** - a `feed_bans` row with `room_id ''` whose `until` is NULL (for good)
+or in the future, what staff make with "Site ban…" (person menu, profile, /feed/admin, the report actions) - is now an
+account lock:
+
+- **No sign-in, by any method.** `sessions.signIn` refuses it before anything is issued: an Error `{status 403, code
+  'banned', until}` whose message ("This account is banned from PATV until <date> UTC. Reason: ...") every sign-in
+  caller shows as itself (`siteban.isRefusal` - a network ban's `network` refusal the same way): the password form,
+  Google, Apple, Telegram, Plex (callback and the create page), Twitch, Discord, the `!signin` chat link (no link is
+  issued at all: reason `banned`), `!signup` claim links. `user.controller.finishLogin` and the Twitch / Discord callbacks
+  ask first (`siteban.assertSignIn`), so an archived banned account isn't restored and a provider id isn't linked. No
+  session row, no cookie, no deletion cancel.
+- **A live session ends on its next request.** The gate checks the lock before the session (no legacy conversion), clears
+  the cookie, ends every session of the account (`revokeAll` why `ban`, at most every 30 s per account; the cutoff stops
+  old sid-less cookies even after the ban) and sets `req.siteLock`; the next HTML page flashes the ban's message (the
+  sign-in form shows it). Every authenticated page, API and write - bounties, the feed, DMs, stories, comments, the
+  casino, markets, uploads, the chat ticket - is refused as for any signed-out visitor. Signed-out visitors are untouched.
+- **Bots acting for the account refuse it too** (no session involved): Pepe's escrow games (`escrow/games.act`: bounties,
+  wagers, pools, loans - only the wind-down verbs cancel / decline / repay / forgive stay; Pepe's own verbs always run),
+  every escrow stake (`escrow/ledger.holdInTx` `E_SITE_BANNED` - a loan repayment still goes), the casino / lotto / stash
+  / raffle / creator bot routers, `!tip` (Pepe / Discord), the chat shop, the chat wheel spin, the queued web actions Pepe
+  claims (failed at ban time and skipped at claim; Pepe's `privacy.*` jobs always run), a chat sign-in link. The Telegram
+  bridge already treated a site ban as tier `none`. Credits, refunds and settlements never ask (an expiring bounty
+  refunds a banned poster; an admin-scheduled deletion of a banned account runs at its time).
+- **Ends on time.** Every read compares `until` with the clock (a cached lock too); no manual step. The lock is cached 5 s
+  per account; `feedstore.ban` / `unban`, `padbans.linked` and a merge forget it at once. Sign-in reads it fresh.
+- **Admins can't be locked out (D1).** The Admin class and the owner (`classRank >= 3`) are exempt, so a stray ban can't
+  lock out the people who lift bans. Banning yourself or your alt was already impossible (`staffrank`), and only the owner
+  can ban an Admin - to lock an Admin out, remove the Admin class first. Staff and Assistants can be locked out.
+- **Merges.** A Twitch / Discord conflict merge refuses a site-banned account (`banned`) or one staff scheduled for deletion
+  (`deleting`) - "please contact staff".
+- **Knobs** (constants at the top of `siteban.js`): `EXEMPT_MIN_RANK` (D1), the wind-down verbs `WIND_DOWN` / `CASINO_OK` /
+  `STASH_OK` (D2), `ADMIN_DELETION_LOCKS` (D3, off: a pending staff-scheduled deletion of a NON-banned account doesn't lock
+  it out - it can sign in but can't cancel it), `SHOW_REASON` (D4).
+- **Not covered yet** (follow-up): bot paths outside those routers that act for a linked account - the Discord bot's buy-in /
+  bonus routes, Twitch channel points, Pepe's market / GTF / PvP routes. A ledger-level spend backstop (`ledger.post`
+  debits) would cover them; it needs a system-source allow-list (the deletion's routing debit, policy, staff grants).
 
 ## New-device notices
 

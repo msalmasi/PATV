@@ -354,3 +354,40 @@ test("the start route links back where it started (profile vs subscriptions)", a
   const s = await PM.linkStart(u);
   assert.match(decodeURIComponent(s.url), /forwardUrl=.*\/subscriptions\?plex=\d+/);
 });
+
+// banfix (siteban.js): a SITE-banned account (feed_bans room_id '') can't sign in with Plex - neither a linked Plex sign-in nor the
+// "create" page's linked-meanwhile path; nothing is issued and the ban's words are shown. (A casino ban, above, still signs in.)
+test("banfix: a site-banned account is refused by Plex sign-in (callback and the create page) - no login, the ban's own words", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  const ivy = await mkUser("ivyban");
+  await PM.linkSelf(ivy, { plex_id: "5020", username: "ivyP" });
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, reason, until) VALUES (?, '', 'ban evasion', NULL)", [ivy.userId]);
+  SB.forget(ivy.userId);
+  PLEX_USER = { id: 5020, username: "ivyP" };
+  let b = browser("10.0.0.40");
+  const { cb } = await plexSignIn(b);
+  assert.equal(cb.location, "/login");
+  assert.equal(b.who(), null, "no login");
+  assert.match(await flashText(b), /This account is banned from PATV\. Reason: ban evasion/);
+  // the create page: an unlinked Plex account parked, then linked to the banned account (another tab) before "create"
+  PLEX_USER = { id: 5021, username: "ivyP2" };
+  b = browser("10.0.0.41");
+  assert.equal((await plexSignIn(b)).cb.location, "/auth/plex/new");
+  const jo = await mkUser("joban");
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES (?, '', NULL)", [jo.userId]);
+  await PM.linkSelf(jo, { plex_id: "5021", username: "ivyP2" });
+  const r = await b.post("/auth/plex/create", { username: "ivy_second" });
+  assert.equal(r.location, "/login");
+  assert.equal(b.who(), null);
+  assert.match(await flashText(b), /This account is banned from PATV/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM users WHERE username = 'ivy_second'"))[0].n, 0, "no account made");
+  // lifted: straight in
+  await runQuery("DELETE FROM feed_bans WHERE user_id = ?", [ivy.userId]);
+  SB.forget(ivy.userId);
+  PLEX_USER = { id: 5020, username: "ivyP" };
+  b = browser("10.0.0.42");
+  await plexSignIn(b);
+  assert.equal(b.who(), "ivyban");
+});

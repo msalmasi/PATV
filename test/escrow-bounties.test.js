@@ -305,6 +305,82 @@ test("the website: the bounty page's forms run on the engine (no queued action),
   assert.equal((await getQuery("SELECT status FROM bounty_actions ORDER BY id DESC LIMIT 1"))[0].status, "failed");
 });
 
+// banfix (siteban.js; owner 2026-11-16: a site-banned account kept posting bounties): a SITE-banned account starts or adds to nothing -
+// not from Pepe's chat (!bounty), not from a website form (the session gate signs it out first; the engine refuses too), and no stake is
+// ever held for it (escrow/ledger.holdInTx E_SITE_BANNED - Pepe's own /hold too); it can still cancel its own (refunded), the deadline
+// still refunds it, Pepe's own verbs still run; an Admin with a stray ban, everyone else and the account once the ban is lifted are unaffected
+test("banfix: a site-banned account can't post, chip in or claim a bounty (chat, website, Pepe's /hold); cancel + expiry refunds still work", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
+                  until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, class) VALUES ('u7', 'eve', 'x', 30000, 'eve_cf', 'pleb')");
+  await runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername, class) VALUES ('u8', 'zed', 'x', 10000, 'zed_cf', 'Admin')");
+  const eve = actor("eve_cf", "eve");
+  const refOf = (r) => Number(String(r.body.ref).replace(/^BT/, ""));
+  // before the ban: two bounties of hers (one to cancel, one to expire) and one of Ann's to try to claim
+  const keep = await act("create", eve, { task: "kick the spammer", amount: 2000, secs: 3600 }, "idem-bf-c1");
+  assert.equal(keep.body.ok, true, JSON.stringify(keep.body));
+  const lapse = await act("create", eve, { task: "sing in the lab", amount: 1000, secs: 3600 }, "idem-bf-c2");
+  assert.equal(lapse.body.ok, true, JSON.stringify(lapse.body));
+  const anns = await act("create", actor("ann_cf", "ann"), { task: "dance on cam", amount: 1000, secs: 3600 }, "idem-bf-c3");
+  assert.equal(anns.body.ok, true, JSON.stringify(anns.body));
+  // banned (staff's site ban; feedstore.ban forgets the cache - here a raw row as another process would write, then forget)
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u7', '', 'eve', 'scam bounties', 'staff', ?, NULL)", [Date.now()]);
+  SB.forget("u7");
+  const e0 = await bal("u7");
+  const holds0 = (await getQuery("SELECT COUNT(*) AS n FROM escrow_holds WHERE user_id = 'u7'"))[0].n;
+  // chat: create / add / claim refused with code 'banned' (Pepe's answer), nothing held, nothing charged
+  for (const [verb, args, idem] of [["create", { task: "another scam", amount: 1500, secs: 3600 }, "idem-bf-x1"],
+                                    ["add", { ref: keep.body.ref, amount: 500 }, "idem-bf-x2"],
+                                    ["claim", { ref: anns.body.ref, note: "done" }, "idem-bf-x3"]]) {
+    const r = await act(verb, eve, args, idem);
+    assert.equal(r.body.ok, false, verb);
+    assert.equal(r.body.code, "banned", verb);
+    assert.match(r.body.error, /banned/, verb);
+  }
+  assert.equal(await bal("u7"), e0, "nothing charged");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM escrow_holds WHERE user_id = 'u7'"))[0].n, holds0, "no hold made");
+  assert.ok(!(await G.load("bounties", refOf(anns))).claims.eve_cf, "no claim recorded");
+  // the website forms (as the engine sees them - in production the session gate has already signed the account out)
+  assert.match(await G.fromForm("u7", "bounty", ["kick", "someone", "5k", "by 2d"], "form-bf-0001"), /banned/);
+  assert.match(await web("u7", `/bounties/${refOf(anns)}/add`, { amount: "500" }), /banned/);
+  assert.equal(await bal("u7"), e0);
+  // every stake, whoever asks: the in-transaction primitive and Pepe's own keyed /hold refuse it (E_SITE_BANNED)
+  const acct = await L.accountFor({ userId: "u7" });
+  await assert.rejects(L.tx(() => L.holdInTx({ key: "bf-direct-1", hid: null, account: acct, amount: 100, ref: "BT999", reason: "bounty-post", via: "site" })),
+                       (e) => e.code === "E_SITE_BANNED");
+  const ph = await post("/api/escrow/bot/hold", { key: "bf-pepe-hold-1", hid: "bfh1", login: "eve_cf", amount: 100, ref: "W999", reason: "wager-stake" });
+  assert.equal(ph.status, 403);
+  assert.equal(ph.body.code, "E_SITE_BANNED");
+  assert.equal(await bal("u7"), e0);
+  // winding down still works: she cancels her own (refunded); the deadline refunds the other; Pepe's own verbs still run
+  const cx = await act("cancel", eve, { ref: keep.body.ref }, "idem-bf-cx");
+  assert.equal(cx.body.ok, true, JSON.stringify(cx.body));
+  assert.equal(await bal("u7"), e0 + 2000);
+  const sp = await act("spec_put", PEPE, { ref: lapse.body.ref, spec: { v: 1, action: "say", phrase: "la", who: null, semantic: false, room: "any" }, text: "x" }, "idem-bf-sp");
+  assert.equal(sp.body.ok, true, JSON.stringify(sp.body));
+  const rec = await G.load("bounties", refOf(lapse));
+  rec.deadline = 1;
+  await G.save("bounties", rec);
+  await G.tick();
+  assert.equal((await G.load("bounties", refOf(lapse))).status, "expired");
+  assert.equal(await bal("u7"), e0 + 3000, "the expiry refund reaches a banned poster");
+  // others are unaffected: an Admin with a stray ban (exempt - D1) and a member
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, until) VALUES ('u8', '', NULL)");
+  SB.forget("u8");
+  const z = await act("create", actor("zed_cf", "zed"), { task: "an admin's bounty", amount: 1000, secs: 3600 }, "idem-bf-z1");
+  assert.equal(z.body.ok, true, JSON.stringify(z.body));
+  const bb = await act("add", actor("bob_cf", "bob"), { ref: anns.body.ref, amount: 100 }, "idem-bf-b1");
+  assert.equal(bb.body.ok, true, JSON.stringify(bb.body));
+  // lifted: she can post again
+  await runQuery("DELETE FROM feed_bans WHERE user_id = 'u7'");
+  SB.forget("u7");
+  const again = await act("create", eve, { task: "a fair bounty", amount: 1000, secs: 3600 }, "idem-bf-c4");
+  assert.equal(again.body.ok, true, JSON.stringify(again.body));
+  for (const r of [z, again, anns]) await act("cancel", actor(r === z ? "zed_cf" : r === again ? "eve_cf" : "ann_cf", r === z ? "zed" : r === again ? "eve" : "ann"),
+                                             { ref: r.body.ref }, "idem-bf-end-" + r.body.ref);
+});
+
 test("rollback hands the records back (keyed); the engine stops", async () => {
   const c10 = await act("create", actor("ann_cf", "ann"), { task: "stays open", amount: 1000, secs: 3600 }, "idem-c10");
   const id10 = Number(String(c10.body.ref).replace(/^BT/, ""));      // (the 1.99ade test above made and cancelled one before it)

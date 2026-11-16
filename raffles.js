@@ -1532,6 +1532,8 @@ async function botAct(b) {
   }
   if (verb === "buy") {
     if (!u) return { ok: false, code: "E_NO_ACCOUNT", error: "link your chat name to a PATV account first (!verify)." };
+    const lock = await require("./siteban").lockOf(u.userId);                // banfix: a site-banned account buys nothing (siteban.js)
+    if (lock) return Object.assign(require("./siteban").botRefusal(lock), { code: "E_SITE_BANNED" });
     const key = String(b.key || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
     // 1.99afy: Pepe sends no price, and an admin can change it before the first ticket - the buy goes through only at the price
     // this buyer was last shown in chat: the one it was announced at, or a newer one (!raffle <id>, or this refusal)

@@ -213,7 +213,9 @@ async function nextSiteId() {
 
 /**
  * In the open transaction: take `amount` from the account into a new hold. -> {ok, hid, txid} | throws Refuse
- * (E_INSUFFICIENT_PAT / E_TARGET_NOT_FOUND / E_CASINO_BANNED / E_DUP_HOLD). `hid` null = the site's own id.
+ * (E_INSUFFICIENT_PAT / E_TARGET_NOT_FOUND / E_CASINO_BANNED / E_SITE_BANNED / E_DUP_HOLD). `hid` null = the site's own id.
+ * banfix: a site-banned account (siteban.js) puts up no new stake, whoever asks (the site's games, the casino, raffles, creators,
+ * gifts, Pepe's /hold) - E_SITE_BANNED; a hold that pays what it owes (siteban.HOLD_OK_REASONS: a loan repayment) still goes.
  */
 async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via = "site", casino = false }) {
   const amt = Math.floor(Number(amount));
@@ -221,6 +223,12 @@ async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via
   if (!REF_RE.test(String(ref || ""))) throw new Refuse(400, "Bad request (ref).", "E_BAD_REF");
   if (!account) throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");
   if (casino && account.casino_banned) throw new Refuse(403, "Banned from the casino.", "E_CASINO_BANNED");
+  {
+    const SB = require("../siteban");
+    if (account.userId && !SB.HOLD_OK_REASONS.has(String(reason || "")) && (await SB.lockOf(account.userId))) {
+      throw new Refuse(403, SB.botText(), "E_SITE_BANNED");
+    }
+  }
   const id = hid ? String(hid) : await nextSiteId();
   if (!HID_RE.test(id)) throw new Refuse(400, "Bad request (hold id).", "E_BAD_HID");
   const clash = (await getQuery("SELECT id, key FROM escrow_holds WHERE id = ?", [id]))[0];

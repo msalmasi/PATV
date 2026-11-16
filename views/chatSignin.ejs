@@ -4,7 +4,7 @@
   browser never sends: public/js/chat-signin.js reads it, clears it from the address bar, asks who it's for (POST
   /api/chatsignin/peek) and shows one button - a same-origin form POST to /signin that spends it and signs in.
   error (after a POST): expired | off | elevated | signup (1.99anv: sign-ups are invite-only and this is Pepe's chat account,
-  never signed in to on the website) | slow | error.
+  never signed in to on the website) | banned (banfix: a site ban - `message` is siteban.message, plain text) | slow | error.
 %>
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <link rel="stylesheet" href="/public/css/pad-access.css?v=2">
@@ -18,10 +18,12 @@
         <% } else if (error === 'off') { %>Chat sign-in is turned off for this account. Sign in with your password, then switch it back on in Settings → Security if you want it.
         <% } else if (error === 'elevated') { %>Admin and staff accounts can't sign in from chat. Please sign in with your password.
         <% } else if (error === 'signup') { %><%- t('chatsignin.err.signup') %>
+        <% } else if (error === 'banned') { %><%= locals.message || '' %> <%- t('chatsignin.err.banned_more') %>
         <% } else if (error === 'slow') { %>Too many tries from your network. Wait a few minutes, then type <b>!signin</b> again.
         <% } else { %>Something went wrong. Type <b>!signin</b> in chat for a new link.<% } %>
       </p>
       <% if (error === 'signup') { %><p><a class="pa-btn primary" href="/register"><%- t('chatsignin.err.signup_btn') %></a></p>
+      <% } else if (error === 'banned') { %>
       <% } else { %><p><a class="pa-btn primary" href="/login">Sign in with a password</a></p><% } %>
     <% } else { %>
       <div id="csBox" data-state="loading">
