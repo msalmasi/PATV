@@ -700,12 +700,10 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : b.game === "roulette" ? "roulette" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
     // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's
     // table if they sit there, then the only tournament table they sit at (svc.tourneyTableFor); seated at more than one: use the web
+    // (1.99aoe review ENGINE-2 / SUITES-1: a room's roulette wheel is that room's table like any other - found by the fallback below,
+    // AFTER the turn-first lookup, so a tournament player's bare !call / !fold beside a wheel still reaches their tournament table;
+    // a game-less !bet that is nobody's turn then gets the wheel's "use !rl" answer)
     let mttBare = false;
-    if (!table && room && game !== "mtt") {
-      await svc.boot();
-      const local = svc.tableForRoom(room);
-      if (local?.game === "roulette") table = local.id;
-    }
     if (!table && room && (game === "holdem" || game === null) && TURN_VERBS.has(verb)) {
       await svc.boot();
       const f = svc.tourneyTableFor(u.userId, room, { turnOnly: game === null });     // (a game-less !bet / !stand: only where it's their turn)
