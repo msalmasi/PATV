@@ -317,6 +317,9 @@ const RULES = {
   "casino_mtt_watch.user_id": M({ key: ["tid"] }),
   "casino_mtt_reminders.user_id": M(),
   "casino_mtt.created_by_user_id": { keep: "who scheduled the tournament (admin audit)" },
+  // O2 (casino/rlstore.js): a roulette line's row is keyed by its stake's transaction id and read with its wheel's own seats and
+  // players (keyed by the uid that bet) - it keeps that uid; its refund / payout follows a merge through ledger.post resolveMerged
+  "casino_rl_lines.user_id": { keep: "the roulette line journal (keyed by the stake's transaction id; the wheel's seats name the uid that bet)" },
   // G1: gangs.js - a member's PATV account follows the merge (the member is keyed by the Camfrog login, so no collision); the
   // rep journal is keyed by the win
   "gang_members.userId": M(), "gang_rep_events.userId": { keep: "the gang-rep journal (keyed by the win)" },

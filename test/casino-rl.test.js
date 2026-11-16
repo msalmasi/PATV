@@ -493,8 +493,8 @@ test("a repeated position remains a single aggregated rebet across rounds", asyn
     expect(await act(T, "a", "bet", "red 100"));
     expect(await act(T, "a", "go"));
     await tick(8000);
-    assert.equal(T.eng.lastslip.a.length, 1);
-    assert.equal(T.eng.lastslip.a[0].amount, (i + 2) * 100);
+    // (O2) the saved slip is compact: [[token, amount], ...]
+    assert.deepEqual(T.eng.slips.a, [["red", (i + 2) * 100]]);
     expect(await act(T, "a", "rebet"));
     await tick(5000);
   }

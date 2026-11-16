@@ -5,6 +5,7 @@ const fair = require("./fair");
 const money = require("./money");
 const engine = require("./rlengine");
 const grammar = require("./rlbets");
+const store = require("./rlstore");
 const V = require("./veil");
 const { runQuery, getQuery, tx } = require("../dbUtils");
 const perms = require("../siteperms");
@@ -160,13 +161,110 @@ function install(core) {
     for (const key of Object.keys(T)) if (!Object.hasOwn(saved, key)) delete T[key];
     Object.assign(T, saved);
   }
-  // Journalled operations may fail after an in-memory edit but before the SQLite transaction commits.
-  // Load the durable book before the next admission, tick or refund observes that edit.
+  // ── O2 (ENGINE-8) per-bet storage: casino/rlstore.js holds one row per line; eng.book, T.stakes and T.escrowed are
+  // in-memory caches of the open spin's live rows. A transaction edits the live T before its save and, if it throws,
+  // restore() reloads the header and the caches (the rows are the source of truth).
+  const reconciled = new WeakSet(); // the wheels whose rows this process has reconciled with their JSON (hydrate)
+  const settledLines = new WeakMap(); // T -> {round, lines}: the spin that landed, while its result is up (frozenLines)
+  let auditedBoot;
+  const openRound = (T) => (T.round && T.round.settle !== "done" ? T.round.no : null);
+  // Release A (rlstore.js header): JSON.stringify(T) - service.save - writes what the previous build can act on. Before the
+  // draw the book goes out as a refund that build runs at its boot (T.stakes + a refund intent marked mirror; a spin
+  // nobody has seen drawn is void); from the draw on the full book goes out (it lands the spin as this build would).
+  // A copy of T ({...T}: the draw's) carries no toJSON and is written whole - the previous build's own format.
+  function mirror() {
+    const e = this.eng || {},
+      out = { ...this };
+    if (!this.intent && (e.phase === "idle" || e.phase === "betting") && Array.isArray(e.book) && e.book.length) {
+      const stakes = this.stakes || [];
+      out.eng = { ...e, book: [] };
+      out.intent = { refund: stakes.map((s) => s.key), amount: sum(stakes.map((s) => s.amount)), why: "restart", mirror: 1 };
+    }
+    return out;
+  }
+  function bind(T) {
+    if (!Object.hasOwn(T, "toJSON")) Object.defineProperty(T, "toJSON", { value: mirror, configurable: true, writable: true });
+    if (!T.eng.slips) T.eng.slips = {};
+    if (!T.eng.lastslip) T.eng.lastslip = {};
+  }
+  function syncStakes(T) {
+    T.stakes = T.eng.book.map((l) => ({ key: l.key, uid: l.uid, amount: l.amount }));
+    T.escrowed = {};
+    for (const l of T.eng.book) T.escrowed[l.uid] = (T.escrowed[l.uid] || 0) + l.amount;
+  }
+  // the caches from the rows (reads only): the open spin's live lines; the landed spin's lines while its result is up
+  async function load(T) {
+    bind(T);
+    if (T.intent && T.intent.mirror) T.intent = null; // this build's own rollback mirror: only the previous build runs it
+    const n = openRound(T);
+    T.eng.book = n == null ? [] : await store.live(T.id, n);
+    syncStakes(T);
+    if (T.eng.phase === "result" && T.round) settledLines.set(T, { round: T.round.no, lines: await store.lines(T.id, T.round.no, "settled") });
+    else settledLines.delete(T);
+    // a slip an older build saved (full bet objects) becomes the compact one
+    for (const [uid, slip] of Object.entries(T.eng.lastslip || {})) if (Array.isArray(slip) && slip.length) T.eng.slips[uid] = packSlip(slip);
+    T.eng.lastslip = {};
+    T.opno = Math.max(Number(T.opno) || 0, await store.maxOpno(T.id));
+  }
+  // Once per wheel object (boot loads new ones): the JSON's book gets its rows and the wheel's live rows are checked
+  // against the ledger (rlstore.reconcile), then the caches are loaded. A no-op afterwards.
+  async function hydrate(T) {
+    if (!T || T.game !== "roulette" || T.status !== "open" || reconciled.has(T)) return;
+    await store.ensure();
+    await auditOnce();
+    bind(T);
+    const since = store.flags.length;
+    await store.reconcile(T, openRound(T), clock());
+    await load(T);
+    reconciled.add(T);
+    report(since);
+  }
+  // once per boot (the first wheel this process reads): the live rows of wheels that are not open
+  async function auditOnce() {
+    if (auditedBoot === S.booted) return;
+    auditedBoot = S.booted;
+    const since = store.flags.length;
+    await store.audit(clock()).catch((e) => console.error("[casino] roulette audit:", e.message));
+    report(since);
+  }
+  // boot: every open wheel's rows before any of them admits a bet (the shared bank sums every wheel's book)
+  async function hydrateAll(T) {
+    for (const t of open()) if (t !== T) await hydrate(t).catch((e) => console.error("[casino] roulette rows " + t.id + ":", e.message));
+    await hydrate(T);
+  }
+  // an audit finding is an ops alert (once per finding batch; opsalerts is idempotent per ref and rate-limited)
+  function report(since) {
+    const found = store.flags.slice(since);
+    if (!found.length) return;
+    const kinds = {};
+    for (const f of found) kinds[f.kind] = (kinds[f.kind] || 0) + 1;
+    require("../opsalerts")
+      .alert({
+        source: "casino_rl",
+        ref: "audit:" + found[0].key,
+        title: "🛞 Roulette audit: " + found.length + " line(s) reconciled",
+        body: Object.entries(kinds).map(([k, n]) => k + " x" + n).join(", ") + " - first " + found[0].key,
+      })
+      .catch((e) => console.error("[casino] roulette audit alert:", e.message));
+  }
+  async function answer(T, key, uid, out) {
+    await runQuery("INSERT OR IGNORE INTO casino_actions (key,table_id,userId,response,created) VALUES (?,?,?,?,?)", [
+      key,
+      T.id,
+      uid,
+      JSON.stringify(out),
+      clock(),
+    ]);
+  }
+  // A transaction failed after an in-memory edit: the durable header and the caches of the rows come back before the next
+  // admission, tick or refund observes that edit.
   async function restore(T) {
     if (!T) return;
     const row = (await getQuery("SELECT state FROM casino_tables WHERE id=?", [T.id]))[0];
     if (!row) return;
     adopt(T, JSON.parse(row.state));
+    bind(T);
+    if (reconciled.has(T)) await load(T);
   }
   function pruneInactive(T) {
     const e = T.eng;
@@ -175,6 +273,7 @@ function install(core) {
   // FAIR-3: the spin after a drawn one was committed at the draw (T.next) - a line queued while the wheel spins is accepted
   // after its spin's commitment exists and is shown (publicView next_commitment). A wheel with none commits now.
   async function nextSeed(T) {
+    await hydrate(T);
     const n = T.eng.round_no + 1,
       pre = T.next && T.next.no === n && T.next.seed ? T.next : null,
       seed = pre ? pre.seed : fair.newServerSeed();
@@ -183,7 +282,9 @@ function install(core) {
       T.next = null;
       T.eng.round_no = n;
       T.eng.phase = "idle";
-      T.eng.book = [];
+      T.eng.book = []; // (O2) a new spin has no live rows yet
+      syncStakes(T);
+      settledLines.delete(T);
       pruneInactive(T);
       T.eng.actions = {};
       T.dl = {};
@@ -258,6 +359,8 @@ function install(core) {
     return T;
   }
   async function available(T) {
+    // (O2) every open wheel's cached book holds its live rows before the shared bank sums them
+    for (const t of open()) await hydrate(t);
     if (houseAt === null || houseAt > clock() || houseAt + 5000 <= clock() || T.eng.phase === "idle") {
       houseRead = await money.houseBalance();
       houseAt = clock();
@@ -279,9 +382,17 @@ function install(core) {
   }
   // Rebet repeats the player's previous spin as the line's own spin sees it: while a spin is in the air, a rebet is
   // queued for the next spin, so the previous spin is the one on the wheel (lastslip is written only at its landing).
+  // (O2) the saved slip is compact - eng.slips[uid] = [[token, amount], ...] - and comes back as bet objects here.
   function lastSlip(T, uid) {
     const lines = own(T, uid);
-    return T.eng.phase === "spinning" && lines.length ? combinedSlip(lines) : T.eng.lastslip[uid] || null;
+    if (T.eng.phase === "spinning" && lines.length) return combinedSlip(lines);
+    const saved = (T.eng.slips || {})[uid] || (T.eng.lastslip || {})[uid];
+    if (!Array.isArray(saved) || !saved.length) return null;
+    try {
+      return saved.map((b) => (Array.isArray(b) ? store.bet(b) : b));
+    } catch (_) {
+      return null; // a position this build doesn't know: no rebet
+    }
   }
   async function checkSeat(T, actor) {
     const uid = actor.uid,
@@ -370,18 +481,21 @@ function install(core) {
     }
     return null;
   }
+  // the header and the act key's answer together (no PAT moves: a queued line, a cleared queued line)
   async function saveAnswer(T, out, uid, key) {
-    await tx(async () => {
-      await save(T);
-      if (key)
-        await runQuery(
-          "INSERT OR IGNORE INTO casino_actions (key,table_id,userId,response,created) VALUES (?,?,?,?,?)",
-          [key, T.id, uid, JSON.stringify(out), clock()],
-        );
-    });
+    try {
+      await tx(async () => {
+        await save(T);
+        if (key) await answer(T, key, uid, out);
+      });
+    } catch (e) {
+      await restore(T);
+      throw e;
+    }
     return out;
   }
   async function place(T, actor, bets, key, queued = false) {
+    await hydrate(T);
     const why = (await gate(actor)) || (await checkSeat(T, actor));
     if (why) return reply(false, why);
     if (T.closing) return reply(false, "🛞 This wheel closes after this spin — no new bets.");
@@ -422,93 +536,107 @@ function install(core) {
     if (blocked) return reply(false, blocked);
     if (e.phase === "betting" && clock() >= T.dl.bet)
       return reply(false, "No more bets — wait for the next spin.");
+    // (O2) ONE transaction: the stake (ledger.post joins it), the line's row, the header and the act key's answer commit
+    // together - or nothing does. A refused charge writes nothing; anything that throws after it rolls the charge back.
     const amount = amountOf(bets),
-      line = { uid, bets, amount, key: spinKey(T) + ":" + uid + ":b" + ++T.opno };
-    T.intent = { key: line.key, uid, amount };
-    await save(T);
+      opno = T.opno + 1,
+      line = { uid, bets, amount, key: spinKey(T) + ":" + uid + ":b" + opno };
     crash("intent");
-    const charge = await money.charge(line.key, uid, amount, "roulette bet");
-    if (!charge.ok) {
-      T.intent = null;
-      await save(T);
-      return reply(false, "The stake could not be charged. Check your available PAT.");
-    }
-    crash("charge");
-    seat(T, actor);
-    e.book.push(line);
-    T.stakes.push({ key: line.key, uid, amount });
-    T.escrowed[uid] = (T.escrowed[uid] || 0) + amount;
-    T.intent = null;
-    e.actions[uid] = (e.actions[uid] || 0) + 1;
-    T.last_activity = clock();
-    if (e.notes) delete e.notes[uid];
-    if (queued) delete e.pending[uid];
-    const first = e.phase === "idle";
-    if (first) {
-      e.phase = "betting";
-      T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
-    }
-    const ans = reply(
-      true,
-      "✅ On the wheel: " +
-        describe(bets, actor.via === "web") +
-        " — " +
-        fmt(T.escrowed[uid]) +
-        " PAT on this spin from you (spins in " +
-        Math.ceil((T.dl.bet - clock()) / 1000) +
-        "s).",
-    );
-    await saveAnswer(T, ans, uid, key);
-    if (first) {
-      const rooms = roomsOf(T).filter((id) => annDue(T, "open_ts", id));
-      if (rooms.length) {
-        await emit(T, "line", "🛞 Bets are open.", { rooms });
+    let ans;
+    try {
+      ans = await tx(async () => {
+        const charge = await money.charge(line.key, uid, amount, "roulette bet");
+        if (!charge.ok) return null;
+        if (charge.replay) throw Object.assign(Error("Stake key " + line.key + " was charged already"), { code: "E_KEY" });
+        crash("charge");
+        await store.insert(T.id, e.round_no, line, opno, key, clock());
+        crash("row");
+        T.opno = opno;
+        seat(T, actor);
+        e.book.push(line);
+        T.stakes.push({ key: line.key, uid, amount });
+        T.escrowed[uid] = (T.escrowed[uid] || 0) + amount;
+        e.actions[uid] = (e.actions[uid] || 0) + 1;
+        T.last_activity = clock();
+        if (e.notes) delete e.notes[uid];
+        if (queued) delete e.pending[uid];
+        if (e.phase === "idle") {
+          e.phase = "betting";
+          T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
+          // the first line's "Bets are open" commits with it (no second write of the wheel)
+          const rooms = roomsOf(T).filter((id) => annDue(T, "open_ts", id));
+          if (rooms.length) await emit(T, "line", "🛞 Bets are open.", { rooms });
+        }
+        const out = reply(
+          true,
+          "✅ On the wheel: " +
+            describe(bets, actor.via === "web") +
+            " — " +
+            fmt(T.escrowed[uid]) +
+            " PAT on this spin from you (spins in " +
+            Math.ceil((T.dl.bet - clock()) / 1000) +
+            "s).",
+        );
         await save(T);
-      }
+        if (key) await answer(T, key, uid, out);
+        crash("answer");
+        return out;
+      });
+    } catch (err) {
+      await restore(T);
+      if (err.code === "E_KEY") T.opno = Math.max(T.opno, opno); // (never offered again: rlstore.strays settles it at boot)
+      throw err;
     }
-    return ans;
+    return ans || reply(false, "The stake could not be charged. Check your available PAT.");
   }
   function dropLines(T, keys) {
-    T.eng.book = T.eng.book.filter((l) => !keys.includes(l.key));
-    T.stakes = T.stakes.filter((l) => !keys.includes(l.key));
-    T.escrowed = {};
-    for (const l of T.eng.book) T.escrowed[l.uid] = (T.escrowed[l.uid] || 0) + l.amount;
+    const gone = new Set(keys);
+    T.eng.book = T.eng.book.filter((l) => !gone.has(l.key));
+    syncStakes(T);
   }
-  async function finishRefund(T) {
-    const it = T.intent,
-      keys = it.refund;
-    for (const l of T.stakes.filter((l) => keys.includes(l.key))) {
-      const result = await money.credit(l.key + ":refund", l.uid, l.amount, "roulette refund (" + it.why + ")");
-      if (!result.ok) throw Error("Wheel refund pending");
-      crash("refund");
-    }
-    dropLines(T, keys);
-    T.intent = null;
-    if (it.uid) T.eng.actions[it.uid] = (T.eng.actions[it.uid] || 0) + 1;
-    if (it.why === "clear") delete T.eng.pending[it.uid];
-    if (!T.eng.book.length && T.eng.phase === "betting") {
-      T.eng.phase = "idle";
-      T.dl = {};
-    }
-    return saveAnswer(T, reply(true, "Refunded " + fmt(it.amount) + " PAT."), it.uid, it.actKey);
-  }
+  // (O2) undo, clear, end, copy and an older build's interrupted refund: ONE transaction. Each line flips live ->
+  // refunded only if it is still live (a line refunded already is skipped) and its <key>:refund is credited with the
+  // flip; a credit that fails rolls every flip and credit of the call back. Then the header and the act key's answer.
   async function refund(T, lines, why, uid, key) {
-    T.intent = {
-      refund: lines.map((l) => l.key),
-      amount: sum(lines.map((l) => l.amount)),
-      why,
-      uid,
-      actKey: key,
-    };
-    await save(T);
-    return finishRefund(T);
+    await hydrate(T);
+    const e = T.eng,
+      keys = lines.map((l) => l.key);
+    try {
+      return await tx(async () => {
+        let amount = 0;
+        for (const l of lines) {
+          if (!(await store.close(l.key, "refunded", why, clock()))) continue;
+          const paid = await money.credit(l.key + ":refund", l.uid, l.amount, "roulette refund (" + why + ")");
+          if (!paid.ok) throw Error("Wheel refund pending");
+          amount += l.amount;
+          crash("refund");
+        }
+        dropLines(T, keys);
+        if (uid) e.actions[uid] = (e.actions[uid] || 0) + 1;
+        if (why === "clear") delete e.pending[uid];
+        if (!e.book.length && e.phase === "betting") {
+          e.phase = "idle";
+          T.dl = {};
+        }
+        const out = reply(true, "Refunded " + fmt(amount) + " PAT.");
+        await save(T);
+        if (key) await answer(T, key, uid, out);
+        return out;
+      });
+    } catch (err) {
+      await restore(T);
+      throw err;
+    }
   }
+  // (the draw's first step) the cached book must be the open spin's live rows: the draw freezes that set
   async function discardRefunded(T) {
-    const keys = [];
-    for (const l of T.eng.book) if (await money.isDone(l.key + ":refund")) keys.push(l.key);
-    if (keys.length) {
-      dropLines(T, keys);
-      await save(T);
+    await hydrate(T);
+    const n = openRound(T),
+      rows = n == null ? [] : await store.liveKeys(T.id, n),
+      cached = new Set(T.eng.book.map((l) => l.key));
+    if (rows.length !== cached.size || rows.some((k) => !cached.has(k))) {
+      console.warn("[casino] roulette " + T.id + ": the cached book was not the live rows - reloaded");
+      await load(T);
     }
   }
   async function draw(T) {
@@ -573,92 +701,134 @@ function install(core) {
       }
     return [...positions.values()];
   }
-  async function land(T) {
-    await discardRefunded(T);
-    const e = T.eng,
+  // (O2) a saved slip is [[token, amount], ...]; a player no longer seated takes theirs along
+  const packSlip = (slip) => slip.map((b) => (Array.isArray(b) ? [b[0], b[1]] : [grammar.token(b), b.amount]));
+  function slipsAfter(T, lines, results) {
+    const out = {};
+    for (const [uid, s] of Object.entries(T.eng.slips || {})) if (T.eng.seats.includes(uid)) out[uid] = s;
+    for (const uid of Object.keys(results)) out[uid] = packSlip(combinedSlip(lines.filter((l) => l.uid === uid)));
+    return out;
+  }
+  // (O2) ONE transaction settles the set the draw froze - the spin's live rows: each player's keyed payout, the House
+  // legs (flashCover only books a claim row: DB-only), the rows -> settled, the reveal, the header and its result line. A
+  // throw anywhere rolls all of it back (the next tick lands again; each key moves PAT once). The rewards run after the
+  // commit with the same lines. quiet (a copied wheel retiring an older build's interrupted settlement): the keyed money
+  // and the rows only - no reveal, no line, no rewards.
+  async function land(T, opts = {}) {
+    await hydrate(T);
+    const quiet = !!opts.quiet,
+      e = T.eng,
       r = T.round,
       key = spinKey(T),
       p = r.pocket;
-    const results = engine.settle(e.book, p);
-    r.results = results;
-    r.settle = "pending";
-    await save(T);
-    const winners = [];
-    let gained = 0,
-      paid = 0;
-    for (const [uid, x] of Object.entries(results)) {
-      const credit = await money.credit(key + ":" + uid + ":pay", uid, x.returned, "roulette payout");
-      if (!credit.ok) throw Error("Wheel settlement pending");
-      if (x.net > 0) {
-        paid += x.net;
-        winners.push({ uid, net: x.net });
-      } else gained -= x.net;
-    }
-    crash("payouts");
-    if (gained) await money.house(key + ":house+", key, null, gained);
-    crash("house+");
-    if (paid && !(await money.houseDone(key + ":house-"))) {
-      await money.flashCover(key + ":house-", paid, "roulette");
-      crash("flash");
-      await money.house(key + ":house-", key, null, -paid);
-    }
-    houseAt = null;
-    crash("house-");
+    let lines = [],
+      results = {};
     try {
-      await require("./rewards").rouletteSpin(T, r.no, results, p);
-    } catch (e) {
+      await tx(async () => {
+        lines = await store.live(T.id, r.no);
+        results = engine.settle(lines, p);
+        const winners = [];
+        let gained = 0,
+          paid = 0;
+        for (const [uid, x] of Object.entries(results)) {
+          const credit = await money.credit(key + ":" + uid + ":pay", uid, x.returned, "roulette payout");
+          if (!credit.ok) throw Error("Wheel settlement pending");
+          if (x.net > 0) {
+            paid += x.net;
+            winners.push({ uid, net: x.net });
+          } else gained -= x.net;
+        }
+        crash("payouts");
+        if (gained) await money.house(key + ":house+", key, null, gained);
+        crash("house+");
+        if (paid && !(await money.houseDone(key + ":house-"))) {
+          await money.flashCover(key + ":house-", paid, "roulette");
+          crash("flash");
+          await money.house(key + ":house-", key, null, -paid);
+        }
+        crash("house-");
+        await store.settle(T.id, r.no, clock());
+        if (quiet) {
+          e.book = [];
+          syncStakes(T);
+          r.settle = "done";
+          await save(T);
+          return;
+        }
+        winners.sort((a, b) => b.net - a.net);
+        const kept = winners.slice(0, 3),
+          house = gained - paid,
+          proof = fairLink(T, r.no);
+        const last = {
+          round_no: r.no,
+          number: p,
+          color: engine.color(p),
+          house_net: house,
+          proof,
+          others_won: Math.max(0, winners.length - 3),
+          winners: kept.map((w) => ({
+            seat: V.seatOf(T, w.uid),
+            name: V.nameOf(T, w.uid, T.players[w.uid].name),
+            net: w.net,
+          })),
+        };
+        const parts = kept.map((w) => T.players[w.uid].name + " +" + fmt(w.net));
+        if (last.others_won) parts.push(last.others_won + " more won");
+        const text =
+          pocketText(p) +
+          (parts.length ? " — 🏆 " + parts.join(" · ") : "") +
+          " · 🏦 House " +
+          (house >= 0 ? "+" : "") +
+          fmt(house) +
+          " PAT · 🔐 " +
+          proof;
+        await runQuery(
+          "UPDATE casino_rounds SET shoe=?,results=?,server_seed=?,revealed=? WHERE table_id=? AND round_no=?",
+          [JSON.stringify({ pocket: p, pockets: 37 }), JSON.stringify(last), r.seed ?? null, clock(), T.id, r.no],
+        );
+        crash("round");
+        e.slips = slipsAfter(T, lines, results);
+        e.lastslip = {};
+        T.last_round = last;
+        e.net = Object.fromEntries(Object.entries(results).map(([u, x]) => [u, x.net]));
+        e.history = e.history.concat({ round_no: r.no, number: p, color: last.color }).slice(-20);
+        T.last_activity = clock();
+        T.last_revealed = r.no;
+        e.book = [];
+        syncStakes(T);
+        delete r.results;
+        r.settle = "done";
+        e.phase = "result";
+        T.dl = { result: clock() + S.settings.rl_result_secs * 1000 };
+        await emit(T, "result", text);
+        await save(T);
+      });
+    } catch (err) {
+      await restore(T);
+      throw err;
+    } finally {
+      houseAt = null;
+    }
+    settledLines.set(T, { round: r.no, lines });
+    if (quiet) return;
+    crash("landed");
+    try {
+      await require("./rewards").rouletteSpin(T, r.no, results, p, lines);
+    } catch (err) {
       // Reward outages have no bearing on a completed PAT settlement.
-      console.error("[casino] roulette rewards:", e.message);
+      console.error("[casino] roulette rewards:", err.message);
     }
     crash("rewards");
-    winners.sort((a, b) => b.net - a.net);
-    const kept = winners.slice(0, 3),
-      house = gained - paid,
-      proof = fairLink(T, r.no);
-    const last = {
-      round_no: r.no,
-      number: p,
-      color: engine.color(p),
-      house_net: house,
-      proof,
-      others_won: Math.max(0, winners.length - 3),
-      winners: kept.map((w) => ({
-        seat: V.seatOf(T, w.uid),
-        name: V.nameOf(T, w.uid, T.players[w.uid].name),
-        net: w.net,
-      })),
-    };
-    const parts = kept.map((w) => T.players[w.uid].name + " +" + fmt(w.net));
-    if (last.others_won) parts.push(last.others_won + " more won");
-    const text =
-      pocketText(p) +
-      (parts.length ? " — 🏆 " + parts.join(" · ") : "") +
-      " · 🏦 House " +
-      (house >= 0 ? "+" : "") +
-      fmt(house) +
-      " PAT · 🔐 " +
-      proof;
-    await tx(async () => {
-      await runQuery(
-        "UPDATE casino_rounds SET shoe=?,results=?,server_seed=?,revealed=? WHERE table_id=? AND round_no=?",
-        [JSON.stringify({ pocket: p, pockets: 37 }), JSON.stringify(last), r.seed ?? null, clock(), T.id, r.no],
-      );
-      crash("round");
-      for (const uid of Object.keys(results)) e.lastslip[uid] = combinedSlip(own(T, uid));
-      T.last_round = last;
-      e.net = Object.fromEntries(Object.entries(results).map(([u, x]) => [u, x.net]));
-      e.history = e.history.concat({ round_no: r.no, number: p, color: last.color }).slice(-20);
-      T.last_activity = clock();
-      T.last_revealed = r.no;
-      T.escrowed = {};
-      T.stakes = [];
-      e.book = [];
-      r.settle = "done";
-      e.phase = "result";
-      T.dl = { result: clock() + S.settings.rl_result_secs * 1000 };
-      await emit(T, "result", text);
-      await save(T);
-    });
+  }
+  // O10 + the rewards: the lines of the wheel's spin - while it takes bets its live lines, once drawn the set the draw froze,
+  // while its result is up the set that landed (until the next spin opens: nextSeed). The cached objects: read only.
+  function frozenLines(T) {
+    if (!T || T.game !== "roulette" || !T.eng) return [];
+    if (T.eng.phase === "result") {
+      const f = settledLines.get(T);
+      return f && T.round && f.round === T.round.no ? f.lines.slice() : [];
+    }
+    return (T.eng.book || []).slice();
   }
   async function closeTable(T, reason) {
     if (T.status !== "open") return;
@@ -673,6 +843,7 @@ function install(core) {
       T.closing = true;
       await save(T);
     }
+    await hydrate(T); // (O2) the book is the live rows before the close refunds them
     if (T.eng.book.length) await refund(T, T.eng.book, "end", null, null);
     await tx(async () => {
       // every unused commitment is revealed: the current round when it never spun, and the next spin committed at a draw
@@ -795,7 +966,7 @@ function install(core) {
   }
   async function tick(T) {
     if (T.status !== "open" || !due(T)) return;
-    if (T.intent) return recover(T);
+    if (T.intent || !reconciled.has(T)) return recover(T); // (O2: a wheel whose rows this process hasn't read yet)
     if (T.eng.phase === "spinning") return land(T);
     if (T.eng.phase === "betting") return draw(T);
     if (T.eng.phase === "result") return advance(T);
@@ -810,17 +981,46 @@ function install(core) {
     await queuedLines(T);
     await save(T);
   }
+  // (O2) This build journals nothing (its money and rows commit together). An intent in the JSON is either its own
+  // rollback mirror (ignored: the rows hold those lines) or an older build's, finished by that build's rules: the rest of
+  // an interrupted refund, by key; an interrupted placement's stake back if it was charged (with a row for the record).
   async function finishIntent(T) {
-    if (T.intent?.refund) await finishRefund(T);
-    else if (T.intent) {
-      const it = T.intent;
-      if (await money.isDone(it.key)) {
-        const paid = await money.credit(it.key + ":refund", it.uid, it.amount, "roulette refund (restart)");
-        if (!paid.ok) throw Error("Stake recovery pending");
-      }
+    const it = T.intent;
+    if (!it) return;
+    if (it.mirror) {
       T.intent = null;
-      await save(T);
+      return;
     }
+    if (Array.isArray(it.refund)) {
+      const keys = new Set(it.refund);
+      T.intent = null;
+      await refund(T, T.eng.book.filter((l) => keys.has(l.key)), it.why || "restart", it.uid || null, it.actKey || null);
+      return;
+    }
+    try {
+      await tx(async () => {
+        const k = store.parseKey(it.key);
+        if (k && (await money.isDone(it.key)) && !(await getQuery("SELECT 1 FROM casino_rl_lines WHERE key=?", [it.key])).length) {
+          const paid = await money.credit(it.key + ":refund", it.uid, it.amount, "roulette refund (restart)");
+          if (!paid.ok) throw Error("Stake recovery pending");
+          await store.insert(T.id, k.round, { key: it.key, uid: it.uid, bets: [], amount: it.amount }, k.opno, null, clock(), "refunded", "restart");
+        }
+        T.intent = null;
+        await save(T);
+      });
+    } catch (e) {
+      await restore(T);
+      throw e;
+    }
+  }
+  // (O2) a stake debit of the open spin with no row (an older build charged it, then stopped before its book had it)
+  async function strayStakes(T) {
+    const n = openRound(T);
+    if (n == null) return;
+    const since = store.flags.length;
+    const found = await tx(() => store.strays(T.id, n, clock()));
+    for (const s of found) T.opno = Math.max(T.opno, store.parseKey(s.key).opno); // (its key is never offered again)
+    report(since);
   }
   // FAIR-1 (1.99aof): a wheel copied from another database - deploy/keep-staging-tables.js strips an open wheel's secret
   // seed from a staging copy and marks it `copied`. That database's wheel may still take bets on this very round (the
@@ -829,7 +1029,8 @@ function install(core) {
   // unrevealed.
   async function retireCopy(T) {
     await finishIntent(T);
-    if (T.round?.settle === "pending") await land(T);
+    await strayStakes(T);
+    if (T.round?.settle === "pending") await land(T, { quiet: true }); // (an older build's interrupted settlement)
     if (T.eng.book.length) await refund(T, T.eng.book, "copy", null, null);
     if (T.round) delete T.round.pocket;
     T.eng.phase = "idle";
@@ -841,8 +1042,16 @@ function install(core) {
     console.log("[casino] " + T.id + ": a roulette wheel copied from another database closed unrevealed");
   }
   async function recover(T) {
+    await hydrateAll(T); // (O2) every open wheel's rows, before this one acts
     if (T.copied || (T.round && !T.round.seed)) return retireCopy(T);
     await finishIntent(T);
+    await strayStakes(T);
+    // (O2) the rewards follow the landing's commit: a restart while its result is up runs them again (each one is keyed)
+    const landed = T.eng.phase === "result" && settledLines.get(T);
+    if (landed && landed.lines.length && T.round.pocket != null)
+      await require("./rewards")
+        .rouletteSpin(T, landed.round, engine.settle(landed.lines, T.round.pocket), T.round.pocket, landed.lines)
+        .catch((e) => console.error("[casino] roulette rewards:", e.message));
     if (T.eng.phase === "betting" && T.dl.bet <= clock()) {
       T.dl.bet = clock() + S.settings.rl_bet_secs * 1000;
       await save(T);
@@ -1094,6 +1303,7 @@ function install(core) {
     shut,
     restore,
     privateNotes,
+    frozenLines,
     HELP,
   };
 }

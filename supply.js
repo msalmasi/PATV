@@ -13,7 +13,8 @@
 //   room_vault_escrow boosts.js (held for the pads)                        casino:tables  PAT at the casino backend's tables:
 //   auto_escrow       autoescrow.js (auto accounts' free rewards, 6 months)
 //                                                                                          blackjack stakes in a round, hold'em stacks
-//                                                                                          (never a Sit & Go's tournament chips)
+//                                                                                          (never a Sit & Go's tournament chips),
+//                                                                                          roulette: the live casino_rl_lines rows
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -35,8 +36,15 @@ async function putSnapshot(pools) {
 /** PAT sitting at the casino backend's tables (out of the wallets, not in the House yet). */
 async function casinoHeld() {
   let n = 0;
+  // O2 (casino/rlstore.js): a roulette line is a casino_rl_lines row, and PAT is held only while it is 'live' (its stake
+  // charged, not refunded or settled yet - each flip commits with its money). The wheels' JSON (T.escrowed) is only a
+  // mirror for a rolled-back build; it is summed instead only on a database that has no rows table yet.
+  let wheels = null;
+  try { wheels = await require("./casino/rlstore").held(); } catch (e) { wheels = null; }
+  if (wheels !== null) n += wheels;
   const rows = await getQuery("SELECT game, state FROM casino_tables WHERE status != 'closed'").catch(() => []);
   for (const r of rows) {
+    if (r.game === "roulette" && wheels !== null) continue;
     let T = null;
     try { T = JSON.parse(r.state); } catch (e) { T = null; }
     if (!T) continue;

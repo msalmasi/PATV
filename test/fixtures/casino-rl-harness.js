@@ -89,6 +89,7 @@ async function fresh() {
   veil._hooks.kind = async () => null;
   for (const name of [
     "casino_tables",
+    "casino_rl_lines",
     "casino_rounds",
     "casino_events",
     "casino_actions",

@@ -71,9 +71,11 @@ test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by 
     await tick(25000);
     assert.equal(T.eng.phase, "spinning");
     if (at === "settling") {
-      svc.S.hooks.crash = "rl:payouts";
-      await tick(8000);
-      assert.equal(T.round.settle, "pending");
+      // (O2) a settlement commits in one transaction now, so an interrupted one is an older build's - round.settle
+      // 'pending' saved, then its keyed payouts - made here as that build left it
+      svc.stop();
+      await require("../casino/money").credit("crl:" + T.id + ":s1:b:pay", "b", 3600, "roulette payout");
+      await sql("UPDATE casino_tables SET state = json_set(state, '$.round.settle', 'pending') WHERE id = ?", [T.id]);
     }
     svc.stop();
     await markCopied(T.id);
