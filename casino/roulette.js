@@ -770,7 +770,9 @@ function install(core) {
       log: V.maskLog(T, T.log),
     };
   }
-  async function meView(T, uid) {
+  // The one-time intro notice is taken (a write: casino_notice_seen) only when the caller will show it - the table page's
+  // and the Room Dock's first request ask with ?notice=1; their 1-2 s polls are reads.
+  async function meView(T, uid, opts = {}) {
     return {
       host: !T.lobby && T.host.uid === uid,
       lines: own(T, uid).map((l) => ({ text: describe(l.bets), amount: l.amount })),
@@ -780,7 +782,7 @@ function install(core) {
       room_left: Math.max(0, S.settings.rl_max_spin - (T.escrowed[uid] || 0)),
       net: T.eng.net?.[uid] ?? null,
       private_note: T.eng.notes?.[uid] || null,
-      notice: await require("./notices").take("rl_intro", uid, clock(), S.settings),
+      notice: opts.notice ? await require("./notices").take("rl_intro", uid, clock(), S.settings) : null,
     };
   }
   function openList() {

@@ -297,11 +297,14 @@
       latest = 0;
     var state = element("p", "rl-state", T("rl_loading", "Loading wheel…")),
       recent = element("p", "rl-recent"),
-      field = element("div", "rl-quick");
+      field = element("div", "rl-quick"),
+      intro = element("p", "rl-intro"),
+      asked = false;
     var open = element("a", "rl-table-link", T("rl_full_table", "Open full table"));
     var account = element("div");
     open.hidden = true;
-    box.append(state, recent, field, open, account);
+    intro.hidden = true;
+    box.append(state, intro, recent, field, open, account);
     if (opts.linked) box.append(element("p", "", T("rl_type_hint", "You can also type !rl red 500 in this chat.")));
     function leaveWheel() {
       if (widget) widget.close();
@@ -330,8 +333,18 @@
           return;
         }
         if (id && id !== where.table) leaveWheel();
-        var resp = await fetch("/api/casino/t/" + where.table, { credentials: "same-origin", cache: "no-store" });
+        // the first request of this sheet may take the one-time intro notice, which the sheet then shows (its polls never do)
+        var ask = asked ? "" : "?notice=1";
+        asked = true;
+        var resp = await fetch("/api/casino/t/" + where.table + ask, { credentials: "same-origin", cache: "no-store" });
         var d = await resp.json();
+        if (d.ok && d.me && d.me.notice && d.me.notice.id === "rl_intro") {
+          intro.textContent = T(
+            "rl_intro",
+            "PAT are points with no cash value. Each spin is independent. The wheel has a single zero and straight up pays 35 to 1.",
+          );
+          intro.hidden = false;
+        }
         if (shut || generation !== latest) return;
         if (!d.ok || d.table.status !== "open") {
           leaveWheel();

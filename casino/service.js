@@ -1240,12 +1240,12 @@ function publicView(T) {
   return v;
 }
 
-async function meView(T, uid) {
+async function meView(T, uid, opts) {
   if (!uid) return null;
   const u = await userRow(uid);
   if (!u) return null;
   const base = { name: u.displayname || u.username, balance: Number(u.points_balance) || 0, banned: !!u.casino_banned, admin: require("../siteperms").can(u, "casino.admin") };
-  if (T && T.game === "roulette") return Object.assign(base, await RL.meView(T, uid));
+  if (T && T.game === "roulette") return Object.assign(base, await RL.meView(T, uid, opts));
   if (T && T.game === "holdem") return Object.assign(base, await HM.meView(T, uid, u));
   const e = T ? T.eng : null;
   const cur = e ? E.currentHand(e) : null;

@@ -300,7 +300,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (ck) { tcache.set(T.id, pub); if (tcache.size > 500) tcache.delete(tcache.keys().next().value); }
     }
     const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms() };
-    out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId) : null;     // only the viewer's own seat / cards
+    // only the viewer's own seat / cards (1.99aoe: ?notice=1 - the wheel's page / Dock showing its one-time notice - may take it; a poll never writes)
+    out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId, { notice: req.query && req.query.notice === "1" }) : null;
     if (mtt && req.user && req.user.userId) svc.MT.seen(req.user.userId);                    // (h22 phase 2: start presence)
     out.watching = noteViewer(T, req);
     res.json(out);

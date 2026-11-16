@@ -130,3 +130,10 @@
     width: 100%;
   }
 }
+/* 1.99aoe: the one-time intro notice in the Room Dock sheet (casinorl-dock.js) */
+.rl-intro {
+  margin: 0.4em 0;
+  padding: 0.45em 0.7em;
+  border-left: 3px solid #f4d88e;
+  font-size: 0.85em;
+}

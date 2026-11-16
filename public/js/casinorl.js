@@ -353,7 +353,13 @@
       s: t.client_seed || "",
     });
     CZ.announce(phase + " · " + msg + (net ? " · " + net : ""));
-    if (me && me.notice) CZ.note(me.notice);
+    if (me && me.notice && me.notice.id === "rl_intro")
+      CZ.note(
+        T(
+          "rl_intro",
+          "PAT are points with no cash value. Each spin is independent. The wheel has a single zero and straight up pays 35 to 1.",
+        ),
+      );
     if (me && me.private_note && (!previous || !previous.me || previous.me.private_note !== me.private_note))
       CZ.toast(me.private_note, true);
   }
@@ -400,7 +406,7 @@
       return act("end");
     },
   );
-  refresh = CZ.startTable(render);
+  refresh = CZ.startTable(render, { first: CZ.signed ? "?notice=1" : "" });
   fetch("/api/casino/lobby", { credentials: "same-origin" })
     .then(function (res) {
       return res.json();

@@ -921,15 +921,18 @@
     });
   }
 
-  /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it */
-  function startTable(render) {
+  /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it.
+   *  opts.first: a query string for the first request only (1.99aoe: the wheel's "?notice=1" - its one-time notice) */
+  function startTable(render, opts) {
     $("cz-table").hidden = false;
-    let stopped = false, busy = false, timer = null, lastD = null;
+    let stopped = false, busy = false, timer = null, lastD = null, first = (opts && opts.first) || "";
     async function refresh() {
       if (busy) return;
       busy = true;
       try {
-        const r = await fetch(`/api/casino/t/${tableId}`, { credentials: "same-origin" });
+        const q = first;
+        first = "";
+        const r = await fetch(`/api/casino/t/${tableId}${q}`, { credentials: "same-origin" });
         if (r.status === 404) {
           toast(T("closed", "That table has closed."), true);
           stopped = true;

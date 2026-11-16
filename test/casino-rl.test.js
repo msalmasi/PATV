@@ -107,16 +107,18 @@ test("one room, switch narrowing, dispatch, host authority and lobby rotation", 
   assert.equal(await cash("b"), after);
   assert.equal(T.eng.pending.b, undefined);
   await svc.setSetting("casino_roulette", "everyone");
-  const empty = await svc.meView(L, "a");
-  assert.ok(empty.notice);
+  // 1.99aoe (ENGINE-3): a poll never takes the one-time notice; the page's / Dock's first request asks for it
   assert.equal((await svc.meView(L, "a")).notice, null);
+  const empty = await svc.meView(L, "a", { notice: true });
+  assert.ok(empty.notice);
+  assert.equal((await svc.meView(L, "a", { notice: true })).notice, null);
   await tick(25 * 3600000);
   assert.ok(lobby());
   assert.notEqual(lobby().id, L.id);
   assert.equal(T.status, "closed");
   assert.ok((await svc.fairRecord(L.id, 1)).verified);
   await tick(7 * 86400000);
-  assert.ok((await svc.meView(lobby(), "d")).notice);
+  assert.ok((await svc.meView(lobby(), "d", { notice: true })).notice);
   assert.equal(await require("../casino/notices").take("hm_timeout", "d", h.time(), {}), null);
   await svc.setSetting("casino_roulette", "off");
   await tick(1);
