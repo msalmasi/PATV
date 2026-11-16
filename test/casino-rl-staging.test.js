@@ -25,6 +25,7 @@ async function refresh() {
   await new Promise((res, rej) => {
     const d = new sqlite3.Database(old, (e) => (e ? rej(e) : d.exec("CREATE TABLE staging_marker (k TEXT)", (e2) => d.close(() => (e2 ? rej(e2) : res())))));
   });
+  await sql("PRAGMA secure_delete = ON");               // (as deploy/refresh-staging-db.sh copies prod - roulette2 WP1)
   await sql(`VACUUM INTO '${copy.replace(/\\/g, "/")}'`);
   const out = execFileSync(process.execPath, [path.join(h.repo, "deploy", "keep-staging-tables.js"), old, copy], { encoding: "utf8" });
   fs.renameSync(old, old + ".previous");
@@ -38,7 +39,7 @@ test("FAIR-1: a staging refresh never lets staging play or publish a seed prod's
   const R = await room("pad-a");
   const live = { [L.id]: L.round.seed, [R.id]: R.round.seed };
   const { dir, out, file } = await refresh();
-  assert.match(out, /casino_tables scrubbed 2/);
+  assert.match(out, /casino_tables scrubbed 2 \(roulette\)/);
   const bytes = fs.readFileSync(file).toString("latin1");
   for (const [id, seed] of Object.entries(live)) assert.ok(!bytes.includes(seed), "the copy still holds " + id + "'s seed");
   const raw = execFileSync(process.execPath, [path.join(__dirname, "fixtures", "casino-rl-staging-boot.js"), dir, Object.keys(live).join(","), String(time())], { encoding: "utf8" });
@@ -56,8 +57,9 @@ test("FAIR-1: a staging refresh never lets staging play or publish a seed prod's
   assert.equal(R.round.seed, live[R.id]);
 });
 
-const markCopied = (id) =>
-  sql("UPDATE casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) WHERE id = ?", [id]);
+// (roulette2 WP1) the scrub's own roulette statement, exported by deploy/keep-staging-tables.js, on this database - for one wheel
+const ROULETTE_SCRUB = require(path.join(h.repo, "deploy", "keep-staging-tables")).CASINO_SCRUB.find((x) => x.what === "roulette").sql.replace(/\bmain\./g, "");
+const markCopied = (id) => sql(ROULETTE_SCRUB + " AND id = ?", [id]);
 test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by key, closed, never revealed", async () => {
   const { cash, total, held, tick, restart, rows } = h;
   for (const at of ["spinning", "settling"]) {
@@ -90,7 +92,7 @@ test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by 
   }
 });
 
-test("the scrub touches only open roulette wheels' seeds (card tables and closed wheels as they were)", async () => {
+test("the scrub touches only open roulette wheels' seeds (closed wheels as they were; the card tables: test/casino-card-staging.test.js)", async () => {
   const L = lobby();
   const R = await room("pad-b");
   expect(await act(R, "a", "end"));

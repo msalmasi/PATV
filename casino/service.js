@@ -509,26 +509,23 @@ async function render(T, events) {
 }
 const uidHash = (uid) => crypto.createHash("sha256").update("seat|" + uid).digest("hex").slice(0, 12);
 
-/** Pay a settled round. Every step is keyed, so running it again (recovery) changes nothing that was done. */
-async function settle(T) {
+/** A settled round's MONEY: the payouts, then the House legs (lost stakes in, the winners' profit out - the Fed flash first when it would
+ *  take the House below its hard floor). Every leg is keyed, so running it again changes nothing that was done. roulette2 WP1: factored
+ *  out of settle() so a copied table (casino/retire.js) pays a round decided on the other database WITHOUT its reveal, events or rewards;
+ *  `strict` (the retire) throws on a refused payout instead of logging it. -> {lostTotal, totalBet, totalPaid, profit} */
+async function settleMoney(T, opts) {
+  const strict = !!(opts && opts.strict);
   const ev = T.eng.results;
   const n = T.eng.round_no;
-  const OUT = { blackjack: "BJ", win: "WIN", push: "PUSH", lose: "LOSS", bust: "BUST" };
   let lostTotal = 0, totalBet = 0, totalPaid = 0;
-  const summ = [];
   for (const r of ev.results) {
     if (r.total_payout > 0) {
       const pr = await money.credit(`cbj:${T.id}:r${n}:${r.key}:pay`, r.key, r.total_payout, "blackjack payout");
+      if (!pr.ok && strict) throw Object.assign(new Error(`payout ${r.total_payout} to ${r.key} refused (${pr.code})`), { code: pr.code });
       if (!pr.ok) console.error(`[casino] ${T.id} r${n}: payout ${r.total_payout} to ${r.key} failed (${pr.code})`);
     }
     lostTotal += r.lost; totalBet += r.total_bet; totalPaid += r.total_payout;
-    const parts = r.hands.map((h) => `${h.value} ${OUT[h.outcome]}`);
-    const ins = r.insurance ? (r.insurance.won ? " ins✔" : " ins✘") : "";
-    const net = r.total_payout - r.total_bet;
-    summ.push(`${r.name}: ${parts.join(", ")}${ins} (${net > 0 ? "+" + fmt(net) : net < 0 ? fmt(net) : "±0"})`);
   }
-  const d = ev.dealer;
-  const dtag = d.bust ? " BUST" : d.blackjack ? " BJ" : "";
   if (S.hooks.crash === "payouts") throw new Error("test crash after the payouts"); // tests only
   // the House: lost stakes in, the winners' profit out (flash first when it would go below its hard floor)
   const profit = Math.max(0, totalPaid - (totalBet - lostTotal));
@@ -540,6 +537,24 @@ async function settle(T) {
     const left = await money.houseBalance();
     if (left < 0 && !fl.used) console.warn(`[casino] UNCOVERED ${T.id} r${n}: the House is at ${left} after paying ${profit} (no flash)`);
   }
+  return { lostTotal, totalBet, totalPaid, profit };
+}
+
+/** Pay a settled round. Every step is keyed, so running it again (recovery) changes nothing that was done. */
+async function settle(T) {
+  const ev = T.eng.results;
+  const n = T.eng.round_no;
+  const OUT = { blackjack: "BJ", win: "WIN", push: "PUSH", lose: "LOSS", bust: "BUST" };
+  const { lostTotal, profit } = await settleMoney(T);
+  const summ = [];
+  for (const r of ev.results) {
+    const parts = r.hands.map((h) => `${h.value} ${OUT[h.outcome]}`);
+    const ins = r.insurance ? (r.insurance.won ? " ins✔" : " ins✘") : "";
+    const net = r.total_payout - r.total_bet;
+    summ.push(`${r.name}: ${parts.join(", ")}${ins} (${net > 0 ? "+" + fmt(net) : net < 0 ? fmt(net) : "±0"})`);
+  }
+  const d = ev.dealer;
+  const dtag = d.bust ? " BUST" : d.blackjack ? " BJ" : "";
   // 1.99mw: every seat's rewards (hands / naturals / natural drops / win XP / gang rep) on the site - keyed, so a re-run counts nothing twice
   const drops = await rewards.blackjackRound(T, n, ev.results, C.DROP_REF_BET);
   if (S.hooks.crash === "settle") throw new Error("test crash mid-settle");          // tests only
@@ -680,6 +695,8 @@ async function tickOnce() {
 
 // ── boot & recovery ──
 async function recover(T) {
+  // roulette2 WP1 (FAIR-1 for cards): a blackjack table copied from another database (a staging refresh) is retired, never resumed (casino/retire.js)
+  if (T.game === "bj" && require("./retire").isCopy(T)) return require("./retire").bj(T, { S, clock, save, settleMoney });
   if (T.game === "roulette") return RL.recover(T);
   if (T.game === "holdem") return HM.recover(T);
   // a stake caught between its intent and the table: refund it if it was charged (nobody loses a stake to a crash)

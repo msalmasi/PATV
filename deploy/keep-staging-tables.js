@@ -90,8 +90,28 @@ const SCRUB = [
 // its unused commitment at its public, sign-in-free /api/casino/fair while prod still takes bets on the same round. So the
 // copy never keeps that seed: it is removed (with a pre-committed next one) and the wheel is marked `copied`; staging's
 // casino closes a copied wheel at boot (casino/roulette.js retireCopy: its book refunded, its commitment never revealed).
-const CASINO_SCRUB = "UPDATE main.casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) " +
-                     "WHERE game = 'roulette' AND status = 'open' AND json_valid(state)";
+// roulette2 WP1 (decision D9): the CARD tables too - an open blackjack table keeps its round's seed (round.seed: the shoe it deals from),
+// the live shoe (eng.shoe) and, mid-round, the dealer's hole card (eng.dealer[1]); an open Hold'em table - a cash table, a sit & go's or a
+// scheduled tournament's - keeps the next hand's seed (next.seed), the hand in play's seed and deck (hand.seed, hand.deck), the dealing
+// deck (eng.deck) and every player's hole cards (eng.hole). All of it goes (the card arrays stay, EMPTY: an engine step that ever ran on
+// a copy fails closed - "the shoe ran out" / "the deck ran out"), and the table is marked `copied`: staging's casino retires it at boot
+// (casino/retire.js, casino/tourney.js, casino/mtt.js: every stake / stack / entry back by its key, nothing revealed, no table line).
+// A scheduled tournament's seating draw seed (casino_mtt seed.draw_seed, committed when registration opens, revealed at the finish) goes
+// from a registering / running / finishing one too. Ship with the retire and fair.js's no-seed guard (one release).
+// Each statement can run twice (refresh-staging-db.sh runs prod's list, then staging's when it differs): the second run changes nothing.
+const CASINO_SCRUB = [
+  { table: "casino_tables", what: "roulette",
+    sql: "UPDATE main.casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) " +
+         "WHERE game = 'roulette' AND status = 'open' AND json_valid(state)" },
+  { table: "casino_tables", what: "cards",
+    sql: "UPDATE main.casino_tables SET state = json_set(json_replace(json_remove(state, '$.round.seed', '$.next.seed', '$.hand.seed', '$.sd', " +
+         "CASE WHEN game = 'bj' AND json_extract(state, '$.eng.phase') IN ('insurance', 'player') THEN '$.eng.dealer[1]' ELSE '$.__none' END), " +
+         "'$.eng.shoe', json('[]'), '$.eng.deck', json('[]'), '$.eng.hole', json('{}'), '$.hand.deck', json('[]')), '$.copied', 1) " +
+         "WHERE game IN ('bj', 'holdem') AND status = 'open' AND json_valid(state)" },
+  { table: "casino_mtt", what: "tournaments",
+    sql: "UPDATE main.casino_mtt SET state = json_set(json_remove(state, '$.seed.draw_seed'), '$.copied', 1) " +
+         "WHERE status IN ('registering', 'running', 'finishing') AND json_valid(state)" },
+];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 
@@ -166,9 +186,10 @@ async function scrub(db) {
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0 });
   }
-  if (await tableSql(db, "main", "casino_tables")) {                       // 1.99aof FAIR-1: no open wheel's seed in the copy
-    const r = await run(db, CASINO_SCRUB);
-    out.push({ table: "casino_tables", scrubbed: r.changes || 0 });
+  for (const s of CASINO_SCRUB) {                                          // 1.99aof FAIR-1 (+ roulette2 WP1: the card tables): no open table's seed
+    if (!(await tableSql(db, "main", s.table))) continue;
+    const r = await run(db, s.sql);
+    out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });
   }
   return out;
 }
@@ -286,9 +307,9 @@ if (require.main === module) {
   const [oldFile, newFile] = process.argv.slice(2);
   if (!oldFile || !newFile) { console.error("usage: node keep-staging-tables.js <staging's current DB> <the fresh copy>"); process.exit(2); }
   main(path.resolve(oldFile), path.resolve(newFile)).then((r) => {
-    const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : x.scrubbed != null ? "scrubbed " + x.scrubbed : "-" + x.cleared));
+    const parts = r.tables.map((x) => x.table + " " + (x.dropped ? "dropped" : x.kept != null ? x.kept : x.reindexed != null ? "reindexed " + x.reindexed : x.scrubbed != null ? "scrubbed " + x.scrubbed + (x.what ? " (" + x.what + ")" : "") : "-" + x.cleared));
     console.log((r.mode === "kept" ? "kept staging's own tables: " : "cleared prod's per-environment tables: ") + parts.join(", "));
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 
-module.exports = { main, keep, clearOnly, scrub, keepKv, KEEP, KV_KEEP, EMPTY, SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };
+module.exports = { main, keep, clearOnly, scrub, keepKv, KEEP, KV_KEEP, EMPTY, SCRUB, CASINO_SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };

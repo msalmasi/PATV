@@ -157,6 +157,13 @@ test("the lists cover every per-environment table, and the script runs it with s
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
+  // roulette2 WP1: the copy is BUILT with secure_delete ON (VACUUM INTO takes it from the connection) - else stale row bytes stay in the
+  // copy's page slack, where the scrubs below (secure_delete ON in the copy) can't reach them
+  assert.match(sh, /sqlite3 -cmd "\.timeout 30000" \/home\/PATV\/myapp\.db "PRAGMA secure_delete = ON; VACUUM INTO '\$S\/myapp\.db\.new';"/);
+  // ... and every open casino table's secrets go from it: roulette wheels, the card tables (blackjack, Hold'em - cash, sit & go and
+  // tournament tables), the tournaments' seating draw seeds
+  assert.deepEqual(K.CASINO_SCRUB.map((s) => [s.table, s.what]), [["casino_tables", "roulette"], ["casino_tables", "cards"], ["casino_mtt", "tournaments"]]);
+  for (const s of K.CASINO_SCRUB) assert.match(s.sql, /^UPDATE main\.casino_(tables|mtt) SET state = json_set\(.*'\$\.copied', 1\) WHERE .*json_valid\(state\)$/);
   const stop = sh.indexOf("pm2 stop patv-staging"), keep = sh.indexOf("keep-staging-tables.js"), swap = sh.indexOf('mv "$S/myapp.db.new" "$S/myapp.db"');
   assert.ok(stop > 0 && keep > stop && swap > keep, "stop -> keep -> swap");
   assert.match(sh, /if ! node "\$\(dirname "\$0"\)\/keep-staging-tables\.js" "\$S\/myapp\.db" "\$S\/myapp\.db\.new"; then[\s\S]{0,300}rm -f "\$S\/myapp\.db\.new"[\s\S]{0,120}pm2 start patv-staging[\s\S]{0,40}exit 1/,

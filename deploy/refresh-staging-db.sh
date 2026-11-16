@@ -17,7 +17,11 @@ S=/home/PATV-staging
 # so copy it through SQLite - VACUUM INTO is one consistent read (a busy prod can't restart it the way it can restart a
 # page-by-page .backup), waits up to 30 s for a lock, and writes a single self-contained file. Never copy the file itself.
 rm -f "$S/myapp.db.new" "$S/myapp.db.new-wal" "$S/myapp.db.new-shm"
-sqlite3 -cmd ".timeout 30000" /home/PATV/myapp.db "VACUUM INTO '$S/myapp.db.new';"
+# roulette2 WP1: secure_delete ON for the copy's build too (VACUUM INTO takes it from this connection). Without it the copy's b-tree pages
+# keep stale bytes of rows as they were copied (a page that turned into an interior page while the copy was built keeps its old leaf cells
+# in its free area), and the per-environment step's scrubs below (secure_delete ON in the copy) can't reach those: prod's card-table seeds and
+# decks, or chat text, could survive the scrub there. (This connection only reads prod's database - the pragma changes nothing on it.)
+sqlite3 -cmd ".timeout 30000" /home/PATV/myapp.db "PRAGMA secure_delete = ON; VACUUM INTO '$S/myapp.db.new';" >/dev/null
 [ "$(sqlite3 "$S/myapp.db.new" 'PRAGMA integrity_check;')" = "ok" ] || { echo "the copy failed integrity_check - staging untouched"; rm -f "$S/myapp.db.new"; exit 1; }
 # 1.99acd: never carry prod members' browser-notification subscriptions (webpush.js) into staging - staging would push
 # staging's DMs and mentions to their browsers if it ever had prod's VAPID keys. Their outbox goes too, and the switch is off.

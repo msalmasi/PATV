@@ -27,6 +27,7 @@ const PAY = require("./mttpay");
 const BUD = require("./mttbudget");
 const TNCFG = require("./tourney");
 const { amt } = require("./holdem");
+const RT = require("./retire");          // roulette2 WP1: a tournament copied from another database is retired at boot
 
 const ID_RE = /^m[0-9a-f]{9}$/;
 const AUDIENCES = Object.freeze(["off", "staff", "everyone"]);
@@ -1075,6 +1076,8 @@ function install(core) {
   }
 
   // ── cancel / void ──
+  // (roulette2 WP1: opts.quiet - a copy's retire, retireCopy below: the draw seed is never marked revealed, no hand is revealed, no notice,
+  //  no room line; the stream slot is let go without advancing to another table)
   async function cancel(M, reason, by, opts) {
     opts = opts || {};
     const now = clock();
@@ -1102,16 +1105,24 @@ function install(core) {
         }
         const ck = `tny:${M.id}:cancel`;
         if (!(await ESC().seen(ck))) await ESC().record(ck, { op: "refund", ref: ref(M), amount: back, via: "casino", result: { ok: true, why: reason, by: by || null, n } });
-        for (const T of liveTables(M)) { if (T.eng.hand_active || T.hand) cut.push(T); closeTableInTx(M, T, c); }
+        for (const T of liveTables(M)) {
+          if (T.eng.hand_active || T.hand) cut.push(T);
+          closeTableInTx(M, T, c);
+          if (opts.quiet) { RT.voidHand(T.eng); Object.assign(T, { hand: null, next: null, replay: null, sd: null }); }   // (never revealed)
+        }
         M.transit = {};
         await runQuery("UPDATE casino_mtt_reminders SET dropped = 'cancelled' WHERE tid = ? AND sent_at IS NULL AND dropped IS NULL", [M.id]);
         M.status = "cancelled";
         M.cancel = { by: by || null, reason, at: now };
         if (M.finish) M.finish.state = "voided";
-        M.seed.revealed_at = now;
+        if (!opts.quiet) M.seed.revealed_at = now;
         await runQuery("INSERT INTO casino_mtt_log (tid, ts, kind, data) VALUES (?, ?, ?, ?)", [M.id, now, opts.void ? "void" : "cancel", JSON.stringify({ reason, by, refunds: n, total: back })]);
       });
       log(M, `${opts.void ? "void" : "cancel"} (${reason}) refunds=${n} total=${back}`);
+      if (opts.quiet) {
+        for (const T of ctx.closed || []) RT.unstream(S, T.id);
+        return { ok: true, n, back };
+      }
       await afterCommit("cancel", async () => {
         for (const T of cut) {
           if (T.hand) {
@@ -2045,6 +2056,16 @@ function install(core) {
   const beforeHand = () => null;
   /** after a restart, before the hand resumes (holdem.js recover): "done" = nothing to resume here */
   async function recoverTable(T) {
+    // roulette2 WP1 (FAIR-1 for cards, decision D9): a tournament table copied from another database is never played or revealed here -
+    // its hand is void and dropped (tournament chips aren't PAT), nothing is scheduled, and its tournament's retire closes it
+    // (recoverOne -> retireCopy, the quiet void below)
+    if (RT.isCopy(T)) {
+      RT.voidHand(T.eng);
+      Object.assign(T, { hand: null, next: null, replay: null, sd: null, pre: {}, turn: null, dl: { turn: null, next: null, idle: null } });
+      T.tourney.hold = "copied";
+      await save(T);
+      return "done";
+    }
     const M = S.mtts.get(T.tourney.id);
     if (!M) { T.tourney.hold = "stopped"; console.error(`[mtt] table ${T.id}: tournament ${T.tourney.id} isn't open - stopped`); return "done"; }
     if (!["running", "finishing"].includes(M.status) || T.status !== "open") return "done";
@@ -2109,7 +2130,29 @@ function install(core) {
       try { await recoverOne(M, now); } catch (e) { if (e && e.crash) throw e; console.error(`[mtt] ${M.id} recover:`, e && e.message ? e.message : e); }
     }
   }
+  // roulette2 WP1 (FAIR-1 for cards, decision D9): a tournament copied from another database - deploy/keep-staging-tables.js strips the
+  // seating draw's seed of a registering / running / finishing one (and every open table's seeds and cards) and marks it `copied`. The
+  // other database may still be playing it, so it is never played (no draw) or revealed here: it is voided quietly through the cancel
+  // path - every hold refunded in full by its key (fee included; a finishing one too: its one settle never ran, so nothing was paid), its
+  // tables closed in the same transaction, no notice, no room line, the draw seed never marked revealed. If that can't go through, the
+  // tournament and its tables are taken out of play here (the rows stay as they are: the next boot tries again).
+  const isCopyM = (M) => !!M && ["scheduled", "registering", "running", "finishing"].includes(M.status) &&
+                         (!!M.copied || !!(M.seed && M.seed.draw_commit && !M.seed.draw_seed));
+  async function retireCopy(M) {
+    const was = M.status;
+    let r;
+    try { r = await cancel(M, "copied from another database", null, { void: true, quiet: true }); } catch (e) { r = { ok: false, why: e && e.message ? e.message : String(e), err: e }; }
+    if (!r.ok) {
+      S.mtts.delete(M.id);
+      for (const rec of M.tables || []) { const T = S.tables.get(rec.id); if (T && T.status === "open") S.tables.delete(rec.id); }
+      console.error(`[mtt] ${M.id}: a tournament copied from another database couldn't be retired yet (${r.why}) - out of play until the next boot`);
+      if (r.err) throw r.err;
+      throw new Error(`a tournament copied from another database couldn't be retired yet (${r.why})`);
+    }
+    log(M, `copied from another database - voided unrevealed (was ${was}): ${r.n} entr${r.n === 1 ? "y" : "ies"}, ${r.back} PAT refunded`);
+  }
   async function recoverOne(M, now) {
+    if (isCopyM(M)) return retireCopy(M);
     const repairs = [];
     if (M.status === "running" || M.status === "finishing") {
       // invariant: every playing entry exactly once seated at a live table or in transit; every seat a playing entry; chips add up

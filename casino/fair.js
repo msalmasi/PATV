@@ -16,8 +16,16 @@ const newServerSeed = () => crypto.randomBytes(32).toString("hex");
 const newClientSeed = () => crypto.randomBytes(8).toString("hex");
 const commitment = (serverSeed) => crypto.createHash("sha256").update(String(serverSeed), "utf8").digest("hex");
 
+// roulette2 WP1 (FAIR-1 for cards): a missing seed never deals. String(undefined) made the HMAC key the literal text "undefined" - a shoe,
+// deck or pocket anyone could compute. A staging copy has its open tables' seeds scrubbed (deploy/keep-staging-tables.js), so this is
+// the backstop behind their retire (casino/retire.js): it throws instead.
+function needSeed(serverSeed) {
+  if (!serverSeed) throw new Error("fair: no server seed - nothing is dealt or spun without one");
+}
+
 /** A generator of uint32 words from the seeds. */
 function words(serverSeed, clientSeed, round) {
+  needSeed(serverSeed);
   let counter = 0, buf = null, pos = 8;
   return () => {
     if (pos >= 8) {
@@ -38,6 +46,7 @@ function below(next, n) {
 }
 
 function shuffleShoe(numDecks, serverSeed, clientSeed, round) {
+  needSeed(serverSeed);
   const shoe = makeShoe(numDecks);
   const next = words(serverSeed, clientSeed, round);
   for (let i = shoe.length - 1; i > 0; i--) {
@@ -57,6 +66,7 @@ function verify(rec) {
 }
 
 function spinPocket(serverSeed, clientSeed, round) {
+  needSeed(serverSeed);
   return below(words(serverSeed, clientSeed, round), 37);
 }
 
