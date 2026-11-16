@@ -117,6 +117,15 @@
   min-width: 0;
   padding: 3px 0;
 }
+/* roulette2 O13(1): iPhone - a quick second tap bets again instead of zooming the page, and the long-press undo (600 ms,
+   casinorl.js) never raises the text-selection / link callout */
+.rl-grid button,
+.rl-outside button {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 .rl-grid button:focus-visible,
 .rl-outside button:focus-visible {
   outline: 3px solid #ffdd75;
@@ -215,11 +224,77 @@
   margin: 0;
   padding: 0;
 }
+/* roulette2 O8: each history entry is a .rl-pocket (red / black / zero, the newest larger with a gold ring) - public/css/casinorl-dock.css */
+.rl-trail ol {
+  align-items: center;
+}
 .rl-trail li {
-  background: #102820;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 13px;
+  display: flex;
+}
+/* roulette2 O7: the table's limits placard (casinorl.js placard()) - a summary line with the player's "left this spin" meter */
+.rl-limits {
+  margin: 0 0 12px;
+  border: 1px solid #f3dab154;
+  border-radius: 10px;
+  background: #0a2a20b3;
+  font: 500 0.86rem/1.45 var(--ds-font);
+  color: #f3ead7;
+}
+.rl-limits[hidden] {
+  display: none;
+}
+.rl-limits summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.9rem;
+  min-height: 44px;
+  padding: 0 0.8rem;
+  cursor: pointer;
+  list-style: none;
+}
+/* (a flex summary has no disclosure marker in Chrome, WebKit draws its own - one ▾ beside the title for both, turned while open) */
+.rl-limits summary::-webkit-details-marker {
+  display: none;
+}
+.rl-limits-h::after {
+  content: "▾";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+  transition: transform 0.15s;
+}
+.rl-limits[open] .rl-limits-h::after {
+  transform: rotate(180deg);
+}
+.rl-limits-h {
+  font-weight: 700;
+  color: #f4d88e;
+}
+.rl-limits-h::before {
+  content: "ⓘ ";
+}
+.rl-left {
+  font-variant-numeric: tabular-nums;
+}
+.rl-left:empty {
+  display: none;
+}
+.rl-limits ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 2px 1.4rem;
+  margin: 0;
+  padding: 0 0.8rem 0.7rem 1.9rem;
+}
+.rl-limits .rl-lim-spin {
+  font-weight: 700;
+}
+.rl-limits .rl-lim-note {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin-inline-start: -1.1rem;
+  color: #e4dccb;
+  font-size: 0.8rem;
 }
 /* 1.99aof (UI-6): a signed-out viewer's line above the controls */
 .rl-signin {

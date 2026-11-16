@@ -318,6 +318,69 @@
     rotor.style.transition = reduced.matches ? "none" : "transform " + ms + "ms cubic-bezier(.17,.07,.16,1)";
     if (!reduced.matches) rotor.style.transform = "rotate(" + angle + "deg)";
   }
+  // roulette2 O7: the table's limits in plain words, from t.limits (the rl_* settings the server's bet checks read), every one per
+  // player and per spin - and, for a signed-in player while bets are open, what they have on the layout and what is left for them
+  // this spin (me.room_left). Open on a wide screen; on a phone it folds to its one line, which keeps the "left" meter in sight.
+  var limitsBox = document.createElement("details"),
+    limitsHead = document.createElement("summary"),
+    limitsTitle = document.createElement("span"),
+    limitsLeft = document.createElement("span"),
+    limitsList = document.createElement("ul");
+  limitsBox.className = "rl-limits";
+  limitsBox.id = "rl-limits";
+  limitsBox.hidden = true;
+  limitsBox.open = !narrow.matches;
+  limitsTitle.className = "rl-limits-h";
+  limitsTitle.textContent = T("rl_limits", "Table limits");
+  limitsLeft.className = "rl-left";
+  limitsHead.append(limitsTitle, limitsLeft);
+  limitsBox.append(limitsHead, limitsList);
+  $("rl-modes").before(limitsBox);
+  function placard(t, me) {
+    var L = t.limits;
+    if (!L || !L.rl_min_bet || !L.rl_max_spin) {
+      limitsBox.hidden = true;
+      return;
+    }
+    limitsBox.hidden = false;
+    var keys = ["rl_min_bet", "rl_max_straight", "rl_max_split", "rl_max_street", "rl_max_corner", "rl_max_line"],
+      key = keys.concat(["rl_max_outside", "rl_max_spin", "rl_max_positions"]).map(function (k) {
+        return L[k];
+      }).join(",");
+    if (limitsList.dataset.key !== key) {
+      limitsList.dataset.key = key;
+      limitsList.replaceChildren();
+      var n = function (k) {
+        return { n: CZ.fmt(L[k]) };
+      };
+      [
+        [T("rl_lim_spin", "All your bets together: up to {n} PAT a spin", n("rl_max_spin")), "rl-lim-spin"],
+        [T("rl_lim_min", "Minimum bet: {n} PAT a spot", n("rl_min_bet"))],
+        [T("rl_lim_straight", "One number (straight up): up to {n} PAT", n("rl_max_straight"))],
+        [T("rl_lim_split", "Split, 2 numbers: up to {n} PAT", n("rl_max_split"))],
+        [T("rl_lim_street", "Street or trio, 3 numbers: up to {n} PAT", n("rl_max_street"))],
+        [T("rl_lim_corner", "Corner or first four, 4 numbers: up to {n} PAT", n("rl_max_corner"))],
+        [T("rl_lim_line", "Line, 6 numbers: up to {n} PAT", n("rl_max_line"))],
+        [T("rl_lim_outside", "Dozens, columns, red or black, odd or even, 1–18 or 19–36: up to {n} PAT each", n("rl_max_outside"))],
+        [L.rl_max_positions ? T("rl_lim_spots", "Up to {n} spots a spin", n("rl_max_positions")) : ""],
+        [T("rl_lim_note", "Every limit is per player and per spin, and counts all your chips on that spot."), "rl-lim-note"],
+      ].forEach(function (row) {
+        if (!row[0]) return;
+        var li = document.createElement("li");
+        li.textContent = row[0];
+        if (row[1]) li.className = row[1];
+        limitsList.append(li);
+      });
+    }
+    var open = t.status === "open" && (t.phase === "idle" || t.phase === "betting");
+    limitsLeft.textContent =
+      me && !me.banned && open && typeof me.room_left === "number"
+        ? T("rl_left", "Your bets this spin: {staked} PAT · {left} PAT left", {
+            staked: CZ.fmt(me.staked || 0),
+            left: CZ.fmt(me.room_left),
+          })
+        : "";
+  }
   function render(d) {
     var previous = last;
     last = d;
@@ -359,16 +422,18 @@
     if (strip.dataset.round !== String(t.last_revealed)) {
       strip.dataset.round = String(t.last_revealed);
       strip.replaceChildren();
+      // roulette2 O8: each pocket in the felt's colours (the client's red list, never the entry's server colour field), newest
+      // first and larger
       t.history
         .slice(-20)
         .reverse()
-        .forEach(function (r) {
+        .forEach(function (r, i) {
           var li = document.createElement("li");
-          li.textContent = (r.color === "red" ? "◆ " : r.number ? "● " : "") + r.number;
-          li.title = word(r.number);
+          li.append(R.pocket(r.number, r.round_no, i === 0));
           strip.append(li);
         });
     }
+    placard(t, me);
     $("rl-proof").textContent = T("rl_commit_line", "Spin {n} commitment: {c} · client seed {s}", {
       n: t.commit_round,
       c: t.commitment || "",
@@ -414,9 +479,23 @@
     CZ.openSheet("cz-histsheet");
     CZ.loadHistory(function (r) {
       var pocket = r.results && r.results.number;
+      // roulette2 O8: the pocket as the strip shows it (the same .rl-pocket colours + spoken word), then the spin's number
+      var chip =
+        Number.isInteger(pocket) && pocket >= 0 && pocket <= 36
+          ? '<span class="rl-pocket ' +
+            R.pocketColor(pocket) +
+            '" role="img" aria-label="' +
+            CZ.esc(R.pocketLabel(pocket)) +
+            '" title="' +
+            CZ.esc(R.pocketLabel(pocket)) +
+            '">' +
+            pocket +
+            "</span> "
+          : "";
       return (
         '<div class="hh"><b>' +
-        CZ.esc(Number.isInteger(pocket) ? word(pocket) : T("rl_spin_number", "Spin {n}", { n: r.round })) +
+        chip +
+        CZ.esc(T("rl_spin_number", "Spin {n}", { n: r.round })) +
         '</b><a href="' +
         CZ.esc(r.proof) +
         '">🔐 ' +

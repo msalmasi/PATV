@@ -1150,6 +1150,18 @@ function annDue(T, key, room) {
   return true;
 }
 
+// roulette2 O6: a roulette wheel's stakes as its push / advert lines name them - the smallest bet and the most one player may stake
+// on a spin (the rl_* settings the bet checks use). One place, so a per-wheel limit (High Roller, a per-spin snapshot) changes it once.
+function rlStakes(T) {
+  const st = S.settings;
+  return { min: Number(st.rl_min_bet) || 100, max: Number(st.rl_max_spin) || 100000, hr: !!(T && T.high_stakes) };
+}
+function rlPushText(T, also) {
+  const k = rlStakes(T);
+  return `🛞 ${T.host.name}'s ${k.hr ? "💎 High Roller " : ""}roulette wheel is playing in this room now — !rl red ${Math.max(500, k.min)} to bet ` +
+         `(min ${fmt(k.min)} PAT a bet, up to ${fmt(k.max)} PAT per player a spin). Also on the web: ${link(T)}${also || ""}`;
+}
+
 /** Push a table to a Camfrog room. mode "add" (the default): attach one more room; "remove": detach that room;
  *  room = null: back to web-only (every room detached). Host or admin. */
 async function push(tableId, room, actor, mode) {
@@ -1169,7 +1181,7 @@ async function push(tableId, room, actor, mode) {
       if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.id !== T.id && roomsOf(t).includes(room))) return R(false, "That room already has a casino table.");
       if (cur.length >= MAX_ROOMS) return R(false, `A table can play in up to ${MAX_ROOMS} rooms at once.`);
       setRooms(T, cur.concat([room]));
-      const how = T.game === "roulette" ? "a roulette wheel — use !rl to bet" : T.tourney ? TN.howText(T) : T.game === "holdem"
+      const how = T.tourney ? TN.howText(T) : T.game === "holdem"
         ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
       const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
@@ -1177,8 +1189,10 @@ async function push(tableId, room, actor, mode) {
       // re-adding a room attaches it again at once, silently); the "now also playing" line follows the same clock
       const quiet = !annDue(T, "push_ts", room);
       if (!quiet) {
-        await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`,
-                   { room_name: r.name, url: link(T), rooms: [room] });
+        // roulette2 O6: a wheel's own line - 🛞, the game named, how to bet here and its limits (was "🂠 <host>'s a roulette wheel")
+        const text = T.game === "roulette" ? rlPushText(T, also)
+          : `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`;
+        await emit(T, "pushed", text, { room_name: r.name, url: link(T), rooms: [room] });
         if (cur.length) await emit(T, "line", `🐸 This table is now also playing in ${r.name} — players there sit at the same table.`, { rooms: cur });
       }
       await save(T);
@@ -1395,7 +1409,12 @@ const MAX_ADVERTS = 10;
 const advertsOf = (T) => (Array.isArray(T.adverts) ? T.adverts : []);
 const advertList = (T) => advertsOf(T).map((id) => ({ id, name: roomName(id) }));
 function advertText(T) {
-  if (T.game === "roulette") return "A roulette wheel is open. Play on the web: " + link(T);
+  if (T.game === "roulette") {
+    // roulette2 O6: 🛞 + the game + its limits (an advertised room only hears this line - no !rl there, so the web link is the way in)
+    const k = rlStakes(T);
+    return `📣 🛞 ${k.hr ? "💎 High Roller " : ""}Roulette at ${T.host.name}'s wheel — single zero, bets from ${fmt(k.min)} PAT, ` +
+           `up to ${fmt(k.max)} PAT per player a spin${k.hr ? " (High Rollers only)" : ""}. Play on the web: ${link(T)}`;
+  }
   if (T.tourney) return `📣 🏁 Sit & Go at ${T.host.name}'s table — ${TN.howText(T)}. Play on the web: ${link(T)}`;   // h22
   const hm = T.game === "holdem";
   const stakes = hm ? `blinds ${fmt(T.eng.sb)}/${fmt(T.eng.bb)}` : `bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}`;
@@ -1497,15 +1516,25 @@ async function roomTables() {
 }
 
 /** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. The `private` part
- *  (hole cards of room players, by Camfrog name) only ever goes to Pepe (bot token), never into an event. */
+ *  (hole cards of room players, by Camfrog name) only ever goes to Pepe (bot token), never into an event.
+ *  roulette2 O12(a): + `now` (this server's clock, ms) so Pepe can place the site's deadlines (land_at, spin.started_at) on his own. */
 async function poll(after, waitMs) {
   await boot();
+  // roulette2 O12(a): the poll BARRIER. A locked step (a roulette draw, a deal) emits - and wakes this long-poll - INSIDE its
+  // transaction, before its COMMIT and before the live table takes the new state (copy-then-commit). Woken there, a poll used to
+  // read the uncommitted rows and draw roomTables() from the live table as it was BEFORE the step (a draw's board still "Place your
+  // bets", the old rev) - then the post-commit wake found no waiter and Pepe's board waited out his next long-poll (up to 7 s of an
+  // 8 s spin). Queueing behind the casino lock (an empty step) lets that step finish first. Taken before the rows are read and never
+  // around roomTables(): refreshVeil -> persistVeil takes the lock itself (a deadlock).
+  const barrier = () => locked(() => null);
   // a client with no cursor yet (or one from another database - a staging refresh) starts from now: no replay
   if (Number(after) < 0 || Number(after) > S.lastSeq) {
-    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [] });
+    await barrier();
+    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [], now: clock() });
   }
   after = Math.max(0, Math.trunc(Number(after) || 0));
   const read = () => getQuery("SELECT seq, table_id, room, ts, kind, data FROM casino_events WHERE seq > ? AND room IS NOT NULL ORDER BY seq LIMIT 200", [after]);
+  await barrier();
   let rows = await read();
   if (!rows.length && waitMs > 0) {
     await new Promise((resolve) => {
@@ -1513,11 +1542,12 @@ async function poll(after, waitMs) {
       const tm = setTimeout(done, waitMs);
       S.waiters.add(done);
     });
+    await barrier();          // (the wake may have come from inside a locked step: let it commit first)
     rows = await read();
   }
   const events = rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
   return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, S.lastSeq), events, stream: S.stream.table },
-                       await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []) });
+                       await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []), now: clock() });
 }
 
 async function fairRecord(tableId, round) {

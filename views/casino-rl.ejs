@@ -2,7 +2,7 @@
 <%- include('layout', {title:t('casino.rl.title'),user:user}) %>
 <%- include('partials/casino-css') %>
 <%- include('partials/casino-rl-css') %>
-<link rel="stylesheet" href="/public/css/room-mod.css?v=10"><link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><link rel="stylesheet" href="/public/css/flair.css?v=5"><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=2">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=10"><link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><link rel="stylesheet" href="/public/css/flair.css?v=5"><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=3">
 <main class="ds-page flow cz rl-page" id="cb" data-game="roulette" data-table="<%= tableId || '' %>" data-signed="<%= signedIn?'1':'' %>" data-user="<%= signedIn && user ? user:'' %>">
 <%- include('partials/casino-top',{t,game:'roulette',tableId}) %>
 <% if(!tableId){ %><section class="ds-card"><h2><%= t('casino.rl.off') %></h2><a href="/casino"><%= t('casino.all_tables') %></a></section><% }else{ %>
@@ -26,4 +26,4 @@
 <%- include('partials/casino-sheets',{t}) %><%- include('partials/casino-chat',{t}) %>
 <% } %></main>
 <% if(tableId){ %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if(signedIn){ %><script src="/public/js/block-sheet.js?v=3"></script><% } %>
-<script src="/public/js/casino-ui.js?v=14"></script><script src="/public/js/patamount.js?v=1"></script><script src="/api/casino/rlbets.js?v=2"></script><script src="/public/js/casinorl-dock.js?v=2"></script><script src="/public/js/casinorl.js?v=2"></script><% } %>
+<script src="/public/js/casino-ui.js?v=14"></script><script src="/public/js/patamount.js?v=1"></script><script src="/api/casino/rlbets.js?v=2"></script><script src="/public/js/casinorl-dock.js?v=3"></script><script src="/public/js/casinorl.js?v=3"></script><% } %>

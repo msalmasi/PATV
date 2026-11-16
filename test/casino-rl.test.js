@@ -499,3 +499,125 @@ test("a repeated position remains a single aggregated rebet across rounds", asyn
     await tick(5000);
   }
 });
+
+// ── roulette2 WP0 (quick wins): the poll barrier + the site's clock (O12a), spin.started_at / secs (O12c), push / advert text (O6),
+// the navbar flag per casino_roulette mode (O3) ──
+const settle = async (ok, what) => {
+  for (let i = 0; i < 1000 && !ok(); i++) await new Promise((r) => setTimeout(r, 2));
+  assert.ok(ok(), what);
+};
+
+test("roulette2 O12(a): a poll woken inside the draw's transaction answers the COMMITTED spin, with the site's clock", async () => {
+  const T = await room();
+  expect(await act(T, "a", "bet", "red 100"));
+  const waiting = svc.S.waiters.size;
+  const p = svc.poll(svc.S.lastSeq, 8000);
+  await settle(() => svc.S.waiters.size > waiting, "the poll waits for an event");
+  // the deadline's draw: its "No more bets" line wakes the poll from inside the transaction, before the live wheel spins
+  await tick(25000);
+  const out = await p;
+  const v = out.tables[T.id];
+  assert.ok(out.events.some((e) => e.kind === "line" && /No more bets/.test(e.data.text)), "the draw's line");
+  assert.equal(v.phase, "spinning", "the committed phase, not the betting one the wake came from");
+  assert.equal(v.rev, T.rev, "the committed rev (Pepe's board redraws on a rev change)");
+  assert.equal(v.spin.number, T.round.pocket);
+  assert.equal(v.spin.started_at, h.time());
+  assert.equal(out.now, h.time(), "now: the site's clock (additive)");
+  // an older Pepe's poll keeps every field it reads
+  for (const k of ["cursor", "events", "stream", "tables", "private", "private_mtt"]) assert.ok(k in out, k);
+  // a veiled player at the wheel: roomTables() refreshes the veil, which takes the casino lock itself - the barrier never wraps it
+  h.veil._hooks.kind = async () => "out";
+  h.veil._reset();
+  const quick = await Promise.race([svc.poll(0, 0), new Promise((r) => setTimeout(() => r("deadlock"), 4000))]);
+  assert.notEqual(quick, "deadlock");
+  assert.equal(quick.tables[T.id].phase, "spinning");
+});
+
+test("roulette2 O12(c): publicView.spin adds started_at and secs, saved with the spin, and stays null unless it spins", async () => {
+  const T = await room();
+  expect(await act(T, "a", "bet", "red 100"));
+  assert.equal(svc.publicView(T).spin, null);
+  await tick(25000);
+  const s = svc.publicView(T).spin;
+  assert.equal(s.started_at, h.time());
+  assert.equal(s.ends_at, T.dl.land);
+  assert.equal(s.ends_at, svc.publicView(T).land_at);
+  assert.equal(s.secs, svc.S.settings.rl_spin_secs);
+  assert.equal(s.started_at + s.secs * 1000, s.ends_at);
+  const saved = JSON.parse((await rows("SELECT state FROM casino_tables WHERE id=?", [T.id]))[0].state);
+  assert.equal(saved.dl.start, s.started_at, "a restart keeps it");
+  // a spin saved by an older build (no dl.start) counts back from its landing
+  delete T.dl.start;
+  assert.equal(svc.publicView(T).spin.started_at, T.dl.land - svc.S.settings.rl_spin_secs * 1000);
+  assert.equal(svc.publicView(T).spin.secs, svc.S.settings.rl_spin_secs);
+  T.dl.start = s.started_at;
+  await tick(8000);
+  assert.equal(T.eng.phase, "result");
+  assert.equal(svc.publicView(T).spin, null);
+});
+
+test("roulette2 O6: a pushed / advertised wheel's line names roulette (🛞) and its limits, from the settings", async () => {
+  const T = await room("pad-a");
+  svc.noteRooms([
+    { id: "pad-b", name: "Pad B" },
+    { id: "pad-c", name: "Pad C" },
+  ]);
+  await svc.setSetting("rl_min_bet", 1000);
+  expect(await svc.push(T.id, "pad-b", actor("a")));
+  const text = async (kind) =>
+    JSON.parse((await rows("SELECT data FROM casino_events WHERE table_id=? AND kind=? ORDER BY seq DESC", [T.id, kind]))[0].data).text;
+  const pushed = await text("pushed");
+  assert.match(pushed, /^🛞 \S+'s roulette wheel is playing in this room now — !rl red 1000 to bet \(min 1,000 PAT a bet, up to 100,000 PAT per player a spin\)\. Also on the web: https?:\/\/\S+\/casino\/roulette\/t\/[a-f0-9]{10}/);
+  assert.doesNotMatch(pushed, /🂠|🃏|'s a roulette/, "not the blackjack emoji or the old grammar slip");
+  await svc.setSetting("rl_min_bet", 100);
+  await svc.setSetting("rl_max_spin", 200000);
+  expect(await svc.advertise(T.id, "pad-c", actor("a"), true));
+  const advert = await text("advert");
+  assert.match(advert, /^📣 🛞 Roulette at \S+'s wheel — single zero, bets from 100 PAT, up to 200,000 PAT per player a spin\. Play on the web: https?:\/\/\S+\/casino\/roulette\/t\//);
+  assert.doesNotMatch(advert, /!rl/, "an advertised room doesn't play the wheel - no !rl there");
+});
+
+test("roulette2 O3 / O12(a): the navbar's Roulette link per casino_roulette mode (at once), and the bot poll's `now`", async (t) => {
+  const express = require("express"),
+    ejs = require("ejs"),
+    app = express(),
+    routes = require("../casino/routes"),
+    perms = require("../siteperms");
+  app.use(express.json());
+  routes.register(app, { isBotToken: (x) => x === "localtest", addUser: (q, r, next) => ((q.user = null), next()) });
+  const layout = require("node:path").join(repo, "views", "layout.ejs");
+  // the layout's `can` is siteperms' render helper for the request's user: one per viewer here
+  const viewers = { guest: null, pleb: { class: "pleb" }, assistant: { class: "Assistant" }, staff: { class: "Staff" }, admin: { class: "Admin" } };
+  const shows = async (who) => {
+    const u = viewers[who];
+    const html = await ejs.renderFile(layout, { title: "T", ogPath: "/", user: u ? "someone" : null, rouletteOn: app.locals.rouletteOn,
+                                                can: (key) => perms.can(u, key) });
+    const n = /<nav class="navbar">[\s\S]*?<\/nav>/.exec(html)[0];
+    const hits = n.match(/<a href="\/casino\/roulette" class="nav-link" title="Roulette"><span class="ic">🛞<\/span><span class="nav-lbl">Roulette<\/span><\/a>/g) || [];
+    assert.ok(hits.length === 0 || hits.length === 2, "in More and ☰ alike");
+    return hits.length === 2;
+  };
+  const want = {
+    everyone: { guest: true, pleb: true, assistant: true, staff: true, admin: true },
+    staff: { guest: false, pleb: false, assistant: false, staff: true, admin: true },
+    off: { guest: false, pleb: false, assistant: false, staff: false, admin: false },
+  };
+  for (const mode of ["staff", "everyone", "off", "staff"]) {
+    await svc.setSetting("casino_roulette", mode);       // no wait: the flag reads the settings this change reloaded
+    for (const who of Object.keys(viewers)) assert.equal(await shows(who), want[mode][who], mode + " / " + who);
+    assert.equal(app.locals.rouletteOn(), mode === "everyone", mode + ": a render without the site's helpers");
+  }
+  await svc.setSetting("casino_roulette", "everyone");
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => srv.once("listening", resolve));
+  t.after(() => srv.close());
+  const j = await (
+    await fetch("http://127.0.0.1:" + srv.address().port + "/api/casino/bot/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "localtest", after: 0, wait: 0, games: ["roulette"] }),
+    })
+  ).json();
+  assert.equal(j.ok, true);
+  assert.equal(j.now, h.time());
+});

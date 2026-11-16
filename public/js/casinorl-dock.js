@@ -59,6 +59,31 @@
       ? T("rl_red_word", "{n} ◆ Red", { n: n })
       : T("rl_black_word", "{n} ● Black", { n: n });
   }
+  // roulette2 O8: one pocket as the felt colours it - .rl-pocket.red / .black / .zero (public/css/casinorl-dock.css, loaded by the
+  // table page and the pad page). The colour comes from the client's red list (PATVRlBets.red), never a server field (rlengine
+  // says "green" for 0). The number is the text, the felt's ◆ / ● glyph is drawn by the CSS, and the colour is also a word for
+  // screen readers ("Spin 41: 14 red"). The table's history strip, its history sheet and the Room Dock's recent line all use it.
+  function pocketColor(n) {
+    return n === 0 ? "zero" : grammar.red.indexOf(n) >= 0 ? "red" : "black";
+  }
+  function pocketLabel(n, round) {
+    var c = pocketColor(n),
+      w =
+        c === "zero"
+          ? T("rl_pocket_zero", "{n} green", { n: n })
+          : c === "red"
+            ? T("rl_pocket_red", "{n} red", { n: n })
+            : T("rl_pocket_black", "{n} black", { n: n });
+    return round ? T("rl_pocket_spin", "Spin {round}: {pocket}", { round: round, pocket: w }) : w;
+  }
+  function pocket(n, round, newest) {
+    var el = element("span", "rl-pocket " + pocketColor(n) + (newest ? " newest" : ""), String(n)),
+      label = pocketLabel(n, round);
+    el.setAttribute("role", "img");
+    el.setAttribute("aria-label", label);
+    el.setAttribute("title", label);
+    return el;
+  }
   var outside = [
     ["low", "1–18"],
     ["even", T("rl_even", "Even")],
@@ -370,6 +395,7 @@
       field.replaceChildren();
       account.replaceChildren();
       recent.textContent = "";
+      recent.dataset.round = "";
       open.hidden = true;
       open.removeAttribute("href");
     }
@@ -427,12 +453,17 @@
         }
         state.textContent =
           ((target === where.table ? where.here : idHere) ? T("rl_room_wheel", "Room wheel") : T("rl_lobby", "Lobby wheel")) + " · " + phase(d.table);
-        recent.textContent = d.table.history
-          .slice(-5)
-          .map(function (r) {
-            return outcome(r.number);
-          })
-          .join(" · ");
+        // roulette2 O8: the last five pockets in the felt's colours, newest first (and larger) like the table's history strip
+        var last5 = d.table.history.slice(-5).reverse(),
+          shownKey = d.table.id + ":" + d.table.last_revealed + ":" + last5.length;
+        if (recent.dataset.round !== shownKey) {
+          recent.dataset.round = shownKey;
+          recent.replaceChildren();
+          if (last5.length) recent.append(element("span", "rl-recent-h", T("rl_recent", "Last spins")));
+          last5.forEach(function (r, i) {
+            recent.append(pocket(r.number, r.round_no, i === 0));
+          });
+        }
         widget.update(d);
       } catch (_) {
         if (!shut && generation === latest) state.textContent = T("net_fail", "Couldn't reach the table. Try again.");
@@ -449,5 +480,14 @@
       if (widget) widget.close();
     };
   }
-  W.PATVRoulette = { mount: mount, controls: controls, phase: phase, outcome: outcome, outside: outside };
+  W.PATVRoulette = {
+    mount: mount,
+    controls: controls,
+    phase: phase,
+    outcome: outcome,
+    outside: outside,
+    pocket: pocket,
+    pocketColor: pocketColor,
+    pocketLabel: pocketLabel,
+  };
 })(window);
