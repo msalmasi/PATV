@@ -4,7 +4,7 @@
   browser never sends: public/js/chat-signin.js reads it, clears it from the address bar, asks who it's for (POST
   /api/chatsignin/peek) and shows one button - a same-origin form POST to /signin that spends it and signs in.
   error (after a POST): expired | off | elevated | signup (1.99anv: sign-ups are invite-only and this is Pepe's chat account,
-  never signed in to on the website) | banned (banfix: a site ban - `message` is siteban.message, plain text) | slow | error.
+  never signed in to on the website) | banned (1.99aoi: a site ban - `message` is siteban.message, plain text) | slow | error.
 %>
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <link rel="stylesheet" href="/public/css/pad-access.css?v=2">

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var _t = function (k, d, v) { return window.__t ? window.__t(k, d, v) : String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
-  // banfix review: a feed ban with no pad IS a site ban (siteban.js) - the prompts say so; a mistyped number of days is asked again
+  // 1.99aoi review: a feed ban with no pad IS a site ban (siteban.js) - the prompts say so; a mistyped number of days is asked again
   // instead of becoming "for good" (parseInt('a week') || 0 was a permanent site ban)
   function askDays(q) {
     for (;;) {

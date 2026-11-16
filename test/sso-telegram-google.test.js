@@ -286,7 +286,7 @@ test("Telegram: \"I already have an account\" links after the password (only whe
   T += 1000;
   await tgSignIn(b3, tgAuth({ id: 7005, first_name: "Wes" }));
   await b3.post("/login", { username: "wes", password: PASSWORD, link_sso: "telegram" });
-  // banfix: a site ban is a sign-in block now (siteban.js) - the password sign-in itself is refused, so nothing can be linked
+  // 1.99aoi: a site ban is a sign-in block now (siteban.js) - the password sign-in itself is refused, so nothing can be linked
   assert.equal(b3.who(), null, "the site ban refuses the password sign-in");
   assert.equal(await TG.linkByTg("7005"), null, "nothing is linked");
   assert.match(await flashText(b3), /This account is banned from PATV\./);
@@ -557,9 +557,9 @@ test("Settings -> Account: Connections has a Google row (link / unlink) and the 
   assert.doesNotMatch(html, /id="googleDiv"/, "hidden when Google isn't set up");
 });
 
-// banfix (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) is refused by
+// 1.99aoi (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) is refused by
 // every SSO path: a linked Telegram / Google sign-in, and the sign-up page's "linked meanwhile" path - no login, the ban's own words
-test("banfix: a site-banned account can't sign in with Telegram or Google, nor through the sign-up page's 'already linked' path", async () => {
+test("1.99aoi: a site-banned account can't sign in with Telegram or Google, nor through the sign-up page's 'already linked' path", async () => {
   const SB = require(path.join(repo, "siteban"));
   const ban = await mkUser("banx");
   await runQuery("INSERT INTO telegram_links (user_id, tg_id, handle, link_source, proof, linked_at) VALUES (?, '7100', 'banxtg', 'self', 'start_code', ?)", [ban.userId, T]);

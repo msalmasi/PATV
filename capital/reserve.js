@@ -271,7 +271,7 @@ async function takePayment(ln, amount, source, t, key) {
   const acct = await borrowerAcct(ln);
   if (!acct) return [0, "the borrower has no PAT account"];
   try {
-    await C.wallet(acct.userId, -amount, "loan-repayment", { counterparty: LENDER, source: `capital:${ref(ln)}`, system: true });   // banfix review: what it owes
+    await C.wallet(acct.userId, -amount, "loan-repayment", { counterparty: LENDER, source: `capital:${ref(ln)}`, system: true });   // 1.99aoi review: what it owes
   } catch (e) {
     if (C.isRefuse(e) && e.code === "E_INSUFFICIENT_PAT") return [0, "insufficient PAT"];
     throw e;

@@ -304,9 +304,9 @@ test("pages: the Pads guide shows Trending (front pick + runners-up with their b
   }
 });
 
-// banfix review (siteban.js): Pepe's chat !boost acts for the linked account without a session (/api/rooms/boost) - a site-banned
+// 1.99aoi review (siteban.js): Pepe's chat !boost acts for the linked account without a session (/api/rooms/boost) - a site-banned
 // account boosts nothing (boost() itself refuses it, so the website's form too); nothing is charged; once lifted it can again
-test("banfix review: a site-banned account can't boost a pad (chat or web) - nothing charged", async () => {
+test("1.99aoi review: a site-banned account can't boost a pad (chat or web) - nothing charged", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

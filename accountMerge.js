@@ -777,7 +777,7 @@ async function moveUserRows(fromId, toId, opts = {}) {
     const busy = await getQuery("SELECT 1 FROM casino_mtt_entries WHERE user_id IN (?, ?) AND (state IN ('held','playing') OR overlay_due > 0) LIMIT 1", [fromId, toId]);
     if (busy.length) throw Object.assign(new Error("has a poker tournament in progress - merge after it ends"), { code: "E_TOURNEY_ACTIVE", status: 409 });
   }
-  // banfix review: never an account PATV staff scheduled for deletion (account_deletions requested_by 'admin:<id>', pending) - its
+  // 1.99aoi review: never an account PATV staff scheduled for deletion (account_deletions requested_by 'admin:<id>', pending) - its
   // rows and PAT would live on in the other account and the deletion would end as "gone" (account_deletions.user_id is 'keep'):
   // every merge path (the Camfrog !verify merge, a duplicate merge, a provider merge). Staff cancel the deletion first. Before any write.
   if (await tableExists("account_deletions")) {
@@ -963,7 +963,7 @@ async function logMerge({ via, from, to, pat = 0, xp = 0, report = {}, note = nu
  *  vested welcome held. Never throws. */
 async function afterMerge(toId, report = {}) {
   const loaded = (m) => Object.keys(require.cache).some((k) => k.endsWith(path.sep + m + ".js"));
-  // banfix: a site ban that moved here with feed_bans (NULL_WINS) locks the target out at once (siteban.js lock cache)
+  // 1.99aoi: a site ban that moved here with feed_bans (NULL_WINS) locks the target out at once (siteban.js lock cache)
   try { require("./siteban").forget(toId); } catch (e) { /* the 5 s cache lands it anyway */ }
   try { if (loaded("rooms")) await require("./rooms").loadCache(); } catch (e) { console.error("[MERGE] rooms cache:", e.message); }
   try { if (loaded("padaccess")) await require("./padaccess").load(); } catch (e) { console.error("[MERGE] pad cache:", e.message); }

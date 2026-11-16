@@ -61,7 +61,7 @@ Each live session: device, method, country / IP, last active, signed in, "This d
 | Account deletion requested | Every session |
 | Logout | That session |
 
-## Site bans (banfix, `siteban.js`)
+## Site bans (1.99aoi, `siteban.js`)
 
 Owner report 2026-11-16: a site-banned account kept posting bounties, and kept signing back in, which cancelled the
 deletion staff had scheduled for it. A **site ban** - a `feed_bans` row with `room_id ''` whose `until` is NULL (for good)
@@ -93,13 +93,13 @@ account lock:
   skipped at claim; Pepe's `privacy.*` jobs always run), a chat sign-in link. The Telegram bridge already treated a site
   ban as tier `none`. Credits, refunds and settlements never ask (an expiring bounty refunds a banned poster; an
   admin-scheduled deletion of a banned account runs at its time).
-- **The ledger backs them all up** (banfix review): `ledger.post` refuses a debit the account has to cover itself
+- **The ledger backs them all up** (1.99aoi review): `ledger.post` refuses a debit the account has to cover itself
   (`requireCover` - a spend, a stake, a buy, a fee) for a site-banned account, whoever asks (`E_SITE_BANNED`), so a bot
   path that forgot to ask still moves nothing. `opts.system` is "not the account acting" and is never asked: the deletion
   job's routing, a creator clawback, a loan repayment / the collection, a market re-settle's clawback, a fine through
   Pepe's charges, a stake the escrow ledger already checked. A banned subscriber's store / creator renewal runs out like
   an unpaid one (grace, then lapsed).
-- **Nobody can name them** (banfix review): a new wager, pool or capital market refuses a site-banned account - or one
+- **Nobody can name them** (1.99aoi review): a new wager, pool or capital market refuses a site-banned account - or one
   PATV staff scheduled for deletion - as its opponent or judge (an open game naming them would keep that deletion on
   hold); the refusal never says why.
 - **A !verify can't take the Camfrog name off a banned account** (or one staff are deleting): the name stays (Pepe would
@@ -112,12 +112,12 @@ account lock:
   can ban an Admin - to lock an Admin out, remove the Admin class first. Staff and Assistants can be locked out.
 - **Merges.** A Twitch / Discord conflict merge refuses a site-banned account (`banned`) or one staff scheduled for deletion
   (`deleting`) - "please contact staff".
-- **A pending staff deletion starts nothing new** (banfix review, `siteban.startLock`): with D3 off a NON-banned account
+- **A pending staff deletion starts nothing new** (1.99aoi review, `siteban.startLock`): with D3 off a NON-banned account
   under a staff deletion can still sign in, but it puts up no new escrow stake (`E_DELETION_PENDING`), and the bot paths
   above start nothing for it (code `deleting`) - so nothing new holds the deletion off. What it can still open through the
   website without PAT (a pad, a shop listing ...) holds the job and the admin is told; D3 on closes that too (it can't
   sign in at all).
-- **The /feed/admin words** (banfix review): a ban there with no pad IS this site ban, so the buttons, prompts and the
+- **The /feed/admin words** (1.99aoi review): a ban there with no pad IS this site ban, so the buttons, prompts and the
   table say "Site ban" / "whole site" and what it does; a mistyped number of days is asked again (it used to become
   "for good").
 - **Knobs** (constants at the top of `siteban.js`): `EXEMPT_MIN_RANK` (D1), the wind-down verbs `WIND_DOWN` / `CASINO_OK` /

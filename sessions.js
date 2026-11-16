@@ -29,7 +29,7 @@
 // cookie make ONE row, and that old token keeps mapping to it (revoking the row kills the old token too). A cookie
 // without a sid issued before the account's session_cutoffs.after is refused. See docs/sessions.md.
 //
-// banfix (site bans, siteban.js): a site-banned account (an active feed_bans row with room_id '') can't sign in - signIn refuses
+// 1.99aoi (site bans, siteban.js): a site-banned account (an active feed_bans row with room_id '') can't sign in - signIn refuses
 // it before anything is issued (code 'banned') - and the gate treats its valid cookie as a signed-out request from its next
 // request on, BEFORE the session check (no legacy conversion, no last_seen touch), and ends its sessions (revokeAll why 'ban', at
 // most every siteban.REVOKE_EVERY_MS per account). The Admin class and the owner are exempt (siteban.js D1).
@@ -277,7 +277,7 @@ async function isFresh(req, within = FRESH_MS) {
  * Create the session, issue the cookie, send a new-device notice if it is one. `method` is one of METHODS; opts.signup =
  * the sign-in that created the account (no notice). Also cancels a pending account deletion the member asked for themselves
  * (signing in cancels it - never one PATV staff scheduled: accountdelete.cancelOnSignIn). -> the session id.
- * banfix: a site-banned account (siteban.js) is refused FIRST - an Error {status 403, code 'banned', until} whose message the
+ * 1.99aoi: a site-banned account (siteban.js) is refused FIRST - an Error {status 403, code 'banned', until} whose message the
  * caller shows (siteban.isRefusal) - so no session row, no cookie and no deletion cancel happen.
  */
 async function signIn(req, res, user, method, opts = {}) {
@@ -380,7 +380,7 @@ function touchSeen(row, req, t) {
   try { const NB = require("./netban"); if (NB.isOn() && row.user_id) NB.note(row.user_id, req, "session").catch(() => {}); } catch (e) { /* never blocks */ }
 }
 
-/** banfix: a locked account's cookie reached the gate - end its sessions (and the cutoff for sid-less cookies), at most every
+/** 1.99aoi: a locked account's cookie reached the gate - end its sessions (and the cutoff for sid-less cookies), at most every
  *  siteban.REVOKE_EVERY_MS per account in this process (parallel requests share one revokeAll, never a burst of hub rows); only
  *  when there is something to end (a live row, or a sid-less cookie the cutoff must stop once the ban is over). */
 const ending = new Map();                       // userId -> {at, p}
@@ -409,7 +409,7 @@ async function gate(req, res, next) {
   let decoded = null;
   try { decoded = jwt.verify(token, process.env.SECRET_KEY); } catch (e) { decoded = null; }
   if (!decoded || !decoded.userId) return next();             // not a login we issued: every reader ignores it anyway
-  // banfix: a site-banned account (siteban.js) is signed out on this request, before the session is even looked at (an old
+  // 1.99aoi: a site-banned account (siteban.js) is signed out on this request, before the session is even looked at (an old
   // sid-less cookie is never converted for it) - every reader below sees no login; its sessions end (endLocked)
   let lock = null;
   try { lock = await require("./siteban").lockOf(decoded.userId); }
@@ -442,7 +442,7 @@ async function userIdOfToken(token) {
   let decoded = null;
   try { decoded = jwt.verify(token, process.env.SECRET_KEY); } catch (e) { return null; }
   if (!decoded || !decoded.userId) return null;
-  try { if (await require("./siteban").lockOf(decoded.userId)) return null; }      // banfix: a site-banned account (siteban.js)
+  try { if (await require("./siteban").lockOf(decoded.userId)) return null; }      // 1.99aoi: a site-banned account (siteban.js)
   catch (e) { console.error("[sessions] token ban check:", e.message); }
   try {
     if (decoded.sid) return valid(await load(sha(decoded.sid)), decoded.userId) ? String(decoded.userId) : null;

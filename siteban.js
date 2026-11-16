@@ -1,4 +1,4 @@
-// siteban.js — banfix (owner report 2026-11-16: "Site bans don't seem to block users from the site ... if I schedule a banned
+// siteban.js — 1.99aoi (owner report 2026-11-16: "Site bans don't seem to block users from the site ... if I schedule a banned
 // account for deletion, they can keep signing back in to prevent deletion"): ONE rule for "this account is locked out of PATV",
 // read by every place that lets an account in or acts for it.
 //
@@ -37,15 +37,15 @@
 //                chat shop (shop.purchasePrize), the chat wheel spin, the queued web actions Pepe claims (actions.js,
 //                bounties.js - failed at ban time and skipped at claim), a chat sign-in link (chatsignin.issue). Telegram's
 //                bridge already treats a site-banned account as tier 'none' (telegram.tierOf).
-//                banfix review: + the capital cluster (capital/service.act - CAPITAL_OK), the gangs (/api/gangs/bot/op - GANG_OK),
+//                1.99aoi review: + the capital cluster (capital/service.act - CAPITAL_OK), the gangs (/api/gangs/bot/op - GANG_OK),
 //                Pepe's generic charges (/api/wager/charge, /api/pat/charge - a fine / clawback passes: SYSTEM_CHARGE_RE), !boost;
 //                and the BACKSTOP: ledger.post refuses a requireCover debit of a locked account unless opts.system (E_SITE_BANNED)
-//     starting   banfix review: startLock = the ban, else a pending deletion PATV staff scheduled (whatever D3 says) - what the
+//     starting   1.99aoi review: startLock = the ban, else a pending deletion PATV staff scheduled (whatever D3 says) - what the
 //                bot paths, every escrow stake (E_DELETION_PENDING) and the "who may be named as judge / opponent" checks of a
 //                new wager / pool / capital market ask, so nothing new holds a staff deletion off (partyText never says why)
 //   not here     a refund, a payout, a settlement or the deletion job - credits and system moves never ask (an expiring bounty
 //                still refunds a banned poster; an admin-scheduled deletion of a banned account runs at its time).
-// Constants at the top are the knobs (D1..D4 in the banfix notes); docs/sessions.md "Site bans".
+// Constants at the top are the knobs (D1..D4 in the 1.99aoi notes); docs/sessions.md "Site bans".
 "use strict";
 const { getQuery } = require("./dbUtils");
 const core = require("./siteperms-core");
@@ -57,7 +57,7 @@ const CACHE_MS = 5000;                      // the same 5 s as sessions.js: a ch
 const CACHE_MAX = 20000;
 const REVOKE_EVERY_MS = 30000;              // the gate's revokeAll for a locked account, at most this often per account (one process)
 // D2: what a banned account may still do through Pepe - wind down what it already has open (never start or add to anything).
-// banfix review: + a judge's / a poster's call on what OTHER people hold - settle a wager or pool it judges (a judge never holds a
+// 1.99aoi review: + a judge's / a poster's call on what OTHER people hold - settle a wager or pool it judges (a judge never holds a
 // position in it: wagers.create / pools.bet refuse that), resolve or reject the claims on its own bounty (the hunters are paid
 // out of the pot that is there; nothing is added) - so the people who aren't banned get the payout they won, not a refund.
 const WIND_DOWN = Object.freeze({
@@ -72,7 +72,7 @@ const CASINO_OK = Object.freeze(new Set(["", "help", "rules", "how", "fair", "in
   "limits", "last", "bets", "cards", "hand", "hole", "leave", "quit", "cashout", "fold", "stand", "stay", "sitout", "unregister", "unadvertise",
   "unadvert"]));
 const STASH_OK = Object.freeze(new Set(["withdraw", "close"]));
-// banfix review (bot paths): the capital cluster's and the gangs' verbs a banned account may still send through Pepe - getting out
+// 1.99aoi review (bot paths): the capital cluster's and the gangs' verbs a banned account may still send through Pepe - getting out
 // (sell a position, cancel its own market, a judge's call on positions others hold, repay, unstake; leave / defect / take its
 // allowance out of the treasury / hand the gang over / disband it). Pepe's own verbs (actor.pepe / the 'pepe' ops) never ask.
 const CAPITAL_OK = Object.freeze({
@@ -158,7 +158,7 @@ function forget(userId) {
   delCache.delete(String(userId));
 }
 
-// ── banfix review (finding 2): what may START something ──
+// ── 1.99aoi review (finding 2): what may START something ──
 const delCache = new Map();                  // userId -> {lock, at}
 /** A pending ADMIN-scheduled deletion of this account, whatever D3 says (cached CACHE_MS): {kind:'deletion', execute_at} | null. */
 async function deletionLock(userId) {
@@ -280,7 +280,7 @@ function flashMiddleware(req, res, next) {
 
 module.exports = { activeBan, lockOf, forget, message, signInError, assertSignIn, isRefusal, botRefusal, botText, windDownOk, flashMiddleware, whenText,
                    dropQueued, lockedRows, QUEUED_FAIL,
-                   deletionLock, startLock, systemCharge, capitalOk, partyText,                          // banfix review
+                   deletionLock, startLock, systemCharge, capitalOk, partyText,                          // 1.99aoi review
                    EXEMPT_MIN_RANK, ADMIN_DELETION_LOCKS, SHOW_REASON, CACHE_MS, REVOKE_EVERY_MS, WIND_DOWN, HOLD_OK_REASONS, CASINO_OK, STASH_OK,
                    CAPITAL_OK, GANG_OK, GANG_PEPE_OPS, SYSTEM_CHARGE_RE,
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _clear: () => { cache.clear(); delCache.clear(); } };

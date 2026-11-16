@@ -64,7 +64,7 @@ const invites = require("./invites");                // 1.99anv: sign-ups open /
 const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
-const siteBan = require("./siteban");              // banfix: site bans lock the account out (sign-in, sessions, bot paths)
+const siteBan = require("./siteban");              // 1.99aoi: site bans lock the account out (sign-in, sessions, bot paths)
 stale.ensure();
 stale.ensureNotice();                                // 1.99bs: the archive warning window
 const twitchLogin = require("./twitchlogin");       // 1.99bu: users.twitchLogin, saved at Twitch sign-in
@@ -327,7 +327,7 @@ app.use(stale.noticeMiddleware(cookieUserId));
 // Accept-Language > English. /language, /lang/:code, /api/settings/language, /i18n/:code.json
 const i18n = require("./i18n");
 app.use(i18n.middleware(cookieUserId));
-// banfix: a site-banned login the session gate just refused (req.siteLock) - the page it opens says why (the sign-in form shows it)
+// 1.99aoi: a site-banned login the session gate just refused (req.siteLock) - the page it opens says why (the sign-in form shows it)
 app.use(siteBan.flashMiddleware);
 i18n.register(app, { addUser, cookieUserId });
 i18n.ensure();                                       // the user_language table + the saved preferences, into memory
@@ -715,7 +715,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
       // Returning User Found
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
-        await siteBan.assertSignIn(currentUser, req);   // banfix: a site-banned account stops here, before anything is touched (siteban.js)
+        await siteBan.assertSignIn(currentUser, req);   // 1.99aoi: a site-banned account stops here, before anything is touched (siteban.js)
         // 1.99anv: an account the Twitch bot made while sign-ups are invite-only needs an invite for its FIRST website sign-in (invites.js)
         const shadow_ = await invites.shadowGate(req, currentUser.userId);
         if (!shadow_.ok) return invites.refuseOauth(req, res, shadow_);
@@ -736,7 +736,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Twitch from your profile.");
         }
         if (existingTwitchEmail.length > 0) {
-          await siteBan.assertSignIn(existingTwitchEmail[0], req);   // banfix: never link Twitch onto a site-banned account it can't sign in to
+          await siteBan.assertSignIn(existingTwitchEmail[0], req);   // 1.99aoi: never link Twitch onto a site-banned account it can't sign in to
           const prior = (await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]))[0];
           await runQuery(
             "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -809,7 +809,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Twitch:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, siteBan.isRefusal(error) ? error.message : "Twitch sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words (banfix: and a site ban's)
+    if (!res.headersSent) oauthFail(req, res, siteBan.isRefusal(error) ? error.message : "Twitch sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words (1.99aoi: and a site ban's)
   }
 });
 
@@ -887,7 +887,7 @@ async function mergeConflict(req, res, provider) {
         holds: `The other account has PAT or items in flight (${(r.holds || []).join(", ")}), so it can't be merged automatically - please contact staff to merge it.`,
         negative: "The other account has a negative balance - please contact staff to merge it.",
         archived: "The other account is archived - please contact staff to merge it.",
-        // banfix: a site-banned account / one PATV staff scheduled for deletion is never merged (providermerge.js)
+        // 1.99aoi: a site-banned account / one PATV staff scheduled for deletion is never merged (providermerge.js)
         banned: req.t ? req.t("auth.merge.banned") : "The other account is banned from PATV, so it can't be merged - please contact staff.",
         deleting: req.t ? req.t("auth.merge.deleting") : "The other account is scheduled for deletion by PATV staff, so it can't be merged - please contact staff.",
       }[r.code] || "That account no longer exists or has changed - nothing to merge.";
@@ -1026,7 +1026,7 @@ app.get("/auth/discord/callback", async (req, res) => {
       );
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
-        await siteBan.assertSignIn(currentUser, req);   // banfix: a site-banned account stops here, before anything is touched (siteban.js)
+        await siteBan.assertSignIn(currentUser, req);   // 1.99aoi: a site-banned account stops here, before anything is touched (siteban.js)
         // 1.99anv: an account the Discord bot made while sign-ups are invite-only needs an invite for its FIRST website sign-in (invites.js)
         const shadow_ = await invites.shadowGate(req, currentUser.userId);
         if (!shadow_.ok) return invites.refuseOauth(req, res, shadow_);
@@ -1045,7 +1045,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Discord from your profile.");
         }
         if (existingDiscordEmail.length > 0) {
-          await siteBan.assertSignIn(existingDiscordEmail[0], req);   // banfix: never link Discord onto a site-banned account it can't sign in to
+          await siteBan.assertSignIn(existingDiscordEmail[0], req);   // 1.99aoi: never link Discord onto a site-banned account it can't sign in to
           const prior = (await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]))[0];
           await runQuery(
             "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -1121,7 +1121,7 @@ app.get("/auth/discord/callback", async (req, res) => {
     }
   } catch (error) {
     console.error("Failed to authenticate with Discord:", error && error.message);
-    if (!res.headersSent) oauthFail(req, res, siteBan.isRefusal(error) ? error.message : "Discord sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words (banfix: and a site ban's)
+    if (!res.headersSent) oauthFail(req, res, siteBan.isRefusal(error) ? error.message : "Discord sign-in didn't work. Please try again.");   // 1.99ajn padppl: a network ban's own words (1.99aoi: and a site ban's)
   }
 });
 
@@ -2325,7 +2325,7 @@ app.post("/api/wager/charge", async (req, res) => {
     if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
       return reply(403, { ok: false, error: "casino_banned" });
     }
-    // banfix review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - is charged for nothing it
+    // 1.99aoi review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - is charged for nothing it
     // starts (a duel / brawl stake, a paid command, heist gear); a fine or a clawback (siteban.systemCharge) still goes through
     if (!siteBan.systemCharge(reason)) {
       const lock = await siteBan.startLock(userId);
@@ -3668,7 +3668,7 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
       if (user[0].casino_banned) {
         return res.status(403).send("You are banned from the casino.");
       }
-      if (await siteBan.lockOf(user[0].userId)) return res.status(403).send(siteBan.botText());   // banfix: a site-banned account (siteban.js)
+      if (await siteBan.lockOf(user[0].userId)) return res.status(403).send(siteBan.botText());   // 1.99aoi: a site-banned account (siteban.js)
 
       const pendingSpin = await getQuery(
         `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' ORDER BY rowid DESC LIMIT 1;`

@@ -319,12 +319,12 @@ test("completeCamfrogLink (the !signup claim page) still returns after the whole
   assert.equal((await row("cl-me")).camfrogUsername, "claimcf");
 });
 
-// banfix review (siteban.js): a !verify from another account never takes a Camfrog name off an account that is site-banned (Pepe would
+// 1.99aoi review (siteban.js): a !verify from another account never takes a Camfrog name off an account that is site-banned (Pepe would
 // resolve the name to the new account and every chat command would work again; the ban doesn't follow - padbans.linked carries only
 // pad_login_bans) or that PATV staff scheduled for deletion (an auto account's merge would escape it: its rows and PAT would live on,
 // the deletion would end as "gone"). Nothing is touched - staff decide; the !signup claim page says the same. And no merge path at all
 // moves an account under a staff deletion (accountMerge.moveUserRows refuses it before any write).
-test("banfix review: !verify can't take a Camfrog name from a banned account or one staff are deleting; no merge escapes a staff deletion", async () => {
+test("1.99aoi review: !verify can't take a Camfrog name from a banned account or one staff are deleting; no merge escapes a staff deletion", async () => {
   await ready;
   const SB = require(path.join(repo, "siteban"));
   const AM = require(path.join(repo, "accountMerge"));

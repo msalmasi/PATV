@@ -1,4 +1,4 @@
-// banfix review (siteban.js): a ban with no pad (feed_bans room_id '') IS the site ban - no sign-in by any method, every session
+// 1.99aoi review (siteban.js): a ban with no pad (feed_bans room_id '') IS the site ban - no sign-in by any method, every session
 // ended - so /feed/admin and the reported-DM actions say so instead of "ban from the feed", and a mistyped number of days is asked
 // again instead of becoming a permanent site ban (it was parseInt('a week') || 0 = for good).
 //   node --test test/siteban-admin-words.test.js

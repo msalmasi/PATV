@@ -66,7 +66,7 @@ async function act(engine, body) {
   return out;
 }
 /**
- * banfix review (siteban.js): the account an action is FOR - the actor, or for Pepe's market create the creator he opens it for -
+ * 1.99aoi review (siteban.js): the account an action is FOR - the actor, or for Pepe's market create the creator he opens it for -
  * starts nothing while it is site-banned or PATV staff have its deletion scheduled (siteban.startLock): no market, no buy, no
  * loan, no stake - from chat or the website. Getting out still works (siteban.CAPITAL_OK: sell, cancel, a judge's settle, repay,
  * unstake); Pepe's own verbs (an auto market, an AI ruling, the protocol's capital) never ask. -> lock | null

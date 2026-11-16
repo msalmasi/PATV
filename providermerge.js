@@ -14,7 +14,7 @@
 //   * an old account with anything in flight (room ownership, stage slots, loans / escrow / stashes,
 //     market / bounty / wager positions, open shop orders - staleaccounts.holdsFor) is refused:
 //     staff merge those by hand;
-//   * banfix: an old account that is site-banned (siteban.js - the ban would follow it onto the signed-in
+//   * 1.99aoi: an old account that is site-banned (siteban.js - the ban would follow it onto the signed-in
 //     account, accountMerge's NULL_WINS) or that PATV staff scheduled for deletion (the merge would escape
 //     it) is refused too ("banned" / "deleting") - staff decide those;
 //   * xp, level and liked move like mergeDuplicate / the Camfrog !verify merge; the history and every
@@ -33,7 +33,7 @@ const NON_BLOCKING = new Set(["pending welcome bonus", "pending Camfrog link"]);
 
 const busy = new Set();
 
-/** banfix: a deletion PATV staff scheduled (account_deletions requested_by 'admin:<id>') that is still pending. */
+/** 1.99aoi: a deletion PATV staff scheduled (account_deletions requested_by 'admin:<id>') that is still pending. */
 async function adminDeletionPending(userId) {
   try {
     return (await getQuery("SELECT 1 FROM account_deletions WHERE user_id = ? AND state IN ('scheduled','held') AND requested_by LIKE 'admin:%' LIMIT 1",
@@ -53,7 +53,7 @@ async function tableExists(t) {
  * Merge account `fromId` (holding the Twitch / Discord id `linkId`) into `toId`.
  * L: {label, idCol, nameCol, otherIdCol, otherNameCol} (index.js LINKS[provider]).
  * Returns {ok: true, amount, xp, from, moved, otherMoved, twitch} or {ok: false, code, holds?}
- *   code: "busy" | "gone" | "changed" | "holds" | "archived" | "negative" | "banned" | "deleting" (banfix)
+ *   code: "busy" | "gone" | "changed" | "holds" | "archived" | "negative" | "banned" | "deleting" (1.99aoi)
  * Throws (after rolling back) if the database fails partway.
  */
 async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkName }) {
@@ -70,7 +70,7 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
 }
 async function _mergeLocked({ provider, L, fromId, toId, linkId, linkName }) {
   {
-    // banfix: never merge a site-banned account (siteban.js) or one PATV staff scheduled for deletion - before anything is touched
+    // 1.99aoi: never merge a site-banned account (siteban.js) or one PATV staff scheduled for deletion - before anything is touched
     if (await require("./siteban").activeBan(fromId)) return { ok: false, code: "banned" };
     if (await adminDeletionPending(fromId)) return { ok: false, code: "deleting" };
     // an archived account gets its PAT back first (restore() runs its own transaction)

@@ -290,11 +290,11 @@ test("wagers: create from chat and from the website form; decline / cancel / voi
   assert.equal(await bal("u2"), bb1 + 1000);
 });
 
-// banfix review (siteban.js): a deletion PATV staff scheduled can't be held off by new wagers - nobody names a site-banned account or
+// 1.99aoi review (siteban.js): a deletion PATV staff scheduled can't be held off by new wagers - nobody names a site-banned account or
 // one under a staff deletion as opponent or judge (an open wager naming them is a deletion blocker - staleaccounts "wager"), and the
 // account under a staff deletion starts none and puts up no stake (escrow holdInTx E_DELETION_PENDING); a member's OWN pending request
 // doesn't count. A banned judge can still settle the wager it judges (siteban.WIND_DOWN): the winner is paid, not refunded.
-test("banfix review: no banned / staff-deleting opponent or judge; no new stake under a staff deletion; a banned judge still settles", async () => {
+test("1.99aoi review: no banned / staff-deleting opponent or judge; no new stake under a staff deletion; a banned judge still settles", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);
@@ -345,7 +345,7 @@ test("banfix review: no banned / staff-deleting opponent or judge; no new stake 
 });
 
 test("wagers: rollback hands the records back (keyed); the ledger rollback waits for it", async () => {
-  // (banfix review: the id this create gets - the test above made wagers too)
+  // (1.99aoi review: the id this create gets - the test above made wagers too)
   const c9 = await act("wagers", "create", actor("ann_cf", "ann"), { opponent: { login: "bob_cf" }, judge: { login: "carol_cf" }, amount: 1000, terms: "stays open", secs: 7200 }, "idem-c9");
   const id9 = Number(String(c9.body.ref).replace(/^W/, ""));
   assert.equal((await post("/api/escrow/admin/rollback", { key: "er-0001" })).body.code, "E_GAMES_LIVE");

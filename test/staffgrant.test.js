@@ -218,7 +218,7 @@ test("index.js: both routes are Admin only (Staff lost access); the cards say wh
   assert.match(g, /id="jackpotReason"/);
 });
 
-// banfix final verify: a clawback is staff acting, not the member - a site ban never blocks it (the ledger backstop lets a
+// 1.99aoi final verify: a clawback is staff acting, not the member - a site ban never blocks it (the ledger backstop lets a
 // system move through); the member's own debit is still refused
 test("a negative grant (clawback) still works on a site-banned account; the member's own spend is still refused", async () => {
   sync(0);

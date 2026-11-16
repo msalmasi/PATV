@@ -1280,7 +1280,7 @@ test("review: chat-only, banned and deleted accounts can't buy an invite (or be 
   await banSite(banned.userId);
   r = await shop.purchasePrize({ userId: banned.userId, username: banned.username, prizeId: INV.PRIZE_ID, source: "website" });
   assert.equal(r.success, false);
-  assert.match(r.message, /banned from the site/, "banfix: a site-banned buyer is refused before any item's own checks (siteban.js)");
+  assert.match(r.message, /banned from the site/, "1.99aoi: a site-banned buyer is refused before any item's own checks (siteban.js)");
   r = await shop.purchasePrize({ userId: payer.userId, username: payer.username, prizeId: INV.PRIZE_ID, source: "website", giftTo: "bannedbuyer" });
   assert.equal(r.success, false);
   await unban(banned.userId);

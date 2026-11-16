@@ -1,4 +1,4 @@
-// banfix review (siteban.js, ledger.js): the paths that act for an account WITHOUT a session refuse a site-banned one where it
+// 1.99aoi review (siteban.js, ledger.js): the paths that act for an account WITHOUT a session refuse a site-banned one where it
 // starts something - and the ledger backs every one of them up:
 //   * ledger.post: a debit the account has to cover itself (requireCover - a spend, a stake, a buy) is refused for a site-banned
 //     account (E_SITE_BANNED), whoever asks; opts.system (a repayment, a clawback, the deletion job's routing) and credits still go;
@@ -79,12 +79,12 @@ test("ledger.post: a site-banned account's own debit is refused (E_SITE_BANNED);
 
 test("Pepe's routed charge (patroutes.charge - /api/wager/charge with a route): a banned account isn't charged; a fine / clawback is", async () => {
   const b0 = await bal("u2");
-  const r = await PR.charge({ key: "cmd-banfix-000001", userId: "u2", username: "tee", amount: 1000, reason: "command-ask", route: { flow: "ask", room: null, payer: "tee_cf", item_sink: null } });
+  const r = await PR.charge({ key: "cmd-1.99aoi-000001", userId: "u2", username: "tee", amount: 1000, reason: "command-ask", route: { flow: "ask", room: null, payer: "tee_cf", item_sink: null } });
   assert.equal(r.ok, false);
   assert.equal(r.code, ledger.E_SITE_BANNED);
   assert.equal(await bal("u2"), b0);
-  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pat_route_intents WHERE key = 'cmd-banfix-000001'"))[0].n, 0, "no route intent");
-  const f = await PR.charge({ key: "cmd-banfix-000002", userId: "u2", username: "tee", amount: 200, reason: "market-resettle-clawback", route: { flow: "resettle", room: null, payer: null, item_sink: null } });
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pat_route_intents WHERE key = 'cmd-1.99aoi-000001'"))[0].n, 0, "no route intent");
+  const f = await PR.charge({ key: "cmd-1.99aoi-000002", userId: "u2", username: "tee", amount: 200, reason: "market-resettle-clawback", route: { flow: "resettle", room: null, payer: null, item_sink: null } });
   assert.equal(f.ok, true, "a clawback is not the account acting");
   assert.equal(await bal("u2"), b0 - 200);
   assert.equal(SB.systemCharge("modfine"), true);
@@ -108,15 +108,15 @@ test("index.js /api/wager/charge: a banned or staff-deleting account is refused 
 
 test("pools.charge (/api/pat/charge): a banned account - or one under a staff deletion - pays for nothing it starts; a fine passes the check", async () => {
   const legs = [["reserve", 1000]];
-  await assert.rejects(P.charge({ key: "cmd-banfix-000003", username: "tee", amount: 1000, reason: "command-imagine", route: { flow: "imagine" }, legs }),
+  await assert.rejects(P.charge({ key: "cmd-1.99aoi-000003", username: "tee", amount: 1000, reason: "command-imagine", route: { flow: "imagine" }, legs }),
                        (e) => e.code === "E_SITE_BANNED" && e.status === 403 && /banned/.test(e.message));
   await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by, reauth) VALUES ('u6', 'scheduled', ?, ?, 'admin:u3', 'admin')",
                  [Date.now(), Date.now() + 14 * DAY]);
   SB.forget("u6");
-  await assert.rejects(P.charge({ key: "cmd-banfix-000004", username: "del", amount: 1000, reason: "command-imagine", route: { flow: "imagine" }, legs }),
+  await assert.rejects(P.charge({ key: "cmd-1.99aoi-000004", username: "del", amount: 1000, reason: "command-imagine", route: { flow: "imagine" }, legs }),
                        (e) => e.code === "E_DELETION_PENDING" && /scheduled for deletion/.test(e.message));
   // a moderator's fine isn't the account acting: past the ban check (then this test database's pools aren't live)
-  await assert.rejects(P.charge({ key: "cmd-banfix-000005", username: "tee", amount: 1000, reason: "modfine", route: { flow: "modfine" }, legs }),
+  await assert.rejects(P.charge({ key: "cmd-1.99aoi-000005", username: "tee", amount: 1000, reason: "modfine", route: { flow: "modfine" }, legs }),
                        (e) => e.code !== "E_SITE_BANNED" && e.code !== "E_DELETION_PENDING");
   // a member's OWN pending request doesn't count, nor a cancelled staff one
   await runQuery("UPDATE account_deletions SET requested_by = 'self' WHERE user_id = 'u6'");
@@ -128,7 +128,7 @@ test("pools.charge (/api/pat/charge): a banned account - or one under a staff de
   assert.equal(await bal("u6"), 100000);
 });
 
-// banfix final verify: Pepe's penalties (a fine, an exploit clawback) are system debits - a site ban never blocks them; any
+// 1.99aoi final verify: Pepe's penalties (a fine, an exploit clawback) are system debits - a site ban never blocks them; any
 // other deduction (and every credit) is not flagged
 test("botcredits.systemDebit: only a NEGATIVE fine/modfine/automod-fine/exploit/clawback is a system debit", () => {
   const BC = require(path.join(repo, "botcredits"));

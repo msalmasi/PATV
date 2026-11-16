@@ -237,7 +237,7 @@ async function sendVerificationEmail(email, username, token) {
 
 // 1.99jr: the one way a sign-in finishes - password (loginUser) and Sign in with Plex (plexsso.js). Any sign-in gate
 // (a ban, 2FA) belongs HERE so every path gets it; today a sign-in brings an archived account back (1.99bm) and issues
-// the 90-day sliding login (middleware/loginCookie.js). banfix: a SITE ban (siteban.js: feed_bans with room_id '' - the
+// the 90-day sliding login (middleware/loginCookie.js). 1.99aoi: a SITE ban (siteban.js: feed_bans with room_id '' - the
 // staff "Site ban") IS a sign-in block - refused here before anything runs (an archived banned account isn't brought back)
 // and again in sessions.signIn; the caller shows the message (siteban.isRefusal). The other restrictions (casino ban, pad
 // and feed bans of one pad, red list) are not sign-in blocks - they're enforced where they apply.
@@ -249,7 +249,7 @@ function methodOf(via) {
   return "password";
 }
 async function finishLogin(req, res, user, via, opts = {}) {
-  await require("./siteban").assertSignIn(user, req);         // banfix: a site-banned account stops here (nothing touched)
+  await require("./siteban").assertSignIn(user, req);         // 1.99aoi: a site-banned account stops here (nothing touched)
   await require("./staleaccounts").touch(user.userId, via || "sign-in");
   await require("./sessions").signIn(req, res, user, opts.method || methodOf(via), { signup: /sign-up|signup/i.test(String(via || "")) || !!opts.signup });
   return user;
@@ -350,7 +350,7 @@ async function loginUser(req, res) {
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
     // 1.99ajn padppl (review fix): a network ban's refusal (sessions.signIn, netban.js) is shown as itself on the form - it never names an address
-    // banfix: a site ban's refusal (siteban.js) the same way - "This account is banned from PATV (until ...)"
+    // 1.99aoi: a site ban's refusal (siteban.js) the same way - "This account is banned from PATV (until ...)"
     if (require("./siteban").isRefusal(err)) return back(err.message);
     console.error("[auth] login error:", err && err.message);
     return back(req.t ? req.t('auth.err.login_failed') : "Something went wrong signing you in. Please try again.");
@@ -633,14 +633,14 @@ const _jsonOr = (s, d) => { try { const v = JSON.parse(s); return v == null ? d 
 const _linkJob = async (id) => (await getQuery('SELECT * FROM camfrog_link_jobs WHERE id = ?', [id]))[0] || null;
 const _jobAnswer = (job) => Object.assign(_jsonOr(job.result, {}), job.state === 'merge' ? { pending: true } : {});
 
-/** banfix review: the refusal of a link whose Camfrog name another account holds that is site-banned / being deleted by staff
+/** 1.99aoi review: the refusal of a link whose Camfrog name another account holds that is site-banned / being deleted by staff
  *  (English: Pepe says it in chat; the !signup claim page shows it). */
 function _linkRefusal(code) {
   const T = require('./i18n-core')(require('./locales/en.json'), null, 'en');
   return Object.assign(new Error(T(code === 'deleting' ? 'cflink.err.deleting' : 'cflink.err.banned')), { refuse: true, code, status: 403 });
 }
 /** Step 1 (one transaction). -> {jobId, result} | {spent: true} (a !verify of the same code was there first) |
- *  {refused: 'banned' | 'deleting'} (banfix review: another account has the name and is site-banned / being deleted by staff) */
+ *  {refused: 'banned' | 'deleting'} (1.99aoi review: another account has the name and is site-banned / being deleted by staff) */
 async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
   const cfLower = String(camfrogUsername).toLowerCase().trim();
   await _linkReady();
@@ -652,7 +652,7 @@ async function _linkNow(userId, camfrogUsername, { code = null } = {}) {
       const d = await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code]);
       if (!d || !d.changes) return { spent: true };
     }
-    // banfix review: a Camfrog name another account holds stays there while that account is site-banned (the !verify would take the
+    // 1.99aoi review: a Camfrog name another account holds stays there while that account is site-banned (the !verify would take the
     // chat identity - and its Camfrog badges - off the ban: Pepe resolves the name to the new account, and padbans.linked carries only
     // pad_login_bans) or PATV staff have its deletion scheduled (a merge of an auto account would escape it; providermerge refuses
     // both the same way). Nothing is touched - staff decide. (The code is spent: a new one after staff have looked.)
@@ -890,7 +890,7 @@ function startCamfrogLinkJobs({ everyMs = 60000 } = {}) {
  *  autoescrow.redeemClaim). Throws when the merge failed (the link stands; the job tick retries the merge). */
 async function completeCamfrogLink(userId, camfrogUsername) {
   const a = await _linkNow(userId, camfrogUsername);
-  if (a.refused) throw _linkRefusal(a.refused);           // banfix review: the name's account is banned / being deleted by staff
+  if (a.refused) throw _linkRefusal(a.refused);           // 1.99aoi review: the name's account is banned / being deleted by staff
   const r = (await runCamfrogLinkJob(a.jobId)) || a.result;
   return { merged: !!r.merged, addedBalance: r.addedBalance || 0, addedXp: r.addedXp || 0, unlinkedFrom: r.unlinkedFrom || null };
 }
@@ -1035,7 +1035,7 @@ async function verifyCamfrogLink(req, res) {
 
     // the link itself, committed (the code is spent in the same transaction)
     const a = await _linkNow(entry.userId, entry.camfrogUsername, { code: C });
-    if (a.refused) {                                 // banfix review: the name's account is site-banned / being deleted by staff
+    if (a.refused) {                                 // 1.99aoi review: the name's account is site-banned / being deleted by staff
       console.log(`[CF-VERIFY] ${who}: refused (${a.refused}) - the account that has the name stays as it is`);
       return res.status(403).json({ error: _linkRefusal(a.refused).message, code: a.refused });
     }

@@ -1206,9 +1206,9 @@ test("the last-method guard holds under concurrent unlinks: Apple + Google at on
   }
 });
 
-// banfix (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) can't sign
+// 1.99aoi (siteban.js): a SITE-banned account (feed_bans room_id '' - this harness's table has only user_id / room_id / until) can't sign
 // in with Apple: the hand-off is refused with the ban's own words (a network ban's too - it fell to "didn't work" before), nothing issued
-test("banfix: a site-banned account's Apple sign-in is refused at the hand-off - no login, the ban's own words; lifted, it works again", async () => {
+test("1.99aoi: a site-banned account's Apple sign-in is refused at the hand-off - no login, the ban's own words; lifted, it works again", async () => {
   const SB = require(path.join(repo, "siteban"));
   const b0 = browser("10.7.0.1");
   T += 1000;

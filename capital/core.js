@@ -225,7 +225,7 @@ async function poolBalance(k) {
   return P().balance(k);
 }
 /** A wallet move in the open transaction: debit with requireCover (-> Refuse E_INSUFFICIENT_PAT) or credit (follows a merge). */
-// banfix review: a debit of a site-banned account is refused (ledger.post's backstop: E_SITE_BANNED) unless `system` - a loan
+// 1.99aoi review: a debit of a site-banned account is refused (ledger.post's backstop: E_SITE_BANNED) unless `system` - a loan
 // repayment or the collection (reserve takePayment), a re-settle's clawback: what it owes, not something it starts.
 async function wallet(userId, amount, type, { counterparty = null, source = "capital", system = false } = {}) {
   const ledger = require("../ledger");

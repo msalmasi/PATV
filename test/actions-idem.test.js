@@ -120,9 +120,9 @@ test("the /act pages tag their forms with a key", () => {
   assert.match(p, /form\[action="\/act"\]/);
 });
 
-// banfix (siteban.js): a website action queued for Pepe by an account that is SITE-banned now is never handed out (failed, with the
+// 1.99aoi (siteban.js): a website action queued for Pepe by an account that is SITE-banned now is never handed out (failed, with the
 // reason), at claim time and at ban time (dropQueued); Pepe's privacy jobs for it (privacy.*) still are; other members' rows are untouched
-test("banfix: a site-banned account's queued web actions are failed, never claimed - its privacy jobs still are", async () => {
+test("1.99aoi: a site-banned account's queued web actions are failed, never claimed - its privacy jobs still are", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery("DELETE FROM pepe_actions");
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,

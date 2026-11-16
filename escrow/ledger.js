@@ -214,7 +214,7 @@ async function nextSiteId() {
 /**
  * In the open transaction: take `amount` from the account into a new hold. -> {ok, hid, txid} | throws Refuse
  * (E_INSUFFICIENT_PAT / E_TARGET_NOT_FOUND / E_CASINO_BANNED / E_SITE_BANNED / E_DUP_HOLD). `hid` null = the site's own id.
- * banfix: a site-banned account (siteban.js) puts up no new stake, whoever asks (the site's games, the casino, raffles, creators,
+ * 1.99aoi: a site-banned account (siteban.js) puts up no new stake, whoever asks (the site's games, the casino, raffles, creators,
  * gifts, Pepe's /hold) - E_SITE_BANNED; a hold that pays what it owes (siteban.HOLD_OK_REASONS: a loan repayment) still goes.
  */
 async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via = "site", casino = false }) {
@@ -223,7 +223,7 @@ async function holdInTx({ key, hid, account, login, amount, ref, reason, cp, via
   if (!REF_RE.test(String(ref || ""))) throw new Refuse(400, "Bad request (ref).", "E_BAD_REF");
   if (!account) throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");
   if (casino && account.casino_banned) throw new Refuse(403, "Banned from the casino.", "E_CASINO_BANNED");
-  // banfix review (finding 2): nor while PATV staff have its deletion scheduled (siteban.startLock) - a new hold would keep that
+  // 1.99aoi review (finding 2): nor while PATV staff have its deletion scheduled (siteban.startLock) - a new hold would keep that
   // deletion 'held' - E_DELETION_PENDING
   {
     const SB = require("../siteban");

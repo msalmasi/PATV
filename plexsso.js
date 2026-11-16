@@ -158,7 +158,7 @@ function register(app, { addUser, authView } = {}) {
       req.session.plexPending = { ...who, at: clock(), next: st.next || "" };
       return res.redirect("/auth/plex/new");
     } catch (e) {
-      // 1.99ajn padppl: a network ban's own words; banfix: a site ban's (siteban.js)
+      // 1.99ajn padppl: a network ban's own words; 1.99aoi: a site ban's (siteban.js)
       if (require("./siteban").isRefusal(e)) { req.flash("error", e.message); return res.redirect("/login"); }
       console.error("[plexsso] callback:", e && e.message);
       return fail(req, res, "auth.plex.failed", "Plex sign-in didn't work. Please try again.");
@@ -202,7 +202,7 @@ function register(app, { addUser, authView } = {}) {
       if (r.hint) req.flash("success", r.hint);          // 1.99ajw padppl rework: "Is <name> your Camfrog name? Link it in Settings…" (cfnames.nameHint)
       return res.redirect(home(r.user, p.next));
     } catch (e) {
-      // banfix: the Plex account was linked meanwhile to a site-banned account (siteban.js) - or a network ban: their own words
+      // 1.99aoi: the Plex account was linked meanwhile to a site-banned account (siteban.js) - or a network ban: their own words
       if (require("./siteban").isRefusal(e)) { delete req.session.plexPending; req.flash("error", e.message); return res.redirect("/login"); }
       console.error("[plexsso] create:", e && e.message);
       return back(tr(req, "auth.err.register_failed", "Something went wrong creating your account. Please try again."));

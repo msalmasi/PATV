@@ -173,7 +173,7 @@ function register(app, { isBotToken, addUser, updateLevel }) {
     if (!u) return { ok: false, code: "no_account" };
     if (verb === "tickets") return Object.assign({ ok: true }, await svc.myTickets(u.userId));
     if (verb === "buy" || verb === "quick") {
-      const lock = await require("../siteban").lockOf(u.userId);          // banfix: a site-banned account buys nothing (siteban.js)
+      const lock = await require("../siteban").lockOf(u.userId);          // 1.99aoi: a site-banned account buys nothing (siteban.js)
       if (lock) return require("../siteban").botRefusal(lock);
       const idem = String(b.idem || "");
       if (!IDEM.test(idem)) return { ok: false, code: "bad_request" };

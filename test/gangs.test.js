@@ -246,10 +246,10 @@ test("ranks, invites, kicks, tags, limits - Pepe's rules", async () => {
   assert.equal(b.body.gang.officers.includes("foamy"), true);
 });
 
-// banfix review (siteban.js): Pepe's !gang ops act for a linked account without a session - a site-banned account founds, joins and
+// 1.99aoi review (siteban.js): Pepe's !gang ops act for a linked account without a session - a site-banned account founds, joins and
 // banks into no gang (by its userId, or only its member key: a Camfrog login / a member row); it can still get out (decline, leave,
 // defect, withdraw, hand over, disband). Pepe's own ops never ask.
-test("banfix review: a site-banned account can't found, join or deposit into a gang through Pepe; it can still decline / leave", async () => {
+test("1.99aoi review: a site-banned account can't found, join or deposit into a gang through Pepe; it can still decline / leave", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

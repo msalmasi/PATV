@@ -397,10 +397,10 @@ test("1.99th: Pepe's auto pools carry `auto` (display table too) and skip the pe
   assert.equal(r.body.pool.auto, undefined);
 });
 
-// banfix review (siteban.js): nobody names a site-banned account (or one PATV staff scheduled for deletion) as a pool's judge - an open
+// 1.99aoi review (siteban.js): nobody names a site-banned account (or one PATV staff scheduled for deletion) as a pool's judge - an open
 // pool it judges holds that deletion off (staleaccounts "market creator/judge") - and a banned judge's call still pays the winners
 // (siteban.WIND_DOWN pools: settle - a judge never bets), so they aren't refunded after the grace instead
-test("banfix review: no banned judge for a new pool; a banned judge still settles the pool it judges", async () => {
+test("1.99aoi review: no banned judge for a new pool; a banned judge still settles the pool it judges", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

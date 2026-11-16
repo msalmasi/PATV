@@ -615,7 +615,7 @@ test("the sheets: in-page PATVSheet confirms with reasons, never confirm(), text
   const bs = SRC("public/js/pad-ban-sheet.js");
   assert.match(bs, /var scopes = Array\.isArray\(o\.only\) \? pv\.scopes\.filter\(function \(sc\) \{ return o\.only\.indexOf\(sc\) >= 0; \}\) : pv\.scopes;/);
   assert.match(bs, /if \(only && want\('site'\) && cur\.site\) opts\.push\(\['site', cur\.site\]\);/);
-  // banfix: a site ban also keeps them from signing in until it ends (siteban.js) - the sheet says so (a new key: every language re-translates)
+  // 1.99aoi: a site ban also keeps them from signing in until it ends (siteban.js) - the sheet says so (a new key: every language re-translates)
   assert.match(bs, /scope === 'site' && !pv\.veil \? _t\('js\.ban\.done_site2', 'Done - they\\'re banned site-wide, signed out, and can\\'t sign in until it ends\.'\)/);
   assert.equal((bs.match(/\bdone\(o, a\);/g) || []).length, 2, "after a ban and after a lift");
   assert.match(bs, /function done\(o, a\) \{ if \(typeof o\.onDone === 'function'\)/);

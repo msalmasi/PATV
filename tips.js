@@ -62,7 +62,7 @@ async function transferPat(senderUsername, recipientUsername, rawAmount, note = 
   if (await require("./blocks").towards(sender.userId, recipient.userId).catch(() => false)) {
     return { ok: false, status: 403, msg: "That tip didn't go through.", code: "blocked" };
   }
-  // banfix: a site-banned sender (siteban.js) tips nobody - Pepe's !tip, the Discord bot's (chattip); the website's tip forms never
+  // 1.99aoi: a site-banned sender (siteban.js) tips nobody - Pepe's !tip, the Discord bot's (chattip); the website's tip forms never
   // get here for one (the session gate signs it out)
   if (await require("./siteban").lockOf(sender.userId)) return { ok: false, status: 403, msg: require("./siteban").botText(), code: "banned" };
 

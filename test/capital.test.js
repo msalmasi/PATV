@@ -700,10 +700,10 @@ test("1.99ajw quick1: a stake into a vault at its staker limit is refused BEFORE
   }
 });
 
-// banfix review (siteban.js; the reviewer's probe): Pepe's capital ops act for a linked account without a session - a site-banned
+// 1.99aoi review (siteban.js; the reviewer's probe): Pepe's capital ops act for a linked account without a session - a site-banned
 // account (or one PATV staff scheduled for deletion) starts nothing there: no buy, no market Pepe opens FOR it, no loan, no stake,
 // never named as a market's judge; it can still get out (sell, repay, unstake). The wallet debit itself refuses it too (ledger.post).
-test("banfix review: a site-banned account buys, borrows, stakes and opens nothing through Pepe; it can still sell; never a judge", async () => {
+test("1.99aoi review: a site-banned account buys, borrows, stakes and opens nothing through Pepe; it can still sell; never a judge", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

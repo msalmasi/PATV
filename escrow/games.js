@@ -137,10 +137,10 @@ async function act(game, body) {
   const idem = body.idem ? String(body.idem) : null;
   if (e.READS && e.READS.includes(verb)) return Object.assign({ ok: true }, await e.read(verb, actor, body.args || {}));
   if (idem && !IDEM_RE.test(idem)) return { ok: false, code: "bad_request", error: "bad idem" };
-  // banfix: a site-banned account (siteban.js) starts or adds to nothing - from Pepe's chat (!bounty / !wager / !pool / !loan) or a
+  // 1.99aoi: a site-banned account (siteban.js) starts or adds to nothing - from Pepe's chat (!bounty / !wager / !pool / !loan) or a
   // website form; it may still wind down what it has open (siteban.WIND_DOWN: cancel, decline, repay, forgive). Pepe's own verbs
   // (actor.pepe: an evidence check, an auto-resolve, a spec) never ask. Every stake is refused once more in holdInTx.
-  // banfix review: startLock - a pending deletion PATV staff scheduled starts nothing new either (a claim, an accept, a bet would
+  // 1.99aoi review: startLock - a pending deletion PATV staff scheduled starts nothing new either (a claim, an accept, a bet would
   // hold that deletion off); the same wind-down verbs stay allowed.
   if (!actor.pepe && !require("../siteban").windDownOk(game, verb)) {
     const acct = await actorAccount(actor);

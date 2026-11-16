@@ -160,7 +160,7 @@ async function create(actor, a, t) {
   const judge = aiJudge ? String(a.pepe || await pepeLogin()) : (a.judge && a.judge.login ? String(a.judge.login).replace(/^@+/, "") : null);
   if (!judge) return fail("no_judge", "Every pool needs a judge — add 'judge @someone' (they can't bet on it), or 'judge @pepe' to let Pepe decide it (experimental).");
   if (!aiJudge && G().same(judge, await pepeLogin())) return fail("bad_judge", `I don't know who the judge '${judge}' is.`);
-  // banfix review (finding 2): never a judge who is site-banned or whose deletion PATV staff scheduled - an open pool it judges
+  // 1.99aoi review (finding 2): never a judge who is site-banned or whose deletion PATV staff scheduled - an open pool it judges
   // would hold that deletion off (staleaccounts "market creator/judge"); the words never say why
   if (!aiJudge) {
     const ja = await G().actorAccount({ login: judge });

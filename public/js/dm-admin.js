@@ -83,7 +83,7 @@
     var tell = row.querySelector('input[name=tell]');
     var body = { message: id, action: act, notify: !tell || tell.checked };
     if (act === 'ban') {
-      // banfix review: this ban is a SITE ban (siteban.js) - said so; a mistyped number of days is asked again, never "for good"
+      // 1.99aoi review: this ban is a SITE ban (siteban.js) - said so; a mistyped number of days is asked again, never "for good"
       var r = window.prompt(_t('js.dmadm.remove_ban_line', 'Remove the message and site-ban @{name} - they are signed out everywhere and can\'t sign in until it ends.', { name: row.getAttribute('data-user') }) + '\nReason:', 'reported direct message');
       if (r === null) return;
       var d;

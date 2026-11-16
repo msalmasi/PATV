@@ -218,7 +218,7 @@ function register(app, { addUser }) {
       if (req.user && req.user.username) return res.redirect(editPage(req.user));
       return res.redirect(await sso.signInOrPark(req, res, w, st.next));
     } catch (e) {
-      // 1.99ajn padppl: a network ban's own words; banfix: a site ban's (siteban.js)
+      // 1.99ajn padppl: a network ban's own words; 1.99aoi: a site ban's (siteban.js)
       if (require("./siteban").isRefusal(e)) { req.flash("error", e.message); return res.redirect(back || "/login"); }
       console.error("[googlesso] callback:", e && e.message);
       return fail(req, res, "auth.google.failed", "Google sign-in didn't work. Please try again.", back);

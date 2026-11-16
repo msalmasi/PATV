@@ -39,7 +39,7 @@
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 const ledger = require("./ledger");
-// banfix final verify: a deduction Pepe makes AS a penalty (a fine, an exploit clawback) is not the account acting, so a site
+// 1.99aoi final verify: a deduction Pepe makes AS a penalty (a fine, an exploit clawback) is not the account acting, so a site
 // ban never blocks it (ledger opts.system); any other deduction stays the account's own and is refused for a banned account
 const SYSTEM_DEBIT_TYPES = /^(fine|modfine|automod-fine|exploit|clawback)$/i;
 const systemDebit = (type, amount) => Number(amount) < 0 && SYSTEM_DEBIT_TYPES.test(String(type || ""));

@@ -584,10 +584,10 @@ test("S1 F13: POST /api/account/delete signs this browser out with the chat swee
   }
 });
 
-// banfix (owner 2026-11-16: "if I schedule a banned account for deletion, they can keep signing back in to prevent deletion"): a deletion
+// 1.99aoi (owner 2026-11-16: "if I schedule a banned account for deletion, they can keep signing back in to prevent deletion"): a deletion
 // PATV staff scheduled is never cancelled by a sign-in (a site-banned account can't sign in at all - siteban.js), its notices never say
 // "sign in to cancel", it runs at its time, and a hold tells the admin who scheduled it; the member's OWN request keeps its grace.
-test("banfix: an admin-scheduled deletion survives sign-in (a banned account can't sign in at all) and runs at its time; a member's own still cancels", async () => {
+test("1.99aoi: an admin-scheduled deletion survives sign-in (a banned account can't sign in at all) and runs at its time; a member's own still cancels", async () => {
   await setup();
   const SB = require(path.join(repo, "siteban"));
   await user("bf_adm", { username: "bfadmin", class: "Admin" });
@@ -632,7 +632,7 @@ test("banfix: an admin-scheduled deletion survives sign-in (a banned account can
   assert.equal(await bal("bf_ban"), 0, "the balance was routed");
 });
 
-test("banfix: a staff deletion on hold says nothing about signing in, and the admin who scheduled it is told (once)", async () => {
+test("1.99aoi: a staff deletion on hold says nothing about signing in, and the admin who scheduled it is told (once)", async () => {
   await setup();
   await user("bh_adm", { username: "bhadmin", class: "Admin" });
   await user("bh_mem", { username: "bhmember", bal: 5 });
@@ -656,9 +656,9 @@ test("banfix: a staff deletion on hold says nothing about signing in, and the ad
   assert.equal((await getQuery("SELECT state FROM account_deletions WHERE user_id = 'bh_mem' ORDER BY id DESC"))[0].state, "done", "runs once it's clear");
 });
 
-// banfix review (finding 7): the hold notices are plain text (the inbox shows them as text, Telegram too) - a blocker label with an
+// 1.99aoi review (finding 7): the hold notices are plain text (the inbox shows them as text, Telegram too) - a blocker label with an
 // apostrophe or an ampersand, and a username with one, come out as typed, never as HTML entities
-test("banfix review: the staff-deletion hold notices show apostrophes and ampersands as typed (no &#39; / &amp;)", async () => {
+test("1.99aoi review: the staff-deletion hold notices show apostrophes and ampersands as typed (no &#39; / &amp;)", async () => {
   await setup();
   await user("ht_adm", { username: "htadmin", class: "Admin" });
   await user("ht_mem", { username: "o'neil", bal: 5 });
@@ -681,9 +681,9 @@ test("banfix review: the staff-deletion hold notices show apostrophes and ampers
   await D.tick();
 });
 
-// banfix review (finding 10): a site-banned member's OWN deletion on hold - they can't sign in (siteban.js), so the notice doesn't tell
+// 1.99aoi review (finding 10): a site-banned member's OWN deletion on hold - they can't sign in (siteban.js), so the notice doesn't tell
 // them to; a member who isn't banned still gets the "sign in to close these" advice
-test("banfix review: a banned member's own held deletion never says to sign in; an unbanned member's still does", async () => {
+test("1.99aoi review: a banned member's own held deletion never says to sign in; an unbanned member's still does", async () => {
   await setup();
   const SB = require(path.join(repo, "siteban"));
   await user("hl_ban", { username: "hlbanned", bal: 5 });
@@ -706,9 +706,9 @@ test("banfix review: a banned member's own held deletion never says to sign in; 
   await D.tick();
 });
 
-// banfix review (finding 6): deletions held for good (a banned member can't close what's in the way) never starve the job - a due
+// 1.99aoi review (finding 6): deletions held for good (a banned member can't close what's in the way) never starve the job - a due
 // 'scheduled' deletion runs on the next tick however many held ones are older; the held ones all still get their turn
-test("banfix review: 20+ held deletions don't keep a newer due one from running", async () => {
+test("1.99aoi review: 20+ held deletions don't keep a newer due one from running", async () => {
   await setup();
   await user("st_adm", { username: "stadmin", class: "Admin" });
   const t0 = clockAt;
@@ -732,9 +732,9 @@ test("banfix review: 20+ held deletions don't keep a newer due one from running"
   await D.tick(); await D.tick();
 });
 
-// banfix review (finding 9): an admin schedules the deletion of a member who already asked for it themselves - the member's pending
+// 1.99aoi review (finding 9): an admin schedules the deletion of a member who already asked for it themselves - the member's pending
 // request becomes staff's (not "Already scheduled"), so signing in no longer cancels it; its date stays; a second admin request is refused
-test("banfix review: staff take over a member's own pending request - a sign-in can't cancel it after that", async () => {
+test("1.99aoi review: staff take over a member's own pending request - a sign-in can't cancel it after that", async () => {
   await setup();
   const express = require("express");
   const app = express();

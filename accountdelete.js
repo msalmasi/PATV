@@ -8,7 +8,7 @@
 //                                         and while anything blocks. Schedules the deletion GRACE_MS (14 days) ahead, signs every
 //                                         device out (sessions.revokeAll) and files a notice.
 //   3. the grace: signing in again - any method - cancels the member's OWN request (sessions.signIn -> cancelOnSignIn) with a
-//                                         notice. banfix: a deletion PATV staff scheduled (requested_by 'admin:<id>') is never
+//                                         notice. 1.99aoi: a deletion PATV staff scheduled (requested_by 'admin:<id>') is never
 //                                         cancelled by a sign-in (or anything the member does) - only an admin cancels it (POST
 //                                         /api/admin/account-deletions/:id/cancel); a site-banned account can't sign in at all
 //                                         (siteban.js), and the job below runs at its time whether or not anyone signs in
@@ -150,7 +150,7 @@ async function pendingOf(userId) {
   await init();
   return (await getQuery("SELECT * FROM account_deletions WHERE user_id = ? AND state IN ('scheduled','held') ORDER BY id DESC LIMIT 1", [String(userId)]))[0] || null;
 }
-/** banfix: a request PATV staff made (POST /api/admin/users/:id/delete: requested_by 'admin:<id>') - never cancelled by a sign-in. */
+/** 1.99aoi: a request PATV staff made (POST /api/admin/users/:id/delete: requested_by 'admin:<id>') - never cancelled by a sign-in. */
 const byAdmin = (row) => !!row && /^admin:/.test(String(row.requested_by || ""));
 const adminIdOf = (row) => (byAdmin(row) ? String(row.requested_by).slice("admin:".length) : null);
 /** The member's language for a notice (i18n.js saved preference, else English). */
@@ -394,9 +394,9 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
       recordings = { logins: w.length, by_hand: w.length - MR.askable(w).length };
     } catch (e) { /* the counts are a courtesy */ }
   }
-  try { require("./siteban").forget(u.userId); } catch (e) { /* the 5 s cache lands it anyway */ }   // banfix review: startLock sees it now
+  try { require("./siteban").forget(u.userId); } catch (e) { /* the 5 s cache lands it anyway */ }   // 1.99aoi review: startLock sees it now
   await require("./sessions").revokeAll(u.userId, { why: "account deletion requested" });
-  // banfix: staff's request says so - signing in doesn't cancel it (cancelOnSignIn leaves it alone)
+  // 1.99aoi: staff's request says so - signing in doesn't cancel it (cancelOnSignIn leaves it alone)
   const viaAdmin = /^admin:/.test(String(by));
   if (viaAdmin) {
     const tr = tOf(u.userId);
@@ -414,7 +414,7 @@ async function schedule(u, { by = "self", reauth = null, reason = null, hideLine
 }
 
 /**
- * banfix review (finding 9): an admin schedules the deletion of an account whose member already asked for it themselves - the
+ * 1.99aoi review (finding 9): an admin schedules the deletion of an account whose member already asked for it themselves - the
  * member's pending request becomes staff's (requested_by 'admin:<id>', reauth 'admin', staff's reason), so a sign-in no longer
  * cancels it (cancelOnSignIn). Its date and its choices (hide lines, remove public messages, recordings) stay as the member set
  * them; held or scheduled, the job carries on. One conditional UPDATE in a transaction (a sign-in that cancelled it first wins:
@@ -438,7 +438,7 @@ async function adoptOwn(u, { by, reason = null } = {}) {
   return { ok: true, execute_at: Number(p.execute_at), adopted: p.id };
 }
 
-/** A sign-in during the grace period cancels the member's OWN deletion request (sessions.signIn). banfix: never one PATV staff
+/** A sign-in during the grace period cancels the member's OWN deletion request (sessions.signIn). 1.99aoi: never one PATV staff
  *  scheduled (requested_by 'admin:<id>') - it stays, and runs at its time. -> cancelled? */
 async function cancelOnSignIn(userId, method) {
   await init();
@@ -717,7 +717,7 @@ async function execute(userId, { force = false } = {}) {
     const first = reqRow.state !== "held";
     await runQuery("UPDATE account_deletions SET state = 'held', held_reason = ?, held_at = ? WHERE id = ?", [why, now(), reqRow.id]);
     if (first && byAdmin(reqRow)) {
-      // banfix: staff's request - no "sign in" advice (a sign-in doesn't cancel it; a banned account can't sign in), and the admin
+      // 1.99aoi: staff's request - no "sign in" advice (a sign-in doesn't cancel it; a banned account can't sign in), and the admin
       // who scheduled it is told, once per hold, what is in the way
       const tr = tOf(uid);
       await require("./inbox").addSafe(uid, { kind: "system", title: tr("acctdel.notice.held_title"), body: tr("acctdel.notice.held_admin_body", { why }),
@@ -729,7 +729,7 @@ async function execute(userId, { force = false } = {}) {
           body: ta("acctdel.alert.held_body", { name: u0.username, why }), link: "/admin/accounts", ref: `acctdel:held-admin:${reqRow.id}` });
       }
     } else if (first) {
-      // banfix review (finding 10): a site-banned member can't sign in (siteban.js), so the "sign in to close these" advice is left out
+      // 1.99aoi review (finding 10): a site-banned member can't sign in (siteban.js), so the "sign in to close these" advice is left out
       let locked = null;
       try { locked = await require("./siteban").lockOf(uid); } catch (e) { locked = null; }
       if (locked) {
@@ -1155,7 +1155,7 @@ async function tick() {
   if (ticking) return ticking;
   ticking = (async () => {
     await init();
-    // banfix review (finding 6): due 'scheduled' rows first, then the held ones least recently tried first (execute() stamps held_at
+    // 1.99aoi review (finding 6): due 'scheduled' rows first, then the held ones least recently tried first (execute() stamps held_at
     // on every try) - a pile of deletions held for good (a banned member can't close what's in the way) never starves a newer one
     const due = await getQuery(`SELECT user_id FROM account_deletions WHERE state IN ('scheduled','held') AND execute_at <= ?
                                 ORDER BY CASE state WHEN 'scheduled' THEN 0 ELSE 1 END, COALESCE(held_at, 0), execute_at, id LIMIT 20`, [now()]);
@@ -1249,7 +1249,7 @@ function register(app, { addUser }) {
       await require("./staffrank").assert(me, target.userId);
       if (String((req.body || {}).confirm || "").trim() !== target.username) throw new Refuse(400, "Type the member's username exactly to confirm.", "E_CONFIRM");
       if (String((req.body || {}).reason || "").trim().length < 3) throw new Refuse(400, "Give a reason.", "E_REASON");   // 1.99wl
-      // banfix review (finding 9): the member's OWN pending request becomes staff's (a sign-in can't cancel it any more); one staff
+      // 1.99aoi review (finding 9): the member's OWN pending request becomes staff's (a sign-in can't cancel it any more); one staff
       // already scheduled is "Already scheduled"
       const own = await pendingOf(target.userId);
       if (own && !byAdmin(own)) {
@@ -1282,7 +1282,7 @@ function register(app, { addUser }) {
       const r = await runQuery("UPDATE account_deletions SET state = 'cancelled', cancelled_at = ?, cancel_via = ? WHERE id = ? AND state IN ('scheduled','held')",
                                [now(), "admin:" + me.userId, d.id]);
       if (r && r.changes) await require("./adminaudit").record(me, "account.delete_cancel", { userId: d.user_id, username: d.username }, { id: d.id }, String(b.reason).slice(0, 200));
-      if (r && r.changes) { try { require("./siteban").forget(d.user_id); } catch (e) { /* the 5 s cache lands it anyway */ } }   // banfix review
+      if (r && r.changes) { try { require("./siteban").forget(d.user_id); } catch (e) { /* the 5 s cache lands it anyway */ } }   // 1.99aoi review
       res.json({ ok: !!(r && r.changes) });
     } catch (e) { fail(res, e); }
   });

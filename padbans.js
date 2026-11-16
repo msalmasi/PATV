@@ -476,7 +476,7 @@ async function linked(userId, login) {
     // audiogate2 (listenban.js): the bans it brought (feed_bans written above without feedstore.ban) stop the room audio now too
     const padsOf = new Set(rows.map((r) => String(r.room_id || "")));
     for (const id of padsOf.has("") ? [null] : padsOf) { try { require("./listenban").changed(id); } catch (e) { /* no listening re-check */ } }
-    // banfix: a SITE ban it brought locks the account out like feedstore.ban's (siteban.js): forgotten from the lock cache, every
+    // 1.99aoi: a SITE ban it brought locks the account out like feedstore.ban's (siteban.js): forgotten from the lock cache, every
     // session ended, its queued web actions failed - it can't sign in again until the ban ends
     if (rows.some((r) => r.scope === "site" && !String(r.room_id || ""))) {
       const SB = require("./siteban");

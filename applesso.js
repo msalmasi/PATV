@@ -770,7 +770,7 @@ function register(app, { addUser, noTimers = false }) {
       }
       return res.redirect(await sso.signInOrPark(req, res, w, h.next));
     } catch (e) {
-      // banfix: a site ban's refusal (siteban.js) - and a network ban's (netban.js; it fell to "failed" before) - in their own words
+      // 1.99aoi: a site ban's refusal (siteban.js) - and a network ban's (netban.js; it fell to "failed" before) - in their own words
       if (require("./siteban").isRefusal(e)) { req.flash("error", e.message); return res.redirect("/login"); }
       console.error("[applesso] continue:", e && e.message);
       return fail(req, res, "failed", signedIn ? ACCOUNT_PAGE : "/login");

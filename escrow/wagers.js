@@ -85,7 +85,7 @@ async function create(actor, a, t) {
   const account = await G().actorAccount(actor);
   if (!account) return fail("no_account", "Couldn't find a PAT account.");
   if (account.casino_banned) return fail("banned", "You're banned from the casino, so no wagers.");
-  // banfix review (finding 2): never an opponent or judge who is site-banned or whose deletion PATV staff scheduled - an open wager
+  // 1.99aoi review (finding 2): never an opponent or judge who is site-banned or whose deletion PATV staff scheduled - an open wager
   // naming them would hold that deletion off (staleaccounts "wager"); the words never say why
   for (const p of aiJudge ? [opp] : [opp, judge]) {
     const pa = await G().actorAccount({ login: p.login, username: p.user || undefined });

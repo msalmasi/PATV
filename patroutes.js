@@ -61,7 +61,7 @@ async function charge({ key, userId, username, amount, reason, counterparty, rou
   await init();
   const ledger = require("./ledger");
   return require("./mainstage")._tx(async () => {
-    // banfix review: a fine / clawback is not the account acting (siteban.systemCharge) - ledger.post's site-ban backstop skips it
+    // 1.99aoi review: a fine / clawback is not the account acting (siteban.systemCharge) - ledger.post's site-ban backstop skips it
     const d = await ledger.post(userId, -Math.floor(Number(amount)), reason, { requireCover: true, system: require("./siteban").systemCharge(reason), counterparty, source: "wager/charge" });
     if (d.ok) await recordInTx(key, { userId, username, amount, reason, txid: d.transactionId }, route);
     return d;

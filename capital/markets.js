@@ -94,7 +94,7 @@ async function create(actor, a, t) {
   const aiJudge = !!a.ai_judge;
   const judge = aiJudge ? String(a.pepe || actor.login || "") : String((a.judge && a.judge.login) || "").slice(0, 60);
   if (!judge) return fail("bad_judge", "every market needs a judge");
-  // banfix review (finding 2): never a judge who is site-banned or whose deletion PATV staff scheduled - an open market it judges
+  // 1.99aoi review (finding 2): never a judge who is site-banned or whose deletion PATV staff scheduled - an open market it judges
   // would hold that deletion off (staleaccounts "market creator/judge"); the words never say why
   if (!aiJudge) {
     const ja = await C.account({ login: judge });
@@ -364,7 +364,7 @@ async function resettle(actor, a, t, { dry }) {
   if (dry || blocked) return { ok: true, dry: true, blocked, plan };
   if (String(a.code || "") !== plan.code) return fail("changed", "something changed since the dry run - run it again.", { plan });
   // one transaction: every clawback (a payee short -> nothing at all), the funder's first leftover back, the pot restored, resolved again
-  for (const d of plan.debits) await C.wallet(d.userId, -d.amount, "market-resettle-clawback", { source: `capital:${ref(m)}`, system: true });   // banfix review: an admin's re-settle
+  for (const d of plan.debits) await C.wallet(d.userId, -d.amount, "market-resettle-clawback", { source: `capital:${ref(m)}`, system: true });   // 1.99aoi review: an admin's re-settle
   const n = Math.trunc(Number(m.resettle_n) || 0) + 1;
   await C.legs(`cap:resettle:${m.id}:${n}`, [{ pool: plan.funder, amount: -plan.funder_back }, { pool: potKey(m.id), amount: plan.pool }],
                { kind: "capital", flow: "market_resettle", why: `market re-settle (${ref(m)}): first leftover back` });

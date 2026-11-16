@@ -28,7 +28,7 @@ your own account; audit-logged as `account.delete`), with the same grace, blocke
 requests: `GET /api/admin/account-deletions`, `POST /api/admin/account-deletions/:id/cancel`.
 
 **A deletion PATV staff scheduled** (`requested_by` `admin:<id>`) is never cancelled by the member signing in, or by
-anything else they do (banfix, owner report 2026-11-16: a banned account signed back in twice and cancelled both). Only an
+anything else they do (1.99aoi, owner report 2026-11-16: a banned account signed back in twice and cancelled both). Only an
 admin cancels it. Its notice says "Signing in doesn't cancel it - only PATV staff can"; a hold's notice gives no sign-in
 advice, and the admin who scheduled it gets an inbox notice once per hold ("A deletion you scheduled is on hold", with
 what is in the way). It runs at its time whether or not anyone signs in - also for a **site-banned** account, which can't
@@ -37,7 +37,7 @@ scheduled for deletion (a merge would escape it). A non-banned account under a s
 the 14 days (`siteban.ADMIN_DELETION_LOCKS` off); it can't cancel it, and anything it opens in between holds the job (the
 admin is told).
 
-banfix review - nothing new holds a staff deletion off, and nothing escapes it:
+1.99aoi review - nothing new holds a staff deletion off, and nothing escapes it:
 - **No new games around it.** While a staff deletion is pending the account puts up no new escrow stake
   (`E_DELETION_PENDING`) and Pepe's bot paths start nothing for it (`siteban.startLock`: games, markets, loans, gangs,
   paid charges); nobody can name it - or a site-banned account - as a new wager's opponent or judge, a pool's judge or a

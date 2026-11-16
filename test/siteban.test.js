@@ -1,4 +1,4 @@
-// banfix (siteban.js): a SITE ban - feed_bans with room_id '' whose until is NULL or in the future - locks the account out of
+// 1.99aoi (siteban.js): a SITE ban - feed_bans with room_id '' whose until is NULL or in the future - locks the account out of
 // PATV. The rule (a pad's ban doesn't count; a temporary ban ends on time, cached locks too; the Admin class and the owner are
 // exempt), the sign-in refusal (sessions.signIn: code 'banned' with the end, no session row, no cookie, no deletion cancel - every
 // method, the password form included), the session gate (a live cookie of an account banned since is a signed-out request on its

@@ -355,9 +355,9 @@ test("the start route links back where it started (profile vs subscriptions)", a
   assert.match(decodeURIComponent(s.url), /forwardUrl=.*\/subscriptions\?plex=\d+/);
 });
 
-// banfix (siteban.js): a SITE-banned account (feed_bans room_id '') can't sign in with Plex - neither a linked Plex sign-in nor the
+// 1.99aoi (siteban.js): a SITE-banned account (feed_bans room_id '') can't sign in with Plex - neither a linked Plex sign-in nor the
 // "create" page's linked-meanwhile path; nothing is issued and the ban's words are shown. (A casino ban, above, still signs in.)
-test("banfix: a site-banned account is refused by Plex sign-in (callback and the create page) - no login, the ban's own words", async () => {
+test("1.99aoi: a site-banned account is refused by Plex sign-in (callback and the create page) - no login, the ban's own words", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

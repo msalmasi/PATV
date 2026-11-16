@@ -319,7 +319,7 @@ async function charge({ key, username, amount, reason, counterparty, route, legs
   if (split.reduce((t, [, a]) => t + a, 0) !== amt) throw new Refuse(400, "The legs don't add up to the amount.", "E_BAD_LEGS");
   const u = await userByName(username);
   if (!u) throw new Refuse(404, "Couldn't find a PAT account.", "E_TARGET_NOT_FOUND");
-  // banfix review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - pays for nothing it starts
+  // 1.99aoi review (siteban.js): a site-banned account - or one whose deletion PATV staff scheduled - pays for nothing it starts
   // (a paid command, heist gear, a gang founding); a fine or a clawback (siteban.systemCharge) still goes through
   const SB = require("./siteban");
   const sys = SB.systemCharge(reason);

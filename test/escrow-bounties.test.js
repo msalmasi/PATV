@@ -305,11 +305,11 @@ test("the website: the bounty page's forms run on the engine (no queued action),
   assert.equal((await getQuery("SELECT status FROM bounty_actions ORDER BY id DESC LIMIT 1"))[0].status, "failed");
 });
 
-// banfix (siteban.js; owner 2026-11-16: a site-banned account kept posting bounties): a SITE-banned account starts or adds to nothing -
+// 1.99aoi (siteban.js; owner 2026-11-16: a site-banned account kept posting bounties): a SITE-banned account starts or adds to nothing -
 // not from Pepe's chat (!bounty), not from a website form (the session gate signs it out first; the engine refuses too), and no stake is
 // ever held for it (escrow/ledger.holdInTx E_SITE_BANNED - Pepe's own /hold too); it can still cancel its own (refunded), the deadline
 // still refunds it, Pepe's own verbs still run; an Admin with a stray ban, everyone else and the account once the ban is lifted are unaffected
-test("banfix: a site-banned account can't post, chip in or claim a bounty (chat, website, Pepe's /hold); cancel + expiry refunds still work", async () => {
+test("1.99aoi: a site-banned account can't post, chip in or claim a bounty (chat, website, Pepe's /hold); cancel + expiry refunds still work", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

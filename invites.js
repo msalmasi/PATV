@@ -353,7 +353,7 @@ async function inviterBlock(userId, { at = now() } = {}) {
   if (!u || u.archived_at) return "gone";
   try { if ((await getQuery("SELECT 1 FROM account_deletions WHERE user_id = ? AND state = 'done' LIMIT 1", [id])).length) return "gone"; }
   catch (e) { /* no deletions table yet */ }
-  try { if (await require("./siteban").activeBan(id, at)) return "banned"; }      // banfix: the one site-ban rule (siteban.js)
+  try { if (await require("./siteban").activeBan(id, at)) return "banned"; }      // 1.99aoi: the one site-ban rule (siteban.js)
   catch (e) { /* a read that fails: as before (no feed_bans table yet) */ }
   return null;
 }

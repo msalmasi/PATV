@@ -2190,7 +2190,7 @@ async function ban(user, target, { room = "", reason = "", days = 0, untilMs = u
       { room: roomId || "*", scope: roomId ? "pad" : "site", until, via }, cleanLine(reason, 200) || null);
   } catch (e) { console.error("[feed] ban audit:", e.message); }
   // 1.99wj: a site-wide ban by staff also signs the account out everywhere (sessions.js); a pad owner's ban doesn't.
-  // banfix: and locks the account out (siteban.js - it can't sign in again until the ban ends; the gate refuses its cookies) -
+  // 1.99aoi: and locks the account out (siteban.js - it can't sign in again until the ban ends; the gate refuses its cookies) -
   // the lock cache forgets it now, and the web actions it queued for Pepe are failed (never run after the ban)
   require("./siteban").forget(u.userId);
   if (!roomId) {
@@ -2207,7 +2207,7 @@ async function unban(user, userId, room = "", { via = "form" } = {}) {
   await require("./staffrank").assert(user, String(userId), { lift: true });      // rankrule: never your own ban (a lift: no rank check)
   const cur = (await getQuery("SELECT username FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]))[0];
   await runQuery("DELETE FROM feed_bans WHERE user_id = ? AND room_id = ?", [String(userId), roomId]);
-  require("./siteban").forget(userId);                 // banfix: a lifted site ban lets them sign in again at once (siteban.js)
+  require("./siteban").forget(userId);                 // 1.99aoi: a lifted site ban lets them sign in again at once (siteban.js)
   // 1.99ajn padppl: an unban is audited too (it never was) - the pad's event log and admin_audit
   if (cur) {
     if (roomId) { try { await rooms.event(roomId, "feed-unban", user.username, String(cur.username || userId)); } catch (e) { /* no registry */ } }

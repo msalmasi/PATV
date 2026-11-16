@@ -1164,7 +1164,7 @@ function register(app, { isBotToken, addUser }) {
     const uid = sentId ? await require("./usernames").resolveUserId(sentId)            // 1.99tc: the stable id first, old names resolve
       : b.username ? ((await require("./usernames").findUser(b.username, { cols: "userId" })) || {}).userId || null : null;
     const actor = uid ? await actorOf({ userId: uid }) : await actorOf({ login });
-    // banfix: a site-banned account (siteban.js) only takes its PAT out (withdraw / close - siteban.STASH_OK)
+    // 1.99aoi: a site-banned account (siteban.js) only takes its PAT out (withdraw / close - siteban.STASH_OK)
     if (actor && actor.userId && !require("./siteban").STASH_OK.has(op) && (await require("./siteban").lockOf(actor.userId))) {
       throw new Refuse(403, require("./siteban").botText(), "E_SITE_BANNED");
     }

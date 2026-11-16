@@ -58,7 +58,7 @@ async function grant(username, rawAmount, by) {
   }
 
   // a clawback: only what the member has, and it goes back into the incentive budget
-  // (banfix final verify: a clawback is staff acting, not the member - system, so a site ban never blocks it)
+  // (1.99aoi final verify: a clawback is staff acting, not the member - system, so a site ban never blocks it)
   const r = await ledger.post(userId, amount, "staff transfer", Object.assign({ requireCover: true, system: true }, src));
   if (!r.ok) {
     if (r.code === ledger.E_INSUFFICIENT) return { status: 409, body: { message: `${username} doesn't have ${fmt(-amount)} PAT.`, code: r.code } };

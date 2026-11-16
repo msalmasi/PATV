@@ -175,9 +175,9 @@ test("the bot route needs the bot token; the token never reaches a log line", as
   assert.ok(!/console\.(log|warn|error)\([^)]*token/i.test(src), "no console line prints a token");
 });
 
-// banfix (siteban.js): a SITE-banned account (feed_bans room_id '') gets no link ("banned" - Pepe says it can't), and a ban made after
+// 1.99aoi (siteban.js): a SITE-banned account (feed_bans room_id '') gets no link ("banned" - Pepe says it can't), and a ban made after
 // the link went out refuses it at the button with the ban's words - the account can't sign in any way
-test("banfix: a site-banned account gets no link, and a ban since the link went out refuses it at the button", async () => {
+test("1.99aoi: a site-banned account gets no link, and a ban since the link went out refuses it at the button", async () => {
   const SB = require(path.join(repo, "siteban"));
   await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER,
                   until INTEGER, PRIMARY KEY (user_id, room_id))`);

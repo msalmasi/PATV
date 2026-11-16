@@ -267,7 +267,7 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now();
     const found = await getQuery(`SELECT * FROM bounty_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
-    // banfix: an action of an account that is site-banned now (siteban.js) is failed, never handed to Pepe
+    // 1.99aoi: an action of an account that is site-banned now (siteban.js) is failed, never handed to Pepe
     const SB = require("./siteban");
     const locked = await SB.lockedRows(found, { keepKind: () => false });
     for (const id of locked) {

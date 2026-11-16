@@ -112,7 +112,7 @@ function register(app, { addUser }) {
         username: v.user.handle || v.user.name, name: v.user.name, email: null, email_verified: false }, next);
       return done(path, true);
     } catch (e) {
-      // 1.99ajn padppl: a network ban's own words; banfix: a site ban's (siteban.js)
+      // 1.99ajn padppl: a network ban's own words; 1.99aoi: a site ban's (siteban.js)
       if (require("./siteban").isRefusal(e)) { req.flash("error", e.message); return done("/login", false); }
       console.error("[tgsso] callback:", e && e.message);
       return fail("auth.tg.failed", "Telegram sign-in didn't work. Please try again.");

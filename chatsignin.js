@@ -5,7 +5,7 @@
 //   POST /api/chatsignin/link {password (bot), login}   Pepe asks for a link for the login that typed !signin
 //        -> {ok:true, url, minutes, username} | {ok:false, reason: "signup" (no real account: use !signup - 1.99anv: also an
 //           account Pepe made that was never signed in to on the website, while sign-ups are invite-only) | "off" (the owner
-//           turned chat sign-in off) | "elevated" (admin / staff: refused) | "banned" (banfix: a site ban - siteban.js; the
+//           turned chat sign-in off) | "elevated" (admin / staff: refused) | "banned" (1.99aoi: a site ban - siteban.js; the
 //           account can't sign in any way) | "rate" (5 an hour) | "bad"}
 //   GET  /signin                     the landing page. The token is in the URL FRAGMENT (/signin#t=<token>): browsers never send
 //                                    a fragment, so it never reaches nginx's access log or this server's, and a link preview /
@@ -111,7 +111,7 @@ async function issue(login, { now = Date.now() } = {}) {
     return { ok: false, reason: "signup" };
   }
   if (await elevated(u)) { await log({ userId: u.userId, login: l, kind: "refused", why: "elevated", at: now }); return { ok: false, reason: "elevated" }; }
-  // banfix: a site-banned account gets no link (it couldn't sign in with it anyway - sessions.signIn refuses it)
+  // 1.99aoi: a site-banned account gets no link (it couldn't sign in with it anyway - sessions.signIn refuses it)
   if (await require("./siteban").lockOf(u.userId)) { await log({ userId: u.userId, login: l, kind: "refused", why: "banned", at: now }); return { ok: false, reason: "banned" }; }
   if (!(await enabledFor(u.userId))) { await log({ userId: u.userId, login: l, kind: "refused", why: "off", at: now }); return { ok: false, reason: "off" }; }
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM chat_signin_tokens WHERE login = ? AND created > ?", [l, now - 3600000]))[0].n;
@@ -138,7 +138,7 @@ async function peek(token, { now = Date.now() } = {}) {
 
 /**
  * The button: spend the token, re-check everything, sign in. -> {ok, user} | {ok:false, error, message?}. `signIn(user)` issues
- * the session (user.controller.finishLogin in production). banfix: a site ban since the link went out -> error "banned" with the
+ * the session (user.controller.finishLogin in production). 1.99aoi: a site ban since the link went out -> error "banned" with the
  * ban's message (siteban.js).
  */
 async function redeem(token, { now = Date.now(), ip = null, agent = null, signIn, t = null } = {}) {
@@ -151,7 +151,7 @@ async function redeem(token, { now = Date.now(), ip = null, agent = null, signIn
   if (!spent || spent.changes !== 1) return { ok: false, error: "expired" };
   // the account as it is NOW: still the login's real account, still allowed
   const u = (await getQuery("SELECT userId, username, class, camfrogUsername FROM users WHERE userId = ?", [r.user_id]))[0];
-  const lock = u ? await require("./siteban").lockOf(u.userId, { fresh: true }) : null;   // banfix: a site ban (siteban.js)
+  const lock = u ? await require("./siteban").lockOf(u.userId, { fresh: true }) : null;   // 1.99aoi: a site ban (siteban.js)
   const why = !u ? "gone" : String(u.camfrogUsername || "").toLowerCase().trim() !== r.login ? "relinked"
     : (await elevated(u)) ? "elevated" : lock ? "banned" : !(await enabledFor(u.userId)) ? "off"
     : (await require("./invites").chatSignInRefused(u.userId)) ? "invite-only" : null;   // 1.99anv review fix: sign-ups closed since the link went out
@@ -219,7 +219,7 @@ function register(app, { isBotToken, addUser }) {
       noLeak(res);
       return res.redirect(303, `/u/${encodeURIComponent(r.user.username)}`);
     } catch (e) {
-      // banfix: a site ban / network ban refusal from the sign-in itself (sessions.signIn) - shown as itself
+      // 1.99aoi: a site ban / network ban refusal from the sign-in itself (sessions.signIn) - shown as itself
       if (require("./siteban").isRefusal(e)) return page(req, res, 403, { error: "banned", message: e.message });
       console.error("[chatsignin] redeem:", e.message);
       return page(req, res, 500, { error: "error" });

@@ -1371,7 +1371,7 @@ async function webAct(userId, body) {
 }
 
 /**
- * banfix review (siteban.js): the account a chat !gang op is for - Pepe sends its userId / username, else the member key (a Camfrog
+ * 1.99aoi review (siteban.js): the account a chat !gang op is for - Pepe sends its userId / username, else the member key (a Camfrog
  * login, or "u:<id>") - starts nothing while it is site-banned or PATV staff have its deletion scheduled (siteban.startLock): no
  * gang founded, joined, invited into, deposited to. Getting out still works (siteban.GANG_OK: decline, leave, defect, withdraw its
  * allowance, hand the gang over, disband); Pepe's own ops (spend / move / patch) never ask. -> lock | null

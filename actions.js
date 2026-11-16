@@ -340,7 +340,7 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now();
     const found = await getQuery(`SELECT * FROM pepe_actions WHERE kind != 'table' AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
-    // banfix: a row queued by an account that is site-banned now (siteban.js) is failed, never handed out - except Pepe's privacy
+    // 1.99aoi: a row queued by an account that is site-banned now (siteban.js) is failed, never handed out - except Pepe's privacy
     // jobs (privacy.*: a deletion's forget / recordings, incognito), which protect the account and always run
     const SB = require("./siteban");
     const locked = await SB.lockedRows(found);
