@@ -39,7 +39,7 @@
 const H = require("./hmengine");
 const V = require("./veil");
 const { amt } = require("./holdem");
-const RT = require("./retire");           // roulette2 WP1: a sit & go copied from another database is retired at boot
+const RT = require("./retire");           // 1.99aoh: a sit & go copied from another database is retired at boot
 
 const SNG = Object.freeze({ STACK: 1500, MIN_SEATS: 2, MAX_SEATS: 9, COUNTDOWN_SECS: 60, REG_MINS: 60, LINGER_MS: 15 * 60e3, MAX_OPEN_PER: 3,
                             RETRY_MS: 60e3, DUP_MS: 120e3, BANDS: Object.freeze([[2, 3], [4, 6], [7, 9]]) });
@@ -555,7 +555,7 @@ function install(core) {
   }
 
   // ── cancel (an admin) / the registration hour: everyone back in full ──
-  // (roulette2 WP1: opts.quiet - a copy's retire, below: no reveal, no line, the stream slot let go without advancing)
+  // (1.99aoh: opts.quiet - a copy's retire, below: no reveal, no line, the stream slot let go without advancing)
   async function refundAll(T, why, by, opts) {
     const quiet = !!(opts && opts.quiet);
     const t = T.tourney, ref = refOf(T);
@@ -661,7 +661,7 @@ function install(core) {
     return t.status === "running" && ((!!t.level_ends_at && now >= t.level_ends_at) || stalled(T, now));
   }
 
-  // roulette2 WP1 (FAIR-1 for cards, decision D9): a sit & go copied from another database (a staging refresh scrubbed its seeds and
+  // 1.99aoh (FAIR-1 for cards, decision D9): a sit & go copied from another database (a staging refresh scrubbed its seeds and
   // cards and marked it `copied`) is never played or revealed here - the hand in play is void and dropped unrevealed (tournament chips
   // aren't PAT), and the sit & go is called off quietly through the cancel path (every entry refunded in full by its key, fee included;
   // a settling one too: its one settle never ran, so nothing was paid). A refund that can't go through throws - the table is then out of
@@ -685,7 +685,7 @@ function install(core) {
 
   /** after a restart (holdem.js recover): "done" = handled here; null = a running sit & go - holdem.js resumes its hand / turn / next */
   async function recover(T) {
-    if (RT.isCopy(T)) return retireCopy(T);          // roulette2 WP1: a copy is retired, never resumed
+    if (RT.isCopy(T)) return retireCopy(T);          // 1.99aoh: a copy is retired, never resumed
     const t = T.tourney, now = clock(), base = Math.min(now, Number(T.updated) || now);
     if (t.status === "registering") {
       if (t.countdown_at) t.countdown_at = now + Math.max(0, t.countdown_at - base);

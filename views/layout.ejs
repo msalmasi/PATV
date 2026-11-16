@@ -91,7 +91,7 @@
               const _rafflesOn = typeof rafflesOn === 'function' ? !!rafflesOn() : false;
               // casino front end per game (casino/routes.js app.locals.casinoOn): 1.99ol bj_front / hm_front on /admin/games, "auto" = the engine flag; cached
               const _casino = (g) => typeof casinoOn === 'function' ? !!casinoOn(g) : false;
-              // roulette2 O3 (D11): 🛞 Roulette - everyone while casino_roulette = everyone, staff only while = staff, hidden while off
+              // 1.99aoh (D11): 🛞 Roulette - everyone while casino_roulette = everyone, staff only while = staff, hidden while off
               // (casino/routes.js app.locals.rouletteOn; `can` = the request's siteperms helper)
               const _rl = typeof rouletteOn === 'function' ? !!rouletteOn(typeof can === 'function' ? can : null) : false;
               // 1.99qp: ⭐ PATV Creators links (creators.navFor via app.locals.creatorNav) - hidden while the feature is off
@@ -124,7 +124,7 @@
                   // D10/1.99ol: the PATV casino (/casino/<game>) when that game's front end is it, else Pepe's tables (tables.js)
                   [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
                   [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
-                  _rl && ['/casino/roulette', '🛞', t('nav.roulette')],   // roulette2 O3 (not "Wheel": that's the PAT prize wheel)
+                  _rl && ['/casino/roulette', '🛞', t('nav.roulette')],   // 1.99aoh (not "Wheel": that's the PAT prize wheel)
                   ['/bounties', '🎯', t('nav.bounties')],
                   ['/polls', '🗳️', t('nav.polls')],     // 2026-10-11: the user - polls are interactive, so Play (was Info & links)
                   _rafflesOn && ['/raffles', '🎫', t('nav.raffles')],   // 1.99xk: 🎫 PAT Raffles (raffles.js; the feature switch)

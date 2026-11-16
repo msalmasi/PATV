@@ -28,7 +28,7 @@ const V = require("./veil");              // 1.99ajw casino2 rework: a veiled pl
 const sizing = require("./sizing");
 const notices = require("./notices");     // 1.99alq train3: the timeout rule's one-time notice at a buy-in
 const themes = require("./themes");       // 1.99amf h20: the table's theme (presentation + the dealer's flavour lines only)
-const RT = require("./retire");           // roulette2 WP1: a cash table copied from another database is retired at boot (FAIR-1 for cards)
+const RT = require("./retire");           // 1.99aoh: a cash table copied from another database is retired at boot (FAIR-1 for cards)
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -284,7 +284,7 @@ function install(core) {
     return R(true, `you bought in for ${fmt(amount)}.`, { quiet: true });
   }
 
-  /** roulette2 WP1 review (the cash-out fix): a seat whose cash-out credit was REFUSED keeps its stack and its seat, sitting out - never
+  /** 1.99aoh review (the cash-out fix): a seat whose cash-out credit was REFUSED keeps its stack and its seat, sitting out - never
    *  dealt in, and its sit-out clock (hm_sitout_mins, tick below) tries the cash-out again once per period, never on every tick. */
   function refusedOut(T, uid) {
     const q = qos(T, uid);
@@ -293,7 +293,7 @@ function install(core) {
   }
 
   /** Pay a seat's chips back as PAT and free the seat (intent first: a restart finishes it). -> true when the seat is free.
-   *  roulette2 WP1 (the cash-out fix): a REFUSED credit keeps the stack at the table - the seat stays (sitting out, retried by its
+   *  1.99aoh (the cash-out fix): a REFUSED credit keeps the stack at the table - the seat stays (sitting out, retried by its
    *  sit-out clock: refusedOut), the intent is cleared (money.credit writes no row when ledger.post refuses, so there is nothing for a
    *  restart to finish) and this answers false: the caller goes on (the table's other deadlines keep running) and never closes the
    *  table with it. Before, the intent was cleared and the seat stood all the same: the stack was lost. opts.quiet (a copied table's
@@ -343,7 +343,7 @@ function install(core) {
       return R(true, e.folded.includes(actor.uid) ? "you'll be cashed out when this hand ends."
                                                   : "you'll be cashed out when this hand ends (or !fold to leave sooner).");
     }
-    if (!(await cashout(T, actor.uid, false))) return R(false, REFUSED_REPLY());   // (roulette2 WP1 review: saved, seat kept)
+    if (!(await cashout(T, actor.uid, false))) return R(false, REFUSED_REPLY());   // (1.99aoh review: saved, seat kept)
     if (!e.seats.length) return closeTable(T, "table empty").then(() => R(true, "you left the table.", { quiet: true }));
     if (!e.hand_active && H.seatedWithChips(e).length < 2) T.dl.next = null;      // nobody left to deal to: wait, then close
     if (!e.hand_active && !T.dl.next) T.dl.idle = outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
@@ -593,7 +593,7 @@ function install(core) {
     return TN().afterHand(T, {});
   }
 
-  /** -> false when the table stays open (roulette2 WP1 review: a refused cash-out keeps its seat - never closed with PAT on it), true when closed */
+  /** -> false when the table stays open (1.99aoh review: a refused cash-out keeps its seat - never closed with PAT on it), true when closed */
   async function closeTable(T, reason) {
     if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
@@ -765,7 +765,7 @@ function install(core) {
     T.eng.seats.some((uid) => { const q = qos(T, uid); return q.out && q.since != null && t >= T.dl.sitout[uid] && !(T.eng.hand_active && T.eng.players.includes(uid)); }); };
 
   async function recover(T) {
-    // roulette2 WP1 (FAIR-1 for cards): a cash table copied from another database (a staging refresh) is retired, never resumed
+    // 1.99aoh (FAIR-1 for cards): a cash table copied from another database (a staging refresh) is retired, never resumed
     // (casino/retire.js); a sit & go / tournament table's copy is retired by casino/tourney.js / casino/mtt.js (TN().recover below)
     if (!T.tourney && RT.isCopy(T)) return RT.holdem(T, { S, clock, save, bookRake, cashout: async (T2, k) => {
       // (a refused credit: the retire stops there - the table stays open in the database, out of play, and the next boot tries again)
@@ -791,7 +791,7 @@ function install(core) {
           if (!e.seats.includes(it.uid)) forgetSeat(T, it.uid);
           console.log(`[casino] ${T.id}: cash-out ${it.key} finished after a restart`);
         } else {
-          // roulette2 WP1 (the cash-out fix): refused - nothing moved, so the stack stays at the table (it was stood up and lost before),
+          // 1.99aoh (the cash-out fix): refused - nothing moved, so the stack stays at the table (it was stood up and lost before),
           // sitting out: its sit-out clock tries the cash-out again (refusedOut)
           if (e.seats.includes(it.uid) && !(e.hand_active && e.players.includes(it.uid))) refusedOut(T, it.uid);
           console.error(`[casino] ${T.id}: cash-out ${it.key} refused after a restart (${r.code}) - the stack stays at the table`);

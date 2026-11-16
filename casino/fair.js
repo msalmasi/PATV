@@ -16,7 +16,7 @@ const newServerSeed = () => crypto.randomBytes(32).toString("hex");
 const newClientSeed = () => crypto.randomBytes(8).toString("hex");
 const commitment = (serverSeed) => crypto.createHash("sha256").update(String(serverSeed), "utf8").digest("hex");
 
-// roulette2 WP1 (FAIR-1 for cards): a missing seed never deals. String(undefined) made the HMAC key the literal text "undefined" - a shoe,
+// 1.99aoh (FAIR-1 for cards): a missing seed never deals. String(undefined) made the HMAC key the literal text "undefined" - a shoe,
 // deck or pocket anyone could compute. A staging copy has its open tables' seeds scrubbed (deploy/keep-staging-tables.js), so this is
 // the backstop behind their retire (casino/retire.js): it throws instead.
 function needSeed(serverSeed) {

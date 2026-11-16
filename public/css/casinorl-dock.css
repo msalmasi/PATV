@@ -147,7 +147,7 @@
   border-left: 3px solid #f4d88e;
   font-size: 0.85em;
 }
-/* roulette2 O8: a roulette pocket - the table's history strip and history sheet, and the Room Dock's recent line
+/* 1.99aoh: a roulette pocket - the table's history strip and history sheet, and the Room Dock's recent line
    (casinorl-dock.js pocket(); this file is loaded by the table page and the pad page). The colour comes from the client's red list
    (PATVRlBets.red) - never the server's "green" for 0; the felt's ◆ / ● glyph under the number is the cue that isn't colour (the
    aria-label says the colour as a word). The newest pocket is larger, with a gold ring. */
@@ -217,7 +217,7 @@
   margin-inline-end: 0.3em;
   font-size: 0.85em;
 }
-/* roulette2 O13(1): iPhone - the Dock's betting buttons and chips: a quick second tap bets again instead of zooming the page */
+/* 1.99aoh: iPhone - the Dock's betting buttons and chips: a quick second tap bets again instead of zooming the page */
 .rl-controls button,
 .rl-quick button {
   touch-action: manipulation;

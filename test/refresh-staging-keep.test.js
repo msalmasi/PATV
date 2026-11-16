@@ -157,11 +157,11 @@ test("the lists cover every per-environment table, and the script runs it with s
   assert.deepEqual(K.LIVE_FEED, ["bridge_rooms", "bridge_feed", "bridge_veil", "bridge_rooms_veil"]);
   assert.deepEqual(K.EMPTY, ["hub_hidden_h", "hub_hidden_meta", "hub_hidden_held", "hub_inbound_nonces", "hub_outbox"], "the outbox last (prod's triggers fire on the others)");
   const sh = fs.readFileSync(path.join(repo, "deploy", "refresh-staging-db.sh"), "utf8");
-  // roulette2 WP1: the copy is BUILT with secure_delete ON (VACUUM INTO takes it from the connection) - else stale row bytes stay in the
+  // 1.99aoh: the copy is BUILT with secure_delete ON (VACUUM INTO takes it from the connection) - else stale row bytes stay in the
   // copy's page slack, where the scrubs below (secure_delete ON in the copy) can't reach them
   assert.match(sh, /sqlite3 -cmd "\.timeout 30000" \/home\/PATV\/myapp\.db "PRAGMA secure_delete = ON; VACUUM INTO '\$S\/myapp\.db\.new';"/);
   // ... and every open casino table's secrets go from it: roulette wheels, the card tables (blackjack, Hold'em - cash, sit & go and
-  // tournament tables), the tournaments' seating draw seeds, and (roulette2 WP1 review) the hole cards cached in casino_actions
+  // tournament tables), the tournaments' seating draw seeds, and (1.99aoh review) the hole cards cached in casino_actions
   assert.deepEqual(K.CASINO_SCRUB.map((s) => [s.table, s.what]), [["casino_tables", "roulette"], ["casino_tables", "cards"], ["casino_mtt", "tournaments"], ["casino_actions", "hole cards"]]);
   for (const s of K.CASINO_SCRUB.filter((x) => x.table !== "casino_actions")) assert.match(s.sql, /^UPDATE main\.casino_(tables|mtt) SET state = json_set\(.*'\$\.copied', 1\) WHERE .*json_valid\(state\)$/);
   assert.match(K.CASINO_SCRUB[3].sql, /^UPDATE main\.casino_actions SET response = json_set\(response, '\$\.reply', ''\) WHERE response LIKE '%Your hand:%' AND /);
@@ -350,8 +350,8 @@ test("CL2 fix-up: staging keeps its own live feed (bridge_feed, bridge_rooms), a
   for (const w of ["prodfeedsecret", "prodarchivesecret"]) assert.ok(!b9.includes(w), w + " is gone (fallback)");
 });
 
-// roulette2 WP1 review: the keep step rebuilds the copy (VACUUM) last. refresh-staging-db.sh runs from PROD's checkout, so until prod has
-// roulette2 WP1 (staging gets a release first) - or after a prod rollback past it - the copy is built by a plain VACUUM INTO, which leaves
+// 1.99aoh review: the keep step rebuilds the copy (VACUUM) last. refresh-staging-db.sh runs from PROD's checkout, so until prod has
+// 1.99aoh (staging gets a release first) - or after a prod rollback past it - the copy is built by a plain VACUUM INTO, which leaves
 // stale row bytes in the copy's page slack (a page that became an interior page keeps its old leaf cells): prod's open tables' seeds,
 // out of reach of every scrub and of secure_delete. The keep script also runs from staging's checkout when it differs, so its rebuild covers
 // that window.

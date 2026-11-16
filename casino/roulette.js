@@ -524,7 +524,7 @@ function install(core) {
     // board) reads the live table without the casino lock, so the spinning state is saved from a copy and reaches the
     // live table after COMMIT. A draw that fails leaves the live wheel betting as it was: nobody saw its pocket.
     // FAIR-3: and the next spin is committed now (unless this wheel closes after this spin), before any line is queued for it
-    // roulette2 O12(c): dl.start = the spin's start on the site's clock (saved with the spin, so a board arriving mid-spin can place it)
+    // 1.99aoh(c): dl.start = the spin's start on the site's clock (saved with the spin, so a board arriving mid-spin can place it)
     const r = { ...T.round, pocket: fair.spinPocket(T.round.seed, T.client_seed, T.round.no) },
       t0 = clock(),
       dl = { start: t0, land: t0 + S.settings.rl_spin_secs * 1000 },
@@ -878,7 +878,7 @@ function install(core) {
       land_at: T.dl.land || null,
       result_until: T.dl.result || null,
       // (null unless the LIVE phase is spinning: the pocket is public only once its draw committed)
-      // roulette2 O12(c): + started_at (site ms) and secs - a spin saved before dl.start existed counts back from its landing
+      // 1.99aoh(c): + started_at (site ms) and secs - a spin saved before dl.start existed counts back from its landing
       spin:
         e.phase === "spinning"
           ? {

@@ -1,4 +1,4 @@
-// casino/retire.js — FAIR-1 for the CARD tables (roulette2 WP1, decision D9): a blackjack or Hold'em table copied from another database.
+// casino/retire.js — FAIR-1 for the CARD tables (1.99aoh, decision D9): a blackjack or Hold'em table copied from another database.
 //
 // A staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then deploy/keep-staging-tables.js on the copy) strips every open card
 // table's secrets from the copy - blackjack T.round.seed, the live shoe T.eng.shoe and (mid-round) the dealer's hole card; Hold'em

@@ -195,7 +195,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
   };
   app.locals.casinoOn = (game) => svc.frontOf(cachedSettings(), game) === "patv";
   app.locals.casinoPath = (game) => svc.frontPath(cachedSettings(), game);
-  // roulette2 O3 (D11): the navbar's 🛞 Roulette link (layout.ejs, beside Blackjack / Hold'em). casino_roulette = everyone: shown to
+  // 1.99aoh (D11): the navbar's 🛞 Roulette link (layout.ejs, beside Blackjack / Hold'em). casino_roulette = everyone: shown to
   // everyone; = staff: to staff only; = off: hidden. `can` is the view's siteperms helper (the request's user): staff = the admin
   // area (Staff and Admin by default) or casino.admin - the people RL.shut lets in (its class ladder, unless /admin/roles moved
   // admin.area). Read from the settings cache on every render: an /admin/games change (setSetting reloads it) shows on the next page.
@@ -713,7 +713,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       // answer in a room whose casino runs on his own tables (no pointer to a web lobby that shows no Sit & Go section)
       out.sng_on = st.hm_enabled ? st.casino_sng || "off" : "off";
       out.mtt_on = st.hm_enabled ? st.casino_mtt || "off" : "off";        // h22 phase 2: the scheduled tournaments' switch (private_mtt rides in `out`)
-      // roulette2 O12(a): the site's clock as the answer leaves (additive - an older Pepe ignores it) - Pepe measures his skew against it
+      // 1.99aoh(a): the site's clock as the answer leaves (additive - an older Pepe ignores it) - Pepe measures his skew against it
       out.now = svc.S.hooks.now();
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {

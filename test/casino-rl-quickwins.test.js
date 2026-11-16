@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP0 (quick wins) - the browser side, in a vm with test/fixtures/mini-dom.js (no browser):
+// 1.99aoh (quick wins) - the browser side, in a vm with test/fixtures/mini-dom.js (no browser):
 //   * O8: the history strip, the history sheet rows and the Room Dock's recent line colour each pocket from the client's red list
 //     (14 and 18 red, 0 zero, 2 black - never the server's color field), say the colour as a word, and emphasise the newest pocket
 //   * O7: the table page's limits placard (t.limits) and the player's "left this spin" meter (me.room_left)
@@ -250,7 +250,7 @@ test("O3: the layout's 🛞 Roulette link sits after Hold'em in Play when roulet
   assert.match(nav(await render({ rouletteOn: () => true })), /href="\/casino\/roulette"/, "a guest sees it while guests may visit");
 });
 
-// roulette2 WP0 review: measured in Chrome (320 / 360 px, dir=rtl, the summary's computed name, forced-colors: active) - these are
+// 1.99aoh review: measured in Chrome (320 / 360 px, dir=rtl, the summary's computed name, forced-colors: active) - these are
 // the CSS rules those measurements came down to
 test("O7 / O8 review: the placard fits a 320 px phone and RTL, its glyphs stay out of its name; pockets keep a readable glyph and colours in a Contrast theme", () => {
   const felt = read("views/partials/casino-rl-css.ejs"),

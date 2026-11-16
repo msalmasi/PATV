@@ -500,14 +500,14 @@ test("a repeated position remains a single aggregated rebet across rounds", asyn
   }
 });
 
-// ── roulette2 WP0 (quick wins): the poll barrier + the site's clock (O12a), spin.started_at / secs (O12c), push / advert text (O6),
+// ── 1.99aoh (quick wins): the poll barrier + the site's clock (O12a), spin.started_at / secs (O12c), push / advert text (O6),
 // the navbar flag per casino_roulette mode (O3) ──
 const settle = async (ok, what) => {
   for (let i = 0; i < 1000 && !ok(); i++) await new Promise((r) => setTimeout(r, 2));
   assert.ok(ok(), what);
 };
 
-test("roulette2 O12(a): a poll woken inside the draw's transaction answers the COMMITTED spin, with the site's clock", async () => {
+test("1.99aoh(a): a poll woken inside the draw's transaction answers the COMMITTED spin, with the site's clock", async () => {
   const T = await room();
   expect(await act(T, "a", "bet", "red 100"));
   const waiting = svc.S.waiters.size;
@@ -533,7 +533,7 @@ test("roulette2 O12(a): a poll woken inside the draw's transaction answers the C
   assert.equal(quick.tables[T.id].phase, "spinning");
 });
 
-test("roulette2 O12(c): publicView.spin adds started_at and secs, saved with the spin, and stays null unless it spins", async () => {
+test("1.99aoh(c): publicView.spin adds started_at and secs, saved with the spin, and stays null unless it spins", async () => {
   const T = await room();
   expect(await act(T, "a", "bet", "red 100"));
   assert.equal(svc.publicView(T).spin, null);
@@ -556,7 +556,7 @@ test("roulette2 O12(c): publicView.spin adds started_at and secs, saved with the
   assert.equal(svc.publicView(T).spin, null);
 });
 
-test("roulette2 O6: a pushed / advertised wheel's line names roulette (🛞) and its limits, from the settings", async () => {
+test("1.99aoh: a pushed / advertised wheel's line names roulette (🛞) and its limits, from the settings", async () => {
   const T = await room("pad-a");
   svc.noteRooms([
     { id: "pad-b", name: "Pad B" },
@@ -577,7 +577,7 @@ test("roulette2 O6: a pushed / advertised wheel's line names roulette (🛞) and
   assert.doesNotMatch(advert, /!rl/, "an advertised room doesn't play the wheel - no !rl there");
 });
 
-test("roulette2 O3 / O12(a): the navbar's Roulette link per casino_roulette mode (at once), and the bot poll's `now`", async (t) => {
+test("1.99aoh / O12(a): the navbar's Roulette link per casino_roulette mode (at once), and the bot poll's `now`", async (t) => {
   const express = require("express"),
     ejs = require("ejs"),
     app = express(),
@@ -622,7 +622,7 @@ test("roulette2 O3 / O12(a): the navbar's Roulette link per casino_roulette mode
   assert.equal(j.now, h.time());
 });
 
-test("roulette2 O12(a) review: a draw that rolls back while Pepe's poll waits never moves his cursor past the line it retries", async (t) => {
+test("1.99aoh(a) review: a draw that rolls back while Pepe's poll waits never moves his cursor past the line it retries", async (t) => {
   const T = await room();
   expect(await act(T, "a", "bet", "red 100"));
   // the draw's transaction fails on its last statement (the next spin's commitment row is already there) - after its "No more bets"
@@ -652,7 +652,7 @@ test("roulette2 O12(a) review: a draw that rolls back while Pepe's poll waits ne
   assert.equal(again.cursor, again.events[again.events.length - 1].seq);
 });
 
-test("roulette2 O7 review: the placard's words match the checks - the minimum is for each bet, a spot's cap counts all your chips there", async () => {
+test("1.99aoh review: the placard's words match the checks - the minimum is for each bet, a spot's cap counts all your chips there", async () => {
   const T = await room();
   const st = svc.S.settings;
   expect(await act(T, "b", "bet", "red " + st.rl_min_bet));

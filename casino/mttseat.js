@@ -31,7 +31,7 @@ function pick(seedHex, label, i, m) {
 }
 /** the draw: `ids` sorted first (so the input order never matters), then Fisher-Yates from the end with HMAC picks -> a new array */
 function drawOrder(seedHex, label, ids) {
-  // roulette2 WP1 review (fair.js's no-seed guard, for the seating draw): never seat from a missing seed - Buffer.from("undefined", "hex")
+  // 1.99aoh review (fair.js's no-seed guard, for the seating draw): never seat from a missing seed - Buffer.from("undefined", "hex")
   // is an EMPTY key, a draw anyone can compute. A staging copy has its tournaments' draw seeds scrubbed (deploy/keep-staging-tables.js).
   if (!/^(?:[0-9a-f]{2}){16,}$/i.test(typeof seedHex === "string" ? seedHex : "")) throw new Error("mttseat: no draw seed - nobody is seated without one");
   const a = Array.from(new Set((ids || []).map(String))).sort();

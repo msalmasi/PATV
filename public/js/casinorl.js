@@ -318,7 +318,7 @@
     rotor.style.transition = reduced.matches ? "none" : "transform " + ms + "ms cubic-bezier(.17,.07,.16,1)";
     if (!reduced.matches) rotor.style.transform = "rotate(" + angle + "deg)";
   }
-  // roulette2 O7: the table's limits in plain words, from t.limits (the rl_* settings the server's bet checks read), every one per
+  // 1.99aoh: the table's limits in plain words, from t.limits (the rl_* settings the server's bet checks read), every one per
   // player and per spin - and, for a signed-in player while bets are open, what they have on the layout and what is left for them
   // this spin (me.room_left). Open on a wide screen; on a phone it folds to its one line, which keeps the "left" meter in sight.
   var limitsBox = document.createElement("details"),
@@ -422,7 +422,7 @@
     if (strip.dataset.round !== String(t.last_revealed)) {
       strip.dataset.round = String(t.last_revealed);
       strip.replaceChildren();
-      // roulette2 O8: each pocket in the felt's colours (the client's red list, never the entry's server colour field), newest
+      // 1.99aoh: each pocket in the felt's colours (the client's red list, never the entry's server colour field), newest
       // first and larger
       t.history
         .slice(-20)
@@ -479,7 +479,7 @@
     CZ.openSheet("cz-histsheet");
     CZ.loadHistory(function (r) {
       var pocket = r.results && r.results.number;
-      // roulette2 O8: the pocket as the strip shows it (the same .rl-pocket colours + spoken word), then the spin's number
+      // 1.99aoh: the pocket as the strip shows it (the same .rl-pocket colours + spoken word), then the spin's number
       var chip =
         Number.isInteger(pocket) && pocket >= 0 && pocket <= 36
           ? '<span class="rl-pocket ' +

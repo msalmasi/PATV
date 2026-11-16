@@ -25,7 +25,7 @@ async function refresh() {
   await new Promise((res, rej) => {
     const d = new sqlite3.Database(old, (e) => (e ? rej(e) : d.exec("CREATE TABLE staging_marker (k TEXT)", (e2) => d.close(() => (e2 ? rej(e2) : res())))));
   });
-  await sql("PRAGMA secure_delete = ON");               // (as deploy/refresh-staging-db.sh copies prod - roulette2 WP1)
+  await sql("PRAGMA secure_delete = ON");               // (as deploy/refresh-staging-db.sh copies prod - 1.99aoh)
   await sql(`VACUUM INTO '${copy.replace(/\\/g, "/")}'`);
   const out = execFileSync(process.execPath, [path.join(h.repo, "deploy", "keep-staging-tables.js"), old, copy], { encoding: "utf8" });
   fs.renameSync(old, old + ".previous");
@@ -57,7 +57,7 @@ test("FAIR-1: a staging refresh never lets staging play or publish a seed prod's
   assert.equal(R.round.seed, live[R.id]);
 });
 
-// (roulette2 WP1) the scrub's own roulette statement, exported by deploy/keep-staging-tables.js, on this database - for one wheel
+// (1.99aoh) the scrub's own roulette statement, exported by deploy/keep-staging-tables.js, on this database - for one wheel
 const ROULETTE_SCRUB = require(path.join(h.repo, "deploy", "keep-staging-tables")).CASINO_SCRUB.find((x) => x.what === "roulette").sql.replace(/\bmain\./g, "");
 const markCopied = (id) => sql(ROULETTE_SCRUB + " AND id = ?", [id]);
 test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by key, closed, never revealed", async () => {

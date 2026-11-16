@@ -97,7 +97,7 @@ before the outbox, because prod's triggers come along with the copy; 1.99add: al
 while `hub_hidden_set` keeps prod's rows, so people hidden on prod stay hidden on staging). 1.99acm: prod's unfinished "Download my data" jobs
 are marked expired in the copy, so staging never zips prod members' data. 1.99aof: every open roulette wheel's secret seed
 is removed from the copy and the wheel marked `copied` - staging closes it at boot (its book refunded, its commitment never
-revealed), so staging can never play or publish a round prod's wheel is still taking bets on. Roulette2 WP1: the card tables too -
+revealed), so staging can never play or publish a round prod's wheel is still taking bets on. 1.99aoh: the card tables too -
 every open blackjack table (its round's seed, the live shoe, the dealer's hole card) and every open Hold'em table, cash, sit & go or
 tournament (the next and current hand's seed, the deck, every hole card), plus a registering or running tournament's seating draw seed and
 the hole cards a player asked for with `!cards` (the reply cached in `casino_actions`). Staging retires each copied table at boot without

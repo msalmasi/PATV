@@ -1,4 +1,4 @@
-// roulette2 WP1 (FAIR-1 for the card tables) - test/casino-card-staging.test.js's STAGING side, in its own process (dbUtils opens ./myapp.db):
+// 1.99aoh (FAIR-1 for the card tables) - test/casino-card-staging.test.js's STAGING side, in its own process (dbUtils opens ./myapp.db):
 // boots the casino on a refreshed copy of "prod" (VACUUM INTO + deploy/keep-staging-tables.js, done by the test) 11 minutes after the copy,
 // then does what staging routinely does: the clock runs past every deadline (bet windows, turn clocks, the next hand, idle closes) and
 // people try to bet, sit, deal and act at every copied table. Then it boots AGAIN (a restart: the retire must be idempotent). Prints one JSON

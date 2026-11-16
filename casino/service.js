@@ -510,7 +510,7 @@ async function render(T, events) {
 const uidHash = (uid) => crypto.createHash("sha256").update("seat|" + uid).digest("hex").slice(0, 12);
 
 /** A settled round's MONEY: the payouts, then the House legs (lost stakes in, the winners' profit out - the Fed flash first when it would
- *  take the House below its hard floor). Every leg is keyed, so running it again changes nothing that was done. roulette2 WP1: factored
+ *  take the House below its hard floor). Every leg is keyed, so running it again changes nothing that was done. 1.99aoh: factored
  *  out of settle() so a copied table (casino/retire.js) pays a round decided on the other database WITHOUT its reveal, events or rewards;
  *  `strict` (the retire) throws on a refused payout instead of logging it. -> {lostTotal, totalBet, totalPaid, profit} */
 async function settleMoney(T, opts) {
@@ -695,7 +695,7 @@ async function tickOnce() {
 
 // ── boot & recovery ──
 async function recover(T) {
-  // roulette2 WP1 (FAIR-1 for cards): a blackjack table copied from another database (a staging refresh) is retired, never resumed (casino/retire.js)
+  // 1.99aoh (FAIR-1 for cards): a blackjack table copied from another database (a staging refresh) is retired, never resumed (casino/retire.js)
   if (T.game === "bj" && require("./retire").isCopy(T)) return require("./retire").bj(T, { S, clock, save, settleMoney });
   if (T.game === "roulette") return RL.recover(T);
   if (T.game === "holdem") return HM.recover(T);
@@ -1167,7 +1167,7 @@ function annDue(T, key, room) {
   return true;
 }
 
-// roulette2 O6: a roulette wheel's stakes as its push / advert lines name them - the smallest bet and the most one player may stake
+// 1.99aoh: a roulette wheel's stakes as its push / advert lines name them - the smallest bet and the most one player may stake
 // on a spin (the rl_* settings the bet checks use). One place, so a per-wheel limit (High Roller, a per-spin snapshot) changes it once.
 function rlStakes(T) {
   const st = S.settings;
@@ -1206,7 +1206,7 @@ async function push(tableId, room, actor, mode) {
       // re-adding a room attaches it again at once, silently); the "now also playing" line follows the same clock
       const quiet = !annDue(T, "push_ts", room);
       if (!quiet) {
-        // roulette2 O6: a wheel's own line - 🛞, the game named, how to bet here and its limits (was "🂠 <host>'s a roulette wheel")
+        // 1.99aoh: a wheel's own line - 🛞, the game named, how to bet here and its limits (was "🂠 <host>'s a roulette wheel")
         const text = T.game === "roulette" ? rlPushText(T, also)
           : `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`;
         await emit(T, "pushed", text, { room_name: r.name, url: link(T), rooms: [room] });
@@ -1427,7 +1427,7 @@ const advertsOf = (T) => (Array.isArray(T.adverts) ? T.adverts : []);
 const advertList = (T) => advertsOf(T).map((id) => ({ id, name: roomName(id) }));
 function advertText(T) {
   if (T.game === "roulette") {
-    // roulette2 O6: 🛞 + the game + its limits (an advertised room only hears this line - no !rl there, so the web link is the way in)
+    // 1.99aoh: 🛞 + the game + its limits (an advertised room only hears this line - no !rl there, so the web link is the way in)
     const k = rlStakes(T);
     return `📣 🛞 ${k.hr ? "💎 High Roller " : ""}Roulette at ${T.host.name}'s wheel — single zero, bets from ${fmt(k.min)} PAT, ` +
            `up to ${fmt(k.max)} PAT per player a spin${k.hr ? " (High Rollers only)" : ""}. Play on the web: ${link(T)}`;
@@ -1534,16 +1534,16 @@ async function roomTables() {
 
 /** Events after `after` for tables in a room (Pepe's), waiting up to waitMs for the first one. The `private` part
  *  (hole cards of room players, by Camfrog name) only ever goes to Pepe (bot token), never into an event.
- *  roulette2 O12(a): + `now` (this server's clock, ms) so Pepe can place the site's deadlines (land_at, spin.started_at) on his own. */
+ *  1.99aoh(a): + `now` (this server's clock, ms) so Pepe can place the site's deadlines (land_at, spin.started_at) on his own. */
 async function poll(after, waitMs) {
   await boot();
-  // roulette2 O12(a): the poll BARRIER. A locked step (a roulette draw, a deal) emits - and wakes this long-poll - INSIDE its
+  // 1.99aoh(a): the poll BARRIER. A locked step (a roulette draw, a deal) emits - and wakes this long-poll - INSIDE its
   // transaction, before its COMMIT and before the live table takes the new state (copy-then-commit). Woken there, a poll used to
   // read the uncommitted rows and draw roomTables() from the live table as it was BEFORE the step (a draw's board still "Place your
   // bets", the old rev) - then the post-commit wake found no waiter and Pepe's board waited out his next long-poll (up to 7 s of an
   // 8 s spin). Queueing behind the casino lock lets that step finish first. Never around roomTables(): refreshVeil -> persistVeil
   // takes the lock itself (a deadlock).
-  // roulette2 O12(a) review: the rows AND the cursor's top come from that ONE locked step - nothing of a casino step is between its
+  // 1.99aoh(a) review: the rows AND the cursor's top come from that ONE locked step - nothing of a casino step is between its
   // INSERT and its COMMIT while it runs, so both are COMMITTED data. The cursor used to come from S.lastSeq, which an INSERT bumps
   // before its transaction is known to commit: a step that rolled back (its line never sent) left it one past the committed top, and
   // since AUTOINCREMENT rolls back too, the retried step's line got that same seq - below Pepe's cursor, never posted.

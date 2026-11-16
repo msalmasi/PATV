@@ -90,7 +90,7 @@ const SCRUB = [
 // its unused commitment at its public, sign-in-free /api/casino/fair while prod still takes bets on the same round. So the
 // copy never keeps that seed: it is removed (with a pre-committed next one) and the wheel is marked `copied`; staging's
 // casino closes a copied wheel at boot (casino/roulette.js retireCopy: its book refunded, its commitment never revealed).
-// roulette2 WP1 (decision D9): the CARD tables too - an open blackjack table keeps its round's seed (round.seed: the shoe it deals from),
+// 1.99aoh (decision D9): the CARD tables too - an open blackjack table keeps its round's seed (round.seed: the shoe it deals from),
 // the live shoe (eng.shoe) and, mid-round, the dealer's hole card (eng.dealer[1]); an open Hold'em table - a cash table, a sit & go's or a
 // scheduled tournament's - keeps the next hand's seed (next.seed), the hand in play's seed and deck (hand.seed, hand.deck), the dealing
 // deck (eng.deck) and every player's hole cards (eng.hole). All of it goes (the card arrays stay, EMPTY: an engine step that ever ran on
@@ -98,7 +98,7 @@ const SCRUB = [
 // (casino/retire.js, casino/tourney.js, casino/mtt.js: every stake / stack / entry back by its key, nothing revealed, no table line).
 // A scheduled tournament's seating draw seed (casino_mtt seed.draw_seed, committed when registration opens, revealed at the finish) goes
 // from a registering / running / finishing one too. Ship with the retire and fair.js's no-seed guard (one release).
-// roulette2 WP1 review: and the hole cards a player asked for - Hold'em's `cards` reply ("🂠 Your hand: <hole cards> | Board: ...", Pepe's
+// 1.99aoh review: and the hole cards a player asked for - Hold'em's `cards` reply ("🂠 Your hand: <hole cards> | Board: ...", Pepe's
 // !cards / !hand / !hole and the website's `cards`, at a cash, sit & go or tournament table) is cached whole in casino_actions.response (the
 // idempotent replay, service.act) - for the hand in play that is prod's hole cards. Its reply is blanked (the row stays: a replay of that
 // key answers an empty reply). Matched on the reply, not table_id: a command typed in a room can be stored with no table_id.
@@ -193,7 +193,7 @@ async function scrub(db) {
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0 });
   }
-  for (const s of CASINO_SCRUB) {                                          // 1.99aof FAIR-1 (+ roulette2 WP1: the card tables): no open table's seed
+  for (const s of CASINO_SCRUB) {                                          // 1.99aof FAIR-1 (+ 1.99aoh: the card tables): no open table's seed
     if (!(await tableSql(db, "main", s.table))) continue;
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });
@@ -304,7 +304,7 @@ async function main(oldFile, newFile, sqlite3 = require("sqlite3")) {
       await run(db, "DETACH DATABASE old").catch(() => {});
     }
     await all(db, "PRAGMA main.journal_mode = DELETE");                     // the copy is moved next: no -wal beside it
-    // roulette2 WP1 review: the copy is rebuilt last. A copy built by a plain VACUUM INTO (refresh-staging-db.sh before roulette2 WP1 -
+    // 1.99aoh review: the copy is rebuilt last. A copy built by a plain VACUUM INTO (refresh-staging-db.sh before 1.99aoh -
     // prod's checkout runs it, and prod gets a release after staging, or rolls back past it) keeps stale row bytes in its page slack -
     // prod's open tables' seeds and decks, chat text - where no scrub or secure_delete above reaches; the rebuild only ever sees the rows
     // the copy has now (scrubbed), and every page of the file is rewritten. This script also runs from staging's checkout when it

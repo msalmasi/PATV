@@ -27,7 +27,7 @@ const PAY = require("./mttpay");
 const BUD = require("./mttbudget");
 const TNCFG = require("./tourney");
 const { amt } = require("./holdem");
-const RT = require("./retire");          // roulette2 WP1: a tournament copied from another database is retired at boot
+const RT = require("./retire");          // 1.99aoh: a tournament copied from another database is retired at boot
 
 const ID_RE = /^m[0-9a-f]{9}$/;
 const AUDIENCES = Object.freeze(["off", "staff", "everyone"]);
@@ -1076,7 +1076,7 @@ function install(core) {
   }
 
   // ── cancel / void ──
-  // (roulette2 WP1: opts.quiet - a copy's retire, retireCopy below: the draw seed is never marked revealed, no hand is revealed, no notice,
+  // (1.99aoh: opts.quiet - a copy's retire, retireCopy below: the draw seed is never marked revealed, no hand is revealed, no notice,
   //  no room line; the stream slot is let go without advancing to another table)
   async function cancel(M, reason, by, opts) {
     opts = opts || {};
@@ -2056,7 +2056,7 @@ function install(core) {
   const beforeHand = () => null;
   /** after a restart, before the hand resumes (holdem.js recover): "done" = nothing to resume here */
   async function recoverTable(T) {
-    // roulette2 WP1 (FAIR-1 for cards, decision D9): a tournament table copied from another database is never played or revealed here -
+    // 1.99aoh (FAIR-1 for cards, decision D9): a tournament table copied from another database is never played or revealed here -
     // its hand is void and dropped (tournament chips aren't PAT), nothing is scheduled, and its tournament's retire closes it
     // (recoverOne -> retireCopy, the quiet void below)
     if (RT.isCopy(T)) {
@@ -2130,7 +2130,7 @@ function install(core) {
       try { await recoverOne(M, now); } catch (e) { if (e && e.crash) throw e; console.error(`[mtt] ${M.id} recover:`, e && e.message ? e.message : e); }
     }
   }
-  // roulette2 WP1 (FAIR-1 for cards, decision D9): a tournament copied from another database - deploy/keep-staging-tables.js strips the
+  // 1.99aoh (FAIR-1 for cards, decision D9): a tournament copied from another database - deploy/keep-staging-tables.js strips the
   // seating draw's seed of a registering / running / finishing one (and every open table's seeds and cards) and marks it `copied`. The
   // other database may still be playing it, so it is never played (no draw) or revealed here: it is voided quietly through the cancel
   // path - every hold refunded in full by its key (fee included; a finishing one too: its one settle never ran, so nothing was paid), its

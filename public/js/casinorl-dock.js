@@ -59,7 +59,7 @@
       ? T("rl_red_word", "{n} ◆ Red", { n: n })
       : T("rl_black_word", "{n} ● Black", { n: n });
   }
-  // roulette2 O8: one pocket as the felt colours it - .rl-pocket.red / .black / .zero (public/css/casinorl-dock.css, loaded by the
+  // 1.99aoh: one pocket as the felt colours it - .rl-pocket.red / .black / .zero (public/css/casinorl-dock.css, loaded by the
   // table page and the pad page). The colour comes from the client's red list (PATVRlBets.red), never a server field (rlengine
   // says "green" for 0). The number is the text, the felt's ◆ / ● glyph is drawn by the CSS, and the colour is also a word for
   // screen readers ("Spin 41: 14 red"). The table's history strip, its history sheet and the Room Dock's recent line all use it.
@@ -453,7 +453,7 @@
         }
         state.textContent =
           ((target === where.table ? where.here : idHere) ? T("rl_room_wheel", "Room wheel") : T("rl_lobby", "Lobby wheel")) + " · " + phase(d.table);
-        // roulette2 O8: the last five pockets in the felt's colours, newest first (and larger) like the table's history strip
+        // 1.99aoh: the last five pockets in the felt's colours, newest first (and larger) like the table's history strip
         var last5 = d.table.history.slice(-5).reverse(),
           shownKey = d.table.id + ":" + d.table.last_revealed + ":" + last5.length;
         if (recent.dataset.round !== shownKey) {

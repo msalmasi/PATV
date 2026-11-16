@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP1 (FAIR-1 for the card tables, decision D9) - SCHEDULED TOURNAMENTS: a staging refresh must never let staging play, or
+// 1.99aoh (FAIR-1 for the card tables, decision D9) - SCHEDULED TOURNAMENTS: a staging refresh must never let staging play, or
 // publish, prod's tournament seeds - the seating draw's seed (casino_mtt seed.draw_seed: it orders the start draw, every table break and the
 // final table) and its tables' hand seeds, decks and hole cards. Prod has a running tournament mid-hand and one registering. The copy keeps
 // none of them (free pages included); staging (test/fixtures/casino-card-staging-boot.js, its own process) voids both quietly at boot through

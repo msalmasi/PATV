@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP1 (FAIR-1 for the card tables, decision D9): a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then
+// 1.99aoh (FAIR-1 for the card tables, decision D9): a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then
 // deploy/keep-staging-tables.js on the copy) must never let staging play, or publish, a blackjack shoe / dealer hole card or a Hold'em deck /
 // hole card prod is still playing. Prod has blackjack tables in the betting window, mid-round after insurance + split + double and mid-round on
 // a real shoe, cash Hold'em tables between hands (the next hand's seed committed) and mid-hand, a running Sit & Go mid-hand and a registering
@@ -122,7 +122,7 @@ test.before(async () => {
 test.after(() => svc.stop());
 
 /** a staging refresh. opts.plain: the copy built by a plain VACUUM INTO - prod's refresh-staging-db.sh one release behind staging (staging
- *  gets a release first) or rolled back past roulette2 WP1: stale row bytes stay in the copy's page slack, and only the keep step's rebuild
+ *  gets a release first) or rolled back past 1.99aoh: stale row bytes stay in the copy's page slack, and only the keep step's rebuild
  *  (deploy/keep-staging-tables.js, from staging's checkout) clears them */
 async function refresh(opts) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "card-staging-"));
@@ -201,7 +201,7 @@ test("FAIR-1 for cards: a staging refresh keeps no open card table's seed or car
   ok(await act("u1", "end", [], { table: bX }));
   assert.equal(get(bX).status, "closed");
 
-  // roulette2 WP1 review: hole cards asked for (Pepe's !cards, the website's `cards`) - the reply is cached whole in casino_actions (the
+  // 1.99aoh review: hole cards asked for (Pepe's !cards, the website's `cards`) - the reply is cached whole in casino_actions (the
   // idempotent replay): for the hand in play at a cash table and a sit & go, prod's hole cards
   const asked = [];
   for (const [uid, tid] of [["u6", hB], ["u7", hB], ["u8", sA], ["u9", sA]]) {
@@ -548,7 +548,7 @@ test("fair.js: a missing seed never deals - shuffleShoe / spinPocket / words thr
   assert.equal(fair.shuffleShoe(6, seed, "abc", 7).join(","), fair.shuffleShoe(6, seed, "abc", 7).join(","));
   assert.equal(fair.shuffleShoe(6, seed, "abc", 7).length, 312);
   assert.equal(fair.verify({ server_seed: null }).ok, false);
-  // (roulette2 WP1 review) the tournament seating draw too: Buffer.from("undefined", "hex") is an EMPTY HMAC key - a draw anyone can compute
+  // (1.99aoh review) the tournament seating draw too: Buffer.from("undefined", "hex") is an EMPTY HMAC key - a draw anyone can compute
   const SEAT = require(path.join(repo, "casino", "mttseat"));
   const ids = ["u3:1", "u1:1", "u2:1", "u4:1"];
   for (const s of [undefined, null, "", 0, "undefined", "zz", "ab", "ab".repeat(15) + "a"]) assert.throws(() => SEAT.drawOrder(s, "start", ids), /no draw seed/, String(s));
@@ -603,7 +603,7 @@ test("the Hold'em cash-out fix: a refused credit keeps the stack at the table (i
   assert.equal(await bal("u1"), 100000);
 });
 
-// roulette2 WP1 review: a refused cash-out never stops a table's clock. It used to throw out of the tick's sit-out loop (every 250 ms, before
+// 1.99aoh review: a refused cash-out never stops a table's clock. It used to throw out of the tick's sit-out loop (every 250 ms, before
 // the turn / next-hand / idle deadlines: a live hand never timed out), out of the hand's wrap-up (no next hand, `leaving` never cleared, and
 // the player whose action ended the hand was told "something went wrong") and out of a close. Now the seat keeps its stack, sits out, and its
 // sit-out clock tries again once per period.
