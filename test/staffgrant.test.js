@@ -217,3 +217,24 @@ test("index.js: both routes are Admin only (Staff lost access); the cards say wh
   const g = fs.readFileSync(path.join(repo, "views/admin/games.ejs"), "utf8");
   assert.match(g, /id="jackpotReason"/);
 });
+
+// banfix final verify: a clawback is staff acting, not the member - a site ban never blocks it (the ledger backstop lets a
+// system move through); the member's own debit is still refused
+test("a negative grant (clawback) still works on a site-banned account; the member's own spend is still refused", async () => {
+  sync(0);
+  const SB = require(path.join(repo, "siteban"));
+  const ledger = require(path.join(repo, "ledger"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT,
+                  by TEXT, at INTEGER, until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  await runQuery("INSERT INTO users (userId, username, points_balance, class) VALUES ('u_banned', 'banned1', 300, 'pleb')");
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES ('u_banned', '', 'banned1', 'spam', 'staffer', ?, NULL)",
+                 [Date.now()]);
+  SB.forget("u_banned");
+  const own = await ledger.post("u_banned", -50, "market-buy", { requireCover: true });
+  assert.equal(own.ok, false);
+  assert.equal(own.code, ledger.E_SITE_BANNED, "the member's own spend is refused");
+  const r = await SG.grant("banned1", -100);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal("banned1"), 200);
+  assert.equal((await txs("banned1")).at(-1).type, "staff transfer");
+});

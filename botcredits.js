@@ -39,6 +39,10 @@
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
 const ledger = require("./ledger");
+// banfix final verify: a deduction Pepe makes AS a penalty (a fine, an exploit clawback) is not the account acting, so a site
+// ban never blocks it (ledger opts.system); any other deduction stays the account's own and is refused for a banned account
+const SYSTEM_DEBIT_TYPES = /^(fine|modfine|automod-fine|exploit|clawback)$/i;
+const systemDebit = (type, amount) => Number(amount) < 0 && SYSTEM_DEBIT_TYPES.test(String(type || ""));
 const funding = require("./funding");
 
 let readyP = null;
@@ -246,10 +250,12 @@ async function chatwinnerPay(body, deps, { userId, type, amt, src, rf, entry, cp
       const transactionId = require("uuid").v4();
       // auto-account escrow (autoescrow.js): a free reward for a Camfrog auto account is held instead (platform rewards never)
       const posted = await require("./autoescrow").credit(userId, amount, "bonus win", { requireCover: true, counterparty: cp, transactionId,
+                                                                           system: systemDebit(type, amount),
                                                                            source: `bonus ${type}${src.value ? " from " + src.value : ""}`,
                                                                            kind: platform ? null : String(type) });
       if (!posted.ok) {
         if (posted.code === ledger.E_INSUFFICIENT) throw new Refusal(402, { success: false, error: "insufficient" }, "insufficient");
+        if (posted.code === ledger.E_SITE_BANNED) throw new Refusal(403, { success: false, error: "banned", code: ledger.E_SITE_BANNED }, "banned");
         throw new Refusal(404, { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND }, "no_user");
       }
       await runQuery("INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
@@ -404,4 +410,4 @@ function register(app, { isBotToken, idemBegin, resolveCounterparty }) {
   });
 }
 
-module.exports = { register, init, chatwinner, jackpotAdjust, mergeBalance, staleReclaimed, note, CHANNEL_POINTS };
+module.exports = { register, init, chatwinner, jackpotAdjust, mergeBalance, staleReclaimed, note, CHANNEL_POINTS, systemDebit };

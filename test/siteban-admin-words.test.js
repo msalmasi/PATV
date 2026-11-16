@@ -54,7 +54,7 @@ function runClick(file, attrs, answers) {
 }
 
 test("the report actions' site ban: a mistyped number of days is asked again (never 'for good'); cancel sends nothing", () => {
-  const rep = { row: { "data-user": "tilly", "data-post": "p1", "data-id": "p1" }, btn: { "data-fa": "r-ban" } };
+  const rep = { row: { "data-user": "mallory", "data-post": "p1", "data-id": "p1" }, btn: { "data-fa": "r-ban" } };
   const a = runClick("public/js/feed-admin.js", rep, ["spam bounties", "a week", "3"]);
   assert.equal(a.alerts.length, 1);
   assert.equal(a.alerts[0], EN["js.feedadm.days_bad"]);
@@ -66,7 +66,7 @@ test("the report actions' site ban: a mistyped number of days is asked again (ne
   assert.equal(z.posted[0].body.days, 0, "0 typed on purpose = for good");
   const c = runClick("public/js/feed-admin.js", rep, ["spam", "forever!!", null]);
   assert.equal(c.posted.length, 0, "cancelled: nothing sent");
-  const dm = runClick("public/js/dm-admin.js", { row: { "data-user": "tilly", "data-msg": "m1" }, btn: { "data-dmfa": "ban" } }, ["reported direct message", "1 week", "7"]);
+  const dm = runClick("public/js/dm-admin.js", { row: { "data-user": "mallory", "data-msg": "m1" }, btn: { "data-dmfa": "ban" } }, ["reported direct message", "1 week", "7"]);
   assert.equal(dm.alerts.length, 1);
   assert.equal(dm.posted.length, 1);
   assert.equal(dm.posted[0].body.days, 7);

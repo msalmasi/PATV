@@ -127,3 +127,20 @@ test("pools.charge (/api/pat/charge): a banned account - or one under a staff de
   assert.equal(await SB.startLock("u6"), null);
   assert.equal(await bal("u6"), 100000);
 });
+
+// banfix final verify: Pepe's penalties (a fine, an exploit clawback) are system debits - a site ban never blocks them; any
+// other deduction (and every credit) is not flagged
+test("botcredits.systemDebit: only a NEGATIVE fine/modfine/automod-fine/exploit/clawback is a system debit", () => {
+  const BC = require(path.join(repo, "botcredits"));
+  for (const t of ["fine", "modfine", "automod-fine", "Automod-Fine", "exploit", "clawback"]) assert.equal(BC.systemDebit(t, -100), true, t);
+  for (const [t, a] of [["automod-fine", 100], ["fine", 0], ["dice", -100], ["slots", -5], ["fine-refund", -5], ["", -1], [null, -1]])
+    assert.equal(BC.systemDebit(t, a), false, `${t} ${a}`);
+});
+
+test("a system debit on a site-banned account goes through (what botcredits passes for a fine)", async () => {
+  await ban("u2");
+  const b0 = await bal("u2");
+  const r = await ledger.post("u2", -100, "bonus win", { requireCover: true, system: true, source: "bonus automod-fine" });
+  assert.equal(r.ok, true);
+  assert.equal(await bal("u2"), b0 - 100);
+});
