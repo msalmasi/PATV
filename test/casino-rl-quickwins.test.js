@@ -151,7 +151,7 @@ test("O7: the limits placard names every limit in plain words and the player's '
   assert.equal(box.querySelector(".rl-left").textContent, "Your bets this spin: 2,500 PAT · 97,500 PAT left");
   assert.deepEqual(items, [
     "All your bets together: up to 100,000 PAT a spin",
-    "Minimum bet: 100 PAT a spot",
+    "Minimum bet: 100 PAT each time you bet",
     "One number (straight up): up to 5,000 PAT",
     "Split, 2 numbers: up to 10,000 PAT",
     "Street or trio, 3 numbers: up to 15,000 PAT",
@@ -159,7 +159,7 @@ test("O7: the limits placard names every limit in plain words and the player's '
     "Line, 6 numbers: up to 30,000 PAT",
     "Dozens, columns, red or black, odd or even, 1–18 or 19–36: up to 50,000 PAT each",
     "Up to 30 spots a spin",
-    "Every limit is per player and per spin, and counts all your chips on that spot.",
+    "Every limit is per player and per spin. A spot's limit counts all your chips on that spot.",
   ]);
   assert.ok(box.querySelector(".rl-lim-spin"), "the per-spin maximum stands out");
   // no more bets / the result: no "left" meter; signed out: the limits without a meter; an admin's new limit shows on the next poll
@@ -248,4 +248,33 @@ test("O3: the layout's 🛞 Roulette link sits after Hold'em in Play when roulet
   n = nav(await render({ rouletteOn: () => true, guestHides: (h) => /^\/casino(\/|$)/.test(h) }));
   assert.doesNotMatch(n, /\/casino\/roulette/);
   assert.match(nav(await render({ rouletteOn: () => true })), /href="\/casino\/roulette"/, "a guest sees it while guests may visit");
+});
+
+// roulette2 WP0 review: measured in Chrome (320 / 360 px, dir=rtl, the summary's computed name, forced-colors: active) - these are
+// the CSS rules those measurements came down to
+test("O7 / O8 review: the placard fits a 320 px phone and RTL, its glyphs stay out of its name; pockets keep a readable glyph and colours in a Contrast theme", () => {
+  const felt = read("views/partials/casino-rl-css.ejs"),
+    dockCss = read("public/css/casinorl-dock.css");
+  // the body of the rule whose selector line is exactly `sel {`
+  const rule = (css, sel) => {
+    const at = css.replace(/\r\n/g, "\n").split("\n" + sel + " {");
+    assert.equal(at.length, 2, sel);
+    return at[1].slice(0, at[1].indexOf("}"));
+  };
+  const ul = rule(felt, ".rl-limits ul");
+  // 17rem columns made a list 272 px wide inside a ~217 px box on a 320 px phone: .rl-stage (overflow: hidden) cut every line off
+  assert.match(ul, /grid-template-columns: repeat\(auto-fit, minmax\(min\(17rem, 100%\), 1fr\)\);/, "a column never wider than the box");
+  // the bullets' room on the inline-start side in RTL too (ar / fa / he / ur): physical padding put the note past the border
+  assert.match(ul, /padding-block: 0 0\.7rem;\s*padding-inline: 1\.9rem 0\.8rem;/);
+  assert.doesNotMatch(ul, /(?:^|\s)padding(?:-left|-right)?:/, "no physical padding");
+  assert.match(rule(felt, ".rl-limits .rl-lim-note"), /margin-inline-start: -1\.1rem;/);
+  // the ⓘ and ▾ are decoration: empty alt text (after a plain fallback for an older WebKit) keeps them out of the spoken name
+  assert.match(rule(felt, ".rl-limits-h::before"), /content: "ⓘ ";\s*content: "ⓘ " \/ "";/);
+  assert.match(rule(felt, ".rl-limits-h::after"), /content: "▾";\s*content: "▾" \/ "";/);
+  // the ◆ / ● cue that isn't colour: big enough to read (it was 7 px, about 3 px wide) and at full strength
+  const glyph = rule(dockCss, ".rl-pocket::after");
+  assert.ok(+/font: (\d+(?:\.\d+)?)px/.exec(glyph)[1] >= 9, "the glyph is at least 9 px");
+  assert.doesNotMatch(glyph, /opacity/);
+  // forced colours: every pocket was the same system colour and the newest lost its ring - they keep the felt's colours
+  assert.match(dockCss, /@media \(forced-colors: active\) \{\s*\.rl-pocket \{\s*forced-color-adjust: none;\s*\}\s*\}/);
 });

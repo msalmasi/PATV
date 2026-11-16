@@ -167,9 +167,9 @@
   text-align: center;
   vertical-align: middle;
 }
+/* (10 px at full strength: a 7 px glyph was about 3 px wide - the ◆ / ● cue has to be readable without the colour) */
 .rl-pocket::after {
-  font: 7px/1 system-ui, sans-serif;
-  opacity: 0.9;
+  font: 10px/1 system-ui, sans-serif;
 }
 .rl-pocket.red {
   background: #c62828;
@@ -196,6 +196,13 @@
   box-shadow:
     inset 0 0 0 1px #555,
     0 0 0 2px #f4cd81;
+}
+/* a Windows Contrast theme (forced colours) would paint every pocket the same system colour and drop the newest one's ring: the
+   pockets keep their felt colours (white on each passes AA) and the ring - the colour is the information here */
+@media (forced-colors: active) {
+  .rl-pocket {
+    forced-color-adjust: none;
+  }
 }
 .rl-recent {
   display: flex;

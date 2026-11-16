@@ -1524,29 +1524,34 @@ async function poll(after, waitMs) {
   // transaction, before its COMMIT and before the live table takes the new state (copy-then-commit). Woken there, a poll used to
   // read the uncommitted rows and draw roomTables() from the live table as it was BEFORE the step (a draw's board still "Place your
   // bets", the old rev) - then the post-commit wake found no waiter and Pepe's board waited out his next long-poll (up to 7 s of an
-  // 8 s spin). Queueing behind the casino lock (an empty step) lets that step finish first. Taken before the rows are read and never
-  // around roomTables(): refreshVeil -> persistVeil takes the lock itself (a deadlock).
-  const barrier = () => locked(() => null);
+  // 8 s spin). Queueing behind the casino lock lets that step finish first. Never around roomTables(): refreshVeil -> persistVeil
+  // takes the lock itself (a deadlock).
+  // roulette2 O12(a) review: the rows AND the cursor's top come from that ONE locked step - nothing of a casino step is between its
+  // INSERT and its COMMIT while it runs, so both are COMMITTED data. The cursor used to come from S.lastSeq, which an INSERT bumps
+  // before its transaction is known to commit: a step that rolled back (its line never sent) left it one past the committed top, and
+  // since AUTOINCREMENT rolls back too, the retried step's line got that same seq - below Pepe's cursor, never posted.
+  const snapshot = (from) =>
+    locked(async () => ({
+      rows: from == null ? [] : await getQuery("SELECT seq, table_id, room, ts, kind, data FROM casino_events WHERE seq > ? AND room IS NOT NULL ORDER BY seq LIMIT 200", [from]),
+      top: ((await getQuery("SELECT MAX(seq) AS s FROM casino_events"))[0] || {}).s || 0,
+    }));
   // a client with no cursor yet (or one from another database - a staging refresh) starts from now: no replay
   if (Number(after) < 0 || Number(after) > S.lastSeq) {
-    await barrier();
-    return Object.assign({ cursor: S.lastSeq, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [], now: clock() });
+    const { top } = await snapshot(null);
+    return Object.assign({ cursor: top, events: [], stream: S.stream.table }, await roomTables(), { private_mtt: [], now: clock() });
   }
   after = Math.max(0, Math.trunc(Number(after) || 0));
-  const read = () => getQuery("SELECT seq, table_id, room, ts, kind, data FROM casino_events WHERE seq > ? AND room IS NOT NULL ORDER BY seq LIMIT 200", [after]);
-  await barrier();
-  let rows = await read();
-  if (!rows.length && waitMs > 0) {
+  let snap = await snapshot(after);
+  if (!snap.rows.length && waitMs > 0) {
     await new Promise((resolve) => {
       const done = () => { clearTimeout(tm); S.waiters.delete(done); resolve(); };
       const tm = setTimeout(done, waitMs);
       S.waiters.add(done);
     });
-    await barrier();          // (the wake may have come from inside a locked step: let it commit first)
-    rows = await read();
+    snap = await snapshot(after);          // (the wake may have come from inside a locked step: let it commit - or roll back - first)
   }
-  const events = rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
-  return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, S.lastSeq), events, stream: S.stream.table },
+  const events = snap.rows.map((r) => ({ seq: r.seq, table: r.table_id, room: r.room, ts: r.ts, kind: r.kind, data: JSON.parse(r.data) }));
+  return Object.assign({ cursor: events.length ? events[events.length - 1].seq : Math.max(after, snap.top), events, stream: S.stream.table },
                        await roomTables(), { private_mtt: await locked(() => MT.privateMtt()).catch(() => []), now: clock() });
 }
 

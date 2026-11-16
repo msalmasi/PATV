@@ -355,7 +355,7 @@
       };
       [
         [T("rl_lim_spin", "All your bets together: up to {n} PAT a spin", n("rl_max_spin")), "rl-lim-spin"],
-        [T("rl_lim_min", "Minimum bet: {n} PAT a spot", n("rl_min_bet"))],
+        [T("rl_lim_min", "Minimum bet: {n} PAT each time you bet", n("rl_min_bet"))],
         [T("rl_lim_straight", "One number (straight up): up to {n} PAT", n("rl_max_straight"))],
         [T("rl_lim_split", "Split, 2 numbers: up to {n} PAT", n("rl_max_split"))],
         [T("rl_lim_street", "Street or trio, 3 numbers: up to {n} PAT", n("rl_max_street"))],
@@ -363,7 +363,7 @@
         [T("rl_lim_line", "Line, 6 numbers: up to {n} PAT", n("rl_max_line"))],
         [T("rl_lim_outside", "Dozens, columns, red or black, odd or even, 1–18 or 19–36: up to {n} PAT each", n("rl_max_outside"))],
         [L.rl_max_positions ? T("rl_lim_spots", "Up to {n} spots a spin", n("rl_max_positions")) : ""],
-        [T("rl_lim_note", "Every limit is per player and per spin, and counts all your chips on that spot."), "rl-lim-note"],
+        [T("rl_lim_note", "Every limit is per player and per spin. A spot's limit counts all your chips on that spot."), "rl-lim-note"],
       ].forEach(function (row) {
         if (!row[0]) return;
         var li = document.createElement("li");

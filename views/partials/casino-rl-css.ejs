@@ -257,8 +257,11 @@
 .rl-limits summary::-webkit-details-marker {
   display: none;
 }
+/* (the ▾ and the ⓘ are decoration: empty alt text keeps them out of the summary's spoken name - "Table limits, Your bets this
+   spin..."; the plain content line first is the fallback for a WebKit without the alt-text syntax) */
 .rl-limits-h::after {
   content: "▾";
+  content: "▾" / "";
   display: inline-block;
   margin-inline-start: 0.35em;
   transition: transform 0.15s;
@@ -272,6 +275,7 @@
 }
 .rl-limits-h::before {
   content: "ⓘ ";
+  content: "ⓘ " / "";
 }
 .rl-left {
   font-variant-numeric: tabular-nums;
@@ -279,12 +283,16 @@
 .rl-left:empty {
   display: none;
 }
+/* (17rem columns side by side on a wide felt; a box narrower than one column - a 320-360 px phone - gets one column as wide as the
+   box, never a fixed 17rem cut off by .rl-stage's overflow. Logical padding: the bullets' room is on the start side in RTL too.) */
 .rl-limits ul {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
   gap: 2px 1.4rem;
   margin: 0;
-  padding: 0 0.8rem 0.7rem 1.9rem;
+  padding-block: 0 0.7rem;
+  padding-inline: 1.9rem 0.8rem;
+  overflow-wrap: anywhere;
 }
 .rl-limits .rl-lim-spin {
   font-weight: 700;

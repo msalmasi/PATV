@@ -621,3 +621,46 @@ test("roulette2 O3 / O12(a): the navbar's Roulette link per casino_roulette mode
   assert.equal(j.ok, true);
   assert.equal(j.now, h.time());
 });
+
+test("roulette2 O12(a) review: a draw that rolls back while Pepe's poll waits never moves his cursor past the line it retries", async (t) => {
+  const T = await room();
+  expect(await act(T, "a", "bet", "red 100"));
+  // the draw's transaction fails on its last statement (the next spin's commitment row is already there) - after its "No more bets"
+  // line was inserted, bumped the in-memory sequence and woke the poll. SQLite's AUTOINCREMENT rolls back too, so the retried
+  // draw writes its line under the SAME seq.
+  const next = T.round.no + 1;
+  await sql("INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)", [T.id, next, "x", "x", h.time()]);
+  t.mock.method(console, "error", () => {});
+  const from = (await rows("SELECT MAX(seq) AS s FROM casino_events"))[0].s || 0;
+  const waiting = svc.S.waiters.size;
+  const p = svc.poll(from, 8000);
+  await settle(() => svc.S.waiters.size > waiting, "the poll waits for an event");
+  await tick(25000);
+  assert.equal(T.eng.phase, "betting", "the failed draw left the wheel betting");
+  const out = await p;
+  assert.deepEqual(out.events, [], "the rolled-back line is never delivered");
+  assert.equal(out.cursor, from, "the cursor stays on the last COMMITTED event");
+  assert.equal(out.tables[T.id].phase, "betting");
+  // a client with no cursor yet starts from the committed top as well
+  assert.equal((await svc.poll(-1, 0)).cursor, from);
+  // the retried draw commits: its line reaches Pepe from the cursor he was given
+  await sql("DELETE FROM casino_rounds WHERE table_id=? AND round_no=?", [T.id, next]);
+  await tick(1000);
+  assert.equal(T.eng.phase, "spinning");
+  const again = await svc.poll(out.cursor, 0);
+  assert.ok(again.events.some((e) => e.kind === "line" && /No more bets/.test(e.data.text)), "the retried draw's line");
+  assert.equal(again.cursor, again.events[again.events.length - 1].seq);
+});
+
+test("roulette2 O7 review: the placard's words match the checks - the minimum is for each bet, a spot's cap counts all your chips there", async () => {
+  const T = await room();
+  const st = svc.S.settings;
+  expect(await act(T, "b", "bet", "red " + st.rl_min_bet));
+  // "Minimum bet: {n} PAT each time you bet" - chips already on the spot don't make a smaller bet on it legal
+  assert.equal((await act(T, "b", "bet", "red " + st.rl_min_bet / 2)).ok, false);
+  // "A spot's limit counts all your chips on that spot" - up to the cap in all, and nothing past it
+  expect(await act(T, "b", "bet", "red " + (st.rl_max_outside - st.rl_min_bet)));
+  assert.equal((await act(T, "b", "bet", "red " + st.rl_min_bet)).ok, false);
+  expect(await act(T, "b", "bet", "black " + st.rl_min_bet));
+  assert.equal((await svc.meView(T, "b")).staked, st.rl_max_outside + st.rl_min_bet);
+});
