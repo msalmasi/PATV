@@ -257,6 +257,12 @@ function install(core) {
   function own(T, uid) {
     return T.eng.book.filter((l) => l.uid === uid);
   }
+  // Rebet repeats the player's previous spin as the line's own spin sees it: while a spin is in the air, a rebet is
+  // queued for the next spin, so the previous spin is the one on the wheel (lastslip is written only at its landing).
+  function lastSlip(T, uid) {
+    const lines = own(T, uid);
+    return T.eng.phase === "spinning" && lines.length ? combinedSlip(lines) : T.eng.lastslip[uid] || null;
+  }
   async function checkSeat(T, actor) {
     const uid = actor.uid,
       e = T.eng;
@@ -770,7 +776,7 @@ function install(core) {
       lines: own(T, uid).map((l) => ({ text: describe(l.bets), amount: l.amount })),
       staked: T.escrowed[uid] || 0,
       pending: T.eng.pending[uid] ? describe(T.eng.pending[uid].bets) : null,
-      last_slip: T.eng.lastslip[uid] ? describe(T.eng.lastslip[uid]) : null,
+      last_slip: lastSlip(T, uid) ? describe(lastSlip(T, uid)) : null,
       room_left: Math.max(0, S.settings.rl_max_spin - (T.escrowed[uid] || 0)),
       net: T.eng.net?.[uid] ?? null,
       private_note: T.eng.notes?.[uid] || null,
@@ -830,7 +836,7 @@ function install(core) {
     if (verb === "bet" || verb === "rebet") {
       const parsed =
         verb === "rebet"
-          ? { ok: !!e.lastslip[uid], bets: e.lastslip[uid], error: "No previous spin to repeat.", hint: "" }
+          ? { ok: !!lastSlip(T, uid), bets: lastSlip(T, uid), error: "No previous spin to repeat.", hint: "" }
           : grammar.parse(args[0], { maxPairs: actor.via === "web" ? 20 : 6, minBet: S.settings.rl_min_bet });
       return parsed.ok ? place(T, actor, parsed.bets, key) : reply(false, parsed.error + " " + parsed.hint);
     }
