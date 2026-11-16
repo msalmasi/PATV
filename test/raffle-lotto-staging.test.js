@@ -210,6 +210,7 @@ test("FAIR-1 for raffles and the lotto: a staging refresh keeps no unrevealed se
   const d3 = st.draws2.find((d) => d.draw === 3);
   assert.ok(d3 && d3.state === "selling", "a fresh draw of staging's own opens");
   assert.notEqual(d3.commitment, d2.commitment);
+  assert.equal(d3.next_at, d2.next_at, "on the copied draw's schedule (the tick's own reopen would skip a week)");
   assert.match(d3.seed, /^[0-9a-f]{64}$/);
   assert.equal(st.draws2.filter((d) => ["selling", "closed"].includes(d.state)).length, 1);
   assert.equal(st.info.draw, 3);
@@ -248,6 +249,12 @@ test("a refused raffle refund (an account that is gone) keeps the copy open and 
   const inbox0 = await one("SELECT COUNT(*) AS n FROM inbox");
   const makerBal = await bal(U("maker")), annBal = await bal(U("ann"));
   await scrubRaffle(r);
+  // never expired (or drawn) by the normal path - its notices and its event - even when its expiry passed before the retire ran
+  const t0 = NOW;
+  NOW = (await raffle(r)).expires_at + 1000;
+  assert.equal(await RF.maybeDraw(r), null);
+  assert.equal((await raffle(r)).status, "open");
+  NOW = t0;
   const danRow = await gone(U("dan"));
   const errs = await capture(async () => {
     const res = await RF.retireCopies();
@@ -376,6 +383,14 @@ test("a copied lotto draw whose sales had CLOSED (its tickets digest public, its
 
 test("the scrub: only open raffles and unrevealed draws, can run twice (refresh-staging-db.sh runs prod's list and staging's), and a copy of an old prod without the tables is fine", async () => {
   assert.deepEqual(K.DRAW_SCRUB.map((s) => [s.table, s.what]), [["raffles", "raffle seeds"], ["lotto_draws", "lotto seeds"]]);
+  // what counts as a copy: an open raffle with no seed; a selling / closed lotto draw with no seed OR marked copied
+  assert.equal(RF.isCopy({ status: "open", server_seed: "" }), true);
+  assert.equal(RF.isCopy({ status: "open", server_seed: "ab".repeat(32) }), false);
+  assert.equal(RF.isCopy({ status: "drawn", server_seed: "" }), false);
+  assert.equal(LS.isCopy({ state: "selling", server_seed: "ab".repeat(32), flags: { copied: 1 } }), true);
+  assert.equal(LS.isCopy({ state: "closed", server_seed: "", flags: {} }), true);
+  assert.equal(LS.isCopy({ state: "selling", server_seed: "ab".repeat(32), flags: {} }), false);
+  assert.equal(LS.isCopy({ state: "drawn", server_seed: "", flags: { copied: 1 } }), false, "a drawn draw is public already");
   assert.ok(K.CASINO_SCRUB.length === 4, "WP1's card / wheel list is untouched");
   const r = (await mkRaffle("maker", { prize_amount: "2k" })).id;
   const { dir, file } = await refresh();

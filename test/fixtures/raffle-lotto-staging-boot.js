@@ -33,8 +33,8 @@ const inList = (list) => list.map(() => "?").join(",") || "''";
 const balances = async () => Object.fromEntries((await getQuery("SELECT userId, points_balance FROM users ORDER BY userId")).map((r) => [r.userId, r.points_balance]));
 const raffles = async () => Object.fromEntries((await getQuery(`SELECT id, status, server_seed, tickets_digest, close_reason, winning_no FROM raffles WHERE id IN (${inList(ids)})`, ids))
   .map((r) => [r.id, { status: r.status, seed: r.server_seed, digest: r.tickets_digest, reason: r.close_reason, winning_no: r.winning_no }]));
-const draws = async () => (await getQuery("SELECT draw, state, server_seed, commitment, flags, white FROM lotto_draws ORDER BY draw"))
-  .map((d) => ({ draw: d.draw, state: d.state, seed: d.server_seed, commitment: d.commitment, flags: JSON.parse(d.flags || "{}"), white: d.white }));
+const draws = async () => (await getQuery("SELECT draw, state, server_seed, commitment, flags, white, next_at FROM lotto_draws ORDER BY draw"))
+  .map((d) => ({ draw: d.draw, state: d.state, seed: d.server_seed, commitment: d.commitment, flags: JSON.parse(d.flags || "{}"), white: d.white, next_at: d.next_at }));
 let app = null;
 function boot() {
   // raffles.js register: what index.js calls at the site's start (its boot retires the copies); the lotto's boot (lotto/routes.js)

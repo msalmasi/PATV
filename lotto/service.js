@@ -383,8 +383,14 @@ async function voidCopy(D) {
     if (S.hooks.crash) S.hooks.crash("copy-purchase");               // tests only
   }
   const flags = Object.assign({}, D.flags || {}, { copied: 1, void: "copy" });
-  const u = await runQuery("UPDATE lotto_draws SET state = 'void', flags = ?, closed_at = COALESCE(closed_at, ?) WHERE draw = ? AND state IN ('selling', 'closed')",
-                           [JSON.stringify(flags), clock(), D.draw]);
+  const u = await tx(async () => {
+    // (never void with a purchase of it still standing: buy refuses a copy, so none can have arrived - checked all the same)
+    if ((await getQuery("SELECT 1 FROM lotto_purchases WHERE draw = ? AND state IN ('done', 'charging') LIMIT 1", [D.draw])).length) {
+      throw new Error("a purchase of it is still standing");
+    }
+    return runQuery("UPDATE lotto_draws SET state = 'void', flags = ?, closed_at = COALESCE(closed_at, ?) WHERE draw = ? AND state IN ('selling', 'closed')",
+                    [JSON.stringify(flags), clock(), D.draw]);
+  });
   if (!u || !u.changes) return null;
   console.log(`[lotto] draw #${D.draw}: a draw copied from another database voided unrevealed (${n} purchase(s), ${fmt(back)} PAT back)`);
   return { draw: D.draw, purchases: n, refunded: back };
