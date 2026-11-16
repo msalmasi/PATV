@@ -57,7 +57,7 @@ test("FAIR-1: a staging refresh never lets staging play or publish a seed prod's
 });
 
 const markCopied = (id) =>
-  sql("UPDATE casino_tables SET state = json_set(json_remove(state, '$.round.seed'), '$.copied', 1) WHERE id = ?", [id]);
+  sql("UPDATE casino_tables SET state = json_set(json_remove(state, '$.round.seed', '$.next.seed'), '$.copied', 1) WHERE id = ?", [id]);
 test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by key, closed, never revealed", async () => {
   const { cash, total, held, tick, restart, rows } = h;
   for (const at of ["spinning", "settling"]) {
@@ -83,6 +83,9 @@ test("a copied wheel mid-spin or mid-settlement at boot: refunded or settled by 
     if (at === "spinning") assert.equal(await cash("b"), 500000, "the copied book was refunded");
     const rec = await svc.fairRecord(T.id, 1);
     assert.equal(rec.server_seed, null, at + ": no seed published");
+    const ahead = await svc.fairRecord(T.id, 2);
+    assert.ok(ahead && ahead.commitment, at + ": the next spin was committed at the draw (FAIR-3)");
+    assert.equal(ahead.server_seed, null, at + ": and never revealed here");
     assert.equal((await rows("SELECT COUNT(*) AS n FROM transactions WHERE type='roulette payout'"))[0].n, at === "settling" ? 1 : 0);
   }
 });

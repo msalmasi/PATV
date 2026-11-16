@@ -172,21 +172,26 @@ function install(core) {
     const e = T.eng;
     e.seats = e.seats.filter((uid) => own(T, uid).length || e.pending[uid] || clock() - e.seen[uid] < 600000);
   }
+  // FAIR-3: the spin after a drawn one was committed at the draw (T.next) - a line queued while the wheel spins is accepted
+  // after its spin's commitment exists and is shown (publicView next_commitment). A wheel with none commits now.
   async function nextSeed(T) {
     const n = T.eng.round_no + 1,
-      seed = fair.newServerSeed();
+      pre = T.next && T.next.no === n && T.next.seed ? T.next : null,
+      seed = pre ? pre.seed : fair.newServerSeed();
     await tx(async () => {
       T.round = { seed, commitment: fair.commitment(seed), no: n };
+      T.next = null;
       T.eng.round_no = n;
       T.eng.phase = "idle";
       T.eng.book = [];
       pruneInactive(T);
       T.eng.actions = {};
       T.dl = {};
-      await runQuery(
-        "INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)",
-        [T.id, n, T.round.commitment, T.client_seed, clock()],
-      );
+      if (!pre)
+        await runQuery(
+          "INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)",
+          [T.id, n, T.round.commitment, T.client_seed, clock()],
+        );
       await save(T);
     });
   }
@@ -405,7 +410,9 @@ function install(core) {
           true,
           (previous ? "⏳ Replaced your queued line: " : "⏳ Queued for the next spin: ") +
             describe(bets, actor.via === "web") +
-            " (charged when betting opens).",
+            " (charged when betting opens)" +
+            (T.next ? " · 🔐 spin " + T.next.no + " committed " + T.next.commitment.slice(0, 12) + "…" : "") +
+            ".",
         ),
         uid,
         key,
@@ -516,9 +523,12 @@ function install(core) {
     // The pocket is public only once its draw has committed. Every reader (the web poll, Pepe's long-poll, the OBS
     // board) reads the live table without the casino lock, so the spinning state is saved from a copy and reaches the
     // live table after COMMIT. A draw that fails leaves the live wheel betting as it was: nobody saw its pocket.
+    // FAIR-3: and the next spin is committed now (unless this wheel closes after this spin), before any line is queued for it
     const r = { ...T.round, pocket: fair.spinPocket(T.round.seed, T.client_seed, T.round.no) },
       dl = { land: clock() + S.settings.rl_spin_secs * 1000 },
-      next = { ...T, round: r, eng: { ...T.eng, phase: "spinning" }, dl };
+      ahead = !T.closing && S.settings.casino_roulette !== "off" && !rotation(T) ? fair.newServerSeed() : null,
+      upcoming = ahead ? { seed: ahead, commitment: fair.commitment(ahead), no: r.no + 1 } : null,
+      next = { ...T, round: r, eng: { ...T.eng, phase: "spinning" }, dl, next: upcoming };
     const players = Object.keys(T.escrowed).map((uid) => ({ uid, name: T.players[uid].name }));
     await tx(async () => {
       await emit(
@@ -537,8 +547,13 @@ function install(core) {
         T.id,
         r.no,
       ]);
+      if (upcoming)
+        await runQuery(
+          "INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)",
+          [T.id, upcoming.no, upcoming.commitment, T.client_seed, clock()],
+        );
     });
-    Object.assign(T, { round: r, dl, rev: next.rev, updated: next.updated });
+    Object.assign(T, { round: r, dl, next: upcoming, rev: next.rev, updated: next.updated });
     T.eng.phase = "spinning";
     wake(T);
     crash("draw");
@@ -658,17 +673,20 @@ function install(core) {
     }
     if (T.eng.book.length) await refund(T, T.eng.book, "end", null, null);
     await tx(async () => {
-      if (!T.round.settle)
+      // every unused commitment is revealed: the current round when it never spun, and the next spin committed at a draw
+      const unused = [T.round.settle ? null : T.round, T.next && T.next.seed ? T.next : null].filter(Boolean);
+      for (const u of unused)
         await runQuery(
           "UPDATE casino_rounds SET server_seed=?,shoe=?,revealed=? WHERE table_id=? AND round_no=?",
           [
-            T.round.seed,
-            JSON.stringify({ pocket: fair.spinPocket(T.round.seed, T.client_seed, T.round.no), pockets: 37 }),
+            u.seed,
+            JSON.stringify({ pocket: fair.spinPocket(u.seed, T.client_seed, u.no), pockets: 37 }),
             clock(),
             T.id,
-            T.round.no,
+            u.no,
           ],
         );
+      T.next = null;
       T.last_revealed = T.round.no;
       T.status = "closed";
       T.closed_at = clock();
@@ -849,6 +867,9 @@ function install(core) {
       client_seed: T.client_seed,
       commitment: T.round.commitment,
       commit_round: T.round.no,
+      // FAIR-3: while a spin is in the air (or its result is up), the next spin's commitment - a queued line's spin
+      next_commitment: T.next ? T.next.commitment : null,
+      next_round: T.next ? T.next.no : null,
       last_revealed: T.last_revealed,
       deadline: T.dl.bet || null,
       land_at: T.dl.land || null,

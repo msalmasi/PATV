@@ -432,3 +432,32 @@ test("SUITES-5: blackjack rounds still verify through the fair record next to ro
   assert.equal(rec.game, "bj");
   assert.equal(rec.verified, true);
 });
+
+test("FAIR-3: a line queued during a spin is accepted after its spin is committed and shown; a close reveals that unused commitment", async () => {
+  const T = await room();
+  expect(await act(T, "b", "bet", "red 100"));
+  await tick(25000);
+  assert.equal(T.eng.phase, "spinning");
+  const committed = (await h.rows("SELECT commitment FROM casino_rounds WHERE table_id=? AND round_no=2", [T.id]))[0];
+  assert.ok(committed, "spin 2 is committed at spin 1's draw");
+  assert.equal(svc.publicView(T).next_commitment, committed.commitment);
+  assert.equal(svc.publicView(T).next_round, 2);
+  assert.equal((await svc.fairRecord(T.id, 2)).server_seed, null);
+  const q = expect(await act(T, "c", "bet", "black 100"));
+  assert.ok(q.reply.includes("spin 2 committed " + committed.commitment.slice(0, 12)), q.reply);
+  await tick(8000);
+  await tick(5000);
+  assert.equal(T.round.no, 2);
+  assert.equal(T.round.commitment, committed.commitment, "spin 2 plays the commitment shown");
+  assert.ok(T.eng.book.some((l) => l.uid === "c"));
+  // the host ends it mid-spin: spin 3, committed at spin 2's draw, closes unused and revealed
+  await tick(25000);
+  expect(await act(T, "a", "end"));
+  await tick(8000);
+  await tick(5000);
+  assert.equal(T.status, "closed");
+  const r3 = await svc.fairRecord(T.id, 3);
+  assert.ok(r3.server_seed, "the unused commitment is revealed at the close");
+  assert.equal(r3.verified, true);
+  assert.equal(r3.results, null);
+});
