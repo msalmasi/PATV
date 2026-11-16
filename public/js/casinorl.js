@@ -1074,8 +1074,11 @@
       fe.classList.toggle("hr", !!t.high_stakes);
       CZ.theme(t, { scene: fe, sign: null });
     }
-    if (wheel && previous && !!previous.table.high_stakes !== !!t.high_stakes) wheel.setPalette(t.high_stakes ? "hr" : "classic");
-    else if (wheel && !previous && t.high_stakes) wheel.setPalette("hr");
+    // (a High Roller wheel's ebony and gold, on the big wheel and the phone's floating one)
+    if ((previous && !!previous.table.high_stakes !== !!t.high_stakes) || (!previous && t.high_stakes))
+      [wheel, floater].forEach(function (w) {
+        if (w) w.setPalette(t.high_stakes ? "hr" : "classic");
+      });
     drive(wheel, t);
     drive(floater, t);
     floatShown();
