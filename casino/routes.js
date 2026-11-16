@@ -666,6 +666,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (Array.isArray(b.games) && b.games.includes("roulette")) {
         out.roulette = svc.RL.openList();
         out.roulette_on = st.casino_roulette;
+        // 1.99aoe (SUITES-2): a room player's queued line refused when betting opened, or dropped by a close - PM'd by Pepe as a
+        // private_mtt "notice" (each key once, only down that player's own room; never an event)
+        out.private_mtt = (out.private_mtt || []).concat(svc.RL.privateNotes());
         out.lobby.roulette = base + "/casino/roulette";
       } else {
         out.events = out.events.filter(e => e.data?.game !== "roulette");

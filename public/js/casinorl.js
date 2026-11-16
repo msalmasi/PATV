@@ -308,6 +308,11 @@
     var t = d.table,
       me = d.me,
       phase = R.phase(t);
+    // ENGINE-4: a rotated lobby wheel names the fresh one - the page follows it (a queued line went along)
+    if (t.status === "closed" && t.next_table && /^[a-f0-9]{10}$/.test(t.next_table)) {
+      W.location.replace("/casino/roulette/t/" + t.next_table);
+      return;
+    }
     spin(t);
     controls.update(d);
     $("cb").classList.toggle("rl-lobby", !!t.lobby);

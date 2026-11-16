@@ -268,7 +268,9 @@ function install(core) {
       e = T.eng;
     if (!e.seats.includes(uid)) {
       if (Object.keys(T.veil || {}).length >= 35 && !(T.veil || {})[uid])
-        return "This wheel is full for now — a fresh one opens after this spin.";
+        return T.lobby
+          ? "This wheel is full for now — a fresh one opens after this spin."
+          : "This wheel is full — it closes after this spin, then !rl start opens a new one.";
       const mine = await dupOf(uid);
       for (const k of e.seats) {
         const other = await dupOf(k);
@@ -294,24 +296,31 @@ function install(core) {
     const k = { trio: "street", first_four: "corner" }[b.kind] || b.kind;
     return S.settings["rl_max_" + k] || S.settings.rl_max_outside;
   }
-  async function checkLine(T, actor, bets) {
+  // The per-position, position-count and per-spin limits of a line on top of the player's lines (none for a queued
+  // line: it opens the player's next spin). -> {why} | {amounts: token -> the player's total on it}
+  function lineLimits(bets, lines) {
     const s = S.settings,
-      e = T.eng,
-      uid = actor.uid,
       amounts = new Map();
-    if (!own(T, uid).length && Object.keys(T.escrowed).length >= s.rl_max_players)
-      return "The wheel has reached its player limit.";
-    if ((e.actions[uid] || 0) >= s.rl_max_lines) return "You've reached the action limit this spin.";
-    for (const b of own(T, uid).flatMap((l) => l.bets))
-      amounts.set(b.token, (amounts.get(b.token) || 0) + b.amount);
+    for (const b of lines.flatMap((l) => l.bets)) amounts.set(b.token, (amounts.get(b.token) || 0) + b.amount);
     for (const b of bets) {
       const amount = (amounts.get(b.token) || 0) + b.amount;
       if (!Number.isSafeInteger(b.amount) || b.amount < s.rl_min_bet || amount > capFor(b))
-        return "The limit on " + b.token + " is " + fmt(capFor(b)) + " PAT, minimum " + fmt(s.rl_min_bet) + ".";
+        return { why: "The limit on " + b.token + " is " + fmt(capFor(b)) + " PAT, minimum " + fmt(s.rl_min_bet) + "." };
       amounts.set(b.token, amount);
     }
     if (amounts.size > s.rl_max_positions || sum([...amounts.values()]) > s.rl_max_spin)
-      return "That line exceeds your per-spin limit.";
+      return { why: "That line exceeds your per-spin limit." };
+    return { amounts };
+  }
+  async function checkLine(T, actor, bets) {
+    const s = S.settings,
+      e = T.eng,
+      uid = actor.uid;
+    if (!own(T, uid).length && Object.keys(T.escrowed).length >= s.rl_max_players)
+      return "The wheel has reached its player limit.";
+    if ((e.actions[uid] || 0) >= s.rl_max_lines) return "You've reached the action limit this spin.";
+    const limited = lineLimits(bets, own(T, uid));
+    if (limited.why) return limited.why;
     const { closed, room } = await available(T);
     if (closed) return "The wheel's bank is closed right now.";
     const base = engine.lossVector(e.book),
@@ -344,8 +353,18 @@ function install(core) {
     const e = T.eng,
       uid = actor.uid;
     if (["result", "spinning"].includes(e.phase)) {
+      // A queued line is checked now as far as it can be (ENGINE-4 / SUITES-2): a room wheel that closes after this spin
+      // opens no next spin, and the limits and the balance refuse it now with the reason. The bank and a balance spent
+      // meanwhile are checked when betting opens; a refusal then is told privately (queuedLines).
+      if (!T.lobby && rotation(T))
+        return reply(false, "🛞 This wheel closes after this spin — no new bets. !rl start opens a new one then.");
       if (!e.pending[uid] && Object.keys(e.pending).length >= S.settings.rl_max_players)
         return reply(false, "The next spin is full.");
+      const limited = lineLimits(bets, []);
+      if (limited.why) return reply(false, limited.why);
+      const u = await userRow(uid);
+      if (!u || !(Number(u.points_balance) >= amountOf(bets)))
+        return reply(false, "You don't have enough available PAT for that line.");
       const previous = e.pending[uid];
       seat(T, actor);
       e.pending[uid] = { bets };
@@ -624,21 +643,52 @@ function install(core) {
       T.status = "closed";
       T.closed_at = clock();
       T.dl = {};
+      for (const [uid, line] of Object.entries(T.eng.pending)) tell(T, uid, line.bets, "the wheel closed.");
       T.eng.pending = {};
-      await emit(T, "closed", "🛞 The roulette wheel closed.", { reason });
+      await emit(T, "closed", CLOSED[reason] || "🛞 The roulette wheel closed.", { reason });
       await save(T);
     });
     streamGone(T.id);
   }
+  const CLOSED = {
+    full: "🛞 The roulette wheel closed: it reached 35 players. !rl start opens a new one.",
+    rotated: "🛞 This lobby wheel closed; a fresh one is open.",
+  };
   const rotation = (T) =>
     Object.keys(T.veil || {}).length >= 35 || (T.lobby && clock() - T.created >= 86400000);
   async function advance(T) {
-    if (T.closing || S.settings.casino_roulette === "off" || rotation(T)) {
-      await closeTable(T, "wheel finished");
+    const off = S.settings.casino_roulette === "off";
+    if (T.closing || off || rotation(T)) {
+      // ENGINE-4: the lobby rotates (a day, or 35 people) - its queued lines move to the fresh lobby wheel and are
+      // charged when its window opens; its page follows the successor (publicView next_table)
+      const carry = T.lobby && !T.closing && !off ? T.eng.pending : {};
+      if (Object.keys(carry).length) T.eng.pending = {};
+      await closeTable(T, T.closing || off ? "wheel finished" : T.lobby ? "rotated" : "full");
+      if (T.lobby && T.status === "closed" && !off) await succeed(T, carry);
       return;
     }
     await nextSeed(T);
     await queuedLines(T);
+  }
+  async function succeed(T, carry) {
+    let N = null;
+    try {
+      N = await ensureLobby();
+    } catch (e) {
+      console.error("[casino] the next lobby wheel:", e.message);
+    }
+    if (!N || N === T) {
+      for (const [uid, line] of Object.entries(carry)) tell(T, uid, line.bets, "the wheel closed.");
+      await save(T);
+      return;
+    }
+    for (const [uid, line] of Object.entries(carry)) {
+      N.players[uid] = N.players[uid] || T.players[uid];
+      N.eng.pending[uid] = line;
+    }
+    if (Object.keys(carry).length) await save(N);
+    T.successor = N.id;
+    await save(T);
   }
   async function queuedLines(T) {
     for (const [uid, line] of Object.entries(T.eng.pending)) {
@@ -646,10 +696,35 @@ function install(core) {
       const out = await place(T, actor, line.bets, null, true);
       if (!out.ok) {
         delete T.eng.pending[uid];
-        T.eng.notes = { ...T.eng.notes, [uid]: out.reply };
+        tell(T, uid, line.bets, out.reply);
         await save(T);
       }
     }
+  }
+  // SUITES-2 / MONEY-9: a queued line refused when betting opens, or dropped by a close, is told privately - the page's
+  // and the Dock's meView.private_note and, for a Camfrog room player, a PM through Pepe's poll (privateNotes).
+  function tell(T, uid, bets, why) {
+    const e = T.eng,
+      text = "Your queued line (" + describe(bets) + ") wasn't placed: " + why;
+    e.notes = { ...e.notes, [uid]: text };
+    const p = T.players[uid] || {};
+    if (p.via !== "room" || !p.camfrog || !p.room) return;
+    e.pmno = (e.pmno || 0) + 1;
+    e.pms = (e.pms || [])
+      .filter((m) => clock() - m.ts < PM_MS)
+      .concat({ key: "rl:" + T.id + ":" + e.pmno, camfrog: p.camfrog, room: p.room, text: "🛞 " + text, ts: clock() })
+      .slice(-20);
+  }
+  // Pepe's poll (`private_mtt`, which he PMs by kind "notice": each key once, only down the player's own room)
+  const PM_MS = 120000;
+  function privateNotes() {
+    const out = [];
+    for (const T of S.tables.values())
+      if (T.game === "roulette")
+        for (const m of T.eng.pms || [])
+          if (clock() - m.ts < PM_MS)
+            out.push({ kind: "notice", key: m.key, camfrog: m.camfrog, room: m.room, table: T.id, text: m.text });
+    return out;
   }
   function due(T) {
     const e = T.eng,
@@ -739,6 +814,7 @@ function install(core) {
       room: T.room,
       url: link(T),
       phase: T.status === "closed" ? "closed" : e.phase,
+      next_table: T.successor || null,
       round_no: e.round_no,
       client_seed: T.client_seed,
       commitment: T.round.commitment,
@@ -959,6 +1035,7 @@ function install(core) {
     gate,
     shut,
     restore,
+    privateNotes,
     HELP,
   };
 }

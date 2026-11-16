@@ -934,6 +934,8 @@
         first = "";
         const r = await fetch(`/api/casino/t/${tableId}${q}`, { credentials: "same-origin" });
         if (r.status === 404) {
+          // 1.99aoe (ENGINE-4): a rotated lobby wheel that has left memory - the lobby page opens the current one
+          if (game === "roulette" && lastD && lastD.table && lastD.table.lobby) { stopped = true; location.replace("/casino/roulette"); return; }
           toast(T("closed", "That table has closed."), true);
           stopped = true;
           const dock = $("cz-dock");
