@@ -119,6 +119,21 @@ const CASINO_SCRUB = [
     sql: "UPDATE main.casino_actions SET response = json_set(response, '$.reply', '') WHERE response LIKE '%Your hand:%' AND " +
          "(CASE WHEN json_valid(response) THEN json_extract(response, '$.reply') END) LIKE '%Your hand:%'" },
 ];
+// roulette2 WP7 (FAIR-1 for the other provably fair draws): an OPEN raffle keeps its secret seed in raffles.server_seed (raffles.js: with
+// the tickets digest taken at the draw it IS the winning ticket number) and a lotto draw still selling or closed keeps its own in
+// lotto_draws.server_seed (lotto/service.js: with the tickets digest it IS the draw's numbers). Prod may still sell either, so the copy
+// never keeps those seeds: each is blanked ('' - both columns are NOT NULL; a blank seed is what marks a copied raffle, and a lotto draw
+// gets flags.copied too). Staging retires them at boot through their own refund paths (raffles.js retireCopies: every held ticket back by
+// its key, the prize back; lotto/service.js retireCopies: every purchase back by its refund key with its pot and House shares) - quiet,
+// never drawn, the seed never revealed - and fair.js's no-seed guard refuses a draw from a blank seed. A drawn raffle or lotto draw keeps
+// its seed: prod revealed it at the draw. Each statement can run twice (a second run finds no seed left to blank).
+const DRAW_SCRUB = [
+  { table: "raffles", what: "raffle seeds",
+    sql: "UPDATE main.raffles SET server_seed = '' WHERE status = 'open' AND server_seed <> ''" },
+  { table: "lotto_draws", what: "lotto seeds",
+    sql: "UPDATE main.lotto_draws SET server_seed = '', flags = json_set(CASE WHEN json_valid(flags) THEN flags ELSE '{}' END, '$.copied', 1) " +
+         "WHERE state IN ('selling', 'closed') AND server_seed <> ''" },
+];
 const NAME_RE = /^[a-z_][a-z0-9_]*$/;
 const q = (n) => { if (!NAME_RE.test(n)) throw new Error("bad name " + n); return '"' + n + '"'; };
 
@@ -194,6 +209,11 @@ async function scrub(db) {
     out.push({ table: s.table, scrubbed: r.changes || 0 });
   }
   for (const s of CASINO_SCRUB) {                                          // 1.99aof FAIR-1 (+ 1.99aoh: the card tables): no open table's seed
+    if (!(await tableSql(db, "main", s.table))) continue;
+    const r = await run(db, s.sql);
+    out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });
+  }
+  for (const s of DRAW_SCRUB) {                                            // roulette2 WP7: no open raffle's / unrevealed lotto draw's seed
     if (!(await tableSql(db, "main", s.table))) continue;
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });
@@ -327,4 +347,4 @@ if (require.main === module) {
   }, (e) => { console.error("the per-environment tables couldn't be made safe: " + e.message); process.exit(1); });
 }
 
-module.exports = { main, keep, clearOnly, scrub, keepKv, KEEP, KV_KEEP, EMPTY, SCRUB, CASINO_SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };
+module.exports = { main, keep, clearOnly, scrub, keepKv, KEEP, KV_KEEP, EMPTY, SCRUB, CASINO_SCRUB, DRAW_SCRUB, CHATLOG, CHATLOG_TRIGGERS, INDEXABLE, LIVE_FEED };

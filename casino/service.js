@@ -52,6 +52,7 @@ const C = {
   MISS_LIMIT: 3, AFK_LIMIT: 3, COVER_MULT: 2,
   LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
   CLOSED_LINGER_MS: 30 * 1000, TICK_MS: 250,
+  OWED_RETRY_MS: 10 * 60 * 1000,      // roulette2 WP7: a refused blackjack payout is tried again this often (payOwed)
 };
 const HIGH_ROLLER = "high roller";
 const HR_WORDS = ["hr", "high", "highroller", "high-roller", "vip", "💎"];
@@ -512,17 +513,24 @@ const uidHash = (uid) => crypto.createHash("sha256").update("seat|" + uid).diges
 /** A settled round's MONEY: the payouts, then the House legs (lost stakes in, the winners' profit out - the Fed flash first when it would
  *  take the House below its hard floor). Every leg is keyed, so running it again changes nothing that was done. 1.99aoh: factored
  *  out of settle() so a copied table (casino/retire.js) pays a round decided on the other database WITHOUT its reveal, events or rewards;
- *  `strict` (the retire) throws on a refused payout instead of logging it. -> {lostTotal, totalBet, totalPaid, profit} */
+ *  `strict` (the retire) throws on a refused payout instead of logging it. roulette2 WP7: otherwise a refused payout is answered in
+ *  `refused` [{key, uid, amount}] - settle() keeps it owed (payOwed); the House legs count it as paid (its PAT stays at the table, owed).
+ *  -> {lostTotal, totalBet, totalPaid, profit, refused} */
 async function settleMoney(T, opts) {
   const strict = !!(opts && opts.strict);
   const ev = T.eng.results;
   const n = T.eng.round_no;
   let lostTotal = 0, totalBet = 0, totalPaid = 0;
+  const refused = [];
   for (const r of ev.results) {
     if (r.total_payout > 0) {
-      const pr = await money.credit(`cbj:${T.id}:r${n}:${r.key}:pay`, r.key, r.total_payout, "blackjack payout");
+      const key = `cbj:${T.id}:r${n}:${r.key}:pay`;
+      const pr = await money.credit(key, r.key, r.total_payout, "blackjack payout");
       if (!pr.ok && strict) throw Object.assign(new Error(`payout ${r.total_payout} to ${r.key} refused (${pr.code})`), { code: pr.code });
-      if (!pr.ok) console.error(`[casino] ${T.id} r${n}: payout ${r.total_payout} to ${r.key} failed (${pr.code})`);
+      if (!pr.ok) {
+        console.error(`[casino] ${T.id} r${n}: payout ${r.total_payout} to ${r.key} refused (${pr.code}) - kept owed at the table, tried again in ${C.OWED_RETRY_MS / 60000} min`);
+        refused.push({ key, uid: r.key, amount: r.total_payout, code: pr.code || null });
+      }
     }
     lostTotal += r.lost; totalBet += r.total_bet; totalPaid += r.total_payout;
   }
@@ -537,7 +545,67 @@ async function settleMoney(T, opts) {
     const left = await money.houseBalance();
     if (left < 0 && !fl.used) console.warn(`[casino] UNCOVERED ${T.id} r${n}: the House is at ${left} after paying ${profit} (no flash)`);
   }
-  return { lostTotal, totalBet, totalPaid, profit };
+  return { lostTotal, totalBet, totalPaid, profit, refused };
+}
+
+// ── roulette2 WP7 (the blackjack payout fix): a payout whose credit was REFUSED stays owed ──
+// money.credit is refused only when ledger.post finds no account to credit (the account is gone; a merged one is followed). Before, settle()
+// logged that and went on: the payout was lost (the stake had left the wallet, the House legs counted the payout as paid). Now, like the
+// Hold'em cash-out fix (holdem.js refusedOut), it stays at the table, owed: T.owed[<its payout key cbj:<table>:r<n>:<uid>:pay>] = {uid,
+// amount, round, since, tries, next} (supply.js counts it as PAT at the table), and the round is not marked done ('owed') while it is the
+// table's round. payOwed - the retry hook - credits it again by that SAME key: money.credit looks the key up first, so a payout lands once,
+// ever (a re-run, a restart, a payout that landed while the table thought it was owed: all replay). It runs on the table's clock every
+// OWED_RETRY_MS (tickOnce), at every boot (recover: everything owed at once) and before the table closes. The table keeps playing
+// meanwhile; it is never CLOSED with a payout owed (closeTable): it stays open, frozen - no new bets, autobets or queued bets (T.closing,
+// seatChecks) - and the payout that lands closes it.
+const owedCount = (T) => Object.keys(T.owed || {}).length;
+function owedDue(T, t) {
+  if (!owedCount(T)) return false;
+  return Object.values(T.owed).some((o) => !(o.next > t));
+}
+/** a settled round's refused payouts -> owed (the same key twice - a settle run again after a crash - stays one entry) */
+function owe(T, n, refused) {
+  if (!refused || !refused.length) return;
+  T.owed = T.owed || {};
+  const t = clock();
+  for (const x of refused) {
+    const o = T.owed[x.key] || { uid: x.uid, amount: x.amount, round: n, since: t, tries: 0 };
+    o.tries += 1;
+    o.code = x.code || null;
+    o.next = t + C.OWED_RETRY_MS;
+    T.owed[x.key] = o;
+  }
+}
+/** each owed payout (all, or the ones whose clock ran out) credited again by its own key. Saves nothing. -> how many are still owed */
+async function retryOwed(T, all) {
+  const t = clock();
+  for (const [key, o] of Object.entries(T.owed || {})) {
+    if (!all && o.next > t) continue;
+    const r = await money.credit(key, o.uid, o.amount, "blackjack payout");
+    if (r.ok) {
+      delete T.owed[key];
+      console.log(`[casino] ${T.id}: owed payout ${key} (${fmt(o.amount)} PAT) ${r.replay ? "had landed already" : "paid"} after ${o.tries} refusal(s)`);
+      continue;
+    }
+    o.tries += 1;
+    o.code = r.code || null;
+    o.next = t + C.OWED_RETRY_MS;
+    console.error(`[casino] ${T.id}: owed payout ${key} (${fmt(o.amount)} PAT to ${o.uid}) refused again (${r.code}) - tried again in ${C.OWED_RETRY_MS / 60000} min`);
+  }
+  if (T.round && T.round.settle === "owed" && !Object.values(T.owed || {}).some((o) => o.round === T.round.no)) T.round.settle = "done";
+  return owedCount(T);
+}
+/** the retry hook (the table's clock, recover): pays what it can; a table whose close waited on it closes once nothing is owed.
+ *  -> true when the table closed */
+async function payOwed(T, all) {
+  const left = await retryOwed(T, all);
+  if (!left && T.closing) {
+    const why = T.closing;
+    delete T.closing;
+    return closeTable(T, why);
+  }
+  await save(T);
+  return false;
 }
 
 /** Pay a settled round. Every step is keyed, so running it again (recovery) changes nothing that was done. */
@@ -545,7 +613,8 @@ async function settle(T) {
   const ev = T.eng.results;
   const n = T.eng.round_no;
   const OUT = { blackjack: "BJ", win: "WIN", push: "PUSH", lose: "LOSS", bust: "BUST" };
-  const { lostTotal, profit } = await settleMoney(T);
+  const { lostTotal, profit, refused } = await settleMoney(T);
+  owe(T, n, refused);                     // roulette2 WP7: a refused payout stays owed at the table (payOwed tries it again by its key)
   const summ = [];
   for (const r of ev.results) {
     const parts = r.hands.map((h) => `${h.value} ${OUT[h.outcome]}`);
@@ -582,8 +651,9 @@ async function settle(T) {
              { round_no: n, commitment: T.round.commitment, server_seed: T.round.seed, client_seed: T.client_seed });
   T.last_revealed = n;
   T.escrowed = {};
-  T.stakes = [];        // this round's doubles / splits / insurance are paid out above - nothing is held any more
-  T.round.settle = "done";
+  T.stakes = [];        // this round's doubles / splits / insurance are paid out above - nothing is held any more (a refused payout: T.owed)
+  // roulette2 WP7: not done while a payout of it is still owed (payOwed marks it done when the last one lands)
+  T.round.settle = Object.values(T.owed || {}).some((o) => o.round === n) ? "owed" : "done";
   await save(T);
 }
 
@@ -599,9 +669,23 @@ async function afterRound(T) {
   return openRound(T, false);
 }
 
+/** -> true when closed; false when a blackjack payout is still owed (roulette2 WP7: the table stays open, frozen, until it lands) */
 async function closeTable(T, reason) {
   if (T.game === "roulette") return RL.closeTable(T, reason);
   await refundHeld(T, null, "table closed");
+  // roulette2 WP7: never closed with a payout owed (a refused credit) - tried once more by its key; still refused: the table stays open,
+  // taking no new bets (seatChecks), no autobets and no queued bets, with no deadline but the owed payout's clock (payOwed closes it)
+  if (owedCount(T) && (await retryOwed(T, true))) {
+    T.closing = reason || T.closing || "closed";
+    T.autobet = [];
+    T.pending = {};
+    T.dl = { bet: null, ins: null, turn: null };
+    T.turn = null;
+    await save(T);
+    console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - ${owedCount(T)} payout(s) still owed: the table stays open, taking no bets, until they go through`);
+    return false;
+  }
+  delete T.closing;
   T.status = "closed";
   T.closed_at = clock();
   T.dl = { bet: null, ins: null, turn: null };
@@ -609,6 +693,7 @@ async function closeTable(T, reason) {
   await emit(T, "closed", `🂠 Blackjack table closed${reason ? " — " + reason : ""}.`, { reason: reason || null });
   await save(T);
   streamGone(T.id);
+  return true;
 }
 
 // ── deadlines ──
@@ -672,7 +757,8 @@ async function tickOnce() {
       });
       continue;
     }
-    const due = (T.dl.bet && T.dl.bet <= t) ? "bet" : (T.dl.ins && T.dl.ins <= t) ? "ins" : (T.dl.turn && T.dl.turn <= t) ? "turn" : null;
+    const due = (T.dl.bet && T.dl.bet <= t) ? "bet" : (T.dl.ins && T.dl.ins <= t) ? "ins" : (T.dl.turn && T.dl.turn <= t) ? "turn"
+      : owedDue(T, t) ? "owed" : null;                  // roulette2 WP7: an owed payout's clock (payOwed)
     if (!due) continue;
     await locked(async () => {
       if (T.status !== "open") return;
@@ -680,6 +766,7 @@ async function tickOnce() {
         if (due === "bet" && T.dl.bet && T.dl.bet <= clock()) await onBetDeadline(T);
         else if (due === "ins" && T.dl.ins && T.dl.ins <= clock()) await onInsDeadline(T);
         else if (due === "turn" && T.dl.turn && T.dl.turn <= clock()) await onTurnDeadline(T);
+        else if (due === "owed" && owedDue(T, clock())) await payOwed(T, false);
       } catch (e) {
         console.error(`[casino] ${T.id} ${due} deadline:`, e);
       }
@@ -708,6 +795,12 @@ async function recover(T) {
     }
     T.intent = null;
   }
+  // roulette2 WP7: every payout a refused credit left owed is tried again now, by its own key; a table whose close waited on one closes
+  // once nothing is owed, and stays frozen while something still is (no deadline: the owed payout's clock, payOwed, closes it)
+  if (owedCount(T) || T.closing) {
+    if (await payOwed(T, true)) return;
+    if (T.closing) return;
+  }
   // a settle that didn't finish: run it again (done steps are skipped by key)
   if (T.round && T.round.settle === "pending" && T.eng.results) {
     console.log(`[casino] ${T.id}: finishing round ${T.eng.round_no}'s settlement after a restart`);
@@ -715,8 +808,8 @@ async function recover(T) {
     await afterRound(T);
     return;
   }
-  // settled, but the next betting window never opened
-  if (T.eng.phase === "done" && (!T.round || T.round.settle === "done")) {
+  // settled, but the next betting window never opened (roulette2 WP7: or settled with a payout still owed - it is tried on its clock)
+  if (T.eng.phase === "done" && (!T.round || T.round.settle === "done" || T.round.settle === "owed")) {
     await afterRound(T);
     return;
   }
@@ -830,6 +923,8 @@ async function cmdStart(actor, room, game, blinds, words) {
 }
 
 async function seatChecks(T, actor) {
+  // roulette2 WP7: a table that waits for an owed payout before it closes takes no new bets
+  if (T.closing) return "this table is closing — it takes no new bets (it closes once a payout still owed goes through).";
   const u = await userRow(actor.uid);
   if (!u) return "no account found";
   if (u.casino_banned) return "🚫 you're banned from the casino.";
@@ -1013,7 +1108,8 @@ function statusText(T) {
 async function cmdEnd(T, actor) {
   if (actor.uid !== T.host.uid && !actor.admin) return R(false, "only the table starter or an admin can close it.");
   if (["insurance", "player", "dealer"].includes(T.eng.phase)) return R(false, "can't close mid-round — let it finish.");
-  await closeTable(T, `closed by ${actor.name}`);
+  // roulette2 WP7: a payout still owed keeps it open (no new bets) - it closes by itself once that payout goes through
+  if (!(await closeTable(T, `closed by ${actor.name}`))) return R(false, "a payout at this table is still owed — it takes no new bets and closes by itself once that payout goes through.");
   return R(true, "table closed.", { quiet: true });
 }
 

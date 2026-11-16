@@ -611,7 +611,17 @@ loses a stake to a crash and nothing is charged twice.
 
 **Settle** is: the engine computes the results (state saved with `settle: "pending"`), then the payouts, the House
 rows and the flash claim, each by key, then `settle: "done"` and the events. Recovery re-runs a pending settle; the
-steps already done are skipped by key. **A hand in progress survives a restart**: the table is reloaded, the deadline
+steps already done are skipped by key.
+
+**A refused payout stays owed** (roulette2 WP7). A credit is refused only when its account is gone (a merged account
+is followed). Before, settle logged it and went on, so the payout was lost. Now it is kept on the table as
+`T.owed[<its payout key>] = {uid, amount, round, since, tries, next}`, `supply.casinoHeld` counts it, and the round is
+`settle: "owed"` (not `done`) while it is the table's round. `payOwed` credits it again by the SAME key
+(`cbj:<table>:r<n>:<uid>:pay`; the key is looked up first, so it lands once, ever) every `C.OWED_RETRY_MS` (10
+minutes) on the table's clock, at every boot, and before the table closes. The table keeps playing meanwhile, but it is
+never closed with a payout owed: `closeTable` keeps it open and frozen (`T.closing`: no new bets, queued bets or
+autobets, no deadline but the owed payout's clock, `!bj end` says why), and the payout that lands closes it. A staging
+copy's retire (`casino/retire.js`) pays what is owed by its key. **A hand in progress survives a restart**: the table is reloaded, the deadline
 of the current decision is re-armed (if it passed while the site was down, the player gets a fresh 30 s rather than
 an instant time-out), and play continues.
 

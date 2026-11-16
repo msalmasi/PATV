@@ -11,7 +11,8 @@
 //   * blackjack: a charged stake caught in its intent is refunded (<key>:refund); a round already DECIDED (settle pending with results)
 //     is paid by settle's own keys (payouts, House legs, Fed flash) - money only: no casino_rounds reveal, no event, no rewards; any
 //     other round is void: each stake of the betting window / each double, split and insurance by <key>:refund, then what is left
-//     escrowed per player (the round's initial bets, dropped from T.stakes at the deal) by cbj:<table>:r<n>:<uid>:copy;
+//     escrowed per player (the round's initial bets, dropped from T.stakes at the deal) by cbj:<table>:r<n>:<uid>:copy; a payout an earlier
+//     round left owed (roulette2 WP7: T.owed, its credit refused there) is paid by its own payout key;
 //   * Hold'em (cash): a buy-in intent is refunded if it was charged, a cash-out intent is finished by its own key; the rake owed goes to
 //     the House by its key; a hand in play is void (every contributor gets back what they put in); every stack is cashed out by a keyed
 //     credit (holdem.js cashout, quiet);
@@ -98,6 +99,12 @@ async function bj(T, d) {
         if (a > 0) strict(await money.credit(`cbj:${T.id}:r${n}:${uid}:copy`, uid, a, "blackjack refund (copy)"), `the copy refund of ${uid}`);
       }
     }
+    // roulette2 WP7: a payout an earlier round left owed (service.js payOwed: its credit was refused there) - decided, so paid by its own key
+    for (const [key, o] of Object.entries(T.owed || {})) {
+      strict(await money.credit(key, o.uid, o.amount, "blackjack payout"), "the owed payout " + key);
+      delete T.owed[key];
+    }
+    delete T.closing;
     crashAt(S, "copy:close");
     // (d) never charged: the queued bets and autobets go; the engine forgets the round (no card of it is left)
     const e = T.eng;

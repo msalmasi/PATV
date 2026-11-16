@@ -34,7 +34,8 @@
 //   commitment = sha256(server_seed) is published at once. At the draw, tickets_digest = sha256 of every purchase in order,
 //   one line "<first>-<last>:<username>\n"; the winning ticket = 1 + below(n) over the HMAC-SHA256(server_seed,
 //   `${tickets_digest}:R<id>:${counter}`) word stream. The seed is revealed after the draw; /raffles/<id> re-checks it in
-//   the browser (and verify() here).
+//   the browser (and verify() here). roulette2 WP7: a staging copy blanks an open raffle's seed - such a raffle is never sold or
+//   drawn here, only retired with full refunds, quietly (retireCopies).
 //
 // ABUSE: verified accounts only (verified.js) create; creations per day, open raffles per user, a max ticket price; the
 //   creator and their linked alts (welcome_bonus.dup_of, shared device / identity keys) can't buy; text
@@ -689,6 +690,8 @@ async function buy(userId, { id, qty, idem, expect, via = "web" } = {}) {
   const out = await tx(async () => {
     const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [r0.id]))[0];
     if (r.status !== "open") throw new Refuse(409, `That raffle is ${r.status}.`, "E_CLOSED");
+    // roulette2 WP7: a raffle copied from another site (its seed blanked) never sells a ticket here - it is retired (retireCopies)
+    if (isCopy(r)) throw new Refuse(409, "That raffle is closed.", "E_CLOSED");
     // 1.99afy: an admin can change the price before the first ticket (edit) - the price the buyer saw is checked again here
     if (expect !== undefined && expect !== null && expect !== "" && int(expect) !== r.price) {
       throw new Refuse(409, `A ticket costs ${fmt(r.price)} PAT - check it and try again.`, "E_PRICE_CHANGED");
@@ -778,6 +781,7 @@ async function settlePotInTx(r, tickets, { payee, legs, how }) {
 async function maybeDraw(id) {
   const r = await raffleRow(id);
   if (!r || r.status !== "open") return null;
+  if (isCopy(r)) return null;                          // roulette2 WP7: a copy is never drawn or expired here - only retired (retireCopies)
   const t = now();
   if (t >= r.expires_at) return expire(r.id, "expired");
   if (r.trigger_kind === "target" && r.sold >= r.target) return draw(r.id);
@@ -794,6 +798,7 @@ async function draw(id) {
   const res = await tx(async () => {
     const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [Number(id)]))[0];
     if (!r || r.status !== "open") return { drawn: false };
+    if (isCopy(r)) return { drawn: false };            // roulette2 WP7: no seed, no draw (fair.js's guard is the backstop)
     if (r.sold < Math.max(1, r.min_tickets)) return { drawn: false };
     const tickets = await getQuery("SELECT * FROM raffle_tickets WHERE raffle_id = ? AND state = 'held' ORDER BY first_no", [r.id]);
     const n = tickets.reduce((a, x) => a + x.qty, 0);
@@ -930,6 +935,57 @@ async function expire(id, why = "expired", { actor = null, reason = null } = {})
     }
   } catch (e) { console.error("[raffles] refund notices:", e.message); }
   return { closed: true, id: res.r.id, status: res.r.status, refunded: res.refunded, tickets: res.tickets };
+}
+
+// ── roulette2 WP7 (FAIR-1 for raffles): a raffle copied from another database ──
+// A staging refresh (deploy/refresh-staging-db.sh, then deploy/keep-staging-tables.js DRAW_SCRUB on the copy) blanks every OPEN raffle's
+// secret server_seed: prod may still be selling that raffle, and its seed with the tickets digest taken at the draw IS the winning ticket,
+// so staging must never draw it or publish the seed (the page, /api/raffles/:id/fair, Pepe's line) while prod still sells. An open
+// raffle without a seed is such a copy - prod never has one (create() makes every raffle with newSeed(); the column is NOT NULL). A copy is
+// never sold, drawn or expired here (buy / maybeDraw / draw refuse it). It is retired at boot (register) and on the clock (tick) through the
+// raffle's own refund path, refundAllInTx - every held ticket back to its buyer by its key (rfr:<ticket>), the prize hold back to the
+// creator, a reserved shop item back in stock - with the row closed 'removed', in ONE transaction, and QUIET: no raffle_events row
+// (staging's Pepe never announces it), no notice, no wake. The commitment stays and the seed is never revealed (nothing is drawn: shape()
+// and the fair route show a seed only once a tickets digest exists). A refused refund (an account that is gone) rolls all of it back: the
+// raffle stays open and out of play, and the next tick tries again (logged once).
+const isCopy = (r) => !!r && r.status === "open" && !r.server_seed;
+const COPY_REASON = "a copy of a raffle from another site - retired without a draw";
+const copyLogged = new Set();
+let retiring = null;
+function retireCopies() {
+  if (retiring) return retiring;
+  retiring = (async () => {
+    await init();
+    const out = { retired: 0, refunded: 0, failed: 0 };
+    const ids = await getQuery("SELECT id FROM raffles WHERE status = 'open' AND (server_seed IS NULL OR server_seed = '') ORDER BY id");
+    for (const { id } of ids) {
+      try {
+        const res = await tx(async () => {
+          const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [id]))[0];
+          if (!isCopy(r)) return null;
+          const back = await refundAllInTx(r, "copy");
+          const t = now();
+          const u = await runQuery("UPDATE raffles SET status = 'removed', closed_at = ?, close_reason = ?, updated = ? WHERE id = ? AND status = 'open'",
+                                   [t, COPY_REASON, t, r.id]);
+          if (!u.changes) throw new Refuse(409, "changed under us", "E_RACE");
+          return back;
+        });
+        if (!res) continue;
+        out.retired++;
+        out.refunded += res.refunded;
+        copyLogged.delete(id);
+        console.log(`[raffles] R${id}: a raffle copied from another database retired unrevealed (${res.tickets} purchase(s), ${fmt(res.refunded)} PAT back)`);
+      } catch (e) {
+        out.failed++;
+        if (!copyLogged.has(id)) {
+          copyLogged.add(id);
+          console.error(`[raffles] R${id}: a raffle copied from another database couldn't be retired yet (${e && e.message ? e.message : e}) - out of play, tried again on the clock`);
+        }
+      }
+    }
+    return out;
+  })().finally(() => { retiring = null; });
+  return retiring;
 }
 
 // ── custom prizes: confirm / dispute / release / admin decision ──
@@ -1425,6 +1481,8 @@ function tick() {
   if (ticking) return ticking;
   ticking = (async () => {
     await init();
+    // roulette2 WP7: a copied raffle whose retire was refused is tried again first (it is skipped by the draws below either way)
+    try { await retireCopies(); } catch (e) { console.error("[raffles] copies:", e.message); }
     const t = now();
     const out = { drawn: 0, expired: 0, released: 0, noticed: 0 };
     const due = await getQuery(`SELECT id FROM raffles WHERE status = 'open' AND (expires_at <= ? OR (trigger_kind = 'date' AND draw_at <= ? AND sold >= min_tickets)
@@ -1594,7 +1652,8 @@ async function achMetrics(userId) {
 
 // ── routes ──
 function register(app, { isBotToken, addUser, noTimers = false }) {
-  init().catch((e) => console.error("[raffles] init:", e.message));
+  // roulette2 WP7: at boot, every raffle copied from another database (a staging refresh) is retired before anything can sell or draw it
+  init().then(() => retireCopies()).catch((e) => console.error("[raffles] init:", e.message));
   if (app.locals) app.locals.rafflesOn = () => enabledSync();
   require("./userlinks").install(app);
   const guard = require("./middleware/authGuard");
@@ -1719,6 +1778,7 @@ function register(app, { isBotToken, addUser, noTimers = false }) {
 }
 module.exports = {
   init, register, enabled, enabledSync, setEnabled, config, setConfig, cleanConfig, create, buy, draw, maybeDraw, expire, cancel, takedown, edit, flushEditNotices, confirmDelivery,
+  retireCopies, isCopy,
   dispute, decide, tick, list, detail, adminState, forPad, cards, botAct, eventsAfter, verify, ticketsDigest, winningNumber, commitmentOf, feeShares, feeLegs, achMetrics,
   Refuse, DEFAULTS, FLOW, KINDS: [KIND_TICKET, KIND_PRIZE, KIND_ITEM], STATUSES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

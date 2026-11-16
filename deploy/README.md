@@ -101,7 +101,10 @@ revealed), so staging can never play or publish a round prod's wheel is still ta
 every open blackjack table (its round's seed, the live shoe, the dealer's hole card) and every open Hold'em table, cash, sit & go or
 tournament (the next and current hand's seed, the deck, every hole card), plus a registering or running tournament's seating draw seed and
 the hole cards a player asked for with `!cards` (the reply cached in `casino_actions`). Staging retires each copied table at boot without
-revealing it: every stake, stack and entry comes back by its own key, with no table line. The copy is built with `secure_delete` on, and the
+revealing it: every stake, stack and entry comes back by its own key, with no table line. Roulette2 WP7: the other provably fair draws too -
+every open raffle's seed and the seed of every lotto draw still selling or closed are blanked in the copy, and staging retires them at boot
+through their own refund paths (every raffle ticket and prize hold back by its key; each lotto purchase back by its refund key, with its pot
+and House shares), with no event or notice, never drawn and never revealed. The copy is built with `secure_delete` on, and the
 keep step rebuilds it (`VACUUM`) at the end, so no seed or card survives in the file's free space either. The rebuild comes from staging's
 own `keep-staging-tables.js`, which also runs when prod's checkout is a release behind, so a refresh between the staging and prod deploys is
 safe. If that can't be done, staging keeps its old database. Wave 2 WP-5: the script also runs the staging checkout's `keep-staging-tables.js` when it differs from prod's, so the
