@@ -1,13 +1,20 @@
+/* public/css/casinorl-dock.css - the roulette slip controls (public/js/casinorl-dock.js controls), on the table page (inside its .dock,
+   views/casino-rl.ejs) and in the pad's Room Dock sheet (views/room.ejs, .rl-compact + the mini wheel). roulette2 WP5b (O9): the chips are
+   the casino's shared ones (contract 9: .chipbtn / .chip / .rl-pocket live in public/css/casino-chips.css, which both pages load) - this
+   file only lays them out and marks the chip a tap places. On the table page the buttons are casino-css.ejs's .cz-btn; the Room Dock,
+   which doesn't load casino-css, keeps its own button look (.rl-compact). */
 .rl-controls {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  color: #fff5dd;
+}
+.rl-controls.rl-compact {
   padding: 0.75rem;
   border: 1px solid #6e6850;
   border-radius: 12px;
   background: #17221e;
-  color: #fff5dd;
 }
-.rl-controls button,
+.rl-compact button:not(.chipbtn),
 .rl-quick button {
   min-height: 44px;
   cursor: pointer;
@@ -19,43 +26,55 @@
 }
 .rl-controls button:disabled {
   cursor: default;
-  opacity: 0.58;
+  opacity: 0.5;
 }
 .rl-chips,
 .rl-actions,
 .rl-quick,
-.rl-slip {
+.rl-slip,
+.rl-rack {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.45rem;
   flex-wrap: wrap;
 }
-.rl-chips .rl-chip {
-  border-radius: 50%;
-  width: 46px;
-  height: 46px;
-  padding: 0;
-  border: 4px dashed #ecddd0;
-  background: #753c36;
-  color: #fff;
-  font-weight: 700;
+.rl-rack {
+  gap: 8px;
 }
-.rl-chips .rl-chip[aria-pressed="true"] {
-  outline: 3px solid #f9dc85;
-  outline-offset: 1px;
+/* the chip a tap places: lifted, with a gold ring (the ring is the cue that isn't colour: aria-pressed says it too) */
+.rl-controls .chipbtn {
+  width: 52px;
+  height: 52px;
+}
+/* (the face fills the button whatever order the chip rules load in - a 💎 chip's own position: relative included) */
+.rl-controls .chipbtn > .chip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.rl-controls .chipbtn[aria-pressed="true"] {
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 3px #ffd740, 0 0 16px rgba(255, 215, 64, 0.6);
+}
+/* (a chip bigger than what is left on the hovered spot, or this spin: dimmed - the reason shows if it's tapped anyway) */
+.rl-controls .chipbtn.over {
+  opacity: 0.4;
 }
 .rl-controls input {
   box-sizing: border-box;
   min-height: 44px;
   background: #111c15;
   border: 1px solid #819781;
-  border-radius: 6px;
+  border-radius: 8px;
   color: white;
   font: inherit;
   padding: 0.5rem;
 }
-.rl-chips input {
-  max-width: 6em;
+.rl-controls input.rl-amount {
+  width: 7em;
+  font-variant-numeric: tabular-nums;
 }
 .rl-slip label {
   display: flex;
@@ -66,15 +85,58 @@
   min-width: 0;
   width: 12em;
 }
+/* the meter and "Type a bet" share a line; a custom chip and the typed bet line fold under it */
+.rl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 1rem;
+}
+.rl-type {
+  text-align: center;
+}
+.rl-type[open] {
+  flex-basis: 100%;
+}
+.rl-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.88em;
+}
+.rl-type summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  cursor: pointer;
+  color: #f4d88e;
+  font-size: 0.9em;
+}
+.rl-type[open] summary {
+  margin-bottom: 0.3rem;
+}
 .rl-preview,
 .rl-feedback,
-.rl-own {
-  font-size: 0.85em;
+.rl-own,
+.rl-meter {
+  font-size: 0.88em;
   margin: 0;
+  text-align: center;
+}
+.rl-meter {
+  color: #f4d88e;
+  font-variant-numeric: tabular-nums;
+}
+.rl-feedback {
+  display: block;
 }
 .rl-preview:empty,
 .rl-feedback:empty,
-.rl-own:empty {
+.rl-own:empty,
+.rl-meter:empty {
   display: none;
 }
 .rl-timer {
@@ -105,6 +167,7 @@
   border-radius: inherit;
 }
 .rl-state {
+  margin: 0;
   font-weight: 700;
 }
 .rl-quick {
@@ -118,19 +181,48 @@
   margin: 0.4em 0;
   color: #f4d88e;
 }
+/* the Room Dock sheet's head: the mini wheel beside the state, players and last spins lines */
+.rl-dtop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rl-mini {
+  flex: none;
+  width: 112px;
+  height: 112px;
+}
+.rl-mini[hidden] {
+  display: none;
+}
+.rl-dside {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.rl-who {
+  margin: 0;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+.rl-who:empty {
+  display: none;
+}
 @media (max-width: 639px) {
   .rl-chips,
-  .rl-actions {
-    gap: 4px;
+  .rl-actions,
+  .rl-rack {
+    gap: 5px;
   }
-  .rl-chips .rl-chip {
-    height: 44px;
+  .rl-controls .chipbtn {
+    width: 46px;
+    height: 46px;
+  }
+  .rl-compact .chipbtn {
     width: 44px;
+    height: 44px;
   }
-  .rl-chips input {
-    width: 5em;
-  }
-  .rl-controls {
+  .rl-controls.rl-compact {
     padding: 6px;
   }
   .rl-slip label {
@@ -138,6 +230,10 @@
   }
   .rl-slip input {
     width: 100%;
+  }
+  .rl-mini {
+    width: 92px;
+    height: 92px;
   }
 }
 /* 1.99aof: the one-time intro notice in the Room Dock sheet (casinorl-dock.js) */
@@ -147,68 +243,13 @@
   border-left: 3px solid #f4d88e;
   font-size: 0.85em;
 }
-/* 1.99aoh: a roulette pocket - the table's history strip and history sheet, and the Room Dock's recent line
-   (casinorl-dock.js pocket(); this file is loaded by the table page and the pad page). The colour comes from the client's red list
-   (PATVRlBets.red) - never the server's "green" for 0; the felt's ◆ / ● glyph under the number is the cue that isn't colour (the
-   aria-label says the colour as a word). The newest pocket is larger, with a gold ring. */
-.rl-pocket {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 1.9em;
-  min-height: 2.15em;
-  padding: 1px 0.3em;
-  border-radius: 6px;
-  color: #fff;
-  font: 700 13px/1.15 var(--ds-font, system-ui, sans-serif);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  vertical-align: middle;
-}
-/* (10 px at full strength: a 7 px glyph was about 3 px wide - the ◆ / ● cue has to be readable without the colour) */
-.rl-pocket::after {
-  font: 10px/1 system-ui, sans-serif;
-}
-.rl-pocket.red {
-  background: #c62828;
-}
-.rl-pocket.red::after {
-  content: "◆";
-}
-.rl-pocket.black {
-  background: #141418;
-  box-shadow: inset 0 0 0 1px #555;
-}
-.rl-pocket.black::after {
-  content: "●";
-}
-.rl-pocket.zero {
-  background: #1e7f4f;
-}
-.rl-pocket.newest {
-  font-size: 16px;
-  min-width: 2.2em;
-  box-shadow: 0 0 0 2px #f4cd81;
-}
-.rl-pocket.black.newest {
-  box-shadow:
-    inset 0 0 0 1px #555,
-    0 0 0 2px #f4cd81;
-}
-/* a Windows Contrast theme (forced colours) would paint every pocket the same system colour and drop the newest one's ring: the
-   pockets keep their felt colours (white on each passes AA) and the ring - the colour is the information here */
-@media (forced-colors: active) {
-  .rl-pocket {
-    forced-color-adjust: none;
-  }
-}
+/* (the pockets themselves - .rl-pocket.red / .black / .zero and .newest - are contract 9's, in public/css/casino-chips.css) */
 .rl-recent {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
+  margin: 0;
 }
 .rl-recent:empty {
   display: none;

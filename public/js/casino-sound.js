@@ -8,6 +8,10 @@
 //   * WebAudio-synthesised, nothing downloaded: a chip clack (a bet goes in), a card slide (cards dealt), a bell (a hand / round
 //     is won). One cue per state change, never one per poll (the first state seen only sets the baseline).
 // Strings: CZ.T("js.casino.sound_*", English default = locales/en.json).
+// roulette2 WP5b (O13(4)): the roulette table (always the classic look) has the toggle too, and its own cues - the ball rolling off
+// the croupier's hand, a diamond's tick, the clack of a fret hop, the settle - played at the moments the wheel (casino/rlwheel.js
+// onEvent) shows them, plus the chip clack and the bell on a win (casinorl.js calls CZSound.cue). Same rules: off by default, never
+// before a gesture, nothing downloaded; under reduced motion only the settle and the bell.
 (function () {
   "use strict";
   const CZ = window.CZ;
@@ -74,10 +78,29 @@
     chip: (c, t) => { burst(c, t, 3400, 7, 0.22, 0.05); burst(c, t + 0.07, 2900, 7, 0.16, 0.05); },                 // two clay chips clack
     card: (c, t) => { burst(c, t, 1400, 1.2, 0.12, 0.16, 4200); },                                                     // a card slides
     bell: (c, t) => { tone(c, t, 1318.5, 0.14, 1.4); tone(c, t, 2637, 0.05, 0.9); tone(c, t, 3951, 0.025, 0.5); },    // the bar's bell
+    // roulette2 WP5b: the wheel's own moments (quiet - a ball, not a bell)
+    rl_launch: (c, t) => { burst(c, t, 700, 0.8, 0.05, 1.1, 1900); },                                                  // the ball rolls off the hand
+    rl_drop: (c, t) => { burst(c, t, 1900, 1.1, 0.05, 0.35, 900); },                                                   // it leaves the track
+    rl_diamond: (c, t) => { burst(c, t, 4600, 9, 0.12, 0.03); },                                                       // a diamond's tick
+    rl_rotor: (c, t) => { burst(c, t, 2500, 6, 0.14, 0.045); },                                                        // onto the rotor
+    rl_hop: (c, t) => { burst(c, t, 2900, 7, 0.1, 0.035); },                                                           // a fret clack
+    rl_settle: (c, t) => { burst(c, t, 2400, 6, 0.16, 0.05); burst(c, t + 0.09, 2700, 7, 0.08, 0.04); },              // home in the pocket
   };
   function play(name) {
     if (!on || !gesture || !ac || !CUES[name]) return;
     try { CUES[name](ac, (ac.currentTime || 0) + 0.01); } catch (e) { /* a broken audio stack never breaks the table */ }
+  }
+  // roulette2 WP5b: a cue the table asks for (casinorl.js) - a background tab plays nothing; a run of hops is at most one clack per 60 ms
+  const reduced = () => { try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; } };
+  let lastCueAt = 0;
+  function cue(name) {
+    if (!on || !gesture || document.hidden || !CUES[name]) return;
+    if (reduced() && name !== "bell" && name !== "rl_settle") return;
+    const now = Date.now();
+    if (/^rl_(?:hop|diamond)$/.test(name) && now - lastCueAt < 60) return;
+    lastCueAt = now;
+    if (!ac) wake();
+    play(name);
   }
 
   // ── what changed: one cue per change of the table's state ──
@@ -101,10 +124,11 @@
   // ── the toggle: in the table's own top row, right after "All tables" (h20 verify review: an extra pill in the page header
   // wrapped it onto another row and pushed the table under the action bar); casino-themes.css floats it to the row's end ──
   let icon = null, label = null;
+  let roulette = false;
   function paint() {
     if (!btn) return;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.title = on ? T("sound_on", "Table sounds on (chips, cards, a bell on a win)") : T("sound_off", "Table sounds off");
+    btn.title = on ? (roulette ? T("sound_on_rl", "Table sounds on (chips, the ball, a bell on a win)") : T("sound_on", "Table sounds on (chips, cards, a bell on a win)")) : T("sound_off", "Table sounds off");
     icon.textContent = on ? "🔊" : "🔇";
     label.textContent = T("sound_btn", "Sound");
   }
@@ -137,6 +161,8 @@
 
   /** every render: the theme the table shows and its public view */
   function update(id, t) {
+    // (roulette2 WP5b: a roulette wheel - classic - has the toggle; its cues come from cue(), never from this state diff)
+    if (t && t.game === "roulette") { roulette = true; const b = button(); if (b) { b.hidden = false; paint(); } sig = null; return; }
     if (!id || id === "classic") { if (btn) btn.hidden = true; sig = null; return; }
     const b = button();
     if (b) b.hidden = false;
@@ -148,5 +174,5 @@
     if (cue) play(cue);
   }
 
-  window.CZSound = { update, enabled: () => on };
+  window.CZSound = { update, cue, enabled: () => on };
 })();

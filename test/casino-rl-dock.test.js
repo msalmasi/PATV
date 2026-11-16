@@ -94,6 +94,8 @@ test("UI-13 / UI-9 / UI-3: an idle ring holds a dash, the small links and inputs
     felt = read("views/partials/casino-rl-css.ejs"),
     lobby = read("views/partials/casino-css.ejs");
   assert.match(dockCss, /\.rl-controls input \{[^}]*min-height: 44px/);
+  // (WP5b: the edges keep a 22 px hit area on a mouse screen; touch screens bet them with the modes)
+  assert.match(felt, /\.rl-grid \.edge::before \{\s*content: "";\s*position: absolute;\s*inset: -2px -7px;/);
   assert.match(dockCss, /\.rl-table-link \{[^}]*min-height: 44px/);
   assert.match(dockCss, /\.rl-timer\.idle \{[^}]*width: 44px;[^}]*height: 44px/);
   assert.match(felt, /\.rl-more a \{[^}]*min-height: 44px/);
@@ -146,13 +148,95 @@ test("UI-6 / UI-7 / UI-8 / UI-12 / UI-14: sign-in prompt, plural counts, spoken 
   const page = read("public/js/casinorl.js"),
     ui = read("public/js/casino-ui.js"),
     en = JSON.parse(read("locales/en.json"));
-  assert.match(page, /if \(!CZ\.signed\) \{[\s\S]{0,200}login\.href = "\/login"[\s\S]{0,200}T\("watching_signin"/);
-  assert.deepEqual(en["js.casino.rl_totals"], { one: "{players} player · {pat} PAT this spin", other: "{players} players · {pat} PAT this spin" });
+  // (roulette2 WP5b: the signed-out line is the table's .watchbar, as on the Blackjack and Hold'em tables - test/casino-rl-page.test.js)
+  assert.match(page, /if \(t\.status === "open" && !CZ\.signed\)\s*txt = "👁 " \+ CZ\.esc\(T\("watching_signin", "You're watching\."\)\) \+ ' <a href="\/login">'/);
+  assert.deepEqual(en["js.casino.rl_layout_n"], { one: "Layout: {players} player · {pat} PAT", other: "Layout: {players} players · {pat} PAT" });
   assert.deepEqual(en["js.casino.rl_lobby_status"], { one: "{n} player · {phase}", other: "{n} players · {phase}" });
-  assert.match(page, /count: t\.totals\.players/);
+  assert.match(page, /count: lay\.players/);
   assert.match(ui, /count: players \}/, "roulette2 WP5a: the lobby's wheel card counts its players with a plural");
-  assert.match(page, /spot: p\.kind === "straight" \? word\(\+token\) : felt\[token\] \|\| token,\s*kind: kinds\[p\.kind\]/);
+  // UI-8 / O7: a spot's spoken name - the felt's words (never the internal kind or token), what it pays, its cap, my bet
+  assert.match(page, /T\("rl_spot_aria", "\{spot\} · \{kind\} · pays \{odds\} to 1 · up to \{cap\} PAT · your bet \{n\} PAT", \{\s*spot: spotWords\(token\),\s*kind: kinds\[p\.kind\]/);
   for (const k of ["rl_trio", "rl_first_four", "rl_dozen", "rl_column", "rl_even_money", "lobby_sub_rl", "lobby_tag_rl"]) assert.ok(en["js.casino." + k], k);
   assert.match(en["js.casino.lobby_tag_rl"], /roulette/);
   assert.match(ui, /if \(running\) \{\s*if \(!again\) again = running\.then/);
+});
+
+// ── roulette2 WP5b: the shared controls on the casino's chips, compact mode in the Room Dock, one key per line ──
+test("WP5b / contract 9: the Room Dock keeps its compact sheet - the casino's chips, its own buttons, no Spin now, a mini wheel, the layout line", async () => {
+  const calls = [];
+  const wheel = {};
+  for (const k of ["setSkew", "spin", "rest", "idle", "destroy"]) wheel[k] = (...a) => { calls.push([k, ...a]); return wheel; };
+  const W = makeWindow((url) => {
+    const u = new URL(url, "http://dock.test");
+    if (u.pathname === "/api/casino/roulette/pad/test-pad") return { ok: true, table: LOBBY, here: false };
+    return view(LOBBY, "betting", { lines: [], staked: 0 }, {
+      felt: [{ t: "red", n: 3000, k: 2 }],
+      seats: [{ name: "Rocco", seat: "s1", staked: 2500, chips: [["red", 2500]] }, { name: "frog 3", seat: "s2", staked: 500, chips: [["red", 500]], veil: 1 }],
+    });
+  });
+  for (const [f, src] of SRC) W.run(src, f);
+  W.PATVRlWheel = { mount: (c, o) => { calls.push(["mount", c.tagName, o.compact]); return wheel; } };
+  const box = W.document.createElement("div");
+  const close = W.PATVRoulette.mount(box, { slug: "test-pad" });
+  await W.settle();
+  const chips = box.querySelectorAll("button").filter((b) => b.classList.contains("chipbtn"));
+  assert.deepEqual(chips.map((b) => b.dataset.chip), ["100", "500", "1000", "5000", "25000"]);
+  assert.deepEqual(chips.map((b) => b.children[0].className), ["chip", "chip c500", "chip c1k", "chip c5k", "chip c25k"], "contract 9's chip classes");
+  assert.equal(chips[0].getAttribute("aria-pressed"), "true");
+  assert.ok(box.querySelector(".rl-compact"), "the Dock's own look");
+  const names = box.querySelectorAll("button").map((b) => b.textContent);
+  assert.ok(!names.includes("Spin now"), "no Spin now in the Dock");
+  assert.ok(names.includes("×2"));
+  assert.ok(box.querySelectorAll("button").every((b) => !/cz-btn/.test(b.className)), "no casino-css buttons on the pad page");
+  assert.deepEqual(calls.find((c) => c[0] === "mount"), ["mount", "CANVAS", true], "the compact mini wheel");
+  assert.equal(box.querySelector(".rl-mini").hidden, false);
+  assert.ok(calls.some((c) => c[0] === "idle"), "bets open: the rotor turns, no ball");
+  assert.equal(box.querySelector(".rl-who").textContent, "Layout: 2 players · 3,000 PAT · Rocco 2.5K, frog 3 500");
+  close();
+  assert.ok(calls.some((c) => c[0] === "destroy"), "closing the sheet stops the wheel");
+});
+
+test("WP5b: every POST has its own idempotency key; a call line that waits for the line in flight goes next, on its own and whole", async () => {
+  let release;
+  const posts = [];
+  const W = makeWindow(async (url, o) => {
+    if (o && o.method === "POST") {
+      posts.push(JSON.parse(o.body));
+      if (posts.length === 1) await new Promise((r) => (release = r));
+      return { ok: true, reply: "ok" };
+    }
+    return { ok: false };
+  });
+  for (const [f, src] of SRC) W.run(src, f);
+  const box = W.document.createElement("div");
+  const c = W.PATVRoulette.controls(box, { id: LOBBY, refresh: async () => {} });
+  c.update(view(LOBBY, "betting", { lines: [], staked: 0, used: { positions: 0, actions: 0, per_token: {} } }, { rules: null }));
+  assert.equal(c.place("red"), true);
+  const t = W.timers.filter((x) => !x.done && x.ms === 900).pop();
+  t.done = true;
+  t.fn();
+  await W.settle();
+  assert.equal(posts.length, 1, "the burst's line is in flight");
+  assert.equal(c.placeMany([{ b: "0-2-3", a: "200" }, { b: "4-7", a: "100" }]), true);
+  await W.settle();
+  assert.equal(posts.length, 1, "it waits");
+  release();
+  await W.settle();
+  assert.equal(posts.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts[1].bets)), [{ b: "0-2-3", a: "200" }, { b: "4-7", a: "100" }], "on its own, never split");
+  assert.notEqual(posts[0].idem, posts[1].idem);
+  // more than 20 positions can't be one line: refused, nothing sent
+  const many = Array.from({ length: 21 }, (_, i) => ({ b: String(i + 1), a: "100" }));
+  assert.equal(c.placeMany(many), false);
+  assert.equal(box.querySelector(".rl-feedback").textContent, "That's more than 20 spots for one line.");
+  // the table page's controls: the casino's buttons with their keys, the typed line and a custom chip under "Type a bet"
+  const box2 = W.document.createElement("div");
+  W.PATVRoulette.controls(box2, { id: LOBBY, refresh: async () => {} });
+  const b2 = box2.querySelectorAll("button");
+  assert.deepEqual(b2.filter((b) => /cz-btn/.test(b.className)).map((b) => b.textContent + ":" + b.getAttribute("aria-keyshortcuts")),
+    ["Undo:Z", "Clear:C", "Rebet:R", "×2:D", "Spin now:Space", "Place line:null"]);
+  const typed = box2.querySelector(".rl-type");
+  assert.equal(typed.tagName, "DETAILS");
+  assert.equal(typed.children[0].textContent, "Type a bet");
+  assert.ok(typed.querySelector("input") && typed.querySelector("form"), "the custom chip and the bet line fold under it");
 });

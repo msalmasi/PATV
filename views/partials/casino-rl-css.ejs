@@ -1,121 +1,142 @@
+<%# views/partials/casino-rl-css.ejs - the roulette table page (views/casino-rl.ejs, public/js/casinorl.js). roulette2 WP5b (O9): on the
+    casino's shared look (casino-css.ejs: .felt + wood rail, .felt-meta, .watchbar, .dock, .cz-btn, seats; contract 9's chips in
+    public/css/casino-chips.css) - only what a wheel adds: the bowl, the betting layout and its chip stacks, the placard, call bets,
+    the players rail, the result moment and the stats drawer. Every animation is off under prefers-reduced-motion (casino-css.ejs). %>
 <style>
-.rl-page {
-  max-width: 1480px;
+/* ── "← All tables" (the Blackjack and Hold'em pages' .back; casino-sound.js puts the 🔇 / 🔊 toggle beside it) ── */
+.rl-page .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin: 0 0 6px;
+  font-size: var(--ds-fs-sm);
+  text-decoration: none;
 }
-.rl-stage {
+.rl-page .back:hover {
+  text-decoration: underline;
+}
+/* (a touch screen: the felt's and the dock's small buttons are full 44 px targets) */
+@media (pointer: coarse) {
+  .rl-page .cz-btn.sm {
+    min-height: 44px;
+  }
+}
+/* ── the felt: the wheel bowl at the head (left on a wide screen), the layout beside it, the history under both ── */
+.felt.rl {
   display: grid;
-  grid-template-columns: minmax(210px, 29%) minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid #84643e;
-  border-radius: 22px;
-  background: #202527;
-  box-shadow: 0 12px 36px #0004;
-  color: #fff8e7;
+  grid-template-columns: minmax(250px, 34%) minmax(0, 1fr);
+  grid-template-areas: "head table" "trail trail";
+  gap: 14px 22px;
+  align-items: start;
+  padding: 24px 24px 18px;
 }
-.rl-cabinet {
-  min-width: 0;
+.rl-head {
+  grid-area: head;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.45em;
-  padding: 20px 10px;
-  background:
-    repeating-linear-gradient(87deg, #0000 0 9px, #0002 11px 12px),
-    linear-gradient(115deg, #3c281e, #201711 50%, #54382a);
+  gap: 8px;
+  min-width: 0;
 }
-.rl-crown {
-  font: 26px Georgia;
-  color: #f4cd81;
-}
-.rl-wheel-frame {
-  width: min(100%, 355px);
-  aspect-ratio: 1;
+.rl-bowl {
   position: relative;
+  width: min(100%, 340px);
+  aspect-ratio: 1;
 }
-.rl-wheel-frame svg {
+.rl-bowl canvas {
+  display: block;
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 6px 4px #0008);
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
 }
-#rl-rotor {
-  transform-origin: 0 0;
+/* (a desktop's tilted wheel - rlwheel.js setTilt, rotateX 38deg - is shorter than its box: the croupier sits closer) */
+@media (min-width: 900px) and (pointer: fine) {
+  .rl-bowl {
+    margin-block: -26px -34px;
+  }
 }
-.rl-pin {
-  position: absolute;
-  top: 1%;
-  left: 48%;
-  width: 4%;
-  height: 8%;
-  background: #fff8d8;
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  filter: drop-shadow(0 2px 2px #000);
-}
-.rl-readout {
-  text-align: center;
-  min-height: 4.8rem;
-  display: grid;
-  align-content: center;
-  gap: 3px;
-}
-.rl-readout strong {
-  font:
-    700 clamp(20px, 2vw, 34px)/1.2 Georgia,
-    serif;
-}
-.rl-readout span {
-  font-size: 0.86rem;
-}
-.rl-readout .win {
-  color: #a8ffd1;
-}
-.rl-carpet {
-  position: relative;
-  min-width: 0;
-  padding: clamp(14px, 2vw, 32px);
-  background: radial-gradient(ellipse at 30% 5%, #277454, #104a38 70%, #10372e);
-  box-shadow: inset 5px 0 12px #0004;
-}
-.rl-title,
-.rl-more,
-.rl-trail {
+.rl-croupier {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
 }
-.rl-title h2 {
-  font: italic 600 clamp(22px, 3vw, 42px) Georgia;
+.rl-croupier .av {
+  width: 44px;
+  height: 44px;
+  background: #0d2a18;
+}
+.rl-croupier .felt-lbl {
+  white-space: nowrap;
+}
+.rl-say {
+  flex: 0 1 230px;
+  min-width: 0;
+  text-align: center;
+}
+.rl-say .felt-msg {
   margin: 0;
+  font-size: 19px;
+}
+.rl-net {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font: 700 14px/1.3 var(--ds-font);
+  font-variant-numeric: tabular-nums;
+}
+.rl-net:empty {
+  display: none;
+}
+.rl-net.win {
+  color: var(--goldt);
+}
+.rl-table {
+  grid-area: table;
+  min-width: 0;
 }
 .rl-title {
-  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 0 0 8px;
 }
-.rl-title span,
-.rl-trail small {
-  font: 500 0.84rem/1.5 var(--ds-font);
-  color: #f3ead7;
+.rl-totals {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--ds-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── the betting layout ── */
+.rl-board {
+  position: relative;
 }
 .rl-grid {
   display: grid;
   grid-template-columns: 0.9fr repeat(12, 1fr) 1.25fr;
   grid-template-rows: repeat(3, minmax(44px, 1fr));
   position: relative;
+  border: 2px solid rgba(255, 236, 190, 0.78);
+  border-radius: 6px 6px 0 0;
 }
 .rl-grid button,
 .rl-outside button {
   position: relative;
-  color: #fff9eb;
-  border: 1px solid #e7dab6;
-  border-radius: 0;
-  cursor: pointer;
-  font:
-    bold clamp(12px, 1.2vw, 20px) Georgia,
-    serif;
-  background: #17603e;
   min-width: 0;
+  margin: 0;
   padding: 3px 0;
+  border: 1px solid rgba(255, 236, 190, 0.55);
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  font: 700 clamp(13px, 1.3vw, 18px) / 1.1 var(--ds-font);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: box-shadow 0.15s, filter 0.15s;
 }
 /* 1.99aoh: iPhone - a quick second tap bets again instead of zooming the page, and the long-press undo (600 ms,
    casinorl.js) never raises the text-selection / link callout */
@@ -128,13 +149,13 @@
 }
 .rl-grid button:focus-visible,
 .rl-outside button:focus-visible {
-  outline: 3px solid #ffdd75;
+  outline: 3px solid var(--ds-focus, #ffdd75);
   outline-offset: -4px;
   z-index: 6;
 }
 .rl-grid button.red,
 .rl-outside .red {
-  background: #d3343a;
+  background: #c62828;
 }
 .rl-grid button.black,
 .rl-outside .black {
@@ -142,42 +163,89 @@
 }
 .rl-grid .zero {
   background: #1e7f4f;
+  border-radius: 40% 0 0 40% / 50% 0 0 50%;
+}
+/* a wide felt: the number (or the outside bet's name) in the upper part of its box, the chips stacked on its lower part - a pile
+   never hides which spot it is on */
+@media (min-width: 640px) {
+  .rl-grid {
+    grid-template-rows: repeat(3, minmax(54px, 1fr));
+  }
+  .rl-outside {
+    grid-template-rows: repeat(2, minmax(50px, auto));
+  }
+  .rl-grid button:not(.edge),
+  .rl-outside button {
+    padding: 0 0 18px;
+  }
+  .rl-grid button:not(.edge) .rl-stk,
+  .rl-outside button .rl-stk {
+    top: auto;
+    bottom: 3px;
+    transform: translateX(-50%);
+  }
+}
+@keyframes rlRakeUp {
+  from {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-220%, -260%) scale(0.5);
+  }
+}
+.rl-grid .col {
+  font-size: 13px;
 }
 .rl-grid .symbol {
   display: block;
-  font: 8px/1 sans-serif;
+  font: 8px/1 system-ui, sans-serif;
+  opacity: 0.85;
 }
 .rl-outside {
-  margin: 13px 0 0;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: 0.9fr repeat(12, 1fr) 1.25fr;
+  grid-template-rows: repeat(2, minmax(44px, auto));
+  margin: 0;
 }
 .rl-outside button {
-  min-height: 39px;
+  min-height: 44px;
+  border-top: 0;
+  font-size: clamp(12px, 1.1vw, 15px);
 }
-.rl-outside .dozen {
-  grid-column: span 2;
-}
+/* the inside edges (splits, streets, corners, lines): a small mark on the line between numbers, with a larger invisible hit area
+   (O13(5): about 24 px) - mouse screens only; a touch screen bets them with the modes (two taps) */
 .rl-grid .edge {
   position: absolute;
   z-index: 2;
-  border: none;
+  width: 10px;
+  height: 22px;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: transparent;
-  font: 10px sans-serif;
   transform: translate(-50%, -50%);
-  width: 11px;
-  height: 24px;
-  padding: 0;
+}
+.rl-grid .edge::before {
+  content: "";
+  position: absolute;
+  inset: -2px -7px;
 }
 .rl-grid .edge.horizontal {
-  width: 24px;
-  height: 11px;
+  width: 22px;
+  height: 10px;
+}
+.rl-grid .edge.horizontal::before {
+  inset: -7px -2px;
 }
 .rl-grid .edge.cross {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   z-index: 3;
+}
+.rl-grid .edge.cross::before {
+  inset: -6px;
 }
 .rl-grid .edge:focus-visible,
 .rl-grid .edge:hover {
@@ -185,36 +253,212 @@
   border-radius: 6px;
   outline: 2px solid #2f2614;
 }
-.rl-grid [data-stake]::after,
-.rl-outside [data-stake]::after {
-  content: attr(data-stake);
-  white-space: nowrap;
-  width: max-content;
+/* hover / focus preview: the numbers a spot covers */
+.rl-grid button.cov {
+  box-shadow: inset 0 0 0 3px rgba(255, 215, 64, 0.95), 0 0 12px rgba(255, 215, 64, 0.5);
+  filter: brightness(1.18);
+  z-index: 1;
+}
+.rl-tip {
+  min-height: 1.45em;
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: var(--ds-fs-sm);
+  line-height: 1.45;
+}
+
+/* ── chips on a spot (casinorl.js stackFor): others' small chips in their seat colour, mine as a pile with a gold ring, the total
+   and the player count; contract 9's .chip / .pile are the chips themselves ── */
+.rl-stk {
   position: absolute;
+  left: 50%;
+  top: 50%;
   z-index: 4;
-  bottom: 0;
-  right: 0;
-  line-height: 1.3;
-  font: 700 10px/1.2 system-ui;
-  background: #ffe2a0;
-  color: #211914;
-  border: 2px dashed #845720;
-  border-radius: 1em;
-  padding: 2px;
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: transform 0.9s ease-in, opacity 0.9s ease-in;
+}
+.rl-stk.on {
+  display: inline-flex;
+}
+.rl-stk .chip.rl-top {
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 0 2px var(--gold);
+}
+.rl-stk .pile.await {
+  opacity: 0.55;
+}
+.rl-stk .rl-amt {
+  align-self: center;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font: 700 10px/1.2 var(--ds-font);
+  white-space: nowrap;
+}
+.rl-stk.mine .rl-amt {
+  color: var(--goldt);
+}
+.rl-stk .rl-k {
+  position: absolute;
+  top: -7px;
+  inset-inline-end: -7px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: #fff;
+  color: #111;
+  font: 700 9px/14px var(--ds-font);
+  font-style: normal;
+  text-align: center;
+}
+.rl-grid .edge .rl-stk .pile,
+.rl-grid .edge .rl-stk .pile .chip {
+  width: 14px;
+}
+.rl-grid .edge .rl-stk .pile .chip {
+  height: 14px;
+}
+.rl-grid .edge .rl-stk .rl-amt {
+  display: none;
+}
+
+/* ── the result (O13(2)): the winning number, every covering spot, losing chips raked toward the wheel ── */
+.rl-grid button.hit,
+.rl-outside button.hit {
+  box-shadow: inset 0 0 0 3px rgba(255, 215, 64, 0.9);
+}
+.rl-grid .edge.hit {
+  background: var(--gold);
+  border-radius: 6px;
+}
+.rl-grid button.won {
+  z-index: 5;
+  box-shadow: inset 0 0 0 3px #fff, 0 0 0 3px var(--gold), 0 0 24px rgba(255, 215, 64, 0.95);
+  animation: rlWon 1.2s ease-in-out 3;
+}
+@keyframes rlWon {
+  50% {
+    box-shadow: inset 0 0 0 3px #fff, 0 0 0 4px var(--gold), 0 0 38px rgba(255, 215, 64, 1);
+  }
+}
+.rl-result .rl-stk.lost {
+  opacity: 0;
+}
+.rl-board.raking .rl-stk.lost {
+  animation: rlRake 0.9s ease-in forwards;
+}
+@keyframes rlRake {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-260%, -160%) scale(0.5);
+  }
+}
+@media (min-width: 640px) {
+  .rl-board.raking button:not(.edge) > .rl-stk.lost {
+    animation-name: rlRakeUp;
+  }
+}
+.rl-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 6;
   pointer-events: none;
 }
-.rl-grid .awaiting::after,
-.rl-outside .awaiting::after {
-  opacity: 0.6;
+.rl-burst i {
+  position: absolute;
+  left: -2px;
+  top: -5px;
+  width: 4px;
+  height: 10px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fff6cf, var(--gold));
+  transform: rotate(var(--a)) translateY(-8px);
+  animation: rlBurst 0.95s ease-out forwards;
 }
+@keyframes rlBurst {
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(-44px) scaleY(0.5);
+  }
+}
+
+/* ── the touch modes and the call bets ── */
 .rl-modes {
   display: none;
 }
+.rl-modes button,
+.rl-call {
+  min-height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 236, 190, 0.5);
+  border-radius: var(--ds-r-pill);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font: 700 14px/1.1 var(--ds-font);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.rl-modes [aria-pressed="true"],
+.rl-call[aria-pressed="true"] {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ds-on-gold);
+}
+.rl-instruction {
+  display: block;
+  min-height: 0;
+  color: #ffe9a3;
+  font-size: var(--ds-fs-sm);
+}
+.rl-instruction:empty {
+  display: none;
+}
+.rl-race {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 10px 0 0;
+}
+.rl-call {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 14px;
+}
+.rl-call small {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.85;
+}
+.rl-call:hover,
+.rl-modes button:hover {
+  border-color: var(--gold);
+}
+
+/* ── the history strip ── */
 .rl-trail {
-  justify-content: flex-start;
-  margin: 16px 0 0;
-  border-top: 1px solid #f3dab154;
+  grid-area: trail;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 2px 0 0;
   padding-top: 12px;
+  border-top: 1px solid rgba(255, 236, 190, 0.22);
 }
 .rl-trail ol {
   display: flex;
@@ -224,20 +468,28 @@
   margin: 0;
   padding: 0;
 }
-/* 1.99aoh: each history entry is a .rl-pocket (red / black / zero, the newest larger with a gold ring) - public/css/casinorl-dock.css */
+/* 1.99aoh: each history entry is a .rl-pocket (red / black / zero, the newest larger with a gold ring) - contract 9's
+   public/css/casino-chips.css */
 .rl-trail ol {
   align-items: center;
 }
 .rl-trail li {
   display: flex;
 }
-/* 1.99aoh: the table's limits placard (casinorl.js placard()) - a summary line with the player's "left this spin" meter */
+.rl-trail small {
+  margin-inline-start: auto;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+}
+
+/* 1.99aoh: the table's limits placard (casinorl.js placard()) - a summary line with the key limits and the player's "left this
+   spin" meter */
 .rl-limits {
-  margin: 0 0 12px;
-  border: 1px solid #f3dab154;
-  border-radius: 10px;
-  background: #0a2a20b3;
-  font: 500 0.86rem/1.45 var(--ds-font);
+  margin: 0 0 10px;
+  border: 1px solid rgba(255, 236, 190, 0.3);
+  border-radius: var(--ds-r-md);
+  background: rgba(0, 0, 0, 0.28);
+  font: 400 0.86rem/1.45 var(--ds-font);
   color: #f3ead7;
 }
 .rl-limits[hidden] {
@@ -271,20 +523,25 @@
 }
 .rl-limits-h {
   font-weight: 700;
-  color: #f4d88e;
+  color: var(--goldt);
 }
 .rl-limits-h::before {
   content: "ⓘ ";
   content: "ⓘ " / "";
 }
+.rl-lim-key {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
 .rl-left {
   font-variant-numeric: tabular-nums;
+  color: var(--goldt);
 }
 .rl-left:empty {
   display: none;
 }
 /* (17rem columns side by side on a wide felt; a box narrower than one column - a 320-360 px phone - gets one column as wide as the
-   box, never a fixed 17rem cut off by .rl-stage's overflow. Logical padding: the bullets' room is on the start side in RTL too.) */
+   box, never a fixed 17rem cut off. Logical padding: the bullets' room is on the start side in RTL too.) */
 .rl-limits ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
@@ -304,17 +561,79 @@
   color: #e4dccb;
   font-size: 0.8rem;
 }
-/* 1.99aof (UI-6): a signed-out viewer's line above the controls */
-.rl-signin {
-  margin: 0 0 8px;
+
+/* ── the players rail (O10): seat colours match their chips on the layout ── */
+.rl-players {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--ds-r-xl);
+  background: var(--panel);
+  border: 1px solid var(--line);
 }
-.rl-signin a {
-  display: inline-flex;
+.rl-ph {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  min-height: 44px;
-  color: #f4d88e;
+  gap: 6px 12px;
+  margin: 0 0 10px;
+  color: var(--txt);
+  font-size: var(--ds-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.rl-ph .rl-otbtn {
+  margin-inline-start: auto;
+}
+.rl-ph .rl-otbtn[aria-pressed="true"]::before {
+  content: "👁 ";
+  content: "👁 " / "";
+}
+.rl-seats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 12px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rl-seats .seat .av {
+  border: 3px solid var(--sc, rgba(255, 255, 255, 0.25));
+}
+.rl-seats .seat.me .av {
+  box-shadow: 0 0 0 2px var(--gold);
+}
+.rl-seats .plate .sub {
+  margin-top: 3px;
+}
+.rl-seats .plate .stack {
+  padding: 2px 7px 2px 3px;
+}
+.rl-none,
+.rl-more-n {
+  align-self: center;
+  color: var(--mut);
+  font-size: var(--ds-fs-sm);
+}
+.rl-none {
+  grid-column: 1 / -1;
+}
+
+/* ── under the dock: the session line, the other wheels, the commitment ── */
+.rl-session {
+  margin: 8px 0 0;
+  color: var(--mut);
+  font-size: var(--ds-fs-sm);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.rl-session:empty {
+  display: none;
 }
 .rl-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
   margin: 12px 0;
 }
 .rl-more a {
@@ -325,68 +644,107 @@
 }
 #rl-proof {
   overflow-wrap: anywhere;
-  color: var(--ds-text-muted);
+  color: var(--mut);
   font-size: 0.8rem;
 }
-@media (max-width: 900px) and (min-width: 640px) {
-  .rl-stage {
-    grid-template-columns: 170px 1fr;
+/* O13(12): a phone's small wheel while a spin runs and the big one is out of sight */
+.rl-float {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 72px);
+  inset-inline-end: 10px;
+  z-index: var(--ds-z-sticky);
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.rl-float canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* ── the stats drawer (O13(9)): plain counts, one neutral colour - never a hot / cold reading ── */
+.rl-indep {
+  padding: 8px 10px;
+  border-radius: var(--ds-r-md);
+  background: var(--ds-gold-bg, rgba(255, 215, 64, 0.12));
+  color: var(--goldt);
+  font-weight: 700;
+}
+.rl-stg {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+}
+.rl-stg > b {
+  color: #fff;
+}
+.rl-str {
+  display: grid;
+  grid-template-columns: minmax(6em, 9em) 1fr 2.5em;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.rl-str > span:last-child {
+  text-align: end;
+}
+.rl-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.rl-bar i {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+/* ── narrower than a desktop: the wheel on top, the layout under it ── */
+@media (max-width: 899px) {
+  .felt.rl {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "head" "table" "trail";
+    padding: 20px 16px 16px;
   }
-  .rl-carpet {
-    padding: 10px;
+  .rl-bowl {
+    width: min(100%, 300px);
   }
 }
 @media (max-width: 639px) {
-  .rl-stage {
-    display: block;
+  .felt.rl {
+    padding: 16px 12px 14px;
+    border-radius: 24px;
   }
-  .rl-cabinet {
-    flex-direction: row;
-    padding: 2px 8px;
-    gap: 12px;
+  .rl-bowl {
+    width: min(100%, 270px);
   }
-  .rl-crown {
-    display: none;
-  }
-  .rl-wheel-frame {
-    width: 94px;
-  }
-  .rl-spinning .rl-wheel-frame {
-    width: min(65vw, 230px);
-  }
-  .rl-readout {
-    min-width: 8em;
-  }
-  .rl-carpet {
-    padding: 12px;
-  }
-  .rl-title h2 {
-    font-size: 24px;
+  .rl-say .felt-msg {
+    font-size: 17px;
   }
   .rl-modes {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
+    gap: 4px;
+    margin: 0 0 8px;
   }
   .rl-modes button {
-    min-height: 44px;
-    padding: 0 0.65rem;
-    background: #0e392a;
-    border: 1px solid #b6cbb8;
-    color: white;
-    border-radius: 6px;
-  }
-  .rl-modes [aria-pressed="true"] {
-    background: #ffe1a1;
-    color: #2b2317;
+    padding: 0 10px;
+    font-size: 13px;
   }
   .rl-board {
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
   }
   .rl-grid {
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: auto;
+    border-radius: 0;
+  }
+  .rl-grid .zero {
+    border-radius: 50% 50% 0 0 / 40% 40% 0 0;
   }
   .rl-grid button:not(.edge),
   .rl-outside button {
@@ -394,55 +752,63 @@
     grid-row: var(--mobile-row) !important;
     min-height: 44px;
   }
+  /* (a phone's cell is wide and short: the chips sit beside the number, not on it) */
+  .rl-grid button:not(.edge) .rl-stk,
+  .rl-outside button .rl-stk {
+    left: auto;
+    inset-inline-end: 6px;
+    transform: translateY(-50%);
+  }
+  .rl-board.raking .rl-stk.lost {
+    animation-name: rlRakeSide;
+  }
   .rl-grid .edge {
     display: none;
   }
   .rl-outside {
-    margin: 8px 0;
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto;
+    margin: 0;
   }
-  .rl-outside .dozen {
-    grid-column: auto;
+  .rl-outside button {
+    border-top: 1px solid rgba(255, 236, 190, 0.55);
   }
-  .rl-title {
-    margin-bottom: 8px;
+  .rl-tip:empty {
+    display: none;
+  }
+  .rl-trail small {
+    flex-basis: 100%;
+    margin: 0;
   }
   #cz-dock {
     position: sticky;
     bottom: 0;
-    z-index: 8;
-    background: #14241c;
-    max-height: 38dvh;
+    max-height: 42dvh;
     overflow: auto;
   }
-  #cz-dock .rl-slip {
-    margin: 3px 0;
+  .rl-seats {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
-  .rl-trail small {
-    font-size: 12px;
+}
+@keyframes rlRakeSide {
+  from {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-120%, -50%) scale(0.5);
   }
 }
 /* 1.99aof (UI-3): a touch screen 640 px or wider (a phone in landscape, a tablet) keeps the wide felt but bets the phone's
-   way - the Split / Street / Corner / Line modes (two taps on numbers) instead of the 11-13 px edge targets, which a
+   way - the Split / Street / Corner / Line modes (two taps on numbers) instead of the small edge targets, which a
    finger misses onto a number (a straight bet charged at once). casinorl.js uses the same media query. */
 @media (pointer: coarse) and (min-width: 640px) {
   .rl-modes {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
+    gap: 4px;
     margin: 0 0 8px;
-  }
-  .rl-modes button {
-    min-height: 44px;
-    padding: 0 0.65rem;
-    background: #0e392a;
-    border: 1px solid #b6cbb8;
-    color: white;
-    border-radius: 6px;
-  }
-  .rl-modes [aria-pressed="true"] {
-    background: #ffe1a1;
-    color: #2b2317;
   }
   .rl-grid .edge {
     display: none;
@@ -452,21 +818,15 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  #rl-rotor {
-    transition: none !important;
+  .rl-board.raking .rl-stk.lost,
+  .rl-grid button.won {
+    animation: none !important;
   }
-  .rl-readout strong {
-    animation: rl-fade 0.2s ease-out;
-  }
-  @keyframes rl-fade {
-    from {
-      opacity: 0.4;
-    }
-    to {
-      opacity: 1;
-    }
+  .rl-burst {
+    display: none;
   }
 }
+/* D4: the lobby wheel isn't pushed or advertised (Host Tools keeps the stream part for an admin) */
 .rl-lobby
   #cz-host
   .sheet-b

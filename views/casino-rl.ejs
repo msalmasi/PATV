@@ -1,30 +1,58 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', {title:t('casino.rl.title'),user:user}) %>
+<%# views/casino-rl.ejs - /casino/roulette/t/<id>: a roulette wheel's table. roulette2 WP5b (O9): built on the casino's shared parts like
+    the Blackjack and Hold'em tables (casino-top, a .back link, the .felt with Pepe as the croupier and the .clock ring, .felt-meta tags,
+    the .watchbar, a players rail, the sticky .dock, the history / Host Tools sheets, the 💬 chat), with the real wheel and ball
+    (casino/rlwheel.js on a <canvas>), the betting layout with everyone's chips (D5), the limits placard, call bets, a stats drawer and the
+    session line. The chips are the casino's shared ones (contract 9: public/css/casino-chips.css). Drawn by public/js/casinorl.js on
+    casino-ui.js + casinorl-dock.js (the slip controls shared with the pad's Room Dock). %>
 <%- include('partials/casino-css') %>
 <link rel="stylesheet" href="/public/css/casino-chips.css?v=1">
 <%- include('partials/casino-rl-css') %>
-<link rel="stylesheet" href="/public/css/room-mod.css?v=10"><link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><link rel="stylesheet" href="/public/css/flair.css?v=5"><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=3">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=10"><link rel="stylesheet" href="/public/css/pad-dock.css?v=13"><link rel="stylesheet" href="/public/css/person-sheet.css?v=3"><link rel="stylesheet" href="/public/css/flair.css?v=5"><link rel="stylesheet" href="/public/css/casinorl-dock.css?v=4">
 <main class="ds-page flow cz rl-page" id="cb" data-game="roulette" data-table="<%= tableId || '' %>" data-signed="<%= signedIn?'1':'' %>" data-user="<%= signedIn && user ? user:'' %>">
 <%- include('partials/casino-top',{t,game:'roulette',tableId}) %>
 <% if(!tableId){ %><section class="ds-card"><h2><%= t('casino.rl.off') %></h2><a href="/casino"><%= t('casino.all_tables') %></a></section><% }else{ %>
 <section id="cz-table" hidden>
-  <div class="rl-stage">
-    <div class="rl-cabinet">
-      <div class="rl-crown" aria-hidden="true">◇</div>
-      <div class="rl-wheel-frame"><svg id="rl-wheel" viewBox="-125 -125 250 250" aria-hidden="true"></svg><span class="rl-pin" aria-hidden="true"></span></div>
-      <div class="rl-readout"><span id="rl-phase"></span><strong id="cz-msg"></strong><span id="rl-net"></span></div>
+  <%# (the lobby's roulette tab: /casino/blackjack#roulette - /casino/roulette itself opens the lobby wheel) %>
+  <a class="back" href="/casino/blackjack#roulette">← <%- t('casino.all_tables') %></a>
+  <div class="felt rl" id="cz-felt">
+    <div class="rl-head">
+      <div class="rl-bowl" id="rl-bowl"><canvas id="rl-wheel" width="340" height="340"></canvas></div>
+      <div class="rl-croupier">
+        <%# Pepe the croupier opens his menu (profile, fairness, history, his stream - casino-ui.js pepeMenu) %>
+        <button type="button" class="cz-who" data-pepe="1" aria-haspopup="menu" aria-label="<%- t('casino.rl.croupier_actions') %>"><span class="av" aria-hidden="true"><img src="/public/img/pepe.png" alt=""></span><span class="felt-lbl"><%- t('casino.rl.croupier') %></span></button>
+        <div class="rl-say"><div class="felt-msg" id="cz-msg"></div><p class="rl-net" id="rl-net"></p></div>
+        <div class="clock" id="cz-fclock" hidden><span class="secs"></span></div>
+      </div>
     </div>
-    <div class="rl-carpet">
-      <div class="rl-title"><h2><%= t('casino.rl.title') %></h2><span id="rl-totals"></span></div>
-      <div id="rl-modes" class="rl-modes" aria-label="<%= t('casino.rl.mode') %>"></div><output id="rl-instruction"></output>
+    <div class="rl-table">
+      <div class="rl-title"><span class="felt-lbl" id="rl-phase"></span><span class="rl-totals" id="rl-totals"></span></div>
+      <div id="rl-modes" class="rl-modes" role="group" aria-label="<%= t('casino.rl.mode') %>"></div><output id="rl-instruction" class="rl-instruction"></output>
       <div id="rl-board" class="rl-board"><div id="rl-grid" class="rl-grid"></div><div id="rl-outside" class="rl-outside"></div></div>
-      <div class="rl-trail"><span><%= t('casino.history') %></span><ol id="rl-history"></ol><small><%= t('casino.rl.independent') %></small></div>
+      <p class="rl-tip" id="rl-tip" aria-hidden="true"></p>
+      <div class="rl-race" id="rl-race" role="group" aria-label="<%= t('casino.rl.calls') %>"></div>
+    </div>
+    <div class="rl-trail">
+      <span class="felt-lbl"><%= t('casino.history') %></span><ol id="rl-history" class="rl-hist"></ol>
+      <button type="button" class="cz-btn ghost sm" id="rl-statsbtn" aria-haspopup="dialog">📊 <%= t('casino.rl.stats') %></button>
+      <small><%= t('casino.rl.independent') %></small>
     </div>
   </div>
-  <div id="cz-dock"></div>
-  <div class="rl-more"><a href="/casino"><%= t('casino.all_tables') %></a><nav id="rl-wheels" aria-label="<%= t('casino.rl.other') %>"></nav><span id="rl-proof"></span></div>
+  <div class="felt-meta" id="cz-meta"></div>
+  <div class="watchbar" id="cz-watchbar" hidden></div>
+  <section class="rl-players" id="rl-players" aria-label="<%= t('casino.rl.players') %>"></section>
+  <div class="dock" id="cz-dock" hidden></div>
+  <p class="rl-session" id="rl-session"></p>
+  <div class="rl-more"><nav id="rl-wheels" aria-label="<%= t('casino.rl.other') %>" hidden></nav><span id="rl-proof"></span></div>
+  <%# O13(12): a phone's small wheel while a spin runs and the big one is scrolled away (casinorl.js; decorative - the felt says the result) %>
+  <div class="rl-float" id="rl-float" hidden aria-hidden="true"><canvas width="88" height="88"></canvas></div>
 </section>
+<dialog class="sheet" id="rl-stats" aria-labelledby="rl-stats-h">
+  <div class="sheet-h"><h2 id="rl-stats-h">📊 <%= t('casino.rl.stats_h') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
+  <div class="sheet-b" id="rl-stats-b"></div>
+</dialog>
 <%- include('partials/casino-sheets',{t}) %><%- include('partials/casino-chat',{t}) %>
 <% } %></main>
 <% if(tableId){ %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if(signedIn){ %><script src="/public/js/block-sheet.js?v=3"></script><% } %>
-<script src="/public/js/casino-ui.js?v=14"></script><script src="/public/js/patamount.js?v=1"></script><script src="/api/casino/rlbets.js?v=2"></script><script src="/public/js/casinorl-dock.js?v=3"></script><script src="/public/js/casinorl.js?v=3"></script><% } %>
+<script src="/public/js/casino-ui.js?v=14"></script><script src="/public/js/casino-sound.js?v=3"></script><script src="/public/js/patamount.js?v=1"></script><script src="/api/casino/rlbets.js?v=2"></script><script src="/api/casino/rlwheel.js?v=2"></script><script src="/public/js/casinorl-dock.js?v=4"></script><script src="/public/js/casinorl.js?v=4"></script><% } %>

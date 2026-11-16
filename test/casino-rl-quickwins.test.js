@@ -64,17 +64,24 @@ function view(phase, me, extra) {
 /** views/casino-rl.ejs's elements + a stub CZ (casino-ui.js), then rlbets / the dock / casinorl.js as the page loads them */
 function tablePage() {
   const W = makeWindow((url) => (String(url).startsWith("/api/casino/lobby") ? { ok: true, roulette: { wheels: [] } } : { ok: false }));
+  // (roulette2 WP5b: the rebuilt page - the felt's wheel canvas and croupier, the layout column (rl-table), the trail; no wheel module
+  // here, so the page keeps its felt and history without one)
   const root = el("main", "cb", [
-    el("svg", "rl-wheel"),
-    el("span", "rl-phase"), el("strong", "cz-msg"), el("span", "rl-net"),
-    el("div", "rl-carpet", [
-      el("span", "rl-totals"), el("div", "rl-modes"), el("output", "rl-instruction"), el("div", "rl-grid"), el("div", "rl-outside"),
+    el("div", "cz-felt", [
+      el("canvas", "rl-wheel"),
+      el("div", "cz-msg"), el("p", "rl-net"),
+      el("div", "rl-table", [
+        el("span", "rl-phase"), el("span", "rl-totals"), el("div", "rl-modes"), el("output", "rl-instruction"),
+        el("div", "rl-board", [el("div", "rl-grid"), el("div", "rl-outside")]), el("div", "rl-race"),
+      ]),
       el("ol", "rl-history"),
     ]),
     el("div", "cz-dock"), el("nav", "rl-wheels"), el("span", "rl-proof"), el("button", "cz-histbtn"),
   ]);
   const $ = (id) => [root, ...root.all()].find((e) => e.attrs.id === id || e.id === id) || null;
-  Object.assign(W.document, { createElementNS: (ns, tag) => new El(tag), querySelector: () => null, getElementById: $ });
+  Object.assign(W.document, { createElementNS: (ns, tag) => new El(tag), querySelector: () => null, getElementById: $,
+                              addEventListener() {}, dispatchEvent() { return true; } });
+  W.CustomEvent = function (type, init) { this.type = type; this.detail = init && init.detail; };
   W.matchMedia = () => ({ matches: false, addEventListener() {} });
   const fill = (d, v) => String(d).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m));
   const CZ = (W.CZ = {
@@ -83,7 +90,8 @@ function tablePage() {
     fmt: (n) => Math.trunc(Number(n) || 0).toLocaleString("en-US"),
     short: (n) => String(n), skew: () => 0,
     esc: (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]),
-    announce() {}, note() {}, toast() {}, openSheet() {},
+    announce() {}, note() {}, toast() {}, openSheet() {}, theme() {}, armClock() {}, pop() {},
+    pileHTML: (n) => String(n), stackHTML: (n) => String(n), avatarHTML: () => "", seatWho: (s, inner) => inner, net: (n) => String(n),
     loadHistory(fn) { CZ.row = fn; },
     actor: () => async () => ({}),
     wireHost() {},
@@ -140,9 +148,10 @@ test("O7: the limits placard names every limit in plain words and the player's '
   const box = $("rl-limits");
   assert.ok(box, "the placard is on the felt");
   assert.equal(box.tagName, "DETAILS");
-  const carpet = $("rl-carpet");
-  assert.ok(carpet.children.indexOf(box) >= 0 && carpet.children.indexOf(box) < carpet.children.indexOf($("rl-modes")), "above the board's modes");
-  assert.equal(box.open, true, "open on a wide screen (folds to its summary line on a phone)");
+  const column = $("rl-table");
+  assert.ok(column.children.indexOf(box) >= 0 && column.children.indexOf(box) < column.children.indexOf($("rl-modes")), "above the board's modes");
+  // (roulette2 WP5b: folded by default on every screen - its summary line keeps the key limits and the meter; the viewer's choice is kept)
+  assert.equal(box.open, false);
   CZ.render(view("betting", { lines: [{ text: "red 2500", amount: 2500 }], staked: 2500, room_left: 97500 }));
   assert.equal(box.hidden, false);
   const sum = box.querySelector("summary"),
@@ -197,17 +206,26 @@ test("O8: the Room Dock's recent line uses the same pockets, newest first", asyn
   assert.equal(pockets(recent)[3].getAttribute("aria-label"), "Spin 1: 14 red");
 });
 
-test("O8 / O13(1): one shared pocket style on both pages, the iPhone touch rules on the board", () => {
+// roulette2 WP5b (contract 9): the .rl-pocket rules moved from casinorl-dock.css to public/css/casino-chips.css (WP5a's file, loaded by the
+// table page and by the pad page) - checked there once that file is in the tree
+const CHIPS = path.join(repo, "public", "css", "casino-chips.css");
+const pocketCss = () => (fs.existsSync(CHIPS) ? fs.readFileSync(CHIPS, "utf8") : null);
+test("O8 / O13(1): one shared pocket style on both pages, the iPhone touch rules on the board", (t) => {
   const dockCss = read("public/css/casinorl-dock.css"),
     felt = read("views/partials/casino-rl-css.ejs");
-  assert.match(dockCss, /\.rl-pocket\.red \{\s*background: #c62828;/);
-  assert.match(dockCss, /\.rl-pocket\.black \{\s*background: #141418;\s*box-shadow: inset 0 0 0 1px #555;/);
-  assert.match(dockCss, /\.rl-pocket\.zero \{\s*background: #1e7f4f;/);
-  assert.match(dockCss, /\.rl-pocket\.newest \{[^}]*font-size: 16px;[^}]*box-shadow: 0 0 0 2px #f4cd81;/);
-  assert.match(dockCss, /\.rl-pocket\.red::after \{\s*content: "◆";/);
-  assert.match(dockCss, /\.rl-pocket\.black::after \{\s*content: "●";/);
-  // the stylesheet with the pocket colours is on the table page and on the pad page (the Room Dock)
-  for (const v of ["views/casino-rl.ejs", "views/room.ejs"]) assert.match(read(v), /\/public\/css\/casinorl-dock\.css\?v=3/, v);
+  assert.doesNotMatch(dockCss, /^\.rl-pocket/m, "no second copy of the pocket rules");
+  assert.match(read("views/casino-rl.ejs"), /\/public\/css\/casino-chips\.css\?v=\d+/, "the table page loads the shared chips");
+  for (const v of ["views/casino-rl.ejs", "views/room.ejs"]) assert.match(read(v), /\/public\/css\/casinorl-dock\.css\?v=4/, v);
+  const css = pocketCss();
+  if (!css) t.diagnostic("public/css/casino-chips.css comes with WP5a: its pocket rules are checked once it is in the tree");
+  else {
+    assert.match(read("views/room.ejs"), /\/public\/css\/casino-chips\.css/, "the pad page (the Room Dock) loads them too");
+    assert.match(css, /\.rl-pocket\.red[^{]*\{[^}]*background: #c62828;/);
+    assert.match(css, /\.rl-pocket\.black[^{]*\{[^}]*background: #141418;/);
+    assert.match(css, /\.rl-pocket\.zero[^{]*\{[^}]*background: #1e7f4f;/);
+    assert.match(css, /\.rl-pocket\.red::after\s*\{[^}]*content: "◆"/);
+    assert.match(css, /\.rl-pocket\.black::after\s*\{[^}]*content: "●"/);
+  }
   assert.doesNotMatch(felt, /\.rl-trail li \{[^}]*background/, "no one dark box for every entry");
   assert.match(felt, /\.rl-grid button,\s*\.rl-outside button \{\s*touch-action: manipulation;\s*-webkit-user-select: none;\s*user-select: none;\s*-webkit-touch-callout: none;/);
   assert.match(dockCss, /\.rl-controls button,\s*\.rl-quick button \{\s*touch-action: manipulation;/);
@@ -272,10 +290,14 @@ test("O7 / O8 review: the placard fits a 320 px phone and RTL, its glyphs stay o
   // the ⓘ and ▾ are decoration: empty alt text (after a plain fallback for an older WebKit) keeps them out of the spoken name
   assert.match(rule(felt, ".rl-limits-h::before"), /content: "ⓘ ";\s*content: "ⓘ " \/ "";/);
   assert.match(rule(felt, ".rl-limits-h::after"), /content: "▾";\s*content: "▾" \/ "";/);
-  // the ◆ / ● cue that isn't colour: big enough to read (it was 7 px, about 3 px wide) and at full strength
-  const glyph = rule(dockCss, ".rl-pocket::after");
-  assert.ok(+/font: (\d+(?:\.\d+)?)px/.exec(glyph)[1] >= 9, "the glyph is at least 9 px");
-  assert.doesNotMatch(glyph, /opacity/);
-  // forced colours: every pocket was the same system colour and the newest lost its ring - they keep the felt's colours
-  assert.match(dockCss, /@media \(forced-colors: active\) \{\s*\.rl-pocket \{\s*forced-color-adjust: none;\s*\}\s*\}/);
+  // the ◆ / ● cue that isn't colour: big enough to read (it was 7 px, about 3 px wide) and at full strength; forced colours: every
+  // pocket was the same system colour and the newest lost its ring - they keep the felt's colours (WP5b: in casino-chips.css, contract 9)
+  assert.doesNotMatch(dockCss.replace(/\/\*[\s\S]*?\*\//g, ""), /\.rl-pocket/, "(its comments aside)");
+  const css = pocketCss();
+  if (css) {
+    const glyph = /\.rl-pocket::after\s*\{([^}]*)\}/.exec(css);
+    assert.ok(glyph && +/font: (\d+(?:\.\d+)?)px/.exec(glyph[1])[1] >= 9, "the glyph is at least 9 px");
+    assert.doesNotMatch(glyph[1], /opacity/);
+    assert.match(css, /@media \(forced-colors: active\)\s*\{[^}]*\.rl-pocket[^{]*\{\s*forced-color-adjust: none;/);
+  }
 });
