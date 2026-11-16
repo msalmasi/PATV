@@ -339,3 +339,36 @@ test("SECURITY-3 / SECURITY-7: a staff-only wheel's proofs and history answer on
     srv.close();
   }
 });
+
+test("UI-10 / SUITES-3: switched off mid-window, the riding player keeps the view through the landing; others get 404; staff mode as before", async () => {
+  const path = require("node:path");
+  const express = require(path.join(h.repo, "node_modules", "express"));
+  const app = express();
+  app.use(express.json());
+  app.use((q, r, next) => { const id = q.get("x-user"); q.user = id ? { userId: id, username: "player" + id } : null; next(); });
+  require(path.join(h.repo, "casino", "routes")).register(app, { isBotToken: () => false, addUser: (q, r, n) => n() });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((ok) => srv.once("listening", ok));
+  const get = (id, user) => fetch("http://127.0.0.1:" + srv.address().port + "/api/casino/t/" + id, { headers: { "x-user": user } });
+  try {
+    const T = await room();
+    expect(await act(T, "b", "bet", "red 300 black 300"));
+    await svc.setSetting("casino_roulette", "staff");
+    assert.equal((await get(T.id, "b")).status, 404, "staff mode: the gate refuses b (brief G)");
+    await svc.setSetting("casino_roulette", "off");
+    assert.equal((await get(T.id, "b")).status, 200, "off: b's 600 PAT still ride");
+    assert.equal((await get(T.id, "c")).status, 404);
+    const bet = await act(T, "b", "bet", "red 100");
+    assert.equal(bet.ok, false, "read-only: no new bet");
+    await tick(25000);
+    await tick(8000);
+    assert.equal(T.eng.phase, "result");
+    const r = await get(T.id, "b");
+    assert.equal(r.status, 200);
+    assert.equal(typeof (await r.json()).me.net, "number", "b sees the landing and the net");
+    await tick(5000);
+    assert.equal(T.status, "closed");
+  } finally {
+    srv.close();
+  }
+});

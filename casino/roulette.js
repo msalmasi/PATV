@@ -133,6 +133,14 @@ function install(core) {
     }
     return mode === "staff" ? "Roulette is open to staff only." : "Roulette is switched off.";
   }
+  // UI-10 / SUITES-3: who may see a wheel's view. Switched off, the open spin still lands and pays (decision 2), so a player
+  // with PAT on it (a line, a queued line, or their result up) keeps the view - every bet is refused - until it closes.
+  // Staff mode stays 404 for everyone its gate refuses (brief G).
+  async function viewShut(T, uid) {
+    const why = await shut({ uid });
+    if (!why || S.settings.casino_roulette !== "off" || !uid || !T || T.game !== "roulette") return why;
+    return T.escrowed[uid] || T.eng.pending[uid] || T.eng.net?.[uid] != null ? null : why;
+  }
   async function gate(actor) {
     const why = await shut(actor);
     if (why) return why;
@@ -1048,6 +1056,7 @@ function install(core) {
     closeTable,
     ensureLobby,
     openLobby,
+    viewShut,
     gate,
     shut,
     restore,

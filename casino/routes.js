@@ -295,7 +295,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     await svc.boot();
     const T = svc.getTable(req.params.id);
-    if (!T || (T.game === "roulette" && await svc.RL.shut({ uid: req.user?.userId }))) return res.status(404).json({ ok: false, error: "That table has closed." });
+    // (1.99aoe UI-10 / SUITES-3: switched off, a player with PAT on the wheel still sees it land - RL.viewShut)
+    if (!T || (T.game === "roulette" && await svc.RL.viewShut(T, req.user?.userId))) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
     const mtt = svc.isMttTable(T);
