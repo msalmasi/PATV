@@ -76,6 +76,9 @@
     K_POCKET = 900, //   pocket floor: radial spring to the rest radius...
     C_POCKET = 30, //    ...and its damping
     SETTLE_W = 22; //    settle spring (critically damped), rad/s
+  // mount(): a re-measured server-clock skew within SKEW_JUMP_MS is slewed in at <= 5% clock speed (no visible jump)
+  var SKEW_SLEW = 0.05,
+    SKEW_JUMP_MS = 1500;
 
   function clamp(x, a, b) {
     return x < a ? a : x > b ? b : x;
@@ -643,6 +646,7 @@
   function spinArgs(v) {
     if (!v || typeof v !== "object") return null;
     if (v.table && typeof v.table === "object") v = v.table; // a whole GET /api/casino/t/:id answer
+    if (typeof v.phase === "string" && v.phase !== "spinning") return null; // only a live spin (post-commit), never a replay
     var sp = v.spin && typeof v.spin === "object" ? v.spin : null,
       pick = function () {
         for (var i = 0; i < arguments.length; i++) if (arguments[i] != null && arguments[i] !== "") return arguments[i];
@@ -1002,7 +1006,8 @@
 
   /**
    * mount(canvas, {compact, reduced, palette, tilt, t, onEvent}) -> a live wheel on a <canvas>, drawn by server time.
-   *   setSkew(ms)  ms = local clock - server clock (CZ.skew()); the wheel shows server time Date.now() - ms
+   *   setSkew(ms)  ms = local clock - server clock (CZ.skew(), the OBS payload's skew_ms); the wheel shows server time
+   *                Date.now() - ms (a re-measured skew within 1.5 s is slewed in, so poll jitter never jumps the ball)
    *   idle([siteNow])  bets open: no ball (fades out), the rotor's shift eases back to zero
    *   spin(view)   a table view with .spin, an OBS payload or plan() arguments; joins mid-flight by server time
    *   rest(pocket) the result: the ball sits in that pocket (finishes a running spin within 300 ms; the server wins)
@@ -1022,7 +1027,10 @@
       io = null,
       timer = 0;
     var st = {
-      skew: 0,
+      skew: 0, //         local clock - server clock, as shown now...
+      skewTo: 0, //       ...and where it is heading
+      skewAt: 0,
+      skewSet: false,
       mode: "idle", //    idle | spin | rest
       plan: null, //      the spin being shown (also while it rests, and while the ball fades out after)
       key: "",
@@ -1049,8 +1057,30 @@
     function reduced() {
       return st.forced !== null ? st.forced : !!(mq && mq.matches);
     }
+    // the server clock. A page re-measures its skew on every poll (it jitters by the poll's latency), so a small change is
+    // slewed in at <= SKEW_SLEW of clock speed instead of jumping the ball; the first skew and a big change apply at once
     function now() {
-      return Date.now() - st.skew;
+      var l = Date.now();
+      if (st.skew !== st.skewTo) {
+        var d = st.skewTo - st.skew,
+          step = (l - st.skewAt) * SKEW_SLEW;
+        if (!(step > 0)) step = 0;
+        st.skew = d <= step && d >= -step ? st.skewTo : st.skew + (d > 0 ? step : -step);
+      }
+      st.skewAt = l;
+      return l - st.skew;
+    }
+    function putSkew(ms) {
+      if (!isFinite(ms)) return;
+      if (!st.skewSet || Math.abs(ms - st.skew) > SKEW_JUMP_MS) {
+        st.skew = ms;
+        st.skewTo = ms;
+        st.skewAt = Date.now();
+        st.skewSet = true;
+      } else {
+        now(); //                                   (bank the slew so far)
+        st.skewTo = ms;
+      }
     }
     function T(k, v) {
       if (typeof opts.t === "function") return opts.t(k, LABELS[k], v);
@@ -1306,12 +1336,11 @@
     // ── the API ──
     var api = {
       setSkew: function (ms) {
-        ms = Number(ms);
-        if (isFinite(ms)) st.skew = ms;
+        putSkew(Number(ms));
         return api;
       },
       idle: function (siteNow) {
-        if (siteNow != null && isFinite(Number(siteNow))) st.skew = Date.now() - Number(siteNow);
+        if (siteNow != null && isFinite(Number(siteNow))) putSkew(Date.now() - Number(siteNow));
         var t = now();
         if (st.mode !== "idle") {
           var shown = st.mode === "rest" || (st.plan && t >= st.plan.t0);

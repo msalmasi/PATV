@@ -340,6 +340,10 @@ test("spinArgs reads every shape a consumer has: table view, OBS payload, cz:rl-
   assert.equal(W.spinArgs({ id: "x", spin: null }), null);
   assert.equal(W.spinArgs({ id: "x", spin: { round_no: 1, number: 40, ends_at: BASE } }), null);
   assert.equal(W.spinArgs(null), null);
+  // only a live spin: a betting / result view or payload never replays one
+  assert.equal(W.spinArgs({ ...obs, phase: "result" }), null);
+  assert.equal(W.spinArgs({ ...view, phase: "betting" }), null);
+  assert.ok(W.spinArgs({ ...view, phase: "spinning" }));
 });
 
 // ── mount(): the browser build in a vm with a fake window, document and 2D context ──
@@ -430,9 +434,9 @@ test("mount: draws a top-down wheel by server time, DPR capped at 2, role=img wi
   let d = B.last();
   assert.equal(d.ball, null, "no ball while bets are open");
   assert.ok(Math.abs(d.rotor - W.idleAngle(B.now)) < 1e-9, "the idle rotor is the server-time angle");
-  m.setSkew(-1000); //                                              the server is 1 s ahead of this clock
+  m.setSkew(-2000); //                                              the server is 2 s ahead of this clock
   B.run(B.now + 16);
-  assert.ok(Math.abs(B.last().rotor - W.idleAngle(B.now + 1000)) < 1e-9);
+  assert.ok(Math.abs(B.last().rotor - W.idleAngle(B.now + 2000)) < 1e-9);
   m.setSkew(0);
   // a spin: the ball appears on the track and the label follows
   const view = { id: "ab12cd34ef", spin: { round_no: 7, number: 17, ends_at: B.now + 12000, started_at: B.now, secs: 12 } };
@@ -487,6 +491,40 @@ test("mount: the same spin every poll doesn't restart; a late view catches up on
   assert.ok(maxStep < 0.3, "no jump, " + maxStep);
   assert.equal(drawnPocket(B, B.last()), 0);
   assert.equal(m.state().phase, "settled");
+  m.destroy();
+});
+
+test("mount: poll-to-poll skew jitter is slewed in (the ball never jumps); a big correction applies at once", () => {
+  const B = browser();
+  const m = B.W.mount(B.cv, {});
+  m.setSkew(0);
+  B.run(BASE + 200);
+  const start = B.now;
+  const p = m.spin({ tableId: "5ca1ab1e00", round: 6, pocket: 14, startedAt: start, landAt: start + 12000 });
+  B.run(start + 1500); //                                             the ball is flying round the track
+  const shown = () => {
+    const d = B.last(), c = B.cv.width / 2;
+    return norm(Math.atan2(d.ball.x - c, -(d.ball.y - c)));
+  };
+  let prev = shown(), maxStep = 0;
+  const jitter = [35, -20, 60, 10, -45, 25];
+  for (let i = 0; i < 60; i++) {
+    if (i % 10 === 0) m.setSkew(jitter[i / 10]); //                a new measurement every poll
+    B.run(B.now + 16);
+    const a = shown();
+    const step = Math.min(norm(a - prev), norm(prev - a));
+    maxStep = Math.max(maxStep, step);
+    prev = a;
+  }
+  // the ball runs at up to ~19 rad/s here: one 16 ms frame is ~0.3 rad; a jump of 60 ms would be ~1.1 rad
+  assert.ok(maxStep < 0.42, "no jump: " + maxStep.toFixed(3));
+  B.run(B.now + 2000);
+  m.setSkew(25);
+  B.run(B.now + 1500);
+  assert.ok(Math.abs(B.last().rotor - norm(W.frame(p, B.now - 25).rotor)) < 1e-6, "converges on the measured skew");
+  m.setSkew(-5000); //                                                 a real clock change: applied at once
+  B.run(B.now + 16);
+  assert.ok(Math.abs(norm(B.last().rotor - W.frame(p, B.now + 5000).rotor)) < 1e-6 || Math.abs(norm(B.last().rotor - W.frame(p, B.now + 5000).rotor) - TAU) < 1e-6);
   m.destroy();
 });
 
