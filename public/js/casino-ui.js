@@ -422,6 +422,8 @@
       if (t.phase === "between") return t.hand_no ? T("ph_between", "Between hands") : T("ph_waiting", "Waiting for players");
       return T("ph_hand", "Hand #{n} · {street}", { n: t.hand_no, street: streetName(t.phase) });
     }
+    // (1.99aoj review: a blackjack table whose close waits for a payout / refund it still owes takes no bets - never "Taking bets")
+    if (t.closing) return T("ph_closing", "Closing · settling a payout or refund");
     if (t.phase === "betting" || t.phase === "idle") return T("ph_betting", "Taking bets");
     return T("ph_round", "Round {n} in play", { n: t.round_no });
   }
@@ -437,7 +439,9 @@
       (t.adverts || []).map((r) => `<span class="tag" title="${esc(T("advertised_in", "Advertised in {room}", { room: r.name }))}">📣 ${esc(r.name)}</span>`).join("");
     const full = t.players >= t.max_seats;
     const locked = hr && !(me && me.high_roller);              // a High Roller table: everyone else can only watch
-    const join = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
+    // (1.99aoj review: a closing blackjack table - it takes no bets until it closes - offers only Watch)
+    const join = !hm && t.closing ? ""
+      : locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
       : `<a class="cz-btn gold sm" href="${url}${signed ? (hm ? "?sit=1" : "#bet") : ""}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("join", "Join"))}</a>`;
     return `<article class="tcard${hm ? " hm" : ""}${hr ? " hr" : ""}" data-id="${esc(t.id)}" aria-label="${esc(T("table_of", "{host}'s table", { host: t.host }))}">` +
       `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : hm ? "🃏" : "🂡"}</span><div><b>${esc(T("table_of", "{host}'s table", { host: t.host }))}</b>` +
@@ -565,8 +569,10 @@
     fill($("cz-hrtables"), hrList.length ? hrList.map((t) => cardFor(t, me)).join("")
       : `<div class="lob-empty">${esc(hr ? T("none_hr_mine", "No High Roller table is open. Open one below.") : T("none_hr", "No High Roller table is open right now."))}</div>`);
     tickSng();                                                   // (a new card's countdown shows at once, not on the next tick)
-    $("cz-stat-tables").querySelector("b").textContent = fmt(all.length);
-    $("cz-stat-players").querySelector("b").textContent = fmt(all.reduce((s, t) => s + (t.players || 0), 0));
+    // (1.99aoj review: a closing blackjack table - it takes no bets, and its seats may be accounts that are gone - is no open table)
+    const live = all.filter((t) => !t.closing);
+    $("cz-stat-tables").querySelector("b").textContent = fmt(live.length);
+    $("cz-stat-players").querySelector("b").textContent = fmt(live.reduce((s, t) => s + (t.players || 0), 0));
     $("cz-stat-rooms").querySelector("b").textContent = fmt((j.rooms || []).length);
     balance(me ? me.balance : null);
     // open a table: only signed in, only while that game's switch is on

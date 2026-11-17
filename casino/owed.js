@@ -204,6 +204,45 @@ async function resolve(T, hooks, why) {
 }
 
 /**
+ * 1.99aoj review (the rollback runbook): owed items left in CLOSED rows. 1.99aoi - the build the site CI's automatic rollback runs -
+ * doesn't know T.owed: it closes such a table (the idle close, an admin's close) with the items still in its saved JSON, and no build
+ * retries, counts or lists them after (the tool sees open tables only). Run once per boot (service.js boot), read only: the closed
+ * blackjack / Hold'em rows whose saved owed still holds an item that never landed (its key, :redirect or :writeoff) are named in the
+ * log and in one ops alert (every site admin; one per set of tables - opsalerts.js dedupes by ref), so someone settles them by hand
+ * (docs/casino-backend.md, the rollback runbook). d.alert: the ops alert (tests). -> [{table, game, closed_at, n, amount}]
+ */
+async function closedAudit(d) {
+  const alert = (d && d.alert) || ((a) => require("../opsalerts").alert(a));
+  // (the prefilter: a non-empty owed object as JSON.stringify saves it - "owed":{} never matches; each match is parsed and checked)
+  const rows = await getQuery(`SELECT id, game, state FROM casino_tables WHERE status = 'closed' AND game IN ('bj', 'holdem') AND instr(state, '"owed":{"') > 0`);
+  const out = [];
+  for (const r of rows) {
+    let T;
+    try { T = JSON.parse(r.state); } catch (e) { continue; }
+    let n = 0, amount = 0;
+    for (const [key, o] of Object.entries((T && T.owed) || {})) {
+      if (!o || !amt(o.amount) || (await landed(key))) continue;
+      n += 1;
+      amount += amt(o.amount);
+    }
+    if (n) out.push({ table: r.id, game: r.game, closed_at: T.closed_at || null, n, amount });
+  }
+  if (!out.length) return out;
+  const total = out.reduce((s, x) => s + x.amount, 0);
+  const ids = out.map((x) => x.table);
+  console.error(`[casino] ${out.length} closed table(s) still hold ${fmt(total)} PAT owed that no build pays (a rollback closed them): ${ids.slice(0, 20).join(", ")}` +
+                `${ids.length > 20 ? ` and ${ids.length - 20} more` : ""} - settle them by hand (docs/casino-backend.md, the rollback runbook)`);
+  try {
+    await alert({ source: "casino_owed", ref: "closed:" + crypto.createHash("sha256").update(ids.join(",")).digest("hex").slice(0, 16),
+                  title: `${out.length} closed casino table(s) still hold ${fmt(total)} PAT owed`,
+                  body: `A rollback build closed ${out.length === 1 ? "this table" : "these tables"} with points still owed (a payout or refund whose account was gone): ` +
+                        `${ids.slice(0, 20).join(", ")}. Nothing retries or counts them and /admin/casino/owed doesn't list them - settle each by hand ` +
+                        `(docs/casino-backend.md, "Rolling back to 1.99aoi with something owed").` });
+  } catch (e) { console.error("[casino] owed closed-table alert:", e && e.message ? e.message : e); }
+  return out;
+}
+
+/**
  * The tool (casino/owedweb.js). core: {S, clock, save, locked, games: {bj: {after}, holdem: {after, retrySeat, dropSeat}}}
  *   after(T)            the table's step once an item is settled (a frozen round marked done, a table waiting to close closes, Hold'em's
  *                       deadlines / close); saves. -> true when it closed
@@ -363,4 +402,4 @@ function install(core) {
 }
 
 module.exports = { RETRY_MS, count, due, owe, retry, settledBy, landed, held, itemsOf, itemId, shortId, whatOf, resolve, install,
-                   redirectKey, writeoffKey };
+                   redirectKey, writeoffKey, closedAudit };

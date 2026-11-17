@@ -341,7 +341,8 @@ test("casino-chat review F7: the frame's 'not open to you' card closes the panel
 
 test("casino review: the table pages emit act for a Blackjack bet / insurance, the docked felt draws a size down, Pepe's role line isn't a login", () => {
   const bj = fs.readFileSync(path.join(repo, "public", "js", "casinobj.js"), "utf8");
-  assert.match(bj, /const actNow = !!\(me && open && \(me\.my_turn \|\| me\.can_insure \|\|\s*\(t\.phase === "betting" && t\.bet_deadline && me\.seat && !\(me\.bet > 0\)/);
+  // (1.99aoj review: never on a closing table - it takes no bets)
+  assert.match(bj, /const actNow = !!\(me && open && !closing && \(me\.my_turn \|\| me\.can_insure \|\|\s*\(t\.phase === "betting" && t\.bet_deadline && me\.seat && !\(me\.bet > 0\)/);
   assert.match(bj, /detail: \{ myTurn: !!\(me && me\.my_turn\), act: actNow \}/);
   assert.match(fs.readFileSync(path.join(repo, "public", "js", "casinohm.js"), "utf8"), /detail: \{ myTurn: !!\(me && me\.my_turn\), act: !!\(me && me\.my_turn\) \}/);
   const hm = fs.readFileSync(path.join(repo, "views", "casino-hm.ejs"), "utf8");

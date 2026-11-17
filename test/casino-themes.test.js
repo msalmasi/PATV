@@ -828,7 +828,7 @@ test("blackjack page: the theme files only for a themed table; casinobj.js dress
   const bjs = rd("public", "js", "casinobj.js"), view = rd("views", "casino-bj.ejs");
   assert.equal((bjs.match(/CZ\.theme\(/g) || []).length, 1, "one call in render");
   assert.match(view, /<% if \(locals\.theme && theme !== 'classic'\) \{ %>/);
-  assert.match(view, /casinobj\.js\?v=9/);
+  assert.match(view, /casinobj\.js\?v=10/);                    // (1.99aoj review: v10 - a closing table)
   const css = rd("public", "css", "casino-themes.css");
   for (const s of [".cz-theme-saloon .felt.bj {", ".cz-theme-saloon .felt.bj::after", ".cz-theme-saloon .bj-shoe", ".cz-theme-saloon .felt.bj .cz-scene"]) assert.ok(css.includes(s), s);
 });

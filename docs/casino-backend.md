@@ -638,14 +638,18 @@ never closed with a payout owed: `closeTable` keeps it open and frozen (`T.closi
 autobets, and no new round - the betting window's bets are refunded and leave the engine, and `!bj deal` / `beginRound`
 deal nothing on a closing table; no deadline but the owed payout's clock; `!bj end` says why), and the payout that
 lands closes it. A staging
-copy's retire (`casino/retire.js`) pays what is owed by its key.
+copy's retire (`casino/retire.js`) pays what is owed by its key. (1.99aoj review) While it waits, the table's view and its lobby
+row say `closing: true`: the lobby card reads "Closing · settling a payout or refund" with Watch only (no Join), the lobby's
+"open tables" / "players seated" leave it out (its seats may be accounts that are gone), and the table page says "This table is
+closing" with no bet dock (Leave stays) - it used to read "Taking bets" and refuse each bet after the tap.
 
 **A refused refund is owed too** (1.99aoj, the close-refund fix). A stake refund refused when a player leaves the betting
 window or the table closes (`refundHeld`: an admin's or host's close, the idle close, the frozen table's final close) used to
 stay in `T.stakes` "for retry" while `closeTable` closed the table anyway, so the stake was lost. Now it is owed in the same
 store and on the same clock: `T.owed[<the stake's key>:refund] = {..., kind: "refund", type}` (the refund's own key, so a
-refund that did land replays), it leaves `T.stakes` / `T.escrowed` (supply counts it as owed), and the table freezes until
-it lands. A stake a restart caught in its intent whose refund is refused (`recover`) is owed the same way (it was logged and
+refund that did land replays), it leaves `T.stakes` / `T.escrowed` (supply counts it as owed), and the table can't close
+until it lands (a close asked meanwhile freezes it: no new bets or rounds; a leave alone doesn't - the table plays on). A
+stake a restart caught in its intent whose refund is refused (`recover`) is owed the same way (it was logged and
 the intent cleared). A refund never holds a round's `settle: "owed"`; only a payout does. Hold'em: a buy-in a restart caught
 in its intent whose refund is refused is owed on the table (`T.owed`, tried on the table's clock and at boot), and the table
 never closes while it is owed (`T.closing` keeps the close's reason; the last owed item settled closes it once nobody is
@@ -706,6 +710,18 @@ close, the idle close) no build pays the item again. Before rolling back, list t
 account / Write off to the House. An automatic rollback can't wait for that: after one, an item at a table 1.99aoi closed
 meanwhile is left only in that closed row's saved `owed` (`casino_tables`, status `closed`) and needs settling by hand. A
 refused Hold'em cash-out is safe either way: both builds keep its seat and its stack.
+- **Finding them.** The first 1.99aoj boot after such a rollback names them: one `[casino] N closed table(s) still hold ... PAT owed`
+  log line and one ops alert to every site admin (`casino_owed`, deduped per set of tables; `owed.closedAudit` - an item whose
+  key, `:redirect` or `:writeoff` landed is left out). By hand, read only, on the site's database:
+  `SELECT id, game, datetime(json_extract(state,'$.closed_at')/1000,'unixepoch') AS closed, json_extract(state,'$.owed') AS owed
+  FROM casino_tables WHERE status = 'closed' AND game IN ('bj','holdem') AND json_extract(state,'$.owed') IS NOT NULL
+  AND json_extract(state,'$.owed') NOT IN ('{}','null');` - each `owed` entry is `{uid, amount, kind, type, round, ...}`.
+- **Settling one.** When the member (`uid`) has an account again (or a new one), pay them the `amount` with the `/admin/economy`
+  PAT grant (the incentive budget pays it) and name the table and item in the reason. When nobody can be paid, there is nothing to
+  move: those points already left the supply when 1.99aoi closed the table. Either way, then clear that row's `owed`, so the boot
+  stops naming it:
+  `UPDATE casino_tables SET state = json_remove(state, '$.owed') WHERE id = '<table id>' AND status = 'closed';` (nothing
+  but this audit reads a closed row's `owed`; the history and fairness pages read its other fields).
 
 **A hand in progress survives a restart**: the table is reloaded, the deadline
 of the current decision is re-armed (if it passed while the site was down, the player gets a fresh 30 s rather than

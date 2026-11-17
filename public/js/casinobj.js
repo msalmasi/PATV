@@ -61,6 +61,9 @@
     const t = d.table, me = d.me;
     last = d;
     const open = t.status === "open";
+    // 1.99aoj review: a table whose close waits for a payout / refund it still owes (the view's `closing`) takes no bets and deals no
+    // round - it says so, with no bet dock (every bet used to be refused only after the tap)
+    const closing = open && !!t.closing;
     const betting = isBetting(t);
     const lr = t.last_round;
     const resultMode = betting && !!lr && t.seats.every((s) => !s.hands.length);
@@ -132,7 +135,7 @@
         whoHTML = CZ.seatWho(s, CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}${mine ? " · " + esc(T("you", "you")) : ""}</span>` +
                   (tags ? `<span class="tags">${tags}</span>` : "") + "</span>");
       } else {
-        const can = CZ.signed && me && !me.seat && !me.pending && open;
+        const can = CZ.signed && me && !me.seat && !me.pending && open && !closing;    // (1.99aoj review: no "bet to sit" at a closing table)
         whoHTML = can ? `<button type="button" class="sitbtn" data-sit="1"><span class="av" aria-hidden="true">+</span><span class="plate">${esc(T("open_seat_bet", "Open seat: bet to sit"))}</span></button>`
                       : `<span class="av" aria-hidden="true"></span><span class="plate">${esc(T("open_seat", "Open seat"))}</span>`;
       }
@@ -165,7 +168,10 @@
     // the message + the felt's clock (betting window, insurance, or whoever is acting)
     let msg = "", sub = "", dlx = null, nom = 0;
     if (!open) msg = T("closed", "That table has closed.");
-    else if (betting) {
+    else if (closing) {
+      msg = T("closing", "This table is closing");
+      sub = T("closing_sub", "It closes once a payout or refund it still owes goes through. No new bets or rounds until then.");
+    } else if (betting) {
       msg = t.seats.length ? T("place_bets", "Place your bets") : T("bet_to_sit", "Bet to take a seat");
       sub = resultMode && Date.now() >= revealAt ? T("last_dealer", "Last round: Pepe {v}", { v: lr.dealer.blackjack ? "BJ" : lr.dealer.bust ? T("bust_v", "{v} bust", { v: lr.dealer.value }) : lr.dealer.value }) : "";
       dlx = t.bet_deadline; nom = t.round_no ? 10 : 30;
@@ -189,17 +195,18 @@
     const wb = $("cz-watchbar");
     const seated = !!(me && (me.seat || me.pending));
     let wtxt = "";
-    if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_signin", "You're watching."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    if (closing) wtxt = "";                    // (the felt's line says it: nobody takes a seat at a closing table)
+    else if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_signin", "You're watching."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
     else if (open && me && !seated && t.high_stakes && !me.high_roller) wtxt = `💎 ${esc(T("watching_hr", "A High Roller table: you're watching. Only High Rollers can bet here."))} <a href="/shop">${esc(T("hr_get", "Get the role"))}</a>`;
     else if (open && me && !seated) wtxt = `👁 ${esc(t.seats.length >= SEATS ? T("watching_full", "You're watching: the table is full.") : T("watching_bet", "You're watching. Place a bet below to take a seat."))}`;
     wb.hidden = !wtxt;
     if (wb.dataset.v !== wtxt) { wb.dataset.v = wtxt; wb.innerHTML = wtxt; }
 
-    dock(t, me, betting);
+    dock(t, me, betting, closing);
     if (me && me.my_turn && !prevTurn) CZ.announce(T("your_turn_sr", "Your turn. Hit, stand, or more."));
     // 1.99ajw casino2: the table needs you (your turn, insurance, or your seat's bet while the betting window runs - review: the phone's
     // chat sheet covered the chips) starts / ends -> the chat's sheet / float makes room for the action dock (casino-chat.js)
-    const actNow = !!(me && open && (me.my_turn || me.can_insure ||
+    const actNow = !!(me && open && !closing && (me.my_turn || me.can_insure ||
       (t.phase === "betting" && t.bet_deadline && me.seat && !(me.bet > 0) && !me.pending && !me.banned && !(t.high_stakes && !me.high_roller))));
     if (actNow !== prevAct) document.dispatchEvent(new CustomEvent("cz:state", { detail: { myTurn: !!(me && me.my_turn), act: actNow } }));
     prevAct = actNow;
@@ -218,7 +225,7 @@
     return set.slice(-6).concat([["max", "cmax"]]);
   }
 
-  function dock(t, me, betting) {
+  function dock(t, me, betting, closing) {
     const dk = $("cz-dock");
     const open = t.status === "open";
     dk.hidden = !CZ.signed || !open || !me;
@@ -228,7 +235,7 @@
     const inRound = !betting && t.seats.some((s) => me.seat && s.seat === me.seat && s.hands.length);
     const myTurn = !!(me.my_turn && t.turn);
     const playing = myTurn || me.can_insure;
-    const showBet = !playing && !me.banned && !hrLocked && ((betting && !(me.bet > 0)) || (!betting && !inRound && !me.pending)) && (me.seat || t.seats.length < SEATS);
+    const showBet = !closing && !playing && !me.banned && !hrLocked && ((betting && !(me.bet > 0)) || (!betting && !inRound && !me.pending)) && (me.seat || t.seats.length < SEATS);
     $("cz-playbox").hidden = !playing;
     $("cz-betbox").hidden = !showBet;
     for (const b of document.querySelectorAll("#cz-playbox [data-v]")) {
@@ -273,7 +280,9 @@
       if (focusBet) { focusBet = false; const c = chips.querySelector("button:not([disabled])"); if (c) c.focus(); }
     }
     let wait = "";
-    if (me.banned) wait = T("banned", "You're banned from the casino.");
+    if (closing) wait = me.seat || me.pending ? T("closing_wait_seat", "This table is closing: it takes no new bets. You can still leave.")
+                                              : T("closing_wait", "This table is closing: it takes no new bets.");
+    else if (me.banned) wait = T("banned", "You're banned from the casino.");
     else if (hrLocked && !me.seat) wait = T("hr_watch_note", "💎 High Rollers only: watch the table above.");
     else if (!playing && !showBet) {
       if (betting && me.bet > 0) wait = T("in_for", "You're in for {n}. Pepe deals when the clock runs out.", { n: fmt(me.bet) });
@@ -283,8 +292,8 @@
     }
     $("cz-wait").hidden = !wait;
     $("cz-wait").textContent = wait;
-    $("cz-deal").hidden = !(betting && me.bet > 0);
-    $("cz-autooff").hidden = !me.autobet || showBet;
+    $("cz-deal").hidden = closing || !(betting && me.bet > 0);
+    $("cz-autooff").hidden = closing || !me.autobet || showBet;
     $("cz-leave").hidden = !(me.seat || me.pending);
   }
 

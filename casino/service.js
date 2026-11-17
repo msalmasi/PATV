@@ -887,6 +887,8 @@ async function boot({ tick = true } = {}) {
     }
     // O2 (casino/rlstore.js audit): the roulette rows of wheels that are not open are checked once per boot, open wheels or not
     await locked(() => RL.bootAudit()).catch((e) => console.error("[casino] roulette audit:", e));
+    // 1.99aoj review (the rollback runbook): owed items a rollback build closed into a table's saved row - named in the log + one ops alert
+    await OW.closedAudit({ alert: S.hooks.opsAlert }).catch((e) => console.error("[casino] owed closed-table audit:", e && e.message ? e.message : e));
     if (rows.length) console.log(`[casino] loaded ${rows.length} open table(s)`);
     await locked(() => MT.recoverAll()).catch((e) => console.error("[casino] mtt recover:", e));      // h22 phase 2 (spec section 27)
     // (1.99aof MONEY-6 / SECURITY-4: one failed lobby creation never leaves boot rejected - boot() is memoized; the tick retries it)
@@ -1442,6 +1444,9 @@ function bjView(T) {
   const room = T.room ? S.rooms.get(T.room) : null;
   return {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
+    // 1.99aoj review: a table whose close waits for a payout / refund it still owes (T.closing: no new bets or rounds) says so - the
+    // table page drops its bet dock, the lobby card its Join (it used to read "Taking bets" until a bet was refused after the tap)
+    closing: T.status === "open" && !!T.closing,
     room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: V.hostName(T), round_no: e.round_no,
     min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, adverts: advertList(T), max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
     theme: themes.themeOf(T, S.settings),     // 1.99amf h20: classic whenever the switch is off
@@ -1490,7 +1495,7 @@ function lobby() {
     const base = { id: T.id, host: T.game === "roulette" && T.lobby ? "Pepe" : V.hostName(T), room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "roulette") return Object.assign(base, RL.lobbyRow(T));
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
-    return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
+    return Object.assign(base, { game: "bj", phase: T.eng.phase, closing: !!T.closing, players: T.eng.seats.length, max_seats: C.MAX_SEATS,   // (1.99aoj review: closing)
                                  min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes,
                                  theme: themes.themeOf(T, S.settings) });
   });
