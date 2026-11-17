@@ -8863,6 +8863,8 @@
   "js.casino.closing_sub": "It closes once a payout or refund it still owes goes through. No new bets or rounds until then.",
   "js.casino.closing_wait": "This table is closing: it takes no new bets.",
   "js.casino.closing_wait_seat": "This table is closing: it takes no new bets. You can still leave.",
+  "js.casino.rl_gone": "That wheel has closed. The wheels still open are on the Roulette tab.",
+  "js.casino.rl_gone_pepe": "That wheel has closed. This is Pepe's wheel, open all the time.",
   "js.casino.back_lobby": "Back to the lobby",
   "js.casino.act_fail": "That didn't work.",
   "js.casino.net_fail": "Couldn't reach the table. Try again.",

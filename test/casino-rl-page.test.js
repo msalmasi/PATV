@@ -104,8 +104,10 @@ function page(opts) {
       posts.push({ url, body });
       return (opts.reply && opts.reply(body)) || { ok: true, reply: "ok" };
     }
-    return String(url).startsWith("/api/casino/lobby") ? opts.lobby || { ok: true, roulette: { wheels: [] } } : { ok: false };
+    if (String(url).startsWith("/api/casino/lobby")) return (typeof opts.lobby === "function" ? opts.lobby() : opts.lobby) || { ok: true, roulette: { wheels: [] } };
+    return { ok: false };
   });
+  if (opts.Date) W.Date = opts.Date; // (a clock the test moves: Date.now() in the page's scripts)
   const el = (tag, id, kids) => {
     const e = new El(tag);
     if (id) e.setAttribute("id", id);
@@ -960,4 +962,53 @@ test("the other wheels: Pepe's wheel, '{host}'s wheel' (+ its room, 💎), from 
   const Q = page({ lobby: { ok: true, roulette: { wheels: [W("aaaaaaaaa9", { lobby: true })] }, tables: [{ id: "aaaaaaaaa9", game: "roulette", host: "Pepe" }] } });
   for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
   assert.deepEqual(Q.$("rl-wheels").all().filter((e) => e.tagName === "A").map((a) => a.textContent), ["Pepe's wheel"]);
+});
+
+// 1.99aoj (review): the other open wheels are drawn again from the table's own poll (render) at most every 30 s - a wheel that closed
+// drops out, a new one shows; nothing changed: the links stay as they are. (They were fetched once, so a link to a wheel gone since led
+// to Pepe's wheel.)
+test("the other wheels: drawn again from the table's poll every 30 s at most - a closed wheel drops out, a new one shows; unchanged: the links stay", async () => {
+  const W = (id, o) => Object.assign({ id, lobby: false, high_stakes: false, room_name: null }, o);
+  let answer = { ok: true, roulette: { wheels: [W("aaaaaaaaa1"), W("aaaaaaaaa2")] }, tables: [{ id: "aaaaaaaaa1", game: "roulette", host: "Rocco" }, { id: "aaaaaaaaa2", game: "roulette", host: "Mia" }] };
+  let t = Date.now();
+  class FakeDate extends Date {}
+  FakeDate.now = () => t;
+  const P = page({ lobby: () => answer, Date: FakeDate });
+  const label = new El("span");                    // (views/casino-rl.ejs: the nav's visible label - never redrawn away)
+  label.setAttribute("id", "rl-wheels-h");
+  P.$("rl-wheels").append(label);
+  const settle = async () => { for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r)); };
+  const links = () => P.$("rl-wheels").all().filter((e) => e.tagName === "A").map((a) => a.textContent);
+  const asks = () => P.W.fetched.filter((f) => String(f.url).startsWith("/api/casino/lobby")).length;
+  await settle();
+  assert.deepEqual(links(), ["Rocco's wheel", "Mia's wheel"]);
+  assert.equal(asks(), 1);
+  // Mia's wheel closes; a poll 10 s later asks nothing yet
+  answer = { ok: true, roulette: { wheels: [W("aaaaaaaaa1"), W("aaaaaaaaa3")] }, tables: [{ id: "aaaaaaaaa1", game: "roulette", host: "Rocco" }, { id: "aaaaaaaaa3", game: "roulette", host: "Bo" }] };
+  t += 10000;
+  P.CZ.render(view("betting", {}));
+  await settle();
+  assert.equal(asks(), 1, "at most every 30 s");
+  assert.deepEqual(links(), ["Rocco's wheel", "Mia's wheel"]);
+  // 30 s on: drawn again - Mia's is gone, Bo's shows; the label stays
+  t += 21000;
+  P.CZ.render(view("betting", {}));
+  await settle();
+  assert.equal(asks(), 2);
+  assert.deepEqual(links(), ["Rocco's wheel", "Bo's wheel"]);
+  const before = P.$("rl-wheels").all().filter((e) => e.tagName === "A");
+  // nothing changed since: the same link elements stay (a focused one keeps its focus)
+  t += 31000;
+  P.CZ.render(view("betting", {}));
+  await settle();
+  assert.equal(asks(), 3);
+  assert.deepEqual(P.$("rl-wheels").all().filter((e) => e.tagName === "A"), before);
+  // every wheel but this one closed: the nav hides
+  answer = { ok: true, roulette: { wheels: [W(ID, { lobby: true })] }, tables: [] };
+  t += 31000;
+  P.CZ.render(view("betting", {}));
+  await settle();
+  assert.deepEqual(links(), []);
+  assert.equal(P.$("rl-wheels").hidden, true);
+  assert.deepEqual(P.$("rl-wheels").children, [label], "the label stays");
 });

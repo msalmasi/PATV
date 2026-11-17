@@ -246,9 +246,17 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const st = await svc.loadSettings(), uid = req.user?.userId;
     const allowed = !(await svc.RL.shut({ uid }));
     const id = req.params.id, table = id && svc.getTable(id);
+    const gone = !!req.query && req.query.gone === "1";
     if (allowed && !id) {
       const wheel = await svc.locked(() => svc.RL.ensureLobby());
-      if (wheel) return res.redirect("/casino/roulette/t/" + wheel.id);
+      if (wheel) return res.redirect("/casino/roulette/t/" + wheel.id + (gone ? "?gone=1" : ""));
+    }
+    // 1.99aoj review: a wheel that has gone (closed, and out of memory 30 s later - or never known) - unless it was one of Pepe's lobby
+    // wheels (a rotated one: Pepe's current wheel, as before) - goes to the lobby's 🛞 tab with a "That wheel has closed" notice (?gone=1:
+    // casino-ui.js), never silently to Pepe's wheel; with no card lobby on the PATV casino, Pepe's wheel says it
+    if (id && allowed && !table && ID.test(id) && !(await svc.RL.wasLobby(id))) {
+      const to = svc.rlLobbyPath(st), h = to.indexOf("#");
+      return res.redirect(h >= 0 ? to.slice(0, h) + "?gone=1" + to.slice(h) : to + "?gone=1");
     }
     if (id && (!table || !allowed || (table.lobby && table.status === "closed"))) return res.redirect("/casino/roulette");
     if (table && table.game !== "roulette") return res.redirect(svc.link(table).replace(/^https?:\/\/[^/]+/, ""));

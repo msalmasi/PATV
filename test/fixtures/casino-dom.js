@@ -1,7 +1,7 @@
 // test/fixtures/casino-dom.js - the casino pages' browser harness for vm tests (no jsdom): a small DOM built from the real views /
 // partials, and page(markup, api, opts) that runs public/js/casino-ui.js on it. Moved here from test/casino-themes-ui.test.js
 // (1.99aoj) so test/casino-lobby.test.js shares it. page() opts: sound (also casino-sound.js), pre (scripts evaluated
-// before casino-ui.js, e.g. rlbets.js's source with module hidden), hash (location.hash at load). fetch answers by PATH (the
+// before casino-ui.js, e.g. rlbets.js's source with module hidden), hash / search / pathname (location's at load). fetch answers by PATH (the
 // query string is dropped: the lobby asks /api/casino/lobby?rl=1; an answer's __status is the response's status); every GET is
 // recorded in gets, every POST in posts. The DOM keeps a focus (focus(), document.activeElement - the body once it's removed).
 "use strict";
@@ -153,7 +153,7 @@ function page(markup, api, opts) {
   opts = opts || {};
   const D = miniDom();
   for (const n of D.parse(markup)) D.body.appendChild(n);
-  const posts = [], gets = [], replaced = [], location = { href: "", hash: opts.hash || "", pathname: opts.pathname || "/casino/blackjack", search: "" };
+  const posts = [], gets = [], replaced = [], location = { href: "", hash: opts.hash || "", pathname: opts.pathname || "/casino/blackjack", search: opts.search || "" };
   const history = { state: null, replaceState: (s, t, u) => { replaced.push(u); const h = String(u).indexOf("#"); location.hash = h >= 0 ? String(u).slice(h) : ""; } };
   const fetch = async (url, o) => {
     if (o && o.method === "POST") { const b = JSON.parse(o.body); posts.push({ url, body: b }); return { json: async () => (api.post ? api.post(url, b) : { ok: false }) }; }

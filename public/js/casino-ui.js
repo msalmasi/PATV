@@ -1182,6 +1182,16 @@
     };
   }
 
+  // 1.99aoj review: a link to a wheel that has closed (and left the server's memory, 30 s after its close) lands on the lobby's 🛞 tab -
+  // or Pepe's wheel, when no card lobby is the PATV casino - with ?gone=1 (casino/routes.js): it says so once, and the address drops it.
+  // It used to land on Pepe's wheel without a word, where an admin's Host Tools then acted on Pepe's wheel.
+  if (/(?:^|[?&])gone=1(?:&|$)/.test(String(location.search || "").replace(/^\?/, ""))) {
+    note(tableId ? T("rl_gone_pepe", "That wheel has closed. This is Pepe's wheel, open all the time.")
+                 : T("rl_gone", "That wheel has closed. The wheels still open are on the Roulette tab."));
+    const rest = String(location.search).replace(/^\?/, "").split("&").filter((x) => x && x !== "gone=1").join("&");
+    try { history.replaceState(history.state, "", location.pathname + (rest ? "?" + rest : "") + (location.hash || "")); } catch (e) { /* (an old engine) */ }
+  }
+
   window.CZ = { $, T, esc, fmt, reduced, idem, post, toast, note, announce, drawCards, staticCards, cardLabel, chipCls, stackHTML, pileHTML, short, avatarHTML, ringSVG, theme,
                 armClock, totalFor, pop, net, openSheet, closeSheet, loadHistory, wireHost, startTable, startLobby, actor, streetName, game, tableId, signed,
                 skew: () => skew,

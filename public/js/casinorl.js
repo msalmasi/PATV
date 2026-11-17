@@ -1191,9 +1191,12 @@
   }
 
   // ── the sound toggle's cues from the table's own moments (the wheel's ball cues come from its onEvent) ──
+  var WHEELS_MS = 30000,
+    wheelsAt = 0;
   function render(d) {
     var previous = last;
     last = d;
+    if (wheelsAt && Date.now() - wheelsAt >= WHEELS_MS) otherWheels(); // (the other open wheels, redrawn - below)
     var t = d.table,
       me = d.me,
       phase = R.phase(t);
@@ -1409,31 +1412,47 @@
   );
   refresh = CZ.startTable(render, { first: CZ.signed ? "?notice=1" : "" });
   // the other open wheels, each named by whose it is (1.99aoj review: several web wheels all read "Web wheel" - WCAG 2.4.4): Pepe's lobby
-  // wheel, "{host}'s wheel" - the host as the lobby's own wheel rows show it (?rl=1: veiled hosts under their label) - then its room
-  fetch("/api/casino/lobby?rl=1", { credentials: "same-origin" })
-    .then(function (res) {
-      return res.json();
-    })
-    .then(function (j) {
-      var nav = $("rl-wheels"),
-        host = {};
-      if (!nav) return;
-      (j.tables || []).forEach(function (t) {
-        if (t && t.game === "roulette" && t.id && t.host) host[t.id] = String(t.host);
-      });
-      ((j.roulette && j.roulette.wheels) || []).forEach(function (w) {
-        if (w.id === CZ.tableId || !/^[a-f0-9]{10}$/.test(w.id)) return;
-        var who = w.lobby
-          ? T("rl_wheel_pepe", "Pepe's wheel")
-          : host[w.id]
-            ? T("rl_wheel_of", "{host}'s wheel", { host: host[w.id] })
-            : T("rl_web_wheel", "Web wheel");
-        var a = doc.createElement("a");
-        a.href = "/casino/roulette/t/" + w.id;
-        a.textContent = (w.high_stakes ? "💎 " : "") + who + (w.room_name ? " · " + w.room_name : "");
-        nav.append(a);
-      });
-      nav.hidden = !nav.querySelector("a");
-    })
-    .catch(function () {});
+  // wheel, "{host}'s wheel" - the host as the lobby's own wheel rows show it (?rl=1: veiled hosts under their label) - then its room.
+  // (1.99aoj review: drawn again from the table's own poll at most every WHEELS_MS - render - so a wheel that closed drops out and a new
+  // one shows; it was fetched once, and a link to a wheel gone since led to Pepe's wheel)
+  function otherWheels() {
+    wheelsAt = Date.now();
+    fetch("/api/casino/lobby?rl=1", { credentials: "same-origin" })
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (j) {
+        var nav = $("rl-wheels"),
+          host = {},
+          rows = [];
+        if (!nav) return;
+        (j.tables || []).forEach(function (t) {
+          if (t && t.game === "roulette" && t.id && t.host) host[t.id] = String(t.host);
+        });
+        ((j.roulette && j.roulette.wheels) || []).forEach(function (w) {
+          if (w.id === CZ.tableId || !/^[a-f0-9]{10}$/.test(w.id)) return;
+          var who = w.lobby
+            ? T("rl_wheel_pepe", "Pepe's wheel")
+            : host[w.id]
+              ? T("rl_wheel_of", "{host}'s wheel", { host: host[w.id] })
+              : T("rl_web_wheel", "Web wheel");
+          rows.push(["/casino/roulette/t/" + w.id, (w.high_stakes ? "💎 " : "") + who + (w.room_name ? " · " + w.room_name : "")]);
+        });
+        var sig = JSON.stringify(rows);
+        if (nav.dataset.v === sig) return; // (nothing changed: the links - and a focused one - stay)
+        nav.dataset.v = sig;
+        Array.prototype.slice.call(nav.children).forEach(function (c) {
+          if (c.tagName === "A") c.remove(); // (the label stays)
+        });
+        rows.forEach(function (r) {
+          var a = doc.createElement("a");
+          a.href = r[0];
+          a.textContent = r[1];
+          nav.append(a);
+        });
+        nav.hidden = !rows.length;
+      })
+      .catch(function () {});
+  }
+  otherWheels();
 })(window);

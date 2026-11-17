@@ -11,6 +11,9 @@
 //     play unaffected); the lobby answer says open / hr_open
 //   * Pepe's links: the poll's lobby.roulette is the lobby's 🛞 tab by the navbar's rule, and so is !rl's "No wheel here" reply
 //   * the home page: a wheel reads as a 🛞 wheel with players; the tables line names each game once
+//   * a link to a wheel that has gone (closed and out of memory, or never known): the lobby's 🛞 tab with ?gone=1, which the page says
+//     once and drops from the address (Pepe's wheel says it when no card lobby is the PATV casino); a rotated lobby wheel's old link
+//     is Pepe's current wheel, as before
 //   node --test test/casino-rl-shipfix.test.js
 const test = require("node:test"),
   assert = require("node:assert/strict");
@@ -420,4 +423,79 @@ test("/admin/games: Who can open a web wheel (rl_web_open, its saved value selec
   assert.match(html, /<input type="number" name="rl_hr_spin_cap" value="0" data-old="0" min="0"/);
   // the form's own check lets 0 through (35 x the straight only has to fit a cap above 0)
   assert.match(html, /\(Number\(form\.elements\.rl_hr_spin_cap\.value\) !== 0 && Number\(form\.elements\.rl_hr_max_straight\.value\) \* 35 > Number\(form\.elements\.rl_hr_spin_cap\.value\)\)/);
+});
+
+// ── (review) a link to a wheel that has gone ──
+async function pageServer(t) {
+  const express = require("express"),
+    app = express();
+  const addUser = (q, r, next) => {
+    const id = q.get("x-test-user");
+    q.user = id ? { userId: id, username: "player" + id } : null;
+    next();
+  };
+  require("../casino/routes").register(app, { isBotToken: () => false, addUser });
+  const srv = app.listen(0, "127.0.0.1");
+  await new Promise((ok) => srv.once("listening", ok));
+  t.after(() => srv.close());
+  return async (p, user) => {
+    const r = await fetch("http://127.0.0.1:" + srv.address().port + p, { redirect: "manual", headers: { "x-test-user": user || "" } });
+    return { status: r.status, location: r.headers.get("location") };
+  };
+}
+
+test("(review) a link to a wheel that has gone: the lobby's 🛞 tab with ?gone=1 (Pepe's wheel, saying so, with no card lobby); a rotated lobby wheel's link: Pepe's current wheel", async (t) => {
+  await fresh();
+  const get = await pageServer(t);
+  try {
+    await svc.setSetting("bj_enabled", "1", "test");
+    const W = expect(await openWeb("a")).table;
+    expect(await act(svc.getTable(W), "a", "end"));
+    assert.equal(svc.getTable(W).status, "closed");
+    await h.tick(31000);                                         // (a closed table leaves the server's memory 30 s after its close)
+    assert.equal(svc.getTable(W), null);
+    assert.deepEqual(await get("/casino/roulette/t/" + W, "b"), { status: 302, location: "/casino/blackjack?gone=1#roulette" },
+                     "the lobby's Roulette tab, with the notice - it used to be /casino/roulette (Pepe's wheel), silently");
+    assert.deepEqual(await get("/casino/roulette/t/abcdef9999", "b"), { status: 302, location: "/casino/blackjack?gone=1#roulette" }, "an id never known: the same");
+    assert.deepEqual(await get("/casino/roulette/t/" + W), { status: 302, location: "/casino/blackjack?gone=1#roulette" }, "signed out: the same");
+    // Pepe's lobby wheel, rotated away (closed, out of memory): its old link is Pepe's wheel, as before
+    const L = lobby();
+    await sql("UPDATE casino_tables SET status = 'closed' WHERE id = ?", [L.id]);
+    svc.S.tables.delete(L.id);
+    assert.equal(await svc.RL.wasLobby(L.id), true);
+    assert.equal(await svc.RL.wasLobby(W), false);
+    assert.deepEqual(await get("/casino/roulette/t/" + L.id, "b"), { status: 302, location: "/casino/roulette" });
+    // neither card game is the PATV casino: Pepe's wheel, which says it (?gone=1 carried through /casino/roulette)
+    await svc.setSetting("bj_enabled", "0", "test");
+    assert.deepEqual(await get("/casino/roulette/t/" + W, "b"), { status: 302, location: "/casino/roulette?gone=1" });
+    const r = await get("/casino/roulette?gone=1", "b");
+    assert.equal(r.status, 302);
+    assert.match(r.location, /^\/casino\/roulette\/t\/[0-9a-f]{10}\?gone=1$/);
+    assert.equal(r.location, "/casino/roulette/t/" + lobby().id + "?gone=1");
+    assert.match((await get("/casino/roulette", "b")).location, /^\/casino\/roulette\/t\/[0-9a-f]{10}$/, "no ?gone: none added");
+  } finally {
+    await svc.setSetting("bj_enabled", "0", "test");
+  }
+});
+
+test("(review) ?gone=1: the lobby says the wheel has closed, once, and the address drops it; Pepe's wheel says it is Pepe's wheel", async () => {
+  const LB = { roulette: { on: true, lobby: null, wheels: [] }, enabled: true, hm_enabled: true, tables: [], rooms: [], stream: null, me: null,
+               limits: { bj: { min_bet: 100, max_bet: 100000, hr_min_bet: 100000, hr_max_bet: 1000000 }, holdem: { hr_ladder: [] } }, themes: { pick: false, list: [] }, now: 0 };
+  const lob = (search, hash) => page(`<main class="ds-page flow cz" id="cb" data-game="bj" data-table="" data-signed="">${partial("casino-top", { game: "bj", tableId: null })}` +
+                                     `${partial("casino-lobby", { game: "bj", bjOn: true, hmOn: true })}</main>`, { "/api/casino/lobby": LB }, { search, hash });
+  let P = lob("?gone=1", "#roulette");
+  assert.equal(P.$("cz-note").hidden, false);
+  assert.equal(P.$("cz-note").querySelector(".cz-note-txt").textContent, "That wheel has closed. The wheels still open are on the Roulette tab.");
+  assert.deepEqual(P.replaced, ["/casino/blackjack#roulette"], "the address drops ?gone=1 (a reload says nothing)");
+  P = lob("?x=1&gone=1", "#roulette");
+  assert.deepEqual(P.replaced, ["/casino/blackjack?x=1#roulette"], "another query part stays");
+  P = lob("", "#roulette");
+  assert.equal(P.$("cz-note").hidden, true, "no ?gone=1: no notice");
+  assert.deepEqual(P.replaced, []);
+  P = lob("?gone=10", "");
+  assert.equal(P.$("cz-note").hidden, true);
+  const R = page(`<main class="ds-page flow cz" id="cb" data-game="roulette" data-table="abcdef0123" data-signed="1">${partial("casino-top", { game: "roulette", tableId: "abcdef0123" })}</main>`,
+                 {}, { search: "?gone=1", pathname: "/casino/roulette/t/abcdef0123" });
+  assert.equal(R.$("cz-note").querySelector(".cz-note-txt").textContent, "That wheel has closed. This is Pepe's wheel, open all the time.");
+  assert.deepEqual(R.replaced, ["/casino/roulette/t/abcdef0123"]);
 });

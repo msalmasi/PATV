@@ -1677,8 +1677,16 @@ function install(core) {
       );
     return reply(false, "Use bet, clear, undo, rebet, bets, limits, last, fair, go, status or help.");
   }
+  /** 1.99aoj review: was this id one of Pepe's lobby wheels (one the rotation closed)? casino/routes.js sends its old link to Pepe's
+   *  current wheel, and any other wheel that has gone to the lobby's 🛞 tab with a notice. Read only. */
+  async function wasLobby(id) {
+    const r = (await getQuery("SELECT state FROM casino_tables WHERE id = ? AND game = 'roulette'", [String(id)]).catch(() => []))[0];
+    if (!r) return false;
+    try { return !!JSON.parse(r.state).lobby; } catch (e) { return false; }
+  }
   return {
     RC: DEFAULTS,
+    wasLobby,
     start,
     run,
     tick,
