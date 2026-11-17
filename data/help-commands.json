@@ -2474,13 +2474,13 @@
    "aliases": [],
    "syntax": [
     "!rl <bet> <amount> [<bet> <amount> ...]",
-    "!rl start",
+    "!rl start [hr]",
     "!rl bets | clear | undo | again | go",
     "!rl status | limits | last | fair | help",
     "!rl end | advertise <room> | unadvertise <room>"
    ],
    "summary": "Play the single-zero roulette wheel with PAT points.",
-   "details": "A wheel has 37 pockets (0 through 36). Each spin is independent. PAT are points with no cash value. A straight pays 35 to 1. Bet on a split, street, trio, corner, first four, six line, dozen, column, or one of the 1-to-1 bets (red/black, odd/even, low/high). Zero loses all 1-to-1 bets.\nType a position followed by a whole PAT amount. For example, **!rl red 500 17-18 100** places a line on red and the split in one request. **!rl 7,17,27 100** places 100 on each number. For the second dozen use **!rl d2 100**. Acknowledgements for bets are private. The default minimum is 100 per position, with up to 5,000 on a straight. Use **!rl limits** for the current limits.\nUse **!rl start** in a room running the site's casino, or play the lobby wheel on the web. **!rl bets** lists your slips. **!rl undo** refunds the last open line and **!rl clear** requests every open line back, subject to the wheel’s bank limit. After betting closes, new lines queue for the next spin and clear drops the queued line. **!rl again** repeats the last slip once. **!rl go** spins a wheel you bet on alone; **!spin** is the separate prize wheel. **!rl fair** links to the proof.\nA bet belongs to the account linked to your chat login, or the account Pepe makes for you. If Pepe cannot confirm you in the room, PM him the command. A PM bets on the wheel of the room you are in.",
+   "details": "A wheel has 37 pockets (0 through 36). Each spin is independent. PAT are points with no cash value. A straight pays 35 to 1. Bet on a split, street, trio, corner, first four, six line, dozen, column, or one of the 1-to-1 bets (red/black, odd/even, low/high). Zero loses all 1-to-1 bets.\nType a position followed by a whole PAT amount. For example, **!rl red 500 17-18 100** places a line on red and the split in one request. **!rl 7,17,27 100** places 100 on each number. For the second dozen use **!rl d2 100**. Acknowledgements for bets are private. The default minimum is 100 per position, with up to 5,000 on a straight. Use **!rl limits** for the current limits.\nUse **!rl start** in a room running the site's casino (**!rl start hr** opens a 💎 High Roller wheel, for High Rollers), or play on the web: the lobby wheel, or open a wheel of your own from the casino page. Pepe's stream shows the wheel on it with the same ball as the web table. **!rl bets** lists your slips. **!rl undo** refunds the last open line and **!rl clear** requests every open line back, subject to the wheel’s bank limit. After betting closes, new lines queue for the next spin and clear drops the queued line. **!rl again** repeats the last slip once. **!rl go** spins a wheel you bet on alone; **!spin** is the separate prize wheel. **!rl fair** links to the proof.\nA bet belongs to the account linked to your chat login, or the account Pepe makes for you. If Pepe cannot confirm you in the room, PM him the command. A PM bets on the wheel of the room you are in.",
    "examples": [
     "To place 500 PAT on red, type !rl red 500.",
     "To ask for your lines, type !rl bets.",
@@ -8862,5 +8862,5 @@
   "catIcon": 16,
   "catBlurb": 300
  },
- "hash": "9db2801256a651c3"
+ "hash": "0d25838a764aaf77"
 }
