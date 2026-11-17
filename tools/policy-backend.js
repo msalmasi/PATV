@@ -367,10 +367,21 @@ function evidenceChecks(s) {
   for (const c of ev.dual) by[c.day + "|" + c.consumer] = c;
   const missing = [];
   for (const d of ev.days) for (const c of need) if (!(by[d + "|" + c] && Number(by[d + "|" + c].checks) > 0)) missing.push(`${d} ${c}`);
-  add(!ev.days.length || missing.length ? "FAIL" : "PASS", `dual read recorded every day ${span} (${need.join(", ") || "no daily reader expected"})`,
-      !ev.days.length ? "no complete day in the window - no evidence"
-        : missing.length ? `no comparison recorded: ${missing.slice(0, 20).join(", ")}${missing.length > 20 ? ` (+${missing.length - 20})` : ""}`
-        : `${ev.dual.filter((c) => ev.days.includes(c.day)).reduce((t, c) => t + Number(c.checks), 0)} comparison(s)`);
+  // 1.99aom: H1 is done once the site owns the economy settings (policy_ownership cfg = site). The readers then read policy_cfg
+  // and compare no push any more (policy/config.js capitalCfg / sourceView return before noteDual), so this H1 gate can never
+  // record again - it is retired (INFO), never a FAIL. While Pepe owns the settings (or they are frozen for the hand-over) it
+  // stands as before.
+  const cfgOwn = (s.features || {}).cfg || {};
+  if (cfgOwn.owner === "site") {
+    const since = Number(cfgOwn.since) > 0 ? ` since ${new Date(Number(cfgOwn.since)).toISOString().slice(0, 16).replace("T", " ")}Z` : "";
+    add("INFO", "H1 done (cfg=site): dual read retired",
+        `the site owns the economy settings${since}${cfgOwn.handover_key ? ` (hand-over ${String(cfgOwn.handover_key).slice(0, 12)})` : ""}: its readers read policy_cfg and compare no push, so "dual read recorded every day" has nothing left to record`);
+  } else {
+    add(!ev.days.length || missing.length ? "FAIL" : "PASS", `dual read recorded every day ${span} (${need.join(", ") || "no daily reader expected"})`,
+        !ev.days.length ? "no complete day in the window - no evidence"
+          : missing.length ? `no comparison recorded: ${missing.slice(0, 20).join(", ")}${missing.length > 20 ? ` (+${missing.length - 20})` : ""}`
+          : `${ev.dual.filter((c) => ev.days.includes(c.day)).reduce((t, c) => t + Number(c.checks), 0)} comparison(s)`);
+  }
   const diffs = ev.dual.filter((c) => Number(c.diffs) > 0);
   add(diffs.length ? "FAIL" : "PASS", `dual read clean ${ev.from}..${ev.today} (today included)`,
       diffs.length ? diffs.map((c) => `${c.day} ${c.consumer}: ${c.diffs}`).join(", ") + " - see policy_cfg_dualread / the card" : "no difference");
