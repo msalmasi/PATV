@@ -240,3 +240,106 @@ test("WP5b: every POST has its own idempotency key; a call line that waits for t
   assert.equal(typed.children[0].textContent, "Type a bet");
   assert.ok(typed.querySelector("input") && typed.querySelector("form"), "the custom chip and the bet line fold under it");
 });
+
+// ── roulette2 WP5b review fixes (the shared controls) ──
+test("review: an E_SPIN refusal of a Rebet or of a line queued while the wheel spins names the line's real total", async () => {
+  let reply = null;
+  const W = makeWindow(async (url, o) => (o && o.method === "POST" ? reply : { ok: false }));
+  for (const [f, src] of SRC) W.run(src, f);
+  const box = W.document.createElement("div");
+  const c = W.PATVRoulette.controls(box, { id: LOBBY, refresh: async () => {} });
+  const fb = () => box.querySelector(".rl-feedback").textContent;
+  // Rebet: the server's have is what the player has on this spin before the line (60,000); the line is the last slip (60,000)
+  c.update(view(LOBBY, "betting", { lines: [{ text: "d1 60000", amount: 60000 }], staked: 60000, last_slip: "black 30000 · red 30000" }));
+  reply = { ok: false, reply: "That line exceeds your per-spin limit.", code: "E_SPIN", max: 100000, have: 60000 };
+  assert.equal(c.run("rebet"), true);
+  await W.settle();
+  assert.equal(fb(), "Your total this spin would be 120,000 PAT — the most per player per spin is 100,000 PAT.", "was 60,000");
+  // while it spins: the server checks the queued line AND the new chip as one line (have 0)
+  c.update(view(LOBBY, "spinning", { lines: [], staked: 0, pending: "17 100 · red 50000" }));
+  reply = { ok: false, reply: "That line exceeds your per-spin limit.", code: "E_SPIN", max: 50000, have: 0 };
+  assert.equal(c.place("red"), true);
+  const t = W.timers.filter((x) => !x.done && x.ms === 900).pop();
+  t.done = true;
+  await t.fn();
+  await W.settle();
+  assert.equal(fb(), "Your total this spin would be 50,200 PAT — the most per player per spin is 50,000 PAT.", "was 100");
+  // an E_SPIN with no line total known (an undo / clear never gets one): the server's own text
+  reply = { ok: false, reply: "That line exceeds your per-spin limit.", code: "E_SPIN", max: 50000, have: 0 };
+  c.update(view(LOBBY, "spinning", { lines: [], staked: 0, pending: "17 100" }));
+  assert.equal(c.run("clear"), true);
+  await W.settle();
+  assert.equal(fb(), "That line exceeds your per-spin limit.");
+});
+
+test("review: a waiting call / ×2 line refused at its turn never strands the chips placed meanwhile - they go next", async () => {
+  let release;
+  const posts = [];
+  const W = makeWindow(async (url, o) => {
+    if (o && o.method === "POST") {
+      posts.push(JSON.parse(o.body));
+      if (posts.length === 1) await new Promise((r) => (release = r));
+      return { ok: true, reply: "ok" };
+    }
+    return { ok: false };
+  });
+  for (const [f, src] of SRC) W.run(src, f);
+  const box = W.document.createElement("div");
+  const queued = (n) => Array.from({ length: n }, (_, i) => String(i + 1) + " 100").join(" · ");
+  let next = null;
+  const c = W.PATVRoulette.controls(box, { id: LOBBY, refresh: async () => { if (next) c.update(next); } });
+  c.update(view(LOBBY, "spinning", { lines: [], staked: 0, pending: queued(10) }));
+  // 1. five chips while it spins: one line (with the 10 queued) in flight, its answer slow
+  for (const tk of ["11", "12", "13", "14", "15"]) assert.equal(c.place(tk), true);
+  const t = W.timers.filter((x) => !x.done && x.ms === 900).pop();
+  t.done = true;
+  t.fn();
+  await W.settle();
+  assert.equal(posts.length, 1);
+  // 2. a 7-spot call line waits behind it (10 + 7 is within 20 now), and one more chip is placed
+  assert.equal(c.placeMany(["16", "17", "18", "19", "20", "21", "22"].map((b) => ({ b, a: "100" }))), true);
+  assert.equal(c.place("23"), true);
+  for (const x of W.timers.filter((y) => !y.done && y.ms === 900)) { x.done = true; x.fn(); }     // (its batch timer: the line is still out)
+  await W.settle();
+  assert.equal(posts.length, 1);
+  // 3. the answer: the queued line is now 15 spots - the waiting 7 can't join it (22 > 20), refused with the reason...
+  next = view(LOBBY, "spinning", { lines: [], staked: 0, pending: queued(15) });
+  release();
+  await W.settle();
+  assert.equal(box.querySelector(".rl-feedback").textContent, "That's more than 20 spots for one line.");
+  // ...and the chip placed meanwhile still goes (was: no timer left, the chip dimmed and the buttons off until another chip)
+  const left = W.timers.filter((x) => !x.done && x.ms <= 900);
+  assert.equal(left.length, 1, "the batch is scheduled again");
+  left[0].done = true;
+  await left[0].fn();
+  await W.settle();
+  assert.equal(posts.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts[1].bets)).map((b) => b.b), Array.from({ length: 15 }, (_, i) => String(i + 1)).concat("23"));
+});
+
+test("review: the Room Dock's mini wheel follows this browser's ⚡ Quick spin (the table page's setting)", async () => {
+  const calls = [];
+  const wheel = {};
+  for (const k of ["setSkew", "spin", "rest", "idle", "destroy"]) wheel[k] = () => wheel;
+  const W = makeWindow((url) => {
+    const u = new URL(url, "http://dock.test");
+    if (u.pathname === "/api/casino/roulette/pad/test-pad") return { ok: true, table: LOBBY, here: false };
+    return view(LOBBY, "betting", { lines: [], staked: 0 });
+  });
+  for (const [f, src] of SRC) W.run(src, f);
+  W.localStorage = { getItem: (k) => (k === "rl-quick" ? "1" : null) };
+  W.PATVRlWheel = { mount: (cv, o) => { calls.push(o); return wheel; } };
+  W.PATVRoulette.mount(W.document.createElement("div"), { slug: "test-pad" });
+  await W.settle();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].reduced, true, "Quick spin on: the mini wheel's reduced path (its rotor doesn't turn non-stop)");
+  // blocked storage: the system setting
+  const W2 = makeWindow((url) => (String(url).includes("/pad/") ? { ok: true, table: LOBBY, here: false } : view(LOBBY, "betting", { lines: [], staked: 0 })));
+  for (const [f, src] of SRC) W2.run(src, f);
+  Object.defineProperty(W2, "localStorage", { get() { throw new Error("blocked"); } });
+  const c2 = [];
+  W2.PATVRlWheel = { mount: (cv, o) => { c2.push(o); return wheel; } };
+  W2.PATVRoulette.mount(W2.document.createElement("div"), { slug: "test-pad" });
+  await W2.settle();
+  assert.equal(c2[0].reduced, undefined);
+});

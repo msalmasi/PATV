@@ -40,6 +40,7 @@
     seenResult = null,
     rendered = false,
     prevPhase = null,
+    previewed = null,
     showOthers = true;
   // UI-3: the phone's way of betting inside positions (modes + two taps) on any touch screen too (views/partials/casino-rl-css.ejs)
   var compact = W.matchMedia("(max-width:639px), (pointer:coarse)"),
@@ -68,6 +69,36 @@
   };
   showOthers = store.get("localStorage", "rl-others") !== "0";
   quick = store.get("localStorage", "rl-quick") === "1";
+  // (review, WCAG 2.1.4: this viewer can turn the single-key shortcuts off - the ⌨ toggle; on unless they did)
+  var keysOn = store.get("localStorage", "rl-keys") !== "0";
+  // (review: how the focus came - a pointer (a mouse click focuses a button on Chrome / Windows, a tap does on Android) or the keyboard.
+  // Not :focus-visible: Chrome starts matching it on the clicked button as soon as a key goes down, so a key handler can't tell.)
+  var lastPointer = -1e9,
+    pointerFocus = null; //                  (the control a pointer focused, while it keeps the focus)
+  function pointerNow() {
+    return Date.now() - lastPointer < 800;
+  }
+  function pointed(e) {
+    lastPointer = Date.now();
+    var tg = e && e.target;
+    if (e && e.type === "pointerdown") pointerFocus = tg && tg.closest ? tg.closest("button,summary,a") : null;
+  }
+  doc.addEventListener("pointerdown", pointed, true);
+  doc.addEventListener("pointerup", pointed, true);
+  doc.addEventListener(
+    "keydown",
+    function () {
+      lastPointer = -1e9; //                 (the keyboard is in use: a focus move now is the keyboard's - Tab, the arrows)
+    },
+    true,
+  );
+  doc.addEventListener(
+    "focusin",
+    function (e) {
+      pointerFocus = pointerNow() ? e.target : null;
+    },
+    true,
+  );
   function color(n) {
     return R.pocketColor(n);
   }
@@ -142,6 +173,11 @@
       floatShown();
     }).observe(bowl);
   }
+  // (review: it takes its own taps - a tap on it never bets on the number under it - and brings the big wheel back into view)
+  on(floatBox, "click", function (e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (bowl && bowl.scrollIntoView) bowl.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
+  });
   function floatShown() {
     if (!floatBox) return;
     var t = last && last.table,
@@ -215,6 +251,7 @@
     unpreview();
     var p = G.positions[token];
     if (!p) return;
+    previewed = token;
     p.nums.forEach(function (n) {
       (nodes[String(n)] || []).forEach(function (b) {
         b.classList.add("cov");
@@ -230,9 +267,14 @@
       b.classList.remove("cov");
     });
     covered = [];
+    previewed = null;
     var tip = $("rl-tip");
     if (tip) tip.textContent = "";
     if (controls) controls.hover(null);
+  }
+  /** (a spot's blur / pointer leave: its own preview only - a click on another spot moves the focus after that one's preview began) */
+  function unpreviewOf(token) {
+    if (previewed === token) unpreview();
   }
   function spot(token, label, cls, parent) {
     var b = doc.createElement("button"),
@@ -266,16 +308,19 @@
     b.onpointerup = cancel;
     b.onpointerleave = function () {
       cancel();
-      unpreview();
+      unpreviewOf(token);
     };
     b.onpointerenter = function (e) {
       if (e.pointerType === "mouse") preview(token);
     };
     b.onpointercancel = cancel;
+    // (review: the keyboard's focus previews; a tap that focuses the button - Android, Windows touch - never leaves it lit as covered)
     b.onfocus = function () {
-      preview(token);
+      if (!pointerNow()) preview(token);
     };
-    b.onblur = unpreview;
+    b.onblur = function () {
+      unpreviewOf(token);
+    };
     b.oncontextmenu = function (e) {
       e.preventDefault();
       cancel();
@@ -494,7 +539,7 @@
       cap: CZ.fmt(controls ? controls.capOf(token) : 0),
       n: CZ.fmt(r.mine + r.wait),
     });
-    if (showOthers && r.total && r.k)
+    if (showOthers && r.total && r.k) {
       s +=
         " · " +
         T("rl_spot_all", { "one": "{pat} PAT on it from {k} player", "other": "{pat} PAT on it from {k} players" }, {
@@ -502,6 +547,20 @@
           k: r.k,
           count: r.k,
         });
+      // (who: the other seats' names - a masked seat by its label - and their chips, the biggest first)
+      var seats = (last && last.table.seats) || [],
+        who = (r.others || [])
+          .slice()
+          .sort(function (a, b) {
+            return b[1] - a[1];
+          })
+          .map(function (o) {
+            return seats[o[0]] ? seats[o[0]].name + " " + CZ.fmt(o[1]) : "";
+          })
+          .filter(Boolean);
+      if (who.length > 4) who = who.slice(0, 4).concat(T("rl_more_n", "+{n} more", { n: who.length - 4 }));
+      if (who.length) s += " " + T("rl_spot_players", "({names})", { names: who.join(", ") });
+    }
     return s;
   }
   var painted = Object.create(null);
@@ -522,6 +581,8 @@
         sig = s.cls + "|" + s.html + "|" + label + "|" + fate + "|" + (result === +token ? 1 : 0);
       if (painted[token] === sig) return;
       painted[token] = sig;
+      // (review: the line under the board follows the chips just placed on the spot being hovered / focused)
+      if (previewed === token && $("rl-tip")) $("rl-tip").textContent = label;
       stks[token].forEach(function (el) {
         el.className = s.cls;
         el.innerHTML = s.html;
@@ -567,6 +628,23 @@
   railHead.append(railLbl, railSum, othersBtn);
   railList.className = "rl-seats";
   if ($("rl-players")) $("rl-players").append(railHead, railList);
+  var rows = new Map(),
+    railExtra = doc.createElement("li");
+  /** a seat's row, made once: its .who (the person-menu button, redrawn only when the name or tags change) and, beside it, the stake */
+  function railRow(key) {
+    var row = rows.get(key);
+    if (row) return row;
+    var li = doc.createElement("li"),
+      who = doc.createElement("div"),
+      bet = doc.createElement("div");
+    li.dataset.seat = key;
+    who.className = "who";
+    bet.className = "rl-sbet";
+    li.append(who, bet);
+    row = { li: li, who: who, bet: bet, wv: null, bv: null };
+    rows.set(key, row);
+    return row;
+  }
   function renderPlayers(t, me) {
     var box = $("rl-players");
     if (!box) return;
@@ -587,41 +665,76 @@
       count: lay.players,
     });
     othersBtn.setAttribute("aria-pressed", String(showOthers));
-    var list = shownSeats
-      .map(function (x) {
-        var s = x.s,
-          mine = !!(me && me.seat && s.seat === me.seat),
-          net = result && typeof s.net === "number" ? s.net : null;
-        var plate =
+    var order = [],
+      keep = Object.create(null);
+    shownSeats.forEach(function (x) {
+      var s = x.s,
+        key = String(s.seat),
+        mine = !!(me && me.seat && s.seat === me.seat),
+        net = result && typeof s.net === "number" ? s.net : null,
+        // (review: a seat with nothing on this spin is dimmed and says so - the rail's head counts only the bettors)
+        out = !(s.staked > 0),
+        row = railRow(key);
+      keep[key] = 1;
+      var cls = "seat" + (mine ? " me" : "") + (net > 0 ? " winner" : "") + (out ? " out" : "");
+      if (row.li.className !== cls) row.li.className = cls;
+      row.li.style.setProperty("--sc", seatColor(x.i));
+      var wv = CZ.seatWho(
+        s,
+        CZ.avatarHTML(s) +
           '<span class="plate"><span class="nm">' +
           CZ.esc(s.name) +
           (mine ? " · " + CZ.esc(T("you", "you")) : "") +
           "</span>" +
-          (s.staked ? '<span class="sub">' + CZ.stackHTML(s.staked, T("rl_stake_lbl", "On the layout {n} PAT", { n: CZ.fmt(s.staked) }), hr) + "</span>" : "") +
-          (net !== null && net !== 0 ? '<span class="sub rl-pnet">' + CZ.net(net) + "</span>" : "") +
           (s.host ? '<span class="tags"><span class="tag gold">👑 ' + CZ.esc(T("host", "host")) + "</span></span>" : "") +
-          "</span>";
-        return (
-          '<li class="seat' +
-          (mine ? " me" : "") +
-          (net > 0 ? " winner" : "") +
-          '" data-seat="' +
-          CZ.esc(s.seat) +
-          '" style="--sc:' +
-          seatColor(x.i) +
-          '"><div class="who">' +
-          CZ.seatWho(s, CZ.avatarHTML(s) + plate) +
-          "</div></li>"
-        );
-      })
-      .join("");
-    if (seats.length > max) list += '<li class="rl-more-n">' + CZ.esc(T("rl_more_n", "+{n} more", { n: seats.length - max })) + "</li>";
-    if (!seats.length)
-      list = '<li class="rl-none">' + CZ.esc(t.phase === "betting" || t.phase === "idle" ? T("rl_no_bets", "No bets yet this spin.") : T("rl_no_players", "Nobody played this spin.")) + "</li>";
-    if (railList.dataset.v !== list) {
-      railList.dataset.v = list;
-      railList.innerHTML = list;
+          "</span>",
+      );
+      if (row.wv !== wv) {
+        row.wv = wv;
+        row.who.innerHTML = wv;
+      }
+      var bv =
+        (s.staked
+          ? '<span class="sub">' + CZ.stackHTML(s.staked, T("rl_stake_lbl", "On the layout {n} PAT", { n: CZ.fmt(s.staked) }), hr) + "</span>"
+          : '<span class="sub rl-out">' + CZ.esc(T("rl_sitting_out", "No bet this spin")) + "</span>") +
+        (net !== null && net !== 0 ? '<span class="sub rl-pnet">' + CZ.net(net) + "</span>" : "");
+      if (row.bv !== bv) {
+        row.bv = bv;
+        row.bet.innerHTML = bv;
+      }
+      order.push(row.li);
+    });
+    rows.forEach(function (row, key) {
+      if (keep[key]) return;
+      if (row.li.parentNode) row.li.remove();
+      rows.delete(key);
+    });
+    var extra = "";
+    if (seats.length > max) {
+      railExtra.className = "rl-more-n";
+      extra = T("rl_more_n", "+{n} more", { n: seats.length - max });
+    } else if (!seats.length) {
+      railExtra.className = "rl-none";
+      extra = t.phase === "betting" || t.phase === "idle" ? T("rl_no_bets", "No bets yet this spin.") : T("rl_no_players", "Nobody played this spin.");
     }
+    if (extra) {
+      if (railExtra.textContent !== extra) railExtra.textContent = extra;
+      order.push(railExtra);
+    } else if (railExtra.parentNode) railExtra.remove();
+    // the order (the biggest stake first) - rows move only while nothing in the rail has the focus and no person menu is open
+    // (a moved button drops the focus; an open menu keeps its anchor); new rows join at the end meanwhile
+    var held =
+        !!(doc.activeElement && railList.contains && railList.contains(doc.activeElement)) ||
+        !!(doc.querySelector && doc.querySelector(".pm-pop")),
+      kids = railList.children,
+      same = kids.length === order.length;
+    for (var i = 0; same && i < order.length; i++) same = kids[i] === order[i];
+    if (!same)
+      order.forEach(function (n) {
+        if (held && n.parentNode === railList) return;
+        if (n.parentNode) n.remove();
+        railList.append(n);
+      });
   }
   on(othersBtn, "click", function () {
     showOthers = !showOthers;
@@ -637,6 +750,12 @@
     var n = t.last_round.number,
       board = $("rl-board");
     if (reduced()) return;
+    (nodes[String(n)] || []).forEach(function (b) {
+      b.classList.add("pulse");
+      setTimeout(function () {
+        b.classList.remove("pulse");
+      }, 3700);
+    });
     if (board) {
       board.classList.add("raking");
       setTimeout(function () {
@@ -665,8 +784,8 @@
     setTimeout(function () {
       (t.seats || []).forEach(function (s) {
         if (!(s.net > 0)) return;
-        var el = doc.querySelector('#rl-players [data-seat="' + String(s.seat).replace(/["\\]/g, "") + '"]');
-        if (el) CZ.pop(el, "+" + CZ.fmt(s.net), "win");
+        var row = rows.get(String(s.seat));
+        if (row && row.li.parentNode) CZ.pop(row.li, "+" + CZ.fmt(s.net), "win");
       });
       if (me && me.net > 0) {
         Object.keys(lay).forEach(function (k) {
@@ -797,7 +916,6 @@
     var rs = t.rooms && t.rooms.length ? t.rooms.map(function (r) {
       return r.name;
     }) : t.room ? [t.room_name || t.room] : [];
-    var Rl = R.rulesOf(t);
     var where = rs.length
       ? "🐸 " + CZ.esc(rs.length > 1 ? T("in_rooms", "Chat rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Chat room {room}", { room: rs[0] }))
       : "🌐 " + CZ.esc(T("web_only", "Web only"));
@@ -807,7 +925,6 @@
       ["", where],
       t.round_no ? ["", CZ.esc(T("rl_spin_number", "Spin {n}", { n: t.round_no }))] : null,
       t.on_stream ? ["red", "📺 " + CZ.esc(T("on_stream", "On Pepe's stream"))] : t.stream_queue ? ["", "📺 " + CZ.esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))] : null,
-      Rl.max_spin ? ["gold", CZ.esc(T("rl_meta_lim", "Min {min} · Straight {straight} · {spin} a spin", { min: CZ.fmt(Rl.min), straight: CZ.fmt(Rl.caps.straight), spin: CZ.fmt(Rl.max_spin) }))] : null,
     ]
       .filter(Boolean)
       .map(function (x) {
@@ -940,6 +1057,8 @@
   var quickBtn = $("rl-quick");
   function paintQuick() {
     if (quickBtn) quickBtn.setAttribute("aria-pressed", String(quick));
+    var cb = $("cb");
+    if (cb) cb.classList.toggle("rl-quick", quick);
   }
   paintQuick();
   on(quickBtn, "click", function () {
@@ -949,6 +1068,16 @@
     // (null: back to following prefers-reduced-motion)
     if (wheel && wheel.setReduced) wheel.setReduced(quick ? true : null);
     if (floater && floater.setReduced) floater.setReduced(quick ? true : null);
+  });
+  var keysBtn = $("rl-keys");
+  function paintKeys() {
+    if (keysBtn) keysBtn.setAttribute("aria-pressed", String(keysOn));
+    if (controls && controls.keys) controls.keys(keysOn);
+  }
+  on(keysBtn, "click", function () {
+    keysOn = !keysOn;
+    store.set("localStorage", "rl-keys", keysOn ? "1" : "0");
+    paintKeys();
   });
   on($("rl-statsbtn"), "click", function () {
     if (last) stats(last.table);
@@ -990,8 +1119,9 @@
     setMode("straight");
     if (controls.placeMany(callPairs(list))) sound("chip");
   }
-  function lightNums(nums) {
+  function lightNums(nums, owner) {
     unpreview();
+    previewed = owner || null;
     nums.forEach(function (n) {
       (nodes[String(n)] || []).forEach(function (b) {
         b.classList.add("cov");
@@ -1032,13 +1162,17 @@
         if (controls.placeMany(callPairs(CALLS[k]))) sound("chip");
       };
       b.onpointerenter = function (e) {
-        if (e.pointerType === "mouse") lightNums(callNums(CALLS[k]));
+        if (e.pointerType === "mouse") lightNums(callNums(CALLS[k]), "call:" + k);
       };
-      b.onpointerleave = unpreview;
+      b.onpointerleave = function () {
+        unpreviewOf("call:" + k);
+      };
       b.onfocus = function () {
-        lightNums(callNums(CALLS[k]));
+        if (!pointerNow()) lightNums(callNums(CALLS[k]), "call:" + k);
       };
-      b.onblur = unpreview;
+      b.onblur = function () {
+        unpreviewOf("call:" + k);
+      };
       box.append(b);
     });
     var nb = doc.createElement("button");
@@ -1085,15 +1219,8 @@
     $("cb").classList.toggle("rl-lobby", !!t.lobby);
     $("cb").classList.toggle("rl-spinning", t.phase === "spinning");
     $("cb").classList.toggle("rl-result", t.phase === "result");
-    $("rl-phase").textContent = phase;
     var msg = croupier(t, me);
     var result = t.phase === "result" && t.last_round;
-    var lay = onLayout(t);
-    $("rl-totals").textContent = T(
-      "rl_layout_n",
-      { "one": "Layout: {players} player · {pat} PAT", "other": "Layout: {players} players · {pat} PAT" },
-      { players: lay.players, pat: CZ.fmt(lay.pat), count: lay.players },
-    );
     var net =
       result && me && typeof me.net === "number"
         ? T("rl_net", "Your net {n} PAT", { n: (me.net > 0 ? "+" : me.net < 0 ? "−" : "±") + CZ.fmt(Math.abs(me.net)) })
@@ -1143,14 +1270,7 @@
     var dk = $("cz-dock");
     if (dk) dk.hidden = !CZ.signed || t.status !== "open" || !me || !!(t.high_stakes && !me.high_roller);
     session(t, me);
-    var proof = $("rl-proof");
-    if (proof)
-      proof.textContent = T("rl_commit_line", "Spin {n} commitment: {c} · client seed {s}", {
-        n: t.commit_round,
-        c: t.commitment || "",
-        s: t.client_seed || "",
-      });
-    CZ.announce(phase + " · " + msg + (net ? " · " + net : ""));
+    CZ.announce((msg && msg !== phase ? phase + " · " + msg : phase) + (net ? " · " + net : ""));
     if (me && me.notice && me.notice.id === "rl_intro")
       CZ.note(
         T(
@@ -1182,22 +1302,67 @@
     },
   });
 
-  // ── O13(8): the keyboard - 1-5 chips, Z undo, C clear, R rebet, D ×2, Space spins now for a sole bettor (never while typing,
-  // never with a modifier; Space on a focused button or link presses it as usual) ──
+  paintKeys();
+
+  // ── O13(8): the keyboard - 1-5 chips, Z undo, C clear, R rebet, D ×2, Space spins now for a sole bettor. Review fixes:
+  //   * WCAG 2.1.4: only on this table - the page itself or a control on it (never the navbar, the chat, a person menu or a sheet) -
+  //     and the viewer can turn them off (⌨, remembered);
+  //   * never while typing, never with a modifier, never a held key's repeats (a held D doubled again and again);
+  //   * a button the KEYBOARD focused keeps Space (Tab, then Space presses it); one a mouse click focused (Chrome on Windows) gives
+  //     Space to the table - Spin now, never that spot or ×2 again; Space on the page spins only while the board is in view (or
+  //     it scrolls, as it always did) ──
+  var tableBox = $("cz-table"),
+    boardSeen = true,
+    spaceEaten = false;
+  if (W.IntersectionObserver && $("rl-board"))
+    new W.IntersectionObserver(function (es) {
+      boardSeen = es.length ? es[es.length - 1].isIntersecting : true;
+    }).observe($("rl-board"));
+  function onTable(el) {
+    if (!el || el === doc.body || el === doc.documentElement) return true;
+    if (el.closest && el.closest('.pm-pop,[role="menu"],[role="dialog"],dialog')) return false;
+    return !!(tableBox && tableBox.contains && tableBox.contains(el));
+  }
   doc.addEventListener("keydown", function (e) {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    if (String(e.key || "") === " " && !e.repeat) spaceEaten = false;      // (a keyup lost to a window switch never eats a later one)
+    if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || !keysOn) return;
+    var k = String(e.key || ""),
+      verb = /^[1-5]$/.test(k) ? "chip" : { z: "undo", c: "clear", r: "rebet", d: "double", " ": "go" }[k.toLowerCase()];
+    if (!verb) return;
     var tg = e.target || {},
       tag = String(tg.tagName || "");
     if (/^(?:INPUT|SELECT|TEXTAREA)$/.test(tag) || tg.isContentEditable) return;
     if (doc.querySelector && doc.querySelector("dialog[open]")) return;
-    var k = String(e.key || "");
-    if (/^[1-5]$/.test(k)) {
+    if (!onTable(tg)) return;
+    var control = /^(?:BUTTON|A|SUMMARY)$/.test(tag);
+    if (verb === "go" && control && tg !== pointerFocus) return;
+    if (e.repeat) {
+      if (verb !== "go" || control) e.preventDefault();
+      return;
+    }
+    if (verb === "chip") {
       if (controls.pick(+k)) e.preventDefault();
       return;
     }
-    var verb = { z: "undo", c: "clear", r: "rebet", d: "double" }[k.toLowerCase()];
-    if (k === " " && !/^(?:BUTTON|A|SUMMARY)$/.test(tag)) verb = "go";
-    if (verb && controls.run(verb)) e.preventDefault();
+    if (verb === "go") {
+      if (control) {
+        // (a mouse-focused control: Space is the table's - the browser never presses that control on the key's release)
+        e.preventDefault();
+        spaceEaten = true;
+        controls.run("go");
+      } else if (boardSeen && controls.can("go")) {
+        e.preventDefault();
+        controls.run("go");
+      }
+      return;
+    }
+    if (controls.run(verb)) e.preventDefault();
+  });
+  doc.addEventListener("keyup", function (e) {
+    if (spaceEaten && String(e.key || "") === " ") {
+      spaceEaten = false;
+      e.preventDefault();
+    }
   });
 
   $("cz-histbtn").onclick = function () {

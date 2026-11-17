@@ -47,6 +47,15 @@ El.prototype.remove = function () {
   if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
   this.parentNode = null;
 };
+El.prototype.contains = function (n) {
+  for (let x = n; x; x = x.parentNode) if (x === this) return true;
+  return false;
+};
+El.prototype.closest = function (sel) {
+  for (let x = this; x && x.tagName; x = x.parentNode) if (x.matches(sel)) return x;
+  return null;
+};
+
 
 const RULES = {
   min: 100,
@@ -105,21 +114,30 @@ function page(opts) {
   };
   const canvas = el("canvas", "rl-wheel");
   canvas.getContext = () => ({});
+  const bowl = el("div", "rl-bowl", [canvas]);
+  const scrolled = [];
+  bowl.scrollIntoView = (o) => scrolled.push(o);
+  // (views/casino-rl.ejs: no .rl-title row - review: Pepe's line and the rail's head say the phase and the layout - and no #rl-proof)
   const root = el("main", "cb", [
-    el("div", "cz-felt", [
-      el("div", "rl-bowl", [canvas]),
-      el("div", "cz-msg"), el("p", "rl-net"), el("div", "cz-fclock"),
-      el("span", "rl-phase"), el("span", "rl-totals"), el("div", "rl-modes"), el("output", "rl-instruction"),
-      el("div", "rl-board", [el("div", "rl-grid"), el("div", "rl-outside")]),
-      el("p", "rl-tip"), el("div", "rl-race"), el("ol", "rl-history"), el("button", "rl-statsbtn"),
+    el("section", "cz-table", [
+      el("div", "cz-felt", [
+        bowl,
+        el("div", "cz-msg"), el("p", "rl-net"), el("div", "cz-fclock"),
+        el("div", "rl-modes"), el("output", "rl-instruction"),
+        el("div", "rl-board", [el("div", "rl-grid"), el("div", "rl-outside")]),
+        el("p", "rl-tip"), el("div", "rl-race"), el("ol", "rl-history"), el("button", "rl-statsbtn"), el("button", "rl-quick"), el("button", "rl-keys"),
+      ]),
+      el("div", "cz-meta"), el("div", "cz-watchbar"), el("section", "rl-players"), el("div", "cz-dock"), el("p", "rl-session"),
+      el("nav", "rl-wheels"), el("div", "rl-float"),
     ]),
-    el("div", "cz-meta"), el("div", "cz-watchbar"), el("section", "rl-players"), el("div", "cz-dock"), el("p", "rl-session"),
-    el("nav", "rl-wheels"), el("span", "rl-proof"), el("div", "rl-float"), el("button", "cz-histbtn"), el("button", "rl-quick"),
+    el("button", "cz-histbtn"),
     el("dialog", "rl-stats", [el("div", "rl-stats-b")]),
   ]);
   const $ = (id) => [root, ...root.all()].find((e) => e.attrs.id === id || e.id === id) || null;
   const listeners = {},
-    events = [];
+    events = [],
+    said = [];
+  if (opts.io) W.IntersectionObserver = opts.io;
   Object.assign(W.document, {
     createElementNS: (ns, tag) => new El(tag),
     querySelector: () => null,
@@ -152,7 +170,7 @@ function page(opts) {
     net: (n) => `<span class="net">${n}</span>`,
     pop: (elx, text, kind) => pops.push([elx, text, kind]),
     armClock: (elx, dl, secs) => clocks.push([elx && elx.attrs.id, dl, secs]),
-    announce() {}, note() {}, toast() {}, theme() {},
+    announce: (s) => said.push(s), note() {}, toast() {}, theme() {},
     openSheet: (id) => { $(id).open = true; },
     loadHistory(fn) { CZ.row = fn; },
     actor: () => async () => ({}),
@@ -162,12 +180,26 @@ function page(opts) {
   for (const f of ["public/js/patamount.js", "casino/rlbets.js", "public/js/casinorl-dock.js", "public/js/casinorl.js"]) W.run(read(f), f);
   const spots = (token) => $("rl-grid").all().concat($("rl-outside").all()).filter((e) => e.tagName === "BUTTON" && e.dataset.token === token);
   const stk = (token) => spots(token)[0].children.find((c) => c.classList.contains("rl-stk"));
-  const press = (key, target) => {
-    const e = { type: "keydown", key, target: target || W.document.body, ctrlKey: false, metaKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+  const press = (key, target, extra) => {
+    const e = Object.assign({ type: "keydown", key, target: target || W.document.body, ctrlKey: false, metaKey: false, altKey: false, repeat: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } }, extra || {});
     for (const fn of listeners.keydown || []) fn(e);
     return e;
   };
-  return { W, CZ, $, root, posts, calls, events, pops, clocks, spots, stk, press };
+  const fireDoc = (type, e) => { for (const fn of listeners[type] || []) fn(Object.assign({ type, preventDefault() {} }, e)); };
+  /** b focused as Chrome on Windows does on a mouse click (or Android on a tap: how = "touch") - or by the keyboard (how = "key": Tab) */
+  const focusBy = (b, how) => {
+    if (how === "key") press("Tab", b);
+    else fireDoc("pointerdown", { target: b, pointerType: how || "mouse", button: 0 });
+    fireDoc("focusin", { target: b });
+    if (how !== "key") fireDoc("pointerup", { target: b, pointerType: how || "mouse" });
+    return b;
+  };
+  const release = (key, target) => {
+    const e = { type: "keyup", key, target: target || W.document.body, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    for (const fn of listeners.keyup || []) fn(e);
+    return e;
+  };
+  return { W, CZ, $, root, posts, calls, events, pops, clocks, spots, stk, press, release, said, scrolled, focusBy };
 }
 const seat = (name, sid, chips, extra) =>
   Object.assign({ name, seat: sid, host: false, staked: chips.reduce((a, c) => a + c[1], 0), chips }, extra || {});
@@ -191,17 +223,22 @@ test("D5 / O10: the felt shows everyone's chips per spot - mine on top with the 
   assert.doesNotMatch(red.className, /\bmine\b/);
   assert.match(red.innerHTML, /2\.5K/);
   assert.equal(P.stk("18").className, "rl-stk", "an empty spot draws nothing");
-  // the spot's spoken name: the felt's words, what it pays, its cap, my bet, everyone's
-  assert.equal(P.spots("17")[0].getAttribute("aria-label"), "17 ● Black · Number · pays 35 to 1 · up to 5,000 PAT · your bet 500 PAT · 1,600 PAT on it from 3 players");
-  assert.match(P.spots("17-20")[0].getAttribute("aria-label"), /^17–20 · Split · pays 17 to 1 · up to 10,000 PAT/);
+  // the spot's spoken name: the felt's words, what it pays, its cap, my bet, everyone's - and WHO else (review, WCAG 1.4.1: the
+  // others' chips are told apart by seat colour on the felt, so the line names them; a masked seat by its label)
+  assert.equal(P.spots("17")[0].getAttribute("aria-label"), "17 ● Black · Number · pays 35 to 1 · up to 5,000 PAT · your bet 500 PAT · 1,600 PAT on it from 3 players (Rocco 1,000, frog 7 100)");
+  assert.equal(P.spots("17")[0].title, P.spots("17")[0].getAttribute("aria-label"), "the hover title too");
+  assert.equal(P.spots("red")[0].getAttribute("aria-label"), "◆ Red · Even money · pays 1 to 1 · up to 50,000 PAT · your bet 0 PAT · 2,500 PAT on it from 1 player (Rocco 2,500)");
+  assert.match(P.spots("17-20")[0].getAttribute("aria-label"), /^17–20 · Split · pays 17 to 1 · up to 10,000 PAT · your bet 0 PAT$/);
   assert.match(P.spots("d2")[0].getAttribute("aria-label"), /^13–24 · Dozen · pays 2 to 1 · up to 50,000 PAT/);
-  // the players rail: the biggest stake first, my seat marked, a masked seat by its label
-  const rail = P.$("rl-players").children.map((c) => c.textContent + (c.innerHTML || "")).join("");
-  assert.ok(rail.indexOf("Rocco") < rail.indexOf("Mia") && rail.indexOf("Mia") < rail.indexOf("frog 7"));
-  assert.match(rail, /class="seat me" data-seat="s2"/);
-  assert.match(rail, /Mia · you/);
-  assert.match(rail, /Layout: 3 players · 4,100 PAT/);
-  assert.doesNotMatch(rail, /uid|userId/);
+  // the players rail: the biggest stake first, my seat marked, a masked seat by its label - one row per seat
+  const rows = P.$("rl-players").querySelectorAll("li");
+  assert.deepEqual(rows.map((li) => li.dataset.seat), ["s1", "s2", "s3"], "Rocco 3,500 · Mia 500 · frog 7 100");
+  assert.equal(rows[1].className, "seat me");
+  assert.match(rows[1].children[0].innerHTML, /Mia · you/);
+  assert.match(rows[2].children[0].innerHTML, /<span class="av veil"><\/span><span class="plate"><span class="nm">frog 7<\/span>/);
+  assert.match(rows[0].children[1].innerHTML, /^<span class="sub"><span class="stack">3500<\/span><\/span>$/, "the stake beside the person button");
+  assert.match(P.$("rl-players").querySelector(".rl-ph").textContent, /Layout: 3 players · 4,100 PAT/);
+  assert.doesNotMatch(rows.map((li) => li.children.map((c) => c.innerHTML).join("")).join(""), /uid|userId/);
   // the per-viewer "Others' bets" toggle: only mine stays
   const toggle = P.$("rl-others");
   assert.equal(toggle.getAttribute("aria-pressed"), "true");
@@ -281,16 +318,23 @@ test("contract 8 / O13(2) / O13(3): the croupier's lines, the result moment and 
   assert.match(P.stk("black").className, /\bhit\b/);
   assert.ok(P.$("rl-board").classList.contains("raking"), "seen land: the rake runs");
   assert.ok(P.spots("26")[0].children.some((c) => c.classList.contains("rl-burst")), "a straight-up hit's gold burst");
-  // the pops come a moment later, over the winners' seats only (the stub's querySelector finds no seat: none here) and my winning spots
+  assert.ok(P.spots("26")[0].classList.contains("pulse"), "seen land: the winning number pulses");
+  // the pops come a moment later, over the winners' rail rows only and my winning spots
   for (const t of P.W.timers.filter((x) => !x.done && x.ms === 350)) { t.done = true; t.fn(); }
   assert.ok(P.pops.some((p) => p[1] === "+3.5K" && p[2] === "win"), "26 straight up: 100 at 35 to 1");
+  assert.ok(P.pops.some((p) => p[1] === "+3,300" && p[0].dataset.seat === "s1"), "over Mia's row in the rail");
+  assert.ok(!P.pops.some((p) => p[0].dataset && p[0].dataset.seat === "s2"), "never over a loser");
   assert.ok(P.pops.every((p) => p[2] === "win"));
+  for (const t of P.W.timers.filter((x) => !x.done && x.ms === 3700)) { t.done = true; t.fn(); }
+  assert.ok(!P.spots("26")[0].classList.contains("pulse"), "the pulse ends; the highlight stays");
+  assert.ok(P.spots("26")[0].classList.contains("won"));
   // a page that OPENS on a result: no rake, no burst, no pops (and the event once)
   const Q = page();
   Q.CZ.render(view("result", me, { last_round: { round_no: 7, number: 26 }, seats: chips, felt }));
   assert.ok(!Q.$("rl-board").classList.contains("raking"));
   assert.ok(!Q.spots("26")[0].children.some((c) => c.classList.contains("rl-burst")));
   assert.ok(Q.spots("26")[0].classList.contains("won"), "the highlight is state, not motion");
+  assert.ok(!Q.spots("26")[0].classList.contains("pulse"), "review: no pulse on a page that opens on a result");
 });
 
 test("O13(2): under reduced motion the result moment has no motion (no rake animation, no burst) but keeps its highlight", () => {
@@ -304,7 +348,8 @@ test("O13(2): under reduced motion the result moment has no motion (no rake anim
   assert.ok(!P.spots("26")[0].children.some((c) => c.classList.contains("rl-burst")));
   assert.ok(P.spots("26")[0].classList.contains("won"));
   const css = read("views/partials/casino-rl-css.ejs");
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.rl-board\.raking \.rl-stk\.lost,\s*\.rl-grid button\.won \{\s*animation: none !important;\s*\}\s*\.rl-burst \{\s*display: none;/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.rl-board\.raking \.rl-stk\.lost,\s*\.rl-grid button\.won\.pulse \{\s*animation: none !important;\s*\}\s*\.rl-burst \{\s*display: none;/);
+  assert.ok(!P.spots("26")[0].classList.contains("pulse"), "no pulse");
 });
 
 test("D8 call bets: Voisins / Tiers / Orphelins / Neighbours ±2 each go as ONE ordinary line (the selected chip is the unit)", async () => {
@@ -461,7 +506,9 @@ test("O7: the limits placard reads t.rules (the spin's own limits) and keeps the
   assert.equal(box.querySelector(".rl-lim-key").textContent, "Min 100 · straight up to 4,000 · up to 100,000 PAT a spin per player");
   assert.equal(box.querySelectorAll("li")[2].textContent, "One number (straight up): up to 4,000 PAT");
   assert.equal(box.querySelector(".rl-left").textContent, "Your bets this spin: 2,500 PAT · 97,500 PAT left");
-  assert.match(P.$("cz-meta").innerHTML, /<span class="tag gold">Min 100 · Straight 4,000 · 100,000 a spin<\/span>/);
+  // (review: the limits are said once - the placard on the felt - never again as a gold tag right under it)
+  assert.doesNotMatch(P.$("cz-meta").innerHTML, /tag gold|Straight 4,000|a spin/);
+  assert.equal(read("locales/en.json").includes('"js.casino.rl_meta_lim"'), false, "its string is gone too");
 });
 
 test("O9 / D4: the tags, the spectator ribbon (signed out, High Roller), the dock only for those who can bet", () => {
@@ -581,8 +628,299 @@ test("O11: the per-viewer ⚡ Quick spin - the wheel's reduced path and no resul
   P.CZ.render(view("result", me, { last_round: { round_no: 7, number: 26 }, seats: chips, felt }));
   assert.ok(!P.$("rl-board").classList.contains("raking"), "no rake");
   assert.ok(P.spots("26")[0].classList.contains("won"), "the highlight stays");
+  assert.ok(!P.spots("26")[0].classList.contains("pulse"), "review: no pulse under Quick spin either");
+  assert.ok(P.$("cb").classList.contains("rl-quick"), "the page's class (the rail's winner glow stops too)");
+  assert.match(read("views/partials/casino-rl-css.ejs"), /\.rl-quick \.seat\.winner \.av \{\s*animation: none;/);
   const Q = page({ local });
   assert.equal(Q.calls.find((c) => c[0] === "mount")[2].reduced, true, "a reload keeps it");
   q.click();
   assert.deepEqual(P.calls.at(-1), ["setReduced", null], "off again: back to the system setting");
+  assert.ok(!P.$("cb").classList.contains("rl-quick"));
+});
+
+// ── roulette2 WP5b review fixes ──
+const SOLE = () => ({
+  me: { seat: "s1", lines: [{ text: "17 100", amount: 100 }], staked: 100, used: { positions: 1, actions: 1, per_token: { 17: 100 } }, last_slip: "black 300" },
+  extra: { totals: { players: 1, staked: 100 }, seats: [seat("Mia", "s1", [["17", 100]])], felt: [{ t: "17", n: 100, k: 1 }] },
+});
+test("review: Space after a MOUSE click on a spot is the table's (Spin now for a sole bettor), never that spot again; Tab-focused buttons keep Space", async () => {
+  const P = page();
+  const s = SOLE();
+  P.CZ.render(view("betting", s.me, s.extra));
+  const spot17 = P.focusBy(P.spots("17")[0], "mouse");
+  let e = P.press(" ", spot17);
+  assert.equal(e.defaultPrevented, true, "the browser never presses the mouse-focused spot on the key's release");
+  assert.equal(P.release(" ", spot17).defaultPrevented, true, "(its keyup too)");
+  await P.W.settle();
+  assert.deepEqual(P.posts.map((p) => p.body.verb), ["go"], "Spin now - no second chip on 17");
+  // not a sole bettor: Space on a mouse-focused spot still never places a chip there (and nothing is sent)
+  P.CZ.render(view("betting", s.me, Object.assign({}, s.extra, { totals: { players: 2, staked: 900 } })));
+  e = P.press(" ", P.focusBy(P.spots("17")[0], "mouse"));
+  assert.equal(e.defaultPrevented, true);
+  await P.W.settle();
+  assert.equal(P.posts.length, 1);
+  // the same after ×2 / a call bet clicked with the mouse
+  const race = P.$("rl-race").children.filter((c) => c.tagName === "BUTTON");
+  assert.equal(P.press(" ", P.focusBy(race[0], "mouse")).defaultPrevented, true);
+  // a button the KEYBOARD focused (Tab): Space is its own - the page doesn't touch it
+  P.CZ.render(view("betting", s.me, s.extra));
+  e = P.press(" ", P.focusBy(P.spots("17")[0], "key"));
+  assert.equal(e.defaultPrevented, false);
+  assert.equal(P.release(" ").defaultPrevented, false);
+  await P.W.settle();
+  assert.equal(P.posts.length, 1, "nothing sent");
+});
+
+test("review: Space on the page spins only while the board is in view (otherwise it scrolls, as it always did)", async () => {
+  let seen = null;
+  const io = function (fn) { this.observe = (el) => { if (el.attrs.id === "rl-board") seen = fn; }; };
+  const P = page({ io });
+  const s = SOLE();
+  P.CZ.render(view("betting", s.me, s.extra));
+  seen([{ isIntersecting: false }]);
+  assert.equal(P.press(" ").defaultPrevented, false, "the page scrolls");
+  await P.W.settle();
+  assert.equal(P.posts.length, 0);
+  seen([{ isIntersecting: true }]);
+  assert.equal(P.press(" ").defaultPrevented, true);
+  await P.W.settle();
+  assert.deepEqual(P.posts.map((p) => p.body.verb), ["go"]);
+});
+
+test("review: a held key never repeats a bet action (D / R / Z / C / Space auto-repeat sends nothing)", async () => {
+  const P = page();
+  const s = SOLE();
+  P.CZ.render(view("betting", s.me, s.extra));
+  for (const k of ["d", "r", "z", "c", " ", "D"]) {
+    const e = P.press(k, undefined, { repeat: true });
+    if (k !== " ") assert.equal(e.defaultPrevented, true, k + ": the repeat is swallowed");
+  }
+  P.press("2", undefined, { repeat: true });
+  await P.W.settle();
+  assert.equal(P.posts.length, 0, "no POST from a repeat");
+  assert.equal(P.W.timers.filter((t) => !t.done && t.ms === 900).length, 0, "nothing queued");
+  // the first press still works
+  P.press("d");
+  await P.W.settle();
+  assert.equal(P.posts.length, 1);
+  assert.deepEqual(plain(P.posts[0].body.bets), [{ b: "17", a: "100" }]);
+});
+
+test("review, WCAG 2.1.4: the shortcuts work only on the table and the viewer can turn them off (remembered); their hints follow", async () => {
+  const kept = {};
+  const local = { getItem: (k) => (k in kept ? kept[k] : null), setItem: (k, v) => { kept[k] = String(v); } };
+  const P = page({ local });
+  const s = SOLE();
+  P.CZ.render(view("betting", s.me, s.extra));
+  // a control off the table (the navbar, the chat), a person menu (appended to the body), a sheet: nothing
+  const nav = new El("button");
+  const menu = new El("div");
+  menu.className = "pm-pop";
+  const item = new El("button");
+  menu.append(item);
+  P.root.append(menu);
+  for (const tg of [nav, item]) {
+    for (const k of ["c", "d", "r", "z", "1"]) assert.equal(P.press(k, tg).defaultPrevented, false, k);
+  }
+  await P.W.settle();
+  assert.equal(P.posts.length, 0, "never from off the table");
+  // the ⌨ toggle: off - no shortcut, no aria-keyshortcuts hint
+  const kb = P.$("rl-keys");
+  assert.equal(kb.getAttribute("aria-pressed"), "true", "on by default");
+  const dock = P.$("cz-dock");
+  const hinted = () => dock.querySelectorAll("button").filter((b) => b.getAttribute("aria-keyshortcuts")).map((b) => b.getAttribute("aria-keyshortcuts"));
+  assert.deepEqual(hinted(), ["1", "2", "3", "4", "5", "Z", "C", "R", "D", "Space"]);
+  kb.click();
+  assert.equal(kb.getAttribute("aria-pressed"), "false");
+  assert.equal(kept["rl-keys"], "0");
+  assert.deepEqual(hinted(), [], "the hints go with them");
+  for (const k of ["d", "c", " ", "2"]) assert.equal(P.press(k).defaultPrevented, false, k);
+  await P.W.settle();
+  assert.equal(P.posts.length, 0);
+  // a reload keeps it off; on again: the hints come back and D works
+  const Q = page({ local });
+  Q.CZ.render(view("betting", s.me, s.extra));
+  assert.equal(Q.$("rl-keys").getAttribute("aria-pressed"), "false");
+  assert.equal(Q.$("cz-dock").querySelectorAll("button").filter((b) => b.getAttribute("aria-keyshortcuts")).length, 0);
+  Q.$("rl-keys").click();
+  assert.equal(Q.$("cz-dock").querySelectorAll("button").filter((b) => b.getAttribute("aria-keyshortcuts")).length, 10);
+  Q.press("d");
+  await Q.W.settle();
+  assert.equal(Q.posts.length, 1);
+  const v = read("views/casino-rl.ejs");
+  assert.match(v, /<button type="button" class="cz-btn ghost sm" id="rl-keys" aria-pressed="true" title="<%= t\('casino\.rl\.keys_help'\) %>">⌨ <%= t\('casino\.rl\.keys'\) %><\/button>/);
+});
+
+test("review: focus from a tap never leaves a spot lit as covered; the keyboard's focus previews; a blur clears only its own", () => {
+  const P = page();
+  P.CZ.render(view("betting", {}));
+  const b14 = P.spots("14")[0];
+  P.focusBy(b14, "touch");
+  b14.onfocus();
+  assert.ok(!b14.classList.contains("cov"), "a tap's focus (Android / Windows touch): no preview");
+  assert.equal(P.$("rl-tip").textContent, "");
+  P.focusBy(b14, "key").onfocus();
+  assert.ok(b14.classList.contains("cov"), "Tab: the preview");
+  // the mouse over 17, then a click on it moves the focus off 14: 14's blur leaves 17's preview
+  P.spots("17")[0].onpointerenter({ pointerType: "mouse" });
+  assert.match(P.$("rl-tip").textContent, /^17 ● Black/);
+  b14.onblur();
+  assert.match(P.$("rl-tip").textContent, /^17 ● Black/, "17 stays previewed");
+  assert.ok(P.spots("17")[0].classList.contains("cov"));
+  P.spots("17")[0].onpointerleave();
+  assert.equal(P.$("rl-tip").textContent, "");
+  // the call bets: the same
+  const race = P.$("rl-race").children.filter((c) => c.tagName === "BUTTON");
+  P.focusBy(race[1], "touch").onfocus();
+  assert.ok(!P.spots("5")[0].classList.contains("cov"));
+  P.focusBy(race[1], "key").onfocus();
+  assert.ok(P.spots("5")[0].classList.contains("cov") && P.spots("36")[0].classList.contains("cov"), "Tiers' numbers");
+});
+
+test("review: the hover line follows the chips just placed on the spot under the mouse", async () => {
+  const P = page();
+  P.CZ.render(view("betting", {}));
+  const d2 = P.spots("d2")[0];
+  d2.onpointerenter({ pointerType: "mouse" });
+  assert.match(P.$("rl-tip").textContent, /your bet 0 PAT$/);
+  d2.onclick();
+  assert.match(P.$("rl-tip").textContent, /^13–24 · Dozen · pays 2 to 1 · up to 50,000 PAT · your bet 100 PAT$/, "at once, with the chip waiting");
+  d2.onclick();
+  assert.match(P.$("rl-tip").textContent, /your bet 200 PAT$/);
+  // another spot's chips never write over the line
+  P.spots("red")[0].onclick();
+  assert.match(P.$("rl-tip").textContent, /^13–24 .* your bet 200 PAT$/);
+});
+
+test("review: the players rail keeps each seat's row and person button across polls; it never reorders under the focus or a menu", () => {
+  const P = page();
+  const at = (a, b, c) => view("betting", { seat: "s9" }, {
+    seats: [seat("Rocco", "s1", a ? [["red", a]] : []), seat("Dee", "s2", b ? [["17", b]] : []), seat("Tali", "s3", c ? [["5", c]] : [])],
+  });
+  P.CZ.render(at(500, 300, 0));
+  const list = P.$("rl-players").querySelector("ol");
+  const rowsOf = () => list.children.map((li) => li.dataset.seat);
+  assert.deepEqual(rowsOf(), ["s1", "s2", "s3"]);
+  const rocco = list.children[0],
+    roccoWho = rocco.children[0],
+    roccoHTML = roccoWho.innerHTML;
+  // a seat with nothing on this spin: dimmed and says so, behind the bettors
+  assert.equal(list.children[2].className, "seat out");
+  assert.match(list.children[2].children[1].innerHTML, /^<span class="sub rl-out">No bet this spin<\/span>$/);
+  assert.match(read("views/partials/casino-rl-css.ejs"), /\.rl-seats \.seat\.out \{\s*opacity: 0\.55;/);
+  // Rocco's stake changes: his row and its .who (the person button) are the same nodes, only the stake beside it changed
+  P.CZ.render(at(900, 300, 0));
+  assert.equal(list.children[0], rocco);
+  assert.equal(rocco.children[0], roccoWho);
+  assert.equal(roccoWho.innerHTML, roccoHTML, "the button is not redrawn");
+  assert.match(rocco.children[1].innerHTML, /900/);
+  // Dee passes Rocco while the focus is on Rocco's button: nothing moves (a moved button drops the focus)
+  P.W.document.activeElement = roccoWho;
+  P.CZ.render(at(900, 2000, 0));
+  assert.deepEqual(rowsOf(), ["s1", "s2", "s3"], "held while the rail has the focus");
+  assert.match(list.children[1].children[1].innerHTML, /2000/, "the stake still updates");
+  // a person menu open: held too
+  P.W.document.activeElement = null;
+  P.W.document.querySelector = (sel) => (sel === ".pm-pop" ? {} : null);
+  P.CZ.render(at(900, 2000, 0));
+  assert.deepEqual(rowsOf(), ["s1", "s2", "s3"]);
+  // neither: the biggest stake first, by moving the same rows
+  P.W.document.querySelector = () => null;
+  P.CZ.render(at(900, 2000, 0));
+  assert.deepEqual(rowsOf(), ["s2", "s1", "s3"]);
+  assert.equal(list.children[1], rocco);
+  // a seat that left: its row goes
+  P.CZ.render(view("betting", { seat: "s9" }, { seats: [seat("Dee", "s2", [["17", 2000]])] }));
+  assert.deepEqual(rowsOf(), ["s2"]);
+  P.CZ.render(view("betting", { seat: "s9" }, { seats: [] }));
+  assert.deepEqual(list.children.map((li) => li.className + ":" + li.textContent), ["rl-none:No bets yet this spin."]);
+});
+
+test("review: the live region never says a phrase twice; the felt has no second phase / layout line, no limits tag, no raw commitment", () => {
+  const P = page();
+  P.CZ.render(view("spinning", {}, { spin: { round_no: 7, number: 3, started_at: Date.now(), ends_at: Date.now() + 12000, secs: 12 } }));
+  assert.equal(P.said.at(-1), "No more bets", "was: No more bets · No more bets");
+  P.CZ.render(view("betting", {}));
+  assert.equal(P.said.at(-1), "Bets open · Place your bets");
+  P.CZ.render(view("result", { net: 300 }, { last_round: { round_no: 7, number: 3 } }));
+  assert.equal(P.said.at(-1), "Result · 3 red · Your net +300 PAT");
+  const v = read("views/casino-rl.ejs"),
+    js = read("public/js/casinorl.js");
+  assert.doesNotMatch(v, /rl-title|id="rl-phase"|id="rl-totals"|id="rl-proof"/);
+  assert.doesNotMatch(js, /rl-proof|rl_meta_lim|\$\("rl-phase"\)|\$\("rl-totals"\)/);
+  // (the commitment stays in the History sheet: casino-ui.js fairness writes #cz-commit for a roulette table)
+  assert.match(read("public/js/casino-ui.js"), /const c = \$\("cz-commit"\);[\s\S]{0,120}t\.game === "roulette" \? T\("rl_commit_line"/);
+});
+
+test("review: the phone's floating wheel takes its own taps (brings the big wheel back) and never sits on the board's spots as a pass-through", () => {
+  const P = page();
+  P.$("rl-float").click();
+  assert.equal(P.scrolled.length, 1, "a tap on it scrolls the big wheel into view");
+  assert.equal(P.scrolled[0].block, "center");
+  assert.equal(P.posts.length + P.W.timers.filter((t) => !t.done && t.ms === 900).length, 0, "no bet");
+  const css = read("views/partials/casino-rl-css.ejs");
+  const rule = /\.rl-float \{([^}]*)\}/.exec(css)[1];
+  assert.match(rule, /pointer-events: auto;/);
+  assert.doesNotMatch(rule, /pointer-events: none/);
+});
+
+test("review CSS: the phone's labels keep the pile's room, the rake goes up, the wide felt's outside rows apply, no filter on the canvas", () => {
+  const css = read("views/partials/casino-rl-css.ejs").replace(/\r\n/g, "\n");      // (a Windows checkout's line ends)
+  const phone = css.slice(css.indexOf("@media (max-width: 639px) {"));
+  assert.match(phone, /\.rl-grid button:not\(\.edge\),\s*\.rl-outside button \{\s*padding-inline: 2px var\(--rl-pile, 54px\);/, "a label never under its pile");
+  assert.match(phone, /\.rl-board\.raking \.rl-stk\.lost \{\s*animation-name: rlRakePhone;/);
+  assert.match(css, /@keyframes rlRakePhone \{[^@]*to \{\s*opacity: 0;\s*transform: translateY\(-230%\) scale\(0\.5\);/, "straight up - never across the labels");
+  assert.doesNotMatch(css, /rlRakeSide/);
+  // the base outside rows come before the wide felt's 50 px ones (later wins at equal specificity)
+  const base = css.indexOf(".rl-outside {\n  display: grid;"),
+    wide = css.indexOf("@media (min-width: 640px) {\n  .rl-grid {");
+  assert.ok(base > 0 && wide > base, "the 50 px rows apply");
+  assert.match(css.slice(wide, wide + 400), /\.rl-outside \{\s*grid-template-rows: repeat\(2, minmax\(50px, auto\)\);/);
+  assert.equal(css.slice(wide).indexOf("grid-template-rows: repeat(2, minmax(44px, auto))"), -1, "no base rule after it");
+  const canvas = /\.rl-bowl canvas \{([^}]*)\}/.exec(css)[1];
+  assert.doesNotMatch(canvas, /filter/);
+  assert.match(canvas, /border-radius: 50%;\s*box-shadow: 0 10px 28px/);
+  assert.doesNotMatch(css, /filter: drop-shadow/);
+});
+
+test("review CSS: the table page's chips are the casino's own size (casino-chips.css); only the Room Dock's are smaller", () => {
+  const dock = read("public/css/casinorl-dock.css");
+  assert.doesNotMatch(dock, /\.rl-controls \.chipbtn \{\s*width/, "no table-page size override");
+  assert.match(dock, /\.rl-compact \.chipbtn \{\s*width: 44px;\s*height: 44px;\s*\}/);
+});
+
+test("review: casino-sound.js unlocks on a tap's pointerup / touchend / click (WebKit), and a cue never makes the AudioContext", () => {
+  const src = read("public/js/casino-sound.js");
+  const W = makeWindow(() => ({}));
+  const back = new El("a");
+  back.className = "back";
+  new El("section").append(back);
+  const ls = {};
+  W.document.querySelector = (s) => (s === "#cz-table > .back" ? back : null);
+  W.document.addEventListener = (type, fn, cap) => (ls[type] = ls[type] || []).push([fn, cap]);
+  let gestureNow = false,
+    made = 0;
+  const inst = [];
+  // WebKit's rule: resume() works only inside a user activation (a touch's pointerdown is not one)
+  function AC() { made++; inst.push(this); this.state = gestureNow ? "running" : "suspended"; this.currentTime = 0; }
+  AC.prototype.resume = function () { if (gestureNow) this.state = "running"; return Promise.resolve(); };
+  W.localStorage = { getItem: (k) => (k === "cz-sound" ? "1" : null), setItem() {} };      // (left on, from an earlier visit)
+  W.CZ = { T: (k, d) => d };
+  W.run(src, "casino-sound.js");
+  for (const t of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) assert.ok((ls[t] || []).some((x) => x[1] === true), t + " (capture)");
+  // a cue before any context exists makes none (it runs from a frame callback, outside any gesture)
+  W.CZSound.update("classic", { game: "roulette" });
+  for (const [fn] of ls.keydown) fn({});              // (a gesture with no AudioContext available yet: none made)
+  W.AudioContext = AC;
+  W.CZSound.cue("rl_settle");
+  assert.equal(made, 0, "cue() never constructs the AudioContext");
+  // a tap: pointerdown (not an activation) makes it suspended; the tap's click resumes it
+  for (const [fn] of ls.pointerdown) fn({ pointerType: "touch" });
+  assert.equal(made, 1);
+  assert.equal(inst[0].state, "suspended", "a touch's pointerdown can't unlock it");
+  gestureNow = true;
+  for (const [fn] of ls.click || []) fn({});
+  gestureNow = false;
+  assert.equal(inst[0].state, "running", "the tap's click does - no need to toggle Sound off and on");
+  assert.equal(made, 1, "one context");
 });

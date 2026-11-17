@@ -35,8 +35,9 @@
     return ac;
   }
   function onGesture() { gesture = true; if (on) wake(); }
-  document.addEventListener("pointerdown", onGesture, true);
-  document.addEventListener("keydown", onGesture, true);
+  // (roulette2 WP5b review: a touch's pointerdown is not a user activation in WebKit - its pointerup / touchend / click are, so a sound
+  // left on unlocks on the first tap on an iPhone instead of after toggling Sound off and on)
+  for (const type of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) document.addEventListener(type, onGesture, true);
 
   // ── the cues ──
   function noise(c) {
@@ -99,7 +100,7 @@
     const now = Date.now();
     if (/^rl_(?:hop|diamond)$/.test(name) && now - lastCueAt < 60) return;
     lastCueAt = now;
-    if (!ac) wake();
+    // (never makes the AudioContext itself: a cue runs from a frame callback, outside any gesture - WebKit would leave it suspended)
     play(name);
   }
 

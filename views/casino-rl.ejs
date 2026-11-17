@@ -27,7 +27,6 @@
       </div>
     </div>
     <div class="rl-table">
-      <div class="rl-title"><span class="felt-lbl" id="rl-phase"></span><span class="rl-totals" id="rl-totals"></span></div>
       <div id="rl-modes" class="rl-modes" role="group" aria-label="<%= t('casino.rl.mode') %>"></div><output id="rl-instruction" class="rl-instruction"></output>
       <div id="rl-board" class="rl-board"><div id="rl-grid" class="rl-grid"></div><div id="rl-outside" class="rl-outside"></div></div>
       <p class="rl-tip" id="rl-tip" aria-hidden="true"></p>
@@ -37,6 +36,8 @@
       <span class="felt-lbl"><%= t('casino.history') %></span><ol id="rl-history" class="rl-hist"></ol>
       <button type="button" class="cz-btn ghost sm" id="rl-statsbtn" aria-haspopup="dialog">📊 <%= t('casino.rl.stats') %></button>
       <button type="button" class="cz-btn ghost sm" id="rl-quick" aria-pressed="false" title="<%= t('casino.rl.quick_help') %>">⚡ <%= t('casino.rl.quick') %></button>
+      <%# (review, WCAG 2.1.4: this viewer turns the table's single-key shortcuts off / on - casinorl.js, remembered) %>
+      <button type="button" class="cz-btn ghost sm" id="rl-keys" aria-pressed="true" title="<%= t('casino.rl.keys_help') %>">⌨ <%= t('casino.rl.keys') %></button>
       <small><%= t('casino.rl.independent') %></small>
     </div>
   </div>
@@ -45,7 +46,8 @@
   <section class="rl-players" id="rl-players" aria-label="<%= t('casino.rl.players') %>"></section>
   <div class="dock" id="cz-dock" hidden></div>
   <p class="rl-session" id="rl-session"></p>
-  <div class="rl-more"><nav id="rl-wheels" aria-label="<%= t('casino.rl.other') %>" hidden></nav><span id="rl-proof"></span></div>
+  <%# (the commitment is the History sheet's #cz-commit - casino-ui.js fairness - and the 🔐 Provably fair pill's, as on Blackjack / Hold'em) %>
+  <div class="rl-more"><nav id="rl-wheels" aria-label="<%= t('casino.rl.other') %>" hidden></nav></div>
   <%# O13(12): a phone's small wheel while a spin runs and the big one is scrolled away (casinorl.js; decorative - the felt says the result) %>
   <div class="rl-float" id="rl-float" hidden aria-hidden="true"><canvas width="88" height="88"></canvas></div>
 </section>

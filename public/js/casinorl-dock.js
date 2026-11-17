@@ -200,7 +200,8 @@
       lastNote = null,
       hovered = null,
       clock = 0;
-    var compact = !!opts.compact;
+    var compact = !!opts.compact,
+      keyed = !compact && opts.keys !== false;
     var root = element("div", "rl-controls" + (compact ? " rl-compact" : "")),
       chipRow = element("div", "rl-chips"),
       rack = element("div", "rl-rack"),
@@ -262,7 +263,8 @@
         b.dataset.chip = String(c[0]);
         b.setAttribute("aria-label", T("rl_chip_n", "Chip {n} PAT", { n: fmt(c[0]) }));
         // (contract 13 / O13(8): the 1-5 keys pick these chips on the table page)
-        if (!compact && i < 5) b.setAttribute("aria-keyshortcuts", String(i + 1));
+        if (i < 5) b.dataset.key = String(i + 1);
+        if (keyed && i < 5) b.setAttribute("aria-keyshortcuts", String(i + 1));
         rack.append(b);
         return b;
       });
@@ -295,13 +297,17 @@
           },
         compact ? "" : cls,
       );
-      if (!compact && keys) b.setAttribute("aria-keyshortcuts", keys);
+      if (!compact && keys) b.dataset.key = keys;
+      if (keyed && keys) b.setAttribute("aria-keyshortcuts", keys);
       actions[verb] = b;
       actionRow.append(b);
     }
     action("undo", T("rl_undo", "Undo"), "cz-btn ghost sm", "Z");
     action("clear", T("clear", "Clear"), "cz-btn ghost sm", "C");
-    action("rebet", T("rl_rebet", "Rebet"), "cz-btn ghost sm", "R");
+    action("rebet", T("rl_rebet", "Rebet"), "cz-btn ghost sm", "R", function () {
+      var me = snapshot && snapshot.me;
+      if (!busy && !pending.length && !flight.length) void send("rebet", {}, total(parseSlip(me && me.last_slip)));
+    });
     action("double", T("rl_double", "×2"), "cz-btn ghost sm", "D", function () {
       double();
     });
@@ -406,7 +412,7 @@
     // O7: a refusal's code and numbers (casino/roulette.js no()) in the felt's words; the server's own text otherwise
     function said(j, lineTotal) {
       if (!j || j.ok) return (j && j.reply) || "";
-      if (j.code === "E_SPIN" && j.max)
+      if (j.code === "E_SPIN" && j.max && typeof lineTotal === "number")
         return T("rl_spin_over", "Your total this spin would be {total} PAT — the most per player per spin is {max} PAT.", {
           total: fmt((Number(j.have) || 0) + (lineTotal || 0)),
           max: fmt(j.max),
@@ -536,20 +542,23 @@
       if (queued.length >= 20) queued = [];
       flight = pending.splice(0, 20 - queued.length);
       flightTotal = total(flight);
-      void send("bet", { bets: queued.concat(flight) }, flightTotal);
+      void send("bet", { bets: queued.concat(flight) }, total(queued.concat(flight)));
     }
     // a call bet / ×2 that had to wait for the line in flight: it goes as its own line next (never split across two)
     function sendLine(pairs) {
-      if (!available()) return;
-      var queued = queuedBets();
-      if (queued.length + pairs.length > 20) {
-        feedback.textContent = T("rl_line_full", "That's more than 20 spots for one line.");
+      var queued = available() ? queuedBets() : [];
+      if (!available() || queued.length + pairs.length > 20) {
+        if (available()) feedback.textContent = T("rl_line_full", "That's more than 20 spots for one line.");
+        // (review: the chain goes on - the next waiting line, or the chips placed meanwhile - never stranded, dimmed, with the buttons off)
+        if (after.length) return sendLine(after.shift());
+        if (pending.length) schedule();
+        updateControls();
         return;
       }
       flight = pairs;
       flightTotal = total(pairs);
       updateControls();
-      void send("bet", { bets: queued.concat(pairs) }, flightTotal);
+      void send("bet", { bets: queued.concat(pairs) }, total(queued.concat(pairs)));
     }
     // UI-4: chips placed in a burst go as one line (each line is one of the spin's actions, rl_max_lines): the batch waits
     // BATCH_MS after the last chip, 20 chips go at once, and a window about to close is never missed
@@ -689,6 +698,21 @@
       },
       /** a keyboard shortcut presses the button it names (undo / clear / rebet / double / go), only while it is shown and enabled */
       run: click,
+      /** whether run(verb) would press its button now */
+      can: function (verb) {
+        var b = actions[verb];
+        return !!(b && !b.hidden && !b.disabled);
+      },
+      /** the table page's keyboard shortcuts on / off: their aria-keyshortcuts hints follow (WCAG 2.1.4) */
+      keys: function (on) {
+        keyed = !compact && !!on;
+        chips.concat(Object.keys(actions).map(function (k) {
+          return actions[k];
+        })).forEach(function (b) {
+          if (keyed && b.dataset.key) b.setAttribute("aria-keyshortcuts", b.dataset.key);
+          else b.removeAttribute("aria-keyshortcuts");
+        });
+      },
       /** a spot under the pointer / focus: chips above what is left on it are dimmed */
       hover: function (token) {
         hovered = token && grammar.positions[token] ? token : null;
@@ -877,7 +901,13 @@
           wheelModule().then(function (WH) {
             if (shut || !widget || id !== target || wheel || !WH || !WH.mount) return;
             mini.hidden = false;
-            wheel = WH.mount(mini, { compact: true, palette: lastD && lastD.table.high_stakes ? "hr" : "classic" });
+            var quick = false;
+            try {
+              quick = !!W.localStorage && W.localStorage.getItem("rl-quick") === "1";
+            } catch (_) {
+              /* blocked storage: the system setting */
+            }
+            wheel = WH.mount(mini, { compact: true, palette: lastD && lastD.table.high_stakes ? "hr" : "classic", reduced: quick ? true : undefined });
             paintWheel(lastD);
           });
         }

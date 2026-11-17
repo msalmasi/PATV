@@ -42,11 +42,13 @@
 .rl-rack {
   gap: 8px;
 }
-/* the chip a tap places: lifted, with a gold ring (the ring is the cue that isn't colour: aria-pressed says it too) */
-.rl-controls .chipbtn {
-  width: 52px;
-  height: 52px;
+/* (review: the table page's chips are the casino's own size - casino-chips.css .chipbtn, as on Blackjack / Hold'em; only the Room Dock's
+   narrow sheet has smaller ones) */
+.rl-compact .chipbtn {
+  width: 44px;
+  height: 44px;
 }
+/* the chip a tap places: lifted, with a gold ring (the ring is the cue that isn't colour: aria-pressed says it too) */
 /* (the face fills the button whatever order the chip rules load in - a 💎 chip's own position: relative included) */
 .rl-controls .chipbtn > .chip {
   position: absolute;
@@ -213,14 +215,6 @@
   .rl-actions,
   .rl-rack {
     gap: 5px;
-  }
-  .rl-controls .chipbtn {
-    width: 46px;
-    height: 46px;
-  }
-  .rl-compact .chipbtn {
-    width: 44px;
-    height: 44px;
   }
   .rl-controls.rl-compact {
     padding: 6px;
