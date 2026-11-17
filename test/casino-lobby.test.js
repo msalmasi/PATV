@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP5a (O4 / O5 / O9, decisions D1 D2, contracts 3 / 4 / 9): the casino lobby with roulette as its third game, and the
+// 1.99aoj (O4 / O5 / O9, decisions D1 D2, contracts 3 / 4 / 9): the casino lobby with roulette as its third game, and the
 // shared chips.
 //   * the browser (public/js/casino-ui.js on the real partials in a vm - test/fixtures/casino-dom.js): the lobby asks ?rl=1; a 🛞
 //     Roulette tab while roulette is open to the viewer (#roulette picks it, a tab you pick is written back); the wheels as table
@@ -463,20 +463,20 @@ test("chips: linked right after the casino-css partial on the blackjack, Hold'em
   assert.match(rd("views", "casino-hm.ejs"), /casinohm\.js\?v=15/);
 });
 
-// (1.99aoj: WP5b removed the Dock's copy - the pocket rules live once, here; the pinned block is WP0's rules as 1.99aoh shipped them in
+// (1.99aoj: the table page's rework removed the Dock's copy - the pocket rules live once, here; the pinned block is the rules 1.99aoh shipped in
 // public/css/casinorl-dock.css, comments stripped and white space folded)
-const WP0_POCKETS = '.rl-pocket { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; ' +
+const POCKETS_1_99AOH = '.rl-pocket { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; ' +
   'min-width: 1.9em; min-height: 2.15em; padding: 1px 0.3em; border-radius: 6px; color: #fff; font: 700 13px/1.15 var(--ds-font, system-ui, sans-serif); ' +
   'font-variant-numeric: tabular-nums; text-align: center; vertical-align: middle; } .rl-pocket::after { font: 10px/1 system-ui, sans-serif; } ' +
   '.rl-pocket.red { background: #c62828; } .rl-pocket.red::after { content: "◆"; } .rl-pocket.black { background: #141418; box-shadow: inset 0 0 0 1px #555; } ' +
   '.rl-pocket.black::after { content: "●"; } .rl-pocket.zero { background: #1e7f4f; } .rl-pocket.newest { font-size: 16px; min-width: 2.2em; ' +
   'box-shadow: 0 0 0 2px #f4cd81; } .rl-pocket.black.newest { box-shadow: inset 0 0 0 1px #555, 0 0 0 2px #f4cd81; } ' +
   '@media (forced-colors: active) { .rl-pocket { forced-color-adjust: none; } }';
-test("pockets: the .rl-pocket rules are WP0's, once, in casino-chips.css (no copy left in casinorl-dock.css) - one look on the felt, the Dock and the lobby", () => {
+test("pockets: the .rl-pocket rules are 1.99aoh's, once, in casino-chips.css (no copy left in casinorl-dock.css) - one look on the felt, the Dock and the lobby", () => {
   const block = (s) => { const t = strip(s); const a = t.indexOf(".rl-pocket {"); const b = t.indexOf("@media (forced-colors: active)"); return t.slice(a, t.indexOf("}", t.indexOf("}", b) + 1) + 1).replace(/\s+/g, " "); };
-  assert.equal(block(rd("public", "css", "casino-chips.css")), WP0_POCKETS);
+  assert.equal(block(rd("public", "css", "casino-chips.css")), POCKETS_1_99AOH);
   const dock = strip(rd("public", "css", "casinorl-dock.css"));
-  assert.doesNotMatch(dock, /\.rl-pocket/, "casinorl-dock.css has no pocket rules any more (WP5b moved them to contract 9's file)");
+  assert.doesNotMatch(dock, /\.rl-pocket/, "casinorl-dock.css has no pocket rules any more (1.99aoj moved them to contract 9's file)");
   // every page that draws a pocket loads the one file: the table page, the pad page's Room Dock and the two lobbies
   for (const v of ["casino-rl.ejs", "room.ejs", "casino-bj.ejs", "casino-hm.ejs"]) assert.match(rd("views", v), /\/public\/css\/casino-chips\.css\?v=1/, v);
 });
@@ -598,7 +598,7 @@ test("(review) chips in the Room Dock: inside .rl-controls the one .chipbtn keep
   assert.deepEqual(spec(".rl-controls button:disabled"), [0, 2, 1]);
   assert.deepEqual(spec(".chipbtn.sm:active:not(:hover)"), [0, 4, 0]);
   const INITIAL = { "min-height": "auto", opacity: "1" };
-  // (WP0 O13(1), the iPhone: a quick second tap on the Dock's chips bets again - no zoom, no text selection; it looks the same)
+  // (1.99aoh, the iPhone: a quick second tap on the Dock's chips bets again - no zoom, no text selection; it looks the same)
   const DOCK_ONLY = { "touch-action": "manipulation", "-webkit-user-select": "none", "user-select": "none" };
   for (const [oname, order] of [["chips then Dock", [chips, dockCss]], ["Dock then chips", [dockCss, chips]]]) {
     const rules = order.flatMap((src) => cssRules(src));

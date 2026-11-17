@@ -1,5 +1,5 @@
 /* Roulette slip controls shared by the table and the Room Dock.
-   roulette2 WP5b (O7 / O9 / O13, contract 9): the chip rack is the casino's own chips (public/css/casino-chips.css .chipbtn / .chip,
+   1.99aoj (O7 / O9 / O13, contract 9): the chip rack is the casino's own chips (public/css/casino-chips.css .chipbtn / .chip,
    the regular and the 💎 denominations, filtered by the wheel's largest position cap), the actions are the table's .cz-btn buttons
    (Undo, Clear, Rebet, ×2, Spin now), the typed bet line folds into "Type a bet", a meter says what is on the layout and what is left
    this spin, and every chip is checked against the wheel's limits (t.rules - the same lim(T) the server checks) before it is queued,
@@ -50,7 +50,7 @@
     });
   }
   // UI-11: a slip reads in the felt's words (1–12, Column 2, 1–18), not the grammar's tokens (d1, c2, low)
-  // (WP5b: an inside position by its numbers with en dashes - 0–2–3, 25–26–28–29)
+  // (1.99aoj: an inside position by its numbers with en dashes - 0–2–3, 25–26–28–29)
   function receipt(bets) {
     return bets
       .map(function (b) {
@@ -127,7 +127,7 @@
   outside.forEach(function (p) {
     if (/^(?:[dc][123]|low|high)$/.test(p[0])) feltName[p[0]] = p[1];
   });
-  // roulette2 O7: the wheel's limits as the server checks them - t.rules (casino/roulette.js rules(T) = lim(T), the spin's own
+  // 1.99aoj: the wheel's limits as the server checks them - t.rules (casino/roulette.js rules(T) = lim(T), the spin's own
   // snapshot, D3), or for an older server the rl_* map in t.limits. caps: straight / split / street / corner / line / outside;
   // kinds maps trio -> street, first_four -> corner and every outside kind -> outside.
   var KINDS = {
@@ -980,7 +980,7 @@
     pocket: pocket,
     pocketColor: pocketColor,
     pocketLabel: pocketLabel,
-    // roulette2 WP5b: shared with the table page (casinorl.js)
+    // 1.99aoj: shared with the table page (casinorl.js)
     spotName: spotName,
     rulesOf: rulesOf,
     capOf: capOf,

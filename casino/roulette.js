@@ -27,10 +27,10 @@ const DEFAULTS = {
   rl_bank_pct: 10,
   rl_spin_cap: 2000000,
   rl_bet_secs: 25,
-  rl_spin_secs: 12, // roulette2 D6: 8 -> 12 s, so the ball drop (casino/rlwheel.js) reads as real (bounds 4-20 kept)
+  rl_spin_secs: 12, // 1.99aoj (D6): 8 -> 12 s, so the ball drop (casino/rlwheel.js) reads as real (bounds 4-20 kept)
   rl_result_secs: 5,
   rl_idle_close_mins: 10,
-  // roulette2 D2: the 💎 High Roller wheels' limits (a wheel opened with !rl start hr / the web's High Roller card) - the same
+  // 1.99aoj (D2): the 💎 High Roller wheels' limits (a wheel opened with !rl start hr / the web's High Roller card) - the same
   // shapes as the rl_* ones above, and rl_hr_spin_cap, the High Roller wheels' share of the ONE House budget (available())
   rl_hr_min_bet: 1000,
   rl_hr_max_straight: 25000,
@@ -69,7 +69,7 @@ function valueOf(key, val) {
 function ordered(s) {
   return caps.every((k) => s[k] >= s.rl_min_bet && s[k] <= s.rl_max_spin);
 }
-// roulette2 D2: the High Roller set - each cap between its minimum and its per-spin maximum, and a straight's worst case (35 to 1)
+// 1.99aoj (D2): the High Roller set - each cap between its minimum and its per-spin maximum, and a straight's worst case (35 to 1)
 // inside the High Roller House cap, or not even one straight at the cap could ever be admitted
 function orderedHr(s) {
   return (
@@ -100,7 +100,7 @@ function readSettings(kv) {
   if (!orderedHr(s)) for (const k of [...hrCaps, "rl_hr_min_bet", "rl_hr_max_spin", "rl_hr_spin_cap"]) s[k] = DEFAULTS[k];
   return s;
 }
-// roulette2 D3: a wheel's limits - its tier's settings (normal, or 💎 High Roller) - as one object. Snapshotted into T.lim when each
+// 1.99aoj (D3): a wheel's limits - its tier's settings (normal, or 💎 High Roller) - as one object. Snapshotted into T.lim when each
 // spin opens (nextSeed), so an admin's edit never changes the limits inside a betting window; every check, the views, the limits
 // verb and the push / advert lines read it (lim(T) in install()).
 function tierLimits(s, high) {
@@ -178,7 +178,7 @@ function install(core) {
     cmdStart,
     wake,
   } = core;
-  // roulette2 (WP3): the High Roller role and texts (service.js: blackjack's), a table's adverts, the stream slot's hand-over at a
+  // 1.99aoj: the High Roller role and texts (service.js: blackjack's), a table's adverts, the stream slot's hand-over at a
   // lobby rotation - optional, so an older core (a test's) still installs
   const isHighRoller = core.isHighRoller || (async () => false);
   const advertList = core.advertList || (() => []);
@@ -188,7 +188,7 @@ function install(core) {
     core.HR_ONLY_PLAY ||
     "💎 this is a High Roller table: only High Rollers can play here (the role is in the prize store — !prizes). You can watch.";
   const reply = (ok, message, extra) => ({ ok, reply: message, pm: true, ...extra });
-  // roulette2 O7: a refusal with its code and numbers ({text, code, ...}); refuse() makes the reply - the text is the reply as before
+  // 1.99aoj: a refusal with its code and numbers ({text, code, ...}); refuse() makes the reply - the text is the reply as before
   const no = (text, code, extra) => ({ text, code, ...extra });
   const refuse = (x) => {
     if (typeof x === "string") return reply(false, x);
@@ -205,7 +205,7 @@ function install(core) {
     if (!T.lim || !T.lim.caps || idle) T.lim = tierLimits(S.settings, high(T));
     return T.lim;
   }
-  // publicView.limits: the rl_* map the page's placard reads (WP0), with THIS wheel's limits under the normal keys (a High
+  // publicView.limits: the rl_* map the page's placard reads (1.99aoh), with THIS wheel's limits under the normal keys (a High
   // Roller wheel's rl_min_bet is its own minimum) - plus the timers and the bank settings as they are
   function limits(T) {
     const out = Object.fromEntries(
@@ -379,7 +379,7 @@ function install(core) {
     if (!row) return;
     adopt(T, JSON.parse(row.state));
     bind(T);
-    viewMoved(T); // roulette2 WP3 (review): its rev went back - a view cached for the rolled-back state is never served again
+    viewMoved(T); // 1.99aoj (review): its rev went back - a view cached for the rolled-back state is never served again
     if (reconciled.has(T)) await load(T);
   }
   function pruneInactive(T) {
@@ -404,7 +404,7 @@ function install(core) {
       pruneInactive(T);
       T.eng.actions = {};
       T.dl = {};
-      T.lim = tierLimits(S.settings, high(T)); // roulette2 D3: this spin's limits (an admin's edit applies from the next spin)
+      T.lim = tierLimits(S.settings, high(T)); // 1.99aoj (D3): this spin's limits (an admin's edit applies from the next spin)
       if (!pre)
         await runQuery(
           "INSERT INTO casino_rounds (table_id,round_no,commitment,client_seed,num_decks,created) VALUES (?,?,?,?,0,?)",
@@ -413,7 +413,7 @@ function install(core) {
       await save(T);
     });
   }
-  // roulette2 D1: opts.high = a 💎 High Roller wheel (fixed for its life; the caller checked the role), opts.slot = the house slot a
+  // 1.99aoj (D1): opts.high = a 💎 High Roller wheel (fixed for its life; the caller checked the role), opts.slot = the house slot a
   // lobby wheel fills ("main"). A wheel opened with room = null and not the lobby is a WEB wheel: its opener hosts it (Host Tools
   // push / advertise / stream / close), it idle-closes like a room wheel, and it is quiet for Pepe until it plays in a room.
   async function start(actor, room, lobby = false, opts = {}) {
@@ -494,7 +494,7 @@ function install(core) {
     }
     return T;
   }
-  // roulette2 D2: the bank. ONE House budget for every open wheel: the lesser of rl_spin_cap and rl_bank_pct of the House above
+  // 1.99aoj (D2): the bank. ONE House budget for every open wheel: the lesser of rl_spin_cap and rl_bank_pct of the House above
   // its hard floor. A wheel may take a book whose worst pocket fits what the OTHER open wheels' positive worst pockets leave of
   // it; a 💎 High Roller wheel also only what the other High Roller wheels leave of rl_hr_spin_cap - so High Rollers can't starve
   // the normal wheels. Invariant (checked at every admission and removal): sum over all open wheels of max(0, worst) <= budget,
@@ -576,7 +576,7 @@ function install(core) {
   const reopen = (T) =>
     T.web && !roomsOf(T).length ? "a new one opens from the casino lobby" : "!rl start opens a new one";
   // place() asks first, for every line it charges or queues - a bet, a rebet, a line queued while the wheel spins and the queued
-  // lines charged when betting opens (queuedLines): roulette2 D1's 💎 High Roller gate (HR_ONLY_PLAY, code E_HR) is here, so
+  // lines charged when betting opens (queuedLines): 1.99aoj's 💎 High Roller gate (D1; HR_ONLY_PLAY, code E_HR) is here, so
   // it covers all of them; anyone may watch a High Roller wheel
   async function checkSeat(T, actor) {
     const uid = actor.uid,
@@ -1050,7 +1050,7 @@ function install(core) {
     }
     return (T.eng.book || []).slice();
   }
-  // opts.keepStream (roulette2: a lobby rotation) - the stream slot is not freed here; succeed() hands it (and an admin's pin) to
+  // opts.keepStream (1.99aoj: a lobby rotation) - the stream slot is not freed here; succeed() hands it (and an admin's pin) to
   // the successor wheel, or frees it when there is none
   async function closeTable(T, reason, opts = {}) {
     if (T.status !== "open") return;
@@ -1115,7 +1115,7 @@ function install(core) {
     const off = S.settings.casino_roulette === "off";
     if (T.closing || off || rotation(T)) {
       // ENGINE-4: the lobby rotates (a day, or 35 people) - its queued lines move to the fresh lobby wheel and are
-      // charged when its window opens; its page follows the successor (publicView next_table). roulette2 (D7): its place on
+      // charged when its window opens; its page follows the successor (publicView next_table). 1.99aoj (D7): its place on
       // Pepe's stream - and an admin's pin - go to the successor too (succeed)
       const carry = T.lobby && !T.closing && !off ? T.eng.pending : {};
       if (Object.keys(carry).length) T.eng.pending = {};
@@ -1214,7 +1214,7 @@ function install(core) {
     if (T.eng.phase === "spinning") return land(T);
     if (T.eng.phase === "betting") return draw(T);
     if (T.eng.phase === "result") return advance(T);
-    // roulette2 (D7): an idle lobby wheel's rotation (a day, or 35 people) goes the way a landed one's does - its successor takes
+    // 1.99aoj (D7): an idle lobby wheel's rotation (a day, or 35 people) goes the way a landed one's does - its successor takes
     // its slot, its queued lines and its place on Pepe's stream (advance -> succeed)
     if (T.lobby && rotation(T) && !T.closing && S.settings.casino_roulette !== "off") return advance(T);
     if (
@@ -1311,7 +1311,7 @@ function install(core) {
     if (due(T)) await tick(T);
   }
   const spinStart = (T) => T.dl.start || T.dl.land - S.settings.rl_spin_secs * 1000;
-  // roulette2 O7: the rules object - the same lim(T) the checks read, the timers, and the bank's straight headroom (bankRefresh's
+  // 1.99aoj: the rules object - the same lim(T) the checks read, the timers, and the bank's straight headroom (bankRefresh's
   // cached figure: null until it has been worked out, and null again once it is BANK_SHOWN_MS old - review: a wheel nobody has
   // viewed on the web for hours never shows that old figure; the web view and Pepe's poll refresh it first)
   function rules(T) {
@@ -1334,7 +1334,7 @@ function install(core) {
       bank_straight: hit && hit.value != null ? hit.value : null,
     };
   }
-  // roulette2 D5 (O10 option C): the CHARGED lines of the wheel's spin (frozenLines: live while betting, frozen once drawn, the
+  // 1.99aoj (D5, O10 option C): the CHARGED lines of the wheel's spin (frozenLines: live while betting, frozen once drawn, the
   // landed set while the result is up; never a queued line) - each seat's chips combined per position, and the felt's total
   // and player count per position. Keyed by the seat only (V.seatOf / V.nameOf below): no account id.
   function chipsOf(T) {
@@ -1374,7 +1374,7 @@ function install(core) {
       room_name: roomList(T)[0]?.name || null,
       adverts: advertList(T),
       url: link(T),
-      // roulette2 (contract 2): the tier, the house slot (the lobby's), the look, the seats and the limits in the shared shape
+      // 1.99aoj (contract 2): the tier, the house slot (the lobby's), the look, the seats and the limits in the shared shape
       tier: high(T) ? "hr" : "main",
       high_stakes: high(T),
       slot: T.lobby ? T.slot || "main" : null,
@@ -1446,13 +1446,13 @@ function install(core) {
       net: T.eng.net?.[uid] ?? null,
       private_note: T.eng.notes?.[uid] || null,
       notice: opts.notice ? await require("./notices").take("rl_intro", uid, clock(), S.settings) : null,
-      // roulette2 (contract 2): the viewer's own seat id (as the seats list keys it), the role, and what they have used this spin
+      // 1.99aoj (contract 2): the viewer's own seat id (as the seats list keys it), the role, and what they have used this spin
       seat: T.eng.seats.includes(uid) ? V.seatOf(T, uid) : null,
       high_roller: await isHighRoller(uid),
       used: { positions: Object.keys(perToken).length, actions: T.eng.actions[uid] || 0, per_token: perToken },
     };
   }
-  // Pepe's poll (`roulette`) and the lobby's wheel list - roulette2 (contract 5): + the tier, the limits and the clock
+  // Pepe's poll (`roulette`) and the lobby's wheel list - 1.99aoj (contract 5): + the tier, the limits and the clock
   function openList() {
     // (review) the lobby wheel first (then in the order they opened): a client that shows the first few always shows it
     return open()
@@ -1510,7 +1510,7 @@ function install(core) {
   async function run(actor, verb, args, opts) {
     const T = opts.table && S.tables.get(opts.table);
     if (verb === "start") {
-      // roulette2 D1: "!rl start [hr]" in a room opens that room's wheel; the web's POST /api/casino/open {game: "roulette", hr}
+      // 1.99aoj (D1): "!rl start [hr]" in a room opens that room's wheel; the web's POST /api/casino/open {game: "roulette", hr}
       // opens a WEB wheel (room null) hosted by the opener. cmdStart (service.js) checks one table per room, the one open web
       // wheel per host, max_tables and the High Roller role (HR_ONLY_OPEN) before RL.start.
       const why = await gate(actor);
@@ -1673,7 +1673,7 @@ function install(core) {
     frozenLines,
     bootAudit,
     HELP,
-    // roulette2 (WP3): a wheel's spin limits (D3), its casino-lobby row, the views' cached bank figure, the bank's pure math
+    // 1.99aoj: a wheel's spin limits (D3), its casino-lobby row, the views' cached bank figure, the bank's pure math
     limOf: lim,
     lobbyRow,
     bankRefresh,

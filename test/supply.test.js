@@ -3,7 +3,7 @@
 //     (his old full snapshot and the shrunk one give the same total)
 //   * the casino backend's tables: blackjack stakes in a round and hold'em stacks / pots are PAT out of the wallets and not in
 //     the House yet - counted as "casino:tables" (closed tables never)
-//   * roulette2 WP7: a cash hold'em table's last hand is counted once between hands (its pot is in the stacks then - e.contrib is
+//   * 1.99aoj: a cash hold'em table's last hand is counted once between hands (its pot is in the stacks then - e.contrib is
 //     counted only while a hand is in play) and its rake until the House row exists; a blackjack payout kept owed counts
 //   NODE_PATH=G:/PATV/node_modules node --test test/supply.test.js
 "use strict";
@@ -88,7 +88,7 @@ test("casino tables: a sit & go's tournament chips are not PAT - never counted (
   assert.equal((await SUP.patSupply()).total, WANT + 1350);
 });
 
-// roulette2 WP7: the last hand's contributions were counted twice between hands - the pot is awarded INTO the stacks at the hand's end
+// 1.99aoj: the last hand's contributions were counted twice between hands - the pot is awarded INTO the stacks at the hand's end
 // (casino/hmengine.js) while e.contrib keeps its numbers until the next deal; the rake waits in T.rake_due until afterHand books it
 test("casino tables: a cash hold'em table between hands counts its stacks once (the last pot is in them), its rake until the House books it", async () => {
   const before = await SUP.casinoHeld();
@@ -106,7 +106,7 @@ test("casino tables: a cash hold'em table between hands counts its stacks once (
   await runQuery("DELETE FROM jackpot_rakes WHERE jackpotId = 'chm:h3:h7:rake'");
 });
 
-// roulette2 WP7: a blackjack payout whose credit was refused stays owed at the table (casino/service.js payOwed) - PAT at the table until it lands
+// 1.99aoj: a blackjack payout whose credit was refused stays owed at the table (casino/service.js payOwed) - PAT at the table until it lands
 test("casino tables: a blackjack payout kept owed (a refused credit) counts at the table", async () => {
   const before = await SUP.casinoHeld();
   await runQuery("INSERT INTO casino_tables (id, game, status, state) VALUES ('b9', 'bj', 'open', ?)",

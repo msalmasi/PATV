@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP5b - the roulette TABLE page (public/js/casinorl.js on casino-ui.js's CZ + casinorl-dock.js controls), in a vm with the
+// 1.99aoj - the roulette TABLE page (public/js/casinorl.js on casino-ui.js's CZ + casinorl-dock.js controls), in a vm with the
 // little DOM of test/fixtures/mini-dom.js and a stub CZ / wheel module (no browser): the felt shows everyone's chips (D5) with mine
 // highlighted, a spot's line names its odds, cap and my bet, the wheel module is driven by the view (spin / rest / idle on the site
 // clock), Pepe's croupier lines, the players rail, the result moment and its client events (contract 8), call bets and ×2 as ONE
@@ -640,7 +640,7 @@ test("O11: the per-viewer ⚡ Quick spin - the wheel's reduced path and no resul
   assert.ok(!P.$("cb").classList.contains("rl-quick"));
 });
 
-// ── roulette2 WP5b review fixes ──
+// ── 1.99aoj review fixes ──
 const SOLE = () => ({
   me: { seat: "s1", lines: [{ text: "17 100", amount: 100 }], staked: 100, used: { positions: 1, actions: 1, per_token: { 17: 100 } }, last_slip: "black 300" },
   extra: { totals: { players: 1, staked: 100 }, seats: [seat("Mia", "s1", [["17", 100]])], felt: [{ t: "17", n: 100, k: 1 }] },

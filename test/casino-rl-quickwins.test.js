@@ -64,7 +64,7 @@ function view(phase, me, extra) {
 /** views/casino-rl.ejs's elements + a stub CZ (casino-ui.js), then rlbets / the dock / casinorl.js as the page loads them */
 function tablePage() {
   const W = makeWindow((url) => (String(url).startsWith("/api/casino/lobby") ? { ok: true, roulette: { wheels: [] } } : { ok: false }));
-  // (roulette2 WP5b: the rebuilt page - the felt's wheel canvas and croupier, the layout column (rl-table), the trail; no wheel module
+  // (1.99aoj: the rebuilt page - the felt's wheel canvas and croupier, the layout column (rl-table), the trail; no wheel module
   // here, so the page keeps its felt and history without one)
   const root = el("main", "cb", [
     el("div", "cz-felt", [
@@ -150,7 +150,7 @@ test("O7: the limits placard names every limit in plain words and the player's '
   assert.equal(box.tagName, "DETAILS");
   const column = $("rl-table");
   assert.ok(column.children.indexOf(box) >= 0 && column.children.indexOf(box) < column.children.indexOf($("rl-modes")), "above the board's modes");
-  // (roulette2 WP5b: folded by default on every screen - its summary line keeps the key limits and the meter; the viewer's choice is kept)
+  // (1.99aoj: folded by default on every screen - its summary line keeps the key limits and the meter; the viewer's choice is kept)
   assert.equal(box.open, false);
   CZ.render(view("betting", { lines: [{ text: "red 2500", amount: 2500 }], staked: 2500, room_left: 97500 }));
   assert.equal(box.hidden, false);
@@ -206,7 +206,7 @@ test("O8: the Room Dock's recent line uses the same pockets, newest first", asyn
   assert.equal(pockets(recent)[3].getAttribute("aria-label"), "Spin 1: 14 red");
 });
 
-// roulette2 WP5b (contract 9): the .rl-pocket rules moved from casinorl-dock.css to public/css/casino-chips.css (WP5a's file, loaded by the
+// 1.99aoj (contract 9): the .rl-pocket rules moved from casinorl-dock.css to public/css/casino-chips.css (the casino's shared file, loaded by the
 // table page and by the pad page) - checked there once that file is in the tree
 const CHIPS = path.join(repo, "public", "css", "casino-chips.css");
 const pocketCss = () => (fs.existsSync(CHIPS) ? fs.readFileSync(CHIPS, "utf8") : null);
@@ -217,7 +217,7 @@ test("O8 / O13(1): one shared pocket style on both pages, the iPhone touch rules
   assert.match(read("views/casino-rl.ejs"), /\/public\/css\/casino-chips\.css\?v=\d+/, "the table page loads the shared chips");
   for (const v of ["views/casino-rl.ejs", "views/room.ejs"]) assert.match(read(v), /\/public\/css\/casinorl-dock\.css\?v=4/, v);
   const css = pocketCss();
-  assert.ok(css, "public/css/casino-chips.css (WP5a) is in the tree");
+  assert.ok(css, "public/css/casino-chips.css is in the tree");
   {
     assert.match(read("views/room.ejs"), /\/public\/css\/casino-chips\.css/, "the pad page (the Room Dock) loads them too");
     assert.match(css, /^\.rl-pocket\.red\b[^{]*\{[^}]*background: #c62828;/m, "the rule itself (1.99aoj: anchored - the file's header comment names .rl-pocket.red too)");
@@ -258,7 +258,7 @@ test("O3: the layout's 🛞 Roulette link sits after Hold'em in Play when roulet
   assert.equal(given, can, "the layout passes its can() (the request's user)");
   for (const cls of ["nav-more", "nav-burger"]) {
     const pop = new RegExp('<details class="' + cls + '">[\\s\\S]*?</details>').exec(n)[0];
-    // (roulette2 WP5a review: with the PATV casino the link is the lobby's 🛞 tab - test/casino-lobby.test.js covers every front)
+    // (1.99aoj review: with the PATV casino the link is the lobby's 🛞 tab - test/casino-lobby.test.js covers every front)
     assert.match(pop, /href="\/casino\/holdem" class="nav-link"[^>]*>[\s\S]*?<\/a><a href="\/casino\/blackjack#roulette" class="nav-link" title="Roulette"><span class="ic">🛞<\/span><span class="nav-lbl">Roulette<\/span><\/a>/, cls);
   }
   assert.doesNotMatch(nav(await render({ user: "someuser", rouletteOn: () => false })), /\/casino\/roulette|title="Roulette"/);
@@ -291,7 +291,7 @@ test("O7 / O8 review: the placard fits a 320 px phone and RTL, its glyphs stay o
   assert.match(rule(felt, ".rl-limits-h::before"), /content: "ⓘ ";\s*content: "ⓘ " \/ "";/);
   assert.match(rule(felt, ".rl-limits-h::after"), /content: "▾";\s*content: "▾" \/ "";/);
   // the ◆ / ● cue that isn't colour: big enough to read (it was 7 px, about 3 px wide) and at full strength; forced colours: every
-  // pocket was the same system colour and the newest lost its ring - they keep the felt's colours (WP5b: in casino-chips.css, contract 9)
+  // pocket was the same system colour and the newest lost its ring - they keep the felt's colours (1.99aoj: in casino-chips.css, contract 9)
   assert.doesNotMatch(dockCss.replace(/\/\*[\s\S]*?\*\//g, ""), /\.rl-pocket/, "(its comments aside)");
   const css = pocketCss();
   if (css) {

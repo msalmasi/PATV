@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP7 (FAIR-1 for raffles and the lotto): a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then
+// 1.99aoj (FAIR-1 for raffles and the lotto): a staging refresh (deploy/refresh-staging-db.sh: VACUUM INTO, then
 // deploy/keep-staging-tables.js on the copy) must never let staging draw, or publish, a raffle or a lotto draw prod is still selling: an
 // OPEN raffle's server_seed with the tickets digest taken at its draw IS the winning ticket, and a lotto draw's (selling or closed) IS its
 // numbers. "Prod" has open raffles of every kind (a community PAT prize with buyers, a shop-item prize, a custom prize nobody bought yet, a
@@ -52,11 +52,11 @@ const total = async () => (await one("SELECT COALESCE(SUM(points_balance),0) AS 
 const raffle = async (id) => (await rows("SELECT * FROM raffles WHERE id = ?", [id]))[0];
 const drawRow = async (d) => (await rows("SELECT * FROM lotto_draws WHERE draw = ?", [d]))[0];
 let n = 0;
-const idem = () => "wp7idem" + String(++n).padStart(6, "0");
+const idem = () => "stgidem" + String(++n).padStart(6, "0");
 const mkRaffle = (who, o) => RF.create(U(who), Object.assign({ title: "Friday mega raffle", prize_kind: "pat", prize_amount: "10k", price: 1000, trigger: "target",
                                                               target: 50, min_tickets: 1, idem: idem() }, o || {}));
 const buy = (who, id, qty) => RF.buy(U(who), { id, qty, idem: idem() });
-const lottoBuy = (who, q) => LS.buy({ uid: U(who), name: who, via: "web" }, { quick: q }, "lt:wp7-" + idem());
+const lottoBuy = (who, q) => LS.buy({ uid: U(who), name: who, via: "web" }, { quick: q }, "lt:stg-" + idem());
 /** the scrub's own statements (deploy/keep-staging-tables.js DRAW_SCRUB), on this database, limited to some rows - what a refresh does to the copy */
 const scrubRaffle = (id) => sql(K.DRAW_SCRUB.find((s) => s.table === "raffles").sql.replace(/\bmain\./g, "") + " AND id = ?", [id]);
 const scrubDraw = (d) => sql(K.DRAW_SCRUB.find((s) => s.table === "lotto_draws").sql.replace(/\bmain\./g, "") + " AND draw = ?", [d]);
@@ -166,7 +166,7 @@ test("FAIR-1 for raffles and the lotto: a staging refresh keeps no unrevealed se
   const prodTotal = await total();
   const stock0 = (await rows("SELECT quantity FROM prizes WHERE prizeId = '9c0aa228-e0c4-46dd-97cc-dc41a245bc05'"))[0].quantity;
   const pot0 = await LS.potBalance();
-  const drawPot = await one("SELECT COALESCE(SUM(amount),0) AS n FROM lotto_pot WHERE moveId LIKE 'lt:wp7-%:pot'");
+  const drawPot = await one("SELECT COALESCE(SUM(amount),0) AS n FROM lotto_pot WHERE moveId LIKE 'lt:stg-%:pot'");
   NOW += 1000;
 
   const { dir, out, file } = await refresh();
@@ -224,7 +224,7 @@ test("FAIR-1 for raffles and the lotto: a staging refresh keeps no unrevealed se
   assert.deepEqual(st.bal2, st.bal1);
   assert.equal(st.held, 0, "no raffle hold left");
   for (const p of PEOPLE) assert.equal(st.bal1[U(p)], prodBal[U(p)] + owed[U(p)], p + ": everything held came back, once");
-  const lottoRefunds = st.refundKeys.filter((x) => /^lt:wp7-/.test(x));
+  const lottoRefunds = st.refundKeys.filter((x) => /^lt:stg-/.test(x));
   assert.equal(lottoRefunds.length, 3, "one refund per purchase of the copied draw, by its own key");
   // prod is untouched: its raffles open on the same seeds, its draw #2 selling on its seed
   for (const id of OPEN) {
@@ -312,7 +312,7 @@ test("a copied lotto draw a refused refund holds up stays out of play (no sale, 
   let errs = await capture(async () => { await LS.retireCopies(); await LS.tick(); });
   assert.equal(errs.filter((l) => l.includes(`draw #${d}:`) && l.includes("couldn't be voided")).length, 1, errs.join("\n"));
   assert.equal((await drawRow(d)).state, "selling", "still copied, not void");
-  assert.equal((await LS.buy({ uid: U("dan"), name: "dan", via: "web" }, { quick: 1 }, "lt:wp7-x1")).code, "closed", "no ticket into a copy");
+  assert.equal((await LS.buy({ uid: U("dan"), name: "dan", via: "web" }, { quick: 1 }, "lt:stg-x1")).code, "closed", "no ticket into a copy");
   assert.equal((await LS.forceDraw("test")).ok, false, "never drawn");
   assert.equal((await LS.info(null)).sales_open, false);
   NOW = (Number(D0.next_at) + 3600) * 1000;                        // past its close and its draw time
@@ -382,7 +382,7 @@ test("a copied lotto draw whose sales had CLOSED (its tickets digest public, its
 });
 
 test("a copied draw's purchase the copy caught mid-finish (charged, both shares moved, not done), staging booting past its close: back once by the void with both shares - never by recover's late refund", async () => {
-  // (review of WP7: boot's recover() refunded such a purchase by the late-refund path - the cost back, the pot and House shares kept: PAT
+  // (1.99aoj review: boot's recover() refunded such a purchase by the late-refund path - the cost back, the pot and House shares kept: PAT
   //  made - and the void then skipped it as 'refunded')
   const d = (await LS.info(null)).draw;
   const D0 = await drawRow(d);
@@ -430,7 +430,7 @@ test("the scrub: only open raffles and unrevealed draws, can run twice (refresh-
   assert.equal(LS.isCopy({ state: "closed", server_seed: "", flags: {} }), true);
   assert.equal(LS.isCopy({ state: "selling", server_seed: "ab".repeat(32), flags: {} }), false);
   assert.equal(LS.isCopy({ state: "drawn", server_seed: "", flags: { copied: 1 } }), false, "a drawn draw is public already");
-  assert.ok(K.CASINO_SCRUB.length === 4, "WP1's card / wheel list is untouched");
+  assert.ok(K.CASINO_SCRUB.length === 4, "1.99aoh's card / wheel list is untouched");
   const r = (await mkRaffle("maker", { prize_amount: "2k" })).id;
   const { dir, file } = await refresh();
   const again = execFileSync(process.execPath, [path.join(repo, "deploy", "keep-staging-tables.js"), file + ".previous", file], { encoding: "utf8" });

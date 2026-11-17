@@ -20,7 +20,7 @@ const repo = path.resolve(__dirname, "..");
 const rd = (...p) => fs.readFileSync(path.join(repo, ...p), "utf8");
 const partial = (name, locals) => ejs.render(rd("views", "partials", name + ".ejs"), locals, { filename: path.join(repo, "views", "partials", name + ".ejs") });
 
-// (the harness - miniDom, page, flush - lives in test/fixtures/casino-dom.js since roulette2 WP5a)
+// (the harness - miniDom, page, flush - lives in test/fixtures/casino-dom.js since 1.99aoj)
 const { miniDom, page, flush } = require("./fixtures/casino-dom");
 
 // the table part of views/casino-hm.ejs (the elements CZ.theme and the sound toggle work with), checked against the view itself

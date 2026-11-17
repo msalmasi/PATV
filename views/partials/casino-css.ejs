@@ -99,7 +99,7 @@
   .cards.row { gap: 6px; }
   @keyframes pcDeal { from { opacity: 0; transform: translate(var(--fx, 0), var(--fy, -90px)) rotate(-14deg) scale(.7); } to { opacity: 1; transform: none; } }
 
-  /* ── chips: .chip (+ the 💎 chips), .pile, .stack and the one .chipbtn live in public/css/casino-chips.css (roulette2 O9: the same
+  /* ── chips: .chip (+ the 💎 chips), .pile, .stack and the one .chipbtn live in public/css/casino-chips.css (1.99aoj: the same
      chips at every table and in the Room Dock - each page links it right after this partial). The Hold'em pot's bigger pile stays here. ── */
   .pot .main .pile, .pot .main .pile .chip { width: 18px; }
   .pot .main .pile .chip { height: 18px; }
@@ -235,7 +235,7 @@
   .lob-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
   .tcard { display: flex; flex-direction: column; gap: 10px; padding: var(--ds-sp-4); border-radius: var(--ds-r-xl); min-width: 0; background: var(--panel); border: 1px solid var(--line); }
   .tcard.hm { border-color: rgba(120,160,255,.28); }
-  /* roulette2 O4: a 🛞 wheel's card (casino-ui.js wheelCard) - the table card with the last pockets (.rl-pocket, casino-chips.css)
+  /* 1.99aoj: a 🛞 wheel's card (casino-ui.js wheelCard) - the table card with the last pockets (.rl-pocket, casino-chips.css)
      and who's on the layout where the seat dots go; its live countdown in the subtitle */
   .tcard.rl { border-color: rgba(230,110,90,.3); }
   .tcard.rl .tcard-h small b { display: inline; font-size: inherit; color: var(--goldt); font-variant-numeric: tabular-nums; }   /* (not .tcard-h b's title block) */
@@ -277,7 +277,7 @@
   .hrcard .hr-chips .chip { width: 30px; height: 30px; }
   .hrcard-games { display: grid; grid-template-columns: 1fr; gap: var(--ds-sp-3); }
   @media (min-width: 720px) { .hrcard-games { grid-template-columns: 1fr 1fr; } .hrcard.one .hrcard-games { grid-template-columns: 1fr; } }
-  /* roulette2 O5: with the 🛞 wheel's sub-section too (.three): blackjack | Hold'em with roulette under them, three across from 1000px */
+  /* 1.99aoj: with the 🛞 wheel's sub-section too (.three): blackjack | Hold'em with roulette under them, three across from 1000px */
   @media (min-width: 720px) { .hrcard.three #cz-hrsec-rl { grid-column: 1 / -1; } }
   @media (min-width: 1000px) { .hrcard.three .hrcard-games { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hrcard.three #cz-hrsec-rl { grid-column: auto; } }
   .hrgame { display: flex; flex-direction: column; gap: var(--ds-sp-2h); min-width: 0; padding: var(--ds-sp-4); border-radius: var(--ds-r-lg);
@@ -305,7 +305,7 @@
     .av { width: 40px; height: 40px; font-size: 15px; }
     .cz-bar { gap: 6px; margin: 10px 0 8px; }
     .lob-tabs button { padding: 0 10px; font-size: 13px; }
-    /* roulette2 WP5a: four games don't fit one row on a phone (the 🛞 tab scrolled out of sight): a 2 x 2 switcher, every tab visible */
+    /* 1.99aoj: four games don't fit one row on a phone (the 🛞 tab scrolled out of sight): a 2 x 2 switcher, every tab visible */
     .lob-tabs.four { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; border-radius: var(--ds-r-xl); }
     .lob-tabs.four button { justify-content: center; min-width: 0; padding: 0 8px; }
     .cz-brand { flex-basis: 100%; }

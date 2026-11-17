@@ -119,7 +119,7 @@ const CASINO_SCRUB = [
     sql: "UPDATE main.casino_actions SET response = json_set(response, '$.reply', '') WHERE response LIKE '%Your hand:%' AND " +
          "(CASE WHEN json_valid(response) THEN json_extract(response, '$.reply') END) LIKE '%Your hand:%'" },
 ];
-// roulette2 WP7 (FAIR-1 for the other provably fair draws): an OPEN raffle keeps its secret seed in raffles.server_seed (raffles.js: with
+// 1.99aoj (FAIR-1 for the other provably fair draws): an OPEN raffle keeps its secret seed in raffles.server_seed (raffles.js: with
 // the tickets digest taken at the draw it IS the winning ticket number) and a lotto draw still selling or closed keeps its own in
 // lotto_draws.server_seed (lotto/service.js: with the tickets digest it IS the draw's numbers). Prod may still sell either, so the copy
 // never keeps those seeds: each is blanked ('' - both columns are NOT NULL; a blank seed is what marks a copied raffle, and a lotto draw
@@ -213,7 +213,7 @@ async function scrub(db) {
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });
   }
-  for (const s of DRAW_SCRUB) {                                            // roulette2 WP7: no open raffle's / unrevealed lotto draw's seed
+  for (const s of DRAW_SCRUB) {                                            // 1.99aoj: no open raffle's / unrevealed lotto draw's seed
     if (!(await tableSql(db, "main", s.table))) continue;
     const r = await run(db, s.sql);
     out.push({ table: s.table, scrubbed: r.changes || 0, what: s.what });

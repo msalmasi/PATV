@@ -118,7 +118,7 @@
           ['rl_idle_close_mins',t('casino.rl.idle_close_mins'),2,120]]) { %>
       <label><%= label %><input type="number" name="<%= key %>" value="<%= casino[key] %>" data-old="<%= casino[key] %>" min="<%= min %>" max="<%= max %>" step="1" required></label>
     <% } %>
-    <%# roulette2 D2: the 💎 High Roller wheels' limits (casino/roulette.js orderedHr: each cap between the HR minimum and its spin maximum,
+    <%# 1.99aoj (D2): the 💎 High Roller wheels' limits (casino/roulette.js orderedHr: each cap between the HR minimum and its spin maximum,
         35 x the straight inside the HR House cap; the cap is the High Roller wheels' share of the ONE House budget above).
         D3: a limit edit applies from each wheel's next spin. %>
     <fieldset id="rlHr" style="grid-column:1/-1;margin:0;padding:var(--ds-sp-3);border:1px solid var(--ds-gold-line, #6b5a2a);border-radius:8px;min-width:0"><legend>💎 <%= t('casino.rl.hr_title') %></legend>
@@ -148,7 +148,7 @@
       if (Math.min.apply(null, positions) < Number(form.elements.rl_min_bet.value) || Math.max.apply(null, positions) > Number(form.elements.rl_max_spin.value)) {
         status.textContent = <%- JSON.stringify(t('casino.rl.limits_error')).replace(/</g,'\\u003c') %>; return;
       }
-      // roulette2 D2: the High Roller set - the same rule, and 35 x its straight limit inside its House cap
+      // 1.99aoj (D2): the High Roller set - the same rule, and 35 x its straight limit inside its House cap
       var hrPositions = ['straight','split','street','corner','line','outside'].map(function (k) { return Number(form.elements['rl_hr_max_' + k].value); });
       if (Math.min.apply(null, hrPositions) < Number(form.elements.rl_hr_min_bet.value) || Math.max.apply(null, hrPositions) > Number(form.elements.rl_hr_max_spin.value) ||
           Number(form.elements.rl_hr_max_straight.value) * 35 > Number(form.elements.rl_hr_spin_cap.value)) {

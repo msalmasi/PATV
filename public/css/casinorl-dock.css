@@ -1,5 +1,5 @@
 /* public/css/casinorl-dock.css - the roulette slip controls (public/js/casinorl-dock.js controls), on the table page (inside its .dock,
-   views/casino-rl.ejs) and in the pad's Room Dock sheet (views/room.ejs, .rl-compact + the mini wheel). roulette2 WP5b (O9): the chips are
+   views/casino-rl.ejs) and in the pad's Room Dock sheet (views/room.ejs, .rl-compact + the mini wheel). 1.99aoj (O9): the chips are
    the casino's shared ones (contract 9: .chipbtn / .chip / .rl-pocket live in public/css/casino-chips.css, which both pages load) - this
    file only lays them out and marks the chip a tap places. On the table page the buttons are casino-css.ejs's .cz-btn; the Room Dock,
    which doesn't load casino-css, keeps its own button look (.rl-compact). */

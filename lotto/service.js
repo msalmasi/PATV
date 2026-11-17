@@ -21,7 +21,7 @@
 //   * One mutex serialises every mutation; one 5 s tick closes sales, draws, pays and reopens.
 //   * The page's lotto_state row (lotto.js; home, banner, og read it) is WRITTEN BY THIS SERVICE while the backend is on
 //     (Pepe's /api/lotto/sync is refused then) - it is a cache of this state, no longer a mirror of Pepe's.
-//   * roulette2 WP7: a draw COPIED from another database (a staging refresh blanks the seed of every draw still selling or closed and
+//   * 1.99aoj: a draw COPIED from another database (a staging refresh blanks the seed of every draw still selling or closed and
 //     marks it flags.copied) is never sold, closed, drawn or published here: boot and the tick void it (retireCopies, below).
 "use strict";
 const { runQuery, getQuery, tx } = require("../dbUtils");
@@ -343,7 +343,7 @@ async function pay(D) {
   scheduleSnapshot(0);
 }
 
-// ── roulette2 WP7 (FAIR-1 for the lotto): a draw copied from another database ──
+// ── 1.99aoj (FAIR-1 for the lotto): a draw copied from another database ──
 // A staging refresh (deploy/refresh-staging-db.sh, then deploy/keep-staging-tables.js DRAW_SCRUB on the copy) blanks the secret server_seed
 // of every draw still selling or closed and marks it flags.copied: prod may still sell that draw, and its seed with the tickets digest IS
 // its numbers - staging must never close, draw or publish it. Such a draw (copied, or with no seed: prod's always have one, openDraw /
@@ -428,7 +428,7 @@ async function tickOnce() {
   const st = await loadSettings();
   if (!st.lotto_backend) { S.wasOn = false; return; }
   if (!S.wasOn) { S.wasOn = true; scheduleSnapshot(0); }
-  await retireCopies();                                  // roulette2 WP7: a copied draw a refused refund left behind
+  await retireCopies();                                  // 1.99aoj: a copied draw a refused refund left behind
   const all = (await draws("WHERE state NOT IN ('paid', 'void')")).filter((d) => !isCopy(d));
   if (!(await getQuery("SELECT 1 FROM lotto_draws LIMIT 1")).length) {
     await openDraw(1, E.nextDrawTs(nowSec()));          // a fresh database (no import): draw #1
@@ -473,7 +473,7 @@ async function recover() {
       continue;
     }
     const D = rowToDraw((await getQuery("SELECT * FROM lotto_draws WHERE draw = ?", [pu.draw]))[0]);
-    // roulette2 WP7 review: a purchase of a draw COPIED from another database is left to the void (retireCopies -> voidCopy), which gives
+    // 1.99aoj review: a purchase of a draw COPIED from another database is left to the void (retireCopies -> voidCopy), which gives
     // back the cost AND whichever shares it moved - the late refund below gives back only the cost (a copy taken inside finishPurchase,
     // its shares moved: PAT made), and the void would then skip it as refunded
     if (isCopy(D)) continue;
@@ -487,7 +487,7 @@ async function boot(opts) {
     await ensure();
     await runQuery("DELETE FROM lotto_events WHERE ts < ?", [clock() - 30 * 86400 * 1000]).catch(() => {});
     await locked(recover);
-    // roulette2 WP7: a draw copied from another database (a staging refresh) is voided before anything can sell, close or draw it
+    // 1.99aoj: a draw copied from another database (a staging refresh) is voided before anything can sell, close or draw it
     await locked(retireCopies).catch((e) => console.error("[lotto] copies:", e && e.message ? e.message : e));
     const st = await loadSettings(true);
     // always (tests: {tick: false}): it idles while lotto_backend is off (a CLI / another process can flip it)
@@ -568,7 +568,7 @@ function buy(actor, { picks, quick }, key, opts = {}) {
     if (!u) return { ok: false, code: "no_account" };
     if (u.casino_banned) return { ok: false, code: "banned" };
     const D = await sellingDraw();
-    // (roulette2 WP7: a draw copied from another database never sells a ticket here - it is voided, retireCopies)
+    // (1.99aoj: a draw copied from another database never sells a ticket here - it is voided, retireCopies)
     if (!D || D.state !== "selling" || nowSec() >= D.close_at || isCopy(D)) return { ok: false, code: "closed", next_at: D ? D.next_at : null };
     let list;
     if (picks && picks.length) {
@@ -727,7 +727,7 @@ function forceDraw(by) {
     const st = await loadSettings();
     if (!st.lotto_backend) return { ok: false, code: "off" };
     const D = await sellingDraw();
-    if (!D || isCopy(D)) return { ok: false, code: "none" };          // (roulette2 WP7: a copied draw is never drawn here)
+    if (!D || isCopy(D)) return { ok: false, code: "none" };          // (1.99aoj: a copied draw is never drawn here)
     if ((await getQuery("SELECT 1 FROM lotto_draws WHERE state = 'drawn'")).length) return { ok: false, code: "paying" };
     await runDraw(D, by || "admin");
     const d2 = rowToDraw((await getQuery("SELECT * FROM lotto_draws WHERE draw = ?", [D.draw]))[0]);
@@ -856,7 +856,7 @@ function exportState() {
   return locked(async () => {
     await ensure();
     const D = await sellingDraw();
-    if (!D || isCopy(D)) return { ok: false, error: "no draw selling" };   // (roulette2 WP7: a copied draw is voided, never exported)
+    if (!D || isCopy(D)) return { ok: false, error: "no draw selling" };   // (1.99aoj: a copied draw is voided, never exported)
     if ((await getQuery("SELECT 1 FROM lotto_draws WHERE state = 'drawn'")).length) return { ok: false, error: "a draw is still paying" };
     if ((await getQuery("SELECT 1 FROM lotto_purchases WHERE state = 'charging'")).length) return { ok: false, error: "a purchase is in flight" };
     const rows = await getQuery(`SELECT t.name, t.w, t.pb, u.username FROM lotto_tickets t LEFT JOIN users u ON u.userId = t.userId

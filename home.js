@@ -89,7 +89,7 @@ async function loadStats() {
     out.tablesHref = csvc.frontPath(st, "lobby");
     const wheels = [];
     for (const row of csvc.lobby()) {
-      // roulette2 (contract 3): the lobby lists the open roulette wheels too. This box is the same for every viewer, so a wheel is
+      // 1.99aoj (contract 3): the lobby lists the open roulette wheels too. This box is the same for every viewer, so a wheel is
       // listed only while roulette is open to everyone, and only one with somebody on it or on Pepe's stream (the always-open
       // lobby wheel waiting for its first bet isn't news); after the card tables, as 🛞 Roulette, linked to its own page
       if (row.game === "roulette") {

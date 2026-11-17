@@ -52,7 +52,7 @@ const C = {
   MISS_LIMIT: 3, AFK_LIMIT: 3, COVER_MULT: 2,
   LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
   CLOSED_LINGER_MS: 30 * 1000, TICK_MS: 250,
-  OWED_RETRY_MS: 10 * 60 * 1000,      // roulette2 WP7: a refused blackjack payout is tried again this often (payOwed)
+  OWED_RETRY_MS: 10 * 60 * 1000,      // 1.99aoj: a refused blackjack payout is tried again this often (payOwed)
 };
 const HIGH_ROLLER = "high roller";
 const HR_WORDS = ["hr", "high", "highroller", "high-roller", "vip", "💎"];
@@ -72,7 +72,7 @@ const S = {
   tick: null,
   booted: null,
   lastSeq: 0,
-  // roulette2 O12(b): the poll's level-triggered cursor - bumped by every wake() (a table state Pepe's poll draws changed). It
+  // 1.99aoj(b): the poll's level-triggered cursor - bumped by every wake() (a table state Pepe's poll draws changed). It
   // starts at this process's start time, so a value from an earlier process (a restart) never equals one of this process's
   stateSeq: Date.now(),
   hooks: { now },              // tests override the clock
@@ -225,7 +225,7 @@ async function writeSetting(key, value, actor) {
 }
 
 // ── persistence ──
-// roulette2 WP3 (review): the key the web routes cache a table's public view under (casino/routes.js, up to 1 s) - one key never
+// 1.99aoj (review): the key the web routes cache a table's public view under (casino/routes.js, up to 1 s) - one key never
 // names two different states. rev alone can: a step that saved inside its transaction and then rolled back (restore) hands the next
 // save that same rev again, so a view built in between (an uncharged line's chips on the felt) would be served as the later state.
 // So + a generation that every save and every roulette restore bumps (memory only, never sent), + who is masked now (an unseated
@@ -284,7 +284,7 @@ async function emitRaw(tableId, room, kind, data) {
   wake();
 }
 function wake() {
-  S.stateSeq += 1;          // roulette2 O12(b): a poll that last saw an older state_seq answers at once (poll: state_after) - no lost wake
+  S.stateSeq += 1;          // 1.99aoj(b): a poll that last saw an older state_seq answers at once (poll: state_after) - no lost wake
   for (const w of Array.from(S.waiters)) { S.waiters.delete(w); w(); }
 }
 
@@ -441,7 +441,7 @@ function forget(T, uid) {
 }
 
 async function beginRound(T) {
-  // roulette2 WP7 review: a table that waits for an owed payout before it closes deals no round (cmdDeal, the bet clock, autobets) - its
+  // 1.99aoj review: a table that waits for an owed payout before it closes deals no round (cmdDeal, the bet clock, autobets) - its
   // window's stakes went back at the close (closeTable), so a deal would pay or collect on PAT nobody holds
   if (T.closing) return false;
   if (T.eng.phase !== "betting") return false;
@@ -533,7 +533,7 @@ const uidHash = (uid) => crypto.createHash("sha256").update("seat|" + uid).diges
 /** A settled round's MONEY: the payouts, then the House legs (lost stakes in, the winners' profit out - the Fed flash first when it would
  *  take the House below its hard floor). Every leg is keyed, so running it again changes nothing that was done. 1.99aoh: factored
  *  out of settle() so a copied table (casino/retire.js) pays a round decided on the other database WITHOUT its reveal, events or rewards;
- *  `strict` (the retire) throws on a refused payout instead of logging it. roulette2 WP7: otherwise a refused payout is answered in
+ *  `strict` (the retire) throws on a refused payout instead of logging it. 1.99aoj: otherwise a refused payout is answered in
  *  `refused` [{key, uid, amount}] - settle() keeps it owed (payOwed); the House legs count it as paid (its PAT stays at the table, owed).
  *  -> {lostTotal, totalBet, totalPaid, profit, refused} */
 async function settleMoney(T, opts) {
@@ -568,7 +568,7 @@ async function settleMoney(T, opts) {
   return { lostTotal, totalBet, totalPaid, profit, refused };
 }
 
-// ── roulette2 WP7 (the blackjack payout fix): a payout whose credit was REFUSED stays owed ──
+// ── 1.99aoj (the blackjack payout fix): a payout whose credit was REFUSED stays owed ──
 // money.credit is refused only when ledger.post finds no account to credit (the account is gone; a merged one is followed). Before, settle()
 // logged that and went on: the payout was lost (the stake had left the wallet, the House legs counted the payout as paid). Now, like the
 // Hold'em cash-out fix (holdem.js refusedOut), it stays at the table, owed: T.owed[<its payout key cbj:<table>:r<n>:<uid>:pay>] = {uid,
@@ -634,7 +634,7 @@ async function settle(T) {
   const n = T.eng.round_no;
   const OUT = { blackjack: "BJ", win: "WIN", push: "PUSH", lose: "LOSS", bust: "BUST" };
   const { lostTotal, profit, refused } = await settleMoney(T);
-  owe(T, n, refused);                     // roulette2 WP7: a refused payout stays owed at the table (payOwed tries it again by its key)
+  owe(T, n, refused);                     // 1.99aoj: a refused payout stays owed at the table (payOwed tries it again by its key)
   const summ = [];
   for (const r of ev.results) {
     const parts = r.hands.map((h) => `${h.value} ${OUT[h.outcome]}`);
@@ -672,7 +672,7 @@ async function settle(T) {
   T.last_revealed = n;
   T.escrowed = {};
   T.stakes = [];        // this round's doubles / splits / insurance are paid out above - nothing is held any more (a refused payout: T.owed)
-  // roulette2 WP7: not done while a payout of it is still owed (payOwed marks it done when the last one lands)
+  // 1.99aoj: not done while a payout of it is still owed (payOwed marks it done when the last one lands)
   T.round.settle = Object.values(T.owed || {}).some((o) => o.round === n) ? "owed" : "done";
   await save(T);
 }
@@ -689,11 +689,11 @@ async function afterRound(T) {
   return openRound(T, false);
 }
 
-/** -> true when closed; false when a blackjack payout is still owed (roulette2 WP7: the table stays open, frozen, until it lands) */
+/** -> true when closed; false when a blackjack payout is still owed (1.99aoj: the table stays open, frozen, until it lands) */
 async function closeTable(T, reason) {
   if (T.game === "roulette") return RL.closeTable(T, reason);
   await refundHeld(T, null, "table closed");
-  // roulette2 WP7: never closed with a payout owed (a refused credit) - tried once more by its key; still refused: the table stays open,
+  // 1.99aoj: never closed with a payout owed (a refused credit) - tried once more by its key; still refused: the table stays open,
   // taking no new bets (seatChecks), no autobets and no queued bets, with no deadline but the owed payout's clock (payOwed closes it)
   if (owedCount(T) && (await retryOwed(T, true))) {
     T.closing = reason || T.closing || "closed";
@@ -784,7 +784,7 @@ async function tickOnce() {
       continue;
     }
     const due = (T.dl.bet && T.dl.bet <= t) ? "bet" : (T.dl.ins && T.dl.ins <= t) ? "ins" : (T.dl.turn && T.dl.turn <= t) ? "turn"
-      : owedDue(T, t) ? "owed" : null;                  // roulette2 WP7: an owed payout's clock (payOwed)
+      : owedDue(T, t) ? "owed" : null;                  // 1.99aoj: an owed payout's clock (payOwed)
     if (!due) continue;
     await locked(async () => {
       if (T.status !== "open") return;
@@ -821,7 +821,7 @@ async function recover(T) {
     }
     T.intent = null;
   }
-  // roulette2 WP7: every payout a refused credit left owed is tried again now, by its own key; a table whose close waited on one closes
+  // 1.99aoj: every payout a refused credit left owed is tried again now, by its own key; a table whose close waited on one closes
   // once nothing is owed, and stays frozen while something still is (no deadline: the owed payout's clock, payOwed, closes it)
   if (owedCount(T) || T.closing) {
     if (await payOwed(T, true)) return;
@@ -834,7 +834,7 @@ async function recover(T) {
     await afterRound(T);
     return;
   }
-  // settled, but the next betting window never opened (roulette2 WP7: or settled with a payout still owed - it is tried on its clock)
+  // settled, but the next betting window never opened (1.99aoj: or settled with a payout still owed - it is tried on its clock)
   if (T.eng.phase === "done" && (!T.round || T.round.settle === "done" || T.round.settle === "owed")) {
     await afterRound(T);
     return;
@@ -921,7 +921,7 @@ async function cmdStart(actor, room, game, blinds, words) {
     return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
   }
   if (game === "roulette") {
-    // roulette2 D1: "!rl start [hr]" (room) / POST /api/casino/open {game: "roulette", hr} (web, room null). A 💎 High Roller wheel
+    // 1.99aoj (D1): "!rl start [hr]" (room) / POST /api/casino/open {game: "roulette", hr} (web, room null). A 💎 High Roller wheel
     // is for High Rollers to open (and, checkSeat, to play); a web wheel is at most ONE open per host (the always-on lobby is the
     // house's); one table per room (above) and max_tables (below) as for every table.
     const ws = (words || (blinds ? [blinds] : [])).map((w) => String(w || "").trim().toLowerCase()).filter(Boolean);
@@ -963,7 +963,7 @@ async function cmdStart(actor, room, game, blinds, words) {
 }
 
 async function seatChecks(T, actor) {
-  // roulette2 WP7: a table that waits for an owed payout before it closes takes no new bets
+  // 1.99aoj: a table that waits for an owed payout before it closes takes no new bets
   if (T.closing) return "this table is closing — it takes no new bets (it closes once a payout still owed goes through).";
   const u = await userRow(actor.uid);
   if (!u) return "no account found";
@@ -1058,7 +1058,7 @@ async function cmdAutobet(T, actor, arg) {
 }
 
 async function cmdDeal(T) {
-  // roulette2 WP7 review: a frozen table (a payout still owed, its close asked for) deals no new round
+  // 1.99aoj review: a frozen table (a payout still owed, its close asked for) deals no new round
   if (T.closing) return R(false, "this table is closing — no new rounds (it closes once a payout still owed goes through).");
   if (T.eng.phase !== "betting") return R(false, "not in the betting phase right now.");
   if (!(await beginRound(T))) return R(false, "no bets yet — !bet <amount> first.");
@@ -1150,7 +1150,7 @@ function statusText(T) {
 async function cmdEnd(T, actor) {
   if (actor.uid !== T.host.uid && !actor.admin) return R(false, "only the table starter or an admin can close it.");
   if (["insurance", "player", "dealer"].includes(T.eng.phase)) return R(false, "can't close mid-round — let it finish.");
-  // roulette2 WP7: a payout still owed keeps it open (no new bets) - it closes by itself once that payout goes through
+  // 1.99aoj: a payout still owed keeps it open (no new bets) - it closes by itself once that payout goes through
   if (!(await closeTable(T, `closed by ${actor.name}`))) return R(false, "a payout at this table is still owed — it takes no new bets and closes by itself once that payout goes through.");
   return R(true, "table closed.", { quiet: true });
 }
@@ -1297,7 +1297,7 @@ function setRooms(T, list) {
 }
 const roomName = (id) => { const r = S.rooms.get(id); return r ? r.name : id; };
 const MAX_ROOMS = 6;
-// roulette2 D1 (review): a host's roulette wheel ON THE WEB - one opened there (T.web, wherever it plays now) or any of theirs that
+// 1.99aoj (D1, review): a host's roulette wheel ON THE WEB - one opened there (T.web, wherever it plays now) or any of theirs that
 // plays in no room (a room wheel moved back to the web). At most one per host: a web open and a move back to the web both ask.
 const onWeb = (t) => !!t && t.game === "roulette" && t.status === "open" && !t.lobby && (t.web || !roomsOf(t).length);
 const webWheelOf = (uid, but) => Array.from(S.tables.values()).find((t) => t !== but && onWeb(t) && t.host && t.host.uid === uid) || null;
@@ -1313,7 +1313,7 @@ function annDue(T, key, room) {
 
 // 1.99aoh: a roulette wheel's stakes as its push / advert lines name them - the smallest bet and the most one player may stake
 // on a spin (the rl_* settings the bet checks use). One place, so a per-wheel limit (High Roller, a per-spin snapshot) changes it once.
-// roulette2 WP3 (D2/D3): the wheel's OWN limits - its tier (💎 High Roller or normal) and the spin's snapshot (RL.limOf)
+// 1.99aoj (D2/D3): the wheel's OWN limits - its tier (💎 High Roller or normal) and the spin's snapshot (RL.limOf)
 function rlStakes(T) {
   const L = T && T.game === "roulette" ? RL.limOf(T) : RLCFG.tierLimits(S.settings, !!(T && T.high_stakes));
   return { min: Number(L.min) || 100, max: Number(L.max_spin) || 100000, straight: Number(L.caps && L.caps.straight) || 0, hr: !!(T && T.high_stakes) };
@@ -1324,7 +1324,7 @@ function rlPushText(T, also) {
          `(min ${fmt(k.min)} PAT a bet, up to ${fmt(k.max)} PAT per player a spin${k.hr ? "; High Rollers only, anyone can watch" : ""}). Also on the web: ${link(T)}${also || ""}`;
 }
 
-// roulette2 D1 (review): a room wheel going back to the web (its last room detached) becomes its host's web wheel - refused while
+// 1.99aoj (D1, review): a room wheel going back to the web (its last room detached) becomes its host's web wheel - refused while
 // that host has another one on the web (else "!rl start" + "back to the web" would open any number of them)
 function twoOnWeb(T, actor) {
   if (!webWheelOf(T.host.uid, T)) return null;
@@ -1348,7 +1348,7 @@ async function push(tableId, room, actor, mode) {
       if (cur.includes(room)) return R(true, "It's already playing there.", { rooms: cur });
       const r = S.rooms.get(room);
       if (!r || clock() - r.ts > C.ROOM_FRESH_MS) return R(false, "Pepe isn't in that room with the casino on right now.");
-      // roulette2 O6(d): Pepe's poll says which games each room has switched on (rooms[].games); he drops every roulette line in a
+      // 1.99aoj(d): Pepe's poll says which games each room has switched on (rooms[].games); he drops every roulette line in a
       // room whose roulette toggle is off - so a wheel is refused there (an older Pepe sends no flags: allowed as before). (A card
       // table's lines aren't gated by his toggles - unchanged.)
       if (T.game === "roulette" && gameOff(r, "roulette")) return R(false, "Roulette is off in that room.");
@@ -1384,7 +1384,7 @@ async function push(tableId, room, actor, mode) {
       if (due.length) await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: due });
       setRooms(T, []);                       // 1.99pc: a web-only table keeps its place on Pepe's stream
     }
-    if (T.game === "roulette" && !roomsOf(T).length) T.web = true;     // roulette2 D1 (review): its host's one web wheel from now on
+    if (T.game === "roulette" && !roomsOf(T).length) T.web = true;     // 1.99aoj (D1, review): its host's one web wheel from now on
     await save(T);
     return R(true, T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
   });
@@ -1462,7 +1462,7 @@ async function meView(T, uid, opts) {
   });
 }
 
-// roulette2 (contract 3): + every open roulette wheel (the lobby wheel, the web and room wheels) in the shared row shape with its
+// 1.99aoj (contract 3): + every open roulette wheel (the lobby wheel, the web and room wheels) in the shared row shape with its
 // roulette fields (RL.lobbyRow). The audience gate is the caller's (the lobby route drops them when RL.lobby(uid).on is false;
 // home.js shows them only while casino_roulette is "everyone").
 function lobby() {
@@ -1495,7 +1495,7 @@ async function streamLoad() {
     if (r[0]) {
       const v = JSON.parse(r[0].value);
       S.stream = { table: v.table || null, by: v.by || null, ts: Number(v.ts) || 0, queue: Array.isArray(v.queue) ? v.queue.slice(0, 50) : [] };
-      if (v.table && v.pin) S.stream.pin = true;        // roulette2 D7: an admin-pinned wheel stays pinned across a restart
+      if (v.table && v.pin) S.stream.pin = true;        // 1.99aoj (D7): an admin-pinned wheel stays pinned across a restart
     }
   } catch (e) { /* a fresh database */ }
 }
@@ -1524,7 +1524,7 @@ function streamGone(id) {
     streamSave().catch(() => {});
   }
 }
-/** roulette2 (D7): a lobby wheel's rotation - its successor takes its place on the stream (the slot, with an admin's pin, or its
+/** 1.99aoj (D7): a lobby wheel's rotation - its successor takes its place on the stream (the slot, with an admin's pin, or its
  *  place in the queue). -> true when it had one */
 function streamHandOff(from, to) {
   let moved = false;
@@ -1539,7 +1539,7 @@ async function streamTick() {
   if (id) {
     const T = S.tables.get(id);
     if (!streamable(id)) { S.stream.table = null; delete S.stream.pin; await streamAdvance(); return; }
-    // roulette2 D7: a wheel an admin pinned there stays (the lobby can wait a while for its first bet); it leaves when it closes
+    // 1.99aoj (D7): a wheel an admin pinned there stays (the lobby can wait a while for its first bet); it leaves when it closes
     // (its successor takes the pin), when it is taken off, or when another table takes the slot
     if (!(S.stream.pin && T.game === "roulette") && clock() - Math.max(T.last_activity || 0, S.stream.ts || 0) > STREAM_IDLE_MS) {
       S.stream.table = null;
@@ -1552,7 +1552,7 @@ async function streamTick() {
   }
 }
 /** on: ask for the stream (host or admin; admins may override), off: leave it / the queue.
- *  roulette2 D7: an admin who puts a roulette wheel there with pin true PINS it - exempt from the 5-minute idle drop */
+ *  1.99aoj (D7): an admin who puts a roulette wheel there with pin true PINS it - exempt from the 5-minute idle drop */
 async function stream(tableId, on, actor, override, pin) {
   await boot();
   return locked(async () => {
@@ -1645,7 +1645,7 @@ async function advertiseIn(T, room, actor, on) {
   const r = findRoom(room) || (advertsOf(T).includes(room) ? { id: room, name: roomName(room) } : null);
   if (!r) return R(false, "Pepe isn't in that room with the casino on right now.");
   const cur = advertsOf(T);
-  // roulette2 O6(d): Pepe posts an advert only where that game's toggle is on - an advert into a room with it off would never be posted
+  // 1.99aoj(d): Pepe posts an advert only where that game's toggle is on - an advert into a room with it off would never be posted
   if (on && gameOff(S.rooms.get(r.id), T.game)) return R(false, `${GAME_NAME[T.game] || "That game"} is off in that room.`);
   if (!on) {
     if (!cur.includes(r.id)) return R(false, "It isn't advertised there.");
@@ -1695,7 +1695,7 @@ function openList() {
 }
 
 // ── Pepe's long-poll ──
-// roulette2 O6(d) (contract 5): a room entry may carry games: {bj, holdem, roulette} - that room's game toggles in Pepe
+// 1.99aoj(d) (contract 5): a room entry may carry games: {bj, holdem, roulette} - that room's game toggles in Pepe
 // (_feature_on('_game_*_enabled')). Pepe's poll says them each heartbeat: an entry without them (an older Pepe - a rollback) clears
 // them, so unknown = on, as before. Only the bot act route's own note of a room ({keepGames: true}: it never carries flags) keeps
 // what the last poll said.
@@ -1733,11 +1733,11 @@ async function roomTables() {
     if (!roomsOf(T).length && S.stream.table !== T.id) continue;      // 1.99pc: + the stream table, wherever it plays
     // 1.99ajw casino2 rework: Pepe's OBS board draws this state - a veiled player is masked here, at the source (casino/veil.js)
     if (T.status === "open") await refreshVeil(T);
-    // roulette2 WP3 (review): a wheel's rules.bank_straight as of now (read-only, at most every 5 s) - not whatever its last web view left
+    // 1.99aoj (review): a wheel's rules.bank_straight as of now (read-only, at most every 5 s) - not whatever its last web view left
     if (T.game === "roulette" && T.status === "open") await RL.bankRefresh(T);
     list.push(T);
   }
-  // roulette2 WP3 (review): the views are built in ONE locked step (synchronous, after the awaits above), so none is of a step still in
+  // 1.99aoj (review): the views are built in ONE locked step (synchronous, after the awaits above), so none is of a step still in
   // its transaction - a line that rolls back never reaches the board (D5: its chips on the felt) under a rev the next save hands out again
   return locked(() => {
     const tables = {}, priv = {};
@@ -1754,7 +1754,7 @@ async function roomTables() {
  *  1.99aoh(a): + `now` (this server's clock, ms) so Pepe can place the site's deadlines (land_at, spin.started_at) on his own. */
 async function poll(after, waitMs, stateAfter) {
   await boot();
-  // roulette2 O12(b) (contract 5): state_after - the state_seq of Pepe's last answer. A table state he draws changed since (any
+  // 1.99aoj(b) (contract 5): state_after - the state_seq of Pepe's last answer. A table state he draws changed since (any
   // wake(), also one with no event row: a web-only wheel on the stream, a wake that found no waiter) answers at once instead of
   // waiting; a value from another process (a restart) too. An older Pepe sends none: he waits as before.
   const sa = stateAfter == null || stateAfter === "" || !Number.isFinite(Number(stateAfter)) ? null : Math.trunc(Number(stateAfter));
@@ -1890,7 +1890,7 @@ const ROUTE = {
 };
 const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, roomList, streamGone, loadSettings, userRow,
   dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); },
-  // roulette2 WP3: the 💎 High Roller role + its text (D1/D2), a wheel's adverts for its view (D4), the stream hand-over at a lobby rotation (D7)
+  // 1.99aoj: the 💎 High Roller role + its text (D1/D2), a wheel's adverts for its view (D4), the stream hand-over at a lobby rotation (D7)
   isHighRoller, HR_ONLY_PLAY, advertList: (T) => advertList(T), streamHandOff: (from, to) => streamHandOff(from, to),
   viewMoved });        // (review: a restore is a new state for the view cache - viewKey)
 const HM = require("./holdem").install({
@@ -2010,7 +2010,7 @@ const HMENG = require("./hmengine");
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
 function limits() {
   const [mn, mx] = bjLimits(false), [hmn, hmx] = bjLimits(true);
-  // roulette2 (contract 3): the roulette limits a NEW spin takes (normal, and 💎 High Roller with its share of the House budget)
+  // 1.99aoj (contract 3): the roulette limits a NEW spin takes (normal, and 💎 High Roller with its share of the House budget)
   const rl = RLCFG.tierLimits(S.settings, false), rh = RLCFG.tierLimits(S.settings, true);
   return { bj: { min_bet: mn, max_bet: mx, hr_min_bet: hmn, hr_max_bet: hmx },
            holdem: { sb_cap: HM.HC.SB_CAP, bb_cap: HM.HC.BB_CAP, hr_ladder: HM.HC.HR_LADDER.map(([sb, bb]) => [sb, bb]) },

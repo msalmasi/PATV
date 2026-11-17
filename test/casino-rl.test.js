@@ -149,7 +149,7 @@ test("liability shared across wheels, undo can be refused, caps and linked accou
   assert.equal(await cash("a"), 499500);
   await sql("INSERT INTO welcome_bonus (userId,dup_of) VALUES ('b','a')");
   assert.match((await act(L, "b", "bet", "black 100")).reply, /linked/);
-  // roulette2 D3: an admin's limit edit applies from a wheel's next spin - L's open spin keeps the limits it opened with, a spin
+  // 1.99aoj (D3): an admin's limit edit applies from a wheel's next spin - L's open spin keeps the limits it opened with, a spin
   // that opens after the edit takes them
   await svc.setSetting("rl_max_positions", 1);
   await svc.setSetting("rl_max_players", 1);
@@ -244,7 +244,7 @@ test("masked winners remain private; real room players see their own room name; 
 });
 
 test("limits cap the accumulated position, complete spin and action count; same IP is a private flag", async () => {
-  await svc.setSetting("rl_max_lines", 2); // (roulette2 D3: before the wheel's spin opens - an edit applies from the next spin)
+  await svc.setSetting("rl_max_lines", 2); // (1.99aoj, D3: before the wheel's spin opens - an edit applies from the next spin)
   const T = await room(),
     before = await total();
   for (const uid of ["b", "c"])

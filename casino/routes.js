@@ -61,7 +61,7 @@ const svc = require("./service");
 const rewards = require("./rewards");
 const themes = require("./themes");       // 1.99amf h20: the table themes (the lobby's picker flag, the table page's theme files)
 
-// (roulette2 O7: + "limits" - a wheel's limits with the bank's live straight headroom, as !rl limits gives them)
+// (1.99aoj: + "limits" - a wheel's limits with the bank's live straight headroom, as !rl limits gives them)
 const WEB_VERBS = new Set(["undo", "clear", "go", "rebet", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status", "fair",
                            "sit", "check", "call", "fold", "allin", "raise", "cards", "pre", "sitout", "sitin", "showhand", "limits"]);
 const BOT_VERBS = new Set(["undo", "clear", "bets", "limits", "last", "start", "bet", "autobet", "deal", "hit", "stand", "double", "split", "insurance", "leave", "end", "status",
@@ -277,7 +277,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     // 1.99ajw casino2 rework: a veiled host reads as their label (casino/veil.js - each open table's veils re-read first, at most every 2 s)
     for (const T of Array.from(svc.S.tables.values())) if (T.status === "open" && !svc.isMttTable(T)) await svc.refreshVeil(T);   // (h22 phase 2: not the MTT tables - a page each)
     // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
-    // roulette2 (contract 3): svc.lobby() lists the open roulette wheels too - dropped here while roulette is shut for this viewer
+    // 1.99aoj (contract 3): svc.lobby() lists the open roulette wheels too - dropped here while roulette is shut for this viewer
     // (RL.lobby(uid).on: the audience gate is async, so it stays in the route); `roulette` itself stays for one release.
     // (review) Only for a page that asks (?rl=1 - the lobby script that draws a wheel's card): today's lobby script draws every row
     // that isn't Hold'em as a Blackjack card, so an older page (a tab left open across the deploy) never gets them. Release B drops
@@ -294,7 +294,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
                stream: !roulette.on && svc.getTable(svc.S.stream.table)?.game === "roulette" ? null : svc.S.stream.table, me, limits: svc.limits(), sng: await svc.TN.lobby(actor ? actor.uid : null),   // (h22: the Sit & Go block)
                themes: themes.lobbyInfo(actor ? { admin: actor.admin } : null, st),   // 1.99amf h20: may this viewer pick a theme
                mtt: await svc.MT.lobby(actor ? actor.uid : null),                                                            // (h22 phase 2: the 🏆 block)
-               now: svc.S.hooks.now() });   // roulette2 WP5a: the server's clock - the lobby's wheel countdowns (deadline / land_at) and Sit & Go clocks
+               now: svc.S.hooks.now() });   // 1.99aoj: the server's clock - the lobby's wheel countdowns (deadline / land_at) and Sit & Go clocks
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -325,7 +325,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!T || (T.game === "roulette" && await svc.RL.viewShut(T, req.user?.userId))) return res.status(404).json({ ok: false, error: "That table has closed." });
     await svc.refreshVeil(T);          // 1.99ajw casino2 rework: a veiled player is masked (casino/veil.js; at most every 2 s per table)
     // h22 phase 2: an MTT table's public part (the view + avatars) is cached per (table, rev) for a second - many players poll it
-    // roulette2 (D5): so is a roulette wheel's (every viewer of a busy wheel polls it every 1-2 s; the felt sums every line) - keyed
+    // 1.99aoj (D5): so is a roulette wheel's (every viewer of a busy wheel polls it every 1-2 s; the felt sums every line) - keyed
     // also by its stream place; its bank figure (rules.bank_straight) is worked out first, read-only, at most every 5 s
     const mtt = svc.isMttTable(T);
     const wheel = T.game === "roulette";
@@ -343,7 +343,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       pub = { k: ck, at: Date.now(), table };
       if (ck) { tcache.set(T.id, pub); if (tcache.size > 500) tcache.delete(tcache.keys().next().value); }
     }
-    // (roulette2 O6(d): each room says whether this table's game is off there - Host Tools greys it, push refuses it)
+    // (1.99aoj(d): each room says whether this table's game is off there - Host Tools greys it, push refuses it)
     const out = { ok: true, now: Date.now(), table: pub.table, rooms: svc.freshRooms(T.game) };
     // only the viewer's own seat / cards (1.99aof: ?notice=1 - the wheel's page / Dock showing its one-time notice - may take it; a poll never writes)
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId, { notice: req.query && req.query.notice === "1" }) : null;
@@ -426,7 +426,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     const b = req.body || {};
     const idem = String(b.idem || "");
     if (!IDEM.test(idem)) return res.status(400).json({ ok: false, error: "Bad request." });
-    // roulette2 D1 (contract 4): {game: "roulette", hr?} opens a WEB wheel the opener hosts (at most one open per host; 💎 for High
+    // 1.99aoj (D1, contract 4): {game: "roulette", hr?} opens a WEB wheel the opener hosts (at most one open per host; 💎 for High
     // Rollers only) - the client goes to /casino/roulette/t/<table>
     if (b.game === "roulette") {
       const out = await svc.act(actor, "start", b.hr ? ["hr"] : [], { room: null, game: "roulette" }, `web-${actor.uid}-${idem}`);
@@ -660,7 +660,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     const b = req.body || {};
-    // (roulette2 D7: an admin's roulette wheel goes up pinned only with {pin: true} - review: a plain stream keeps the idle drop)
+    // (1.99aoj, D7: an admin's roulette wheel goes up pinned only with {pin: true} - review: a plain stream keeps the idle drop)
     res.json(await svc.stream(req.params.id, b.on !== false, actor, !!b.override, b.pin === true));
   });
 
@@ -706,7 +706,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       const tables = Array.from(svc.S.tables.values());
       if (Array.isArray(b.ach_base) && b.ach_base.length) await rewards.setBases(b.ach_base, tables);
       if (Array.isArray(b.rep_ack) && b.rep_ack.length) await rewards.repAck(b.rep_ack);
-      // roulette2 O12(b) (contract 5): + state_after (the state_seq of his last answer) - a state that changed since answers at once
+      // 1.99aoj(b) (contract 5): + state_after (the state_seq of his last answer) - a state that changed since answers at once
       const out = await svc.poll(b.after, wait, b.state_after);
       // (review) a Pepe that doesn't know tournaments (an older build: no `scene` in his poll) gets neither their lines (he'd post them
       // ungated by the room's poker toggle) nor a tournament table on his board (he'd draw it as a Sit & Go)
@@ -768,7 +768,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
       if (lock) return res.json(require("../siteban").botRefusal(lock));
     }
     const room = b.room ? String(b.room).slice(0, 64) : null;
-    if (room) svc.noteRooms([{ id: room, name: b.room_name || room }], { keepGames: true });   // (roulette2: the poll's games flags stay)
+    if (room) svc.noteRooms([{ id: room, name: b.room_name || room }], { keepGames: true });   // (1.99aoj: the poll's games flags stay)
     let table = b.table && ID.test(String(b.table)) ? String(b.table) : null;
     const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : b.game === "sng" ? "sng" : b.game === "mtt" ? "mtt" : b.game === "roulette" ? "roulette" : null;     // (h22: "sng" = !sng; phase 2: "mtt" = !mtt)
     // h22 phase 2: a bare Hold'em verb (!call, !fold, ...) from a room player goes to the table where it's their TURN first, then the room's
@@ -789,7 +789,7 @@ function register(app, { isBotToken, addUser, discordBridge }) {
                     iph: null, admin: !!b.admin, room };
     // 1.99se: an advert's room name can be long / have spaces ("!bj advertise Drama Central") - Pepe sends it as one arg
     const argMax = ["advertise", "advert", "ad", "unadvertise", "unadvert"].includes(verb) ? 64 : game === "roulette" ? 160 : 24;
-    // (roulette2 D1: "!rl start hr" - Pepe passes up to two words after a start verb, like his CBJ_START_VERBS; one bet line otherwise)
+    // (1.99aoj, D1: "!rl start hr" - Pepe passes up to two words after a start verb, like his CBJ_START_VERBS; one bet line otherwise)
     const rlMaxArgs = ["start", "open", "new"].includes(verb) ? 2 : 1;
     if (game === "roulette" && b.args != null && (!Array.isArray(b.args) || b.args.length > rlMaxArgs ||
         b.args.some(x => typeof x !== "string" || x.length > argMax))) return res.status(400).json({ ok: false, pm: true, reply: "Bet line too long or malformed." });

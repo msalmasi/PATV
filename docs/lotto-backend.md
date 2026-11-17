@@ -62,7 +62,7 @@ Every movement has a deterministic key and is looked up before it is made:
   A prize for an account that no longer exists goes back to the House or the pot (keyed). XP and the notice are marked before they are sent, so they are never sent twice.
 - **Pepe's moves of the pot** (`!donate lotto`, Fed grants, the reseed) use `bot:<ref>`, where the ref is his vault-leg key. The pot never goes negative.
 - **Concurrency.** One mutex covers every mutation, and a tick every 5 s closes sales, draws and pays.
-- **A staging copy** (roulette2 WP7). The staging refresh blanks the `server_seed` of every draw still selling or
+- **A staging copy** (1.99aoj). The staging refresh blanks the `server_seed` of every draw still selling or
   closed and sets `flags.copied` (`deploy/keep-staging-tables.js`), because prod may still be selling that draw. Such a
   draw is never sold into, closed, drawn or published on staging (`buy`, `forceDraw` and the tick skip it, and boot's
   recovery leaves a purchase of it that is still `charging` to the void). Boot and the tick void it: each purchase,

@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP3, Pepe's long-poll (contract 5, O12(b)): state_after in, state_seq + now out - a wake that found no waiting poll can
+// 1.99aoj, Pepe's long-poll (contract 5, O12(b)): state_after in, state_seq + now out - a wake that found no waiting poll can
 // no longer be lost (a web wheel on the stream drawn by "Spin now" writes no event row); rooms carry each room's game toggles and
 // push / advertise refuse a room with that game off; an older Pepe (no state_after, rooms {id, name}) polls exactly as before.
 // Invented accounts a..d only.

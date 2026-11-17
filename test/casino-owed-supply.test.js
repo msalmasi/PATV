@@ -1,4 +1,4 @@
-// roulette2 WP7 - two follow-ups from wave 1's reviews, on a temp DB:
+// 1.99aoj - two follow-ups from wave 1's reviews, on a temp DB:
 //   * the BLACKJACK PAYOUT FIX: settle() used to log a REFUSED payout (the account is gone: ledger.post finds no row to credit) and mark
 //     the round done - the payout was lost. Now it stays owed at the table (T.owed, by its own payout key), the round isn't done while it is
 //     the table's round, supply.js counts it, and payOwed tries it again by that key on the table's clock, at every boot and before the
@@ -226,7 +226,7 @@ test("a table is never closed with a payout owed: it stays open, frozen (no new 
 });
 
 test("a frozen table (its close asked for in a betting window while a payout is owed) deals no round on the bets it refunded - not by a bettor, a stranger or a restart", async () => {
-  // (review of WP7: closeTable's frozen branch refunded the window's stakes but left them in the engine, and !bj deal dealt them - a win
+  // (1.99aoj review: closeTable's frozen branch refunded the window's stakes but left them in the engine, and !bj deal dealt them - a win
   //  paid a stake nobody held, a loss put one into the House from nothing)
   await fresh();
   const start = await total();

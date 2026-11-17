@@ -1,5 +1,5 @@
 "use strict";
-// roulette2 WP3 (decisions D1-D7, contracts 2-4): web-opened wheels (normal and 💎 High Roller), the High Roller gate on live,
+// 1.99aoj (decisions D1-D7, contracts 2-4): web-opened wheels (normal and 💎 High Roller), the High Roller gate on live,
 // queued and rebet lines, ONE House budget across every wheel and tier (admission and removal), the per-spin limit snapshot, the
 // felt's chips with incognito seats masked, the refusal codes, Host Tools on a web wheel and the casino lobby's wheel rows.
 // Invented accounts a..d only.

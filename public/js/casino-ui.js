@@ -6,7 +6,7 @@
 // h22 (1.99alz): + the lobby's 🏁 Sit & Go section and its Create sheet (/api/casino/lobby -> sng), and the Sit & Go countdowns
 // ([data-sngdl], once a second on the server's clock) the table page's header (casinohm.js) uses too.
 // h22 phase 2 (1.99amj): a scheduled tournament's table polls every 2 s while it isn't your turn (1 s on your turn, 5 s hidden).
-// roulette2 WP5a: roulette is the lobby's third game - its 🛞 tab (#roulette), the wheels as table cards (wheelCard), "Open a wheel".
+// 1.99aoj: roulette is the lobby's third game - its 🛞 tab (#roulette), the wheels as table cards (wheelCard), "Open a wheel".
 (function () {
   "use strict";
   const root = document.getElementById("cb");
@@ -434,7 +434,7 @@
       `${t.proof ? `<a class="tag green" href="${esc(t.proof)}">🔐 ${esc(T("fair_short", "Fair"))}</a>` : ""}</div>` +
       `<div class="acts">${join}<a class="cz-btn ghost sm" href="${url}">👁 ${esc(T("watch", "Watch"))}</a></div></article>`;
   }
-  // ── roulette2 O4 (WP5a): a 🛞 wheel's card - the table card's markup (.tcard / .tcard-h / .meta / .acts) with the wheel's own lines:
+  // ── 1.99aoj: a 🛞 wheel's card - the table card's markup (.tcard / .tcard-h / .meta / .acts) with the wheel's own lines:
   // "Pepe's wheel" (the always-on lobby wheel) or "{host}'s wheel", the live phase + its countdown (the lobby answer's deadline /
   // land_at on the server's clock), the last pockets in the felt's colours where the seat dots go, who's on the layout, the limits
   // (the per-spin maximum spelled out), 💎, rooms / web, 📺, 🔐 Fair; Play + 👁 Watch. Display only: nothing here moves PAT, and the
@@ -519,7 +519,7 @@
   function renderLobby() {
     const j = lobbyData;
     if (!j) return;
-    // roulette2 O4: roulette is a game of the lobby while it's open to this viewer (the lobby answer's roulette.on; the server drops
+    // 1.99aoj: roulette is a game of the lobby while it's open to this viewer (the lobby answer's roulette.on; the server drops
     // the wheel rows otherwise): its tab, its cards, its open cards
     const rlOn = !!(j.roulette && j.roulette.on);
     if (!rlOn && lobbyTab === "roulette") lobbyTab = game;
@@ -589,7 +589,7 @@
       const cur = tlist.find((x) => x.id === lobbyTheme);
       $("cz-themenote").textContent = !cur || cur.default ? "" : T("theme_note", "Looks only: the rules, the cards, the odds and every PAT amount stay the same.") +
         (cur.games.includes("bj") ? "" : " " + T("theme_bj_classic", "Blackjack tables open in Classic for now.")) +
-        (rlOn ? " " + T("theme_rl_classic", "Roulette wheels open in Classic.") : "");   // (roulette2: a wheel opens classic - the server takes no theme)
+        (rlOn ? " " + T("theme_rl_classic", "Roulette wheels open in Classic.") : "");   // (1.99aoj: a wheel opens classic - the server takes no theme)
     }
     // the 💎 card: High Rollers open tables from it; everyone else sees what it is and where the role comes from
     // 1.99sk: two sub-sections (blackjack / Hold'em), each with its limits for everyone; the pickers and buttons (.hr-only)
@@ -599,7 +599,7 @@
     const ladder = (lim.holdem.hr_ladder || []).map(([s, b]) => `${s}/${b}`);
     $("cz-hrsec-bj").hidden = !j.enabled;
     $("cz-hrsec-hm").hidden = !j.hm_enabled || !ladder.length;
-    // roulette2 D2: the 💎 wheel's sub-section (its limits from limits.roulette.hr) while roulette is open to this viewer
+    // 1.99aoj (D2): the 💎 wheel's sub-section (its limits from limits.roulette.hr) while roulette is open to this viewer
     const hrRl = $("cz-hrsec-rl"), rlHr = rlLim && rlLim.hr ? rlLim.hr : null;
     if (hrRl) hrRl.hidden = !rlOn || !rlHr;
     if (hrRl && !hrRl.hidden) $("cz-hrrl").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlHr.min_bet), spin: fmt(rlHr.max_spin) });
@@ -632,7 +632,7 @@
   // idempotency key: a double click never holds twice) and Watch. Hidden on the blackjack tab and while the switch is off (unless one
   // is still open - leaving it always works).
   const mmss = (ms) => { const n = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
-  // (roulette2 WP5a: + a wheel card's countdown, [data-rldl] - the lobby answer's `now` sets the skew)
+  // (1.99aoj: + a wheel card's countdown, [data-rldl] - the lobby answer's `now` sets the skew)
   function tickSng() {
     const now = Date.now() - skew;
     for (const el of document.querySelectorAll("[data-sngdl]")) el.textContent = mmss(Number(el.dataset.sngdl) - now);
@@ -773,7 +773,7 @@
   }
   async function lobby() {
     try {
-      // roulette2 (contract 3): ?rl=1 - this script draws a wheel's row as a wheel card (an older page gets none); `now` = the
+      // 1.99aoj (contract 3): ?rl=1 - this script draws a wheel's row as a wheel card (an older page gets none); `now` = the
       // server's clock for the wheels' countdowns
       lobbyData = await (await fetch("/api/casino/lobby?rl=1", { credentials: "same-origin" })).json();
       if (lobbyData && lobbyData.now) setSkew(lobbyData.now);
@@ -786,7 +786,7 @@
     const btn = $(OPEN_BTN[g][high ? 1 : 0]);
     if (!btn || btn.disabled) return;
     btn.disabled = true;
-    // roulette2 D1 (contract 4): {game: "roulette", hr?} opens a web wheel the viewer hosts (one at a time; 💎 for High Rollers) -
+    // 1.99aoj (D1, contract 4): {game: "roulette", hr?} opens a web wheel the viewer hosts (one at a time; 💎 for High Rollers) -
     // the server answers 200 {ok, table} or 409 with the reason (already hosting one, the High Roller role, the casino full)
     const body = { game: g === "holdem" ? "holdem" : g === "roulette" ? "roulette" : "bj", idem: idem() };
     if (g === "holdem") body.blinds = high ? hrBlinds : blinds;
@@ -806,7 +806,7 @@
       location.href = "/casino/roulette/t/" + encodeURIComponent(j.table);
     } else toast(j.reply || j.error || (g === "roulette" ? T("rl_open_fail", "Couldn't open a wheel.") : T("open_fail", "Couldn't open a table.")), true);
   }
-  /** roulette2 (WP5a): #all / #bj / #holdem / #roulette picks the lobby's tab (the page's own game when none); a tab you pick is
+  /** 1.99aoj: #all / #bj / #holdem / #roulette picks the lobby's tab (the page's own game when none); a tab you pick is
    *  written back (replaceState: no history entry), so Back from a table lands on the same tab */
   function hashTab() {
     const h = String((typeof location !== "undefined" && location.hash) || "").replace(/^#/, "").toLowerCase();
@@ -831,7 +831,7 @@
   }
   function startLobby() {
     $("cz-lobby").hidden = false;
-    lobbyTab = hashTab() || game;               // (roulette2: #roulette - the roulette tab once the lobby says roulette is open to you)
+    lobbyTab = hashTab() || game;               // (1.99aoj: #roulette - the roulette tab once the lobby says roulette is open to you)
     for (const b of document.querySelectorAll(".lob-tabs button")) {
       b.addEventListener("click", () => { lobbyTab = b.dataset.tab; writeTab(); renderLobby(); });
     }

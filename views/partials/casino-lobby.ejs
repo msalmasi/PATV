@@ -2,7 +2,7 @@
 <%# views/partials/casino-lobby.ejs - D10: the casino lobby, shared by /casino/blackjack and /casino/holdem (the page's game is the
     first tab): open tables of both games (seats taken, stakes, the Camfrog room each is pushed to, stream, fairness), Join /
     Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn.
-    roulette2 O4/O5 (WP5a): roulette is the third game here - a 🛞 Roulette tab (#roulette picks it; shown while roulette is open to
+    1.99aoj: roulette is the third game here - a 🛞 Roulette tab (#roulette picks it; shown while roulette is open to
     this viewer), the wheels as table cards (the always-on lobby wheel first, 💎 wheels in the High Roller section), and "Open a
     wheel" / a 💎 roulette sub-section in the open cards. The old "Roulette · N players" box above the hero is gone.
     (review) rlFirst: the page's first guess at roulette - app.locals.rouletteOn(can), the navbar's own test - so a phone's tab strip
@@ -56,7 +56,7 @@
         <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-hm-go"><%- t('casino.open_hm') %></button>
         <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
       </div>
-      <%# roulette2 D1 (WP5a): open a web wheel you host - at most one at a time; POST /api/casino/open {game: "roulette"} (casino-ui.js) %>
+      <%# 1.99aoj (D1): open a web wheel you host - at most one at a time; POST /api/casino/open {game: "roulette"} (casino-ui.js) %>
       <div class="tcard rl" id="cz-open-rl" hidden>
         <div class="tcard-h"><span class="ic" aria-hidden="true">🛞</span><div><b><%- t('casino.rl.title') %></b><small><%- t('casino.rl.rules') %></small></div></div>
         <p id="cz-rlmax"><%- t('casino.rl.open_note') %></p>
@@ -88,7 +88,7 @@
             </div>
             <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrhm-go" aria-label="<%- t('casino.open_hrhm') %>"><%- t('casino.hr_open_go') %></button></div>
           </section>
-          <%# roulette2 D2 (WP5a): a 💎 High Roller wheel - its limits for everyone, the button for High Rollers %>
+          <%# 1.99aoj (D2): a 💎 High Roller wheel - its limits for everyone, the button for High Rollers %>
           <section class="hrgame" id="cz-hrsec-rl" aria-labelledby="cz-hrsec-rl-h" hidden>
             <h3 class="hrgame-h" id="cz-hrsec-rl-h"><span class="ds-ic" aria-hidden="true">🛞</span><%- t('casino.rl.title') %></h3>
             <p class="hrgame-lim" id="cz-hrrl"></p>

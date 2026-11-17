@@ -110,7 +110,7 @@ async function fresh() {
   now += 86400000;
   await svc.boot({ tick: false });
   await svc.setSetting("casino_roulette", "everyone");
-  // roulette2 D6 made the default spin 12 s; these suites step the clock by the 8 s spin they were written for (casino-rl-tables
+  // 1.99aoj (D6) made the default spin 12 s; these suites step the clock by the 8 s spin they were written for (casino-rl-tables
   // checks the new default)
   await svc.setSetting("rl_spin_secs", 8);
   await svc.tickOnce();

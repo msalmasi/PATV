@@ -1,4 +1,4 @@
-/* Single-zero roulette table page (/casino/roulette/t/<id>) - roulette2 WP5b (O7 / O9 / O10 / O11 / O13, contracts 2, 7, 8, 9).
+/* Single-zero roulette table page (/casino/roulette/t/<id>) - 1.99aoj (O7 / O9 / O10 / O11 / O13, contracts 2, 7, 8, 9).
    Built on the casino's shared parts (casino-ui.js CZ: the top bar, the felt, Pepe's menu, the countdown ring, seats with the person
    menu, chips, pops, sheets, Host Tools) like the Blackjack and Hold'em tables:
    * the REAL wheel and ball (casino/rlwheel.js PATVRlWheel.mount): driven by spin.started_at / ends_at and the site clock, so it

@@ -94,14 +94,14 @@ test("UI-13 / UI-9 / UI-3: an idle ring holds a dash, the small links and inputs
     felt = read("views/partials/casino-rl-css.ejs"),
     lobby = read("views/partials/casino-css.ejs");
   assert.match(dockCss, /\.rl-controls input \{[^}]*min-height: 44px/);
-  // (WP5b: the edges keep a 22 px hit area on a mouse screen; touch screens bet them with the modes)
+  // (1.99aoj: the edges keep a 22 px hit area on a mouse screen; touch screens bet them with the modes)
   assert.match(felt, /\.rl-grid \.edge::before \{\s*content: "";\s*position: absolute;\s*inset: -2px -7px;/);
   assert.match(dockCss, /\.rl-table-link \{[^}]*min-height: 44px/);
   assert.match(dockCss, /\.rl-timer\.idle \{[^}]*width: 44px;[^}]*height: 44px/);
   assert.match(felt, /\.rl-more a \{[^}]*min-height: 44px/);
   assert.match(felt, /grid-template-rows: repeat\(3, minmax\(44px, 1fr\)\)/);
   assert.match(felt, /@media \(pointer: coarse\) and \(min-width: 640px\) \{\s*\.rl-modes \{\s*display: flex;[\s\S]*?\.rl-grid \.edge \{\s*display: none;/);
-  // (roulette2 WP5a: the lobby's bare roulette link is gone - each wheel is a table card with Play / Watch buttons, casino-lobby.test.js)
+  // (1.99aoj: the lobby's bare roulette link is gone - each wheel is a table card with Play / Watch buttons, casino-lobby.test.js)
   assert.doesNotMatch(lobby, /#cz-roulette/);
   assert.match(read("public/js/casinorl.js"), /matchMedia\("\(max-width:639px\), \(pointer:coarse\)"\)/);
 });
@@ -148,12 +148,12 @@ test("UI-6 / UI-7 / UI-8 / UI-12 / UI-14: sign-in prompt, plural counts, spoken 
   const page = read("public/js/casinorl.js"),
     ui = read("public/js/casino-ui.js"),
     en = JSON.parse(read("locales/en.json"));
-  // (roulette2 WP5b: the signed-out line is the table's .watchbar, as on the Blackjack and Hold'em tables - test/casino-rl-page.test.js)
+  // (1.99aoj: the signed-out line is the table's .watchbar, as on the Blackjack and Hold'em tables - test/casino-rl-page.test.js)
   assert.match(page, /if \(t\.status === "open" && !CZ\.signed\)\s*txt = "👁 " \+ CZ\.esc\(T\("watching_signin", "You're watching\."\)\) \+ ' <a href="\/login">'/);
   assert.deepEqual(en["js.casino.rl_layout_n"], { one: "Layout: {players} player · {pat} PAT", other: "Layout: {players} players · {pat} PAT" });
   assert.deepEqual(en["js.casino.rl_lobby_status"], { one: "{n} player · {phase}", other: "{n} players · {phase}" });
   assert.match(page, /count: lay\.players/);
-  assert.match(ui, /count: players \}/, "roulette2 WP5a: the lobby's wheel card counts its players with a plural");
+  assert.match(ui, /count: players \}/, "1.99aoj: the lobby's wheel card counts its players with a plural");
   // UI-8 / O7: a spot's spoken name - the felt's words (never the internal kind or token), what it pays, its cap, my bet
   assert.match(page, /T\("rl_spot_aria", "\{spot\} · \{kind\} · pays \{odds\} to 1 · up to \{cap\} PAT · your bet \{n\} PAT", \{\s*spot: spotWords\(token\),\s*kind: kinds\[p\.kind\]/);
   for (const k of ["rl_trio", "rl_first_four", "rl_dozen", "rl_column", "rl_even_money", "lobby_sub_rl", "lobby_tag_rl"]) assert.ok(en["js.casino." + k], k);
@@ -161,8 +161,8 @@ test("UI-6 / UI-7 / UI-8 / UI-12 / UI-14: sign-in prompt, plural counts, spoken 
   assert.match(ui, /if \(running\) \{\s*if \(!again\) again = running\.then/);
 });
 
-// ── roulette2 WP5b: the shared controls on the casino's chips, compact mode in the Room Dock, one key per line ──
-test("WP5b / contract 9: the Room Dock keeps its compact sheet - the casino's chips, its own buttons, no Spin now, a mini wheel, the layout line", async () => {
+// ── 1.99aoj: the shared controls on the casino's chips, compact mode in the Room Dock, one key per line ──
+test("1.99aoj / contract 9: the Room Dock keeps its compact sheet - the casino's chips, its own buttons, no Spin now, a mini wheel, the layout line", async () => {
   const calls = [];
   const wheel = {};
   for (const k of ["setSkew", "spin", "rest", "idle", "destroy"]) wheel[k] = (...a) => { calls.push([k, ...a]); return wheel; };
@@ -196,7 +196,7 @@ test("WP5b / contract 9: the Room Dock keeps its compact sheet - the casino's ch
   assert.ok(calls.some((c) => c[0] === "destroy"), "closing the sheet stops the wheel");
 });
 
-test("WP5b: every POST has its own idempotency key; a call line that waits for the line in flight goes next, on its own and whole", async () => {
+test("1.99aoj: every POST has its own idempotency key; a call line that waits for the line in flight goes next, on its own and whole", async () => {
   let release;
   const posts = [];
   const W = makeWindow(async (url, o) => {
@@ -241,7 +241,7 @@ test("WP5b: every POST has its own idempotency key; a call line that waits for t
   assert.ok(typed.querySelector("input") && typed.querySelector("form"), "the custom chip and the bet line fold under it");
 });
 
-// ── roulette2 WP5b review fixes (the shared controls) ──
+// ── 1.99aoj review fixes (the shared controls) ──
 test("review: an E_SPIN refusal of a Rebet or of a line queued while the wheel spins names the line's real total", async () => {
   let reply = null;
   const W = makeWindow(async (url, o) => (o && o.method === "POST" ? reply : { ok: false }));

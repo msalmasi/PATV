@@ -1,4 +1,4 @@
-// roulette2 WP7 (FAIR-1 for raffles and the lotto) - test/raffle-lotto-staging.test.js's STAGING side, in its own process (dbUtils opens
+// 1.99aoj (FAIR-1 for raffles and the lotto) - test/raffle-lotto-staging.test.js's STAGING side, in its own process (dbUtils opens
 // ./myapp.db): boots raffles (raffles.js register - what index.js does) and the lotto (lotto/service.js boot - what lotto/routes.js does) on a
 // refreshed copy of "prod" (VACUUM INTO + deploy/keep-staging-tables.js, done by the test) 11 minutes after the copy, runs their clocks
 // (raffles' tick, the lotto's tick) past a few minutes, and tries to buy tickets in every copied raffle and draw one. Then it boots AGAIN (a

@@ -34,7 +34,7 @@
 //   commitment = sha256(server_seed) is published at once. At the draw, tickets_digest = sha256 of every purchase in order,
 //   one line "<first>-<last>:<username>\n"; the winning ticket = 1 + below(n) over the HMAC-SHA256(server_seed,
 //   `${tickets_digest}:R<id>:${counter}`) word stream. The seed is revealed after the draw; /raffles/<id> re-checks it in
-//   the browser (and verify() here). roulette2 WP7: a staging copy blanks an open raffle's seed - such a raffle is never sold or
+//   the browser (and verify() here). 1.99aoj: a staging copy blanks an open raffle's seed - such a raffle is never sold or
 //   drawn here, only retired with full refunds, quietly (retireCopies).
 //
 // ABUSE: verified accounts only (verified.js) create; creations per day, open raffles per user, a max ticket price; the
@@ -690,7 +690,7 @@ async function buy(userId, { id, qty, idem, expect, via = "web" } = {}) {
   const out = await tx(async () => {
     const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [r0.id]))[0];
     if (r.status !== "open") throw new Refuse(409, `That raffle is ${r.status}.`, "E_CLOSED");
-    // roulette2 WP7: a raffle copied from another site (its seed blanked) never sells a ticket here - it is retired (retireCopies)
+    // 1.99aoj: a raffle copied from another site (its seed blanked) never sells a ticket here - it is retired (retireCopies)
     if (isCopy(r)) throw new Refuse(409, "That raffle is closed.", "E_CLOSED");
     // 1.99afy: an admin can change the price before the first ticket (edit) - the price the buyer saw is checked again here
     if (expect !== undefined && expect !== null && expect !== "" && int(expect) !== r.price) {
@@ -781,7 +781,7 @@ async function settlePotInTx(r, tickets, { payee, legs, how }) {
 async function maybeDraw(id) {
   const r = await raffleRow(id);
   if (!r || r.status !== "open") return null;
-  if (isCopy(r)) return null;                          // roulette2 WP7: a copy is never drawn or expired here - only retired (retireCopies)
+  if (isCopy(r)) return null;                          // 1.99aoj: a copy is never drawn or expired here - only retired (retireCopies)
   const t = now();
   if (t >= r.expires_at) return expire(r.id, "expired");
   if (r.trigger_kind === "target" && r.sold >= r.target) return draw(r.id);
@@ -798,7 +798,7 @@ async function draw(id) {
   const res = await tx(async () => {
     const r = (await getQuery("SELECT * FROM raffles WHERE id = ?", [Number(id)]))[0];
     if (!r || r.status !== "open") return { drawn: false };
-    if (isCopy(r)) return { drawn: false };            // roulette2 WP7: no seed, no draw (fair.js's guard is the backstop)
+    if (isCopy(r)) return { drawn: false };            // 1.99aoj: no seed, no draw (fair.js's guard is the backstop)
     if (r.sold < Math.max(1, r.min_tickets)) return { drawn: false };
     const tickets = await getQuery("SELECT * FROM raffle_tickets WHERE raffle_id = ? AND state = 'held' ORDER BY first_no", [r.id]);
     const n = tickets.reduce((a, x) => a + x.qty, 0);
@@ -937,7 +937,7 @@ async function expire(id, why = "expired", { actor = null, reason = null } = {})
   return { closed: true, id: res.r.id, status: res.r.status, refunded: res.refunded, tickets: res.tickets };
 }
 
-// ── roulette2 WP7 (FAIR-1 for raffles): a raffle copied from another database ──
+// ── 1.99aoj (FAIR-1 for raffles): a raffle copied from another database ──
 // A staging refresh (deploy/refresh-staging-db.sh, then deploy/keep-staging-tables.js DRAW_SCRUB on the copy) blanks every OPEN raffle's
 // secret server_seed: prod may still be selling that raffle, and its seed with the tickets digest taken at the draw IS the winning ticket,
 // so staging must never draw it or publish the seed (the page, /api/raffles/:id/fair, Pepe's line) while prod still sells. An open
@@ -1481,7 +1481,7 @@ function tick() {
   if (ticking) return ticking;
   ticking = (async () => {
     await init();
-    // roulette2 WP7: a copied raffle whose retire was refused is tried again first (it is skipped by the draws below either way)
+    // 1.99aoj: a copied raffle whose retire was refused is tried again first (it is skipped by the draws below either way)
     try { await retireCopies(); } catch (e) { console.error("[raffles] copies:", e.message); }
     const t = now();
     const out = { drawn: 0, expired: 0, released: 0, noticed: 0 };
@@ -1652,7 +1652,7 @@ async function achMetrics(userId) {
 
 // ── routes ──
 function register(app, { isBotToken, addUser, noTimers = false }) {
-  // roulette2 WP7: at boot, every raffle copied from another database (a staging refresh) is retired before anything can sell or draw it
+  // 1.99aoj: at boot, every raffle copied from another database (a staging refresh) is retired before anything can sell or draw it
   init().then(() => retireCopies()).catch((e) => console.error("[raffles] init:", e.message));
   if (app.locals) app.locals.rafflesOn = () => enabledSync();
   require("./userlinks").install(app);

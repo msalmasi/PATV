@@ -124,7 +124,7 @@
                   // D10/1.99ol: the PATV casino (/casino/<game>) when that game's front end is it, else Pepe's tables (tables.js)
                   [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
                   [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
-                  // 1.99aoh (not "Wheel": that's the PAT prize wheel); roulette2 WP5a (review, O3/O4) the lobby's 🛞 Roulette tab - every wheel, Open a
+                  // 1.99aoh (not "Wheel": that's the PAT prize wheel); 1.99aoj (review, O3/O4) the lobby's 🛞 Roulette tab - every wheel, Open a
                   // wheel, the 💎 ones - on the page the casino's front end uses; Pepe's lobby wheel only while neither game is the PATV casino
                   _rl && [_casino('bj') ? '/casino/blackjack#roulette' : _casino('holdem') ? '/casino/holdem#roulette' : '/casino/roulette', '🛞', t('nav.roulette')],
                   ['/bounties', '🎯', t('nav.bounties')],
