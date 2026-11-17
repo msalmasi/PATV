@@ -638,7 +638,53 @@ never closed with a payout owed: `closeTable` keeps it open and frozen (`T.closi
 autobets, and no new round - the betting window's bets are refunded and leave the engine, and `!bj deal` / `beginRound`
 deal nothing on a closing table; no deadline but the owed payout's clock; `!bj end` says why), and the payout that
 lands closes it. A staging
-copy's retire (`casino/retire.js`) pays what is owed by its key. **A hand in progress survives a restart**: the table is reloaded, the deadline
+copy's retire (`casino/retire.js`) pays what is owed by its key.
+
+**A refused refund is owed too** (1.99aoj, the close-refund fix). A stake refund refused when a player leaves the betting
+window or the table closes (`refundHeld`: an admin's or host's close, the idle close, the frozen table's final close) used to
+stay in `T.stakes` "for retry" while `closeTable` closed the table anyway, so the stake was lost. Now it is owed in the same
+store and on the same clock: `T.owed[<the stake's key>:refund] = {..., kind: "refund", type}` (the refund's own key, so a
+refund that did land replays), it leaves `T.stakes` / `T.escrowed` (supply counts it as owed), and the table freezes until
+it lands. A stake a restart caught in its intent whose refund is refused (`recover`) is owed the same way (it was logged and
+the intent cleared). A refund never holds a round's `settle: "owed"`; only a payout does. Hold'em: a buy-in a restart caught
+in its intent whose refund is refused is owed on the table (`T.owed`, tried on the table's clock and at boot), and the table
+never closes while it is owed (`T.closing` keeps the close's reason; the last owed item settled closes it once nobody is
+seated). A refused cash-out keeps its seat as before (sitting out), now marked owed: `T.qol[uid].refused = {key, since,
+tries, code}`, and every later try of that cash-out uses the same key.
+
+**Owed casino PAT, the owner's tool** (1.99aoj, `/admin/casino/owed`; `casino/owed.js`, `casino/owedweb.js`). The page
+(linked from `/admin/games`' casino card with a count badge; casino admins) lists every item owed at the open blackjack and
+Hold'em tables: the game, the table, what it is (round N payout / stake refund / cash-out / buy-in refund), the member (a
+username, or "account missing" + a short opaque reference - never an account id or an address), the amount, since, tries,
+the last refusal code and the next automatic try. Per item:
+- **Retry now** (casino admins): the item's own retry, now, by its own key (a cash-out: the seat's own cash-out).
+- **Pay another account** (a Pepe owner + the password step-up: `POST /api/admin/stepup/nonce {for: "casino_owed"}` and the
+  account password; a reason): credited to the named account under a NEW derived key `<item key>:redirect` (ledger type
+  `... (redirected)`).
+- **Write off to the House** (a Pepe owner + the step-up; a reason): `jackpot_rakes <item key>:writeoff` under the table's
+  casino spin id (`cbj:<table>:r<n>` / `chm:<table>:owed` - jackpotflows "casino tables"), the House leg a lost stake goes
+  to. Never burned.
+Every action runs under the casino mutex, is idempotent by the form's key (a double submit answers the first time's answer),
+is refused when the item changed since the page was drawn (its id - a hash of the table and its key - and its amount), and is
+in `admin_audit` (action `casino_owed`: who, the item, the amount, the reason, the target, via web, the outcome). One item
+lands under at most ONE of its key, `:redirect` and `:writeoff`: every retry asks for the other two first, and a redirect or
+write-off asks for the original key first (a credit that landed while the table's save was behind closes the item as paid). A
+redirect / write-off is journalled on the table (`T.owed_act`, saved before the money moves); a restart finishes it (the move
+landed: the item closes) or drops it (nothing moved: still owed) before anything retries that item. Settling a table's last
+owed item closes a table that waited to close, marks a frozen round done, and lets Hold'em's close proceed. Supply stops
+counting an item once paid, redirected or written off, also while the table's own save is behind. With nothing owed the
+supply is exactly 1.99aoi's (test/supply.test.js runs 1.99aoi's own supply.js on the same tables).
+
+**Rolling back to 1.99aoi with something owed (runbook).** 1.99aoi, the build the site CI's automatic rollback runs, doesn't
+know `T.owed`: it keeps the field in the table's saved JSON while the table stays open, but it never retries an owed item,
+doesn't count it in the supply, doesn't freeze the table (`T.closing`), and once it closes that table (an admin's or host's
+close, the idle close) no build pays the item again. Before rolling back, list the tables with anything owed on
+`/admin/casino/owed` (the badge on `/admin/games` counts them) and settle each one there first: Retry now, or Pay another
+account / Write off to the House. An automatic rollback can't wait for that: after one, an item at a table 1.99aoi closed
+meanwhile is left only in that closed row's saved `owed` (`casino_tables`, status `closed`) and needs settling by hand. A
+refused Hold'em cash-out is safe either way: both builds keep its seat and its stack.
+
+**A hand in progress survives a restart**: the table is reloaded, the deadline
 of the current decision is re-armed (if it passed while the site was down, the player gets a fresh 30 s rather than
 an instant time-out), and play continues.
 

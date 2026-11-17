@@ -1,0 +1,47 @@
+<%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: typeof isAdmin !== 'undefined' ? isAdmin : true }) %>
+<%# 1.99aoj: owed casino PAT (casino/owed.js, casino/owedweb.js) - a payout, refund or cash-out whose credit was refused because the account is
+    gone, kept at its table and tried again on its own. public/js/admin-owed.js draws the list from GET /api/casino/admin/owed and sends each
+    action (retry now: casino admins; pay another account / write off to the House: a Pepe owner + the password step-up). Every action is in
+    the admin log (admin_audit casino_owed). %>
+<style>
+  .owed-list { display: grid; gap: var(--ds-sp-3); margin-top: var(--ds-sp-2); }
+  .owed-item { border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); padding: var(--ds-sp-3); min-width: 0; }
+  .owed-item h3 { margin: 0 0 6px; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+  .owed-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 4px var(--ds-sp-3); margin: 0 0 var(--ds-sp-2); font-size: 13.5px; }
+  .owed-facts div { min-width: 0; overflow-wrap: anywhere; }
+  .owed-facts b { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ds-text-muted); }
+  .owed-acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
+  .owed-form { margin-top: var(--ds-sp-2); padding-top: var(--ds-sp-2); border-top: 1px solid var(--ds-line); }
+  .owed-form[hidden] { display: none; }
+  .owed-help dt { font-weight: 700; margin-top: var(--ds-sp-2); }
+  .owed-help dd { margin: 2px 0 0; }
+  .owed-recent li { margin: 0 0 6px; overflow-wrap: anywhere; }
+</style>
+<div class="adm-head">
+  <h1>💸 Owed casino PAT</h1>
+  <p>When the casino pays someone - a blackjack payout, a stake refund, a Hold'em cash-out - and their account is gone (a hard purge or a broken merge), the credit is refused. The points are never dropped: they stay at the table, owed, and are tried again on their own (every 10 minutes, a Hold'em seat every sit-out period, and at every restart). A table never closes while it owes points - a blackjack table takes no new bets until everything it owes is settled. <a href="/admin/games#casino">Games ›</a></p>
+</div>
+<section class="adm-card" id="owedHelp" aria-labelledby="owedHelpT">
+  <h2 id="owedHelpT">What each button does</h2>
+  <dl class="owed-help adm-help">
+    <dt>Retry now</dt>
+    <dd>Tries the same credit to the same account again, right away - the same thing the automatic retry does. Safe to press any time: points that already went through are never paid twice. Casino admins.</dd>
+    <dt>Pay another account <span class="adm-pill admin">owners</span></dt>
+    <dd>Pays the points to an account you name instead (for example the member's new account). The original account can never be paid them afterwards, even if it comes back. Needs a reason and your password.</dd>
+    <dt>Write off to the House <span class="adm-pill admin">owners</span></dt>
+    <dd>Gives the points back to the House - the casino jackpot, which pays the casino's winners and keeps its lost bets. Nothing is burned; the points stay in the economy. Needs a reason and your password.</dd>
+  </dl>
+  <% if (!owner) { %><p class="adm-help">Your account can retry. Paying another account and writing off are for Pepe owners: an account with a linked Camfrog login that holds Pepe's owner role.</p><% } %>
+</section>
+<section class="adm-card" id="owedItems" aria-labelledby="owedItemsT">
+  <h2 id="owedItemsT">Owed now <span class="adm-pill" id="owedCount">…</span></h2>
+  <p class="adm-msg" id="owedStatus" role="status" aria-live="polite"></p>
+  <div id="owedList" class="owed-list" data-owner="<%= owner ? '1' : '0' %>"><p class="adm-help">Loading…</p></div>
+</section>
+<section class="adm-card" id="owedRecent" aria-labelledby="owedRecentT">
+  <h2 id="owedRecentT">Recently settled</h2>
+  <p class="adm-help">Every action on this page is in the admin log: who did it, the item, the amount and the reason.</p>
+  <ul id="owedRecentList" class="owed-recent adm-help"><li>Loading…</li></ul>
+</section>
+<script src="/public/js/admin-owed.js?v=1"></script>
+<%- include('../partials/admin-close') %>

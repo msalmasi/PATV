@@ -6,7 +6,8 @@
 //   /admin/users        👥 all members (1.99anv members.js), roles + classes, XP, welcome bonus, stale-account cleanup, 🎟️ sign-ups & invites
 //                       (1.99anv invites.js), 🚪 guest access - what signed-out visitors can open (1.99anv guestaccess.js)
 //   /admin/economy      Reserve + today's flows, loans/credit, PAT grants, redemption codes, royalties, shop
-//   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js)
+//   /admin/games        manual wheel spin, jackpot top-up, casino front end (1.99ol), casino bans (where they live), GTF heist market settings (1.99xq), duel / brawl knobs #pvp (1.99yc, pvpcfg.js),
+//                       the link to /admin/casino/owed with its count badge (1.99aoj, casino/owed.js)
 //   /admin/cosmetics    badges (create / list / delete), links to cosmetics + achievements
 //   /admin/bridge       the web command audit log (GET /api/bridge/cmdlog, admins only); the 🎙 Push-to-talk clips limits (pttlimits.js)
 //   /admin/pepe         the Pepe control panel (views/partials/pepe-control.ejs) + where his feed settings live
@@ -234,8 +235,10 @@ function register(app, { addUser }) {
   }));
   // 1.99ol: + the casino front-end switches (casino_settings bj_front / hm_front; saved through /api/casino/admin/settings)
   // 1.99xq: + the GTF heist market settings (heistmarket.adminView; was a card on /gtf/market), admins only
+  // 1.99aoj: + owed: {n, amount} - casino PAT owed because its credit was refused (casino/owed.js; the badge on the link to /admin/casino/owed)
   app.get("/admin/games", addUser, gate, page("games", "Admin · Games", async (req, me) => ({ casino: await safe(() => require("./casino/service").loadSettings(true), null),
-    hm: SP.can(me, "games.config") ? await safe(() => require("./heistmarket").adminView(), null) : null })));
+    hm: SP.can(me, "games.config") ? await safe(() => require("./heistmarket").adminView(), null) : null,
+    owed: SP.can(me, "casino.admin") ? await safe(async () => require("./casino/service").OW.summary(), null) : null })));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));
   // wave 2 WP-5 review fix (WP5-ACC-1): the Evidence card's export form only while evidence clips can be made (evidence.effective();
   // evidenceexport.js refuses otherwise anyway)

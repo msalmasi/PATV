@@ -29,6 +29,7 @@ const sizing = require("./sizing");
 const notices = require("./notices");     // 1.99alq train3: the timeout rule's one-time notice at a buy-in
 const themes = require("./themes");       // 1.99amf h20: the table's theme (presentation + the dealer's flavour lines only)
 const RT = require("./retire");           // 1.99aoh: a cash table copied from another database is retired at boot (FAIR-1 for cards)
+const OW = require("./owed");             // 1.99aoj: PAT owed because its credit was refused (a buy-in refund at boot; the owner's tool)
 
 const HC = {
   ACT_SECS: 60, NEXT_SECS: 15, IDLE_SECS: 300, MAX_SEATS: 9, MIN_BUY_BB: 20, MAX_BUY_BB: 200, SB_CAP: 5000, BB_CAP: 10000,
@@ -89,6 +90,7 @@ function install(core) {
     if (back) {
       if (!q.out && !q.back) return R(true, "you're already playing.");
       q.out = false; q.since = null; q.back = T.tourney ? null : post ? "post" : "wait"; q.timeouts = 0;   // (h22: a sit & go seat never left the blinds)
+      delete q.refused;              // (1.99aoj: the account is back and playing - its stack isn't owed any more, it's theirs at the table)
       if (!T.eng.hand_active) T.dl.idle = null;
       if (!T.eng.hand_active && !T.dl.next) T.dl.next = clock() + HC.NEXT_SECS * 1000;
     } else {
@@ -270,6 +272,7 @@ function install(core) {
     const name = T.players[actor.uid].name;
     H.sit(e, actor.uid, name, amount);
     qos(T, actor.uid);
+    if (T.qol[actor.uid]) delete T.qol[actor.uid].refused;     // (1.99aoj: the account is back - its stack isn't owed any more)
     T.intent = null;
     if (!e.hand_active) T.dl.idle = clock() + HC.IDLE_SECS * 1000;
     const joining = e.hand_active && !e.players.includes(actor.uid) ? " (joins next hand)" : "";
@@ -285,10 +288,15 @@ function install(core) {
   }
 
   /** 1.99aoh review (the cash-out fix): a seat whose cash-out credit was REFUSED keeps its stack and its seat, sitting out - never
-   *  dealt in, and its sit-out clock (hm_sitout_mins, tick below) tries the cash-out again once per period, never on every tick. */
-  function refusedOut(T, uid) {
+   *  dealt in, and its sit-out clock (hm_sitout_mins, tick below) tries the cash-out again once per period, never on every tick.
+   *  1.99aoj (casino/owed.js): the seat is marked owed - q.refused {key, since, tries, code}: the refused credit's key, which every
+   *  later try of this cash-out uses again (a credit that landed replays), and /admin/casino/owed lists and settles it. */
+  function refusedOut(T, uid, key, code) {
     const q = qos(T, uid);
     q.out = true; q.since = clock(); q.back = null;
+    q.refused = q.refused || { key, since: clock(), tries: 0 };
+    q.refused.tries += 1;
+    q.refused.code = code || null;
     qos(T, uid);                                                    // the sit-out clock from now
   }
 
@@ -304,15 +312,19 @@ function install(core) {
     if (!e.seats.includes(uid)) return true;
     const quiet = !!(opts && opts.quiet);
     const name = e.names[uid] || (T.players[uid] || {}).name || uid;
+    const was = T.qol && T.qol[uid] && T.qol[uid].refused;
+    // 1.99aoj (casino/owed.js): a seat whose cash-out was refused (owed) - its stack already paid under its key (a save behind), or settled
+    // elsewhere by an owner (redirected / written off): nothing is credited again, the seat just leaves
+    if (was && was.key && (e.chips[uid] || 0) > 0 && (await OW.landed(was.key))) e.chips[uid] = 0;
     const chips = e.chips[uid] || 0;
     if (chips > 0) {
-      const key = opKey(T, uid, "out");
+      const key = was && was.key ? was.key : opKey(T, uid, "out");      // (1.99aoj: an owed cash-out keeps its key)
       T.intent = { kind: "out", key, uid, amount: chips, ts: clock() };
       await save(T);
       const r = await money.credit(key, uid, chips, "holdem cash-out");
       if (!r.ok) {
         T.intent = null;
-        refusedOut(T, uid);
+        refusedOut(T, uid, key, r.code);
         await save(T);
         console.error(`[casino] ${T.id}: cash-out ${chips} to ${uid} refused (${r.code}) - the stack stays at the table (sitting out, tried again in ${setting("hm_sitout_mins", 10)} min)`);
         return false;
@@ -593,19 +605,24 @@ function install(core) {
     return TN().afterHand(T, {});
   }
 
-  /** -> false when the table stays open (1.99aoh review: a refused cash-out keeps its seat - never closed with PAT on it), true when closed */
+  /** -> false when the table stays open (1.99aoh review: a refused cash-out keeps its seat - never closed with PAT on it; 1.99aoj: nor with
+   *  a refund owed, T.owed), true when closed */
   async function closeTable(T, reason) {
     if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
     for (const k of e.seats.slice()) await cashout(T, k, false);
-    if (e.seats.length) {
-      // every seat left holds a refused cash-out, sitting out (refusedOut): its sit-out clock tries again, and the last one out closes it
+    if (OW.count(T)) await OW.retry(T, { all: true, t: clock() });      // 1.99aoj: an owed refund is tried once more by its key
+    if (e.seats.length || OW.count(T)) {
+      // every seat left holds a refused cash-out, sitting out (refusedOut): its sit-out clock tries again, and the last one out closes it;
+      // 1.99aoj: an owed refund is tried on its clock, and the last owed item settled closes it (owedSettled - T.closing: the close asked for)
+      T.closing = reason || T.closing || "closed";
       T.dl.next = null;
       T.dl.idle = null;
       await save(T);
-      console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - a cash-out was refused, the table stays open`);
+      console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - ${e.seats.length ? "a cash-out was refused" : "a refund is still owed"}, the table stays open`);
       return false;
     }
+    delete T.closing;
     T.status = "closed";
     T.closed_at = clock();
     T.dl = { turn: null, next: null, idle: null };
@@ -613,6 +630,44 @@ function install(core) {
     await emit(T, "closed", `🃏 Hold'em table closed${reason ? " — " + reason : ""}.`, { reason: reason || null });
     await save(T);
     core.streamGone(T.id);
+    return true;
+  }
+
+  // ── 1.99aoj: owed items (casino/owed.js; the owner's tool /admin/casino/owed) ──
+  /** once an owed item is settled (an owed refund's retry, or an owner's on /admin/casino/owed): nobody seated and nothing owed closes the
+   *  table (the close it waited on, or "table empty"); otherwise its deadlines as after a !stand. Saves. -> true when it closed */
+  async function owedSettled(T) {
+    const e = T.eng;
+    if (T.tourney) { await save(T); return false; }
+    if (!e.seats.length && !OW.count(T) && !e.hand_active) return (await closeTable(T, T.closing || "table empty")) === true;
+    if (!e.hand_active) {
+      if (H.seatedWithChips(e).length < 2) T.dl.next = null;
+      // (a table waiting to close keeps waiting - no idle close of its own; its last owed item closes it)
+      if (!T.dl.next) T.dl.idle = T.closing || outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
+    }
+    await save(T);
+    return false;
+  }
+  /** the tool's "retry now" of a refused seat: its own cash-out (its owed key), now - as its sit-out clock would */
+  const retrySeat = (T, uid) => standCmd(T, { uid });
+  /** an owner settled a refused seat's stack elsewhere (redirected / written off): the seat leaves without a credit - its chips were paid by
+   *  that move. opts.quiet (a restart finishing it): no table line. -> true when the seat left */
+  async function dropSeat(T, uid, opts) {
+    const e = T.eng;
+    if (!e.seats.includes(uid)) return false;
+    if (e.hand_active && e.players.includes(uid) && !e.folded.includes(uid)) return false;
+    const name = e.names[uid] || (T.players[uid] || {}).name || uid;
+    e.chips[uid] = 0;
+    try { H.stand(e, uid); } catch (err) { return false; }
+    forgetSeat(T, uid);
+    if (T.intent && T.intent.uid === uid) T.intent = null;
+    const quiet = !!(opts && opts.quiet);
+    if (!quiet) await emit(T, "line", `🚪 ${name} leaves the table.`);
+    if (uid === T.host.uid && e.seats.length) {
+      const nh = e.seats[0];
+      T.host = { uid: nh, name: e.names[nh] || (T.players[nh] || {}).name || nh };
+      if (!quiet) await emit(T, "line", `👑 ${T.host.name} is now the table host.`);
+    }
     return true;
   }
 
@@ -667,6 +722,7 @@ function install(core) {
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "only the table starter or an admin can close it.");
     if (T.eng.hand_active) return R(false, "can't close mid-hand — let the hand finish first.");
     if ((await closeTable(T, `closed by ${actor.name}`)) === false) {
+      if (!T.eng.seats.length) return R(false, "the table stays open — a refund it owes didn't go through; it closes by itself once that goes through.");
       return R(false, "the table stays open — a cash-out didn't go through, so those chips stay at the table (sitting out) until it goes through.");
     }
     return R(true, "table closed.", { quiet: true });
@@ -723,6 +779,11 @@ function install(core) {
         if (T.status === "closed") return;
       }
     }
+    // 1.99aoj: an owed refund's clock (casino/owed.js) - tried again by its own key; the last owed item settled closes a table that waited
+    if (OW.due(T, t)) {
+      await OW.retry(T, { t: clock() });
+      if (await owedSettled(T)) return;
+    }
     if (T.dl.turn && T.dl.turn <= t) {
       const k = H.currentActor(e);
       if (!k || !T.turn || T.turn.uid !== k || T.turn.hand !== e.hand_no) return;
@@ -761,10 +822,13 @@ function install(core) {
       await closeTable(T, "idle — no action");
     }
   }
-  const due = (T) => { const t = clock(); return (T.tourney && TN().due(T)) || (T.dl.turn && T.dl.turn <= t) || (T.dl.next && T.dl.next <= t) || (T.dl.idle && T.dl.idle <= t) ||
+  const due = (T) => { const t = clock(); return (T.tourney && TN().due(T)) || (T.dl.turn && T.dl.turn <= t) || (T.dl.next && T.dl.next <= t) || (T.dl.idle && T.dl.idle <= t) || OW.due(T, t) ||
     T.eng.seats.some((uid) => { const q = qos(T, uid); return q.out && q.since != null && t >= T.dl.sitout[uid] && !(T.eng.hand_active && T.eng.players.includes(uid)); }); };
 
   async function recover(T) {
+    // 1.99aoj (casino/owed.js): an owner's redirect / write-off of an owed item a restart caught - finished (the move landed: the item
+    // closes) or dropped (nothing moved) before anything retries that item (never paid twice)
+    if (!T.tourney && T.owed_act && (await OW.resolve(T, { dropSeat }))) await save(T);
     // 1.99aoh (FAIR-1 for cards): a cash table copied from another database (a staging refresh) is retired, never resumed
     // (casino/retire.js); a sit & go / tournament table's copy is retired by casino/tourney.js / casino/mtt.js (TN().recover below)
     if (!T.tourney && RT.isCopy(T)) return RT.holdem(T, { S, clock, save, bookRake, cashout: async (T2, k) => {
@@ -780,8 +844,12 @@ function install(core) {
       if (it.kind === "buy") {
         // charged but the chips never reached the table: give it back
         if (await money.isDone(it.key)) {
-          const r = await money.credit(it.key + ":refund", it.uid, it.amount, "holdem refund (restart)");
+          const type = "holdem refund (restart)";
+          const r = await money.credit(it.key + ":refund", it.uid, it.amount, type);
           console.log(`[casino] ${T.id}: buy-in ${it.key} interrupted by a restart - refunded (${r.ok ? "ok" : r.code})`);
+          // 1.99aoj (sweep): a refused refund used to be logged and the intent cleared - the charged buy-in was lost. Now it is owed (its own
+          // key, casino/owed.js): tried on the table's clock, the table never closed while it is owed, settled on /admin/casino/owed
+          if (!r.ok) OW.owe(T, it.key + ":refund", { uid: it.uid, amount: it.amount, round: null, kind: "refund", type, code: r.code }, clock(), OW.RETRY_MS);
         }
       } else if (it.kind === "out") {
         // finish the cash-out (the credit is keyed: paid once), then free the seat
@@ -793,13 +861,17 @@ function install(core) {
         } else {
           // 1.99aoh (the cash-out fix): refused - nothing moved, so the stack stays at the table (it was stood up and lost before),
           // sitting out: its sit-out clock tries the cash-out again (refusedOut)
-          if (e.seats.includes(it.uid) && !(e.hand_active && e.players.includes(it.uid))) refusedOut(T, it.uid);
+          if (e.seats.includes(it.uid) && !(e.hand_active && e.players.includes(it.uid))) refusedOut(T, it.uid, it.key, r.code);
           console.error(`[casino] ${T.id}: cash-out ${it.key} refused after a restart (${r.code}) - the stack stays at the table`);
         }
       }
       T.intent = null;
     }
     await bookRake(T);
+    // 1.99aoj: every refund a refused credit left owed is tried again now, by its own key; a table whose close waited on what it owed (or on
+    // a seat an owner settled before this restart) closes once nothing is owed and nobody is seated
+    if (!T.tourney && OW.count(T)) await OW.retry(T, { all: true, t: clock() });
+    if (!T.tourney && T.closing && !e.hand_active && !T.hand && !e.seats.length && !OW.count(T)) { await closeTable(T, T.closing); return; }
     const t = clock();
     if (e.hand_active) {
       const k = H.currentActor(e);
@@ -910,6 +982,7 @@ function install(core) {
                              high_stakes: T.high_stakes, theme: themes.themeOf(T, S.settings) });
 
   return { HC, start, run, tick, due, recover, publicView, meView, privateFor, lobbyRow, closeTable, cardsFor, HELP,
+           owedSettled, retrySeat, dropSeat,               // (1.99aoj: casino/owed.js - the owed-PAT tool)
            midRound: (T) => T.eng.hand_active,
            newTable, seatChecks, forgetSeat,               // (h22: what casino/tourney.js builds a sit & go with)
            qos, commitNext };                              // (h22 phase 2: a moved seat's QoL travels; a new tournament table's first seed)

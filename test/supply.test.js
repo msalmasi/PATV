@@ -3,8 +3,9 @@
 //     (his old full snapshot and the shrunk one give the same total)
 //   * the casino backend's tables: blackjack stakes in a round and hold'em stacks / pots are PAT out of the wallets and not in
 //     the House yet - counted as "casino:tables" (closed tables never)
-//   * 1.99aoj: a cash hold'em table's last hand is counted once between hands (its pot is in the stacks then - e.contrib is
-//     counted only while a hand is in play) and its rake until the House row exists; a blackjack payout kept owed counts
+//   * 1.99aoj: a cash hold'em table is counted exactly as 1.99aoi counts it (its stacks + e.contrib, between hands too; never
+//     T.rake_due - the fix waits until after H2a); what a blackjack or Hold'em table owes counts (casino/owed.js held), and with
+//     nothing owed the total is 1.99aoi's own supply.js's for the same state
 //   NODE_PATH=G:/PATV/node_modules node --test test/supply.test.js
 "use strict";
 const test = require("node:test");
@@ -116,4 +117,68 @@ test("casino tables: a blackjack payout kept owed (a refused credit) counts at t
   assert.equal(await SUP.casinoHeld(), before + 2000);
   await runQuery("DELETE FROM casino_tables WHERE id = 'b9'");
   assert.equal(await SUP.casinoHeld(), before);
+});
+
+// 1.99aoj (the owed casino PAT): supply.js counts what a blackjack or Hold'em table owes (casino/owed.js held) and nothing else
+// new - with nothing owed, patSupply().total is the deployed base's (1.99aoi's own supply.js, vendored byte for byte in
+// test/fixtures/casino-prev/ - test/casino-rl-store.test.js checks the copies against the base) for the same state: blackjack
+// stakes, a Hold'em hand in play, between hands (the last pot counted twice, as 1.99aoi does) with its rake not booked / booked,
+// a refused cash-out's seat (its stack is in the chips), a Sit & Go, an empty T.owed. (The roulette rows are checked against
+// that build's own count in test/casino-rl-store.test.js: held() === its heldJson.)
+test("casino tables: with nothing owed, patSupply().total is 1.99aoi's to the PAT; an owed item is the only difference, until it lands or is written off", async () => {
+  const Module = require("module");
+  const prevDir = path.join(__dirname, "fixtures", "casino-prev");
+  const man = JSON.parse(fs.readFileSync(path.join(prevDir, "manifest.json"), "utf8"));
+  const text = fs.readFileSync(path.join(prevDir, "supply.js.txt"), "utf8").replace(/\r\n/g, "\n");
+  const bytes = Buffer.from(text, "utf8");
+  assert.equal(crypto.createHash("sha1").update(Buffer.concat([Buffer.from("blob " + bytes.length + "\0"), bytes])).digest("hex"), man.files["supply.js"],
+               "the vendored supply.js is the base's blob");
+  // 1.99aoi's supply.js, compiled under this repo's supply.js path (its requires resolve to the same dbUtils / pools / ... as SUP's)
+  const file = path.join(repo, "supply.js");
+  const m = new Module(file, module);
+  m.filename = file;
+  m.paths = Module._nodeModulePaths(repo);
+  m._compile(text, file);
+  const PREV = m.exports;
+  assert.notEqual(PREV.casinoHeld, SUP.casinoHeld);
+  const same = async (why) => {
+    assert.equal(await SUP.casinoHeld(), await PREV.casinoHeld(), "casino:tables - " + why);
+    assert.equal((await SUP.patSupply()).total, (await PREV.patSupply()).total, "patSupply().total - " + why);
+  };
+  const apart = async (n, why) => assert.equal((await SUP.patSupply()).total - (await PREV.patSupply()).total, n, why);
+  const put = (id, game, s) => runQuery("INSERT INTO casino_tables (id, game, status, state) VALUES (?, ?, 'open', ?)", [id, game, JSON.stringify(s)]);
+  const set = (id, s) => runQuery("UPDATE casino_tables SET state = ? WHERE id = ?", [JSON.stringify(s), id]);
+  await same("the tables the tests above left (blackjack stakes, a hand in play, sit & gos, a closed table)");
+  const B = { escrowed: { u1: 400, u2: 150 }, owed: {}, closing: "an admin close" };
+  await put("bq1", "bj", B);
+  const H = { eng: { chips: { u1: 1090, u2: 900 }, contrib: { u1: 100, u2: 100 }, hand_active: false, seats: ["u1", "u2"] },
+              rake_due: { key: "chm:hq1:h7:rake", n: 7, amount: 10 }, owed: {} };
+  await put("hq1", "holdem", H);
+  await same("a blackjack table with stakes and an empty T.owed; a Hold'em table between hands, its rake not booked");
+  await runQuery("INSERT INTO jackpot_rakes (jackpotId, amount) VALUES ('chm:hq1:h7:rake', 10)");
+  await same("the rake booked");
+  const C = { eng: { chips: { u2: 2500 }, contrib: {}, hand_active: false, seats: ["u2"] },
+              qol: { u2: { out: true, refused: { key: "chm:hq2:out:u2:1", since: 1, tries: 2, code: "E_NO_ACCOUNT" } } } };
+  await put("hq2", "holdem", C);
+  await same("a refused cash-out's seat (its stack is in the chips; nothing in T.owed)");
+  H.eng.contrib = { u1: 25, u2: 50 }; H.eng.chips = { u1: 1065, u2: 850 }; H.eng.hand_active = true;
+  await set("hq1", H);
+  await same("the next hand in play");
+  // an item owed: the only difference, exactly its amount (1.99aoi never counted T.owed)
+  B.owed = { "cbj:bq1:r3:u1:pay": { uid: "u1", amount: 2000, round: 3, kind: "payout" } };
+  await set("bq1", B);
+  H.owed = { "chm:hq1:i9:refund": { uid: "u2", amount: 3000, round: null, kind: "refund" } };
+  await set("hq1", H);
+  await apart(5000, "a blackjack payout + a Hold'em buy-in refund owed");
+  // its credit landed while the table's save is behind: it isn't PAT at the table any more - identical again for that item
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES ('cbj:bq1:r3:u1:pay', 'u1', 'blackjack payout', 2000)");
+  await runQuery("UPDATE users SET points_balance = points_balance + 2000 WHERE userId = 'u1'");
+  await apart(3000, "the payout landed (the table's T.owed still lists it)");
+  await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, amount) VALUES ('chm:hq1:i9:refund:writeoff', 'chm:hq1:owed', 3000)");
+  await same("the refund written off to the House (the table's T.owed still lists it)");
+  for (const id of ["bq1", "hq1", "hq2"]) await runQuery("DELETE FROM casino_tables WHERE id = ?", [id]);
+  for (const k of ["chm:hq1:h7:rake", "chm:hq1:i9:refund:writeoff"]) await runQuery("DELETE FROM jackpot_rakes WHERE jackpotId = ?", [k]);
+  await runQuery("DELETE FROM transactions WHERE transactionId = 'cbj:bq1:r3:u1:pay'");
+  await runQuery("UPDATE users SET points_balance = points_balance - 2000 WHERE userId = 'u1'");
+  await same("back to the tables the tests above left");
 });

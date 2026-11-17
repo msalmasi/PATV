@@ -38,6 +38,7 @@ const SNGCFG = require("./tourney");      // h22: the Sit & Go settings (pure); 
 const themes = require("./themes");       // 1.99amf h20: the card tables' themes (presentation only; casino_themes switch)
 const RLCFG = require("./roulette");
 const MTCFG = require("./mtt");           // h22 phase 2 (1.99amj): the scheduled tournaments' settings (pure); the service is MT below
+const OW = require("./owed");             // 1.99aoj: casino PAT owed because its credit was refused + the owner's tool (/admin/casino/owed)
 
 // Roulette shares the locked action, tick, recovery, privacy and stream paths. Its own service owns each spin.
 // ── the rules (Pepe's BJ_* constants) ──
@@ -52,7 +53,7 @@ const C = {
   MISS_LIMIT: 3, AFK_LIMIT: 3, COVER_MULT: 2,
   LOG_KEEP: 40, EVENT_KEEP_MS: 48 * 3600 * 1000, ROOM_FRESH_MS: 90 * 1000,
   CLOSED_LINGER_MS: 30 * 1000, TICK_MS: 250,
-  OWED_RETRY_MS: 10 * 60 * 1000,      // 1.99aoj: a refused blackjack payout is tried again this often (payOwed)
+  OWED_RETRY_MS: OW.RETRY_MS,         // 1.99aoj: a refused blackjack payout / refund is tried again this often (payOwed; 10 minutes)
 };
 const HIGH_ROLLER = "high roller";
 const HR_WORDS = ["hr", "high", "highroller", "high-roller", "vip", "💎"];
@@ -366,13 +367,21 @@ async function stake(T, uid, amount, op, type, apply) {
   return { ok: true };
 }
 
-/** Return every stake still held for `uid` (or everyone) in the CURRENT betting window. */
+/** Return every stake still held for `uid` (or everyone) in the CURRENT betting window.
+ *  1.99aoj (the close-refund fix): a refund whose credit is REFUSED (the account is gone) is OWED - T.owed[<the stake's key>:refund], kind
+ *  "refund", the same store and clock as an owed payout (payOwed; casino/owed.js) - and leaves T.stakes / T.escrowed (supply.js counts it
+ *  there). It used to stay in T.stakes "for retry", and closeTable then closed the table anyway: the stake was lost. Its key is the refund's
+ *  own, so a refund that did land replays instead of paying twice; the table is never closed while it is owed (closeTable freezes it). */
 async function refundHeld(T, uid, why) {
   const keep = [];
   for (const s of T.stakes || []) {
     if (uid && s.uid !== uid) { keep.push(s); continue; }
-    const r = await money.credit(s.key + ":refund", s.uid, s.amount, `blackjack refund (${why})`);
-    if (!r.ok) { console.warn(`[casino] refund ${s.key} failed (${r.code}) - kept for retry`); keep.push(s); continue; }
+    const type = `blackjack refund (${why})`;
+    const r = await money.credit(s.key + ":refund", s.uid, s.amount, type);
+    if (!r.ok) {
+      OW.owe(T, s.key + ":refund", { uid: s.uid, amount: s.amount, round: s.round, kind: "refund", type, code: r.code }, clock(), C.OWED_RETRY_MS);
+      console.error(`[casino] ${T.id}: refund ${s.key} (${fmt(s.amount)} PAT to ${s.uid}) refused (${r.code}) - kept owed at the table, tried again in ${C.OWED_RETRY_MS / 60000} min`);
+    }
     T.escrowed[s.uid] = Math.max(0, (T.escrowed[s.uid] || 0) - s.amount);
     if (!T.escrowed[s.uid]) delete T.escrowed[s.uid];
   }
@@ -584,54 +593,40 @@ async function settleMoney(T, opts) {
 // OWED_RETRY_MS (tickOnce), at every boot (recover: everything owed at once) and before the table closes. The table keeps playing
 // meanwhile; it is never CLOSED with a payout owed (closeTable): it stays open, frozen - no new bets, autobets or queued bets (T.closing,
 // seatChecks) - and the payout that lands closes it.
-const owedCount = (T) => Object.keys(T.owed || {}).length;
-function owedDue(T, t) {
-  if (!owedCount(T)) return false;
-  return Object.values(T.owed).some((o) => !(o.next > t));
-}
+// 1.99aoj (the close-refund fix, casino/owed.js): a stake refund refused when a player leaves the betting window or the table closes
+// (refundHeld) and the refund of a stake a restart caught in its intent (recover) are owed the same way - their own <stake key>:refund,
+// kind "refund" - and an owner settles any of them on /admin/casino/owed (retry now, redirect, write off to the House).
+const owedCount = (T) => OW.count(T);
+const owedDue = (T, t) => OW.due(T, t);
+/** a payout of round n is still owed (a refund never holds a round's "done") */
+const payoutOwed = (T, n) => Object.values(T.owed || {}).some((o) => (o.kind || "payout") === "payout" && o.round === n);
 /** a settled round's refused payouts -> owed (the same key twice - a settle run again after a crash - stays one entry) */
 function owe(T, n, refused) {
-  if (!refused || !refused.length) return;
-  T.owed = T.owed || {};
-  const t = clock();
-  for (const x of refused) {
-    const o = T.owed[x.key] || { uid: x.uid, amount: x.amount, round: n, since: t, tries: 0 };
-    o.tries += 1;
-    o.code = x.code || null;
-    o.next = t + C.OWED_RETRY_MS;
-    T.owed[x.key] = o;
-  }
+  for (const x of refused || []) OW.owe(T, x.key, { uid: x.uid, amount: x.amount, round: n, kind: "payout", type: "blackjack payout", code: x.code }, clock(), C.OWED_RETRY_MS);
 }
-/** each owed payout (all, or the ones whose clock ran out) credited again by its own key. Saves nothing. -> how many are still owed */
+/** each owed payout / refund (all, or the ones whose clock ran out) credited again by its own key. Saves nothing. -> how many are still owed */
 async function retryOwed(T, all) {
-  const t = clock();
-  for (const [key, o] of Object.entries(T.owed || {})) {
-    if (!all && o.next > t) continue;
-    const r = await money.credit(key, o.uid, o.amount, "blackjack payout");
-    if (r.ok) {
-      delete T.owed[key];
-      console.log(`[casino] ${T.id}: owed payout ${key} (${fmt(o.amount)} PAT) ${r.replay ? "had landed already" : "paid"} after ${o.tries} refusal(s)`);
-      continue;
-    }
-    o.tries += 1;
-    o.code = r.code || null;
-    o.next = t + C.OWED_RETRY_MS;
-    console.error(`[casino] ${T.id}: owed payout ${key} (${fmt(o.amount)} PAT to ${o.uid}) refused again (${r.code}) - tried again in ${C.OWED_RETRY_MS / 60000} min`);
-  }
-  if (T.round && T.round.settle === "owed" && !Object.values(T.owed || {}).some((o) => o.round === T.round.no)) T.round.settle = "done";
+  await OW.retry(T, { all, t: clock(), ms: C.OWED_RETRY_MS });
+  if (T.round && T.round.settle === "owed" && !payoutOwed(T, T.round.no)) T.round.settle = "done";
   return owedCount(T);
 }
-/** the retry hook (the table's clock, recover): pays what it can; a table whose close waited on it closes once nothing is owed.
- *  -> true when the table closed */
-async function payOwed(T, all) {
-  const left = await retryOwed(T, all);
-  if (!left && T.closing) {
+/** once an owed item is settled (its retry, or an owner's on /admin/casino/owed): the frozen round is done when no payout of it is owed,
+ *  and a table whose close waited closes once nothing is owed. Saves. -> true when the table closed */
+async function owedSettled(T) {
+  if (T.round && T.round.settle === "owed" && !payoutOwed(T, T.round.no)) T.round.settle = "done";
+  if (!owedCount(T) && T.closing) {
     const why = T.closing;
     delete T.closing;
     return closeTable(T, why);
   }
   await save(T);
   return false;
+}
+/** the retry hook (the table's clock, recover): pays what it can; a table whose close waited on it closes once nothing is owed.
+ *  -> true when the table closed */
+async function payOwed(T, all) {
+  await retryOwed(T, all);
+  return owedSettled(T);
 }
 
 /** Pay a settled round. Every step is keyed, so running it again (recovery) changes nothing that was done. */
@@ -679,7 +674,7 @@ async function settle(T) {
   T.escrowed = {};
   T.stakes = [];        // this round's doubles / splits / insurance are paid out above - nothing is held any more (a refused payout: T.owed)
   // 1.99aoj: not done while a payout of it is still owed (payOwed marks it done when the last one lands)
-  T.round.settle = Object.values(T.owed || {}).some((o) => o.round === n) ? "owed" : "done";
+  T.round.settle = payoutOwed(T, n) ? "owed" : "done";
   await save(T);
 }
 
@@ -695,16 +690,18 @@ async function afterRound(T) {
   return openRound(T, false);
 }
 
-/** -> true when closed; false when a blackjack payout is still owed (1.99aoj: the table stays open, frozen, until it lands) */
+/** -> true when closed; false when a blackjack payout or refund is still owed (1.99aoj: the table stays open, frozen, until it lands) */
 async function closeTable(T, reason) {
   if (T.game === "roulette") return RL.closeTable(T, reason);
+  // 1.99aoj: never closed with PAT owed (a refused credit) - what was owed already is tried once more by its key, then the window's stakes
+  // go back (refundHeld: a refused refund is owed too - it used to stay in T.stakes and be lost here); still owed: the table stays open,
+  // taking no new bets (seatChecks), no autobets and no queued bets, with no deadline but the owed items' clock (payOwed closes it)
+  if (owedCount(T)) await retryOwed(T, true);
   await refundHeld(T, null, "table closed");
-  // 1.99aoj: never closed with a payout owed (a refused credit) - tried once more by its key; still refused: the table stays open,
-  // taking no new bets (seatChecks), no autobets and no queued bets, with no deadline but the owed payout's clock (payOwed closes it)
-  if (owedCount(T) && (await retryOwed(T, true))) {
+  if (owedCount(T)) {
     T.closing = reason || T.closing || "closed";
-    // (review: the window's bets refunded above leave the engine too - only a stake whose refund was refused, kept in T.stakes for the
-    //  close's next try, keeps its bet; beginRound deals nothing on a closing table either way)
+    // (review: the window's bets refunded above leave the engine too - a refused refund is owed, not in play; beginRound deals nothing on
+    //  a closing table either way)
     if (["betting", "idle"].includes(T.eng.phase)) {
       for (const uid of Object.keys(T.eng.bets || {})) if (!(T.stakes || []).some((s) => s.uid === uid)) delete T.eng.bets[uid];
       T.eng.insurance = {};
@@ -714,7 +711,7 @@ async function closeTable(T, reason) {
     T.dl = { bet: null, ins: null, turn: null };
     T.turn = null;
     await save(T);
-    console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - ${owedCount(T)} payout(s) still owed: the table stays open, taking no bets, until they go through`);
+    console.error(`[casino] ${T.id}: not closed (${reason || "?"}) - ${owedCount(T)} payout(s) / refund(s) still owed: the table stays open, taking no bets, until they go through`);
     return false;
   }
   delete T.closing;
@@ -814,6 +811,9 @@ async function tickOnce() {
 
 // ── boot & recovery ──
 async function recover(T) {
+  // 1.99aoj (casino/owed.js): an owner's redirect / write-off of an owed item that a restart caught - finished (its move landed: the item
+  // closes) or dropped (nothing moved) before anything retries that item (never paid twice)
+  if (T.game === "bj" && T.owed_act && (await OW.resolve(T, {}))) await save(T);
   // 1.99aoh (FAIR-1 for cards): a blackjack table copied from another database (a staging refresh) is retired, never resumed (casino/retire.js)
   if (T.game === "bj" && require("./retire").isCopy(T)) return require("./retire").bj(T, { S, clock, save, settleMoney });
   if (T.game === "roulette") return RL.recover(T);
@@ -822,8 +822,14 @@ async function recover(T) {
   if (T.intent) {
     const it = T.intent;
     if (await money.isDone(it.key)) {
-      const r = await money.credit(it.key + ":refund", it.uid, it.amount, "blackjack refund (restart)");
+      const type = "blackjack refund (restart)";
+      const r = await money.credit(it.key + ":refund", it.uid, it.amount, type);
       console.log(`[casino] ${T.id}: stake ${it.key} interrupted by a restart - refunded (${r.ok ? "ok" : r.code})`);
+      // 1.99aoj (sweep): a refused refund used to be logged and the intent cleared - the charged stake was lost. Now it is owed (its own key)
+      if (!r.ok) {
+        const m = /:r(\d+):/.exec(String(it.key));
+        OW.owe(T, it.key + ":refund", { uid: it.uid, amount: it.amount, round: m ? Number(m[1]) : nextRoundNo(T), kind: "refund", type, code: r.code }, clock(), C.OWED_RETRY_MS);
+      }
     }
     T.intent = null;
   }
@@ -974,8 +980,8 @@ async function cmdStart(actor, room, game, blinds, words) {
 }
 
 async function seatChecks(T, actor) {
-  // 1.99aoj: a table that waits for an owed payout before it closes takes no new bets
-  if (T.closing) return "this table is closing — it takes no new bets (it closes once a payout still owed goes through).";
+  // 1.99aoj: a table that waits for an owed payout / refund before it closes takes no new bets
+  if (T.closing) return "this table is closing — it takes no new bets (it closes once a payout or refund it still owes goes through).";
   const u = await userRow(actor.uid);
   if (!u) return "no account found";
   if (u.casino_banned) return "🚫 you're banned from the casino.";
@@ -1070,7 +1076,7 @@ async function cmdAutobet(T, actor, arg) {
 
 async function cmdDeal(T) {
   // 1.99aoj review: a frozen table (a payout still owed, its close asked for) deals no new round
-  if (T.closing) return R(false, "this table is closing — no new rounds (it closes once a payout still owed goes through).");
+  if (T.closing) return R(false, "this table is closing — no new rounds (it closes once a payout or refund it still owes goes through).");
   if (T.eng.phase !== "betting") return R(false, "not in the betting phase right now.");
   if (!(await beginRound(T))) return R(false, "no bets yet — !bet <amount> first.");
   await save(T);
@@ -1161,8 +1167,8 @@ function statusText(T) {
 async function cmdEnd(T, actor) {
   if (actor.uid !== T.host.uid && !actor.admin) return R(false, "only the table starter or an admin can close it.");
   if (["insurance", "player", "dealer"].includes(T.eng.phase)) return R(false, "can't close mid-round — let it finish.");
-  // 1.99aoj: a payout still owed keeps it open (no new bets) - it closes by itself once that payout goes through
-  if (!(await closeTable(T, `closed by ${actor.name}`))) return R(false, "a payout at this table is still owed — it takes no new bets and closes by itself once that payout goes through.");
+  // 1.99aoj: a payout or refund still owed keeps it open (no new bets) - it closes by itself once that goes through
+  if (!(await closeTable(T, `closed by ${actor.name}`))) return R(false, "a payout or refund at this table is still owed — it takes no new bets and closes by itself once that goes through.");
   return R(true, "table closed.", { quiet: true });
 }
 
@@ -1957,6 +1963,10 @@ KINDS.mtt = { beforeDeal: MT.beforeDeal, dealt: MT.dealt, noDealNext: MT.noDealN
               due: () => false, recover: MT.recoverTable, tableVerb: MT.tableVerb, view: MT.view, meView: MT.meView, outAtDeal: MT.outAtDeal, outNow: MT.outNow };
 /** routes.js: the Discord bridge (index.js discordBridge) for the tournament channel posts */
 const setDiscordBridge = (fn) => { core2.discordBridge = typeof fn === "function" ? fn : null; };
+// 1.99aoj: the owner's tool for casino PAT owed because its credit was refused (casino/owed.js; /admin/casino/owed, casino/owedweb.js)
+const OWT = OW.install({ S, clock, save, locked,
+  games: { bj: { after: (T) => owedSettled(T) },
+           holdem: { after: (T) => HM.owedSettled(T), retrySeat: (T, uid) => HM.retrySeat(T, uid), dropSeat: (T, uid, o) => HM.dropSeat(T, uid, o) } } });
 
 /**
  * h22 phase 2: put a tournament's final table on Pepe's stream (internal, not locked: called inside the MTT's locked job after a commit).
@@ -2038,4 +2048,5 @@ module.exports = {
   loadSettings, setSetting, FRONTS, frontOf, frontPath, rlLobbyPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
   refreshVeil, myHands, viewKey,  // the routes re-read a table's veils before they answer
+  OW: OWT,                        // 1.99aoj: the owed-PAT tool (list / summary / recent / act)
 };

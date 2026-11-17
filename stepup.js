@@ -1,9 +1,10 @@
 // stepup.js — the owner's password step-up on the website actions that move PAT or change who owns Pepe (owner answers
-// 2026-10-20, (3)): the PAT grant (POST /api/admin/transfer/:username), the House adjust (POST /api/g/wheel/jackpot) and a
-// direct owner grant / removal on /admin/roles (POST /api/admin/roles/role). The same throttled step-up as the
+// 2026-10-20, (3)): the PAT grant (POST /api/admin/transfer/:username), the House adjust (POST /api/g/wheel/jackpot), a
+// direct owner grant / removal on /admin/roles (POST /api/admin/roles/role) and (1.99aoj) the redirect / write-off of owed casino PAT
+// (POST /api/casino/admin/owed/redirect | writeoff, casino/owedweb.js; purpose casino_owed). The same throttled step-up as the
 // /admin/economy edit (econstore.stepUp):
 //   * a same-origin fetch: X-Requested-With: fetch AND an Origin / Referer naming this host (a request with neither is refused)
-//   * a single-use nonce (pepecontrol.issueNonce / takeNonce): POST /api/admin/stepup/nonce {for: grant|house} here, or
+//   * a single-use nonce (pepecontrol.issueNonce / takeNonce): POST /api/admin/stepup/nonce {for: grant|house|casino_owed} here, or
 //     /api/admin/roles/nonce on /admin/roles - only a Pepe owner gets one
 //   * the account's own password; 5 wrong in 15 minutes per account -> 429 until the window ends (shared with every other
 //     step-up: the economy edit, the payout recipe and staking cards, the owner-change confirm)
@@ -14,7 +15,7 @@ const CROSS = "Security check failed - reload the page.";
 const fail = (status, code, message) => Object.assign(new Error(message), { status, code, refuse: true });
 
 /** What each step-up guards: the capability the owner check uses (staffroles.ownerOf). */
-const PURPOSES = { grant: "econ.grant_pat", house: "econ.house_adjust" };
+const PURPOSES = { grant: "econ.grant_pat", house: "econ.house_adjust", casino_owed: "casino.admin" };
 
 /** Throws unless the request is a same-origin fetch. */
 function sameOrigin(req) {
@@ -33,7 +34,7 @@ async function check(req, user, body) {
   }
 }
 
-/** POST /api/admin/stepup/nonce {for: grant|house} (after addUser): a single-use nonce for a Pepe owner of that action. */
+/** POST /api/admin/stepup/nonce {for: grant|house|casino_owed} (after addUser): a single-use nonce for a Pepe owner of that action. */
 async function nonceRoute(req, res) {
   res.set("Cache-Control", "no-store");
   try {

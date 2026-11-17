@@ -1,11 +1,13 @@
 {
   "base": "e4446e74e91ba82ccd69d857377aa9e449bee0b1",
   "label": "1.99aoi",
-  "note": "The previous build (1.99aoi, e4446e74) as test/fixtures/casino-rl-prev-boot.js runs it: each file is git show <base>:<path>, byte for byte. Refresh with the deployed base whenever it moves.",
+  "note": "The previous build (1.99aoi, e4446e74) as test/fixtures/casino-rl-prev-boot.js runs it (supply.js: test/supply.test.js compares its count with this build's): each file is git show <base>:<path>, byte for byte. Refresh with the deployed base whenever it moves.",
   "files": {
+    "casino/holdem.js": "367dfb07401bfac609f5610c8f408803ed29f5e5",
     "casino/retire.js": "419be9759dca814fd1b77bd9d4ca1830a9a77102",
     "casino/rewards.js": "24f715844a5cb955177fa6b76eb9b9e26c22dc55",
     "casino/roulette.js": "ad1068df604ac32ed92d720b41728f7c3fa3ba63",
-    "casino/service.js": "2454d98bd653f24337fba67f6643979fd5092e39"
+    "casino/service.js": "2454d98bd653f24337fba67f6643979fd5092e39",
+    "supply.js": "28562bd23091a08c9f2a975ba611d3f68e2c117e"
   }
 }

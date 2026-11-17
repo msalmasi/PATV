@@ -12,7 +12,8 @@
 //   markets           capital/service.js market pots (Phase 3)
 //   room_vault_escrow boosts.js (held for the pads)                        casino:tables  PAT at the casino backend's tables:
 //   auto_escrow       autoescrow.js (auto accounts' free rewards, 6 months)
-//                                                                                          blackjack stakes in a round, hold'em stacks
+//                                                                                          blackjack stakes in a round, hold'em stacks,
+//                                                                                          1.99aoj: payouts / refunds owed (casino/owed.js)
 //                                                                                          (never a Sit & Go's tournament chips),
 //                                                                                          roulette: the live casino_rl_lines rows
 "use strict";
@@ -32,6 +33,13 @@ async function putSnapshot(pools) {
   await runQuery("INSERT INTO supply_snapshot (id, pools, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP) " +
                  "ON CONFLICT(id) DO UPDATE SET pools = excluded.pools, updated_at = CURRENT_TIMESTAMP", [JSON.stringify(cleanRows(pools))]);
 }
+
+// 1.99aoj (casino/owed.js held): what a table owes - not once its credit landed, or an owner redirected / wrote it off, while the table's
+// own save is behind (it stops counting at once: the redirect's wallet or the House has it); a settled Hold'em seat's stack likewise
+const owedAt = async (T) => {
+  try { return await require("./casino/owed").held(T); }
+  catch (e) { return Object.values(T.owed || {}).reduce((s, o) => s + Math.max(0, Math.floor(Number(o && o.amount) || 0)), 0); }   // (a failed look-up: all of it)
+};
 
 /** PAT sitting at the casino backend's tables (out of the wallets, not in the House yet). */
 async function casinoHeld() {
@@ -58,10 +66,12 @@ async function casinoHeld() {
       // twice. The fix (contributions only while e.hand_active, plus T.rake_due until afterHand books it) changes patSupply().total - an
       // input of the economy engines that move to the site at H2a - so it ships on its own after H2a's first clean gate, with the owner's OK.
       for (const v of Object.values(e.contrib || {})) n += Math.max(0, Math.floor(Number(v) || 0));
+      // 1.99aoj (casino/owed.js): a buy-in refund a restart left owed (its credit refused); a refused cash-out's stack is in the chips above
+      n += await owedAt(T);
     } else {
       for (const v of Object.values(T.escrowed || {})) n += Math.max(0, Math.floor(Number(v) || 0));
-      // 1.99aoj: a blackjack payout whose credit was refused stays owed at the table (casino/service.js payOwed) until it lands
-      for (const o of Object.values(T.owed || {})) n += Math.max(0, Math.floor(Number(o && o.amount) || 0));
+      // 1.99aoj: a blackjack payout or stake refund whose credit was refused stays owed at the table (casino/service.js payOwed) until it lands
+      n += await owedAt(T);
     }
   }
   return n;

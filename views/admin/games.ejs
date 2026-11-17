@@ -85,6 +85,13 @@
   })();
   </script>
   <% } %>
+  <%# 1.99aoj: owed casino PAT (casino/owed.js) - a payout / refund / cash-out whose credit was refused (the account is gone), kept at its
+      table; settled on /admin/casino/owed (retry now, pay another account, write off to the House). The badge counts what is owed now. %>
+  <% if (_can('casino.admin')) { %>
+  <h2 id="casinoOwedT">💸 Owed casino PAT <% if (locals.owed && locals.owed.n) { %><span class="adm-pill bad" id="casinoOwedBadge"><%= locals.owed.n %></span><% } %></h2>
+  <p class="adm-help">A casino payout, refund or cash-out refused because the member's account is gone stays owed at its table (the table can't close until it is settled) and is tried again on its own.<% if (locals.owed && locals.owed.n) { %> <b><%= locals.owed.n %> item<%= locals.owed.n === 1 ? '' : 's' %>, <%= Math.trunc(locals.owed.amount).toLocaleString('en-US') %> PAT, owed now.</b><% } else if (locals.owed) { %> Nothing is owed now.<% } %></p>
+  <div class="adm-actions"><a class="adm-btn ghost" href="/admin/casino/owed">Owed casino PAT ›</a></div>
+  <% } %>
   <h2 id="casinoT">Casino bans</h2>
   <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
   <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>

@@ -21,6 +21,7 @@
 "use strict";
 const money = require("./money");
 const H = require("./hmengine");
+const OW = require("./owed");             // 1.99aoj: what a table owes (a refused payout / refund) - paid by its own key, unless settled elsewhere
 
 /** a card table copied from another database (deploy/keep-staging-tables.js), or one whose committed seed is missing */
 function isCopy(T) {
@@ -57,6 +58,18 @@ function voidHand(e) {
   const fresh = H.newTable({ sb: e.sb || 1, bb: e.bb || 2 });
   for (const k of Object.keys(fresh)) if (!HM_TABLE_FIELDS.has(k)) e[k] = fresh[k];
   e.hand_active = false;
+}
+
+/** 1.99aoj: everything a copied table owes (T.owed: a refused payout / refund), strictly by its own key - one an owner settled elsewhere
+ *  (casino/owed.js settledBy: redirected / written off) is not paid again */
+async function payOwed(T) {
+  for (const [key, o] of Object.entries(T.owed || {})) {
+    if (!(await OW.settledBy(key))) {
+      const type = o.type || `${T.game === "holdem" ? "holdem" : "blackjack"} ${o.kind === "refund" ? "refund" : "payout"}`;
+      strict(await money.credit(key, o.uid, o.amount, type), "the owed " + (o.kind || "payout") + " " + key);
+    }
+    delete T.owed[key];
+  }
 }
 
 /** fail closed: a copy that couldn't be retired is taken out of play here (its row stays open + copied: the next boot tries again) */
@@ -99,11 +112,9 @@ async function bj(T, d) {
         if (a > 0) strict(await money.credit(`cbj:${T.id}:r${n}:${uid}:copy`, uid, a, "blackjack refund (copy)"), `the copy refund of ${uid}`);
       }
     }
-    // 1.99aoj: a payout an earlier round left owed (service.js payOwed: its credit was refused there) - decided, so paid by its own key
-    for (const [key, o] of Object.entries(T.owed || {})) {
-      strict(await money.credit(key, o.uid, o.amount, "blackjack payout"), "the owed payout " + key);
-      delete T.owed[key];
-    }
+    // 1.99aoj: a payout an earlier round left owed (service.js payOwed: its credit was refused there) - decided, so paid by its own key;
+    // likewise a stake refund left owed (refundHeld / a restart's intent refund). One an owner redirected or wrote off there is settled.
+    await payOwed(T);
     delete T.closing;
     crashAt(S, "copy:close");
     // (d) never charged: the queued bets and autobets go; the engine forgets the round (no card of it is left)
@@ -144,8 +155,9 @@ async function holdem(T, d) {
       }
       T.intent = null;
     }
-    // (b) the rake the last hand owes the House (keyed)
+    // (b) the rake the last hand owes the House (keyed); 1.99aoj: a buy-in refund a restart left owed there - by its own key
     await bookRake(T);
+    await payOwed(T);
     // (c) a hand in play is void; nothing of it (or of the next one) is revealed or kept
     voidHand(e);
     T.hand = null;

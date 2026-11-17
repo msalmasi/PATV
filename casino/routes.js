@@ -43,6 +43,7 @@
 // h22 phase 2 (1.99amj) 🏆 SCHEDULED tournaments (casino/mtt.js; each one's tables are /casino/holdem/t/:id with table.tourney.kind "mtt"):
 //   GET  /casino/holdem/mtt/:id             the tournament page (302 to /casino/holdem while the switch hides it from this viewer)
 //   GET  /casino/holdem/leaderboard         the leaderboard page;  GET /admin/casino/mtt  the schedule manager (casino.admin)
+//   1.99aoj: GET /admin/casino/owed + /api/casino/admin/owed[/retry|/redirect|/writeoff] - owed casino PAT (casino/owedweb.js)
 //   GET  /api/casino/mtt                    the lobby block (also GET /api/casino/lobby -> mtt): {mtt_on, can_register, upcoming, registering, running, recent, mine}
 //   GET  /api/casino/mtt/leaderboard        ?period=YYYY-MM|all&page=n (50 a page; veiled players never on it)
 //   GET  /api/casino/mtt/:id                {mtt: the view, me, results}   /players?page= (masked rows)   /tables   /me
@@ -606,6 +607,8 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     if (!op || !MID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such action." });
     return adminPost(req, res, op, req.params.id, Object.assign({}, req.body || {}, { n: Math.floor(Number(req.params.n)) }));
   });
+  // 1.99aoj: /admin/casino/owed - casino PAT owed because its credit was refused (retry now / redirect / write off; casino/owedweb.js)
+  require("./owedweb").register(app, { addUser });
   app.post("/api/casino/admin/mtt/:id/:op", addUser, (req, res) => {
     const ops = ["cancel", "void", "pause", "resume", "start", "delay", "max", "stream", "overlay-retry"];
     if (!ops.includes(req.params.op) || !MID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such action." });
