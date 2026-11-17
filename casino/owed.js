@@ -24,8 +24,15 @@
 // One item lands under at most ONE of {its key, :redirect, :writeoff}, ever: every retry asks for the other two first
 // (settledBy), a redirect / write-off asks for the original key first. A redirect or write-off is journalled on the table
 // (T.owed_act, saved BEFORE the money moves); a restart finishes it (the move landed: the item closes) or drops it (nothing
-// moved) before anything retries (resolve). Every action is in admin_audit (action "casino_owed"): who, the item, the amount,
-// the reason, via web, the outcome - one row per action (an act's id dedupes a restart).
+// moved) before anything retries (resolve). 1.99aoj review: an act that THREW after its journal (a database error mid-move) is
+// resolved the same way at once, or by the next locked step at that table (the tool's next action, the item's automatic retry) -
+// every act runs under the casino mutex, so an act seen by another locked step is never in flight. Every action is in admin_audit
+// (action "casino_owed"): who, the item (its page id, its key), the amount, the reason, the recipient (its account id and
+// username, its ban / deletion lock), the ledger / House row it wrote (its key, the spin), via web, the outcome - one row per
+// action (an act's id dedupes a restart).
+// 1.99aoj review: a redirect's recipient is named EXACTLY when two usernames differ only in capitals (otherwise refused), is never
+// an archived or deleted account (nobody can use points there), and a site-banned / deletion-scheduled one is paid only when the
+// owner ticks "Pay this account anyway" (b.locked_ok) after the page said so.
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("../dbUtils");
@@ -65,16 +72,18 @@ const defaultType = (T, o) => `${T.game === "holdem" ? "holdem" : "blackjack"} $
 
 /**
  * Each owed entry credited again by its own key - every one (opts.all: a boot, a close), one (opts.only: the tool's retry), or the
- * ones whose clock ran out. An entry an owner settled elsewhere closes unpaid; one whose owner settle is in flight (T.owed_act) is
- * left to it. Saves nothing. -> how many are still owed
+ * ones whose clock ran out. An entry an owner settled elsewhere closes unpaid. An owner's settle left journalled (T.owed_act) is
+ * resolved first (resolve, opts.hooks): every caller holds the casino mutex, so it is one that threw (or a restart caught) - never
+ * one in flight (before the 1.99aoj review its item was skipped until a restart, and a due one kept the tick saving every 250 ms).
+ * Saves nothing. -> how many are still owed
  */
 async function retry(T, opts) {
   const p = opts || {};
   const t = p.t, ms = p.ms || RETRY_MS;
+  if (T.owed_act) await resolve(T, p.hooks, "an error");
   for (const [key, o] of Object.entries(T.owed || {})) {
     if (p.only && key !== p.only) continue;
     if (!p.all && !p.only && o.next > t) continue;
-    if (T.owed_act && T.owed_act.key === key) continue;
     const by = await settledBy(key);
     if (by) {
       delete T.owed[key];
@@ -134,20 +143,38 @@ function whatOf(T, it) {
 }
 const labelOf = (T, it) => (it.kind === "cashout" ? "holdem cash-out" : `${T.game === "holdem" ? "holdem" : "blackjack"} ${it.kind === "refund" ? "refund" : "payout"}`) + " (redirected)";
 const spinOf = (T, it) => (T.game === "holdem" ? `chm:${T.id}:owed` : `cbj:${T.id}:r${it.round == null ? T.eng.round_no : it.round}`);
+/** a redirect's recipient by username: the exact spelling first; two accounts differing only in capitals and none spelled exactly ->
+ *  {ambiguous}; none -> null (1.99aoj review - the old look-up took whichever case-variant row came first) */
+async function targetOf(name) {
+  const rows = await getQuery("SELECT userId, username, archived_at FROM users WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 2", [name, name]);
+  if (!rows.length) return null;
+  if (rows[0].username === name || rows.length === 1) return rows[0];
+  return { ambiguous: true };
+}
+const lockText = (lock) => (lock.kind === "deletion" ? "scheduled for deletion by PATV staff" : lock.until != null ? "site-banned for now" : "site-banned");
 const nameOf = async (uid) => ((await getQuery("SELECT username FROM users WHERE userId = ?", [uid]).catch(() => []))[0] || {}).username || null;
 
-/** One admin_audit row per action (an act's id: a restart that finishes it never writes a second). Never throws. */
+/** One admin_audit row per action (an act's id: a restart that finishes it never writes a second). Never throws.
+ *  1.99aoj review: the row names the item (its page id and its key), the recipient's ACCOUNT id beside its username (a username can be
+ *  renamed later), its ban / deletion lock, and the ledger row (a redirect: transactions <key>:redirect) or House row (a write-off:
+ *  jackpot_rakes <key>:writeoff + its spin id) the action wrote - so the row joins the ledger. (admin_audit is admins-only; recent()
+ *  passes none of these ids to the page.) */
 async function audit(by, d, reason) {
   try {
     const A = require("../adminaudit");
     await A.init();
     if (d.act && (await getQuery("SELECT 1 FROM admin_audit WHERE action = 'casino_owed' AND detail LIKE ?", [`%"act":"${d.act}"%`])).length) return;
-    await A.record(by, "casino_owed", { userId: d.uid, username: await nameOf(d.uid) },
-                   { op: d.op, act: d.act || null, table: d.table, game: d.game, what: d.what, amount: d.amount, to: d.to || null, via: "web", outcome: d.outcome,
-                     code: d.code || null }, reason || null);
+    const detail = { op: d.op, act: d.act || null, table: d.table, game: d.game, item: d.item || null, key: d.key || null, what: d.what, amount: d.amount,
+                     to: d.to || null, to_id: d.to_id || null, via: "web", outcome: d.outcome, code: d.code || null };
+    if (d.to_lock) detail.to_lock = d.to_lock;
+    if (d.ledger_key) detail.ledger_key = d.ledger_key;
+    if (d.house_key) { detail.house_key = d.house_key; detail.spin = d.spin || null; }
+    await A.record(by, "casino_owed", { userId: d.uid, username: await nameOf(d.uid) }, detail, reason || null);
   } catch (e) { console.error("[casino] owed audit:", e && e.message ? e.message : e); }
 }
-const actAudit = (a, outcome) => audit(a.by, { op: a.op, act: a.id, table: a.table, game: a.game, what: a.what, amount: a.amount, to: a.to_name, uid: a.uid, outcome }, a.reason);
+const actAudit = (a, outcome) => audit(a.by, { op: a.op, act: a.id, table: a.table, game: a.game, item: a.item, key: a.key, what: a.what, amount: a.amount,
+                                               to: a.to_name, to_id: a.to, to_lock: a.to_lock || null, uid: a.uid, outcome,
+                                               ledger_key: a.op === "redirect" ? a.dkey : null, house_key: a.op === "redirect" ? null : a.dkey, spin: a.spin }, a.reason);
 
 /** the settled item leaves the table: its owed entry, or (Hold'em) the seat with its stack (paid elsewhere) */
 async function closeItem(T, a, hooks) {
@@ -158,17 +185,19 @@ async function closeItem(T, a, hooks) {
 /**
  * At boot (service.recover / holdem.js recover), before anything retries: a redirect / write-off a restart caught. Its move landed ->
  * the item closes; nothing moved -> the act is dropped (the item stays owed). Audited either way. Saves nothing. -> true when there was one
+ * 1.99aoj review: also for an act that threw after its journal (why "an error": settleItem's catch, the tool's next action, retry).
  */
-async function resolve(T, hooks) {
+async function resolve(T, hooks, why) {
   const a = T && T.owed_act;
   if (!a) return false;
+  const after = why || "a restart";
   if (await actDone(a)) {
-    await actAudit(a, "done (finished after a restart)");
+    await actAudit(a, `done (finished after ${after})`);
     await closeItem(T, a, Object.assign({ quiet: true }, hooks || {}));
-    console.log(`[casino] ${T.id}: an owner's ${a.op} of ${a.key} (${fmt(a.amount)} PAT) landed before a restart - the item is closed`);
+    console.log(`[casino] ${T.id}: an owner's ${a.op} of ${a.key} (${fmt(a.amount)} PAT) landed before ${after} - the item is closed`);
   } else {
-    await actAudit(a, "interrupted by a restart - nothing moved");
-    console.warn(`[casino] ${T.id}: an owner's ${a.op} of ${a.key} was interrupted by a restart before it moved anything - still owed`);
+    await actAudit(a, `interrupted by ${after} - nothing moved`);
+    console.warn(`[casino] ${T.id}: an owner's ${a.op} of ${a.key} was interrupted by ${after} before it moved anything - still owed`);
   }
   T.owed_act = null;
   return true;
@@ -234,10 +263,16 @@ function install(core) {
   async function run(op, admin, b) {
     const T = S.tables.get(String(b.table || ""));
     if (!T || T.status !== "open" || (T.game !== "bj" && T.game !== "holdem")) return fail(409, "E_GONE", "That table isn't open any more - reload the page.");
+    // 1.99aoj review: an earlier settle at this table that threw after its journal (a database error mid-move) - finished or dropped now,
+    // as a restart would (under the mutex nothing else is in flight); it used to answer "busy" to every action there until a restart
+    if (T.owed_act) {
+      await resolve(T, G(T), "an error");
+      await G(T).after(T);
+      if (T.status !== "open") return fail(409, "E_CHANGED", "That item was settled already - reload the page.");
+    }
     const it = itemsOf(T).find((x) => itemId(T, x.key) === String(b.item || ""));
     if (!it) return fail(409, "E_CHANGED", "That item isn't owed any more - reload the page.");
     if (Number(b.amount) !== it.amount) return fail(409, "E_CHANGED", `The amount changed since the page was drawn (it is ${fmt(it.amount)} PAT now) - reload the page.`);
-    if (T.owed_act) return fail(409, "E_BUSY", "Another settle at this table is still being finished - reload the page in a moment.");
     if (it.kind === "cashout" && T.eng.hand_active && T.eng.players.includes(it.uid)) return fail(409, "E_IN_HAND", "That seat is in a hand - try again when the hand ends.");
     if (op === "retry") return retryItem(T, it, admin);
     return settleItem(T, it, op, admin, b);
@@ -254,8 +289,8 @@ function install(core) {
       await G(T).after(T);
     }
     const now = paid ? null : itemsOf(T).find((x) => x.key === it.key);
-    await audit(admin, { op: "retry", table: T.id, game: T.game, what: whatOf(T, it), amount: it.amount, uid: it.uid, outcome: paid ? "paid" : "still refused",
-                         code: now ? now.code : null }, null);
+    await audit(admin, { op: "retry", table: T.id, game: T.game, item: itemId(T, it.key), key: it.key, what: whatOf(T, it), amount: it.amount, uid: it.uid,
+                         outcome: paid ? "paid" : "still refused", code: now ? now.code : null }, null);
     return paid ? ok(`Paid to the original account (${fmt(it.amount)} PAT).`)
                 : fail(409, "E_REFUSED", `Still refused (${(now && now.code) || "?"}) - it stays owed, and it is tried again automatically.`);
   }
@@ -268,38 +303,57 @@ function install(core) {
     if (by || (await money.isDone(it.key))) {
       await closeItem(T, { kind: it.kind, key: it.key, uid: it.uid }, G(T));
       await G(T).after(T);
-      await audit(admin, { op, table: T.id, game: T.game, what: whatOf(T, it), amount: it.amount, uid: it.uid, outcome: by ? `already ${by}` : "had landed already" }, reason);
+      await audit(admin, { op, table: T.id, game: T.game, item: itemId(T, it.key), key: it.key, what: whatOf(T, it), amount: it.amount, uid: it.uid,
+                           outcome: by ? `already ${by}` : "had landed already" }, reason);
       return fail(409, "E_LANDED", by ? `It was ${by} already - nothing is owed.` : "It reached the original account after all - nothing is owed.");
     }
-    let to = null;
+    let to = null, lock = null;
     if (op === "redirect") {
-      const name = String(b.to == null ? "" : b.to).trim().slice(0, 64);
+      const name = String(b.to == null ? "" : b.to).trim().replace(/^@/, "").slice(0, 64);
       if (!name) return fail(400, "E_TO", "Name the account to pay.");
-      to = (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?)", [name]))[0] || null;
+      to = await targetOf(name);
       if (!to) return fail(404, "E_TO", `No account called ${name}.`);
+      if (to.ambiguous) return fail(409, "E_TO_AMBIGUOUS", `More than one account is called ${name} in different capitals - type the username exactly as it is written.`);
       if (to.userId === it.uid) return fail(409, "E_SAME", "That's the original account - use Retry now.");
+      if (to.archived_at) return fail(409, "E_TO_ARCHIVED", `${to.username} is an archived or deleted account - nobody can use points paid there. Restore it first, or name another account.`);
+      lock = await require("../siteban").startLock(to.userId);
+      if (lock && b.locked_ok !== true) {
+        return Object.assign(fail(409, "E_TO_LOCKED", `${to.username} is ${lockText(lock)}. Tick "Pay this account anyway" to pay it all the same.`), { lock: lock.kind });
+      }
     }
-    const a = { id: crypto.randomBytes(6).toString("hex"), op, key: it.key, kind: it.kind, uid: it.uid, amount: it.amount,
+    const a = { id: crypto.randomBytes(6).toString("hex"), op, key: it.key, item: itemId(T, it.key), kind: it.kind, uid: it.uid, amount: it.amount,
                 dkey: op === "redirect" ? redirectKey(it.key) : writeoffKey(it.key), spin: spinOf(T, it), to: to ? to.userId : null, to_name: to ? to.username : null,
-                by: { userId: admin.userId, username: admin.username }, reason, at: clock(), table: T.id, game: T.game, what: whatOf(T, it) };
+                to_lock: lock ? lock.kind : null, by: { userId: admin.userId, username: admin.username }, reason, at: clock(), table: T.id, game: T.game, what: whatOf(T, it) };
     T.owed_act = a;                  // the journal: saved before anything moves (resolve finishes or drops it after a restart)
     await save(T);
-    crash("owed:act");
-    if (op === "redirect") {
-      const r = await money.credit(a.dkey, a.to, a.amount, labelOf(T, it));
-      if (!r.ok) {
-        T.owed_act = null;
-        await save(T);
-        await audit(admin, { op, act: a.id, table: T.id, game: T.game, what: a.what, amount: a.amount, to: a.to_name, uid: a.uid, outcome: "refused", code: r.code }, reason);
-        return fail(409, "E_TO_REFUSED", `${to.username} couldn't be credited (${r.code}) - nothing moved, and it stays owed.`);
+    try {
+      crash("owed:act");
+      if (op === "redirect") {
+        const r = await money.credit(a.dkey, a.to, a.amount, labelOf(T, it));
+        if (!r.ok) {
+          T.owed_act = null;
+          await save(T);
+          await audit(admin, { op, act: a.id, table: T.id, game: T.game, item: a.item, key: a.key, what: a.what, amount: a.amount, to: a.to_name, to_id: a.to,
+                               to_lock: a.to_lock, uid: a.uid, outcome: "refused", code: r.code }, reason);
+          return fail(409, "E_TO_REFUSED", `${to.username} couldn't be credited (${r.code}) - nothing moved, and it stays owed.`);
+        }
+      } else {
+        await money.house(a.dkey, a.spin, null, a.amount);
       }
-    } else {
-      await money.house(a.dkey, a.spin, null, a.amount);
+      crash("owed:moved");
+      await actAudit(a, "done");
+      await closeItem(T, a, G(T));
+      T.owed_act = null;
+    } catch (e) {
+      // 1.99aoj review: an error after the journal (a database error mid-move) - finished (the move landed) or dropped (nothing moved)
+      // now, as a restart would; if that fails too, the next locked step at this table resolves it (run, retry). (A test's simulated
+      // process death - e.crash - leaves the journal for the boot, like a real one.)
+      if (!(e && e.crash) && T.owed_act === a) {
+        try { await resolve(T, G(T), "an error"); await G(T).after(T); }
+        catch (e2) { console.error(`[casino] ${T.id}: an owner's ${op} of ${a.key} failed and couldn't be resolved yet:`, e2 && e2.message ? e2.message : e2); }
+      }
+      throw e;
     }
-    crash("owed:moved");
-    await actAudit(a, "done");
-    await closeItem(T, a, G(T));
-    T.owed_act = null;
     await G(T).after(T);
     console.log(`[casino] ${T.id}: ${admin.username} ${op === "redirect" ? "redirected" : "wrote off"} ${a.key} (${fmt(a.amount)} PAT${a.to_name ? " to " + a.to_name : " to the House"})`);
     return ok(op === "redirect" ? `Paid ${fmt(a.amount)} PAT to ${a.to_name}.` : `Written off: ${fmt(a.amount)} PAT went back to the House.`);

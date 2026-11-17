@@ -4,7 +4,9 @@
 //   GET  /api/casino/admin/owed                 {items, recent, owner, now} - every item owed at the open tables, the newest audited actions
 //                                               (no account ids: a member is a username, or "account missing" + a short opaque reference)
 //   POST /api/casino/admin/owed/retry           {table, item, amount, idem}  casino admins: the item's own retry, now
-//   POST /api/casino/admin/owed/redirect        {table, item, amount, idem, to, reason, nonce, password}  a Pepe OWNER + the password step-up
+//   POST /api/casino/admin/owed/redirect        {table, item, amount, idem, to, reason, nonce, password, locked_ok?}  a Pepe OWNER + the password
+//                                               step-up (1.99aoj review: locked_ok true = pay a site-banned / deletion-scheduled account anyway,
+//                                               after an E_TO_LOCKED answer; an archived / deleted account never)
 //   POST /api/casino/admin/owed/writeoff        {table, item, amount, idem, reason, nonce, password}      a Pepe OWNER + the password step-up
 // Every POST is a same-origin JSON fetch (X-Requested-With: fetch + an Origin / Referer naming this host - stepup.sameOrigin). The owner
 // check (staffroles.ownerOf, casino.admin) comes before the step-up (stepup.check: the single-use nonce from POST /api/admin/stepup/nonce

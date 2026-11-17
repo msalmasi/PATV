@@ -73,7 +73,8 @@ async function fresh() {
   svc.S.hooks.deck = null;
   svc.S.hooks.crash = null;
   svc.S.rate.clear();
-  for (const t of ["casino_tables", "casino_events", "casino_rounds", "casino_actions", "transactions", "reserve_claims", "casino_settings", "admin_audit"]) {
+  for (const t of ["casino_tables", "casino_events", "casino_rounds", "casino_actions", "transactions", "reserve_claims", "casino_settings", "admin_audit",
+                   "feed_bans", "account_deletions"]) {
     await runQuery(`DELETE FROM ${t}`).catch(() => {});
   }
   await runQuery("DELETE FROM users");
@@ -84,6 +85,7 @@ async function fresh() {
                    [id, name.toLowerCase(), name, pw, cls, cf]);
   }
   away.clear();
+  require(path.join(repo, "siteban")).forget();
   await runQuery("DELETE FROM jackpot_rakes");
   await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, amount) VALUES ('seed', 'seed', 10000000)");
   funding.sync({});
@@ -140,6 +142,9 @@ test.before(async () => {
   await runQuery("CREATE TABLE welcome_bonus (userId TEXT PRIMARY KEY, dup_of TEXT)");
   await runQuery("CREATE TABLE badges (badgeId TEXT PRIMARY KEY, name TEXT, description TEXT, icon TEXT, points INTEGER, requirement TEXT, pat INTEGER DEFAULT 0)");
   await runQuery("CREATE TABLE classes (classId TEXT PRIMARY KEY, class TEXT)");
+  // (1.99aoj review: a redirect asks siteban.startLock - a site ban, a staff-scheduled deletion)
+  await runQuery("CREATE TABLE feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT, at INTEGER, until INTEGER, PRIMARY KEY (user_id, room_id))");
+  await runQuery("CREATE TABLE account_deletions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, state TEXT NOT NULL, requested_at INTEGER NOT NULL, execute_at INTEGER NOT NULL, requested_by TEXT)");
   await funding.init();
   const SR = require(path.join(repo, "staffroles"));
   await SR.init();
@@ -764,4 +769,274 @@ test("(A) the owner's step-up purpose: a nonce for casino_owed only for a Pepe o
   const T1 = { id: "aaaaaaaaaa" }, T2 = { id: "bbbbbbbbbb" };
   assert.notEqual(OW.itemId(T1, "k"), OW.itemId(T2, "k"));
   assert.match(OW.itemId(T1, "cbj:aaaaaaaaaa:r1:p-ann-01:pay"), /^[0-9a-f]{16}$/);
+});
+
+// ───────────────────────────── 1.99aoj review fixes ─────────────────────────────
+const MONEY = require(path.join(repo, "casino", "money"));
+const addUser = async (id, name, extra) => {
+  await runQuery("INSERT INTO users (userId, username, displayname, password, class, points_balance, archived_at) VALUES (?, ?, ?, 'x', 'pleb', 100000, ?)",
+                 [id, name, name, (extra && extra.archived_at) || null]);
+};
+
+test("review: a redirect's recipient - two usernames that differ only in capitals: the exact spelling is paid, any other is refused (it used to pay whichever row came first)", async () => {
+  await fresh();
+  await addUser("p-eve-05", "eve");
+  await addUser("p-eve-06", "EVE");
+  const start = await total();
+  const o = await threeOwed();
+  const p = (await list()).items.find((x) => x.kind === "payout");
+  const amb = await ownerAct("redirect", p, { to: "Eve", reason: "member's new account" });
+  assert.equal(amb.status, 409, JSON.stringify(amb.body));
+  assert.equal(amb.body.code, "E_TO_AMBIGUOUS");
+  assert.match(amb.body.error, /exactly/);
+  assert.deepEqual(await keys(o.key + ":redirect"), [], "nothing moved");
+  const r = await ownerAct("redirect", p, { to: "EVE", reason: "member's new account" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.match(r.body.message, /to EVE\./);
+  assert.equal(await bal("p-eve-06"), 102000, "the account typed exactly");
+  assert.equal(await bal("p-eve-05"), 100000, "not its case-variant");
+  // one account in any capitals is still found
+  const rf = (await list()).items.find((x) => x.kind === "refund");
+  const b0 = await bal(ID.bob);
+  ok((await ownerAct("redirect", rf, { to: "BOB", reason: "the member asked for it" })).body);
+  assert.equal(await bal(ID.bob), b0 + 600);
+  assert.equal(await total(), start);
+});
+
+test("review: a redirect never pays an archived / deleted account; a site-banned or deletion-scheduled one only when the owner ticks 'pay anyway' - and the audit row names the recipient's account, the item and the ledger row", async () => {
+  await fresh();
+  await addUser("p-zed-07", "zed", { archived_at: 1 });                       // (a deleted account's tombstone / an archived stale account)
+  await addUser("p-yan-08", "yan");
+  await runQuery("INSERT INTO account_deletions (user_id, state, requested_at, execute_at, requested_by) VALUES ('p-yan-08', 'scheduled', 1, ?, 'admin:x')", [Date.now() + 864e5]);
+  const start = await total();
+  const o = await threeOwed();
+  // (Bob - the host who played - is site-banned afterwards)
+  await runQuery("INSERT INTO feed_bans (user_id, room_id, reason, by, at, until) VALUES (?, '', 'spam', 'mod', 1, NULL)", [ID.bob]);
+  require(path.join(repo, "siteban")).forget();
+  const p = (await list()).items.find((x) => x.kind === "payout");
+  const arch = await ownerAct("redirect", p, { to: "zed", reason: "member's new account" });
+  assert.equal(arch.status, 409);
+  assert.equal(arch.body.code, "E_TO_ARCHIVED");
+  const arch2 = await ownerAct("redirect", p, { to: "zed", reason: "member's new account", locked_ok: true });
+  assert.equal(arch2.body.code, "E_TO_ARCHIVED", "never, even ticked");
+  const del = await ownerAct("redirect", p, { to: "yan", reason: "member's new account" });
+  assert.equal(del.status, 409);
+  assert.equal(del.body.code, "E_TO_LOCKED");
+  assert.equal(del.body.lock, "deletion");
+  const ban = await ownerAct("redirect", p, { to: "bob", reason: "member's new account" });
+  assert.equal(ban.status, 409);
+  assert.equal(ban.body.code, "E_TO_LOCKED");
+  assert.equal(ban.body.lock, "ban");
+  assert.match(ban.body.error, /site-banned/);
+  assert.equal((await ownerAct("redirect", p, { to: "bob", reason: "member's new account", locked_ok: "on" })).body.code, "E_TO_LOCKED", "only an explicit true");
+  assert.deepEqual(await keys(o.key + ":redirect"), [], "nothing moved");
+  assert.equal(await total(), start);
+  // deliberate: ticked -> paid, and the audit says it was a locked account
+  const b0 = await bal(ID.bob);
+  const r = await ownerAct("redirect", p, { to: "bob", reason: "member's new account", locked_ok: true });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(await bal(ID.bob), b0 + 2000);
+  const au = (await audits()).filter((x) => x.detail.op === "redirect" && x.detail.outcome === "done");
+  assert.equal(au.length, 1);
+  const d = au[0].detail;
+  assert.equal(d.to, "bob");
+  assert.equal(d.to_id, ID.bob, "the recipient's account id (a username can be renamed)");
+  assert.equal(d.to_lock, "ban");
+  assert.equal(d.item, p.id);
+  assert.equal(d.key, o.key);
+  assert.equal(d.ledger_key, o.key + ":redirect", "joins transactions");
+  assert.deepEqual(await keys(d.ledger_key), [2000]);
+  // the page's answer never carries those ids
+  const lr = await call("/api/casino/admin/owed", ID.adm);
+  for (const uid of Object.values(ID)) assert.ok(!lr.text.includes(uid), `no account id in the answer (${uid})`);
+  assert.ok(!lr.text.includes(o.key), "nor a key");
+  // a write-off's row names its House row and spin; a retry's its item and key
+  const rf = lr.body.items.find((x) => x.kind === "refund");
+  await capture(async () => call("/api/casino/admin/owed/retry", ID.adm, { table: rf.table, item: rf.id, amount: rf.amount, idem: idem() }));
+  ok((await ownerAct("writeoff", rf, { reason: "account purged, nobody to pay" })).body);
+  const all = await audits();
+  const rt = all.find((x) => x.detail.op === "retry");
+  assert.equal(rt.detail.item, rf.id);
+  assert.equal(rt.detail.key, o.rkey);
+  const wo = all.find((x) => x.detail.op === "writeoff");
+  assert.equal(wo.detail.house_key, o.rkey + ":writeoff");
+  assert.equal(wo.detail.spin, `cbj:${o.t}:r2`);
+  assert.deepEqual(await rakes(wo.detail.house_key), [{ amount: 600, spinId: wo.detail.spin }]);
+  assert.equal(await total(), start);
+});
+
+/** Hold'em: Bob (host) and Dan seated; Dan's account goes; Bob ends - Dan's cash-out is refused, the table waits on it (T.closing) */
+async function closingHoldem() {
+  const h = ok(await HA(bob, "start", ["25/50"], { room: null })).table;
+  ok(await HA(bob, "sit", ["2000"], { table: h }));
+  ok(await HA(mk(ID.dan, "Dan"), "sit", ["2500"], { table: h }));
+  await gone(ID.dan);
+  await capture(async () => HA(bob, "end", [], { table: h }));
+  assert.ok(get(h).closing, "waiting to close");
+  return h;
+}
+
+test("review: Hold'em - a new player at a table that waited to close plays at a normal table: settling the last owed seat leaves the idle clock running, and it idle-closes (it stayed open with no deadline)", async () => {
+  await fresh();
+  const start = await total();
+  const h = await closingHoldem();
+  ok(await HA(cat, "sit", ["1000"], { table: h }));
+  assert.equal(get(h).closing, undefined, "someone bought in: the table is in play again");
+  const it = (await list()).items.find((x) => x.kind === "cashout");
+  ok((await ownerAct("writeoff", it, { reason: "account purged, nobody to pay" })).body);
+  const T = get(h);
+  assert.equal(T.status, "open");
+  assert.deepEqual(T.eng.seats, [ID.cat]);
+  assert.ok(T.dl.idle, "the idle clock runs: " + JSON.stringify(T.dl));
+  const c0 = await bal(ID.cat);
+  await later(301);
+  assert.equal(get(h).status, "closed", "idle-closed");
+  assert.equal(await bal(ID.cat), c0 + 1000, "Cat cashed out");
+  assert.equal(await total(), start);
+});
+
+test("review: Hold'em - an owed buy-in refund on an emptied table, then a new player; the refund lands on its own clock - the table keeps its idle deadline and closes", async () => {
+  await fresh();
+  let start = await total();
+  const t = ok(await HA(bob, "start", ["25/50"], { room: null })).table;
+  ok(await HA(bob, "sit", ["2000"], { table: t }));
+  const ikey = `chm:${t}:${ID.ann}:buy:78`;
+  ok(await MONEY.charge(ikey, ID.ann, 3000, "holdem buy-in"));
+  svc.stop();
+  await runQuery("UPDATE casino_tables SET state = json_set(state, '$.intent', json(?)) WHERE id = ?", [JSON.stringify({ kind: "buy", key: ikey, uid: ID.ann, amount: 3000, ts: NOW }), t]);
+  await gone(ID.ann);
+  start -= 3000;
+  await capture(() => restart());
+  await capture(async () => ok(await HA(bob, "stand", [], { table: t })));
+  assert.equal(get(t).closing, "table empty");
+  ok(await HA(cat, "sit", ["1000"], { table: t }));
+  await back(ID.ann, "Ann");
+  await capture(() => later(601));
+  assert.deepEqual(await keys(ikey + ":refund"), [3000]);
+  const T = get(t);
+  assert.equal(T.status, "open", "Cat is seated");
+  assert.ok(T.dl.idle, "the idle clock runs: " + JSON.stringify(T.dl));
+  await later(301);
+  assert.equal(get(t).status, "closed");
+  assert.equal(await total(), start + 3000);
+});
+
+test("review: an owner's write-off that throws after its journal is resolved at once (nothing moved: still owed; it moved: closed) - never 'busy until a restart', and the automatic retry goes on", async () => {
+  // (1) the House write throws before anything moved: the act is dropped at once - retry now works, the clock pays it
+  await fresh();
+  let start = await total();
+  let o = await threeOwed();
+  let p = (await list()).items.find((x) => x.kind === "payout");
+  const orig = MONEY.house;
+  MONEY.house = async () => { MONEY.house = orig; throw new Error("database is locked"); };
+  let r;
+  await capture(async () => { r = await ownerAct("writeoff", p, { reason: "account purged, nobody to pay" }); });
+  assert.equal(r.status, 500);
+  assert.equal(get(o.t).owed_act, null, "resolved at once");
+  assert.equal((await row(o.t)).s.owed_act, null, "and saved");
+  assert.ok(get(o.t).owed[o.key], "still owed");
+  assert.equal((await audits()).filter((x) => x.detail.outcome === "interrupted by an error - nothing moved").length, 1);
+  assert.equal(await total(), start);
+  await capture(async () => { r = await call("/api/casino/admin/owed/retry", ID.adm, { table: p.table, item: p.id, amount: p.amount, idem: idem() }); });
+  assert.equal(r.body.code, "E_REFUSED", "not E_BUSY");
+  await back(ID.ann, "Ann");
+  await later(601);
+  assert.deepEqual(await keys(o.key), [2000], "its clock paid it");
+  // (2) the House row landed, then an error: the item closes at once (the House has it) - never paid to the original afterwards
+  await fresh();
+  start = await total();
+  o = await threeOwed();
+  p = (await list()).items.find((x) => x.kind === "payout");
+  const h0 = await house();
+  MONEY.house = async (...a) => { await orig(...a); MONEY.house = orig; throw new Error("lost the connection"); };
+  await capture(async () => { r = await ownerAct("writeoff", p, { reason: "account purged, nobody to pay" }); });
+  assert.equal(r.status, 500);
+  assert.equal(get(o.t).owed_act, null);
+  assert.ok(!get(o.t).owed[o.key], "closed: the House has it");
+  assert.equal(await house(), h0 + 2000);
+  const au = (await audits()).filter((x) => x.detail.op === "writeoff");
+  assert.equal(au.length, 1);
+  assert.equal(au[0].detail.outcome, "done (finished after an error)");
+  assert.equal(au[0].detail.house_key, o.key + ":writeoff");
+  await back(ID.ann, "Ann");
+  await later(700);
+  assert.deepEqual(await keys(o.key), [], "never paid to the original");
+  assert.equal(await total(), start);
+  // ... a Hold'em seat the same way: the seat leaves at once
+  const c = (await list()).items.find((x) => x.kind === "cashout");
+  MONEY.house = async (...a) => { await orig(...a); MONEY.house = orig; throw new Error("lost the connection"); };
+  await capture(async () => { r = await ownerAct("writeoff", c, { reason: "account purged, nobody to pay" }); });
+  assert.equal(r.status, 500);
+  assert.ok(!get(o.h).eng.seats.includes(ID.dan), "the seat left");
+  assert.equal(get(o.h).status, "closed", "the table that waited on it closes");
+  await back(ID.dan, "Dan");
+  await later(700);
+  assert.deepEqual(await keys(o.hkey), []);
+  assert.equal(await total(), start);
+});
+
+test("review: an act whose resolve failed too stays journalled - the next locked step at its table resolves it: the tool's next action, or the item's automatic retry (it used to wait for a restart)", async () => {
+  const orig = MONEY.house, origDone = MONEY.houseDone;
+  const breakBoth = () => {
+    MONEY.house = async () => {
+      MONEY.house = orig;
+      MONEY.houseDone = async () => { MONEY.houseDone = origDone; throw new Error("still down"); };
+      throw new Error("database is locked");
+    };
+  };
+  for (const via of ["the tool", "the clock"]) {
+    await fresh();
+    const start = await total();
+    const o = await threeOwed();
+    const p = (await list()).items.find((x) => x.kind === "payout");
+    breakBoth();
+    let r;
+    await capture(async () => { r = await ownerAct("writeoff", p, { reason: "account purged, nobody to pay" }); });
+    assert.equal(r.status, 500);
+    assert.ok(get(o.t).owed_act, `${via}: still journalled (the resolve failed too)`);
+    assert.equal(MONEY.houseDone, origDone);
+    if (via === "the tool") {
+      await capture(async () => { r = await call("/api/casino/admin/owed/retry", ID.adm, { table: p.table, item: p.id, amount: p.amount, idem: idem() }); });
+      assert.equal(r.body.code, "E_REFUSED", "resolved, then retried - not E_BUSY");
+      assert.equal(get(o.t).owed_act, null);
+      await back(ID.ann, "Ann");
+      r = await call("/api/casino/admin/owed/retry", ID.adm, { table: p.table, item: p.id, amount: p.amount, idem: idem() });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+    } else {
+      await back(ID.ann, "Ann");
+      await capture(() => later(601));
+      assert.equal(get(o.t).owed_act, null, "the retry resolved it");
+    }
+    assert.deepEqual(await keys(o.key), [2000], via);
+    assert.equal((await audits()).filter((x) => x.detail.op === "writeoff").length, 1, "one audit row for the act");
+    assert.equal(await total(), start, via);
+  }
+});
+
+test("review: the page's words - a table in play keeps playing; the empty list is about blackjack and Hold'em only; 'Recent actions'; the Games sub-links point at /admin/games from this page", async () => {
+  await fresh();
+  const pg = await call("/admin/casino/owed", ID.adm);
+  assert.equal(pg.status, 200);
+  assert.match(pg.text, /A table still in play keeps playing/);
+  assert.doesNotMatch(pg.text, /a blackjack table takes no new bets until everything it owes is settled/);
+  assert.match(pg.text, /roulette wheel or a tournament/);
+  assert.match(pg.text, /<h2 id="owedRecentT">Recent actions<\/h2>/);
+  const js = fs.readFileSync(path.join(repo, "public", "js", "admin-owed.js"), "utf8");
+  assert.doesNotMatch(js, /Every casino payout, refund and cash-out went through/);
+  assert.match(js, /Nothing is owed at the blackjack or Hold'em tables/);
+  // the sub-bar / sidebar anchors of the Games section, drawn on this page, go to /admin/games
+  for (const a of ["#wheel", "#jackpot", "#casino"]) {
+    assert.match(pg.text, new RegExp(`href="/admin/games${a}"`), a);
+    assert.doesNotMatch(pg.text, new RegExp(`href="${a}"`), a);
+  }
+  assert.match(pg.text, /href="\/admin\/casino\/owed"/);
+  // on /admin/games itself they stay in-page anchors
+  const g = await call("/admin/games", ID.adm);
+  assert.match(g.text, /href="#wheel"/);
+  // the tournament manager, drawn the same way
+  const ejs = require("ejs");
+  const nav = await ejs.renderFile(path.join(repo, "views", "partials", "admin-nav.ejs"), { section: "games", navPage: "/admin/casino/mtt", can: () => true });
+  assert.match(nav, /href="\/admin\/games#heistmarket"/);
+  assert.doesNotMatch(nav, /href="#/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "admin", "casino-mtt.ejs"), "utf8"), /navPage: '\/admin\/casino\/mtt'/);
 });

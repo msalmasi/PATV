@@ -91,6 +91,7 @@ function install(core) {
       if (!q.out && !q.back) return R(true, "you're already playing.");
       q.out = false; q.since = null; q.back = T.tourney ? null : post ? "post" : "wait"; q.timeouts = 0;   // (h22: a sit & go seat never left the blinds)
       delete q.refused;              // (1.99aoj: the account is back and playing - its stack isn't owed any more, it's theirs at the table)
+      delete T.closing;              // (1.99aoj review: the table is in play again - it idle-closes like any other)
       if (!T.eng.hand_active) T.dl.idle = null;
       if (!T.eng.hand_active && !T.dl.next) T.dl.next = clock() + HC.NEXT_SECS * 1000;
     } else {
@@ -273,6 +274,7 @@ function install(core) {
     H.sit(e, actor.uid, name, amount);
     qos(T, actor.uid);
     if (T.qol[actor.uid]) delete T.qol[actor.uid].refused;     // (1.99aoj: the account is back - its stack isn't owed any more)
+    delete T.closing;              // (1.99aoj review: someone buys in - the table is in play again; it idle-closes like any other)
     T.intent = null;
     if (!e.hand_active) T.dl.idle = clock() + HC.IDLE_SECS * 1000;
     const joining = e.hand_active && !e.players.includes(actor.uid) ? " (joins next hand)" : "";
@@ -611,7 +613,7 @@ function install(core) {
     if (T.tourney) { console.error(`[casino] ${T.id}: a sit & go never closes like a cash table (${reason || "?"}) - left open`); return; }   // h22
     const e = T.eng;
     for (const k of e.seats.slice()) await cashout(T, k, false);
-    if (OW.count(T)) await OW.retry(T, { all: true, t: clock() });      // 1.99aoj: an owed refund is tried once more by its key
+    if (OW.count(T)) await OW.retry(T, { all: true, t: clock(), hooks: { dropSeat } });      // 1.99aoj: an owed refund is tried once more by its key
     if (e.seats.length || OW.count(T)) {
       // every seat left holds a refused cash-out, sitting out (refusedOut): its sit-out clock tries again, and the last one out closes it;
       // 1.99aoj: an owed refund is tried on its clock, and the last owed item settled closes it (owedSettled - T.closing: the close asked for)
@@ -642,8 +644,10 @@ function install(core) {
     if (!e.seats.length && !OW.count(T) && !e.hand_active) return (await closeTable(T, T.closing || "table empty")) === true;
     if (!e.hand_active) {
       if (H.seatedWithChips(e).length < 2) T.dl.next = null;
-      // (a table waiting to close keeps waiting - no idle close of its own; its last owed item closes it)
-      if (!T.dl.next) T.dl.idle = T.closing || outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
+      // the idle clock as after a !stand: a seat that plays gets its idle close (1.99aoj review - a T.closing left from an earlier close
+      // used to leave a lone new player's table open with no deadline at all); nobody seated (a refund still owed) or a refused seat
+      // sitting out: none - the owed item's own clock (or the seat's sit-out clock) closes it
+      if (!T.dl.next) T.dl.idle = !e.seats.length || outHolds(T) ? null : clock() + HC.IDLE_SECS * 1000;
     }
     await save(T);
     return false;
@@ -781,7 +785,7 @@ function install(core) {
     }
     // 1.99aoj: an owed refund's clock (casino/owed.js) - tried again by its own key; the last owed item settled closes a table that waited
     if (OW.due(T, t)) {
-      await OW.retry(T, { t: clock() });
+      await OW.retry(T, { t: clock(), hooks: { dropSeat } });
       if (await owedSettled(T)) return;
     }
     if (T.dl.turn && T.dl.turn <= t) {
@@ -870,7 +874,7 @@ function install(core) {
     await bookRake(T);
     // 1.99aoj: every refund a refused credit left owed is tried again now, by its own key; a table whose close waited on what it owed (or on
     // a seat an owner settled before this restart) closes once nothing is owed and nobody is seated
-    if (!T.tourney && OW.count(T)) await OW.retry(T, { all: true, t: clock() });
+    if (!T.tourney && OW.count(T)) await OW.retry(T, { all: true, t: clock(), hooks: { dropSeat } });
     if (!T.tourney && T.closing && !e.hand_active && !T.hand && !e.seats.length && !OW.count(T)) { await closeTable(T, T.closing); return; }
     const t = clock();
     if (e.hand_active) {

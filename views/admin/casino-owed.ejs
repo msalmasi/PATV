@@ -1,4 +1,4 @@
-<%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: typeof isAdmin !== 'undefined' ? isAdmin : true }) %>
+<%- include('../partials/admin-open', { title, user, section: 'games', navPage: '/admin/casino/owed', admIsAdmin: typeof isAdmin !== 'undefined' ? isAdmin : true }) %>
 <%# 1.99aoj: owed casino PAT (casino/owed.js, casino/owedweb.js) - a payout, refund or cash-out whose credit was refused because the account is
     gone, kept at its table and tried again on its own. public/js/admin-owed.js draws the list from GET /api/casino/admin/owed and sends each
     action (retry now: casino admins; pay another account / write off to the House: a Pepe owner + the password step-up). Every action is in
@@ -12,14 +12,18 @@
   .owed-facts b { display: block; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ds-text-muted); }
   .owed-acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
   .owed-form { margin-top: var(--ds-sp-2); padding-top: var(--ds-sp-2); border-top: 1px solid var(--ds-line); }
-  .owed-form[hidden] { display: none; }
+  .owed-form[hidden], .owed-item .owed-anyway[hidden] { display: none; }   /* (beats .adm-form label:has(> input[type=checkbox])) */
+  .owed-msg { margin: var(--ds-sp-2) 0 0; }
+  #owedStatus, .owed-msg { scroll-margin: 88px 0 24px; }                 /* (scrolled into view clear of the phone's sticky admin bar) */
+  .owed-msg:empty { margin: 0; min-height: 0; }                            /* (kept in the page: an aria-live line must exist before it speaks) */
   .owed-help dt { font-weight: 700; margin-top: var(--ds-sp-2); }
   .owed-help dd { margin: 2px 0 0; }
   .owed-recent li { margin: 0 0 6px; overflow-wrap: anywhere; }
 </style>
 <div class="adm-head">
   <h1>💸 Owed casino PAT</h1>
-  <p>When the casino pays someone - a blackjack payout, a stake refund, a Hold'em cash-out - and their account is gone (a hard purge or a broken merge), the credit is refused. The points are never dropped: they stay at the table, owed, and are tried again on their own (every 10 minutes, a Hold'em seat every sit-out period, and at every restart). A table never closes while it owes points - a blackjack table takes no new bets until everything it owes is settled. <a href="/admin/games#casino">Games ›</a></p>
+  <p>When the casino pays someone - a blackjack payout, a stake refund, a Hold'em cash-out - and their account is gone (a hard purge or a broken merge), the credit is refused. The points are never dropped: they stay at the table, owed, and are tried again on their own (every 10 minutes, a Hold'em seat every sit-out period, and at every restart). A table never closes while it owes points: one whose close was asked for (or that emptied) stays open until everything it owes is settled - a blackjack one taking no new bets meanwhile. A table still in play keeps playing. <a href="/admin/games#casino">Games ›</a></p>
+  <p class="adm-help">This page covers the blackjack and Hold'em cash tables. A roulette wheel or a tournament (Sit &amp; Go or scheduled) whose payout or refund is refused keeps retrying on its own and is not listed here - the server log names it.</p>
 </div>
 <section class="adm-card" id="owedHelp" aria-labelledby="owedHelpT">
   <h2 id="owedHelpT">What each button does</h2>
@@ -27,7 +31,7 @@
     <dt>Retry now</dt>
     <dd>Tries the same credit to the same account again, right away - the same thing the automatic retry does. Safe to press any time: points that already went through are never paid twice. Casino admins.</dd>
     <dt>Pay another account <span class="adm-pill admin">owners</span></dt>
-    <dd>Pays the points to an account you name instead (for example the member's new account). The original account can never be paid them afterwards, even if it comes back. Needs a reason and your password.</dd>
+    <dd>Pays the points to an account you name instead (for example the member's new account). The original account can never be paid them afterwards, even if it comes back. Type the username exactly when two accounts differ only in capitals. An archived or deleted account can't be paid; a site-banned one, or one PATV staff scheduled for deletion, only when you tick "Pay this account anyway" after the page says so. Needs a reason and your password.</dd>
     <dt>Write off to the House <span class="adm-pill admin">owners</span></dt>
     <dd>Gives the points back to the House - the casino jackpot, which pays the casino's winners and keeps its lost bets. Nothing is burned; the points stay in the economy. Needs a reason and your password.</dd>
   </dl>
@@ -39,9 +43,9 @@
   <div id="owedList" class="owed-list" data-owner="<%= owner ? '1' : '0' %>"><p class="adm-help">Loading…</p></div>
 </section>
 <section class="adm-card" id="owedRecent" aria-labelledby="owedRecentT">
-  <h2 id="owedRecentT">Recently settled</h2>
-  <p class="adm-help">Every action on this page is in the admin log: who did it, the item, the amount and the reason.</p>
+  <h2 id="owedRecentT">Recent actions</h2>
+  <p class="adm-help">Every action on this page is in the admin log - the ones that settled something and the ones that were refused: who did it, the item, the amount, the reason and the outcome.</p>
   <ul id="owedRecentList" class="owed-recent adm-help"><li>Loading…</li></ul>
 </section>
-<script src="/public/js/admin-owed.js?v=1"></script>
+<script src="/public/js/admin-owed.js?v=2"></script>
 <%- include('../partials/admin-close') %>

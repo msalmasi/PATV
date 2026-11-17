@@ -4,6 +4,9 @@
   1.99ack: every entry and sub-link names the capabilities (siteperms.js) that open it, and the viewer sees only what
   they can use (an Assistant: the pages of their own capabilities - banner / soundboard / pad connection review).
   Sub-links are anchors on that section's page; old anchors on /feed/admin (#urgent #users #dms #audit #pepe) are kept.
+  1.99aoj review: navPage (optional) - the path of a page drawn under a section that is NOT the section's own page (e.g.
+  /admin/casino/owed, /admin/casino/mtt under Games): its '#' sub-links then point at the section's page (n[1] + '#...'), not at
+  anchors the page drawn doesn't have.
 %><%
   const _can = locals.can || new Function(include('../../siteperms-core.js'))().viewCan(locals);
   const _sec = typeof section !== 'undefined' ? section : '';
@@ -65,6 +68,8 @@
   const NAV = ALL_.filter((n) => n[0] === _sec || n[5].some((k) => _can(k)));
   const _subOk = (s) => !s[2] || _can(s[2]);
   const _cur = NAV.find((n) => n[0] === _sec);
+  const _here = typeof navPage !== 'undefined' && navPage ? String(navPage) : null;
+  const _sub = (n, s) => (s[0].charAt(0) === '#' && _here && _here !== n[1] ? n[1] + s[0] : s[0]);
   const _role = _can(SENS) ? 'Admin' : _can(AREA) ? 'Staff' : 'Assistant';
 %>
 <nav class="adm-side" aria-label="Admin sections">
@@ -75,7 +80,7 @@
         <a href="<%= n[1] %>"<%- on ? ' aria-current="page"' : '' %>><span class="ic" aria-hidden="true"><%= n[2] %></span><span class="lb"><%= n[3] %></span></a>
         <% if (on && n[4].length) { %>
           <ul class="adm-sub">
-            <% n[4].forEach((s) => { if (!_subOk(s)) return; %><li><a href="<%= s[0] %>"><%= s[1] %></a></li><% }) %>
+            <% n[4].forEach((s) => { if (!_subOk(s)) return; %><li><a href="<%= _sub(n, s) %>"><%= s[1] %></a></li><% }) %>
           </ul>
         <% } %>
       </li>
@@ -85,6 +90,6 @@
 </nav>
 <% if (_cur && _cur[4].length) { %>
 <nav class="adm-subbar" aria-label="<%= _cur[3] %> sections">
-  <% _cur[4].forEach((s) => { if (!_subOk(s)) return; %><a href="<%= s[0] %>"><%= s[1] %></a><% }) %>
+  <% _cur[4].forEach((s) => { if (!_subOk(s)) return; %><a href="<%= _sub(_cur, s) %>"><%= s[1] %></a><% }) %>
 </nav>
 <% } %>

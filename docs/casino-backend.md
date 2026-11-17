@@ -675,6 +675,29 @@ owed item closes a table that waited to close, marks a frozen round done, and le
 counting an item once paid, redirected or written off, also while the table's own save is behind. With nothing owed the
 supply is exactly 1.99aoi's (test/supply.test.js runs 1.99aoi's own supply.js on the same tables).
 
+The 1.99aoj review of the tool:
+- **The recipient of a redirect** is looked up by username, the exact spelling first. When two accounts differ only in
+  capitals and neither is spelled exactly as typed, it is refused (`E_TO_AMBIGUOUS`) - it used to pay whichever row came
+  first. An archived or deleted account (`archived_at`: a stale-cleanup archive or a deletion's tombstone) is never paid
+  (`E_TO_ARCHIVED`). A site-banned account, or one PATV staff scheduled for deletion (`siteban.startLock`), is refused once
+  (`E_TO_LOCKED`); the page then shows "Pay this account anyway", and only `locked_ok: true` pays it (audited as `to_lock`).
+- **The audit row** (`admin_audit` `casino_owed`) also names the item (`item`: its page id, `key`), the recipient's account id
+  (`to_id`: a username can be renamed), and the row the action wrote: `ledger_key` (transactions `<key>:redirect`) or
+  `house_key` + `spin` (jackpot_rakes `<key>:writeoff`). The page's own list never shows these ids.
+- **An act that throws** after its journal (a database error mid-move) is resolved at once like a restart would (the move
+  landed: the item closes; nothing moved: it stays owed, audited "interrupted by an error"). If that fails too, the next locked
+  step at that table resolves it - the tool's next action there, or the item's automatic retry (`owed.retry`). It used to answer
+  "busy" to every action at that table, and its automatic retry skipped it, until a restart.
+- **Hold'em**: someone buying in (or a refused seat coming back) clears `T.closing` - the table is in play again and idle-closes
+  like any other; settling an owed item re-arms the idle clock as a `!stand` does. A lone new player's table used to stay open
+  with no deadline.
+- **The page**: each item has its own status line beside its buttons (scrolled into view, clear of the phone's sticky admin
+  bar); the password is cleared only after it was used (a success, a wrong password). The sub-links of the Games section point at
+  `/admin/games#...` from this page and from `/admin/casino/mtt` (`admin-nav.ejs` `navPage`). Roulette wheels and
+  tournaments are not on this page (their refused credits keep retrying on their own); the page says so.
+- Its strings stay English, like the other casino admin page (`/admin/casino/mtt`) and the Casino bans card beside its link on
+  `/admin/games`: the site's admin pages are not translated by design; they are not in `locales/`.
+
 **Rolling back to 1.99aoi with something owed (runbook).** 1.99aoi, the build the site CI's automatic rollback runs, doesn't
 know `T.owed`: it keeps the field in the table's saved JSON while the table stays open, but it never retries an owed item,
 doesn't count it in the supply, doesn't freeze the table (`T.closing`), and once it closes that table (an admin's or host's
