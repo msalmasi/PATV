@@ -37,3 +37,6 @@ test/fixtures/evidence-wire.json text eol=lf
 test/fixtures/postmd/* text eol=lf
 # 1.99aon: the former-room-id wire (retention_keep.former_rooms), shared byte-for-byte with camfrog-bot (ci/fixtures/; sha256 pinned in both)
 test/fixtures/retention-former-wire.json text eol=lf
+
+# 1.99aoj: the previous build the rollback proof runs (test/fixtures/casino-rl-prev-boot.js) - git blobs byte for byte on every host
+test/fixtures/casino-prev/** text eol=lf

@@ -1,9 +1,10 @@
 "use strict";
 // O2 (ENGINE-8) per-bet storage, release A - casino/rlstore.js: a line is one casino_rl_lines row keyed by its stake's
 // transactionId, committed with the stake and the act key's answer; the supply sums the live rows; the shared bank sums
-// every open wheel's cached rows. Release A keeps a JSON mirror the PREVIOUS build (1.99aof, run here in its own process:
-// test/fixtures/casino-rl-prev-boot.js) acts on correctly after the CI's automatic rollback, and this build migrates exactly
-// what that build leaves (mid-betting, mid-spin, mid-settlement, an interrupted refund or placement).
+// every open wheel's cached rows. Release A keeps a JSON mirror the PREVIOUS build (1.99aoi, the deployed base: every module this
+// release changed as that build has it - test/fixtures/casino-prev/ - run in its own process by test/fixtures/casino-rl-prev-boot.js)
+// acts on correctly after the CI's automatic rollback, and this build migrates exactly what that build leaves (mid-betting, mid-spin,
+// mid-settlement, an interrupted refund or placement).
 const test = require("node:test"),
   assert = require("node:assert/strict");
 const path = require("node:path");
@@ -37,9 +38,11 @@ function prevBuild(steps) {
     { encoding: "utf8" },
   );
   const out = JSON.parse(raw.trim().split("\n").pop());
+  for (const f of out.loaded || []) prevLoaded.add(f);
   h.move(out.now - h.time());
   return out;
 }
+const prevLoaded = new Set(); // (the repo modules each previous-build run loaded - the last test checks them against the base)
 
 test("a line is one row: its stake's key, compact bets, committed with the stake and the act key's answer", async () => {
   let T = await room();
@@ -586,4 +589,45 @@ test("the row reads of a boot and a restore are index seeks: a wheel's MAX(opno)
   const plan = async (q, p) => (await rows("EXPLAIN QUERY PLAN " + q, p)).map((r) => r.detail).join(" | ");
   assert.match(await plan("SELECT MAX(opno) AS n FROM casino_rl_lines WHERE table_id = ?", ["x"]), /USING (COVERING )?INDEX casino_rl_lines_opno \(table_id=\?\)/);
   assert.match(await plan("SELECT key FROM casino_rl_lines WHERE key IN (?, ?)", ["a", "b"]), /USING (COVERING )?INDEX sqlite_autoindex_casino_rl_lines_1 \(key=\?\)/);
+});
+
+// 1.99aoj (review): the rollback proof runs the build a rollback runs. The previous build is the deployed base WHOLE - every module this
+// release changed as that build has it (test/fixtures/casino-prev/, git blobs in its manifest), not just its roulette.js inside this
+// build's service.js - and every other module it loads is the same file in both builds (checked where git has the base: a shallow CI
+// clone checks the copies against the manifest only).
+test("rollback proof: the previous build is the deployed base - its vendored modules byte for byte, every other module it loads unchanged since", async () => {
+  const fs = require("node:fs"),
+    crypto = require("node:crypto");
+  const dir = path.join(__dirname, "fixtures", "casino-prev"),
+    man = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+  const blob = (buf) => crypto.createHash("sha1").update(Buffer.concat([Buffer.from("blob " + buf.length + "\0"), buf])).digest("hex");
+  const lf = (buf) => Buffer.from(buf.toString("utf8").replace(/\r\n/g, "\n"), "utf8");
+  assert.match(man.base, /^[0-9a-f]{40}$/);
+  assert.equal(man.label, "1.99aoi", "the build prod runs before this release");
+  for (const [f, sha] of Object.entries(man.files)) assert.equal(blob(lf(fs.readFileSync(path.join(dir, f + ".txt")))), sha, f + ": the base's blob, byte for byte");
+  // a run of its own (an open, a bet, a spin) so the loaded set is there when this test runs alone
+  prevBuild([{ open: "pad-prev" }, { act: ["$0", "b", "bet", "red 200"] }, { tick: svc.S.settings.rl_bet_secs * 1000 }, { tick: svc.S.settings.rl_spin_secs * 1000 }]);
+  const loaded = [...prevLoaded];
+  for (const f of ["casino/service.js", "casino/roulette.js", "casino/money.js", "ledger.js"]) assert.ok(loaded.includes(f), "the previous build ran " + f);
+  for (const f of loaded) assert.ok(!f.startsWith("casino/rlstore"), "release A's row store is not in the previous build: " + f);
+  for (const f of ["casino/service.js", "casino/roulette.js"]) assert.ok(man.files[f], f + " is the previous build's own");
+  let git = null;
+  try {
+    git = (...a) => execFileSync("git", ["-C", h.repo, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    git("cat-file", "-e", man.base + "^{commit}");
+  } catch (e) {
+    git = null;
+  }
+  if (!git) return; // (no base commit in this clone: the manifest check above is the proof)
+  for (const [f, sha] of Object.entries(man.files)) assert.equal(git("rev-parse", man.base + ":" + f), sha, f + ": the manifest's blob is the base's");
+  for (const f of loaded.filter((x) => !man.files[x])) {
+    const now = blob(lf(fs.readFileSync(path.join(h.repo, f)))),
+      then = git("rev-parse", man.base + ":" + f);
+    if (now === then) continue;
+    // a data file (locales/en.json: this release only ADDS keys) may grow - the previous build reads every key it knows unchanged
+    assert.ok(f.endsWith(".json"), f + " changed since the base - vendor its previous copy into test/fixtures/casino-prev/");
+    const was = JSON.parse(execFileSync("git", ["-C", h.repo, "cat-file", "blob", then], { encoding: "utf8", maxBuffer: 1 << 28 })),
+      is = JSON.parse(fs.readFileSync(path.join(h.repo, f), "utf8"));
+    for (const k of Object.keys(was)) assert.deepEqual(is[k], was[k], f + ": " + k + " reads as the previous build shipped it");
+  }
 });

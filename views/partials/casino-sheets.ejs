@@ -1,12 +1,15 @@
 <% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# views/partials/casino-sheets.ejs - D10: the table pages' sheets (native <dialog>: focus trap, Esc closes; a bottom sheet on a
     phone): hand history + the provably-fair commitment, and the host / admin tools (push to a Camfrog room, Pepe's stream with
-    its queue position and the admin override, close the table). Locals: t. %>
+    its queue position and the admin override, close the table). Locals: t, game (1.99aoj review: 'roulette' words Host Tools for a
+    wheel - "The wheel", "Close the wheel", the advert's "wheel's link" / "before a spin"; Blackjack / Hold'em read as before). %>
+<% const _rlw = locals.game === 'roulette'; -%>
 <dialog class="sheet" id="cz-histsheet" aria-labelledby="cz-hist-h">
   <div class="sheet-h"><h2 id="cz-hist-h">📜 <%- t('casino.history') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
   <div class="sheet-b">
     <div class="hist" id="cz-hist"></div>
-    <p class="fine" style="margin-top:14px"><%- t('casino.fair_how') %></p>
+    <%# (a wheel: the spin's proof, never "the deck" - casinorl.js writes the same line at load) %>
+    <p class="fine" style="margin-top:14px"><%- _rlw ? t('js.casino.rl_fair_how') : t('casino.fair_how') %></p>
     <p class="commit" id="cz-commit"></p>
   </div>
 </dialog>
@@ -24,7 +27,7 @@
       <button type="button" class="cz-btn ghost sm" id="cz-unpush"><%- t('casino.unpush') %></button>
     </div>
     <label class="lbl" for="cz-adroom"><%- t('casino.advert_h') %></label>
-    <p class="fine"><%- t('casino.advert_note') %></p>
+    <p class="fine"><%- _rlw ? t('casino.rl.advert_note') : t('casino.advert_note') %></p>
     <div class="roomchips" id="cz-adlist"></div>
     <p class="fine" id="cz-adnone" hidden><%- t('casino.no_rooms') %></p>
     <select id="cz-adroom"></select>
@@ -32,11 +35,15 @@
     <label class="lbl"><%- t('casino.stream_h') %></label>
     <p class="fine" id="cz-streamnow"></p>
     <p class="fine" id="cz-override-row" hidden><label><input type="checkbox" id="cz-override"> <%- t('casino.override') %></label></p>
+    <% if (_rlw) { %><%# 1.99aoj (review, D7): an admin pins a wheel on Pepe's stream - no 5-minute idle drop, so the OBS board stays with it
+        ({pin: true} with the stream request; casino-ui.js shows the box, or the 📌 button once it is on the stream) %>
+    <p class="fine" id="cz-pin-row" hidden><label><input type="checkbox" id="cz-pin"> <%- t('casino.rl.pin') %></label></p><% } %>
     <div class="rowb">
       <button type="button" class="cz-btn amber sm" id="cz-stream"><%- t('casino.stream_ask') %></button>
+      <% if (_rlw) { %><button type="button" class="cz-btn ghost sm" id="cz-pinnow" hidden>📌 <%- t('casino.rl.pin_now') %></button><% } %>
       <button type="button" class="cz-btn ghost sm" id="cz-unstream"><%- t('casino.unstream') %></button>
     </div>
-    <label class="lbl"><%- t('casino.table_h') %></label>
-    <button type="button" class="cz-btn red sm" id="cz-close"><%- t('casino.close_table') %></button>
+    <label class="lbl"><%- _rlw ? t('casino.rl.wheel_h') : t('casino.table_h') %></label>
+    <button type="button" class="cz-btn red sm" id="cz-close"><%- _rlw ? t('casino.rl.close_wheel') : t('casino.close_table') %></button>
   </div>
 </dialog>

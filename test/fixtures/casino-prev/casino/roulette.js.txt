@@ -524,8 +524,10 @@ function install(core) {
     // board) reads the live table without the casino lock, so the spinning state is saved from a copy and reaches the
     // live table after COMMIT. A draw that fails leaves the live wheel betting as it was: nobody saw its pocket.
     // FAIR-3: and the next spin is committed now (unless this wheel closes after this spin), before any line is queued for it
+    // 1.99aoh(c): dl.start = the spin's start on the site's clock (saved with the spin, so a board arriving mid-spin can place it)
     const r = { ...T.round, pocket: fair.spinPocket(T.round.seed, T.client_seed, T.round.no) },
-      dl = { land: clock() + S.settings.rl_spin_secs * 1000 },
+      t0 = clock(),
+      dl = { start: t0, land: t0 + S.settings.rl_spin_secs * 1000 },
       ahead = !T.closing && S.settings.casino_roulette !== "off" && !rotation(T) ? fair.newServerSeed() : null,
       upcoming = ahead ? { seed: ahead, commitment: fair.commitment(ahead), no: r.no + 1 } : null,
       next = { ...T, round: r, eng: { ...T.eng, phase: "spinning" }, dl, next: upcoming };
@@ -849,6 +851,7 @@ function install(core) {
     if (T.eng.phase === "idle" || T.eng.phase === "betting") await queuedLines(T);
     if (due(T)) await tick(T);
   }
+  const spinStart = (T) => T.dl.start || T.dl.land - S.settings.rl_spin_secs * 1000;
   function publicView(T) {
     const e = T.eng;
     return {
@@ -874,13 +877,17 @@ function install(core) {
       deadline: T.dl.bet || null,
       land_at: T.dl.land || null,
       result_until: T.dl.result || null,
+      // (null unless the LIVE phase is spinning: the pocket is public only once its draw committed)
+      // 1.99aoh(c): + started_at (site ms) and secs - a spin saved before dl.start existed counts back from its landing
       spin:
         e.phase === "spinning"
           ? {
               round_no: e.round_no,
               number: T.round.pocket,
               color: engine.color(T.round.pocket),
+              started_at: spinStart(T),
               ends_at: T.dl.land,
+              secs: (T.dl.land - spinStart(T)) / 1000,
             }
           : null,
       seats: e.seats.map((uid) => ({

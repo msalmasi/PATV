@@ -104,7 +104,7 @@ function page(opts) {
       posts.push({ url, body });
       return (opts.reply && opts.reply(body)) || { ok: true, reply: "ok" };
     }
-    return String(url).startsWith("/api/casino/lobby") ? { ok: true, roulette: { wheels: [] } } : { ok: false };
+    return String(url).startsWith("/api/casino/lobby") ? opts.lobby || { ok: true, roulette: { wheels: [] } } : { ok: false };
   });
   const el = (tag, id, kids) => {
     const e = new El(tag);
@@ -560,8 +560,8 @@ test("O13(9) / O13(10): the stats drawer always says each spin is independent (n
 
 test("O9: the page is built on the shared parts (back link, felt, croupier, clock, meta, watchbar, players, dock) and the shared chips", () => {
   const v = read("views/casino-rl.ejs");
-  // (1.99aoj: the back link is the lobby the navbar names - <%= rlLobby %>; test/casino-ui.test.js renders it)
-  for (const s of ['<a class="back" href="<%= rlLobby %>">', '<div class="felt rl" id="cz-felt">', 'class="cz-who" data-pepe="1"',
+  // (1.99aoj: the back link is the lobby the navbar names - rlLobby, never this page itself; test/casino-ui.test.js renders it)
+  for (const s of [`<a class="back" href="<%= rlLobby === '/casino/roulette' ? '/casino' : rlLobby %>">`, '<div class="felt rl" id="cz-felt">', 'class="cz-who" data-pepe="1"',
     '<div class="clock" id="cz-fclock" hidden>', '<div class="felt-meta" id="cz-meta">', '<div class="watchbar" id="cz-watchbar" hidden>',
     '<section class="rl-players" id="rl-players"', '<div class="dock" id="cz-dock" hidden>', '<dialog class="sheet" id="rl-stats"'])
     assert.ok(v.includes(s), s);
@@ -925,4 +925,39 @@ test("review: casino-sound.js unlocks on a tap's pointerup / touchend / click (W
   gestureNow = false;
   assert.equal(inst[0].state, "running", "the tap's click does - no need to toggle Sound off and on");
   assert.equal(made, 1, "one context");
+});
+
+// 1.99aoj (review): the other open wheels under the table, each named by whose it is (several read "Web wheel" - WCAG 2.4.4), from the
+// lobby's own wheel rows (?rl=1: the host as the lobby shows it), after the nav's visible label (views/casino-rl.ejs)
+test("the other wheels: Pepe's wheel, '{host}'s wheel' (+ its room, 💎), from the lobby's rows (?rl=1); this wheel never; a visible label", async () => {
+  const W = (id, o) => Object.assign({ id, lobby: false, high_stakes: false, room_name: null }, o);
+  const P = page({
+    lobby: {
+      ok: true,
+      roulette: { wheels: [W(ID, { lobby: true }), W("aaaaaaaaa1"), W("aaaaaaaaa2", { high_stakes: true }), W("aaaaaaaaa3", { room_name: "Test Lounge" }), W("aaaaaaaaa4"), W("bad id")] },
+      tables: [
+        { id: "aaaaaaaaa1", game: "roulette", host: "Rocco" },
+        { id: "aaaaaaaaa2", game: "roulette", host: "frog 7" },
+        { id: "aaaaaaaaa3", game: "roulette", host: "Mia" },
+        { id: "bbbbbbbbb1", game: "bj", host: "Nobody" },
+      ],
+    },
+  });
+  for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(P.W.fetched.some((f) => f.url === "/api/casino/lobby?rl=1"), "the lobby's wheel rows (with their hosts)");
+  const nav = P.$("rl-wheels");
+  const links = nav.all().filter((e) => e.tagName === "A").map((a) => [a.href || a.attrs.href, a.textContent]);
+  assert.deepEqual(links, [
+    ["/casino/roulette/t/aaaaaaaaa1", "Rocco's wheel"],
+    ["/casino/roulette/t/aaaaaaaaa2", "💎 frog 7's wheel"],
+    ["/casino/roulette/t/aaaaaaaaa3", "Mia's wheel · Test Lounge"],
+    ["/casino/roulette/t/aaaaaaaaa4", "Web wheel"],
+  ], "whose each is; a row without a host (an older answer) as before; this wheel and a bad id never");
+  assert.equal(nav.hidden, false);
+  const v = read("views/casino-rl.ejs");
+  assert.match(v, /<nav id="rl-wheels" aria-labelledby="rl-wheels-h" hidden><span class="rl-more-n" id="rl-wheels-h"><%= t\('casino\.rl\.other'\) %><\/span><\/nav>/);
+  // the lobby wheel's link when this page is another wheel
+  const Q = page({ lobby: { ok: true, roulette: { wheels: [W("aaaaaaaaa9", { lobby: true })] }, tables: [{ id: "aaaaaaaaa9", game: "roulette", host: "Pepe" }] } });
+  for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
+  assert.deepEqual(Q.$("rl-wheels").all().filter((e) => e.tagName === "A").map((a) => a.textContent), ["Pepe's wheel"]);
 });

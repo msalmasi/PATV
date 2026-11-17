@@ -461,16 +461,33 @@
                 if (t && t.content && !document.querySelector('.site-foot')) document.body.appendChild(t.content.cloneNode(true));
             });
         </script>
-        <script>
+        <%# 1.99aoj (review): a link to a #tab (the lobby's 🛞 Roulette tab on the Blackjack or Hold'em lobby) is the current one on that tab -
+            and on the roulette pages - and the page's plain link (Blackjack) gives way to it there; following a link in a menu, or a new #tab,
+            closes the menu (a hash-only link never reloads the page, so the menu stayed open over it - on a phone ☰ covers the screen).
+            window.patvNavMark: casino-ui.js re-marks after a lobby tab picked by its button (replaceState fires no hashchange). %>
+        <script id="navMark">
             // Highlight the page you're on; close an open menu when clicking elsewhere.
             (function () {
-                var p = location.pathname;
-                document.querySelectorAll('.navbar .nav-link').forEach(function (a) {
-                    var h = a.getAttribute('href');
-                    if (h && h.charAt(0) === '/' && (h === '/' ? p === '/' : p === h || p.indexOf(h + '/') === 0 || (h.indexOf('/wheel') > 0 && p.indexOf('/wheel') > 0))) a.classList.add('current');
-                });
+                function mark() {
+                    var p = location.pathname, hs = location.hash || '', links = document.querySelectorAll('.navbar .nav-link'), tab = {};
+                    function onTab(h) {
+                        var i = h.indexOf('#'), base = h.slice(0, i), frag = h.slice(i);
+                        return (p === base && hs === frag) || (frag === '#roulette' && (p === '/casino/roulette' || p.indexOf('/casino/roulette/') === 0));
+                    }
+                    links.forEach(function (a) { var h = a.getAttribute('href'); if (h && h.charAt(0) === '/' && h.indexOf('#') > 0 && onTab(h)) tab[h.slice(0, h.indexOf('#'))] = 1; });
+                    links.forEach(function (a) {
+                        var h = a.getAttribute('href'), on = false;
+                        if (h && h.charAt(0) === '/') on = h.indexOf('#') > 0 ? onTab(h) : !tab[h] && (h === '/' ? p === '/' : p === h || p.indexOf(h + '/') === 0 || (h.indexOf('/wheel') > 0 && p.indexOf('/wheel') > 0));
+                        if (on) a.classList.add('current'); else a.classList.remove('current');
+                    });
+                }
+                function shut() { document.querySelectorAll('.navbar details[open]').forEach(function (d) { d.removeAttribute('open'); }); }
+                mark();
+                window.patvNavMark = mark;
+                window.addEventListener('hashchange', function () { shut(); mark(); });
                 document.addEventListener('click', function (e) {
-                    document.querySelectorAll('.navbar details[open]').forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute('open'); });
+                    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+                    document.querySelectorAll('.navbar details[open]').forEach(function (d) { if (!d.contains(e.target) || (a && d.contains(a))) d.removeAttribute('open'); });
                 });
                 // 1.99pj: Escape closes an open menu and puts focus back on its button
                 document.addEventListener('keydown', function (e) {

@@ -1,11 +1,14 @@
 // O2 release A (rollback safety) - test/casino-rl-store.test.js's PREVIOUS BUILD, in its own process (dbUtils opens ./myapp.db):
-// the roulette service of the release before per-bet storage (1.99aof: test/fixtures/casino-rl-prev-roulette.js.txt is
-// casino/roulette.js at 84952cc0, byte for byte; service.js / money.js / ledger.js are the ones it shipped with, unchanged
-// by O2 but for service boot()'s RL.bootAudit() call, stubbed below) boots on the database this build wrote - what the site CI's automatic rollback does - and runs a few steps.
+// the build the site CI's automatic rollback runs, booted on the database this build wrote, running a few steps.
+// 1.99aoj (review): the WHOLE previous build, not just its roulette.js inside this build's service.js. Every module this release
+// changed is loaded as the deployed base has it - the vendored copies in test/fixtures/casino-prev/ (manifest.json names the base
+// commit, its version and each file's git blob; test/casino-rl-store.test.js checks the copies against the manifest, and, where git
+// has the base, against the base itself and that every other module this process loads is unchanged since it). Every other module
+// is the same file in both builds.
 //   node test/fixtures/casino-rl-prev-boot.js <dir with myapp.db> <clock ms> <steps JSON>
 // steps: [{open: room}, {act: [tableId | "$0" (the first wheel opened here), uid, verb, line]}, {tick: ms}, {move: ms},
 // {crash: "rl:<step>" | null} (that build's own crash points)] - prints one JSON line: the wheels, the wallets, what that
-// build's supply audit counted at its tables (T.escrowed in the JSON), the House and the clock.
+// build's supply audit counted at its tables (T.escrowed in the JSON), the House, the clock and the repo modules it loaded.
 "use strict";
 const fs = require("fs"),
   path = require("path"),
@@ -15,18 +18,18 @@ const repo = path.resolve(__dirname, "../..");
 if (require.main !== module || !dir) return; // (a fixture: loaded on its own it does nothing)
 process.chdir(dir);
 delete process.env.STAGING;
-// casino/roulette.js resolves to the previous build's module (its own requires resolve from casino/, as they did)
-const target = path.join(repo, "casino", "roulette.js");
-const prev = new Module(target, module);
-prev.filename = target;
-prev.paths = Module._nodeModulePaths(path.dirname(target));
-prev._compile(fs.readFileSync(path.join(__dirname, "casino-rl-prev-roulette.js.txt"), "utf8"), target);
-prev.loaded = true;
-require.cache[target] = prev;
+const rel = (f) => path.relative(repo, f).split(path.sep).join("/");
+const PREV_DIR = path.join(__dirname, "casino-prev");
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(PREV_DIR, "manifest.json"), "utf8"));
+const PREV = new Map(Object.keys(MANIFEST.files).map((f) => [f, fs.readFileSync(path.join(PREV_DIR, f + ".txt"), "utf8")]));
+// a changed module compiles from the previous build's text under its own path (its requires resolve from its own folder, as they did),
+// whenever it is first required - lazily required ones too
+const loadJs = Module._extensions[".js"];
+Module._extensions[".js"] = function (m, filename) {
+  const text = PREV.get(rel(filename));
+  return text === undefined ? loadJs(m, filename) : m._compile(text, filename);
+};
 const svc = require(path.join(repo, "casino/service"));
-// (O2 added one line to service.js boot(): RL.bootAudit(). The previous build's service has no such call and its roulette
-// no such function - a no-op here, as it was there.)
-if (typeof svc.RL.bootAudit !== "function") svc.RL.bootAudit = async () => {};
 const veil = require(path.join(repo, "casino/veil"));
 const { getQuery } = require(path.join(repo, "dbUtils"));
 require(path.join(repo, "casino/rewards")).hooks.updateLevel = async () => {};
@@ -72,6 +75,8 @@ const who = (uid) => ({ uid, name: "Player" + uid, username: "player" + uid, cam
   out.heldJson = await heldJson();
   out.house = (await getQuery("SELECT SUM(amount) AS n FROM jackpot_rakes"))[0].n;
   out.now = now;
+  // the repo's own modules this build ran (the store test checks each one that isn't vendored is unchanged since the base)
+  out.loaded = Object.keys(require.cache).map(rel).filter((f) => !f.startsWith("..") && !f.startsWith("node_modules/") && !f.startsWith("test/")).sort();
   process.stdout.write(JSON.stringify(out) + "\n");
   svc.stop();
   process.exit(0);

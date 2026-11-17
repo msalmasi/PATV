@@ -731,7 +731,9 @@ function register(app, { isBotToken, addUser, discordBridge }) {
         // 1.99aof (SUITES-2): a room player's queued line refused when betting opened, or dropped by a close - PM'd by Pepe as a
         // private_mtt "notice" (each key once, only down that player's own room; never an event)
         out.private_mtt = (out.private_mtt || []).concat(svc.RL.privateNotes());
-        out.lobby.roulette = base + "/casino/roulette";
+        // 1.99aoj (review): Pepe's "all:" / "web wheels:" link - the lobby's 🛞 Roulette tab, where every wheel is listed and Open a
+        // wheel lives (svc.rlLobbyPath: the navbar's rule); /casino/roulette itself opens Pepe's lobby wheel only. An older Pepe reads it too.
+        out.lobby.roulette = base + svc.rlLobbyPath(st);
       } else {
         out.events = out.events.filter(e => e.data?.game !== "roulette");
         if (out.tables[out.stream]?.game === "roulette") out.stream = null;

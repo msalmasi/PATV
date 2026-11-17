@@ -99,6 +99,11 @@
     <label><%= t('casino.rl.audience') %><select name="casino_roulette" data-old="<%= casino.casino_roulette %>">
       <% for (const audience of ['off','staff','everyone']) { %><option value="<%= audience %>" <%= casino.casino_roulette === audience ? 'selected' : '' %>><%= audience %></option><% } %>
     </select></label>
+    <%# 1.99aoj (review): who may open a web wheel of their own (casino/roulette.js webShut) - the lobby wheel, room wheels and play at
+        every open wheel stay "Who can play"'s %>
+    <label><%= t('casino.rl.web_open') %><select name="rl_web_open" data-old="<%= casino.rl_web_open %>" aria-describedby="rlWebOpenHelp">
+      <% for (const audience of ['off','staff','everyone']) { %><option value="<%= audience %>" <%= casino.rl_web_open === audience ? 'selected' : '' %>><%= audience %></option><% } %>
+    </select><small class="adm-help" id="rlWebOpenHelp"><%= t('casino.rl.web_open_help') %></small></label>
     <% for (const [key,label,min,max] of [['rl_min_bet',t('casino.rl.min_bet'),1,10000000000],
           ['rl_max_straight',t('casino.rl.max_straight'),1,10000000000],
           ['rl_max_split',t('casino.rl.max_split'),1,10000000000],
@@ -122,7 +127,7 @@
         35 x the straight inside the HR House cap; the cap is the High Roller wheels' share of the ONE House budget above).
         D3: a limit edit applies from each wheel's next spin. %>
     <fieldset id="rlHr" style="grid-column:1/-1;margin:0;padding:var(--ds-sp-3);border:1px solid var(--ds-gold-line, #6b5a2a);border-radius:8px;min-width:0"><legend>💎 <%= t('casino.rl.hr_title') %></legend>
-    <p class="adm-help"><%= t('casino.rl.hr_help') %></p><div class="adm-form">
+    <p class="adm-help"><%= t('casino.rl.hr_help') %> <%= t('casino.rl.hr_closed_help') %></p><div class="adm-form">
     <% for (const [key,label,min,max] of [['rl_hr_min_bet',t('casino.rl.min_bet'),1,10000000000],
           ['rl_hr_max_straight',t('casino.rl.max_straight'),1,10000000000],
           ['rl_hr_max_split',t('casino.rl.max_split'),1,10000000000],
@@ -151,7 +156,7 @@
       // 1.99aoj (D2): the High Roller set - the same rule, and 35 x its straight limit inside its House cap
       var hrPositions = ['straight','split','street','corner','line','outside'].map(function (k) { return Number(form.elements['rl_hr_max_' + k].value); });
       if (Math.min.apply(null, hrPositions) < Number(form.elements.rl_hr_min_bet.value) || Math.max.apply(null, hrPositions) > Number(form.elements.rl_hr_max_spin.value) ||
-          Number(form.elements.rl_hr_max_straight.value) * 35 > Number(form.elements.rl_hr_spin_cap.value)) {
+          (Number(form.elements.rl_hr_spin_cap.value) !== 0 && Number(form.elements.rl_hr_max_straight.value) * 35 > Number(form.elements.rl_hr_spin_cap.value))) {
         status.textContent = <%- JSON.stringify(t('casino.rl.hr_limits_error')).replace(/</g,'\\u003c') %>; return;
       }
       // saved one by one, each checked against the ones saved before it: what widens the room goes first, what narrows it last

@@ -13,6 +13,9 @@ const perms = require("../siteperms");
 const AUDIENCES = ["off", "staff", "everyone"];
 const DEFAULTS = {
   casino_roulette: "off",
+  // 1.99aoj (review): who may OPEN a web wheel of their own (POST /api/casino/open {game: "roulette"}; D1: everyone). The lobby wheel,
+  // room wheels (!rl start in a room) and playing at any open wheel are unaffected - casino_roulette above still decides those.
+  rl_web_open: "everyone",
   rl_min_bet: 100,
   rl_max_straight: 5000,
   rl_max_split: 10000,
@@ -40,9 +43,10 @@ const DEFAULTS = {
   rl_hr_max_line: 150000,
   rl_hr_max_outside: 250000,
   rl_hr_max_spin: 500000,
-  rl_hr_spin_cap: 1000000,
+  rl_hr_spin_cap: 1000000, // 1.99aoj (review): 0 = High Roller wheels closed (none opens; an open one takes no new line: E_BANK)
 };
 const SETTING_KEYS = Object.keys(DEFAULTS);
+const AUDIENCE_KEYS = ["casino_roulette", "rl_web_open"]; // (off | staff | everyone; every other key is a whole number)
 const POSITIONS = ["straight", "split", "street", "corner", "line", "outside"];
 const caps = POSITIONS.map((k) => "rl_max_" + k);
 const hrCaps = POSITIONS.map((k) => "rl_hr_max_" + k);
@@ -59,8 +63,8 @@ const bounds = {
   rl_hr_spin_cap: [0, 10000000],
 };
 function valueOf(key, val) {
-  if (key === "casino_roulette" && AUDIENCES.includes(val)) return val;
-  if (key !== "casino_roulette" && SETTING_KEYS.includes(key) && /^\d+$/.test(String(val))) {
+  if (AUDIENCE_KEYS.includes(key) && AUDIENCES.includes(val)) return val;
+  if (!AUDIENCE_KEYS.includes(key) && SETTING_KEYS.includes(key) && /^\d+$/.test(String(val))) {
     const [min, max] = bounds[key] || [1, 1e10];
     if (Number(val) >= min && Number(val) <= max) return Number(val);
   }
@@ -70,10 +74,12 @@ function ordered(s) {
   return caps.every((k) => s[k] >= s.rl_min_bet && s[k] <= s.rl_max_spin);
 }
 // 1.99aoj (D2): the High Roller set - each cap between its minimum and its per-spin maximum, and a straight's worst case (35 to 1)
-// inside the High Roller House cap, or not even one straight at the cap could ever be admitted
+// inside the High Roller House cap, or not even one straight at the cap could ever be admitted. 1.99aoj (review): a cap of 0 closes the
+// High Roller wheels (no straight is meant to fit) - the limits themselves still have to be in order
 function orderedHr(s) {
   return (
-    hrCaps.every((k) => s[k] >= s.rl_hr_min_bet && s[k] <= s.rl_hr_max_spin) && s.rl_hr_max_straight * 35 <= s.rl_hr_spin_cap
+    hrCaps.every((k) => s[k] >= s.rl_hr_min_bet && s[k] <= s.rl_hr_max_spin) &&
+    (s.rl_hr_spin_cap === 0 || s.rl_hr_max_straight * 35 <= s.rl_hr_spin_cap)
   );
 }
 function checkSetting(key, val, current = DEFAULTS) {
@@ -184,6 +190,8 @@ function install(core) {
   const advertList = core.advertList || (() => []);
   const streamHandOff = core.streamHandOff || (() => false);
   const viewMoved = core.viewMoved || (() => {});
+  // 1.99aoj (review): the path of the lobby's 🛞 Roulette tab (service.js rlLobbyPath - every wheel, Open a wheel); an older core: the wheel page
+  const rlLobbyPath = core.rlLobbyPath || (() => "/casino/roulette");
   const HR_ONLY_PLAY =
     core.HR_ONLY_PLAY ||
     "💎 this is a High Roller table: only High Rollers can play here (the role is in the prize store — !prizes). You can watch.";
@@ -209,7 +217,7 @@ function install(core) {
   // Roller wheel's rl_min_bet is its own minimum) - plus the timers and the bank settings as they are
   function limits(T) {
     const out = Object.fromEntries(
-      SETTING_KEYS.filter((k) => k !== "casino_roulette" && !k.startsWith("rl_hr_")).map((k) => [k, S.settings[k]]),
+      SETTING_KEYS.filter((k) => !AUDIENCE_KEYS.includes(k) && !k.startsWith("rl_hr_")).map((k) => [k, S.settings[k]]),
     );
     if (!T) return out;
     const L = lim(T);
@@ -233,6 +241,21 @@ function install(core) {
     }
     return mode === "staff" ? "Roulette is open to staff only." : "Roulette is switched off.";
   }
+  // 1.99aoj (review): may this actor OPEN a web wheel of their own (rl_web_open: off | staff | everyone - staff as in shut() above)? The
+  // lobby wheel, room wheels and every open wheel's play are casino_roulette's alone. null = yes, else why not.
+  async function webShut(actor) {
+    const mode = (await loadSettings()).rl_web_open;
+    if (mode === "everyone") return null;
+    if (mode === "staff" && actor && actor.uid) {
+      const u = await userRow(actor.uid);
+      if (u && (perms.atLeast(u, "staff") || perms.can(u, "casino.admin"))) return null;
+    }
+    return mode === "staff"
+      ? "Opening a web wheel of your own is open to staff only right now. The lobby wheel and the room wheels are open to play."
+      : "Opening a web wheel of your own is switched off right now. The lobby wheel and the room wheels are open to play.";
+  }
+  // 1.99aoj (review): rl_hr_spin_cap 0 closes the 💎 High Roller wheels - none opens (cmdStart), an open one takes no new line (bankRoom)
+  const hrClosed = () => S.settings.rl_hr_spin_cap === 0;
   // UI-10 / SUITES-3: who may see a wheel's view. Switched off, the open spin still lands and pays (decision 2), so a player
   // with PAT on it (a line, a queued line, or their result up) keeps the view - every bet is refused - until it closes.
   // Staff mode stays 404 for everyone its gate refuses (brief G).
@@ -1505,7 +1528,9 @@ function install(core) {
   async function lobby(uid) {
     const on = !(await shut({ uid }));
     const wheels = on ? openList() : [];
-    return { on, lobby: wheels.find((w) => w.lobby) || null, wheels };
+    // 1.99aoj (review): open / hr_open - may this viewer open a web wheel, and are the 💎 ones open at all (the lobby hides its Open
+    // cards otherwise; the server refuses either way)
+    return { on, open: on && !(await webShut({ uid })), hr_open: on && !hrClosed(), lobby: wheels.find((w) => w.lobby) || null, wheels };
   }
   async function run(actor, verb, args, opts) {
     const T = opts.table && S.tables.get(opts.table);
@@ -1533,7 +1558,8 @@ function install(core) {
       return reply(
         false,
         "No wheel here. Use !rl start or play on the web: " +
-          link({ game: "roulette", id: "x" }).replace(/\/t\/x$/, ""),
+          link({ game: "roulette", id: "x" }).replace(/\/casino\/roulette\/t\/x$/, "") +
+          rlLobbyPath(),
       );
     if (T.intent) await recover(T);
     const uid = actor.uid,
@@ -1668,6 +1694,8 @@ function install(core) {
     viewShut,
     gate,
     shut,
+    webShut,
+    hrClosed,
     restore,
     privateNotes,
     frozenLines,

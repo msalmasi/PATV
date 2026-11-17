@@ -4,8 +4,10 @@
 //     the table's round, supply.js counts it, and payOwed tries it again by that key on the table's clock, at every boot and before the
 //     table closes - it lands exactly once, ever. The table plays on meanwhile; it is never CLOSED with a payout owed (frozen: no new bets,
 //     until it lands). A crash mid-settle, a restart, and a staging copy (casino/retire.js pays it by its key) change none of that.
-//   * the SUPPLY between Hold'em hands: supply.js casinoHeld counted a cash table's last-hand contributions on top of the stacks the pot was
-//     paid into - the figure ran high by the last pot at every open table between hands. Now it is the PAT really there.
+//   * the SUPPLY between Hold'em hands: supply.js casinoHeld counts a cash table's last-hand contributions on top of the stacks the pot was
+//     paid into - the figure runs high by the last pot at every open table between hands. 1.99aoj (review) leaves that count exactly as
+//     1.99aoi has it (patSupply().total is an economy-engine input and the engines move to the site at H2a): its fix ships on its own
+//     after H2a's first clean gate, with the owner's OK. The test below pins today's count; conservation is checked without it.
 //   node --test test/casino-owed-supply.test.js      (uses a temp DB)
 "use strict";
 const test = require("node:test");
@@ -376,8 +378,11 @@ const ACES = ["As", "Ah", "Ks", "Kh", "2c", "7d", "9h", "3s", "4c"];
 const HA = (who, verb, args, opts) => A(who, verb, args, Object.assign({ game: "holdem" }, opts || {}));
 const stacks = (T) => Object.values(T.eng.chips).reduce((s, v) => s + v, 0);
 
-test("supply: a cash Hold'em table between hands counts the PAT really there (its stacks) - the last hand's pot never twice", async () => {
+// 1.99aoj (review): the count stays 1.99aoi's this release (an economy-engine input - see the header); the PAT itself is conserved
+test("supply: a cash Hold'em table counts as 1.99aoi counts it - the stacks + the last hand's contributions between hands; the PAT itself is conserved", async () => {
   await fresh();
+  const contrib = (T) => Object.values(T.eng.contrib || {}).reduce((s, v) => s + v, 0);
+  const real = async (T) => (await wallets()) + away + (await house()) + stacks(T);     // (every PAT, without supply.js)
   const start = await total();
   const t = ok(await HA(ann, "start", ["25/50"], { room: null })).table;
   ok(await HA(ann, "sit", ["2000"], { table: t }));
@@ -392,10 +397,10 @@ test("supply: a cash Hold'em table between hands counts the PAT really there (it
   const actor = T.eng.actor;
   ok(await HA(actor === "u1" ? ann : bob, "fold", [], { table: t }));
   assert.equal(T.eng.hand_active, false);
-  assert.ok(Object.values(T.eng.contrib).some((v) => v > 0), "the engine keeps the last hand's contributions between hands");
+  assert.ok(contrib(T) > 0, "the engine keeps the last hand's contributions between hands");
   assert.equal(stacks(T), 4000);
-  assert.equal(await SUP.casinoHeld(), 4000, "between hands: the stacks only (was 4,000 + the last pot)");
-  assert.equal(await total(), start);
+  assert.equal(await SUP.casinoHeld(), 4000 + contrib(T), "between hands: the stacks + the last pot, as 1.99aoi counts it");
+  assert.equal(await real(T), start);
   // a showdown with the 2% rake: the rake is the House's once booked, the pot is in the stacks
   deck(ACES);
   ok(await HA(ann, "deal", [], { table: t }));
@@ -407,14 +412,12 @@ test("supply: a cash Hold'em table between hands counts the PAT really there (it
   assert.equal(T.eng.hand_active, false);
   assert.ok(T.last_round && T.last_round.rake > 0, "a raked showdown");
   assert.equal(T.rake_due, null, "the rake is booked");
-  assert.equal(await SUP.casinoHeld(), stacks(T));
   assert.equal(stacks(T), 4000 - T.last_round.rake);
-  assert.equal(await total(), start, "wallets + House + the tables: nothing made or lost across the hands");
-  // a saved state between the awards and the House row (afterHand books the rake): counted until that row exists
+  assert.equal(await SUP.casinoHeld(), stacks(T) + contrib(T));
+  assert.equal(await real(T), start, "wallets + House + the stacks: nothing made or lost across the hands");
+  // a saved state between the awards and the House row (afterHand books the rake): not counted at the table, as before
   const s = (await row(t)).s;
   s.rake_due = { key: `chm-test:${t}:rake`, n: 99, amount: 7 };
   await runQuery("UPDATE casino_tables SET state = ? WHERE id = ?", [JSON.stringify(s), t]);
-  assert.equal(await SUP.casinoHeld(), stacks(T) + 7);
-  await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, amount) VALUES (?, 'x', 7)", [`chm-test:${t}:rake`]);
-  assert.equal(await SUP.casinoHeld(), stacks(T), "and not once the House has it");
+  assert.equal(await SUP.casinoHeld(), stacks(T) + contrib(T), "T.rake_due isn't counted (1.99aoi's count)");
 });

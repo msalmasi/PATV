@@ -21,7 +21,9 @@
 <% if(!tableId){ %><section class="ds-card"><h2><%= t('casino.rl.off') %></h2><a href="<%= rlLobby === '/casino/roulette' ? '/casino' : rlLobby %>"><%= t('casino.all_tables') %></a></section><% }else{ %>
 <section id="cz-table" hidden>
   <%# (the lobby's roulette tab - rlLobby above; /casino/roulette itself opens the lobby wheel) %>
-  <a class="back" href="<%= rlLobby %>">← <%- t('casino.all_tables') %></a>
+  <%# (1.99aoj review: never a link to this page itself - with neither game on the PATV casino it is Pepe's tables lobby, /casino, as on
+      the wheel-less page; #cb's data-lobby keeps /casino/roulette, so a closed wheel still goes back to Pepe's lobby wheel) %>
+  <a class="back" href="<%= rlLobby === '/casino/roulette' ? '/casino' : rlLobby %>">← <%- t('casino.all_tables') %></a>
   <div class="felt rl" id="cz-felt">
     <div class="rl-head">
       <div class="rl-bowl" id="rl-bowl"><canvas id="rl-wheel" width="340" height="340"></canvas></div>
@@ -53,7 +55,8 @@
   <div class="dock" id="cz-dock" hidden></div>
   <p class="rl-session" id="rl-session"></p>
   <%# (the commitment is the History sheet's #cz-commit - casino-ui.js fairness - and the 🔐 Provably fair pill's, as on Blackjack / Hold'em) %>
-  <div class="rl-more"><nav id="rl-wheels" aria-label="<%= t('casino.rl.other') %>" hidden></nav></div>
+  <%# (1.99aoj review: a visible label before the links - each link names whose wheel it is, casinorl.js) %>
+  <div class="rl-more"><nav id="rl-wheels" aria-labelledby="rl-wheels-h" hidden><span class="rl-more-n" id="rl-wheels-h"><%= t('casino.rl.other') %></span></nav></div>
   <%# O13(12): a phone's small wheel while a spin runs and the big one is scrolled away (casinorl.js; decorative - the felt says the result) %>
   <div class="rl-float" id="rl-float" hidden aria-hidden="true"><canvas width="88" height="88"></canvas></div>
 </section>
@@ -61,7 +64,7 @@
   <div class="sheet-h"><h2 id="rl-stats-h">📊 <%= t('casino.rl.stats_h') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
   <div class="sheet-b" id="rl-stats-b"></div>
 </dialog>
-<%- include('partials/casino-sheets',{t}) %><%- include('partials/casino-chat',{t}) %>
+<%- include('partials/casino-sheets',{t,game:'roulette'}) %><%- include('partials/casino-chat',{t}) %>
 <% } %></main>
 <% if(tableId){ %><script src="/public/js/room-mod.js?v=16"></script><script src="/public/js/pad-tip.js?v=1"></script><% if(signedIn){ %><script src="/public/js/block-sheet.js?v=3"></script><% } %>
 <script src="/public/js/casino-ui.js?v=15"></script><script src="/public/js/casino-sound.js?v=3"></script><script src="/public/js/patamount.js?v=1"></script><script src="/api/casino/rlbets.js?v=2"></script><script src="/api/casino/rlwheel.js?v=2"></script><script src="/public/js/casinorl-dock.js?v=4"></script><script src="/public/js/casinorl.js?v=4"></script><% } %>

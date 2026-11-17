@@ -805,7 +805,7 @@
       nom = 0,
       Rl = R.rulesOf(t),
       now = Date.now() - CZ.skew();
-    if (t.status !== "open") msg = T("closed", "That table has closed.");
+    if (t.status !== "open") msg = T("rl_closed", "This wheel has closed."); // (1.99aoj review: a wheel, as Host Tools now says)
     else if (t.phase === "betting" || t.phase === "idle") {
       var left = t.phase === "betting" && t.deadline ? t.deadline - now : Infinity;
       msg = left <= 5000 ? T("rl_last_bets", "Last bets…") : T("place_bets", "Place your bets");
@@ -1408,20 +1408,32 @@
     },
   );
   refresh = CZ.startTable(render, { first: CZ.signed ? "?notice=1" : "" });
-  fetch("/api/casino/lobby", { credentials: "same-origin" })
+  // the other open wheels, each named by whose it is (1.99aoj review: several web wheels all read "Web wheel" - WCAG 2.4.4): Pepe's lobby
+  // wheel, "{host}'s wheel" - the host as the lobby's own wheel rows show it (?rl=1: veiled hosts under their label) - then its room
+  fetch("/api/casino/lobby?rl=1", { credentials: "same-origin" })
     .then(function (res) {
       return res.json();
     })
     .then(function (j) {
+      var nav = $("rl-wheels"),
+        host = {};
+      if (!nav) return;
+      (j.tables || []).forEach(function (t) {
+        if (t && t.game === "roulette" && t.id && t.host) host[t.id] = String(t.host);
+      });
       ((j.roulette && j.roulette.wheels) || []).forEach(function (w) {
         if (w.id === CZ.tableId || !/^[a-f0-9]{10}$/.test(w.id)) return;
+        var who = w.lobby
+          ? T("rl_wheel_pepe", "Pepe's wheel")
+          : host[w.id]
+            ? T("rl_wheel_of", "{host}'s wheel", { host: host[w.id] })
+            : T("rl_web_wheel", "Web wheel");
         var a = doc.createElement("a");
         a.href = "/casino/roulette/t/" + w.id;
-        a.textContent = (w.high_stakes ? "💎 " : "") + (w.room_name || (w.lobby ? T("rl_lobby", "Lobby wheel") : T("rl_web_wheel", "Web wheel")));
-        $("rl-wheels").append(a);
+        a.textContent = (w.high_stakes ? "💎 " : "") + who + (w.room_name ? " · " + w.room_name : "");
+        nav.append(a);
       });
-      var nav = $("rl-wheels");
-      if (nav) nav.hidden = !nav.querySelector("a");
+      nav.hidden = !nav.querySelector("a");
     })
     .catch(function () {});
 })(window);

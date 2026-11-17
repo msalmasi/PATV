@@ -16,6 +16,17 @@
 .rl-page .back:hover {
   text-decoration: underline;
 }
+/* 1.99aoj (review): the 🔇 / 🔊 Sound toggle (casino-sound.js, right after .back) at the row's end, as on a themed Blackjack / Hold'em
+   table (casino-themes.css - which this page never loads - scopes those rules to its theme); a phone shows the icon only */
+.rl-page .cz-snd {
+  float: inline-end;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .rl-page .cz-snd-l {
+    display: none;
+  }
+}
 /* (a touch screen: the felt's and the dock's small buttons are full 44 px targets) */
 @media (pointer: coarse) {
   .rl-page .cz-btn.sm {
@@ -658,6 +669,9 @@
   justify-content: space-between;
   gap: 0.65rem;
   margin: 12px 0;
+}
+.rl-more .rl-more-n {
+  margin-inline-end: 0.65em; /* (1.99aoj review: the links' visible label - "Other open wheels") */
 }
 .rl-more a {
   margin-inline-end: 0.65em;

@@ -261,10 +261,13 @@
     const ids = new Set(attached.map((r) => r.id));
     const rooms = (d.rooms || []).filter((r) => !ids.has(r.id));
     const sel = $("cz-room");
-    const want = rooms.map((r) => r.id + "|" + r.name + "|" + (r.busy ? 1 : 0)).join(",");
+    // 1.99aoj (review): a room where this game is off can't take it (the server refuses a wheel's push there: rooms[].off, roulette
+    // only - casino/service.js freshRooms) - greyed and named like a busy one, never a choice that always fails
+    const why = (r) => (r.busy ? T("room_busy", "has a table") : r.off ? T("rl_room_off", "roulette is off here") : "");
+    const want = rooms.map((r) => r.id + "|" + r.name + "|" + (r.busy ? 1 : 0) + (r.off ? 1 : 0)).join(",");
     if (sel.dataset.v !== want) {
       sel.dataset.v = want;
-      sel.innerHTML = rooms.map((r) => `<option value="${esc(r.id)}"${r.busy ? " disabled" : ""}>${esc(r.name)}${r.busy ? " · " + esc(T("room_busy", "has a table")) : ""}</option>`).join("");
+      sel.innerHTML = rooms.map((r) => `<option value="${esc(r.id)}"${why(r) ? " disabled" : ""}>${esc(r.name)}${why(r) ? " · " + esc(why(r)) : ""}</option>`).join("");
     }
     const list = $("cz-roomlist");
     const lsig = attached.map((r) => r.id + "|" + r.name).join(",");
@@ -274,13 +277,14 @@
     }
     $("cz-roomnone").hidden = rooms.length > 0 || attached.length > 0;
     $("cz-room").hidden = !rooms.length;
-    $("cz-push").hidden = !rooms.length;
+    $("cz-push").hidden = !rooms.some((r) => !why(r));               // (review: nothing left to pick - no Add button)
     $("cz-unpush").hidden = !attached.length;
     $("cz-roomnow").textContent = attached.length > 1 ? T("rooms_now", "Playing in {n} chat rooms and on the web.", { n: attached.length })
                                 : t.room ? T("room_now", "Now in chat room {room} and on the web.", { room: t.room_name || t.room })
                                 : T("room_web", "Web only right now.");
     let s;
-    if (t.on_stream) s = T("stream_on", "📺 This table is on Pepe's stream.");
+    if (t.on_stream) s = game === "roulette" ? (t.stream_pinned ? T("rl_stream_pinned", "📌 This wheel is pinned on Pepe's stream: it stays there until it closes or is taken off.")
+                                                                : T("rl_stream_on", "📺 This wheel is on Pepe's stream.")) : T("stream_on", "📺 This table is on Pepe's stream.");
     else if (t.stream_queue) s = t.stream_queue === 1 ? T("stream_next", "You're next in line for Pepe's stream.")
                                                       : T("stream_queued", "You're number {n} in line for Pepe's stream.", { n: t.stream_queue });
     else s = T("stream_free", "Ask for Pepe's stream: first come, first served, then a queue.");
@@ -290,18 +294,27 @@
     $("cz-stream").disabled = !!t.stream_queue && !me.admin;
     $("cz-unstream").hidden = !(t.on_stream || t.stream_queue);
     $("cz-override-row").hidden = !me.admin || t.on_stream;
+    // 1.99aoj (review, D7): an admin's 📌 pin of a wheel on Pepe's stream (no 5-minute idle drop, so the OBS board stays with it) - the box
+    // beside "Put it on Pepe's stream", the 📌 button once it is there unpinned (the partial draws both on a wheel's page only)
+    const pinRow = $("cz-pin-row"), pinNow = $("cz-pinnow"), pinner = !!me.admin && game === "roulette";
+    if (pinRow) pinRow.hidden = !pinner || !!t.on_stream;
+    if (pinNow) pinNow.hidden = !(pinner && t.on_stream && !t.stream_pinned);
     // 1.99pc: adverts - one line + reminders in other rooms, no gameplay there
     const adv = t.adverts || [];
     const advIds = new Set(adv.map((r) => r.id).concat(attached.map((r) => r.id)));
     const asel = $("cz-adroom");
     const aopts = (d.rooms || []).filter((r) => !advIds.has(r.id));
-    const asig = aopts.map((r) => r.id + "|" + r.name).join(",");
+    // 1.99aoj (review): the server refuses an advert in a room where the table's game is off (advertise: the room's game flags - a
+    // wheel's rooms[].off too): greyed and named, and no Advertise button once nothing is left to pick
+    const aoff = (r) => !!(r.off || (r.games && r.games[game] === false));
+    const offWhy = () => (game === "roulette" ? T("rl_room_off", "roulette is off here") : T("room_game_off", "this game is off here"));
+    const asig = aopts.map((r) => r.id + "|" + r.name + "|" + (aoff(r) ? 1 : 0)).join(",");
     if (asel.dataset.v !== asig) {
       asel.dataset.v = asig;
-      asel.innerHTML = aopts.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+      asel.innerHTML = aopts.map((r) => `<option value="${esc(r.id)}"${aoff(r) ? " disabled" : ""}>${esc(r.name)}${aoff(r) ? " · " + esc(offWhy()) : ""}</option>`).join("");
     }
     asel.hidden = !aopts.length;
-    $("cz-adgo").hidden = !aopts.length;
+    $("cz-adgo").hidden = !aopts.some((r) => !aoff(r));
     const alist = $("cz-adlist");
     const alsig = adv.map((r) => r.id + "|" + r.name).join(",");
     if (alist.dataset.v !== alsig) {
@@ -331,7 +344,9 @@
       if (b) side(`/api/casino/t/${tableId}/push`, { room: b.dataset.unroom, mode: "remove" });
     });
     $("cz-unpush").addEventListener("click", () => side(`/api/casino/t/${tableId}/push`, { room: null }));
-    $("cz-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!($("cz-override") && $("cz-override").checked) }));
+    $("cz-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!($("cz-override") && $("cz-override").checked),
+                                                                                          pin: !!($("cz-pin") && $("cz-pin").checked) }));
+    if ($("cz-pinnow")) $("cz-pinnow").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, pin: true }));   // (1.99aoj review, D7)
     $("cz-unstream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: false }));
     $("cz-close").addEventListener("click", () => {
       // 1.99aoj: a wheel is closed as a wheel (casino/roulette.js "end": the layout's bets are refunded; a spin in the air lands first)
@@ -557,9 +572,12 @@
     // open a table: only signed in, only while that game's switch is on
     $("cz-open-bj").hidden = !j.enabled;
     $("cz-open-hm").hidden = !j.hm_enabled;
+    // (review: roulette.open - may this viewer open a web wheel of their own (rl_web_open); hr_open - are the 💎 wheels open at all
+    // (rl_hr_spin_cap > 0). An older answer has neither: open, as before)
+    const rlCanOpen = rlOn && j.roulette.open !== false, rlHrOpen = rlCanOpen && j.roulette.hr_open !== false;
     const rlOpen = $("cz-open-rl");
-    if (rlOpen) rlOpen.hidden = !rlOn;
-    $("cz-open-wrap").hidden = !j.enabled && !j.hm_enabled && !rlOn;
+    if (rlOpen) rlOpen.hidden = !rlCanOpen;
+    $("cz-open-wrap").hidden = !j.enabled && !j.hm_enabled && !rlCanOpen;
     const rlLim = (lim.roulette || null);
     if (rlOn && rlLim && $("cz-rlmax")) $("cz-rlmax").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlLim.min_bet), spin: fmt(rlLim.max_spin) });
     for (const b of document.querySelectorAll(".cz-openbtn")) b.hidden = !signed;
@@ -601,12 +619,13 @@
     $("cz-hrsec-hm").hidden = !j.hm_enabled || !ladder.length;
     // 1.99aoj (D2): the 💎 wheel's sub-section (its limits from limits.roulette.hr) while roulette is open to this viewer
     const hrRl = $("cz-hrsec-rl"), rlHr = rlLim && rlLim.hr ? rlLim.hr : null;
-    if (hrRl) hrRl.hidden = !rlOn || !rlHr;
+    if (hrRl) hrRl.hidden = !rlHrOpen || !rlHr;
     if (hrRl && !hrRl.hidden) $("cz-hrrl").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlHr.min_bet), spin: fmt(rlHr.max_spin) });
     // (review) the note under the sub-sections names the 💎 wheels too while theirs shows (the partial draws both; the page guessed one)
     const lockT = $("cz-hr-locked-t"), lockRl = $("cz-hr-locked-rl");
     if (lockT && lockRl) { const w = !!(hrRl && !hrRl.hidden); lockT.hidden = w; lockRl.hidden = !w; }
     const shownSecs = ["cz-hrsec-bj", "cz-hrsec-hm", "cz-hrsec-rl"].filter((id) => $(id) && !$(id).hidden).length;
+    $("cz-open-hr").hidden = shownSecs === 0;                  // (review: no game of it open here - no empty 💎 card)
     $("cz-open-hr").classList.toggle("one", shownSecs === 1);
     $("cz-open-hr").classList.toggle("three", shownSecs === 3);
     $("cz-hrbj").textContent = T("bj_limits_n", "Bets {min}–{max} PAT.", { min: fmt(lim.bj.hr_min_bet), max: fmt(lim.bj.hr_max_bet) });
@@ -818,6 +837,7 @@
       const cur = hashTab();
       if (lobbyTab === game ? !cur : cur === lobbyTab) return;
       history.replaceState(history.state, "", lobbyTab === game ? location.pathname + location.search : "#" + lobbyTab);
+      if (typeof window.patvNavMark === "function") window.patvNavMark();   // (1.99aoj review: the navbar marks the tab's own link - layout.ejs)
     } catch (e) { /* (a sandboxed frame) */ }
   }
   function pickBlinds(box, set) {
@@ -835,7 +855,15 @@
     for (const b of document.querySelectorAll(".lob-tabs button")) {
       b.addEventListener("click", () => { lobbyTab = b.dataset.tab; writeTab(); renderLobby(); });
     }
-    if (window.addEventListener) window.addEventListener("hashchange", () => { const h = hashTab(); if (h && h !== lobbyTab) { lobbyTab = h; renderLobby(); } });
+    // (1.99aoj review: a #tab followed from the navbar - the page doesn't reload - picks the tab and brings the tab strip into view)
+    if (window.addEventListener) window.addEventListener("hashchange", () => {
+      const h = hashTab();
+      if (!h || h === lobbyTab) return;
+      lobbyTab = h;
+      renderLobby();
+      const strip = document.querySelector(".lob-tabs");
+      if (strip && typeof strip.scrollIntoView === "function") { try { strip.scrollIntoView({ block: "nearest" }); } catch (e) { /* (an old engine) */ } }
+    });
     pickBlinds($("cz-blinds"), (v) => { blinds = v; });
     pickBlinds($("cz-hrblinds"), (v) => { hrBlinds = v; });
     if ($("cz-themes")) $("cz-themes").addEventListener("click", (e) => { const b = e.target.closest("button[data-th]"); if (b) { lobbyTheme = b.dataset.th; renderLobby(); } });
@@ -1098,12 +1126,13 @@
         if (r.status === 404) {
           // 1.99aof (ENGINE-4): a rotated lobby wheel that has left memory - the lobby page opens the current one
           if (game === "roulette" && lastD && lastD.table && lastD.table.lobby) { stopped = true; location.replace("/casino/roulette"); return; }
-          toast(T("closed", "That table has closed."), true);
+          const gone = game === "roulette" ? T("rl_closed", "This wheel has closed.") : T("closed", "That table has closed.");   // (1.99aoj review)
+          toast(gone, true);
           stopped = true;
           const dock = $("cz-dock");
           if (dock) dock.hidden = true;
           const m = $("cz-msg");
-          if (m) m.innerHTML = `${esc(T("closed", "That table has closed."))}<small><a href="${esc(game === "roulette" ? rlLobby() : game === "holdem" ? "/casino/holdem" : "/casino/blackjack")}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
+          if (m) m.innerHTML = `${esc(gone)}<small><a href="${esc(game === "roulette" ? rlLobby() : game === "holdem" ? "/casino/holdem" : "/casino/blackjack")}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
           return;
         }
         const d = await r.json();

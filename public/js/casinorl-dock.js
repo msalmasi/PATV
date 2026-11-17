@@ -74,7 +74,7 @@
   function phase(t) {
     if (t.phase === "idle" || t.phase === "betting") return T("rl_open", "Bets open");
     if (t.phase === "spinning") return T("rl_spinning", "No more bets");
-    if (t.phase === "closed") return T("closed", "That table has closed.");
+    if (t.phase === "closed") return T("rl_closed", "This wheel has closed.");
     return T("rl_result", "Result");
   }
   function outcome(n) {
@@ -881,7 +881,7 @@
         if (shut || generation !== latest) return;
         if (!d.ok || d.table.status !== "open") {
           leaveWheel();
-          state.textContent = d.error || T("closed", "That table has closed.");
+          state.textContent = d.error || T("rl_closed", "This wheel has closed.");
           return;
         }
         if (!widget) {

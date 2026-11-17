@@ -173,6 +173,12 @@ test("1.99aoj: the roulette page keeps the navbar's Roulette link, goes back to 
     p = await page("/casino/roulette");
     assert.equal(nav(p.html).split(rlLink("/casino/roulette")).length - 1, 2);
     assert.match(p.html, /data-lobby="\/casino\/roulette"/);
+    // (1.99aoj review) "← All tables" never links to this page itself: Pepe's tables lobby (a closed wheel's data-lobby keeps his wheel)
+    assert.ok(p.html.includes('<a class="back" href="/casino">'), "← All tables: /casino, not the page itself");
+    assert.ok(!p.html.includes('<a class="back" href="/casino/roulette">'));
+    // (1.99aoj review) a wheel's Host Tools word it as a wheel; the other wheels' list has a visible label
+    assert.ok(p.html.includes(">Close the wheel</button>") && p.html.includes('<label class="lbl">The wheel</label>'));
+    assert.ok(p.html.includes('<span class="rl-more-n" id="rl-wheels-h">Other open wheels</span>'));
     // roulette shut for this viewer: no wheel; "All tables" goes to the lobby (Pepe's tables while the lobby would be this page)
     await svc.setSetting("casino_roulette", "off", "test");
     p = await page("/casino/roulette");

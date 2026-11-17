@@ -88,16 +88,18 @@ test("casino tables: a sit & go's tournament chips are not PAT - never counted (
   assert.equal((await SUP.patSupply()).total, WANT + 1350);
 });
 
-// 1.99aoj: the last hand's contributions were counted twice between hands - the pot is awarded INTO the stacks at the hand's end
-// (casino/hmengine.js) while e.contrib keeps its numbers until the next deal; the rake waits in T.rake_due until afterHand books it
-test("casino tables: a cash hold'em table between hands counts its stacks once (the last pot is in them), its rake until the House books it", async () => {
+// 1.99aoj (review): this release counts a cash Hold'em table exactly as 1.99aoi does - its stacks and e.contrib, between hands too
+// (the last pot is in both: a known double count), never T.rake_due. patSupply().total is an input of the economy engines that move to
+// the site at H2a, so the fix (contributions only while a hand is in play, the rake until the House books it) ships on its own after
+// H2a's first clean gate, with the owner's OK: no step in the supply at this deploy, and none back at a rollback.
+test("casino tables: a cash hold'em table counts as 1.99aoi counts it (stacks + contributions, between hands too) - no engine input moves at this deploy", async () => {
   const before = await SUP.casinoHeld();
   // a 2-player hand: both put in 100 (contrib), u1 won the 200 pot minus a 10 rake: stacks 1090 + 900, the hand is over
   const T = { eng: { chips: { u1: 1090, u2: 900 }, contrib: { u1: 100, u2: 100 }, hand_active: false }, rake_due: { key: "chm:h3:h7:rake", n: 7, amount: 10 } };
   await runQuery("INSERT INTO casino_tables (id, game, status, state) VALUES ('h3', 'holdem', 'open', ?)", [JSON.stringify(T)]);
-  assert.equal(await SUP.casinoHeld(), before + 1090 + 900 + 10, "between hands: the stacks + the rake owed - the last hand's contributions never again");
+  assert.equal(await SUP.casinoHeld(), before + 1090 + 900 + 200, "between hands: the stacks + the last hand's contributions, as before (not the rake owed)");
   await runQuery("INSERT INTO jackpot_rakes (jackpotId, amount) VALUES ('chm:h3:h7:rake', 10)");
-  assert.equal(await SUP.casinoHeld(), before + 1090 + 900, "the rake is the House's once its row exists (not counted twice)");
+  assert.equal(await SUP.casinoHeld(), before + 1090 + 900 + 200, "the House's rake row changes nothing at the table");
   delete T.rake_due;
   T.eng.contrib = { u1: 25, u2: 50 }; T.eng.chips = { u1: 1065, u2: 850 }; T.eng.hand_active = true;     // the next hand: blinds in
   await runQuery("UPDATE casino_tables SET state = ? WHERE id = 'h3'", [JSON.stringify(T)]);

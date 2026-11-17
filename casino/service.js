@@ -141,6 +141,12 @@ function frontPath(st, game) {
   const patv = frontOf(st, game) === "patv";
   return game === "holdem" ? (patv ? "/casino/holdem" : "/poker") : (patv ? "/casino/blackjack" : "/blackjack");
 }
+// 1.99aoj (review): where ALL the wheels are - the lobby's 🛞 Roulette tab (every wheel, Open a wheel, the 💎 ones) on the page the
+// casino's front end uses, by the navbar's own rule (views/layout.ejs, views/casino-rl.ejs); Pepe's lobby wheel (/casino/roulette)
+// only while neither game is the PATV casino. Pepe's "all:" / "web wheels:" links (the poll's lobby.roulette) and !rl's reply use it.
+function rlLobbyPath(st) {
+  return frontOf(st, "bj") === "patv" ? "/casino/blackjack#roulette" : frontOf(st, "holdem") === "patv" ? "/casino/holdem#roulette" : "/casino/roulette";
+}
 async function isSiteAdmin(uid) {
   if (!uid) return false;
   const r = await getQuery("SELECT class FROM users WHERE userId = ?", [uid]).catch(() => []);
@@ -927,8 +933,13 @@ async function cmdStart(actor, room, game, blinds, words) {
     const ws = (words || (blinds ? [blinds] : [])).map((w) => String(w || "").trim().toLowerCase()).filter(Boolean);
     const high = ws.some((w) => HR_WORDS.includes(w));
     if (ws.some((w) => !HR_WORDS.includes(w))) return R(false, "usage: !rl start  (or !rl start hr for a 💎 High Roller wheel)", { pm: true });
+    // 1.99aoj (review): the two levers short of closing all roulette - rl_hr_spin_cap 0 closes the 💎 wheels, rl_web_open says who may
+    // open a web wheel of their own (a room's wheel and the lobby wheel are casino_roulette's alone)
+    if (high && RL.hrClosed()) return R(false, "💎 High Roller wheels are closed right now. The normal wheels are open as usual.", { code: "E_HR_CLOSED", pm: true });
     if (high && !(await isHighRoller(actor.uid))) return R(false, HR_ONLY_OPEN, { pm: true });
     if (!room) {
+      const shutWeb = await RL.webShut(actor);
+      if (shutWeb) return R(false, shutWeb, { code: "E_WEB_CLOSED", pm: true });
       const mine = webWheelOf(actor.uid);
       if (mine) return R(false, "You already have a roulette wheel open — close it before you open another.", { table: mine.id, url: link(mine), pm: true });
     }
@@ -1440,6 +1451,8 @@ function publicView(T) {
   v.on_stream = S.stream.table === T.id;
   const qi = S.stream.queue.indexOf(T.id);
   v.stream_queue = qi >= 0 ? qi + 1 : null;
+  // 1.99aoj (review, D7): a wheel an admin pinned on Pepe's stream (no 5-minute idle drop) - Host Tools' 📌 says so
+  if (T.game === "roulette") v.stream_pinned = v.on_stream && !!S.stream.pin;
   return v;
 }
 
@@ -1892,7 +1905,8 @@ const RL = RLCFG.install({ S, clock, save, emit, fmt, link, fairLink, roomsOf, r
   dupOf, remember, annDue, advertCmd, advertRepeat, cmdStart, wake: (T) => { if (!mttQuiet(T) && !quietWheel(T)) wake(); },
   // 1.99aoj: the 💎 High Roller role + its text (D1/D2), a wheel's adverts for its view (D4), the stream hand-over at a lobby rotation (D7)
   isHighRoller, HR_ONLY_PLAY, advertList: (T) => advertList(T), streamHandOff: (from, to) => streamHandOff(from, to),
-  viewMoved });        // (review: a restore is a new state for the view cache - viewKey)
+  viewMoved,           // (review: a restore is a new state for the view cache - viewKey)
+  rlLobbyPath: () => rlLobbyPath(S.settings) });   // (1.99aoj review: "play on the web" names the lobby's Roulette tab)
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards: hmRewards, dropLine,
   roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
@@ -2021,7 +2035,7 @@ function limits() {
 module.exports = {
   C, S, HM, TN, RL, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, PUSH_ANNOUNCE_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   MT, isMttTable, tourneyTableFor, streamTake, setDiscordBridge, tourneyKind,    // h22 phase 2: the scheduled tournaments
-  loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
+  loadSettings, setSetting, FRONTS, frontOf, frontPath, rlLobbyPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
   uidHash,      // 1.99ajw casino2: the table view's seat key (casino/people.js keys its seats the same way)
   refreshVeil, myHands, viewKey,  // the routes re-read a table's veils before they answer
 };

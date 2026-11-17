@@ -53,15 +53,11 @@ async function casinoHeld() {
       if (T.tourney) continue;          // h22 (1.99alz): a 🏁 Sit & Go's stacks are tournament chips - its PAT is the TNY escrow holds (escrow rows)
       const e = T.eng || {};
       for (const v of Object.values(e.chips || {})) n += Math.max(0, Math.floor(Number(v) || 0));
-      // 1.99aoj: a hand's contributions are PAT at the table only WHILE it is in play. When it ends the pot goes INTO the stacks
-      // (casino/hmengine.js awardUncontested / showdown) but e.contrib keeps that hand's numbers until the next deal resets them, so between
-      // hands they were counted twice (the last hand's pot, at every open cash table). The rake the hand owes the House waits in T.rake_due
-      // until afterHand books it (keyed): counted until that House row exists.
-      if (e.hand_active) for (const v of Object.values(e.contrib || {})) n += Math.max(0, Math.floor(Number(v) || 0));
-      const rk = T.rake_due;
-      if (rk && rk.amount > 0 && !(await getQuery("SELECT 1 FROM jackpot_rakes WHERE jackpotId = ?", [String(rk.key)]).catch(() => [])).length) {
-        n += Math.max(0, Math.floor(Number(rk.amount) || 0));
-      }
+      // 1.99aoj (review): counted exactly as 1.99aoi does - e.contrib too, between hands as well. Known: when a hand ends its pot goes INTO
+      // the stacks (casino/hmengine.js) while e.contrib keeps that hand's numbers until the next deal, so between hands the last pot counts
+      // twice. The fix (contributions only while e.hand_active, plus T.rake_due until afterHand books it) changes patSupply().total - an
+      // input of the economy engines that move to the site at H2a - so it ships on its own after H2a's first clean gate, with the owner's OK.
+      for (const v of Object.values(e.contrib || {})) n += Math.max(0, Math.floor(Number(v) || 0));
     } else {
       for (const v of Object.values(T.escrowed || {})) n += Math.max(0, Math.floor(Number(v) || 0));
       // 1.99aoj: a blackjack payout whose credit was refused stays owed at the table (casino/service.js payOwed) until it lands
