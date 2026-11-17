@@ -611,7 +611,7 @@ test("wiring: casinohm.js sets the theme in render through CZ.theme; the Hold'em
   assert.match(view, /casinohm\.js\?v=15/, "roulette2 WP5a: v15 (the raise rack's .chipbtn.sm); v13: the sign anchored on the felt (h20 verify review 3; v12 before the rebase on h22's v11); h22 phase 2: v14, one above themes' v13 / phase 2's v12");
   for (const v of ["casino-hm.ejs", "casino-bj.ejs"]) {
     assert.match(rd("views", v), /casino-themes\.css\?v=3/, v + ": the review's layout fixes");
-    assert.match(rd("views", v), /casino-sound\.js\?v=2/, v + ": the toggle in the table's top row");
+    assert.match(rd("views", v), /casino-sound\.js\?v=3/, v + ": the toggle in the table's top row (1.99aoj: v3 - the roulette cues and the tap unlock, the version the roulette page loads)");
   }
   assert.match(rd("casino", "routes.js"), /theme: T \? themes\.themeOf\(T, st\) : "classic"/);
   // the admin view: one row, saved like the other Hold'em controls (no admin-panel.js change)

@@ -334,15 +334,17 @@ test("without PATVRlBets (rlbets.js didn't load) the pockets show without a colo
   assert.deepEqual(cards(Q)[0].querySelectorAll(".rl-pocket").map((x) => x.textContent), ["5"]);
 });
 
+// (1.99aoj: node identity is checked with assert.ok(a === b) - a failing assert.equal on two fake-DOM nodes made node:assert diff the
+// whole fake DOM, which grew the test process to ~44 GB instead of failing)
 test("a poll with nothing new keeps the cards as they are (no re-draw: a focused link keeps its focus)", async () => {
   const data = LOBBY({ tables: [wheel("w1", { lobby: true, last: [4] })] });
   const P = await started(data, { hash: "#roulette" });
   const before = cards(P)[0];
   await P.poll();
-  assert.equal(cards(P)[0], before, "the same element");
+  assert.ok(cards(P)[0] === before, "the same element");
   data.tables[0].players = 2;
   await P.poll();
-  assert.notEqual(cards(P)[0], before, "a change redraws");
+  assert.ok(cards(P)[0] !== before, "a change redraws");
 });
 
 test("(review) a redraw keeps the keyboard focus: the same control in the same card (data-id), one of its kind when its link moved on, the card's first when it's gone", async () => {
@@ -356,19 +358,19 @@ test("(review) a redraw keeps the keyboard focus: the same control in the same c
   el.focus();
   data.tables[2].staked = 100;
   await P.poll();
-  assert.notEqual(card("w2").querySelector(".acts a.gold"), el, "redrawn");
-  assert.equal(doc.activeElement, card("w2").querySelector(".acts a.gold"), "the focus follows the redraw");
+  assert.ok(card("w2").querySelector(".acts a.gold") !== el, "redrawn");
+  assert.ok(doc.activeElement === card("w2").querySelector(".acts a.gold"), "the focus follows the redraw");
   assert.equal(doc.activeElement.focusOpts.preventScroll, true, "no scroll jump");
   // Watch (same href as Play): Watch again, never Play
   card("w2").querySelector(".acts a.ghost").focus();
   data.tables[2].players = 1;
   await P.poll();
-  assert.equal(doc.activeElement, card("w2").querySelector(".acts a.ghost"));
+  assert.ok(doc.activeElement === card("w2").querySelector(".acts a.ghost"), "Watch again, never Play");
   // blackjack's Join on the All tab while a wheel changes
   card("t1").querySelector(".acts a.gold").focus();
   data.tables[1].last = [4, 9];
   await P.poll();
-  assert.equal(doc.activeElement, card("t1").querySelector(".acts a.gold"));
+  assert.ok(doc.activeElement === card("t1").querySelector(".acts a.gold"), "blackjack's Join keeps the focus");
   assert.equal(doc.activeElement.getAttribute("href"), "/casino/blackjack/t/t1#bet");
   // the 🔐 Fair link's round moves on: the Fair link of the new round
   card("w2").querySelector("a.tag.green").focus();
@@ -384,12 +386,12 @@ test("(review) a redraw keeps the keyboard focus: the same control in the same c
   card("t1").querySelector(".acts a.gold").focus();
   data.tables.splice(0, 1);
   await P.poll();
-  assert.equal(doc.activeElement, doc.body);
+  assert.ok(doc.activeElement === doc.body, "the focus goes with the card (the body)");
   // focus outside the grids is left alone
   P.$("cz-open-rl-go").focus();
   data.tables[0].players = 3;
   await P.poll();
-  assert.equal(doc.activeElement, P.$("cz-open-rl-go"));
+  assert.ok(doc.activeElement === P.$("cz-open-rl-go"), "focus outside the grids is left alone");
   // Play gone (the High Roller role ended: a 💎 wheel's Play turns into the 🔒 tag): the card's first control, Watch
   const H = LOBBY({ tables: [wheel("w7", { host: "Dee", high_stakes: true })], me: { name: "Dee", balance: 900000, high_roller: true } });
   const Q = await started(H, { hash: "#roulette" });
@@ -398,7 +400,7 @@ test("(review) a redraw keeps the keyboard focus: the same control in the same c
   H.me.high_roller = false;
   await Q.poll();
   assert.ok(hc().querySelector(".acts .tag.lock"), "locked now");
-  assert.equal(Q.D.doc.activeElement, hc().querySelector(".acts a.ghost"));
+  assert.ok(Q.D.doc.activeElement === hc().querySelector(".acts a.ghost"), "the card's first control, Watch");
 });
 
 // ── the chips: one file for every table (contract 9) ──
@@ -452,7 +454,7 @@ test("chips: linked right after the casino-css partial on the blackjack, Hold'em
     assert.equal(src.split(LINK).length, 2, v + ": once");
   }
   const room = rd("views", "room.ejs");
-  assert.ok(room.includes(LINK + '<link rel="stylesheet" href="/public/css/casinorl-dock.css?v=3">'), "the pad page, before the Dock's roulette sheet");
+  assert.ok(room.includes(LINK + '<link rel="stylesheet" href="/public/css/casinorl-dock.css?v=4">'), "the pad page, before the Dock's roulette sheet");
   // the lobby pages colour the wheel cards' pockets from PATVRlBets.red: rlbets.js on the lobby (not on a table: that page has its own)
   for (const v of ["casino-bj.ejs", "casino-hm.ejs"]) {
     assert.match(rd("views", v), /<% if \(!tableId\) \{ %><script src="\/api\/casino\/rlbets\.js\?v=2"><\/script><% \} %>/);
@@ -461,9 +463,22 @@ test("chips: linked right after the casino-css partial on the blackjack, Hold'em
   assert.match(rd("views", "casino-hm.ejs"), /casinohm\.js\?v=15/);
 });
 
-test("pockets: the lobby's .rl-pocket rules are WP0's (casinorl-dock.css) - one look on the felt, the Dock and the lobby", () => {
+// (1.99aoj: WP5b removed the Dock's copy - the pocket rules live once, here; the pinned block is WP0's rules as 1.99aoh shipped them in
+// public/css/casinorl-dock.css, comments stripped and white space folded)
+const WP0_POCKETS = '.rl-pocket { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; ' +
+  'min-width: 1.9em; min-height: 2.15em; padding: 1px 0.3em; border-radius: 6px; color: #fff; font: 700 13px/1.15 var(--ds-font, system-ui, sans-serif); ' +
+  'font-variant-numeric: tabular-nums; text-align: center; vertical-align: middle; } .rl-pocket::after { font: 10px/1 system-ui, sans-serif; } ' +
+  '.rl-pocket.red { background: #c62828; } .rl-pocket.red::after { content: "◆"; } .rl-pocket.black { background: #141418; box-shadow: inset 0 0 0 1px #555; } ' +
+  '.rl-pocket.black::after { content: "●"; } .rl-pocket.zero { background: #1e7f4f; } .rl-pocket.newest { font-size: 16px; min-width: 2.2em; ' +
+  'box-shadow: 0 0 0 2px #f4cd81; } .rl-pocket.black.newest { box-shadow: inset 0 0 0 1px #555, 0 0 0 2px #f4cd81; } ' +
+  '@media (forced-colors: active) { .rl-pocket { forced-color-adjust: none; } }';
+test("pockets: the .rl-pocket rules are WP0's, once, in casino-chips.css (no copy left in casinorl-dock.css) - one look on the felt, the Dock and the lobby", () => {
   const block = (s) => { const t = strip(s); const a = t.indexOf(".rl-pocket {"); const b = t.indexOf("@media (forced-colors: active)"); return t.slice(a, t.indexOf("}", t.indexOf("}", b) + 1) + 1).replace(/\s+/g, " "); };
-  assert.equal(block(rd("public", "css", "casino-chips.css")), block(rd("public", "css", "casinorl-dock.css")));
+  assert.equal(block(rd("public", "css", "casino-chips.css")), WP0_POCKETS);
+  const dock = strip(rd("public", "css", "casinorl-dock.css"));
+  assert.doesNotMatch(dock, /\.rl-pocket/, "casinorl-dock.css has no pocket rules any more (WP5b moved them to contract 9's file)");
+  // every page that draws a pocket loads the one file: the table page, the pad page's Room Dock and the two lobbies
+  for (const v of ["casino-rl.ejs", "room.ejs", "casino-bj.ejs", "casino-hm.ejs"]) assert.match(rd("views", v), /\/public\/css\/casino-chips\.css\?v=1/, v);
 });
 
 // ── (review) the shared chip inside the Room Dock's .rl-controls: a small cascade (specificity, then source order) over the two sheets

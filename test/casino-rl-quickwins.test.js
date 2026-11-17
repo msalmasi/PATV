@@ -217,14 +217,14 @@ test("O8 / O13(1): one shared pocket style on both pages, the iPhone touch rules
   assert.match(read("views/casino-rl.ejs"), /\/public\/css\/casino-chips\.css\?v=\d+/, "the table page loads the shared chips");
   for (const v of ["views/casino-rl.ejs", "views/room.ejs"]) assert.match(read(v), /\/public\/css\/casinorl-dock\.css\?v=4/, v);
   const css = pocketCss();
-  if (!css) t.diagnostic("public/css/casino-chips.css comes with WP5a: its pocket rules are checked once it is in the tree");
-  else {
+  assert.ok(css, "public/css/casino-chips.css (WP5a) is in the tree");
+  {
     assert.match(read("views/room.ejs"), /\/public\/css\/casino-chips\.css/, "the pad page (the Room Dock) loads them too");
-    assert.match(css, /\.rl-pocket\.red[^{]*\{[^}]*background: #c62828;/);
-    assert.match(css, /\.rl-pocket\.black[^{]*\{[^}]*background: #141418;/);
-    assert.match(css, /\.rl-pocket\.zero[^{]*\{[^}]*background: #1e7f4f;/);
-    assert.match(css, /\.rl-pocket\.red::after\s*\{[^}]*content: "◆"/);
-    assert.match(css, /\.rl-pocket\.black::after\s*\{[^}]*content: "●"/);
+    assert.match(css, /^\.rl-pocket\.red\b[^{]*\{[^}]*background: #c62828;/m, "the rule itself (1.99aoj: anchored - the file's header comment names .rl-pocket.red too)");
+    assert.match(css, /^\.rl-pocket\.black\b[^{]*\{[^}]*background: #141418;/m);
+    assert.match(css, /^\.rl-pocket\.zero\b[^{]*\{[^}]*background: #1e7f4f;/m);
+    assert.match(css, /^\.rl-pocket\.red::after\s*\{[^}]*content: "◆"/m);
+    assert.match(css, /^\.rl-pocket\.black::after\s*\{[^}]*content: "●"/m);
   }
   assert.doesNotMatch(felt, /\.rl-trail li \{[^}]*background/, "no one dark box for every entry");
   assert.match(felt, /\.rl-grid button,\s*\.rl-outside button \{\s*touch-action: manipulation;\s*-webkit-user-select: none;\s*user-select: none;\s*-webkit-touch-callout: none;/);

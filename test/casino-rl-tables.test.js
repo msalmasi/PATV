@@ -729,3 +729,62 @@ test("(review) rules.bank_straight is never an old figure: null once 10 s old; P
   assert.equal(polled.rules.bank_straight, 1000, "the poll's own read-only refresh");
   assert.equal(svc.publicView(R).rules.bank_straight, 1000);
 });
+
+// ── 1.99aoj integration: the 1.99aoi site ban (siteban.js) on the new wheels - a web wheel and a 💎 one take no stake from a site-banned
+// member (every roulette stake is money.charge -> ledger.post requireCover, whose E_SITE_BANNED backstop refuses it), and the bot route
+// refuses their !rl start [hr] / bets before the service (siteban.CASINO_OK); a web open needs a session, which a ban ends (sessions.js) ──
+test("1.99aoj: a site-banned member stakes nothing on a web or a 💎 wheel and can't open one from chat; lifted, they play again", async (t) => {
+  const SB = require("../siteban"),
+    api = await server(t, true);
+  await sql(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT,
+             at INTEGER, until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  const ban = async (uid) => {
+    await sql("INSERT OR REPLACE INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, '', ?, 'spam', 'staffer', ?, NULL)",
+              [uid, "player" + uid, Date.now()]);
+    SB.forget(uid);
+  };
+  t.after(async () => { await sql("DELETE FROM feed_bans"); SB.forget(); });
+  await highRoller("c");
+  await highRoller("d");
+  const W = svc.getTable(expect(await openWeb("a")).table);
+  const H = svc.getTable(expect(await openWeb("d", true)).table);
+  assert.equal(H.high_stakes, true);
+  await ban("b");
+  await ban("c");
+  const t0 = await total(),
+    b0 = await cash("b"),
+    c0 = await cash("c");
+  const refused = (out, what) => {
+    assert.equal(out.ok, false, what);
+    assert.match(out.reply, /could not be charged/, what);
+  };
+  refused(await act(W, "b", "bet", "red 100"), "a web wheel: the ledger refuses the banned member's stake");
+  refused(await act(H, "c", "bet", "red 1000"), "a 💎 wheel: the same gate (a High Roller too)");
+  refused(await act(H, "c", "bet", "17 1000"), "a straight-up line on the 💎 wheel");
+  assert.equal(await cash("b"), b0, "nothing charged");
+  assert.equal(await cash("c"), c0);
+  assert.equal(W.eng.book.length + H.eng.book.length, 0, "no line on either layout");
+  assert.equal((await rows("SELECT COUNT(*) AS n FROM casino_rl_lines WHERE user_id IN ('b','c')"))[0].n, 0, "no per-bet row");
+  assert.equal(await total(), t0, "PAT is conserved");
+  // chat: the bot route answers the ban itself - no wheel opened, no bet taken (start / bet are not getting-out verbs)
+  for (const v of ["start", "open", "bet", "rebet", "again", "go"]) assert.ok(!SB.CASINO_OK.has(v), v + " is refused for a banned account");
+  const bot = (uid, verb, args) =>
+    api("/api/casino/bot/act", null, { password: "localtest", username: "player" + uid, room: "pad-ban", game: "roulette", verb, args, idem: "bot-ban-" + uid + "-" + ++n });
+  const before = wheels().length;
+  const s = (await bot("c", "start", ["hr"])).body;
+  assert.equal(s.ok, false);
+  assert.equal(s.code, "banned");
+  assert.equal(wheels().length, before, "no wheel opened");
+  assert.equal((await bot("b", "bet", ["red 100"])).body.code, "banned");
+  // ...but they still read (limits, the wheel's status) - siteban.CASINO_OK
+  assert.ok(SB.CASINO_OK.has("limits") && SB.CASINO_OK.has("status"));
+  // the ban lifted: the same member plays the same wheels again
+  await sql("DELETE FROM feed_bans");
+  SB.forget();
+  expect(await act(W, "b", "bet", "red 100"));
+  expect(await act(H, "c", "bet", "red 1000"));
+  assert.equal(await cash("b"), b0 - 100);
+  assert.equal(await cash("c"), c0 - 1000);
+  assert.equal(await total(), t0, "PAT is conserved");
+  await invariant("after the lifted ban's bets");
+});

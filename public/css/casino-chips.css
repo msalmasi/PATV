@@ -7,8 +7,9 @@
    - .chipbtn: the ONE chip button (it replaces blackjack's .chipbtn and Hold'em's .rchip, both moved here unchanged) - markup:
        <button type="button" class="chipbtn[ hr][ sm]" data-add="500"><span class="chip c500" aria-hidden="true"></span><span class="l">500</span></button>
      .hr = a 💎 chip (its label in gold on black); .sm = the small rack (Hold'em's raise rack, 46 px).
-   - .rl-pocket.red | .black | .zero: a roulette pocket (the same rules as WP0's public/css/casinorl-dock.css, duplicated here so the
-     lobby's wheel cards have them; the colour class always comes from PATVRlBets.red - the client says "zero", never "green").
+   - .rl-pocket.red | .black | .zero: a roulette pocket - 1.99aoh's rules, moved here unchanged from public/css/casinorl-dock.css
+     (1.99aoj: the one copy - the table page, the Room Dock and the lobby's wheel cards all load this file); the colour class
+     always comes from PATVRlBets.red - the client says "zero", never "green").
 
    Scope: the chip rules apply inside the casino pages (.cz), the Room Dock's roulette controls (.rl-controls) and any container
    marked .cz-chipset - never to the site's other ".chip" classes (the pad's moderation fine buttons are "pm-btn chip", stage.css has
@@ -76,7 +77,7 @@
 :where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm:hover { transform: translateY(-2px); }
 :where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm:active:not(:hover) { transform: none; }
 
-/* ── a roulette pocket (roulette2 O8): the wheel's history strip and sheet, the Room Dock's recent line, the lobby's wheel cards.
+/* ── a roulette pocket (1.99aoh): the wheel's history strip and sheet, the Room Dock's recent line, the lobby's wheel cards.
    The number is the text; the felt's ◆ / ● glyph under it is the cue that isn't colour (the aria-label says the colour as a
    word); the newest pocket is larger, with a gold ring. ── */
 .rl-pocket {

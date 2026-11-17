@@ -560,16 +560,18 @@ test("O13(9) / O13(10): the stats drawer always says each spin is independent (n
 
 test("O9: the page is built on the shared parts (back link, felt, croupier, clock, meta, watchbar, players, dock) and the shared chips", () => {
   const v = read("views/casino-rl.ejs");
-  for (const s of ['<a class="back" href="/casino/blackjack#roulette">', '<div class="felt rl" id="cz-felt">', 'class="cz-who" data-pepe="1"',
+  // (1.99aoj: the back link is the lobby the navbar names - <%= rlLobby %>; test/casino-ui.test.js renders it)
+  for (const s of ['<a class="back" href="<%= rlLobby %>">', '<div class="felt rl" id="cz-felt">', 'class="cz-who" data-pepe="1"',
     '<div class="clock" id="cz-fclock" hidden>', '<div class="felt-meta" id="cz-meta">', '<div class="watchbar" id="cz-watchbar" hidden>',
     '<section class="rl-players" id="rl-players"', '<div class="dock" id="cz-dock" hidden>', '<dialog class="sheet" id="rl-stats"'])
     assert.ok(v.includes(s), s);
   assert.match(v, /<%- include\('partials\/casino-css'\) %>\s*<link rel="stylesheet" href="\/public\/css\/casino-chips\.css\?v=1">/, "contract 9");
   assert.match(v, /casino-sound\.js\?v=3/);
+  assert.match(v, /casino-ui\.js\?v=15/, "1.99aoj: the casino-ui.js the Blackjack and Hold'em pages load");
   assert.doesNotMatch(v, /rl-cabinet|rl-crown|rl-pin|<svg id="rl-wheel"/, "the old cabinet and SVG prize wheel are gone");
   const css = read("views/partials/casino-rl-css.ejs");
   assert.doesNotMatch(css, /max-width: 1480px|Georgia/);
-  assert.doesNotMatch(css, /^\.(?:chip|chipbtn|rl-pocket|pile|stack)[^{]*\{/m, "the chips and pockets themselves stay in casino-chips.css");
+  assert.doesNotMatch(css, /^\.(?:chip|chipbtn|rl-pocket|pile|stack)\b[^{]*\{/m, "the chips and pockets themselves stay in casino-chips.css");
   // contract 9: chip classes only (the page and the dock never invent chip classes of their own)
   const js = read("public/js/casinorl.js") + read("public/js/casinorl-dock.js");
   const used = new Set();

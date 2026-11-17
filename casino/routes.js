@@ -251,8 +251,10 @@ function register(app, { isBotToken, addUser, discordBridge }) {
     }
     if (id && (!table || !allowed || (table.lobby && table.status === "closed"))) return res.redirect("/casino/roulette");
     if (table && table.game !== "roulette") return res.redirect(svc.link(table).replace(/^https?:\/\/[^/]+/, ""));
+    // 1.99aoj: no `rouletteOn` local here - a boolean under that name shadowed app.locals.rouletteOn(can) in layout.ejs, so the navbar's
+    // 🛞 Roulette link vanished on the roulette page itself (views/casino-rl.ejs never read it)
     res.render("casino-rl", { title: "Roulette", user: req.user?.username || null, signedIn: !!uid, theme: "classic",
-      tableId: table?.id || null, rouletteOn: allowed, bjOn: st.bj_enabled, hmOn: st.hm_enabled });
+      tableId: table?.id || null, bjOn: st.bj_enabled, hmOn: st.hm_enabled });
   });
 
   app.get("/casino/fair/:id/:round", addUser, async (req, res) => {

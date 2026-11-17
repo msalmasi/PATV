@@ -139,6 +139,67 @@ test("pages: the lobby and a table render from the shared partials; a Hold'em pa
   assert.ok(html.includes("casinohm.js") && html.includes('id="cz-buy"'));
 });
 
+// 1.99aoj integration: the roulette table page keeps the navbar's 🛞 Roulette link (casino/routes.js no longer renders a `rouletteOn`
+// boolean that shadowed app.locals.rouletteOn in layout.ejs), names its lobby by the navbar's own rule (#cb data-lobby and "All tables"),
+// and loads casino-ui.js v15 / casino-sound.js v3 like the Blackjack and Hold'em pages; casino-ui.js words a wheel as a wheel
+test("1.99aoj: the roulette page keeps the navbar's Roulette link, goes back to the lobby's Roulette tab, loads the shared scripts' versions", async () => {
+  const page = async (url) => {
+    const r = await fetch(base + url, { headers: H("u1") });
+    return { url: r.url, html: await r.text() };
+  };
+  const nav = (html) => /<nav class="navbar">[\s\S]*?<\/nav>/.exec(html)[0];
+  const rlLink = (href) => `<a href="${href}" class="nav-link" title="Roulette"><span class="ic">🛞</span><span class="nav-lbl">Roulette</span></a>`;
+  const was = svc.S.settings.casino_roulette;
+  await svc.setSetting("casino_roulette", "everyone", "test");
+  try {
+    // Blackjack is the PATV casino (bj_enabled, front auto): the lobby's 🛞 tab is /casino/blackjack#roulette
+    let p = await page("/casino/roulette");
+    assert.match(p.url, /\/casino\/roulette\/t\/[\w-]+$/, "the bare page opens Pepe's lobby wheel");
+    assert.equal(nav(p.html).split(rlLink("/casino/blackjack#roulette")).length - 1, 2, "the navbar's 🛞 Roulette link, in More and ☰ alike");
+    assert.match(p.html, /<main class="ds-page flow cz rl-page" id="cb" data-game="roulette" data-lobby="\/casino\/blackjack#roulette"/);
+    assert.ok(p.html.includes('<a class="back" href="/casino/blackjack#roulette">'), "← All tables: the same path");
+    assert.ok(p.html.includes('<script src="/public/js/casino-ui.js?v=15"></script>'), "casino-ui.js v15, as on Blackjack / Hold'em");
+    assert.ok(p.html.includes('<script src="/public/js/casino-sound.js?v=3"></script>'));
+    // only Hold'em is the PATV casino: its lobby's tab (never casinoPath('bj') + '#roulette' = /blackjack#roulette)
+    await svc.setSetting("bj_enabled", "0", "test");
+    await svc.setSetting("hm_enabled", "1", "test");
+    p = await page("/casino/roulette");
+    assert.equal(nav(p.html).split(rlLink("/casino/holdem#roulette")).length - 1, 2);
+    assert.match(p.html, /data-lobby="\/casino\/holdem#roulette"/);
+    assert.ok(p.html.includes('<a class="back" href="/casino/holdem#roulette">'));
+    assert.ok(!p.html.includes("/blackjack#roulette"));
+    // neither game on the site: Pepe's lobby wheel, as the navbar has it
+    await svc.setSetting("hm_enabled", "0", "test");
+    p = await page("/casino/roulette");
+    assert.equal(nav(p.html).split(rlLink("/casino/roulette")).length - 1, 2);
+    assert.match(p.html, /data-lobby="\/casino\/roulette"/);
+    // roulette shut for this viewer: no wheel; "All tables" goes to the lobby (Pepe's tables while the lobby would be this page)
+    await svc.setSetting("casino_roulette", "off", "test");
+    p = await page("/casino/roulette");
+    assert.ok(!p.html.includes('id="cz-table"'), "no wheel");
+    assert.ok(p.html.includes('<a href="/casino">'), "not a link to itself");
+    assert.ok(!nav(p.html).includes('title="Roulette"'), "roulette off: no navbar link");
+    await svc.setSetting("bj_enabled", "1", "test");
+    p = await page("/casino/roulette");
+    assert.ok(p.html.includes('<a href="/casino/blackjack#roulette">'));
+  } finally {
+    await svc.setSetting("bj_enabled", "1", "test");
+    await svc.setSetting("hm_enabled", "0", "test");
+    await svc.setSetting("casino_roulette", was, "test");
+  }
+  // casino-ui.js: at a wheel Pepe is the croupier, the history is spins, and Host Tools closes a wheel (new keys - the BJ / Hold'em
+  // English is unchanged)
+  const ui = fs.readFileSync(path.join(repo, "public", "js", "casino-ui.js"), "utf8"),
+    en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+  assert.match(ui, /game === "roulette" \? T\("rl_close_q", "Close this wheel\?[^"]*"\) : T\("close_bj_q", "Close this table\?"\)/);
+  assert.match(ui, /role: game === "roulette" \? T\("rl_pepe_role", "the croupier · provably fair"\) : T\("pepe_role", "the dealer · provably fair"\)/);
+  assert.match(ui, /game === "roulette" \? T\("rl_pepe_history", "Spin history"\) : T\("pepe_history", "Hand history"\)/);
+  assert.equal(en["js.casino.close_bj_q"], "Close this table?");
+  assert.equal(en["js.casino.pepe_role"], "the dealer · provably fair");
+  assert.equal(en["js.casino.pepe_history"], "Hand history");
+  for (const k of ["rl_close_q", "rl_pepe_role", "rl_pepe_history"]) assert.doesNotMatch(en["js.casino." + k], /dealer|table|hand/i, k);
+});
+
 test("strings: every js.casino.* default in the page scripts equals locales/en.json; every view key exists", () => {
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   const seen = new Map();

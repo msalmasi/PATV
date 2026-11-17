@@ -334,7 +334,9 @@
     $("cz-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!($("cz-override") && $("cz-override").checked) }));
     $("cz-unstream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: false }));
     $("cz-close").addEventListener("click", () => {
-      if (!confirm(game === "holdem" ? T("close_hm_q", "Close this table? Everyone is cashed out.") : T("close_bj_q", "Close this table?"))) return;
+      // 1.99aoj: a wheel is closed as a wheel (casino/roulette.js "end": the layout's bets are refunded; a spin in the air lands first)
+      if (!confirm(game === "holdem" ? T("close_hm_q", "Close this table? Everyone is cashed out.")
+                   : game === "roulette" ? T("rl_close_q", "Close this wheel? Bets on the layout come back; a spin already running lands first.") : T("close_bj_q", "Close this table?"))) return;
       closeSheet("cz-host");
       closeVerb();
     });
@@ -1030,10 +1032,11 @@
     const proof = t.last_revealed || t.last_hand_revealed || null;
     items.push(["🛡️ " + T("pepe_fair", "Fairness"), proof ? `/casino/fair/${t.id || tableId}/${proof}` : null, proof ? null : () => { const h = $("cz-histbtn"); if (h) h.click(); },
                 t.commitment ? T("pepe_fair_next", "next {c}…", { c: String(t.commitment).slice(0, 10) }) : null]);
-    items.push(["📜 " + T("pepe_history", "Hand history"), null, () => { const h = $("cz-histbtn"); if (h) h.click(); }]);
+    // 1.99aoj: at a wheel Pepe is the croupier and the history is spins, not hands
+    items.push(["📜 " + (game === "roulette" ? T("rl_pepe_history", "Spin history") : T("pepe_history", "Hand history")), null, () => { const h = $("cz-histbtn"); if (h) h.click(); }]);
     if (t.on_stream && pe.pad) items.push(["📺 " + T("pepe_stream", "On Pepe's stream"), pe.pad]);
     smallMenu(anchor, { cls: "cz-pepe", aria: T("pepe_menu", "Pepe"), avatar: { name: "Pepe", avatar: "/public/img/pepe.png" }, name: "Pepe",
-                        role: T("pepe_role", "the dealer · provably fair"), items });
+                        role: game === "roulette" ? T("rl_pepe_role", "the croupier · provably fair") : T("pepe_role", "the dealer · provably fair"), items });
   }
   /** a masked seat's menu: its label and that they play incognito - no profile, no tip, nothing that says who. 1.99akb casmask (the
    *  1.99ajw verifier's gap b): 🚫 Block… - a FROG-NAME block, the chat's masked-entry item and sheet (block-sheet.js veil: whatever frog
