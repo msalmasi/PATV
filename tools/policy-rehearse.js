@@ -537,7 +537,8 @@ async function inspect(o) {
   for (const x of ev.moves) summary.push(`move ${x.key} (${x.kind}${x.flow ? ", " + x.flow : ""}) net ${fmt(x.net)}: ${x.legs.map(([p, n]) => `${p} ${n > 0 ? "+" : ""}${fmt(n)}`).join(", ")}`);
   for (const b of ev.burns_since_setup) if (!ev.moves.some((x) => x.key === b.key)) summary.push(`burn since the setup ${b.key}: ${fmt(b.amount)} PAT (${iso(b.ts / 1000)})`);
   for (const f of ev.fed_records) summary.push(`fed_records ${f.kind} ${f.key}: ${f.state} ${fmt(f.amount)} (${f.source}, ${f.month})`);
-  for (const e of legs.some((l) => /^floor/.test(l)) ? ev.effects.filter((x) => x.kind === "cap_hit") : []) summary.push(`effect ${e.key}: wanted ${fmt(e.data.wanted)}, room ${fmt(e.data.room)}${e.acked_at ? " (acked)" : ""}`);
+  const months = new Set(recs.filter((r) => /^floor/.test(r.leg || "")).map((r) => iso(r.at).slice(0, 7)));
+  for (const e of ev.effects.filter((x) => x.kind === "cap_hit" && [...months].some((m) => x.key.endsWith(`-${m}`)))) summary.push(`effect ${e.key}: wanted ${fmt(e.data.wanted)}, room ${fmt(e.data.room)}${e.acked_at ? " (acked)" : ""}`);
   summary.push(...verdict);
   return { summary, evidence: ev, verdict };
 }
@@ -747,9 +748,15 @@ async function main(argv) {
       if (!tables.has(t)) refuse(`not an initialized site database: no ${t} table`);
     }
     const r = await COMMANDS[command](o);
+    const lg = (legs) => legs.map(([p, n]) => `${p} ${n > 0 ? "+" : ""}${fmt(n)}`).join(", ");
+    const lines = r.summary || (command === "setup"
+      ? [`setup ${r.leg} tag ${r.tag} at ${r.at_iso}${r.dup ? " (done before: the stored receipt)" : ""}: ${r.legs.length ? `moved ${lg(r.legs)} (pool move ${r.key})` : "nothing to move - the state is already there"}` +
+         `${r.vault_cash && r.vault_cash.length ? " - uses Bank / Market-maker cash until the undo" : ""}`, `plan at the setup: ${JSON.stringify(r.preview)}`]
+      : command === "undo" ? [r.dup ? "undo: done before" : r.exact ? `undo: every system pool back to the PAT (${r.result && r.result.moved ? "one keyed move" : "nothing to move"})`
+        : `undo: the setup's own legs given back; left (the engine's legs / other moves): ${JSON.stringify(r.left)}`] : []);
     if (o.json || command === "snapshot") out(JSON.stringify(r, null, 2));
     else {
-      for (const l of r.summary || []) out(l);
+      for (const l of lines) out(l);
       out("--- evidence (JSON) ---");
       out(JSON.stringify(Object.assign({}, r, { summary: undefined }), null, 2));
     }
