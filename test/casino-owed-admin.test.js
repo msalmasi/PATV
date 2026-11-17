@@ -640,6 +640,30 @@ test("(A) refused when the item changed since the page was drawn: a wrong amount
   assert.equal(await total(), start);
 });
 
+test("(A) an item whose own credit landed while the table's save was behind: a redirect / write-off finds it paid - closes it, moves nothing", async () => {
+  await fresh();
+  const start = await total();
+  const o = await threeOwed();
+  const p = (await list()).items.find((x) => x.kind === "payout");
+  await back(ID.ann, "Ann");
+  ok(await require(path.join(repo, "casino", "money")).credit(o.key, ID.ann, 2000, "blackjack payout"));   // (landed; the table never saw it)
+  assert.equal(await total(), start, "supply doesn't count a landed item twice");
+  const r = await ownerAct("redirect", p, { to: "bob", reason: "member's new account" });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "E_LANDED");
+  assert.deepEqual(await keys(o.key + ":redirect"), []);
+  assert.ok(!get(o.t).owed[o.key], "closed as paid");
+  const h0 = await house();
+  const rf = (await list()).items.find((x) => x.kind === "refund");
+  await back(ID.cat, "Cat");
+  ok(await require(path.join(repo, "casino", "money")).credit(o.rkey, ID.cat, 600, "blackjack refund (table closed)"));
+  const w = await ownerAct("writeoff", rf, { reason: "account purged for good" });
+  assert.equal(w.body.code, "E_LANDED");
+  assert.equal(await house(), h0, "nothing written off");
+  assert.equal(get(o.t).status, "closed", "its last owed item closed: the table that waited closes");
+  assert.equal(await total(), start);
+});
+
 test("(A) a restart mid-action: journalled before the money moves - a crash before it drops the action (still owed), a crash after it finishes it (closed, never paid twice)", async () => {
   // (1) a crash after the journal, before the move: nothing moved; the boot drops the act (audited) and the item stays owed
   await fresh();
@@ -688,6 +712,26 @@ test("(A) a restart mid-action: journalled before the money moves - a crash befo
   assert.ok(!get(o.h).eng.seats.includes(ID.dan), "the seat left at the boot");
   await later(700);
   assert.deepEqual(await keys(o.hkey), []);
+  assert.equal(await total(), start);
+});
+
+test("(A) a staging copy taken between a redirect's move and its close: the copy's retire never pays the original key (the act is finished first)", async () => {
+  await fresh();
+  const start = await total();
+  const o = await threeOwed();
+  const p = (await list()).items.find((x) => x.kind === "payout");
+  svc.S.hooks.crash = "owed:moved";
+  await assert.rejects(svc.OW.act("redirect", { userId: ID.own, username: "owner" }, { table: p.table, item: p.id, amount: p.amount, idem: idem(), to: "bob", reason: "member's new account" }));
+  svc.stop();
+  // the copy's scrub (deploy/keep-staging-tables.js), then staging's boot with every account there
+  const K = require(path.join(repo, "deploy", "keep-staging-tables"));
+  for (const s of K.CASINO_SCRUB) await runQuery(s.sql.replace(/\bmain\./g, "")).catch((e) => { if (!/no such table/.test(e.message)) throw e; });
+  for (const [id, nm] of [[ID.ann, "Ann"], [ID.cat, "Cat"], [ID.dan, "Dan"]]) await back(id, nm);
+  await capture(() => restart());
+  assert.equal((await row(o.t)).status, "closed", "the copy is retired");
+  assert.deepEqual(await keys(o.key), [], "never paid to the original - the redirect landed");
+  assert.deepEqual(await keys(o.key + ":redirect"), [2000]);
+  assert.deepEqual(await keys(o.rkey), [600], "what was still owed is paid by its own key");
   assert.equal(await total(), start);
 });
 
