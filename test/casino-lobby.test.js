@@ -87,6 +87,36 @@ test("the lobby asks /api/casino/lobby?rl=1; roulette open to you: a 🛞 Roulet
   assert.match(partial("casino-lobby", { game: "bj", bjOn: true, hmOn: true }), /data-tab="roulette" aria-selected="false" hidden>/, "hidden until the lobby says so");
 });
 
+test("(review) the page's first guess: app.locals.rouletteOn(can) draws the 🛞 tab and the 2 x 2 strip before the lobby answers (no shift under a thumb)", async () => {
+  const can = () => false;
+  let given = null;
+  const on = partial("casino-lobby", { game: "bj", bjOn: true, hmOn: true, can, rouletteOn: (c) => ((given = c), true) });
+  assert.equal(given, can, "the view's can() (the request's user), as the navbar asks");
+  assert.match(on, /<div class="lob-tabs four" role="tablist"/);
+  assert.match(on, /data-tab="roulette" aria-selected="false">/, "the tab drawn, not hidden");
+  assert.match(on, /<span id="cz-hr-locked-t" hidden>[^<]*<\/span><span id="cz-hr-locked-rl">/, "the 💎 note that names the wheels");
+  for (const off of [{ rouletteOn: () => false }, {}]) {
+    const html = partial("casino-lobby", Object.assign({ game: "holdem", bjOn: true, hmOn: true, can }, off));
+    assert.match(html, /<div class="lob-tabs" role="tablist"/, "three tabs: the strip as it was");
+    assert.match(html, /data-tab="roulette" aria-selected="false" hidden>/);
+    assert.match(html, /<span id="cz-hr-locked-t">[^<]*<\/span><span id="cz-hr-locked-rl" hidden>/);
+  }
+  // the guess and the lobby answer agree: nothing moves; the answer says shut: the strip goes back to three
+  const page1 = (data) => page(`<main class="ds-page flow cz" id="cb" data-game="bj" data-table="" data-signed="1" data-user="ann">${partial("casino-top", { game: "bj", tableId: null })}${on}</main>`,
+                               { "/api/casino/lobby": data, post: () => ({ ok: false }) }, { pre: RLBETS });
+  let P = page1(LOBBY({ tables: [wheel("w1", { lobby: true })] }));
+  assert.equal(tab(P, "roulette").hidden, false, "before the first answer");
+  P.CZ.startLobby(); await flush(); await flush();
+  assert.equal(tab(P, "roulette").hidden, false);
+  assert.ok(P.D.doc.querySelector(".lob-tabs").classList.contains("four"));
+  P = page1(LOBBY({ roulette: { on: false, lobby: null, wheels: [] } }));
+  P.CZ.startLobby(); await flush(); await flush();
+  assert.equal(tab(P, "roulette").hidden, true, "corrected by the answer");
+  assert.ok(!P.D.doc.querySelector(".lob-tabs").classList.contains("four"));
+  assert.equal(P.$("cz-hr-locked-t").hidden, false);
+  assert.equal(P.$("cz-hr-locked-rl").hidden, true);
+});
+
 test("wheel cards: Pepe's lobby wheel first on All, then the rest as listed; the card's lines (phase + countdown, pockets, who, limits, tags, Play / Watch)", async () => {
   const ann = wheel("w2", { host: "Annie", players: 3, staked: 1200, phase: "betting", deadline: NOW + 12000, round_no: 6, last: [17, 0, 18, 14, 2],
                             rooms: [{ id: "pad-a", name: "Pad A" }], adverts: [{ id: "pad-b", name: "Pad B" }], on_stream: true, proof: "/casino/fair/w2/5" });
@@ -109,7 +139,7 @@ test("wheel cards: Pepe's lobby wheel first on All, then the rest as listed; the
   assert.deepEqual(pk.map((x) => x.textContent), ["2", "14", "18", "0", "17"]);
   assert.deepEqual(pk.map((x) => x.getAttribute("aria-label")), ["2 black", "14 red", "18 red", "0 green", "17 black"], "the colour as a word too");
   assert.ok(pk.every((x) => x.getAttribute("role") === "img"));
-  assert.equal(card.querySelector(".rl-last").getAttribute("aria-label"), "Last spins");
+  assert.equal(card.querySelector(".rl-last").getAttribute("aria-label"), "Last spins, newest first", "(review) the order is said, not only drawn");
   assert.equal(card.querySelector(".rl-tally").textContent, "3 players · 1,200 PAT on the layout");
   assert.equal(lob.querySelector(".rl-tally").textContent, "1 player · 500 PAT on the layout", "one player: the singular");
   const tags = (c) => c.querySelectorAll(".meta .tag").map((x) => x.textContent);
@@ -233,21 +263,46 @@ test("Open a wheel: {game: roulette, idem} -> the wheel's page; 💎 sends hr (H
   assert.equal(P.$("cz-hrrl").textContent, "Bets from 1,000 PAT · up to 500,000 PAT a spin, all your bets together.");
   assert.equal(P.$("cz-open-hrrl-go").parentNode.hidden, true, "not a High Roller: no button");
   assert.ok(P.$("cz-open-hr").classList.contains("three"), "three sub-sections (blackjack, Hold'em, roulette)");
-  assert.equal(P.$("cz-open-hrrl-go").getAttribute("aria-label"), "Open a 💎 High Roller wheel");
+  // (review, WCAG 2.5.3) the 💎 button's spoken name starts with its visible text (Voice Control: "tap Open a wheel, High Roller"),
+  // with no emoji read out as "gem stone"
+  const hrb = P.$("cz-open-hrrl-go");
+  assert.equal(hrb.getAttribute("aria-label"), "Open a wheel, High Roller");
+  assert.ok(hrb.getAttribute("aria-label").startsWith(hrb.textContent), "the visible text first");
+  assert.doesNotMatch(hrb.getAttribute("aria-label"), /\p{Extended_Pictographic}/u);
+  assert.notEqual(hrb.getAttribute("aria-label"), P.$("cz-open-rl-go").textContent, "not the normal button's name");
+  // (review) the note under the sub-sections names the 💎 wheels while theirs shows
+  assert.equal(P.$("cz-hr-locked").hidden, false);
+  assert.equal(P.$("cz-hr-locked-t").hidden, true);
+  assert.equal(P.$("cz-hr-locked-rl").hidden, false);
+  assert.match(P.$("cz-hr-locked-rl").textContent, /💎 roulette wheels/);
+  assert.equal(P.$("cz-hr-locked").querySelector("a").getAttribute("href"), "/shop", "the store link stays");
   P = await started(LOBBY({ me: { name: "Dee", balance: 900000, high_roller: true } }));
   assert.equal(P.$("cz-open-hrrl-go").parentNode.hidden, false);
   P.D.click(P.$("cz-open-hrrl-go"));
   await flush(); await flush();
   assert.deepEqual([P.posts[0].body.game, P.posts[0].body.hr], ["roulette", true]);
   assert.equal(P.location.href, "/casino/roulette/t/w9");
-  // refused (one web wheel per host): the reason as a toast, no navigation, the button back on
+  // refused (one web wheel per host): (review) the refusal names your wheel - go to it (its Host Tools close it); a retry after a lost
+  // answer lands on the wheel the first try opened
   P = await started(LOBBY({}), { post: () => ({ ok: false, reply: "You already have a roulette wheel open — close it before you open another.", table: "w2" }) });
   P.D.click(P.$("cz-open-rl-go"));
   await flush(); await flush();
-  assert.equal(P.location.href, "");
+  assert.equal(P.location.href, "/casino/roulette/t/w2", "to your wheel");
   assert.equal(P.$("cz-toast").textContent, "You already have a roulette wheel open — close it before you open another.");
+  assert.equal(P.$("cz-open-rl-go").disabled, false);
+  // any other refusal (no wheel named): the reason as a toast, no navigation, the button back on
+  P = await started(LOBBY({}), { post: () => ({ ok: false, reply: "the casino has 9 tables open already — join one at /tables." }) });
+  P.D.click(P.$("cz-open-rl-go"));
+  await flush(); await flush();
+  assert.equal(P.location.href, "");
+  assert.equal(P.$("cz-toast").textContent, "the casino has 9 tables open already — join one at /tables.");
   assert.ok(P.$("cz-toast").classList.contains("bad"));
   assert.equal(P.$("cz-open-rl-go").disabled, false);
+  // a blackjack refusal is a toast whatever it carries (unchanged)
+  P = await started(LOBBY({}), { post: () => ({ ok: false, reply: "No.", table: "t1" }) });
+  P.D.click(P.$("cz-open-bj-go"));
+  await flush(); await flush();
+  assert.equal(P.location.href, "");
   // signed out: the sign-in link instead of the button
   P = await started(LOBBY({ me: null }), { signed: false });
   assert.equal(P.$("cz-open-rl-go").hidden, true);
@@ -288,6 +343,62 @@ test("a poll with nothing new keeps the cards as they are (no re-draw: a focused
   data.tables[0].players = 2;
   await P.poll();
   assert.notEqual(cards(P)[0], before, "a change redraws");
+});
+
+test("(review) a redraw keeps the keyboard focus: the same control in the same card (data-id), one of its kind when its link moved on, the card's first when it's gone", async () => {
+  const data = LOBBY({ tables: [bj("t1"), wheel("w1", { lobby: true, last: [4] }), wheel("w2", { host: "Cy", proof: "/casino/fair/w2/5" })] });
+  const P = await started(data, { hash: "#all" });
+  const doc = P.D.doc;
+  const card = (id) => cards(P).find((c) => c.getAttribute("data-id") === id);
+  assert.deepEqual(cards(P).map((c) => c.getAttribute("data-id")), ["w1", "t1", "w2"], "each card says its table");
+  // Cy's Play link focused; a chip lands on Cy's wheel (its card changes) -> the new Play link of the same card
+  const el = card("w2").querySelector(".acts a.gold");
+  el.focus();
+  data.tables[2].staked = 100;
+  await P.poll();
+  assert.notEqual(card("w2").querySelector(".acts a.gold"), el, "redrawn");
+  assert.equal(doc.activeElement, card("w2").querySelector(".acts a.gold"), "the focus follows the redraw");
+  assert.equal(doc.activeElement.focusOpts.preventScroll, true, "no scroll jump");
+  // Watch (same href as Play): Watch again, never Play
+  card("w2").querySelector(".acts a.ghost").focus();
+  data.tables[2].players = 1;
+  await P.poll();
+  assert.equal(doc.activeElement, card("w2").querySelector(".acts a.ghost"));
+  // blackjack's Join on the All tab while a wheel changes
+  card("t1").querySelector(".acts a.gold").focus();
+  data.tables[1].last = [4, 9];
+  await P.poll();
+  assert.equal(doc.activeElement, card("t1").querySelector(".acts a.gold"));
+  assert.equal(doc.activeElement.getAttribute("href"), "/casino/blackjack/t/t1#bet");
+  // the 🔐 Fair link's round moves on: the Fair link of the new round
+  card("w2").querySelector("a.tag.green").focus();
+  data.tables[2].proof = "/casino/fair/w2/6";
+  await P.poll();
+  assert.equal(doc.activeElement.getAttribute("href"), "/casino/fair/w2/6");
+  // Play turns into Full (the same gold link, aria-disabled): still it
+  card("w2").querySelector(".acts a.gold").focus();
+  data.tables[2].players = 35;
+  await P.poll();
+  assert.equal(doc.activeElement.textContent, "Full");
+  // the card is gone: the focus goes with it (the body)
+  card("t1").querySelector(".acts a.gold").focus();
+  data.tables.splice(0, 1);
+  await P.poll();
+  assert.equal(doc.activeElement, doc.body);
+  // focus outside the grids is left alone
+  P.$("cz-open-rl-go").focus();
+  data.tables[0].players = 3;
+  await P.poll();
+  assert.equal(doc.activeElement, P.$("cz-open-rl-go"));
+  // Play gone (the High Roller role ended: a 💎 wheel's Play turns into the 🔒 tag): the card's first control, Watch
+  const H = LOBBY({ tables: [wheel("w7", { host: "Dee", high_stakes: true })], me: { name: "Dee", balance: 900000, high_roller: true } });
+  const Q = await started(H, { hash: "#roulette" });
+  const hc = () => cards(Q, "cz-hrtables")[0];
+  hc().querySelector(".acts a.gold").focus();
+  H.me.high_roller = false;
+  await Q.poll();
+  assert.ok(hc().querySelector(".acts .tag.lock"), "locked now");
+  assert.equal(Q.D.doc.activeElement, hc().querySelector(".acts a.ghost"));
 });
 
 // ── the chips: one file for every table (contract 9) ──
@@ -355,6 +466,199 @@ test("pockets: the lobby's .rl-pocket rules are WP0's (casinorl-dock.css) - one 
   assert.equal(block(rd("public", "css", "casino-chips.css")), block(rd("public", "css", "casinorl-dock.css")));
 });
 
+// ── (review) the shared chip inside the Room Dock's .rl-controls: a small cascade (specificity, then source order) over the two sheets
+// the pad page links - casino-chips.css, then casinorl-dock.css - for the dock's markup, against the same chip inside .cz ──
+const splitTop = (s, sep) => { const parts = []; let d = 0, cur = ""; for (const ch of s) { if ("([".includes(ch)) d++; if (")]".includes(ch)) d--; if (ch === sep && !d) { parts.push(cur.trim()); cur = ""; } else cur += ch; } parts.push(cur.trim()); return parts; };
+function cssRules(src) {
+  const out = [];
+  const walk = (text, media) => {
+    let pos = 0;
+    for (;;) {
+      const open = text.indexOf("{", pos);
+      if (open < 0) return;
+      const head = text.slice(pos, open).trim();
+      let depth = 1, j = open + 1;
+      while (depth) { if (text[j] === "{") depth++; else if (text[j] === "}") depth--; j++; }
+      const body = text.slice(open + 1, j - 1);
+      if (head.startsWith("@media")) walk(body, head.slice(6).trim());
+      else if (!head.startsWith("@")) {
+        const decls = {};
+        for (const d of splitTop(body, ";")) { const k = d.indexOf(":"); if (k > 0) decls[d.slice(0, k).trim()] = d.slice(k + 1).trim().replace(/\s+/g, " "); }
+        for (const sel of splitTop(head, ",")) out.push({ sel: sel.replace(/\s+/g, " "), decls, media });
+      }
+      pos = j;
+    }
+  };
+  walk(strip(src), null);
+  return out;
+}
+function compounds(sel) {           // [{c, comb}] - the combinator to the LEFT of each compound (" " or ">")
+  const parts = []; let cur = "", d = 0, pend = null;
+  for (const ch of sel) {
+    if ("([".includes(ch)) d++;
+    if (")]".includes(ch)) d--;
+    if (!d && (ch === " " || ch === ">")) { if (cur) { parts.push({ c: cur, comb: pend }); cur = ""; pend = " "; } if (ch === ">") pend = ">"; continue; }
+    cur += ch;
+  }
+  if (cur) parts.push({ c: cur, comb: pend });
+  return parts;
+}
+function simples(c) {
+  const out = []; let i = 0;
+  const m0 = /^([a-z][\w-]*|\*)/i.exec(c);
+  if (m0) { out.push({ t: "tag", v: m0[1].toLowerCase() }); i = m0[0].length; }
+  while (i < c.length) {
+    const ch = c[i];
+    if (ch === "." || ch === "#") { const m = /^[\w-]+/.exec(c.slice(i + 1)); out.push({ t: ch === "." ? "cls" : "id", v: m[0] }); i += 1 + m[0].length; }
+    else if (ch === "[") { const j = c.indexOf("]", i); const m = /^([\w-]+)(?:="([^"]*)")?$/.exec(c.slice(i + 1, j)); out.push({ t: "attr", k: m[1], v: m[2] }); i = j + 1; }
+    else if (ch === ":") {
+      const m = /^::?([\w-]+)/.exec(c.slice(i)); i += m[0].length;
+      let arg = null;
+      if (c[i] === "(") { let d = 1, j = i + 1; while (d) { if (c[j] === "(") d++; else if (c[j] === ")") d--; j++; } arg = c.slice(i + 1, j - 1); i = j; }
+      out.push({ t: m[0].startsWith("::") ? "pel" : "pseudo", v: m[1], arg });
+    } else throw new Error("selector " + c);
+  }
+  return out;
+}
+function spec(sel) {
+  let a = 0, b = 0, c = 0;
+  for (const { c: comp } of compounds(sel)) for (const s of simples(comp)) {
+    if (s.t === "id") a++;
+    else if (s.t === "cls" || s.t === "attr") b++;
+    else if (s.t === "tag") c += s.v === "*" ? 0 : 1;
+    else if (s.t === "pel") c++;
+    else if (s.v === "is" || s.v === "not") { const best = splitTop(s.arg, ",").map(spec).sort((x, y) => y[0] - x[0] || y[1] - x[1] || y[2] - x[2])[0]; a += best[0]; b += best[1]; c += best[2]; }
+    else if (s.v !== "where") b++;
+  }
+  return [a, b, c];
+}
+function matchSel(sel, chain, ei) {
+  const parts = compounds(sel);
+  const at = (pi, k) => {
+    if (!matchCompound(parts[pi].c, chain, k)) return false;
+    if (pi === 0) return true;
+    if (parts[pi].comb === ">") return k > 0 && at(pi - 1, k - 1);
+    for (let x = k - 1; x >= 0; x--) if (at(pi - 1, x)) return true;
+    return false;
+  };
+  return at(parts.length - 1, ei);
+}
+function matchCompound(comp, chain, k) {
+  const e = chain[k];
+  return simples(comp).every((s) => {
+    if (s.t === "tag") return s.v === "*" || e.tag === s.v;
+    if (s.t === "cls") return e.cls.includes(s.v);
+    if (s.t === "id") return e.id === s.v;
+    if (s.t === "attr") return s.k in e.attrs && (s.v === undefined || e.attrs[s.k] === s.v);
+    if (s.t === "pel") return false;                                   // (the element itself, never a pseudo-element)
+    if (s.v === "where" || s.v === "is") return splitTop(s.arg, ",").some((x) => matchSel(x, chain, k));
+    if (s.v === "not") return !splitTop(s.arg, ",").some((x) => matchSel(x, chain, k));
+    if (s.v === "disabled") return "disabled" in e.attrs;
+    if (s.v === "enabled") return !("disabled" in e.attrs);
+    return !!e.state[s.v];                                             // :hover / :active as forced; anything else off
+  });
+}
+const mediaOk = (m, w) => { if (!m) return true; const x = /^\((max|min)-width: (\d+)px\)$/.exec(m); return !!x && (x[1] === "max" ? w <= +x[2] : w >= +x[2]); };
+function cascade(rules, chain, w) {
+  const won = {};
+  rules.forEach((r, order) => {
+    if (!mediaOk(r.media, w) || !matchSel(r.sel, chain, chain.length - 1)) return;
+    const sp = spec(r.sel);
+    for (const [p, v] of Object.entries(r.decls)) {
+      const cur = won[p];
+      const cmp = cur ? sp[0] - cur.sp[0] || sp[1] - cur.sp[1] || sp[2] - cur.sp[2] : 1;
+      if (cmp >= 0) won[p] = { v, sp, sel: r.sel };              // (equal specificity: the later rule wins)
+    }
+  });
+  return won;
+}
+test("(review) chips in the Room Dock: inside .rl-controls the one .chipbtn keeps its box (58 / 52 px round, transparent, #111 label) - the Dock's `.rl-controls button` tile never wins, in either link order", () => {
+  const chips = rd("public", "css", "casino-chips.css"), dockCss = rd("public", "css", "casinorl-dock.css");
+  const el = (tag, cls, attrs, state) => ({ tag, cls, attrs: attrs || {}, state: state || {} });
+  // the cascade itself, on known cases: the Dock's (0,1,1) beats a (0,1,0) :where() rule, whichever comes first
+  for (const css of [":where(.a) .chipbtn { color: red; } .rl-controls button { color: blue; }", ".rl-controls button { color: blue; } :where(.a) .chipbtn { color: red; }"]) {
+    assert.equal(cascade(cssRules(css), [el("div", ["rl-controls", "a"]), el("button", ["chipbtn"])], 1280).color.v, "blue");
+  }
+  assert.deepEqual(spec(":where(.cz, .rl-controls, .cz-chipset) .chipbtn[disabled]"), [0, 2, 0]);
+  assert.deepEqual(spec(".rl-controls button:disabled"), [0, 2, 1]);
+  assert.deepEqual(spec(".chipbtn.sm:active:not(:hover)"), [0, 4, 0]);
+  const INITIAL = { "min-height": "auto", opacity: "1" };
+  // (WP0 O13(1), the iPhone: a quick second tap on the Dock's chips bets again - no zoom, no text selection; it looks the same)
+  const DOCK_ONLY = { "touch-action": "manipulation", "-webkit-user-select": "none", "user-select": "none" };
+  for (const [oname, order] of [["chips then Dock", [chips, dockCss]], ["Dock then chips", [dockCss, chips]]]) {
+    const rules = order.flatMap((src) => cssRules(src));
+    for (const w of [1280, 375]) for (const variant of [[], ["hr"], ["sm"], ["sm", "hr"]]) for (const state of [{}, { hover: true }, { active: true }, { disabled: true }]) {
+      const btn = el("button", ["chipbtn"].concat(variant), Object.assign({ type: "button" }, state.disabled ? { disabled: "" } : {}), state);
+      const label = el("span", ["l"]);
+      const cz = [el("main", ["ds-page", "cz"]), el("div", ["dock-row", "chipbtns"]), btn];
+      const dock = [el("div", ["rl-controls"]), el("div", ["rl-chips"]), btn];
+      const czDock = [el("main", ["ds-page", "cz"]), el("div", ["dock"]), el("div", ["rl-controls"]), el("div", ["rl-chips"]), btn];     // (the roulette page's dock)
+      const want = cascade(rules, cz, w), wantL = cascade(rules, cz.concat([label]), w);
+      for (const [name, chain] of [["the Dock", dock], ["the roulette page's dock", czDock]]) {
+        const got = cascade(rules, chain, w), gotL = cascade(rules, chain.concat([label]), w);
+        const why = `${name} · ${oname} · ${w}px · .chipbtn${variant.map((v) => "." + v).join("")}${Object.keys(state).map((s) => ":" + s).join("")}`;
+        for (const p of new Set(Object.keys(want).concat(Object.keys(got)))) {
+          const v = (x) => (x[p] ? x[p].v : INITIAL[p] || "(initial)");
+          if (p in DOCK_ONLY && !want[p]) { assert.equal(v(got), DOCK_ONLY[p], `${why}: ${p}`); continue; }
+          assert.equal(v(got), v(want), `${why}: ${p} (won by ${got[p] ? got[p].sel : "-"})`);
+        }
+        for (const p of new Set(Object.keys(wantL).concat(Object.keys(gotL)))) assert.equal(gotL[p] && gotL[p].v, wantL[p] && wantL[p].v, `${why}: the label's ${p}`);
+      }
+    }
+    // and the values themselves, in the Dock
+    const box = (w, attrs) => cascade(rules, [el("div", ["rl-controls"]), el("div", ["rl-chips"]), el("button", ["chipbtn"], attrs)], w);
+    const b = box(1280);
+    assert.deepEqual([b.width.v, b.height.v, b["border-radius"].v, b.background.v, b.color.v, b.border.v, b.padding.v], ["58px", "58px", "50%", "transparent", "#111", "0", "0"]);
+    assert.equal(box(375).width.v, "52px");
+    const off = box(1280, { disabled: "" });
+    assert.deepEqual([off.opacity.v, off.cursor.v], [".35", "not-allowed"], "a disabled chip as on the tables");
+  }
+});
+
+test("(review) the navbar's 🛞 Roulette lands on the lobby's Roulette tab on the page the casino's front end uses (Pepe's wheel only while neither game is the PATV casino)", async () => {
+  const ejs = require("ejs");
+  const layout = path.join(__dirname, "..", "views", "layout.ejs");
+  const nav = (html) => /<nav class="navbar">[\s\S]*?<\/nav>/.exec(html)[0];
+  const href = async (fronts) => {
+    const html = nav(await ejs.renderFile(layout, { title: "T", ogPath: "/", user: "someuser", can: () => false, rouletteOn: () => true, casinoOn: (g) => !!fronts[g] }));
+    const m = html.match(/<a href="[^"]*" class="nav-link" title="Roulette">/g) || [];
+    assert.ok(m.length >= 1, "the link is there");
+    const hs = new Set(m.map((x) => /href="([^"]*)"/.exec(x)[1]));
+    assert.equal(hs.size, 1, "the same place in every menu");
+    return [...hs][0];
+  };
+  assert.equal(await href({ bj: true, holdem: true }), "/casino/blackjack#roulette");
+  assert.equal(await href({ bj: true }), "/casino/blackjack#roulette");
+  assert.equal(await href({ holdem: true }), "/casino/holdem#roulette", "blackjack on Pepe's tables: the Hold'em lobby");
+  assert.equal(await href({}), "/casino/roulette", "no PATV lobby: Pepe's lobby wheel (the route's redirect)");
+  // the lobby reads #roulette as its tab (startLobby's hashTab)
+  const P = await started(LOBBY({ tables: [bj("t1"), wheel("w1", { lobby: true })] }), { hash: "#roulette" });
+  assert.equal(tab(P, "roulette").getAttribute("aria-selected"), "true");
+});
+
+test("(review) a closed player's wheel: Back to the lobby goes to the lobby's 🛞 tab (#cb data-lobby), else Pepe's wheel as before", async () => {
+  const closed = async (attrs) => {
+    const P = page(`<main class="ds-page flow cz rl-page" id="cb" data-game="roulette" data-table="abc1234567" data-signed="1" data-user="ann"${attrs}>${partial("casino-top", { game: "roulette", tableId: "abc1234567" })}` +
+                   `<section id="cz-table" hidden><strong id="cz-msg"></strong><div id="cz-dock"></div></section></main>`,
+                   { "/api/casino/t/abc1234567": { __status: 404 } }, {});
+    P.CZ.startTable(() => {});
+    await flush(); await flush();
+    return P;
+  };
+  let P = await closed(' data-lobby="/casino/blackjack#roulette"');
+  const a = P.$("cz-msg").querySelector("a");
+  assert.deepEqual([a.textContent, a.getAttribute("href")], ["Back to the lobby", "/casino/blackjack#roulette"]);
+  assert.equal(P.$("cz-dock").hidden, true);
+  P = await closed(' data-lobby="/casino/holdem#roulette"');
+  assert.equal(P.$("cz-msg").querySelector("a").getAttribute("href"), "/casino/holdem#roulette");
+  P = await closed("");
+  assert.equal(P.$("cz-msg").querySelector("a").getAttribute("href"), "/casino/roulette", "no data-lobby (an older page): as before");
+  for (const bad of ["//evil.test/x", "https://evil.test/", "javascript:alert(1)", '/casino/blackjack#x" onclick="y']) {
+    P = await closed(` data-lobby="${bad.replace(/"/g, "&quot;")}"`);
+    assert.equal(P.$("cz-msg").querySelector("a").getAttribute("href"), "/casino/roulette", "only a same-site path: " + bad);
+  }
+});
+
 // ── the route ──
 const h = require("./fixtures/casino-rl-harness");
 const { svc, sql, actor } = h;
@@ -399,7 +703,8 @@ test("route: the lobby says the server's clock (now), and the wheel rows it send
 test("en.json: the lobby's keys", () => {
   const en = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "locales", "en.json"), "utf8"));
   for (const k of ["casino.rl.open_note", "casino.rl.open_go", "casino.rl.open_hr", "js.casino.rl_wheel_pepe", "js.casino.rl_wheel_of", "js.casino.g_rl", "js.casino.rl_play",
-                   "js.casino.rl_no_spins", "js.casino.rl_card_limits", "js.casino.none_rl", "js.casino.rl_open_limits", "js.casino.rl_open_fail", "js.casino.theme_rl_classic"])
+                   "js.casino.rl_no_spins", "js.casino.rl_card_limits", "js.casino.none_rl", "js.casino.rl_open_limits", "js.casino.rl_open_fail", "js.casino.theme_rl_classic",
+                   "casino.hr_locked_rl", "js.casino.rl_recent_order"])
     assert.equal(typeof en[k], "string", k);
   assert.deepEqual(en["js.casino.rl_card_tally"], { one: "{n} player · {pat} PAT on the layout", other: "{n} players · {pat} PAT on the layout" });
   assert.doesNotMatch(JSON.stringify(["casino.rl.open_note", "js.casino.rl_open_limits", "js.casino.rl_card_tally"].map((k) => en[k])), /money|real prize/i);

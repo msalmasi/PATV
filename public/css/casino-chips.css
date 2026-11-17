@@ -64,6 +64,11 @@
 @media (max-width: 600px) {
   :where(.cz, .rl-controls, .cz-chipset) .chipbtn { width: 52px; height: 52px; }
 }
+/* (review) the Room Dock's roulette sheet (casinorl-dock.css, linked after this file) styles every `.rl-controls button` (0,1,1) as a
+   square green tile - a chip button there takes back the chip's box. (0,2,0) / (0,3,0) win whatever the link order; every value is
+   the one the chip has inside .cz (min-height: the initial auto). */
+.rl-controls .chipbtn { min-height: auto; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #111; }
+.rl-controls .chipbtn:disabled { opacity: .35; cursor: not-allowed; }
 /* .sm: the small rack (Hold'em's raise; was .rchip): 46 px at every width, a lighter lift, no press dip */
 :where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm { width: 46px; height: 46px; font-size: 11px; }
 :where(.cz, .rl-controls, .cz-chipset) .chipbtn.sm span.l { padding: 2px 4px; }

@@ -4,7 +4,10 @@
     Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn.
     roulette2 O4/O5 (WP5a): roulette is the third game here - a 🛞 Roulette tab (#roulette picks it; shown while roulette is open to
     this viewer), the wheels as table cards (the always-on lobby wheel first, 💎 wheels in the High Roller section), and "Open a
-    wheel" / a 💎 roulette sub-section in the open cards. The old "Roulette · N players" box above the hero is gone. %>
+    wheel" / a 💎 roulette sub-section in the open cards. The old "Roulette · N players" box above the hero is gone.
+    (review) rlFirst: the page's first guess at roulette - app.locals.rouletteOn(can), the navbar's own test - so a phone's tab strip
+    has its final shape (the 🛞 tab, .four's 2 x 2 grid) before the lobby answer; renderLobby corrects it if the answer disagrees. %>
+<% const rlFirst = typeof locals.rouletteOn === 'function' ? !!locals.rouletteOn(typeof locals.can === 'function' ? locals.can : null) : false; -%>
 <section id="cz-lobby" hidden>
   <div class="lob-hero">
     <div class="lob-suits" aria-hidden="true"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></div>
@@ -17,10 +20,10 @@
     </div>
   </div>
 
-  <div class="lob-tabs" role="tablist" aria-label="<%- t('casino.tabs') %>">
+  <div class="lob-tabs<%= rlFirst ? ' four' : '' %>" role="tablist" aria-label="<%- t('casino.tabs') %>">
     <% const tabs = [['all', t('casino.tab_all')], ['bj', '<span class="ds-ic" aria-hidden="true">🂡</span>' + t('casino.bj_title')], ['holdem', '<span class="ds-ic" aria-hidden="true">🃏</span>' + t('casino.hm_title')],
                      ['roulette', '<span class="ds-ic" aria-hidden="true">🛞</span>' + t('casino.rl.title')]]; %>
-    <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"<%= k === 'roulette' ? ' hidden' : '' %>><%- label %></button><% } %>
+    <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"<%= k === 'roulette' && !rlFirst ? ' hidden' : '' %>><%- label %></button><% } %>
   </div>
   <div class="lob-grid" id="cz-tables" aria-live="off"></div>
 
@@ -92,7 +95,8 @@
             <div class="hrgame-act hr-only"><button type="button" class="cz-btn gold sm" id="cz-open-hrrl-go" aria-label="<%- t('casino.rl.open_hr') %>"><%- t('casino.rl.open_go') %></button></div>
           </section>
         </div>
-        <p class="hrcard-lock" id="cz-hr-locked"><%- t('casino.hr_locked') %> <a href="/shop"><%- t('casino.hr_store') %></a></p>
+        <%# (review) with roulette open to the viewer the note names the 💎 wheels too (renderLobby swaps the two by the lobby answer) %>
+        <p class="hrcard-lock" id="cz-hr-locked"><span id="cz-hr-locked-t"<%= rlFirst ? ' hidden' : '' %>><%- t('casino.hr_locked') %></span><span id="cz-hr-locked-rl"<%= rlFirst ? '' : ' hidden' %>><%- t('casino.hr_locked_rl') %></span> <a href="/shop"><%- t('casino.hr_store') %></a></p>
       </div>
     </div>
   </div>

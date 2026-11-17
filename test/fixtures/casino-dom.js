@@ -2,7 +2,8 @@
 // partials, and page(markup, api, opts) that runs public/js/casino-ui.js on it. Moved here from test/casino-themes-ui.test.js
 // (roulette2 WP5a) so test/casino-lobby.test.js shares it. page() opts: sound (also casino-sound.js), pre (scripts evaluated
 // before casino-ui.js, e.g. rlbets.js's source with module hidden), hash (location.hash at load). fetch answers by PATH (the
-// query string is dropped: the lobby asks /api/casino/lobby?rl=1); every GET is recorded in gets, every POST in posts.
+// query string is dropped: the lobby asks /api/casino/lobby?rl=1; an answer's __status is the response's status); every GET is
+// recorded in gets, every POST in posts. The DOM keeps a focus (focus(), document.activeElement - the body once it's removed).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -19,6 +20,10 @@ function miniDom() {
   const decode = (s) => s.replace(/&(#\d+|#x[0-9a-f]+|amp|lt|gt|quot|apos);/gi, (m, e) => (e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : +e.slice(1))
     : { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" }[e.toLowerCase()]));
   const doc = { listeners: {}, hidden: false };
+  // (roulette2 WP5a review) the focus: document.activeElement is the element focus() was last called on while it is in the page,
+  // else the body - as a browser does when the focused element is removed (a redraw's innerHTML)
+  let focused = null;
+  Object.defineProperty(doc, "activeElement", { get: () => (focused && doc.documentElement.contains(focused) ? focused : doc.body), enumerable: true });
   function text(s) { return { nodeType: 3, _t: s, parentNode: null, get textContent() { return this._t; }, set textContent(v) { this._t = String(v); },
                               cloneNode() { return text(this._t); }, remove() { if (this.parentNode) this.parentNode._drop(this); } }; }
   function el(tag) {
@@ -41,6 +46,7 @@ function miniDom() {
                              if (i < 0) this.childNodes.push(c); else this.childNodes.splice(i, 0, c); return c; },
       _drop(c) { const i = this.childNodes.indexOf(c); if (i >= 0) this.childNodes.splice(i, 1); c.parentNode = null; },
       remove() { if (this.parentNode) this.parentNode._drop(this); },
+      focus(o) { focused = this; this.focusOpts = o || null; }, blur() { if (focused === this) focused = null; },
       contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; },
       cloneNode(deep) { const c = el(this.localName); c.attrs = Object.assign({}, this.attrs); if (deep) for (const k of this.childNodes) c.appendChild(k.cloneNode(true)); return c; },
       addEventListener(k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); }, removeEventListener() {},
@@ -154,7 +160,7 @@ function page(markup, api, opts) {
     const key = String(url).split("?")[0];          // (roulette2 WP5a: the lobby asks /api/casino/lobby?rl=1)
     gets.push(String(url));
     const j = typeof api[key] === "function" ? api[key]() : api[key];
-    return { json: async () => j || {} };
+    return { status: (j && j.__status) || 200, json: async () => j || {} };     // (an answer's __status: e.g. a closed table's 404)
   };
   const store = {}, timers = [];
   const window = { matchMedia: () => ({ matches: false, addEventListener() {} }), localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } } };

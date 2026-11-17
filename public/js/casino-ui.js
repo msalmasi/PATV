@@ -422,7 +422,7 @@
     const locked = hr && !(me && me.high_roller);              // a High Roller table: everyone else can only watch
     const join = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
       : `<a class="cz-btn gold sm" href="${url}${signed ? (hm ? "?sit=1" : "#bet") : ""}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("join", "Join"))}</a>`;
-    return `<article class="tcard${hm ? " hm" : ""}${hr ? " hr" : ""}" aria-label="${esc(T("table_of", "{host}'s table", { host: t.host }))}">` +
+    return `<article class="tcard${hm ? " hm" : ""}${hr ? " hr" : ""}" data-id="${esc(t.id)}" aria-label="${esc(T("table_of", "{host}'s table", { host: t.host }))}">` +
       `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : hm ? "🃏" : "🂡"}</span><div><b>${esc(T("table_of", "{host}'s table", { host: t.host }))}</b>` +
       `<small>${esc(hm ? T("g_holdem", "No-Limit Hold'em") : T("g_bj", "Blackjack"))} · ${esc(phaseText(t))}</small></div></div>` +
       `<div class="seatdots" aria-label="${esc(T("seats_v", "{n} of {max} seats taken", { n: t.players, max: t.max_seats }))}">${dots}<span>${fmt(t.players)}/${fmt(t.max_seats)}</span></div>` +
@@ -481,10 +481,10 @@
     const locked = hr && !(me && me.high_roller);              // a 💎 wheel: everyone else can only watch
     const play = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
       : `<a class="cz-btn gold sm" href="${url}"${full ? ' aria-disabled="true"' : ""}>${esc(full ? T("full", "Full") : T("rl_play", "Play"))}</a>`;
-    return `<article class="tcard rl${hr ? " hr" : ""}" aria-label="${esc(title)}">` +
+    return `<article class="tcard rl${hr ? " hr" : ""}" data-id="${esc(t.id)}" aria-label="${esc(title)}">` +
       `<div class="tcard-h"><span class="ic" aria-hidden="true">${hr ? "💎" : "🛞"}</span><div><b>${esc(title)}</b>` +
       `<small>${esc(T("g_rl", "Single-zero roulette"))} · ${wheelPhase(t)}</small></div></div>` +
-      `<div class="rl-last" role="group" aria-label="${esc(T("rl_recent", "Last spins"))}">${pockets}</div>` +
+      `<div class="rl-last" role="group" aria-label="${esc(T("rl_recent_order", "Last spins, newest first"))}">${pockets}</div>` +   // (review: the order is said, not only drawn)
       `<p class="rl-tally">${esc(tally)}</p>` +
       `<div class="meta"><span class="tag gold">${esc(limits)}</span>${hr ? `<span class="tag hr">💎 ${esc(T("high_roller", "High Roller"))}</span>` : ""}` +
       `${t.lobby ? `<span class="tag">${esc(T("rl_lobby", "Lobby wheel"))}</span>` : ""}${where}` +
@@ -496,8 +496,24 @@
   const TABS = ["all", "bj", "holdem", "roulette"];
   const isLobbyWheel = (t) => t.game === "roulette" && !!t.lobby;
   const blindsLabel = (sb, bb) => (sb >= 100000 ? `${short(sb)}/${short(bb)}` : `${fmt(sb)}/${fmt(bb)}`);
-  /** innerHTML only when it changed (a 4 s poll with nothing new keeps the cards - and the focus - as they are) */
-  function fill(el, html) { if (el.dataset.v !== html) { el.dataset.v = html; el.innerHTML = html; } }
+  /** innerHTML only when it changed (a 4 s poll with nothing new keeps the cards as they are). (review) A redraw keeps the keyboard
+   *  focus: a wheel's card changes on nearly every poll during play (players, staked, phase, its clock), so a focused link or button
+   *  in a card (data-id = its table) is found again in the redrawn card - the same control by its tag and class (Play / Join, Watch,
+   *  Fair: one of each in a card; a Fair link's round moves on), else the card's first one - and focused without a scroll. A card
+   *  that has gone (or moved to the other grid) loses it. */
+  function fill(el, html) {
+    if (el.dataset.v === html) return;
+    const a = document.activeElement;
+    const card = a && a !== el && el.contains(a) && a.closest ? a.closest("[data-id]") : null;
+    const was = card ? { id: card.getAttribute("data-id"), tag: a.tagName, cls: a.getAttribute("class") || "" } : null;
+    el.dataset.v = html;
+    el.innerHTML = html;
+    if (!was) return;
+    const again = Array.from(el.querySelectorAll("[data-id]")).find((c) => c.getAttribute("data-id") === was.id);
+    const ctl = again ? Array.from(again.querySelectorAll("a, button")) : [];
+    const hit = ctl.find((x) => x.tagName === was.tag && (x.getAttribute("class") || "") === was.cls) || ctl[0];
+    if (hit && typeof hit.focus === "function") { try { hit.focus({ preventScroll: true }); } catch (e) { hit.focus(); } }
+  }
   function renderLobby() {
     const j = lobbyData;
     if (!j) return;
@@ -585,6 +601,9 @@
     const hrRl = $("cz-hrsec-rl"), rlHr = rlLim && rlLim.hr ? rlLim.hr : null;
     if (hrRl) hrRl.hidden = !rlOn || !rlHr;
     if (hrRl && !hrRl.hidden) $("cz-hrrl").textContent = T("rl_open_limits", "Bets from {min} PAT · up to {spin} PAT a spin, all your bets together.", { min: fmt(rlHr.min_bet), spin: fmt(rlHr.max_spin) });
+    // (review) the note under the sub-sections names the 💎 wheels too while theirs shows (the partial draws both; the page guessed one)
+    const lockT = $("cz-hr-locked-t"), lockRl = $("cz-hr-locked-rl");
+    if (lockT && lockRl) { const w = !!(hrRl && !hrRl.hidden); lockT.hidden = w; lockRl.hidden = !w; }
     const shownSecs = ["cz-hrsec-bj", "cz-hrsec-hm", "cz-hrsec-rl"].filter((id) => $(id) && !$(id).hidden).length;
     $("cz-open-hr").classList.toggle("one", shownSecs === 1);
     $("cz-open-hr").classList.toggle("three", shownSecs === 3);
@@ -778,6 +797,11 @@
     if (j.ok && j.table) {
       location.href = g === "roulette" ? "/casino/roulette/t/" + encodeURIComponent(j.table)
                     : (g === "holdem" ? "/casino/holdem/t/" : "/casino/blackjack/t/") + j.table + (g === "holdem" ? "?sit=1" : "#bet");
+    } else if (g === "roulette" && j.table && typeof j.table === "string") {
+      // (review) "You already have a roulette wheel open" is the one refusal that names a wheel (j.table, your web wheel): go to it - its
+      // 🎛️ Host Tools close it. A retry after a lost answer lands here too, on the wheel the first try opened.
+      toast(j.reply || j.error || T("rl_open_fail", "Couldn't open a wheel."), true);
+      location.href = "/casino/roulette/t/" + encodeURIComponent(j.table);
     } else toast(j.reply || j.error || (g === "roulette" ? T("rl_open_fail", "Couldn't open a wheel.") : T("open_fail", "Couldn't open a table.")), true);
   }
   /** roulette2 (WP5a): #all / #bj / #holdem / #roulette picks the lobby's tab (the page's own game when none); a tab you pick is
@@ -1042,6 +1066,12 @@
     });
   }
 
+  /** (review) where a closed player's or room's wheel sends you back to: #cb's data-lobby - the lobby's 🛞 tab on the page the casino's
+   *  front end uses (e.g. /casino/blackjack#roulette; views/casino-rl.ejs) - else Pepe's lobby wheel (/casino/roulette), as before */
+  function rlLobby() {
+    const p = String(root.dataset.lobby || "");
+    return /^\/(?!\/)[\w\-/]*(?:#roulette)?$/.test(p) ? p : "/casino/roulette";
+  }
   /** the table loop: poll the table's state about once a second (slower in a background tab); render() draws it.
    *  opts.first: a query string for the first request only (1.99aof: the wheel's "?notice=1" - its one-time notice) */
   function startTable(render, opts) {
@@ -1070,7 +1100,7 @@
           const dock = $("cz-dock");
           if (dock) dock.hidden = true;
           const m = $("cz-msg");
-          if (m) m.innerHTML = `${esc(T("closed", "That table has closed."))}<small><a href="${game === "roulette" ? "/casino/roulette" : game === "holdem" ? "/casino/holdem" : "/casino/blackjack"}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
+          if (m) m.innerHTML = `${esc(T("closed", "That table has closed."))}<small><a href="${esc(game === "roulette" ? rlLobby() : game === "holdem" ? "/casino/holdem" : "/casino/blackjack")}">${esc(T("back_lobby", "Back to the lobby"))}</a></small>`;
           return;
         }
         const d = await r.json();

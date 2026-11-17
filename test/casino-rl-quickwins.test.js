@@ -240,14 +240,15 @@ test("O3: the layout's 🛞 Roulette link sits after Hold'em in Play when roulet
   assert.equal(given, can, "the layout passes its can() (the request's user)");
   for (const cls of ["nav-more", "nav-burger"]) {
     const pop = new RegExp('<details class="' + cls + '">[\\s\\S]*?</details>').exec(n)[0];
-    assert.match(pop, /href="\/casino\/holdem" class="nav-link"[^>]*>[\s\S]*?<\/a><a href="\/casino\/roulette" class="nav-link" title="Roulette"><span class="ic">🛞<\/span><span class="nav-lbl">Roulette<\/span><\/a>/, cls);
+    // (roulette2 WP5a review: with the PATV casino the link is the lobby's 🛞 tab - test/casino-lobby.test.js covers every front)
+    assert.match(pop, /href="\/casino\/holdem" class="nav-link"[^>]*>[\s\S]*?<\/a><a href="\/casino\/blackjack#roulette" class="nav-link" title="Roulette"><span class="ic">🛞<\/span><span class="nav-lbl">Roulette<\/span><\/a>/, cls);
   }
-  assert.doesNotMatch(nav(await render({ user: "someuser", rouletteOn: () => false })), /\/casino\/roulette/);
-  assert.doesNotMatch(nav(await render({ user: "someuser" })), /\/casino\/roulette/, "rendered without the casino routes: hidden");
+  assert.doesNotMatch(nav(await render({ user: "someuser", rouletteOn: () => false })), /\/casino\/roulette|title="Roulette"/);
+  assert.doesNotMatch(nav(await render({ user: "someuser" })), /\/casino\/roulette|title="Roulette"/, "rendered without the casino routes: hidden");
   // a guest, with the casino closed to guests (guestaccess covers /casino/*): hidden even while it's open to everyone
   n = nav(await render({ rouletteOn: () => true, guestHides: (h) => /^\/casino(\/|$)/.test(h) }));
-  assert.doesNotMatch(n, /\/casino\/roulette/);
-  assert.match(nav(await render({ rouletteOn: () => true })), /href="\/casino\/roulette"/, "a guest sees it while guests may visit");
+  assert.doesNotMatch(n, /\/casino\/roulette|title="Roulette"/);
+  assert.match(nav(await render({ rouletteOn: () => true })), /href="\/casino\/blackjack#roulette" class="nav-link" title="Roulette"/, "a guest sees it while guests may visit");
 });
 
 // 1.99aoh review: measured in Chrome (320 / 360 px, dir=rtl, the summary's computed name, forced-colors: active) - these are
