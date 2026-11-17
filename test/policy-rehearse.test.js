@@ -546,7 +546,7 @@ test("notices: the copy's Telegram reach - status WARNs, guarantee / overflow se
   try {
     // the link works: a notice filed outside the tool becomes an alert (what the staging site / staging Pepe's runs would queue)
     assert.equal(await inbox.add("u1", { kind: "staking", title: "Staking payout: +1 PAT", ref: "wf:test-tg-outside:s1" }), true);
-    await settle();
+    for (let i = 0; i < 30 && !(await outbox()).length; i++) await new Promise((r) => setTimeout(r, 100));
     assert.deepEqual((await outbox()).map((x) => x.ref), ["n:wf:test-tg-outside:s1"]);
     assert.deepEqual(await R.noticeRisk(), { links: 1, unsent: 1 });
     const st = await R.status({ at: MON });
