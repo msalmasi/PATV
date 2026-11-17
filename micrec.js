@@ -16,7 +16,9 @@
 //   2. The owner sync's `retention_keep` block (keepBlock; POST /api/rooms/owners answer - roomsweb.js; read by the bot's
 //      pepe_retention.parse_keep): legal holds (rooms, people), open reports on 🎙 lines and each room's tier lapses still inside
 //      their own 30-day grace (the site's subscriptions + the chat archive's tier tracking, the latest loss of each tier). `ok` is
-//      true only when every part was read in full - Pepe deletes nothing without a complete block from the last hour.
+//      true only when every part was read in full - Pepe deletes nothing without a complete block from the last hour. 1.99aon: + each
+//      pad's FORMER room ids (former_rooms: a house rotation moves the house pad to a new Camfrog id - what Pepe filed under the old
+//      one keeps the pad's tier; formerRooms below).
 //   3. Account deletion's "Also delete my mic recordings" (accountdelete.js stores the choice; recWindowsOf / queueRecDeletes /
 //      retryRecDeletes here): one website action "privacy.recdelete" [before (unix s)] per Camfrog login the account had (bot
 //      pepe_mydata: the login's recordings made before then, holds kept); re-asked every 6 hours for 30 days until Pepe takes it.
@@ -331,11 +333,14 @@ const hashOf = (login) => require("./chatlog").hash(login);
  * and the chat archive's tier tracking (chatlogview lapses: when the site saw the downgrade). Throws when the subscriptions can't
  * be read (the block is then incomplete).
  */
+/** A pad's retention tier now: "unlimited" | "prime" | "standard" (premium.padPerks; "standard" on any doubt). */
+function tierNow(room) {
+  try { const x = require("./premium").padPerks(room).retention; return TIER_RANK[x] != null ? x : "standard"; } catch (e) { return "standard"; }
+}
 async function lapseMap(t = now()) {
   const P = require("./premium");
   await P.init();
   const out = new Map();
-  const tierNow = (room) => { try { const x = P.padPerks(room).retention; return TIER_RANK[x] != null ? x : "standard"; } catch (e) { return "standard"; } };
   const add = (room, tier, at) => {
     if (!room || TIER_RANK[tier] == null || !(at > 0) || at > t || t - at >= GRACE_MS) return;
     const cur = tierNow(room);
@@ -361,6 +366,57 @@ async function lapseMap(t = now()) {
   return out;
 }
 
+// ── 1.99aon: a pad's FORMER room ids (owner 2026-11-17: "Fix PepeFrog.Room which is now TheNewSpot so it isn't deleted. It will
+// also get a new room in the future.") ──
+// Pepe files his history (chat logs, mic transcripts, mic recordings) under the Camfrog room id it was made in. A house rotation
+// (houserotate.js - Pepe's account changes, his home pad moves to the new account's room) moves the PAD and, by default, its chat
+// archive; the old id leaves the registry, so for Pepe it was a room with no pad - "no tier" after its 30-day grace, and the
+// nightly pass would delete the house pad's whole history under it. The owner sync now names every former id of a pad and the id
+// the pad has NOW (Pepe's retention gives what was made under the old id before the move the pad's windows, holds included):
+//   * the sources: the rotation journal (house_rotations: every move to a new id, `at` = when) and rooms_kv house_room.prev (the
+//     end of its `until` day, for an id the journal doesn't have). Every rotation that comes later adds itself - nothing to do by
+//     hand. A rotation that LEFT the archive under the old id (archive "keep" -> result "kept") isn't one: by the owner's choice
+//     that history is "no pad" (purged to the free window after the grace), as houserotate.js says.
+//   * a pad connect / disconnect (padrekey.js) is NOT one: the chat archive stays with the Camfrog room there (CL2), so a room
+//     that loses its pad really loses its tier.
+//   * an older Pepe (before bot 1.99aoo) reads only `tiers` and `held_rooms`: each former id the registry doesn't have (nobody's
+//     pad now) also rides in `tiers` at its pad's tier and lapses, marked "via" (a newer Pepe ignores that raise - he has the
+//     time-bounded rule - and keeps the lapses), and the former ids of a held pad join `held_rooms`.
+const FORMER_MAX = 2000;                   // former ids in one block (more -> complete: false: Pepe deletes nothing)
+const utcDayEnd = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s == null ? "" : s).trim()); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) + DAY : null; };
+/**
+ * Every former room id of a pad -> [{id, to (the pad's id now), until (ms: when the pad moved away; null = not known)}]. Today
+ * only the house pad moves (houserotate.js), so `to` is the house room. Throws when the journal can't be read.
+ */
+async function formerRooms() {
+  const R = require("./rooms");
+  let h = null;
+  try { h = JSON.parse(((await getQuery("SELECT value FROM rooms_kv WHERE key = 'house_room'"))[0] || {}).value || "null"); } catch (e) { h = null; }
+  const cur = (h && typeof h.id === "string" && h.id) || R.houseRoom();
+  const byId = new Map(), kept = new Set();
+  const add = (id, until) => {
+    id = String(id == null ? "" : id).trim();
+    if (!id || low(id) === low(cur) || !R.ROOM_ID_RE.test(id)) return;
+    const x = byId.get(low(id));
+    if (!x) byId.set(low(id), { id, to: cur, until });
+    else if (x.until != null && (until == null || until > x.until)) x.until = until;   // its latest move away (null: no end known)
+  };
+  if (await tableThere("house_rotations")) {
+    for (const r of await getQuery("SELECT from_id, to_id, at, result FROM house_rotations ORDER BY id")) {
+      if (!r.from_id || !r.to_id || low(r.from_id) === low(r.to_id)) continue;     // a rename / login-only change: the same room
+      let res = null;
+      try { res = r.result ? JSON.parse(r.result) : null; } catch (e) { res = null; }
+      if (res && res.archive === "kept") { kept.add(low(r.from_id)); continue; }
+      add(r.from_id, Number(r.at) > 0 ? Number(r.at) : null);
+    }
+  }
+  for (const p of (h && Array.isArray(h.prev) ? h.prev : [])) {
+    if (!p || typeof p.id !== "string" || kept.has(low(p.id)) || byId.has(low(p.id))) continue;
+    add(p.id, utcDayEnd(p.until));
+  }
+  return [...byId.values()];
+}
+
 let keepCache = null;                      // {at, block}
 let keepStats = null;                      // the admin card: the last block's counts (no names)
 /**
@@ -370,7 +426,7 @@ let keepStats = null;                      // the admin card: the last block's c
 async function keepBlock({ t = now(), fresh = false } = {}) {
   if (!fresh && keepCache && t - keepCache.at < KEEP_CACHE_MS && t >= keepCache.at) return keepCache.block;
   let complete = true;
-  const block = { ok: false, v: 1, at: Math.floor(t / 1000), complete: true, policy: false, held_rooms: [], held_who_h: [], reported_tx: {}, tiers: {} };
+  const block = { ok: false, v: 1, at: Math.floor(t / 1000), complete: true, policy: false, held_rooms: [], held_who_h: [], reported_tx: {}, tiers: {}, former_rooms: {} };
   try { await init(); block.policy = policyOn(); } catch (e) { complete = false; }
   // 1. the tier lapses inside their grace (bot: tiers {room: {tier, lapsed: [{tier, at (ms)}]}} - Pepe's own record covers the rest)
   try {
@@ -421,11 +477,31 @@ async function keepBlock({ t = now(), fresh = false } = {}) {
       }
     }
   } catch (e) { complete = false; console.error("[micrec] keep block - reports:", e.message); }
+  // 4. 1.99aon: the pads' former room ids (formerRooms) - {old id: [{to, until (ms | null)}]}; + an older Pepe's copies
+  let via = 0;
+  try {
+    const fr = await formerRooms();
+    if (fr.length > FORMER_MAX) complete = false;
+    const reg = new Set((await getQuery("SELECT room_id FROM rooms_registry")).map((r) => low(r.room_id)));
+    const held = new Set(block.held_rooms.map(low));
+    const tierKey = (id) => Object.keys(block.tiers).find((k) => low(k) === low(id));
+    const extraHeld = [];
+    for (const x of fr.slice(0, FORMER_MAX)) {
+      block.former_rooms[x.id] = [{ to: x.to, until: x.until }];
+      if (reg.has(low(x.id))) continue;          // somebody's pad now: its own data keeps its own rules (only Pepe 1.99aoo's dated rule)
+      const tier = tierNow(x.to), tk = tierKey(x.to), tkx = tierKey(x.id);
+      const lapsed = tk ? block.tiers[tk].lapsed.map((e) => ({ ...e })) : [];
+      if (!tkx && (tier !== "standard" || lapsed.length)) { block.tiers[x.id] = { tier, lapsed, via: x.to }; via++; }
+      if (held.has(low(x.to)) && !held.has(low(x.id))) extraHeld.push(x.id);
+    }
+    block.held_rooms.push(...extraHeld);
+  } catch (e) { complete = false; console.error("[micrec] keep block - former rooms:", e.message); }
   block.complete = complete;
   block.ok = complete;                                    // the bot reads only a block with ok: true (else he deletes nothing)
   keepCache = { at: t, block };
-  keepStats = { at: t, complete, grace_rooms: Object.keys(block.tiers).length, held_rooms: block.held_rooms.length,
-                held_people: block.held_who_h.length, reported_lines: Object.values(block.reported_tx).reduce((n, l) => n + l.length, 0) };
+  keepStats = { at: t, complete, grace_rooms: Object.keys(block.tiers).length - via, held_rooms: block.held_rooms.length,
+                held_people: block.held_who_h.length, reported_lines: Object.values(block.reported_tx).reduce((n, l) => n + l.length, 0),
+                former_rooms: Object.keys(block.former_rooms).length };
   return block;
 }
 
@@ -931,5 +1007,6 @@ module.exports = { init, register, policyOn, pepeCan, setPolicy, cfg, privacyCop
                    ownSince, scrubLateAcks, alertSkipped, REC_SKIP_REMIND_MS,                                    // review 2
                    pepeGaps, drift, accountHoldHashes, REC_WAIT_WARN_MS,                                         // review 4
                    unknownCopy, UNKNOWN_OK, ruleChanges, gapsNow,                                                // 1.99afv (+ review)
+                   formerRooms, tierNow, FORMER_MAX,                                                             // 1.99aon
                    _setClock: (f) => { clock = f || (() => Date.now()); }, _resetCache: () => { keepCache = null; keepStats = null; },
                    _loadCfg: () => loadCfg() };                                                                  // (tests)

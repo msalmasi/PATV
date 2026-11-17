@@ -312,7 +312,9 @@
       (d.unknown_published ? ' · published with the switch: ' + d.unknown_published.rule + (d.unknown_published.split_since ? ' (made before ' + when(d.unknown_published.split_since) + ' UTC)' : '') +
         (d.unknown_published.at ? ', since ' + when(d.unknown_published.at) + ' UTC' : '') : '');
     keep.textContent = k ? 'Keep block (built ' + when(k.at) + ' UTC' + (k.complete ? '' : ', INCOMPLETE: Pepe deletes no audio') + '): ' + k.grace_rooms +
-      ' room(s) in a tier\'s grace, ' + k.held_rooms + ' room(s) and ' + k.held_people + ' person(s) on a legal hold, ' + k.reported_lines + ' reported 🎙 line(s).' : 'Keep block: not built yet.';
+      ' room(s) in a tier\'s grace, ' + k.held_rooms + ' room(s) and ' + k.held_people + ' person(s) on a legal hold, ' + k.reported_lines + ' reported 🎙 line(s)' +
+      // 1.99aon: a pad's former Camfrog room ids (house rotations) - what Pepe filed under them keeps the pad's tier
+      (k.former_rooms ? ', ' + k.former_rooms + ' former room id(s) kept with their pad\'s tier' : '') + '.' : 'Keep block: not built yet.';
     exps.textContent = x ? 'Download my data: ' + x.waiting + ' waiting for Pepe\'s part (at most ' + x.pepe_jobs_max + ' asked at once), ' + (x.held || 0) + ' waiting their turn, ' + x.rec_inflight + ' of ' + x.rec_jobs_max + ' recordings exports in flight, ' +
       size(x.rec_ready_bytes) + ' of recordings exports ready (' + size(x.rec_disk_max) + ' budget), ' + x.gave_up_7d + ' finished without Pepe in 7 days.' : '';
     dels.textContent = '';

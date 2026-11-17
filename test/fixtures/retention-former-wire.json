@@ -1,0 +1,389 @@
+{
+ "about": "1.99aon/1.99aoo shared fixture - tools/gen_retention_former_wire.py in camfrog-bot writes it; pinned in both repos",
+ "now_ms": 1806494400000,
+ "site_rows": {
+  "rooms_registry": [
+   [
+    "NewSpot.Room",
+    "the-new-place",
+    "The New Place",
+    "house"
+   ],
+   [
+    "Lapsed_Room",
+    "lapsed-room",
+    "Lapsed Room",
+    "user"
+   ],
+   [
+    "Ancient.Room",
+    "ancient-room",
+    "Ancient Room",
+    "user"
+   ]
+  ],
+  "house_room": {
+   "id": "NewSpot.Room",
+   "title": "The New Place",
+   "slug": "the-new-place",
+   "since": 1794441037000,
+   "prev": [
+    {
+     "id": "Ancient.Room",
+     "title": "Old Place",
+     "slug": "old-place",
+     "until": "2026-06-30"
+    },
+    {
+     "id": "KeptHome.Room",
+     "title": "Kept Place",
+     "slug": "kept-place",
+     "until": "2026-09-01"
+    },
+    {
+     "id": "FrogHome.Room",
+     "title": "Frog Home",
+     "slug": "frog-home",
+     "until": "2026-11-11"
+    },
+    {
+     "id": "Swampy",
+     "title": "Swampy",
+     "slug": "swampy",
+     "until": "2026-11-11"
+    },
+    {
+     "id": "Frog_Home.Room",
+     "title": "Swampy",
+     "slug": "swampy",
+     "until": "2026-11-11"
+    }
+   ]
+  },
+  "house_rotations": [
+   [
+    1,
+    "rot-k",
+    "KeptHome.Room",
+    "FrogHome.Room",
+    1788264000000,
+    {
+     "mode": "move",
+     "archive": "kept"
+    }
+   ],
+   [
+    2,
+    "rot-a",
+    "FrogHome.Room",
+    "Swampy",
+    1794355991484,
+    {
+     "mode": "move",
+     "archive": "moved",
+     "archive_rk": 1
+    }
+   ],
+   [
+    3,
+    "rot-b",
+    "Swampy",
+    "Frog_Home.Room",
+    1794363729833,
+    {
+     "mode": "move",
+     "archive": "moved",
+     "archive_rk": 1
+    }
+   ],
+   [
+    4,
+    "rot-c",
+    "Frog_Home.Room",
+    "NewSpot.Room",
+    1794441037000,
+    {
+     "mode": "move",
+     "archive": "moved",
+     "archive_rk": 1
+    }
+   ],
+   [
+    5,
+    "rot-d",
+    "NewSpot.Room",
+    "NewSpot.Room",
+    1794441097000,
+    {
+     "mode": "login",
+     "archive": "none"
+    }
+   ]
+  ],
+  "premium_subs": [
+   [
+    "prime_plus",
+    "NewSpot.Room",
+    "comped"
+   ]
+  ],
+  "chatlog_rooms": [
+   [
+    1,
+    "NewSpot.Room"
+   ],
+   [
+    2,
+    "Lapsed_Room"
+   ]
+  ],
+  "chatlog_meta_tiers": {
+   "Lapsed_Room": {
+    "tier": "standard",
+    "prev": "prime",
+    "drop_at": 1806062400000,
+    "lapsed": [
+     {
+      "tier": "prime",
+      "at": 1806062400000
+     }
+    ]
+   }
+  },
+  "chatlog_holds": [
+   "room:1"
+  ]
+ },
+ "block": {
+  "ok": true,
+  "v": 1,
+  "at": 1806494400,
+  "complete": true,
+  "policy": false,
+  "held_rooms": [
+   "NewSpot.Room",
+   "FrogHome.Room",
+   "Swampy",
+   "Frog_Home.Room"
+  ],
+  "held_who_h": [],
+  "reported_tx": {},
+  "tiers": {
+   "Lapsed_Room": {
+    "tier": "standard",
+    "lapsed": [
+     {
+      "tier": "prime",
+      "at": 1806062400000
+     }
+    ]
+   },
+   "FrogHome.Room": {
+    "tier": "unlimited",
+    "lapsed": [],
+    "via": "NewSpot.Room"
+   },
+   "Swampy": {
+    "tier": "unlimited",
+    "lapsed": [],
+    "via": "NewSpot.Room"
+   },
+   "Frog_Home.Room": {
+    "tier": "unlimited",
+    "lapsed": [],
+    "via": "NewSpot.Room"
+   }
+  },
+  "former_rooms": {
+   "FrogHome.Room": [
+    {
+     "to": "NewSpot.Room",
+     "until": 1794355991484
+    }
+   ],
+   "Swampy": [
+    {
+     "to": "NewSpot.Room",
+     "until": 1794363729833
+    }
+   ],
+   "Frog_Home.Room": [
+    {
+     "to": "NewSpot.Room",
+     "until": 1794441037000
+    }
+   ],
+   "Ancient.Room": [
+    {
+     "to": "NewSpot.Room",
+     "until": 1782864000000
+    }
+   ]
+  }
+ },
+ "pepe": {
+  "owners": {
+   "NewSpot.Room": {
+    "plus": true,
+    "prime": true
+   },
+   "Lapsed_Room": {
+    "prime": false
+   },
+   "Ancient.Room": {
+    "prime": false
+   }
+  },
+  "lapses": {
+   "FrogHome.Room": [
+    [
+     "plus",
+     1794355991.484
+    ]
+   ],
+   "Swampy": [
+    [
+     "plus",
+     1794363729.833
+    ]
+   ],
+   "Frog_Home.Room": [
+    [
+     "plus",
+     1794441037.0
+    ]
+   ],
+   "Lapsed_Room": [
+    [
+     "prime",
+     1806062400.0
+    ]
+   ]
+  },
+  "retention": {
+   "chat_days": 30,
+   "chat_prime": null,
+   "rec_days": 30,
+   "rec_prime": 365,
+   "pm_days": 30,
+   "pm_pass": null,
+   "chat_plus": null,
+   "rec_plus": null,
+   "audio_days": 30,
+   "audio_prime": 180,
+   "audio_plus": null,
+   "delete": true,
+   "split": true,
+   "split_since": 1793336073
+  }
+ },
+ "expect": [
+  [
+   "chat",
+   "FrogHome.Room",
+   1789430400000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "FrogHome.Room",
+   1790856000000,
+   null,
+   true
+  ],
+  [
+   "rec",
+   "Swampy",
+   1794358800000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "Frog_Home.Room",
+   1794398400000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "Frog_Home.Room",
+   1795176000000,
+   30,
+   true
+  ],
+  [
+   "audio",
+   "KeptHome.Room",
+   1786752000000,
+   30,
+   false
+  ],
+  [
+   "audio",
+   "Ancient.Room",
+   1781481600000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "Ancient.Room",
+   1785542400000,
+   30,
+   false
+  ],
+  [
+   "audio",
+   "Lapsed_Room",
+   1798761600000,
+   180,
+   false
+  ],
+  [
+   "audio",
+   "NewSpot.Room",
+   1796083200000,
+   null,
+   true
+  ]
+ ],
+ "old_pepe": [
+  [
+   "audio",
+   "FrogHome.Room",
+   1790856000000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "Frog_Home.Room",
+   1795176000000,
+   null,
+   true
+  ],
+  [
+   "audio",
+   "KeptHome.Room",
+   1786752000000,
+   30,
+   false
+  ],
+  [
+   "audio",
+   "Ancient.Room",
+   1781481600000,
+   30,
+   false
+  ],
+  [
+   "audio",
+   "Lapsed_Room",
+   1798761600000,
+   180,
+   false
+  ]
+ ]
+}

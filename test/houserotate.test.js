@@ -9,6 +9,7 @@
 //     house_room, Pepe's logins, the rules intro + welcome post, the event / audit / journal; a stray pad folds in
 //   - re-apply = already; seed() makes no ghost house pad; the HTTP route + the owner sync's identity / house_room
 //   - restore_of: the round trip (and what it refuses after); a case-only fix
+//   - 1.99aon: each rotation's journal row makes the old id the pad's former room for Pepe's retention (micrec.formerRooms), undo included
 //   - review fixes: the room's privacy audit (seethrough_log) and where an on-air consent was asked (onair_consent.room) stay with
 //     the Camfrog room (S11); a bot key of another caller is refused (S9); a SEEDS id gets its marker even without a seeded: row (F8)
 //   TZ=UTC NODE_PATH=G:/PATV/node_modules node --test test/houserotate.test.js
@@ -386,6 +387,9 @@ test("apply (the API): the house pad becomes The_Swamp - rows, evidence kept, ga
   assert.deepEqual([j.from_id, j.to_id, B.registry.from.slug, B.registry.to.slug, B.welcome.id], [OLD, NEW, "pepes-pad", "swamp-old", "w1"]);
   assert.equal(B.rows["test_pad_rows.room_id"].length, 4);
   assert.equal(JSON.parse(j.result).archive, "moved");
+  // 1.99aon: the rotation's journal row IS the record Pepe's retention needs - the old id is the pad's former room from now on, with
+  // nothing done by hand (micrec.formerRooms -> the owner sync's retention_keep.former_rooms)
+  assert.deepEqual(await require(path.join(repo, "micrec")).formerRooms(), [{ id: OLD, to: NEW, until: j.at }]);
   // the site Admins heard about it
   assert.ok(await one("SELECT 1 AS x FROM inbox WHERE user_id = ? AND title LIKE '%House pad%'", [U.admin.userId]), "one notice to each site Admin");
 });
@@ -464,6 +468,9 @@ test("restore_of: the undo puts the house pad back (the login stays); a later un
   assert.deepEqual((await RK.vaultRekeysForPepe()).map((x) => [x.from, x.to]), [[OLD, NEW], [NEW, OLD]], "the vault goes back too");
   const j = await one("SELECT restored_by FROM house_rotations WHERE key = ?", [KEY]);
   assert.equal(j.restored_by, (await one("SELECT id FROM house_rotations WHERE key = ?", [KEY + "-undo"])).id);
+  // 1.99aon: after the undo the old id is the house again (never its own former room) and the id it went back FROM is one
+  const undo = await one("SELECT at FROM house_rotations WHERE key = ?", [KEY + "-undo"]);
+  assert.deepEqual(await require(path.join(repo, "micrec")).formerRooms(), [{ id: NEW, to: OLD, until: undo.at }]);
   // again: already; another undo of it / the forward key again: refused
   assert.equal((await H.apply({ restore_of: KEY, to: { login: "Pepe_Frog" } }, { live: false })).already, true);
   await assert.rejects(H.apply({ restore_of: KEY, key: "undo-2", to: { login: "Pepe_Frog" } }, { live: false }), (e) => e.code === "already_restored");
