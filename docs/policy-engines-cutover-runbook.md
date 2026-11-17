@@ -677,21 +677,24 @@ below are points. Live with the owner; never 03:30-04:30 UTC.
 ### 15.1 The tool
 
 `node tools/policy-rehearse.js <command> --db=<staging copy>/myapp.db [...]`, in the staging checkout, with `PATV_ENV=staging`
-and `STAGING=1` (it refuses without both).
+and `STAGING=1` set **on the command itself** (`PATV_ENV=staging STAGING=1 node tools/policy-rehearse.js ...`, never `export`ed
+into the shell: the same SSH session may run prod's H2a commands later). It refuses without both.
 
 | Command | Options | What it does |
 |---|---|---|
-| `status` | `--at` [`--leg`] | read only: engines (mode, paused, armed), owners, a test clock on the database (WARN), Pepe's push age, the system pools, the settings the legs read, and per leg what the setup would move and plan at `--at` (reachable / refused and why) |
-| `setup` | `--leg --tag --at` [`--margin`] | forces the leg's state: ONE keyed pool move between system pools (`pool_moves` `rehearse:<tag>:<leg>`, flow `policy_rehearsal`, via `staging`, net 0) + its receipt (`policy_meta` `rehearse:<tag>:<leg>`: before / after balances, the legs, the plan it reaches), in ONE `dbUtils.tx`. A state already there moves nothing (the receipt still records it). Rolled back whole when the leg isn't reached |
-| `tick` | `--leg --tag --at` | one pass of the REAL scheduler (`policy/scheduler.js pass`) in this process at `--at`, period ids `<id>-<tag>`, only the leg's engines; prints `ran`, the rows written during the pass, the supply before / after vs the expected change, the evidence and the verdict |
+| `status` | `--at` [`--leg`] | read only: engines (mode, paused, armed), owners, a test clock on the database (WARN), Pepe's push age, the system pools, the copy's Telegram reach (prod members' `telegram_links` / unsent `telegram_outbox` rows: WARN), every setup still open (`open setup rehearse:<tag>:<leg> ...` with its undo command; WARN, and a FAIL with exit 3 from 02:30 to 04:30 UTC: the real 04:00 run would act on a forced state), the settings the legs read, and per leg what the setup would move and plan at `--at` (reachable / refused and why) |
+| `setup` | `--leg --tag --at` [`--margin`] [`--allow-notices`] | forces the leg's state: ONE keyed pool move between system pools (`pool_moves` `rehearse:<tag>:<leg>`, flow `policy_rehearsal`, via `staging`, net 0) + its receipt (`policy_meta` `rehearse:<tag>:<leg>`: before / after balances, the legs, the plan it reaches), in ONE `dbUtils.tx`. A state already there moves nothing (the receipt still records it). Rolled back whole when the leg isn't reached. `guarantee` / `overflow` (their ticks run a tagged epoch: staking payout notices) are refused while the copy holds Telegram links or unsent alerts, unless `--allow-notices` |
+| `tick` | `--leg --tag --at` | one pass of the REAL scheduler (`policy/scheduler.js pass`) in this process at `--at`, period ids `<id>-<tag>`, only the leg's engines; prints `ran`, the rows written during the pass, the supply before / after vs the expected change, the evidence and the verdict. The pass files its inbox notices but queues no Telegram alert (the tool's process only) |
 | `inspect` | `--tag` [`--leg`] | read only: the receipts, the tag's runs, the site's plan next to Pepe's report (field by field, `ok`, the boundary, the blocking diffs), the effects (cap notices), the mints, the pool moves, the burns since the setup, the verdict |
 | `undo` | `--leg --tag --at` [`--after-run`] | reverses exactly the setup's own legs (ONE keyed move `rehearse:<tag>:<leg>:undo`). Without `--after-run` the system pools must be as the setup left them (every balance back to the PAT). With it (an engine leg - or anything else - moved them since) it still reverses only the setup's legs and prints what is left and the moves that explain it. Refused once the burn reserve moved (giving it back would pay out of the burn reserve) |
-| `snapshot` | | read only, JSON: PAT-row counts, the max `pool_moves` rowid, the supply, the modes |
-| `cutcheck` | `--before=<snapshot file>` | read only: after the cutover - the engines live, every period of Pepe's pushed journals (every done epoch, the last 30 release / monetary days: what his handshake hands) `handed` / `done`, zero PAT rows since the snapshot (`new_moves` lists any), the supply unchanged |
+| `snapshot` | | read only, JSON: PAT-row counts and the max rowid of each PAT table, the time, the supply, the modes |
+| `cutcheck` | `--before=<snapshot file>` | read only: after the cutover - the engines live, every period of Pepe's pushed journals (every done epoch, the last 30 release / monetary days: what his handshake hands) `handed` / `done`, no period he handed run again by the site, no PAT row from the hand-over (no cutover / import row, no leg of a period he handed, no engine leg that no site run since the snapshot explains), the supply reconciled with the burns and mints since the snapshot. Live activity in between - the staging site's own burn accrual (live from the cutover on), its runs of periods that fell due, Pepe's last burns, charges - prints as `INFO`, never a FAIL |
 
 **Legs** (`--leg`): `floor` (the Fed under its floor with cap room: mints min(need, daily, room)), `floorcap` (the Fed under its
 floor while the month's floor cap binds: mints the room left - 0 too - and writes `cap_hit:floor-<month>`), `guarantee` (a Monday:
-incentives to 0; the tagged epoch, the release, then the top-up), `ceiling` (the Fed at its ceiling + the margin: the excess
+incentives ALWAYS moved to 0 - into the Fed - even when they are already under the target: the guarantee's base is the tagged
+epoch's `incentives_after`, and that epoch's own share can lift them over the target before the top-up; prod's copy: ~20.6M
+into the Fed; then the tagged epoch, the release, the top-up), `ceiling` (the Fed at its ceiling + the margin: the excess
 released by `fed_ceiling_action`), `burn` (+250,000 into the burn reserve), `overflow` (Fort Knox at its cap + the margin, the cap
 as the daily plan computes it on both the test clock and the real clock). `--margin` (default 10,000) is how far past the line
 the ceiling / overflow / floor are put. One leg per tag; a tag is 3-8 lowercase letters / digits, a letter first, never reused.
@@ -730,15 +733,22 @@ force one.
    - his engine switches OFF (he runs the engines) and the site's three engines `shadow`: `!econ engines status`.
 5. `status` (below) shows no test clock (`WARN the database carries a test clock`: clear it with
    `POST /api/policy/admin/test-clock {at: null}` first).
-6. **Notices.** The copy keeps prod's `telegram_links`: a staging inbox notice (the epoch's staking payouts, the weekly digest)
-   is queued as a Telegram alert (`telegram_outbox`). Before the guarantee leg (its tagged epochs pay stakers on staging - Pepe's
-   in shadow, the site's live), make sure staging Pepe's Telegram bridge doesn't deliver them (owner's call).
-7. On the VPS:
+6. **Notices.** The refresh keeps prod's `telegram_links` and prod's unsent `telegram_outbox` rows (it scrubs only web push).
+   Every staging inbox notice for a linked member becomes a Telegram alert (`inbox.add` -> `telegram.onNotice`), and staging Pepe
+   drains that queue: the tagged epochs' staking payouts (Pepe's in shadow, the staging site's live), the weekly digest, the
+   pause's ops alerts. Staking alerts are opt-in, ops alerts default on for admins. Scrub the staging copy right after the
+   refresh, before any rehearsal step (staging only; staging has no use for prod members' links):
+   ```bash
+   sqlite3 /home/PATV-staging/myapp.db "DELETE FROM telegram_links; DELETE FROM telegram_outbox WHERE sent_at IS NULL;"
+   ```
+   `status` WARNs while either is non-zero and `setup` refuses `guarantee` / `overflow` until then (`--allow-notices` only once
+   staging Pepe is confirmed to have no Telegram token). The tool's own ticks never queue an alert; the staging site and staging
+   Pepe do.
+7. On the VPS (the environment rides on each command - never `export` it: the same shell may run prod's section 16 later):
    ```bash
    cd /home/PATV-staging
-   export PATV_ENV=staging STAGING=1
    DB=/home/PATV-staging/myapp.db
-   R="node tools/policy-rehearse.js"
+   R="env PATV_ENV=staging STAGING=1 node tools/policy-rehearse.js"
    $R status --db=$DB --at=2026-11-24T05:10:00Z      # every leg at that clock: reachable / refused, the setup legs, the settings
    ```
 
@@ -787,9 +797,13 @@ $R snapshot --db=$DB > /root/staging-backups/h2a-rehearsal-before-cutover.json
 # Pepe: !econ engines cutover all confirm   (or C:\PATV\policy-cutover.request.json {"action":"cutover","actor":"<owner login>","key":"pc-h2areh-1"})
 $R cutcheck --db=$DB --before=/root/staging-backups/h2a-rehearsal-before-cutover.json
 ```
-Expected: `PASS engines live on the site: treasury=live monetary=live burn=live`, `PASS every period in Pepe's pushed journals is
-handed / done here (N)`, `PASS no PAT rows since the snapshot` (on a quiet PepeLab; other activity shows in `new_moves` - the
-cutover writes none), `PASS supply unchanged`. Pepe: `!econ engines status` = `SITE (site mode live)` x3.
+Run `cutcheck` right after the cutover. Expected: `PASS engines live on the site: treasury=live monetary=live burn=live`,
+`PASS every period in Pepe's pushed journals is handed / done here (N)`, `PASS no period Pepe handed was run by the site since the
+snapshot`, `PASS the cutover wrote no PAT row: ...`, `PASS supply reconciled: ...`. The staging site's burn engine is live from the
+cutover on and burns whatever sits in the burn reserve at its next 5-minute accrual slot; that, Pepe's last burns before his
+switches went off and any PepeLab charge show as `INFO since the snapshot ...` lines and in the supply line's `burned` - not a
+FAIL. A FAIL names the row (a hand-over row, a leg of a period he handed) or the unexplained supply difference (run it again
+once if a burn landed while it read). Pepe: `!econ engines status` = `SITE (site mode live)` x3.
 
 ### 15.5 The live round (the site runs each leg at its tag)
 
@@ -832,8 +846,11 @@ A FAIL names what is missing (`not done`, `moved twice / once-sided`, `conserved
 2. A fresh shadow leg (`ceiling`, tag `sreceil`, 2026-11-27T05:10:00Z, inject `at` 1795756200): `PASS shadow ceiling: ...`.
 3. Re-cutover: a new snapshot, `cutover` with a new key (`pc-h2areh-2`), `cutcheck`; a fresh live leg (`ceiling`, tag
    `lreceil`, 2026-12-02T05:10:00Z): `PASS live ceiling: ...`.
-4. Final rollback (`pr-h2areh-2`): staging is left in shadow, as before. `inspect --tag=<tag>` lists any receipt still open
-   (`undo --after-run` it) - or refresh staging from prod again.
+4. Final rollback (`pr-h2areh-2`): staging is left in shadow, as before.
+5. **End check, before 03:30 UTC:** `$R status --db=$DB` lists no `open setup` line (each one prints its own `undo ...
+   --after-run` command; a burn setup is closed once its PAT was burned). An open setup at 04:00 means the real run acts on a
+   forced state (the ceiling's Fed, a drained incentive budget); from 02:30 UTC `status` FAILs on it (exit 3). Or refresh
+   staging from prod again.
 
 What the rehearsal leaves on staging (sandbox PAT, all keyed): the tagged epochs' waterfalls (Pepe's `sguar`, the site's
 `lguar` / `lover` / `lreceil`... - the second and later ones of a week find little surplus), a 5,000,000 December floor mint
@@ -846,9 +863,14 @@ Live with the owner, on the date the owner set after the gates (plan section 4; 
 Stop rule: not cut over by 16:00 UTC - don't start; never 03:30-04:30 UTC; no other promote that day; no bot restart within
 10 min of 04:00.
 
+0. **A clean shell.** A shell that ran the rehearsal may still carry its environment: `unset STAGING PATV_ENV`, then
+   `env | grep -E '^(STAGING|PATV_ENV)='` prints nothing. Every command below runs in `/home/PATV` against prod.
 1. **Preflight (T0).** `cd /home/PATV && node tools/policy-backend.js preflight --since=<the first D-day of the clean window>`:
    0 FAIL, "shadow periods clean (14 days, D-15)" PASS, "derived dual read clean since ..." and "shadow audit = Pepe's" PASS.
-   Since 1.99aom the H1 gate reads `INFO H1 done (cfg=site): dual read retired` (it can't record after H1). Pepe's half, the
+   With 1.99aom on prod the H1 gate reads `INFO H1 done (cfg=site): dual read retired` (it can't record after H1). Before that
+   (prod still on 1.99aoi) the same line is a FAIL `dual read recorded every day ...`: excusable only when it is the only FAIL,
+   `status` shows `feature cfg site`, and the next line "dual read clean ... (today included)" is PASS. A D-15 day the owner
+   waived in writing keeps the "shadow periods clean" line a WARN listing only that day for 14 days. Pepe's half, the
    owner: `!econ policy status` - pvault unsure / outbox, corrections unsure / paying, pools outbox / uncertain / inbox, policy
    outbox and dead letters, capital outbox all 0; the last W record notified / audit / digest.
 2. **Backups.** `TS=$(date -u +%Y%m%dT%H%M%SZ); sqlite3 /home/PATV/myapp.db ".backup /home/PATV-backups/myapp-pre-h2a-$TS.db"`;
@@ -863,9 +885,16 @@ Stop rule: not cut over by 16:00 UTC - don't start; never 03:30-04:30 UTC; no ot
    continuous.
 7. **+5 min: pause / resume once** (owner's go): `node tools/policy-backend.js --actor=<owner login> pause all --note "H2a smoke"`,
    then `resume all`. Preflight after: no engine paused.
-8. **Watch.** The next 04:00 UTC: `SELECT key, state, error, result FROM policy_runs ORDER BY created DESC LIMIT 6` - the daily,
-   the monetary day and the burn slots `done` with `conserved: true`; effects acked by Pepe; the floor (November: the cap has no
-   room left - expect `cap_hit:floor-<month>` and no mint) and the guarantee (Monday) as the rehearsal showed. The first
-   site-run Monday: the epoch, the audit + digest once each, the I6 notices, conservation.
+8. **Watch.** The next 04:00 UTC: `SELECT key, state, error, result FROM policy_runs ORDER BY created DESC LIMIT 6` - the daily
+   and the monetary day `done` (the treasury runs carry `conserved: true`; a monetary run has no `conserved` - read its
+   `done_legs` / `skipped` / `notes` and the supply change), the burn slots `done`; effects acked by Pepe; the floor and the
+   guarantee (Monday) as the rehearsal showed. The floor mints min(need, `fed_floor_mint_daily`, the month's room) where the room
+   is `mintcap_floor` minus that month's floor mints so far: when the room is under the day's want, expect a mint of exactly the
+   room (0 once it is used up) and one `cap_hit:floor-<month>` effect - not a failure (prod 2026-11: ~760,797 left after the
+   11-17 mint, so the first November site-run day mints at most that, then 0 until 12-01). The first site-run Monday: the epoch,
+   the audit + digest once each, the I6 notices, conservation.
 9. **Rollback** (while the site answers): `!econ engines rollback all confirm` - the site back to shadow, Pepe applies every
-   effect; it never undoes a leg the site ran.
+   effect; it never undoes a leg the site ran. Pepe stops at the first effect that fails to apply ("[POLICY] effect ... left for
+   the next pass") but switches his engines on anyway, so check before the next boundary: `SELECT COUNT(*) FROM policy_effects
+   WHERE acked_at IS NULL` = 0. Not 0 = his journal may lack a period the site ran, and his next tick could run it again:
+   investigate (pause his side if needed) before 03:40 UTC.
