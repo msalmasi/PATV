@@ -375,8 +375,9 @@ async function lapseMap(t = now()) {
 // the pad has NOW (Pepe's retention gives what was made under the old id before the move the pad's windows, holds included):
 //   * the sources: the rotation journal (house_rotations: every move to a new id, `at` = when) and rooms_kv house_room.prev (the
 //     end of its `until` day, for an id the journal doesn't have). Every rotation that comes later adds itself - nothing to do by
-//     hand. A rotation that LEFT the archive under the old id (archive "keep" -> result "kept") isn't one: by the owner's choice
-//     that history is "no pad" (purged to the free window after the grace), as houserotate.js says.
+//     hand. A rotation that LEFT the archive under the old id (archive "keep" -> result "kept", or archive_req "keep" when the
+//     old id had no archive row) isn't one: by the owner's choice that history is "no pad" (purged to the free window after the
+//     grace), as houserotate.js says - Pepe's identity history skips the same rotations (pepe_identity archive "keep").
 //   * a pad connect / disconnect (padrekey.js) is NOT one: the chat archive stays with the Camfrog room there (CL2), so a room
 //     that loses its pad really loses its tier.
 //   * an older Pepe (before bot 1.99aoo) reads only `tiers` and `held_rooms`: each former id the registry doesn't have (nobody's
@@ -406,7 +407,8 @@ async function formerRooms() {
       if (!r.from_id || !r.to_id || low(r.from_id) === low(r.to_id)) continue;     // a rename / login-only change: the same room
       let res = null;
       try { res = r.result ? JSON.parse(r.result) : null; } catch (e) { res = null; }
-      if (res && res.archive === "kept") { kept.add(low(r.from_id)); continue; }
+      // review: the owner's "keep" counts even when the old id had no archive row to leave (archive "none", archive_req "keep")
+      if (res && (res.archive === "kept" || res.archive_req === "keep")) { kept.add(low(r.from_id)); continue; }
       add(r.from_id, Number(r.at) > 0 ? Number(r.at) : null);
     }
   }

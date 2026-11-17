@@ -515,3 +515,30 @@ test("tools/house-rotate.js: a dry run on a copy writes nothing; --apply backs u
   assert.equal(r.code, 2);
   assert.equal(rooms.HOUSE_ROOM, NEW, "the live database didn't move");
 });
+
+test("1.99aon review: archive \"keep\" is the owner's choice even when the old id had no archive row - no former room of the pad; an undo follows its forward row", async () => {
+  const M = require(path.join(repo, "micrec"));
+  const ids = async () => (await M.formerRooms()).map((x) => x.id);
+  // the house pad moves on (archive moved along), then its archive row is parked elsewhere: the house pad has none at its id
+  const a = await H.apply({ key: "rot-fresh", from: { room: NEW, login: "Pepe_Frog" }, to: { room: "Fresh.Room", title: "Fresh", slug: "fresh-home", login: "Pepe_Frog" } }, { live: false });
+  assert.equal(a.ok, true, JSON.stringify(a));
+  assert.deepEqual([a.result.archive, a.result.archive_req], ["moved", "move"], "a move records what was asked too");
+  await runQuery("UPDATE chatlog_rooms SET room_id = 'Parked.Room', pad_id = 'Parked.Room' WHERE room_id = 'Fresh.Room'");
+  // archive "keep" with nothing to leave: the journal says archive "none" (as a move with nothing to move) + archive_req "keep"
+  const c = await H.apply({ key: "rot-keep", archive: "keep", from: { room: "Fresh.Room", login: "Pepe_Frog" }, to: { room: "Kept2.Room", title: "Kept Two", slug: "kept-two", login: "Pepe_Frog" } }, { live: false });
+  assert.equal(c.ok, true, JSON.stringify(c));
+  assert.deepEqual([c.result.archive, c.result.archive_req], ["none", "keep"]);
+  assert.ok(JSON.parse((await one("SELECT value FROM rooms_kv WHERE key = 'house_room'")).value).prev.some((p) => p.id === "Fresh.Room"), "(house_room.prev names it)");
+  let got = await ids();
+  assert.ok(!got.includes("Fresh.Room"), `the owner asked to leave Fresh.Room's history there: no former room (journal or prev) - ${got}`);
+  assert.ok(got.includes(NEW), "the earlier move still is one");
+  // the bot's identity skips the same rotation (pepe_identity former home archive "keep") - both sides agree
+  // the undo without typing archive=keep: the site follows the forward row (nothing was left at Kept2.Room: archive "none")
+  const u = await H.apply({ restore_of: "rot-keep", from: { login: "Pepe_Frog" }, to: { login: "Pepe_Frog" } }, { live: false });
+  assert.equal(u.ok, true, JSON.stringify(u));
+  assert.equal(u.result.archive, "none");
+  assert.equal(u.result.archive_req, undefined, "an undo records no request of its own (the site ignores one)");
+  got = await ids();
+  assert.ok(got.includes("Kept2.Room") && !got.includes("Fresh.Room"), `Kept2.Room was the house and left nothing behind -> a former room; Fresh.Room is the house again - ${got}`);
+  await runQuery("UPDATE chatlog_rooms SET room_id = 'Fresh.Room', pad_id = 'Fresh.Room' WHERE room_id = 'Parked.Room'");
+});

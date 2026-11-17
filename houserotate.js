@@ -27,7 +27,8 @@
 //     e archive    "move" (default, D1): chatlog_rooms room_id + pad_id and chatlog_meta tier:<id> - the pad's chat history stays
 //                  continuous (chat_log rows are keyed by rk and don't change). A non-empty archive at `to` -> to_has_archive
 //                  unless "keep" (the archive then stays under the old id: no pad, no Plus, purged to the free window after the
-//                  grace).
+//                  grace). 1.99aon: the result also keeps the request (archive_req) - Pepe's retention reads the old id as the
+//                  pad's former room (micrec.formerRooms) unless the owner asked to keep its history there.
 //     f title      rooms_registry.title (60 characters)
 //     g address    padaddress.renameInTx: the old slug becomes an alias, slug_set = 1 (an address the same = done)
 //     h house      rooms_kv house_room = {id, title, slug, since, prev: [..., {id, title, slug, until}]}
@@ -389,6 +390,11 @@ async function writeChange(d, now) {
   const F = d.F;
   const result = { key: c.key, mode: d.mode, from, to, at: now, moved: {}, archive: "none", title: { from: F.title, to: d.title },
                    slug: { from: F.slug, to: d.slug }, restore_of: c.restore_of || null };
+  // 1.99aon (review): what the owner ASKED for the old id's history ("keep": leave it there - no pad, no Plus), also when the
+  // old id had no archive row to leave (archive then says "none", the same as a move with nothing to move). micrec.formerRooms
+  // reads it: a "keep" rotation's old id is no former room of the pad. An undo follows its forward row instead (its result's
+  // archive), so it records no request of its own.
+  if (d.mode === "move" && !c.restore_of) result.archive_req = c.archive === "keep" ? "keep" : "move";
   // b journal (the before-image first: nothing is written yet)
   await ensureJournal();
   const before = await beforeImage(from, to, T);
