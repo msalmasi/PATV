@@ -666,104 +666,206 @@ unchanged.
    pending audit on the real clock (or tick once more: `POST /api/policy/admin/tick {at: <Mon 04:31Z>, tag: "p4a", engines: []}`,
    which runs PO-4 only). Expect `W2026-11-09-p4a` state `final`, audit_match = 1 and digest_match = 1.
 
-## 15. H2a rehearsal (forced legs)
+## 15. H2a rehearsal (forced legs) - `tools/policy-rehearse.js` (1.99aom)
 
-For the owner and main agent, 2026-11-10 through 11-16, before H2a on 11-17 at 14:00 UTC. This kit does not certify a
-handover. Keep the D-15 evidence and every H2a gate in addition to these exercises. Use only disposable staging copies,
-with the staging bot, outside the 03:30-04:30 UTC real-clock window. PAT amounts below are points.
+The plan's last H2a gate is a staging rehearsal on a fresh copy of prod that **forces the legs prod never had**: a floor mint
+(including the monthly floor-mint cap binding - prod's November cap was nearly used by 11-17), the Monday guarantee top-up, a
+Fed ceiling release, a burn and a Fort Knox overflow; then pause / resume with staging Pepe stopped, rollback and re-cutover.
+It does not certify a handover by itself: every other H2a gate (D-15 on prod's real days included) still holds. PAT amounts
+below are points. Live with the owner; never 03:30-04:30 UTC.
 
-### 15.1 Preparation and commands
+### 15.1 The tool
 
-Take consistent offline backups of staging's database (including its WAL state) and bot state before starting. Main agent
-prepares the prod copy through the existing approved backup procedure; this tool never connects to a host or copies prod.
-Use a **fresh copy per leg and per shadow/live comparison**. Stop the staging site while changing the copied database, so
-its scheduler cannot race the setup. Start it against that same copy for the bot boundary/report exercise. Do not point the
-tool at the deployed staging directory. Its canonical database path must be `policy-rehearsal-<id>/myapp.db`; symlinks are
-resolved before checking. Production/live/PATV path components are refused. Both environment variables below are mandatory.
+`node tools/policy-rehearse.js <command> --db=<staging copy>/myapp.db [...]`, in the staging checkout, with `PATV_ENV=staging`
+and `STAGING=1` (it refuses without both).
 
-From the checked-out site code, with an absolute path to the initialized copy:
+| Command | Options | What it does |
+|---|---|---|
+| `status` | `--at` [`--leg`] | read only: engines (mode, paused, armed), owners, a test clock on the database (WARN), Pepe's push age, the system pools, the settings the legs read, and per leg what the setup would move and plan at `--at` (reachable / refused and why) |
+| `setup` | `--leg --tag --at` [`--margin`] | forces the leg's state: ONE keyed pool move between system pools (`pool_moves` `rehearse:<tag>:<leg>`, flow `policy_rehearsal`, via `staging`, net 0) + its receipt (`policy_meta` `rehearse:<tag>:<leg>`: before / after balances, the legs, the plan it reaches), in ONE `dbUtils.tx`. A state already there moves nothing (the receipt still records it). Rolled back whole when the leg isn't reached |
+| `tick` | `--leg --tag --at` | one pass of the REAL scheduler (`policy/scheduler.js pass`) in this process at `--at`, period ids `<id>-<tag>`, only the leg's engines; prints `ran`, the rows written during the pass, the supply before / after vs the expected change, the evidence and the verdict |
+| `inspect` | `--tag` [`--leg`] | read only: the receipts, the tag's runs, the site's plan next to Pepe's report (field by field, `ok`, the boundary, the blocking diffs), the effects (cap notices), the mints, the pool moves, the burns since the setup, the verdict |
+| `undo` | `--leg --tag --at` [`--after-run`] | reverses exactly the setup's own legs (ONE keyed move `rehearse:<tag>:<leg>:undo`). Without `--after-run` the system pools must be as the setup left them (every balance back to the PAT). With it (an engine leg - or anything else - moved them since) it still reverses only the setup's legs and prints what is left and the moves that explain it. Refused once the burn reserve moved (giving it back would pay out of the burn reserve) |
+| `snapshot` | | read only, JSON: PAT-row counts, the max `pool_moves` rowid, the supply, the modes |
+| `cutcheck` | `--before=<snapshot file>` | read only: after the cutover - the engines live, every period of Pepe's pushed journals (every done epoch, the last 30 release / monetary days: what his handshake hands) `handed` / `done`, zero PAT rows since the snapshot (`new_moves` lists any), the supply unchanged |
 
-```powershell
-$env:PATV_ENV = 'staging'
-$env:STAGING = '1'
-$db = 'G:/rehearsals/policy-rehearsal-floor/myapp.db'
-node tools/policy-rehearse.js setup --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
-node tools/policy-rehearse.js inspect --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
-node tools/policy-rehearse.js undo --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+**Legs** (`--leg`): `floor` (the Fed under its floor with cap room: mints min(need, daily, room)), `floorcap` (the Fed under its
+floor while the month's floor cap binds: mints the room left - 0 too - and writes `cap_hit:floor-<month>`), `guarantee` (a Monday:
+incentives to 0; the tagged epoch, the release, then the top-up), `ceiling` (the Fed at its ceiling + the margin: the excess
+released by `fed_ceiling_action`), `burn` (+250,000 into the burn reserve), `overflow` (Fort Knox at its cap + the margin, the cap
+as the daily plan computes it on both the test clock and the real clock). `--margin` (default 10,000) is how far past the line
+the ceiling / overflow / floor are put. One leg per tag; a tag is 3-8 lowercase letters / digits, a letter first, never reused.
+Day rules: `guarantee` on a Monday; `floor`, `floorcap`, `ceiling`, `overflow` not on a Monday; all but `burn` at least an hour
+past 04:00 (before that the monetary day waits for the release and the epoch for the cut-off).
+
+**Safety.** The database must not be prod's: never under `/home/PATV` (its database, its `backups/`) or `/home/PATV-backups`,
+never a path with a `PATV` / `PATV-backups` / `prod` / `production` / `live` folder, never a hard link of `/home/PATV/myapp.db`
+(the resolved path, links followed, before anything opens SQLite). `/home/PATV-staging/myapp.db` (a fresh prod copy after
+`refresh-staging-db.sh`) is the intended one. Setup / undo move PAT only between reserve, incentives, fortknox, heist, bank and
+mm (the burn reserve as a destination) - never a wallet, the House, an escrow pool, a room vault, stakers or vaultfloat. The
+Bank / Market-maker cash is taken last (only the ceiling can need it) and the receipt / `status` say so: their share prices read
+it until the undo. The scheduler's clock is set in the tool's process only (`policy/core` and `fed/service`, restored after): no
+test clock is written to the database, so the staging site's own scheduler never jumps. No write 03:30-04:30 UTC. Exit codes:
+0, 2 refused (nothing written), 3 a FAIL verdict, 1 an error. stdout is the tool's own (summary lines, then the evidence JSON;
+`--json`: JSON only); the site's module logs go to stderr.
+
+**What reads as a pass.** Only a `PASS ...` line. `WAIT` (no Pepe report yet, nothing ran), `FAIL`, an empty `ran`, or a
+supply line that doesn't read `reconciled` is not. A setup refusal ("the configuration / journal keeps the leg from being
+reached", "not enough PAT in the system pools") is not a passed leg: record it with `status`'s line; never change a setting to
+force one.
+
+### 15.2 Before you start
+
+1. Not 03:30-04:30 UTC; no other promote that day. The staging site runs 1.99aom or later.
+2. Backups: `TS=$(date -u +%Y%m%dT%H%M%SZ); sqlite3 /home/PATV-staging/myapp.db ".backup /root/staging-backups/staging-pre-h2a-rehearsal-$TS.db"`;
+   staging Pepe (VM 111): `turf_data.json`, `vaults.json`, `burns.json`, `policy_client.json` to `C:\PATV\backups\pre-h2a-rehearsal-<ts>`.
+3. A fresh prod copy: `bash /home/PATV/deploy/refresh-staging-db.sh`. It carries prod's engines (shadow), the settings owned
+   by the site (H1, `cfg = site`), the Fed's books (this month's floor mints - the cap's room) and the pools.
+4. Staging Pepe like prod Pepe:
+   - prod's econ docs: `C:\PATV\policy-inject.json {"action": "load_prod_copy", "path": "<read-only copy of prod's turf_data.json>"}`
+     (made by the reviewed read-only script, plan 6.2; `bot_settings.json` is never copied);
+   - the economy settings owned by the site, as on prod: `!econ policy status` says `cfg` site at the staging site's rev. If he
+     still owns them, re-cut H1 on staging first (sections 14.2-14.6). Otherwise every monetary comparison differs on the
+     settings (staging 11-17: `floor_room` site 30,000,000 / pepe 22,604,460);
+   - his engine switches OFF (he runs the engines) and the site's three engines `shadow`: `!econ engines status`.
+5. `status` (below) shows no test clock (`WARN the database carries a test clock`: clear it with
+   `POST /api/policy/admin/test-clock {at: null}` first).
+6. **Notices.** The copy keeps prod's `telegram_links`: a staging inbox notice (the epoch's staking payouts, the weekly digest)
+   is queued as a Telegram alert (`telegram_outbox`). Before the guarantee leg (its tagged epochs pay stakers on staging - Pepe's
+   in shadow, the site's live), make sure staging Pepe's Telegram bridge doesn't deliver them (owner's call).
+7. On the VPS:
+   ```bash
+   cd /home/PATV-staging
+   export PATV_ENV=staging STAGING=1
+   DB=/home/PATV-staging/myapp.db
+   R="node tools/policy-rehearse.js"
+   $R status --db=$DB --at=2026-11-24T05:10:00Z      # every leg at that clock: reachable / refused, the setup legs, the settings
+   ```
+
+Clocks and tags (any fresh tags work; the inject's `at` is the same instant in seconds):
+
+| Leg | `--at` | inject `at` | shadow tag | live tag | Notes |
+|---|---|---|---|---|---|
+| guarantee | 2026-11-23T05:10:00Z (Mon) | 1795410600 | `sguar` | `lguar` | epoch, daily, then monetary `guarantee: true` |
+| floorcap | 2026-11-24T05:10:00Z (Tue) | 1795497000 | `sfcap` | `lfcap` | November: the cap's room (0 after prod's 11-18 04:00Z floor mint) |
+| ceiling | 2026-11-24T05:10:00Z | 1795497000 | `sceil` | `lceil` | needs ~112M more in the Fed: `status` says if the system pools hold it |
+| overflow | 2026-11-26T05:10:00Z (Thu) | 1795669800 | `sover` | `lover` | Pepe's inject `daily` plans on the REAL clock (the tag aside) |
+| floor | 2026-12-01T05:10:00Z (Tue) | 1796101800 | `sflor` | `lflor` | December: the cap's full room - the site's live mint is journaled in December |
+| burn | 2026-11-24T05:10:00Z | - | `sburn` | `lburn` | Pepe's accrual (shadow) / the site's (live) burns it |
+
+### 15.3 The shadow round (staging Pepe runs, the site compares)
+
+For each leg: `setup`, wait 30 s (Pepe's pool mirror refreshes every 15 s), staging Pepe's inject at the same instant and tag,
+wait for `C:\PATV\policy-inject.result.json` `ok`, then `inspect`. His run takes the boundary snapshot, moves his legs (sandbox
+PAT) and reports; the site compares.
+
+```bash
+$R setup   --db=$DB --leg=floorcap --tag=sfcap --at=2026-11-24T05:10:00Z
+# Pepe: {"action": "run", "engine": "monetary", "at": 1795497000, "tag": "sfcap", "guarantee": false}
+$R inspect --db=$DB --tag=sfcap
+$R undo    --db=$DB --leg=floorcap --tag=sfcap --at=2026-11-24T05:10:00Z --after-run
 ```
 
-First prove setup/undo without an engine tick: `result.ok=true`, the selected preview field positive, setup pool move net 0,
-undo `ok=true` and every balance restored to the PAT. Repeating either command with the same leg/tag/time is a no-op.
-A tag is permanently bound to that leg/time and must not be reused after undo. Use a new copy/tag for the next exercise.
-The tool stores its before/after receipt under `policy_meta rehearse:<tag>:<leg>` in the **same transaction** as its keyed
-pool move. An interruption before commit leaves neither; after commit retry answers the same receipt. No wallets, House,
-escrow, pots or policy settings are changed by setup. Insufficient system pools or an unreachable plan refuses the setup.
+| Leg | Pepe's inject (`C:\PATV\policy-inject.json`) | Expected verdict |
+|---|---|---|
+| floorcap | `{"action":"run","engine":"monetary","at":1795497000,"tag":"sfcap","guarantee":false}` | `PASS shadow floorcap: monetary D2026-11-24-sfcap ok=1 vs the boundary snapshot - Pepe's plan = the site's (floor_need N, daily 5,000,000, room R, floor_mint R)`; R = the room left (0 on a copy after 11-18 04:00Z) |
+| ceiling | `{"action":"run","engine":"monetary","at":1795497000,"tag":"sceil","guarantee":false}` | `PASS shadow ceiling: ... (fed 150,010,000, excess 10,000 -> <fed_ceiling_action>)` |
+| overflow | `{"action":"run","engine":"daily","at":1795669800,"tag":"sover"}` | `PASS shadow overflow: treasury D2026-11-26-sover ok=1 ... (fortknox F, overflow O (loans L))` |
+| floor | `{"action":"run","engine":"monetary","at":1796101800,"tag":"sflor","guarantee":false}` | `PASS shadow floor: ... floor_mint 5,000,000` (his own mint is refused by the staging Fed's real-time November cap - expected; only the plans compare) |
+| guarantee | `epoch`, then `daily`, then `{"action":"run","engine":"monetary","at":1795410600,"tag":"sguar","guarantee":true}` (same `at` / tag each) | `PASS shadow guarantee: monetary D2026-11-23-sguar ok=1 ... (target T, base B, paid P)` + `PASS shadow guarantee: treasury W2026-11-23-sguar ok=1` + `... treasury D2026-11-23-sguar ok=1`; the monetary row's decision "site waits for the epoch / pepe true" is whitelisted (section 13) |
+| burn | none: his accrual burns the burn reserve within 5 min | `PASS burn: 250,000 PAT burned since the setup (...) - by the accrual on its real slot`; the closed day's `shadow:burn:D<day>` row compares after 04:01 UTC the next day (preflight's shadow line) |
 
-For an engine exercise omit undo, then run (same options as setup):
+Every inspect prints the site's boundary plan next to Pepe's, field by field (`<- differs` marks a difference) and the blocking
+diffs of a row that isn't clean. `undo --after-run` gives the synthetic setup back after his legs moved (not after the burn:
+it is final); `left` is what his legs did.
 
-```powershell
-node tools/policy-rehearse.js tick --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
-node tools/policy-rehearse.js inspect --db=$db --leg=floor --tag=h2af1 --at=2026-11-10T05:10:00Z
+### 15.4 The cutover (staging Pepe's handshake)
+
+```bash
+$R snapshot --db=$DB > /root/staging-backups/h2a-rehearsal-before-cutover.json
+# Pepe (owner, in the staging room): !econ engines export all     -> what he hands over, nothing blocking
+# Pepe: !econ engines cutover all confirm   (or C:\PATV\policy-cutover.request.json {"action":"cutover","actor":"<owner login>","key":"pc-h2areh-1"})
+$R cutcheck --db=$DB --before=/root/staging-backups/h2a-rehearsal-before-cutover.json
+```
+Expected: `PASS engines live on the site: treasury=live monetary=live burn=live`, `PASS every period in Pepe's pushed journals is
+handed / done here (N)`, `PASS no PAT rows since the snapshot` (on a quiet PepeLab; other activity shows in `new_moves` - the
+cutover writes none), `PASS supply unchanged`. Pepe: `!econ engines status` = `SITE (site mode live)` x3.
+
+### 15.5 The live round (the site runs each leg at its tag)
+
+`setup`, then `tick` (same options), then a second `tick` (a retry: `ran: nothing`, no rows), then `undo --after-run` (not for
+the burn). The order matters for one thing: a live treasury tick runs its tagged week's epoch first - run `guarantee` before
+`overflow` so that epoch finds the House surplus already settled.
+
+```bash
+$R setup --db=$DB --leg=guarantee --tag=lguar --at=2026-11-23T05:10:00Z
+$R tick  --db=$DB --leg=guarantee --tag=lguar --at=2026-11-23T05:10:00Z
 ```
 
-`tick` uses the real scheduler, an explicit test clock and tagged period IDs; it changes no engine mode, pause or ownership.
-The previous clock is restored in `finally`. After a killed process, inspect/clear the test clock using the existing
-`POST /api/policy/admin/test-clock {at:null}` before restarting the staging site. An empty `ran`, a wait, a failed run,
-missing bot plan or `ok != 1` is **not a pass**. `inspect` prints runs, site/Pepe plans, all diff families, effects, mints
-and keyed pool rows (including hashed burn keys). Save evidence outside the public repository; scrub account identities.
+| Leg | `ran` | Expected verdict / supply |
+|---|---|---|
+| guarantee | `treasury W2026-11-23-lguar; treasury D2026-11-23-lguar; monetary D2026-11-23-lguar` | `PASS live guarantee: the epoch W2026-11-23-lguar and the release D2026-11-23-lguar first, then the top-up P once (mo-D2026-11-23-lguar-guarantee; target T, base B); conserved=true`; supply `reconciled` (+0) |
+| floorcap | `monetary D2026-11-24-lfcap` | `PASS live floorcap: the monthly cap bound - need N, daily 5,000,000, room R -> minted R; cap notice cap_hit:floor-2026-11`; supply +R |
+| floor | `monetary D2026-12-01-lflor` | `PASS live floor: minted 5,000,000 once (floor-D2026-12-01-lflor; need N, daily 5,000,000, room 30,000,000)`; supply +5,000,000; `fed_records` mint month `2026-12` (it uses 5M of staging's December cap) |
+| ceiling | `monetary D2026-11-24-lceil` | `PASS live ceiling: released 10,000 once to <the burn reserve / incentives> (mo-D2026-11-24-lceil-ceiling; ...)`; supply +0 (a release to the burn reserve is burned by the next accrual) |
+| overflow | `treasury W2026-11-23-lover; treasury D2026-11-26-lover` | `PASS live overflow: O over the cap moved once (tr-D2026-11-26-lover-fkover[-loan]; loans repaid L); conserved=true`; supply +0 |
+| burn | `burn A<slot>-lburn 250000` - or nothing when the staging site's own accrual burned it first (its real slot) | `PASS burn: 250,000 PAT burned since the setup (burn:S<n>-...)`; supply -250,000 when the tick burned it |
 
-### 15.2 Forced-leg checklist
+A FAIL names what is missing (`not done`, `moved twice / once-sided`, `conserved=false`, a missing cap notice). A run that
+`failed` or was recorded `missed` is a FAIL with its error.
 
-Use these options with the command pattern above; choose fresh lowercase alphanumeric tags of at most 8 characters.
-Targets come from the effective policy config and real plan, including the scaled guarantee and percentage Fort Knox cap.
-No setting or pre-existing transfer key is changed to make an exercise pass.
+### 15.6 Pause / resume with staging Pepe stopped
 
-| Leg | Time / tag example | Forced state and required evidence | Pass line to record after verifying |
-|---|---|---|---|
-| floor | Tue 11-10 05:10Z / `h2af1` | Reserve one PAT below effective floor; `floor_mint > 0`; live `floor-D2026-11-10-h2af1` mint and matching `fed_records` mint (legacy Fed: `policy_mints`); supply rises by actual mint | `PASS floor: plan matched; mint once; supply reconciled` |
-| guarantee | Mon 11-16 05:10Z / `h2ag1` | incentives 0; settle the **same tagged** Monday epoch first, release next, then monetary; `guarantee_paid > 0`, `mo-D2026-11-16-h2ag1-guarantee` once | `PASS guarantee: epoch/release waited; top-up once; conserved` |
-| ceiling | Tue 11-10 05:10Z / `h2ac1` | Reserve effective ceiling + 1M; `excess > 0`; `mo-D2026-11-10-h2ac1-ceiling` routes by existing `ceiling_action` (to burn reserve if burn, otherwise incentives) | `PASS ceiling: configured destination; excess once; conserved` |
-| burn | Tue 11-10 05:10Z / `h2ab1` | burn reserve +250K; existing accrual mode, inflight respected; tagged `A<slot>-h2ab1` done, `burn:S<seq>-<hash>`, burn effect + `pat_burns`; actual burned PAT leave supply | `PASS burn: actual amount once; supply fell by burned PAT` |
-| overflow | Tue 11-10 05:10Z / `h2ao1` | Fort Knox actual computed cap +1M; `overflow > 0`; daily `tr-D2026-11-10-h2ao1-fkover` (and any configured loan repayment legs), no arbitrary fixed cap | `PASS overflow: current cap; loans respected; conserved` |
+1. Stop staging Pepe (the bot; Camfrog may stay).
+2. `node tools/policy-backend.js --dir=/home/PATV-staging --actor=<owner login> pause all --note "H2a rehearsal"`
+3. `$R setup --db=$DB --leg=ceiling --tag=lpaus --at=2026-11-27T05:10:00Z`, then `$R tick` (same options): `ran: nothing
+   (monetary is paused - nothing runs (a tagged tick records nothing))`, the balances as the setup left them, no `policy_runs` row.
+4. `node tools/policy-backend.js --dir=/home/PATV-staging --actor=<owner login> resume all`
+5. `$R tick` again: `PASS live ceiling: ...`; a second tick runs nothing. `undo --after-run`.
+6. Start staging Pepe; his effects drain (`node tools/policy-backend.js --dir=/home/PATV-staging status`).
 
-The guarantee reads a settled epoch's `incentives_after` when present, not just today's pool. If that journal prevents a
-top-up, setup refuses and rolls back; use a fresh copy and an unsettled test-clock Monday, settle its tagged epoch through
-the existing staging injection, then inspect the actual plan again. Do not edit the journal or waive the cut-off wait.
-If the epoch replenishes incentives above the target, choose another representative copy and record why the first was
-ineligible. Floor caps or organic issuance can likewise make a forced floor unreachable; a refusal is not a passed leg.
+### 15.7 Rollback, shadow again, re-cutover
 
-For shadow comparisons, run the staging bot's existing `policy-inject.json` actions (§10, §14.7). For example the payload
-`{"action":"run","engine":"monetary","at":1794287400,"tag":"h2af1","guarantee":false}` runs Tue 11-10 05:10 UTC.
-For Monday use `epoch`, then `daily`, then `monetary` with `guarantee:true`, all at the same clock/tag. Verify the timestamp
-locally before running; the ISO timestamp passed to this tool is authoritative. The bot takes the boundary before its legs
-and pushes its own plan. Stop the site scheduler while doing offline setup; restart against the prepared copy before the
-bot injection. Then stop it again to inspect. Require `shadow:<engine>:<period>` `ok=1`, no blocking diff, and expected legs.
-Never synthesize a Pepe report from the JavaScript plan. For live proof restore the identical pre-leg copy, perform the
-normal owner cutover, run the site tick at the same tag/clock, and compare stored plans/actual rows with saved shadow
-evidence. Preserve both outputs before restoring any database. Burn day summaries finalize only on the real pool clock
-after day close +60 seconds; a future test clock cannot prove that gate. Keep the closed-day burn comparison separately.
+1. Pepe: `!econ engines rollback all confirm` (or `{"action":"rollback","actor":"<owner login>","key":"pr-h2areh-1"}`). The site
+   goes back to shadow and answers every period it ran (`ran`) and every effect he hasn't applied; he applies them (his journals
+   then hold the site's tagged periods). `status`: shadow x3; preflight "policy effects acked".
+2. A fresh shadow leg (`ceiling`, tag `sreceil`, 2026-11-27T05:10:00Z, inject `at` 1795756200): `PASS shadow ceiling: ...`.
+3. Re-cutover: a new snapshot, `cutover` with a new key (`pc-h2areh-2`), `cutcheck`; a fresh live leg (`ceiling`, tag
+   `lreceil`, 2026-12-02T05:10:00Z): `PASS live ceiling: ...`.
+4. Final rollback (`pr-h2areh-2`): staging is left in shadow, as before. `inspect --tag=<tag>` lists any receipt still open
+   (`undo --after-run` it) - or refresh staging from prod again.
 
-### 15.3 Pause, rollback and re-cutover (owner/main agent only, staging)
+What the rehearsal leaves on staging (sandbox PAT, all keyed): the tagged epochs' waterfalls (Pepe's `sguar`, the site's
+`lguar` / `lover` / `lreceil`... - the second and later ones of a week find little surplus), a 5,000,000 December floor mint
+(`lflor`), November's room minted (`lfcap`), two 250,000 burns, the ceiling excesses (burned if `fed_ceiling_action` is burn),
+staking notices in staging inboxes, and the synthetic setups given back.
 
-1. In the staging room as the owner: `!econ engines status`, `!econ engines export`, then
-   `!econ engines cutover all confirm`. Expect SITE for every engine, handed rows for every imported period, **zero new
-   transfer rows from the import**, no conflict, no queued/dead reports. Capture before/after rows and supply history.
-2. Stop staging Pepe. On the isolated staging site copy use the existing emergency CLI:
-   `node tools/policy-backend.js --dir=<copy-folder> --actor=owner pause all --note "H2a rehearsal"`.
-   Run a tagged tick; require unchanged balances and no executed engine leg. Paused/missed rows must say paused.
-3. Resume with `node tools/policy-backend.js --dir=<copy-folder> --actor=owner resume all --note "H2a rehearsal"`.
-   At the current tagged period tick again; verify policy's current-period/late rules and no duplicate leg. Repeat the
-   successful tick and require unchanged run/move counts and balances. Do not expect an older missed period to catch up.
-4. Restart Pepe, let effects drain/ack and his docs push; as owner run `!econ engines rollback all confirm`.
-   Expect all three shadow, effects open 0, every site-run period in his journal, no duplicate PAT movement. Run a new-tag
-   shadow period and require clean comparison. Rollback does not undo previously executed mint/burn/transfer legs.
-5. `!econ engines export`, `!econ engines cutover all confirm`, then a fresh tagged live tick. Require handed done keys,
-   once-only live legs, expected supply delta and clean saved-plan comparison. Finally `!econ engines rollback all confirm`
-   to leave staging shadow, clear the test clock, restore staging backups by the approved offline procedure and verify both
-   sides' switches, journals and zero pending effects again. Never use detach as a rehearsal rollback.
+## 16. H2a on prod (the cutover day)
 
-**Undo scope:** `undo` reverses only the synthetic setup transfer, through a keyed zero-net rollback move. It checks every
-pool against its stored post-setup snapshot under the write gate, and refuses if any changed. It cannot reverse scheduler
-mint/burn or participant effects. After any executed leg restore the whole disposable database and corresponding bot copy
-offline, never manufacture a compensating mint or erase an existing done key. The owner/main agent records these pass lines
-only after the actual rehearsal; local tests or a successful CLI exit do not substitute for gate 6.
+Live with the owner, on the date the owner set after the gates (plan section 4; D-15: a D-day that isn't clean moves it a week).
+Stop rule: not cut over by 16:00 UTC - don't start; never 03:30-04:30 UTC; no other promote that day; no bot restart within
+10 min of 04:00.
+
+1. **Preflight (T0).** `cd /home/PATV && node tools/policy-backend.js preflight --since=<the first D-day of the clean window>`:
+   0 FAIL, "shadow periods clean (14 days, D-15)" PASS, "derived dual read clean since ..." and "shadow audit = Pepe's" PASS.
+   Since 1.99aom the H1 gate reads `INFO H1 done (cfg=site): dual read retired` (it can't record after H1). Pepe's half, the
+   owner: `!econ policy status` - pvault unsure / outbox, corrections unsure / paying, pools outbox / uncertain / inbox, policy
+   outbox and dead letters, capital outbox all 0; the last W record notified / audit / digest.
+2. **Backups.** `TS=$(date -u +%Y%m%dT%H%M%SZ); sqlite3 /home/PATV/myapp.db ".backup /home/PATV-backups/myapp-pre-h2a-$TS.db"`;
+   Pepe (VM 110): `turf_data.json`, `vaults.json`, `burns.json`, `policy_client.json` to `C:\PATV\backups\pre-h2a-<ts>`.
+3. **Before** (read only, saved): `sqlite3 -readonly /home/PATV/myapp.db "SELECT (SELECT COUNT(*) FROM pool_moves), (SELECT COUNT(*) FROM stash_moves), (SELECT COUNT(*) FROM fed_records), (SELECT COUNT(*) FROM jackpot_rakes), (SELECT COUNT(*) FROM pat_burns)"`.
+4. **Dry run.** Owner: `!econ engines export all` - the periods he hands, nothing blocking.
+5. **Cutover.** Owner: `!econ engines cutover all confirm`. Pepe: `!econ engines status` = `SITE (site mode live)` x3.
+6. **Verify** (read only): `SELECT engine, mode, paused, armed_at FROM policy_engines` (live x3, Pepe's armed_at);
+   `SELECT key, state, via FROM policy_runs WHERE state = 'handed' ORDER BY created` - every done epoch of his journal and his
+   last 30 release / monetary days; the counts of step 3 unchanged but for live activity in between (`SELECT key, kind FROM
+   pool_moves ORDER BY rowid DESC LIMIT 20`: no policy move); `SELECT day, total FROM supply_history ORDER BY day DESC LIMIT 3`
+   continuous.
+7. **+5 min: pause / resume once** (owner's go): `node tools/policy-backend.js --actor=<owner login> pause all --note "H2a smoke"`,
+   then `resume all`. Preflight after: no engine paused.
+8. **Watch.** The next 04:00 UTC: `SELECT key, state, error, result FROM policy_runs ORDER BY created DESC LIMIT 6` - the daily,
+   the monetary day and the burn slots `done` with `conserved: true`; effects acked by Pepe; the floor (November: the cap has no
+   room left - expect `cap_hit:floor-<month>` and no mint) and the guarantee (Monday) as the rehearsal showed. The first
+   site-run Monday: the epoch, the audit + digest once each, the I6 notices, conservation.
+9. **Rollback** (while the site answers): `!econ engines rollback all confirm` - the site back to shadow, Pepe applies every
+   effect; it never undoes a leg the site ran.
