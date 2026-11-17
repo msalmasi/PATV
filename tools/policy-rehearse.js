@@ -15,13 +15,22 @@
 //   burn       250,000 PAT into the burn reserve: the accrual burns it (live: the site; shadow: staging Pepe's own burn tick)
 //   overflow   Fort Knox above its cap (the cap the daily plan computes - pct of the week's target or fixed): the overflow,
 //              Fed loans first (tr-<day>-fkover / -fkover-loan)
-// A state that is already there (prod's copy: the Fed under its floor, the November cap used, incentives under the target) is
-// not forced again: the setup moves nothing and its receipt records the state as it was.
+// A state that is already there (prod's copy: the Fed under its floor, the November cap used) is not forced again: the setup
+// moves nothing and its receipt records the state as it was. The one exception is `guarantee`: it ALWAYS moves incentives to 0
+// (into the Fed), even when they are already under the target. The monetary day's guarantee base is the tagged epoch's
+// incentives_after (policy/engines planMonetary gBase), and that epoch adds its own waterfall share to incentives first - from
+// a balance just under the target the share alone can lift them over it, and the top-up the leg is about never happens. The
+// Fed rises by the incentives moved (prod's copy: ~20.6M) until the guarantee draws on it.
 //
 // COMMANDS (every one takes --db=<path to the staging copy's myapp.db>)
-//   status   --at=<ISO Z> [--leg=]            read only: engines, owner, pools, the settings the legs read, and what each leg's
-//                                              setup would move and plan (nothing written)
-//   setup    --leg= --tag= --at=<ISO Z> [--margin=N]   force the state: ONE keyed pool move between system pools + its receipt
+//   status   --at=<ISO Z> [--leg=]            read only: engines, owner, pools, the settings the legs read, what each leg's setup
+//                                              would move and plan, the setups still open (WARN; FAIL from 02:30 to 04:30 UTC:
+//                                              the real 04:00 run would act on a forced state), and the copy's Telegram reach
+//                                              (prod members' links / unsent alerts: WARN). Nothing written
+//   setup    --leg= --tag= --at=<ISO Z> [--margin=N] [--allow-notices]   force the state: ONE keyed pool move between system
+//                                              pools + its receipt. guarantee / overflow (a tagged epoch pays stakers: staking
+//                                              notices) are refused while the copy holds Telegram links or unsent alerts, unless
+//                                              --allow-notices (staging Pepe confirmed to have no Telegram token)
 //   tick     --leg= --tag= --at=<ISO Z>       one scheduler pass in THIS process at --at, period ids "<id>-<tag>", only the leg's
 //                                              engines (guarantee: treasury + monetary; overflow: treasury; burn: burn; the rest:
 //                                              monetary). Modes decide what it does: shadow / dry record the site's plan, live runs
@@ -29,9 +38,13 @@
 //   inspect  --tag= [--leg= --at=]            read only: the runs, the site's plan vs Pepe's report (diffs, ok, blocking), the
 //                                              effects, the mints, the pool moves of the tag, and the verdict lines
 //   undo     --leg= --tag= --at= [--after-run] reverse the setup's own legs exactly (ONE keyed move); see UNDO
-//   snapshot                                 read only: the PAT-row counts + supply (save it before a cutover)
+//   snapshot                                 read only: the PAT-row counts and row marks + supply (save it before a cutover)
 //   cutcheck --before=<snapshot.json>        read only: after Pepe's cutover - the engines live, every period of his journals
-//                                              handed, zero PAT rows since the snapshot, the supply unchanged
+//                                              handed, no PAT row from the hand-over (no cutover / import row, no leg of a
+//                                              period he handed, no engine leg that no site run since the snapshot explains),
+//                                              the supply reconciled with the burns / mints since the snapshot. Live activity
+//                                              in between (the site's own burn accrual once the engines are live, charges,
+//                                              Pepe's last burns) is listed as INFO, never a FAIL
 //   Output: summary lines, then the evidence as JSON (--json: the JSON only).
 //
 // SAFETY
@@ -49,6 +62,9 @@
 //   * the scheduler runs in this process at --at (policy/core's and fed/service's clocks, restored afterwards): NO test clock is
 //     written to the database, so the staging site's own scheduler never jumps.
 //   * no write between 03:30 and 04:30 UTC (the real 04:00 runs).
+//   * the tool's own process never queues a Telegram alert: a tick's runs file their inbox notices (staking payouts, the digest,
+//     ops alerts) but telegram.onNotice / onDm / queue are no-ops while it runs. Other processes on the copy (the staging site,
+//     staging Pepe's shadow runs) still queue them: scrub the copy (runbook section 15.2) or confirm staging Pepe has no token.
 // UNDO reverses exactly the setup's own legs. Without --after-run it needs the system pools as the setup left them (then every
 // balance is back to the PAT); with --after-run (an engine leg - or anything else - moved them since) it still reverses only the
 // setup's legs and prints what is left (the engine's legs, and the moves that explain it). It never reverses a mint, a burn or an
@@ -78,6 +94,9 @@ const LEGS = {
   overflow: { engines: ["treasury"], kind: "daily", day: "weekday" },
 };
 const WINDOW = [3 * 3600 + 30 * 60, 4 * 3600 + 30 * 60];       // 03:30-04:30 UTC: no writes
+const NEAR_RUN = [2 * 3600 + 30 * 60, 4 * 3600 + 30 * 60];     // 02:30-04:30 UTC: an open setup is a FAIL in status (the 04:00 run)
+// the legs whose tick runs a tagged epoch (a staking payout notice per paid stash)
+const NOTICE_LEGS = new Set(Object.keys(LEGS).filter((l) => LEGS[l].engines.includes("treasury")));
 
 let realNow = () => Date.now();
 function refuse(message) { throw Object.assign(new Error(message), { refused: true }); }
@@ -113,6 +132,34 @@ function inWindow(ms = realNow()) {
   return s >= WINDOW[0] && s < WINDOW[1];
 }
 function noWindow() { if (inWindow()) refuse("not between 03:30 and 04:30 UTC (the real 04:00 runs) - nothing written"); }
+/** 02:30-04:30 UTC: the real 04:00 run is less than an hour and a half away (or running). */
+function nearRun(ms = realNow()) {
+  const d = new Date(ms);
+  const s = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  return s >= NEAR_RUN[0] && s < NEAR_RUN[1];
+}
+
+// ── notices: the copy's Telegram reach ──
+/** Read only: prod members' Telegram links and the alerts not yet sent on this copy (refresh-staging-db.sh keeps both). */
+async function noticeRisk() {
+  const { getQuery } = require("../dbUtils");
+  const has = async (t) => (await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0;
+  const links = (await has("telegram_links")) ? Number((await getQuery("SELECT COUNT(*) AS n FROM telegram_links"))[0].n) || 0 : 0;
+  const unsent = (await has("telegram_outbox")) ? Number((await getQuery("SELECT COUNT(*) AS n FROM telegram_outbox WHERE sent_at IS NULL"))[0].n) || 0 : 0;
+  return { links, unsent };
+}
+const riskText = (r) => `${fmt(r.links)} Telegram link(s), ${fmt(r.unsent)} unsent Telegram alert(s)`;
+/** Run fn with the site's Telegram queue switched off in THIS process (telegram.onNotice / onDm / queue no-ops, restored after):
+ *  the engines' inbox notices are still filed - the rehearsal reads them - but none becomes an alert staging Pepe could deliver,
+ *  and no fire-and-forget alert write is left running when the CLI closes the database. */
+async function noTelegram(fn) {
+  const TG = require("../telegram");
+  const keep = { onNotice: TG.onNotice, onDm: TG.onDm, queue: TG.queue };
+  TG.onNotice = () => {};
+  TG.onDm = () => {};
+  TG.queue = async () => false;
+  try { return await fn(); } finally { Object.assign(TG, keep); }
+}
 
 function valid(o, { leg = true, at = true } = {}) {
   if (!TAG_RE.test(o.tag || "")) refuse("--tag: 3-8 lowercase letters / digits, a letter first");
@@ -298,6 +345,15 @@ async function setup(o) {
   noWindow();
   const D = require("../dbUtils"), C = require("../policy/core"), P = require("../pools");
   await C.init(); await P.init();
+  if (NOTICE_LEGS.has(o.leg) && !o.allowNotices) {
+    const nr = await noticeRisk();
+    if (nr.links || nr.unsent) {
+      refuse(`${o.leg}: this copy holds ${riskText(nr)} (prod's, kept by the refresh) - its tagged epoch pays stakers and a staking ` +
+             "notice becomes a Telegram alert staging Pepe would deliver if he had a bot token. Scrub the copy first (runbook section " +
+             "15.2: DELETE FROM telegram_links; DELETE FROM telegram_outbox WHERE sent_at IS NULL) or, once staging Pepe is confirmed " +
+             "to have no Telegram token, --allow-notices - nothing moved");
+    }
+  }
   const key = keyOf(o);
   return D.tx(async () => {
     const old = await C.meta(key);
@@ -435,7 +491,7 @@ async function tick(o) {
   const only = LEGS[o.leg].engines;
   const m0 = await marks();
   const s0 = await supplyNow();
-  const ran = await withClock(o.at, () => SCH.pass(o.at, { tag: o.tag, only }));
+  const ran = await noTelegram(() => withClock(o.at, () => SCH.pass(o.at, { tag: o.tag, only })));
   const s1 = await supplyNow();
   const rows = await rowsAfter(m0);
   const ev = await inspect(Object.assign({}, o));
@@ -628,6 +684,28 @@ function shadowLine(leg, p) {
   return "";
 }
 
+/** Read only: the setups whose forced state is still in the system pools - a receipt not undone that moved something (a burn
+ *  setup counts only until its PAT was burned: a burn is final, its undo is refused once it ran). `ran`: the system pools moved
+ *  since the setup (an engine leg or other activity), so its undo needs --after-run. */
+async function openSetups() {
+  const { getQuery } = require("../dbUtils");
+  const now = await tracked();
+  const out = [];
+  for (const row of await getQuery("SELECT key, value FROM policy_meta WHERE key LIKE 'rehearse:%' ORDER BY key")) {
+    const r = J(row.value, null);
+    if (!r || r.undone || !Array.isArray(r.legs) || !r.legs.length || !LEGS[r.leg]) continue;
+    if (r.leg === "burn") {
+      const need = int((r.legs.find(([p]) => p === "burn") || [null, 0])[1]);
+      const burned = Number((await getQuery(`SELECT COALESCE(SUM(-l.amount), 0) AS b FROM pool_moves m JOIN pool_move_legs l ON l.move_key = m.key
+                                             WHERE m.kind = 'burn' AND l.pool = 'burn' AND l.amount < 0 AND m.ts >= ?`, [Math.trunc(Number(r.ts) || 0)]))[0].b) || 0;
+      if (need > 0 && burned >= need) continue;
+    }
+    const ran = TRACKED.some((p) => int(now[p]) !== int((r.after || {})[p]));
+    out.push({ key: r.key || row.key, leg: r.leg, tag: r.tag, at: r.at, at_iso: r.at_iso || iso(r.at), ts: r.ts, legs: r.legs, ran });
+  }
+  return out;
+}
+
 // ── status (read only) ──
 async function status(o) {
   if (o.leg !== undefined && !Object.hasOwn(LEGS, o.leg)) refuse("--leg: " + Object.keys(LEGS).join(" | "));
@@ -645,7 +723,22 @@ async function status(o) {
   if (clock && Number(clock.offset_ms)) summary.push(`WARN the database carries a test clock (${iso((Date.now() + Number(clock.offset_ms)) / 1000)}): the staging site's own scheduler runs at it - clear it (POST /api/policy/admin/test-clock {at:null}) unless you set it on purpose`);
   summary.push(`push ${src.at ? Math.round(Date.now() / 1000 - Number(src.at)) + " s old" : "never"} · bot_version ${src.bot_version || "-"} · cfg from ${src.from}`);
   summary.push(`pools ${TRACKED.map((p) => `${p} ${fmt(pools[p])}`).join(" · ")}`);
-  const out = { summary, engines: engs, owners: own, test_clock: clock, pools, legs: {} };
+  const nr = await noticeRisk();
+  if (nr.links || nr.unsent) {
+    summary.push(`WARN this copy holds ${riskText(nr)}: a tagged epoch's staking notices (and ops alerts) become alerts staging Pepe ` +
+                 "would deliver if he had a Telegram token - scrub the copy (runbook section 15.2) or confirm he has none (setup refuses guarantee / overflow until then unless --allow-notices)");
+  }
+  const open = await openSetups();
+  for (const r of open) {
+    summary.push(`open setup ${r.key} at ${r.at_iso} (set up ${new Date(Number(r.ts) || 0).toISOString()}): moved ${r.legs.map(([p, n]) => `${p} ${n > 0 ? "+" : ""}${fmt(n)}`).join(", ")}` +
+                 ` - undo --leg=${r.leg} --tag=${r.tag} --at=${r.at_iso}${r.ran ? " --after-run (an engine leg ran since)" : ""}`);
+  }
+  if (open.length) {
+    const soon = nearRun();
+    summary.push(`${soon ? "FAIL" : "WARN"} ${open.length} open setup(s): the real 04:00 UTC run acts on a forced state - undo every one before 03:30 UTC` +
+                 `${soon ? " (the run is less than an hour and a half away)" : ""}`);
+  }
+  const out = { summary, engines: engs, owners: own, test_clock: clock, pools, notices: nr, open_setups: open, legs: {} };
   if (Number.isFinite(o.at)) {
     const c = E.C({ cfg: (await S.config()).cfg, consts: src.consts });
     summary.push(`settings fed_floor ${fmt(c.raw("fed_floor"))} · fed_ceiling ${fmt(c.raw("fed_ceiling"))} · fed_floor_mint_daily ${fmt(c.raw("fed_floor_mint_daily"))} · mintcap_floor ${fmt(c.raw("mintcap_floor"))} · fed_ceiling_action ${c.raw("fed_ceiling_action")} · incentive_guarantee ${c.raw("incentive_guarantee")} · guarantee_scaled ${!!c.raw("guarantee_scaled")} · heist_cap_mode ${c.raw("heist_cap_mode")}`);
@@ -666,27 +759,42 @@ async function status(o) {
 }
 
 // ── snapshot / cutcheck (read only): the H2a verify ("the import wrote zero PAT rows", every handed period, supply) ──
+const SNAP_TABLES = ["pool_moves", "pool_move_legs", "stash_moves", "jackpot_rakes", "fed_records", "policy_mints", "pat_burns", "transactions"];
 async function snapshot() {
   const { getQuery } = require("../dbUtils");
-  const count = async (t) => ((await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length
-    ? Number((await getQuery(`SELECT COUNT(*) AS n FROM ${t}`))[0].n) : null);
-  const rows = {};
-  for (const t of ["pool_moves", "pool_move_legs", "stash_moves", "jackpot_rakes", "fed_records", "policy_mints", "pat_burns", "transactions"]) rows[t] = await count(t);
+  const at = Date.now();                                    // before the reads: a row written while they run counts as "since"
+  const rows = {}, maxes = {};
+  for (const t of SNAP_TABLES) {
+    if (!(await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length) { rows[t] = null; maxes[t] = null; continue; }
+    const r = (await getQuery(`SELECT COUNT(*) AS n, COALESCE(MAX(rowid), 0) AS m FROM ${t}`))[0];
+    rows[t] = Number(r.n); maxes[t] = Number(r.m);
+  }
+  const supply = await supplyNow();
   const C = require("../policy/core");
   const engs = await C.engines();
-  const maxMove = Number((await getQuery("SELECT COALESCE(MAX(rowid), 0) AS m FROM pool_moves"))[0].m);
-  return { summary: [`snapshot: ${Object.entries(rows).map(([t, n]) => `${t} ${n === null ? "-" : n}`).join(" · ")} · supply ${fmt(await supplyNow())}`],
-           at: Date.now(), rows, pool_moves_max: maxMove, supply: await supplyNow(), engines: Object.fromEntries(Object.entries(engs).map(([e, r]) => [e, r.mode])) };
+  return { summary: [`snapshot: ${Object.entries(rows).map(([t, n]) => `${t} ${n === null ? "-" : n}`).join(" · ")} · supply ${fmt(supply)}`],
+           at, rows, maxes, pool_moves_max: maxes.pool_moves, supply, engines: Object.fromEntries(Object.entries(engs).map(([e, r]) => [e, r.mode])) };
+}
+/** The period an engine row's key belongs to, among `periods` (longest first: a tagged "D...-lceil" before the plain day), or null.
+ *  Keys: tr-<did>-..., wf-<eid>-..., mo-<did>-..., act-<did>-..., fedmint-floor-<did> / fedmint-iss-<did>, floor- / iss-<did>
+ *  (fed_records), pol-<leg key> (the House's jackpot_rakes). */
+function periodOfKey(key, periods) {
+  const k = String(key || "").replace(/^pol-/, "").replace(/^fedmint-/, "").replace(/^(?:tr|wf|mo|act|floor|iss)-/, "");
+  for (const p of periods) if (k === p || k.startsWith(p + "-") || k.startsWith(p + ":")) return p;
+  return null;
 }
 async function cutcheck(o) {
   if (!o.before) refuse("--before=<the snapshot JSON saved before the cutover>");
   const before = J(fs.readFileSync(path.resolve(o.cwd || process.cwd(), o.before), "utf8"));
   if (!before || !before.rows) refuse("--before isn't a snapshot (node tools/policy-rehearse.js snapshot --json > file)");
+  if (!before.maxes || !Number.isFinite(Number(before.at))) refuse("--before is a snapshot without row marks (an older kit's) - take a new one before the cutover");
   const now = await snapshot();
   const S = require("../policy/source"), C = require("../policy/core");
+  const { getQuery } = require("../dbUtils");
   const src = await S.read();
   const lines = [];
   const add = (ok, s) => lines.push(`${ok ? "PASS" : "FAIL"} ${s}`);
+  const info = (s) => lines.push(`INFO ${s}`);
   const engs = await C.engines();
   add(C.ENGINES.every((e) => engs[e].mode === "live"), `engines live on the site: ${C.ENGINES.map((e) => `${e}=${engs[e].mode}`).join(" ")}`);
   // what Pepe's handshake hands over (pepe_policyclient._p4_handover): every done epoch of his journal, his last 30 done release
@@ -697,18 +805,77 @@ async function cutcheck(o) {
   const missing = [];
   for (const [e, p] of want) { const r = await C.run(e, String(p)); if (!r || !["handed", "done"].includes(r.state)) missing.push(`${e}:${p}`); }
   add(!missing.length, `every period in Pepe's pushed journals is handed / done here (${want.length})${missing.length ? ": missing " + missing.slice(0, 12).join(", ") : ""}`);
-  const grew = Object.entries(now.rows).filter(([t, n]) => n !== null && before.rows[t] !== null && before.rows[t] !== undefined && n !== before.rows[t]);
-  const { getQuery } = require("../dbUtils");
-  const newMoves = (await getQuery("SELECT key, kind, flow, net FROM pool_moves WHERE rowid > ? ORDER BY rowid LIMIT 50", [int(before.pool_moves_max)]));
-  add(!grew.length, `no PAT rows since the snapshot${grew.length ? ": " + grew.map(([t, n]) => `${t} ${before.rows[t]} -> ${n}`).join(", ") + " - read new_moves: the cutover itself writes none; other live activity on this database counts here too" : ""}`);
-  add(now.supply === before.supply, `supply unchanged ${fmt(before.supply)} -> ${fmt(now.supply)}`);
-  return { summary: lines, before, now, missing, new_moves: newMoves };
+
+  // The rows since the snapshot, by cause. The cutover itself writes none (policy_runs / policy_engines / policy_meta /
+  // policy_audit only); what does land meanwhile is live activity: the site's own burn accrual (live from the cutover on: one
+  // burn per accrual slot of whatever is in the burn reserve), its runs of periods that fell due, Pepe's last burns before his
+  // switches went off, charges, payouts. Only a hand-over row or a row of a period Pepe handed is a FAIL.
+  const since = Math.trunc(Number(before.at));
+  const mark = (t) => int((before.maxes || {})[t]);
+  const handed = new Set(want.map(([, p]) => String(p)));
+  const siteRuns = await getQuery("SELECT engine, period FROM policy_runs WHERE via = 'site' AND state = 'done' AND COALESCE(done, created) >= ? ORDER BY created", [since]);
+  const sitePeriods = new Set(siteRuns.map((r) => r.period));
+  const rerun = siteRuns.filter((r) => want.some(([e, p]) => e === r.engine && String(p) === r.period));
+  add(!rerun.length, `no period Pepe handed was run by the site since the snapshot${rerun.length ? ": " + rerun.map((r) => `${r.engine}:${r.period}`).join(", ") : ""}`);
+  const periods = [...new Set([...handed, ...sitePeriods])].sort((a, z) => z.length - a.length);
+  const bad = [], live = new Map(), other = [];
+  let siteBurned = 0, otherBurned = 0, minted = 0;
+  const newMoves = now.maxes.pool_moves === null ? [] : await getQuery("SELECT key, kind, flow, via, net FROM pool_moves WHERE rowid > ? ORDER BY rowid LIMIT 5000", [mark("pool_moves")]);
+  const siteBurnRuns = siteRuns.filter((r) => r.engine === "burn").length;
+  for (const m of newMoves) {
+    if (m.kind === "burn") { if (m.via === "policy") siteBurned -= int(m.net); else otherBurned -= int(m.net); }
+    if (/^fedmint-/.test(m.key)) minted += int(m.net);
+    if (m.kind === "cutover" || /hand-?over|cutover|import/i.test(String(m.flow || ""))) { bad.push(`${m.key} (kind ${m.kind}, flow ${m.flow}): a hand-over row`); continue; }
+    if (m.via !== "policy") { other.push(m); continue; }
+    if (m.kind === "burn") {
+      if (!siteBurnRuns) bad.push(`${m.key}: a site burn with no site burn run since the snapshot`);
+      else live.set("burn accrual", (live.get("burn accrual") || 0) + 1);
+      continue;
+    }
+    const p = periodOfKey(m.key, periods);
+    if (p && handed.has(p) && !sitePeriods.has(p)) bad.push(`${m.key}: a leg of ${p}, a period Pepe handed`);
+    else if (p && sitePeriods.has(p)) live.set(p, (live.get(p) || 0) + 1);
+    else bad.push(`${m.key}: an engine leg that no site run since the snapshot explains`);
+  }
+  // the other PAT tables: a row keyed to a period Pepe handed (a waterfall stash leg, a House leg, a floor / issuance mint) is a FAIL
+  const keyed = [["stash_moves", "key", ""], ["jackpot_rakes", "jackpotId", ""], ["fed_records", "key", " AND kind = 'mint'"]];
+  for (const [t, col, where] of keyed) {
+    if (now.maxes[t] === null || now.maxes[t] === undefined) continue;
+    const rows = await getQuery(`SELECT ${col} AS k FROM ${t} WHERE rowid > ?${where} ORDER BY rowid LIMIT 5000`, [mark(t)]);
+    for (const r of rows) {
+      const p = periodOfKey(r.k, periods);
+      if (p && handed.has(p) && !sitePeriods.has(p)) bad.push(`${t} ${r.k}: a row of ${p}, a period Pepe handed`);
+    }
+  }
+  const grew = {};
+  for (const t of SNAP_TABLES) {
+    const a = before.rows[t], b = now.rows[t];
+    if (a !== null && a !== undefined && b !== null && b !== undefined && b !== a) grew[t] = b - a;
+  }
+  const nRows = Object.values(grew).reduce((x, n) => x + n, 0);
+  add(!bad.length, `the cutover wrote no PAT row: ${fmt(nRows)} row(s) since the snapshot, none a hand-over row or a row of a period Pepe handed` +
+                   `${bad.length ? " - " + bad.slice(0, 8).join(" | ") : ""}`);
+  if (live.has("burn accrual")) info(`since the snapshot: the site's live burn accrual burned ${fmt(siteBurned)} PAT (${live.get("burn accrual")} burn move(s): the burn reserve the cutover found, or what reached it since)`);
+  const runs = [...live.keys()].filter((k) => k !== "burn accrual");
+  if (runs.length) info(`since the snapshot: the site ran ${runs.join(", ")} (${runs.map((k) => live.get(k)).reduce((x, n) => x + n, 0)} engine move(s))`);
+  if (other.length || Object.keys(grew).length) {
+    const by = {};
+    for (const m of other) { const c = /^charge:/.test(m.key) ? "charges" : m.kind === "burn" ? "Pepe's burns" : `${m.via || "?"} ${m.kind}`; by[c] = (by[c] || 0) + 1; }
+    info(`since the snapshot, other live activity: ${Object.entries(by).map(([c, n]) => `${c} ${n}`).join(", ") || "no pool move"}` +
+         `${otherBurned ? ` (Pepe's burns ${fmt(otherBurned)} PAT)` : ""}; rows ${Object.entries(grew).map(([t, n]) => `${t} ${n > 0 ? "+" : ""}${n}`).join(", ") || "none"}`);
+  }
+  const burned = siteBurned + otherBurned;
+  const expect = int(before.supply) - burned + minted;
+  add(now.supply === expect, `supply reconciled: ${fmt(before.supply)} -> ${fmt(now.supply)}` +
+      `${burned ? `; burned ${fmt(burned)}` : ""}${minted ? `; minted ${fmt(minted)}` : ""}${burned || minted ? " since the snapshot" : " (no burn or mint since the snapshot)"}` +
+      `${now.supply === expect ? "" : ` - expected ${fmt(expect)}, ${fmt(now.supply - expect)} unexplained (run it again if a burn landed while it read)`}`);
+  return { summary: lines, before, now, missing, rerun, problems: bad, new_moves: newMoves.slice(0, 50) };
 }
 
 // ── the CLI ──
 function usage() {
   return "usage: PATV_ENV=staging STAGING=1 node tools/policy-rehearse.js <status|setup|tick|inspect|undo|snapshot|cutcheck> --db=<staging copy>/myapp.db " +
-         "[--leg=" + Object.keys(LEGS).join("|") + "] [--tag=<1-8 a-z0-9>] [--at=YYYY-MM-DDTHH:MM:SSZ] [--margin=N] [--after-run] [--before=file] [--json]";
+         "[--leg=" + Object.keys(LEGS).join("|") + "] [--tag=<3-8 a-z0-9, a letter first>] [--at=YYYY-MM-DDTHH:MM:SSZ] [--margin=N] [--after-run] [--allow-notices] [--before=file] [--json]";
 }
 function parseArgs(argv) {
   const o = {};
@@ -716,6 +883,7 @@ function parseArgs(argv) {
   for (const a of argv.slice(1)) {
     if (a === "--after-run") { o.afterRun = true; continue; }
     if (a === "--json") { o.json = true; continue; }
+    if (a === "--allow-notices") { o.allowNotices = true; continue; }
     const m = /^--(db|leg|tag|at|margin|before)=(.+)$/.exec(a);
     if (!m) refuse(`unknown option ${a} - ${usage()}`);
     o[m[1]] = m[2];
@@ -760,7 +928,8 @@ async function main(argv) {
       out("--- evidence (JSON) ---");
       out(JSON.stringify(Object.assign({}, r, { summary: undefined }), null, 2));
     }
-    if ((r.verdict || r.summary || []).some((l) => /^FAIL /.test(l)) && command !== "status") process.exitCode = 3;
+    // (status's only FAIL line: setups still open while the real 04:00 UTC run is near)
+    if ((r.verdict || r.summary || []).some((l) => /^FAIL /.test(l))) process.exitCode = 3;
   } finally {
     await new Promise((resolve) => D.db.close(() => resolve()));
   }
@@ -772,4 +941,5 @@ if (require.main === module) {
   });
 }
 module.exports = { guard, valid, transfers, wanted, reached, previewLeg, setup, undo, tick, inspect, status, snapshot, cutcheck, verdictOf, withClock,
-                   inWindow, main, parseArgs, LEGS, SOURCES, TRACKED, BURN_AMOUNT, MARGIN_DEFAULT, _setRealNow: (fn) => { realNow = fn || (() => Date.now()); } };
+                   inWindow, nearRun, noticeRisk, noTelegram, openSetups, main, parseArgs, LEGS, SOURCES, TRACKED, BURN_AMOUNT, MARGIN_DEFAULT,
+                   _setRealNow: (fn) => { realNow = fn || (() => Date.now()); } };

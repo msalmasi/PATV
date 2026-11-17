@@ -380,8 +380,22 @@ test("the H2a sequence: shadow (Pepe's handshake + report) -> cutover -> every l
   assert.equal(cut.ok, true, JSON.stringify(cut));
   const snapFile = path.join(tmp, "before-cutover.json");
   fs.writeFileSync(snapFile, JSON.stringify(snap));
+  // live activity between the snapshot and the check (staging after a real cutover): a charge, and - the engines being live now -
+  // the site's own burn accrual burning what reached the burn reserve. Neither is the hand-over's: INFO, and the supply reconciles
+  const A0 = require(path.join(repo, "policy", "apply"));
+  assert.equal((await P.move({ key: "charge:rt-test-cutcheck", legs: [["reserve", -10000], ["fortknox", 10000]], terminal: true })).ok, true);
+  assert.equal((await P.move({ key: "test-cutcheck-to-burn", legs: [["reserve", -5000], ["burn", 5000]], terminal: true })).ok, true);
+  assert.equal((await A0.runBurn("A999999990", Date.now() / 1000)).amount, 5000);
   const cc = await R.cutcheck({ before: snapFile });
-  assert.deepEqual(cc.summary.filter((l) => !l.startsWith("PASS")), [], cc.summary.join("\n"));
+  assert.deepEqual(cc.summary.filter((l) => l.startsWith("FAIL")), [], cc.summary.join("\n"));
+  assert.ok(cc.summary.some((l) => /^INFO since the snapshot: the site's live burn accrual burned 5,000 PAT/.test(l)), cc.summary.join("\n"));
+  assert.ok(cc.summary.some((l) => /^INFO since the snapshot, other live activity: .*charges 1/.test(l)), cc.summary.join("\n"));
+  assert.ok(cc.summary.some((l) => /^PASS supply reconciled: .*burned 5,000 since the snapshot$/.test(l)), cc.summary.join("\n"));
+  // a leg of a period Pepe handed (the site moving D2026-11-17 again) is the hand-over's: FAIL
+  await P.move({ key: "mo-D2026-11-17-guarantee:in", legs: [["reserve", -1], ["incentives", 1]], via: "policy", terminal: true });
+  const bad = await R.cutcheck({ before: snapFile });
+  assert.ok(bad.summary.some((l) => /^FAIL the cutover wrote no PAT row: .*mo-D2026-11-17-guarantee:in: a leg of D2026-11-17, a period Pepe handed/.test(l)), bad.summary.join("\n"));
+  await P.move({ key: "test-cutcheck-back", legs: [["incentives", -1], ["reserve", 1]], terminal: true });
 
   // ── 3. every leg live, once, through the real scheduler at its tag ──
   const live = async (leg, tag, at, more = () => {}, { executed = true, margin } = {}) => {
@@ -483,6 +497,120 @@ test("the H2a sequence: shadow (Pepe's handshake + report) -> cutover -> every l
   assert.equal((await SCH.rollback({ key: "pr-h2areh-2", engines: C.ENGINES, actor: "owl" })).ok, true);
 });
 
+test("overflow: Fort Knox is put over the REAL clock's cap too - staging Pepe's inject `daily` plans at the real time, not --at", async () => {
+  // staging Pepe's _p4_inject runs `daily` as self._tr_daily("rehearsal", did): the period id from --at, the plan (and its boundary
+  // handshake) at the real time. A scaled Fort Knox cap (heist_cap_mode pct: 60% of the week's guarantee target) differs between
+  // weeks: here the real clock's week (11-23) has a 10M issuance mint in the week before it (issuance_to_guarantee), --at's week
+  // (11-30) none - the real cap is the higher one
+  const at = T("2026-12-02T05:10:00Z"), did = "D2026-12-02-fkreal", realS = REAL / 1000;
+  const iss = { key: "iss-test-fkreal", amount: 10 * M, policy: "issuance", source: "issuance", state: "done", dest: "reserve", ts: T("2026-11-20T12:00:00Z") };
+  await D.runQuery("INSERT INTO fed_records (kind, key, rec, state, amount, source, month, ts, updated) VALUES ('mint', ?, ?, 'done', ?, 'issuance', '2026-11', ?, ?)",
+                   [iss.key, JSON.stringify(iss), iss.amount, iss.ts, Date.now()]);
+  await pushCfg({ econ_cfg: Object.assign({}, CFG, { issuance_to_guarantee: true }) });
+  try {
+    for (const e of ["treasury"]) assert.equal((await C.engines())[e].mode, "shadow");
+    const capOf = async (nowS) => { const inp = await G.daily(nowS, did); return E.heistCap(inp, E.C(inp), "fortknox", nowS); };
+    const capAt = await capOf(at), capReal = await capOf(realS);
+    assert.equal(capAt, 15 * M);
+    assert.equal(capReal, 21 * M, "the real week's target is 35M: its Fort Knox cap is the higher one");
+    const o = opt("overflow", "fkreal", at);
+    const r = await R.setup(o);
+    assert.equal(r.after.fortknox, capReal + R.MARGIN_DEFAULT, "over both caps: the real clock's");
+    // Pepe as the real bot runs it: the handshake and his gather at the REAL time, the period id from --at
+    const b = await SCH.boundary({ engine: "treasury", period: did, now: realS });
+    assert.equal(b.ok, true, JSON.stringify(b));
+    const inputs = await G.daily(realS, did);
+    const rep = await SCH.report({ engine: "treasury", period: did, inputs, plan: SCH.planOf("treasury", inputs), cfg: { rev: 7, sha: "x", src: "site" } });
+    assert.equal(rep.clean, true, JSON.stringify(rep));
+    assert.ok(SCH.planOf("treasury", inputs).overflow > 0, "Pepe's real-clock plan reaches the overflow");
+    const ins = await R.inspect(o);
+    assert.ok(ins.verdict.some((l) => l.startsWith("PASS shadow overflow:")), ins.verdict.join("\n"));
+    assert.equal((await R.undo(o)).exact, true);
+  } finally {
+    await pushCfg();
+    await D.runQuery("DELETE FROM fed_records WHERE key = 'iss-test-fkreal'");
+  }
+});
+
+test("notices: the copy's Telegram reach - status WARNs, guarantee / overflow setups refuse unless --allow-notices, a tick queues no alert", async () => {
+  const TG = require(path.join(repo, "telegram"));
+  const inbox = require(path.join(repo, "inbox"));
+  await TG.init();
+  const outbox = () => D.getQuery("SELECT kind, ref FROM telegram_outbox WHERE user_id = 'u1' ORDER BY id");
+  const settle = () => new Promise((r) => setTimeout(r, 400));          // telegram.onNotice is fire-and-forget
+  assert.deepEqual(await R.noticeRisk(), { links: 0, unsent: 0 });
+  assert.ok(!(await R.status({ at: MON })).summary.some((l) => /Telegram/.test(l)));
+  // a member linked on prod (the refresh keeps telegram_links) who wants staking alerts
+  await D.runQuery("INSERT INTO telegram_links (user_id, tg_id, handle, linked_at) VALUES ('u1', '700001', 'fernt', ?)", [Date.now()]);
+  await D.runQuery("INSERT INTO telegram_prefs (user_id, kind, on_) VALUES ('u1', 'staking', 1)");
+  try {
+    // the link works: a notice filed outside the tool becomes an alert (what the staging site / staging Pepe's runs would queue)
+    assert.equal(await inbox.add("u1", { kind: "staking", title: "Staking payout: +1 PAT", ref: "wf:test-tg-outside:s1" }), true);
+    await settle();
+    assert.deepEqual((await outbox()).map((x) => x.ref), ["n:wf:test-tg-outside:s1"]);
+    assert.deepEqual(await R.noticeRisk(), { links: 1, unsent: 1 });
+    const st = await R.status({ at: MON });
+    assert.ok(st.summary.some((l) => /^WARN this copy holds 1 Telegram link\(s\), 1 unsent Telegram alert\(s\)/.test(l)), st.summary.join("\n"));
+    // guarantee / overflow (a tagged epoch: staking notices) refuse - nothing moved; the other legs don't notify
+    const b0 = await P.balances();
+    await assert.rejects(R.setup(opt("guarantee", "tgref", MON)), /Telegram link\(s\).*--allow-notices - nothing moved/);
+    await assert.rejects(R.setup(opt("overflow", "tgreo", T("2026-11-26T05:10:00Z"))), /Telegram/);
+    assert.deepEqual(await P.balances(), b0);
+    assert.equal(await C.meta("rehearse:tgref:guarantee"), null);
+    const o = Object.assign(opt("guarantee", "tgok", MON), { allowNotices: true });
+    await R.setup(o);
+    assert.equal(R.parseArgs(["setup", "--allow-notices"]).o.allowNotices, true);
+    // the tool's own tick files the notice but queues no alert (here: a notice filed during the pass)
+    const save = SCH.pass;
+    SCH.pass = async (...a) => { await inbox.add("u1", { kind: "staking", title: "Staking payout: +2 PAT", ref: "wf:test-tg-tick:s1" }); return save(...a); };
+    try { await R.tick(o); } finally { SCH.pass = save; }
+    await settle();
+    assert.equal((await D.getQuery("SELECT COUNT(*) AS n FROM inbox WHERE user_id = 'u1' AND ref = 'wf:test-tg-tick:s1'"))[0].n, 1, "the inbox notice is filed");
+    assert.deepEqual((await outbox()).map((x) => x.ref), ["n:wf:test-tg-outside:s1"], "no alert queued by the tick");
+    assert.equal(typeof TG.onNotice, "function");
+    assert.notEqual(TG.onNotice.toString(), "() => {}", "telegram restored after the tick");
+    await R.undo(o);
+  } finally {
+    await D.runQuery("DELETE FROM telegram_links WHERE user_id = 'u1'");
+    await D.runQuery("DELETE FROM telegram_prefs WHERE user_id = 'u1'");
+    await D.runQuery("DELETE FROM telegram_outbox WHERE user_id = 'u1'");
+  }
+  assert.deepEqual(await R.noticeRisk(), { links: 0, unsent: 0 });
+});
+
+test("status lists the setups still open (WARN; FAIL from 02:30 to 04:30 UTC, exit 3) - a burn setup only until it is burned", async () => {
+  const o = opt("ceiling", "openx", T("2026-11-27T05:10:00Z"));
+  await R.setup(o);
+  try {
+    const s = await R.status({});
+    const line = s.summary.find((l) => l.startsWith("open setup rehearse:openx:ceiling "));
+    assert.ok(line, s.summary.join("\n"));
+    assert.match(line, /moved .*reserve \+/);
+    assert.match(line, /undo --leg=ceiling --tag=openx --at=2026-11-27T05:10:00Z$/);
+    assert.ok(s.summary.some((l) => /^WARN \d+ open setup\(s\): the real 04:00 UTC run acts on a forced state/.test(l)));
+    assert.ok(!s.summary.some((l) => l.startsWith("FAIL")));
+    assert.ok(s.open_setups.some((x) => x.key === "rehearse:openx:ceiling" && x.ran === false));
+    R._setRealNow(() => Date.parse("2026-11-25T02:45:00Z"));
+    try {
+      const n = await R.status({});
+      assert.ok(n.summary.some((l) => /^FAIL \d+ open setup\(s\): .*less than an hour and a half away/.test(l)), n.summary.join("\n"));
+    } finally { R._setRealNow(() => REAL); }
+    assert.equal(R.nearRun(Date.parse("2026-11-25T02:29:59Z")), false);
+    assert.equal(R.nearRun(Date.parse("2026-11-25T02:30:00Z")), true);
+    assert.equal(R.nearRun(Date.parse("2026-11-25T04:30:00Z")), false);
+  } finally { await R.undo(o); }
+  assert.ok(!(await R.status({})).summary.some((l) => l.startsWith("open setup rehearse:openx:")), "closed by the undo");
+  // a burn setup whose PAT was burned is not open (the burn is final; its undo is refused)
+  assert.ok(!(await R.openSetups()).some((x) => x.key === "rehearse:burnt:burn"), "the earlier test's burnt setup was burned");
+  const ob = opt("burn", "openb", TUE);
+  await R.setup(ob);
+  assert.ok((await R.openSetups()).some((x) => x.key === "rehearse:openb:burn"));
+  const A = require(path.join(repo, "policy", "apply"));
+  await C.setMode("burn", "live", { by: "test" });
+  try { assert.ok((await A.runBurn("A999999980", Date.now() / 1000)).amount >= R.BURN_AMOUNT); } finally { await C.setMode("burn", "shadow", { by: "test" }); }
+  assert.ok(!(await R.openSetups()).some((x) => x.key === "rehearse:openb:burn"), "burned: no longer open");
+});
+
 test("status (read only): every leg's setup and plan at a clock, nothing written", async () => {
   const n0 = (await D.getQuery("SELECT COUNT(*) AS n FROM pool_moves"))[0].n;
   const s = await R.status({ at: TUE });
@@ -500,7 +628,9 @@ test("the CLI end to end in its own process (no SECRET_KEY): status, setup, insp
   const run = (args) => spawnSync(process.execPath, [TOOL, ...args, "--db=" + db], { cwd: os.tmpdir(), encoding: "utf8", timeout: 120000,
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, PATV_ENV: "staging", STAGING: "1", NODE_PATH: process.env.NODE_PATH || "" } });
   const st = run(["status", "--at=2026-12-08T05:10:00Z"]);
-  assert.equal(st.status, 0, st.stderr + st.stdout);
+  // (this database keeps the executed legs' setups open: from 02:30 UTC status FAILs on them - exit 3)
+  assert.ok(st.status === 0 || (st.status === 3 && R.nearRun(Date.now()) && /^FAIL \d+ open setup/m.test(st.stdout)), st.stderr + st.stdout);
+  assert.match(st.stdout, /^open setup rehearse:/m);
   assert.match(st.stdout, /^leg ceiling +reachable/m);
   const before = await P.balances();
   const su = run(["setup", "--leg=ceiling", "--tag=clia", "--at=2026-12-08T05:10:00Z", "--json"]);
