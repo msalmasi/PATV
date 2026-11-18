@@ -348,8 +348,9 @@ async function pass(nowS, info, engs) {
       row = await getRow(did);
     }
     const si = row.site_inputs || {};
-    const attempts = Array.isArray(si.attempts) ? si.attempts : [];
-    if (attempts.length >= MAX_ATTEMPTS) return closed;
+    const attempts = Array.isArray(si.attempts) ? si.attempts : [];       // the newest 20, for the card
+    const made = Number(si.n) || attempts.length;
+    if (made >= MAX_ATTEMPTS) return closed;
     const s = pickSample(ring, data);
     if (!s) return closed;
     if (attempts.some((a) => a.sample_at === Math.round(s.at))) return closed;
@@ -357,7 +358,7 @@ async function pass(nowS, info, engs) {
     const ok = x.clean ? 1 : null;
     const plan = planOf(s, x, data.eid);
     plan.site.budgets = E.resolveWeek(Object.assign({}, data.inp, { week: { id: data.eid, budgets: {}, spent: x.site } }), data.c, s.at).budgets;
-    await putRow(did, { site_inputs: Object.assign({}, si, { attempts: attempts.concat(attemptRec(s, x, nowMs)).slice(-20), n: attempts.length + 1, carry: x.carry, stuck_unsure: x.stuck.slice(0, 20) }),
+    await putRow(did, { site_inputs: Object.assign({}, si, { attempts: attempts.concat(attemptRec(s, x, nowMs)).slice(-20), n: made + 1, carry: x.carry, stuck_unsure: x.stuck.slice(0, 20) }),
                         site_plan: plan.site, pepe_plan: plan.pepe, total_diff: x.list,
                         notes: Object.entries(x.carry).map(([g, c]) => `${g}: carry ${c.amount} over the Monday boundary (${c.legs.join(", ")})`),
                         blocking: x.list, ok, boundary_ts: s.at });

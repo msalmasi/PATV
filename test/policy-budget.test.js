@@ -225,6 +225,11 @@ test("pad and launchpad destinations: pool to pool in one move, the cap's excess
   assert.equal(r.body.vault, "incentives"); assert.equal(r.body.group, "activity");
   assert.equal(r.body.dest.room_in, 1000); assert.equal(r.body.dest.overflow, 4000);
   assert.equal(await inc(), i - 5000); assert.equal(await X.P.balance("fortknox"), fk + 4000); assert.equal(await X.P.balance("room:pad-1"), 50 * M);
+  const k0 = await X.P.balance("fortknox");
+  const full = await spend({ key: "lp-grant-pad-1-1:a0", flow: "launchpad_grant", amount: 3000, keep: 0, dest: { kind: "launchpad", id: "pad-1", tag: "launchpad grant" } });
+  assert.equal(full.body.state, "paid", JSON.stringify(full.body));
+  assert.deepEqual([full.body.dest.room_in, full.body.dest.overflow], [3000, 0], "a launch payout isn't capped: it lands whole in the pad's vault, as Pepe's transfer does");
+  assert.equal(await X.P.balance("room:pad-1"), 50 * M + 3000); assert.equal(await X.P.balance("fortknox"), k0);
   const lp = await spend({ key: "lp-grant-pad-2-1:a0", flow: "launchpad_grant", amount: 40000, keep: 100000, dest: { kind: "launchpad", id: "pad-2", tag: "launchpad grant" } });
   assert.equal(lp.body.state, "paid"); assert.equal(lp.body.group, "launchpad");
   assert.equal(await X.P.balance("room:pad-2"), 40000);
@@ -351,6 +356,81 @@ test("claims booked before the hand-over settle once on the site; a flash claim 
   assert.equal(await count("reserve_claims", "claimId IN ('legacy-1','legacy-2') AND settled=1"), 2);
   assert.equal((await B.sweepLegacyClaims()).settled, 0);
   assert.equal(await inc(), i - 1200);
+});
+
+test("a legacy flash claim: Pepe's own loan id, never a second loan; settled only when the loan stands, or when flash is off", async () => {
+  const claim = (id, amount = 50000) => X.runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, 'flash:house:wheel', 'u1', 'x', ?)", [id, amount]);
+  const settled = async (id) => (await X.getQuery("SELECT settled FROM reserve_claims WHERE claimId = ?", [id]))[0].settled;
+  const loans = async (like) => (await X.getQuery("SELECT key FROM fed_records WHERE kind = 'loan' AND key LIKE ? ORDER BY key", [like])).map((r) => r.key);
+  // Pepe's loan landed and his acknowledgement was lost
+  await claim("fl-a");
+  await X.tx(() => X.F.loanInTx({ vault: "house", amount: 50000, flash: true, auto: true, key: "fx-site-fl-a", reason: "site wheel payout past the House floor", actor: "site", via: "site" }, null));
+  const loanCount = async () => (await X.getQuery("SELECT COUNT(*) AS n FROM fed_records WHERE kind = 'loan'"))[0].n;
+  const n0 = await loanCount();
+  let h = await house();
+  assert.equal((await B.sweepLegacyClaims()).settled, 1);
+  assert.equal(await settled("fl-a"), 1); assert.equal(await house(), h, "the House isn't lent the gap a second time");
+  assert.deepEqual(await loans("%fl-a%"), ["FL-fx-site-fl-a"]);
+  assert.equal(await loanCount(), n0, "no loan under any other id either");
+  // no loan yet: the same id Pepe would have used
+  await claim("fl-b");
+  h = await house();
+  await B.sweepLegacyClaims();
+  assert.equal(await settled("fl-b"), 1); assert.equal(await house(), h + 50000); assert.deepEqual(await loans("%fl-b%"), ["FL-fx-site-fl-b"]);
+  // the source's cap refuses the loan: nothing is settled
+  await claim("fl-c");
+  const realLoan = X.F.loanInTx;
+  X.F.loanInTx = async () => ({ ok: false, loan_refused: true, error: "mint cap" });
+  h = await house();
+  const quiet = console.error; const logged = []; console.error = (...a) => logged.push(a.join(" "));
+  try {
+    assert.equal((await B.sweepLegacyClaims()).settled, 0);
+    await B.sweepLegacyClaims();
+  } finally { X.F.loanInTx = realLoan; console.error = quiet; }
+  assert.equal(await settled("fl-c"), 0); assert.equal(await house(), h); assert.deepEqual(await loans("%fl-c%"), []);
+  assert.equal(logged.filter((l) => l.includes("fl-c")).length, 1, "logged, once");
+  assert.equal((await B.sweepLegacyClaims()).settled, 1, "and it settles once the loan can be made");
+  assert.equal(await settled("fl-c"), 1); assert.equal(await house(), h + 50000);
+  // the Fed's books aren't here
+  await claim("fl-d");
+  await X.F.setMeta("live", false); X.F.forgetLive();
+  h = await house();
+  try { assert.equal((await B.sweepLegacyClaims()).settled, 0); } finally { await X.F.setMeta("live", true); X.F.forgetLive(); }
+  assert.equal(await settled("fl-d"), 0); assert.equal(await house(), h);
+  // two sweeps at once: one settles it
+  const both = await Promise.all([B.sweepLegacyClaims(), B.sweepLegacyClaims()]);
+  assert.equal(both[0].settled + both[1].settled, 1); assert.equal(await settled("fl-d"), 1); assert.deepEqual(await loans("%fl-d%"), ["FL-fx-site-fl-d"]);
+  // flash switched off after the site paid: the House carries it, no loan
+  await claim("fl-e");
+  const push = await X.C._pushForSource();
+  await X.C.putCfg(Object.assign({}, push, { econ_cfg: Object.assign({}, push.econ_cfg, { flash_house: false }) }));
+  h = await house();
+  try { assert.equal((await B.sweepLegacyClaims()).settled, 1); } finally { await X.C.putCfg(push); }
+  assert.equal(await settled("fl-e"), 1); assert.equal(await house(), h); assert.deepEqual(await loans("%fl-e%"), []);
+});
+
+test("/week gives Pepe each settled claim as [id, its second, group, amount], by sequence", async () => {
+  assert.equal((await B.takeClaim({ claimId: "wk-claim-1", flow: "incentives:levelup", userId: "u1", type: "x", amount: 77 })).ok, true);
+  const row = (await X.getQuery("SELECT seq, ts FROM incentive_settled WHERE claim_id = 'wk-claim-1'"))[0];
+  const s = (await post("/api/policy/bot/week", { settled_after: row.seq - 1 })).body.settled;
+  assert.deepEqual(s.ids, [["wk-claim-1", Math.floor(row.ts / 1000), "levelup", 77]]);
+  assert.equal(s.next, row.seq); assert.equal(s.more, false);
+});
+
+test("a site-owned activity reward reaches a login with characters a spend key can't hold", async () => {
+  const A = X.R("policy", "apply");
+  const logins = ["q'x", "a+b*c~d"];
+  for (const [i, lg] of logins.entries()) await X.runQuery("INSERT INTO users (userId, username, password, points_balance, camfrogUsername) VALUES (?, ?, 'x', 0, ?)", [`act-u${i}`, `actuser${i}`, lg]);
+  const inputs = { cfg: X.cfg, consts: X.E.CONSTS, flags: { layers: true, tr_live: true }, rows: logins.map((lg) => ["2026-11-17", lg, 50, 0]), pools: { incentives: await inc() }, week: { id: WEEK, budgets: {}, spent: {} }, mints: [] };
+  const i = await inc();
+  const rec = await X.tx(() => A._payActivity("D2026-11-18", inputs, { activity: { amount: 2000, local_day: "2026-11-17" } }, T0 / 1000));
+  assert.deepEqual(rec.state, { "a+b*c~d": "paid", "q'x": "paid" });
+  assert.equal(await inc(), i - 2000); assert.equal(await bal("act-u0"), 1000); assert.equal(await bal("act-u1"), 1000);
+  const rows = await X.getQuery("SELECT key, grp, amount, status FROM incentive_spends WHERE flow = 'activity_rewards' AND key LIKE 'act-D2026-11-18-%' ORDER BY key");
+  assert.equal(rows.length, 2); assert.ok(rows.every((r) => r.grp === "activity" && r.status === "paid" && r.amount === 1000 && B.KEY_RE.test(r.key)), JSON.stringify(rows));
+  assert.equal(await count("bot_credit_log", "ref = 'act-D2026-11-18-q''x' AND outcome = 'ok'"), 1, "the day's own idempotency ref stays the login");
+  const again = await X.tx(() => A._payActivity("D2026-11-18", inputs, { activity: { amount: 2000, local_day: "2026-11-17" } }, T0 / 1000));
+  assert.equal(again.paid, 0); assert.equal(await inc(), i - 2000);
 });
 
 test("spendInTx in the caller's transaction: several destinations, one row, terminal refusal vs a throw, what casino guarantees need", async () => {

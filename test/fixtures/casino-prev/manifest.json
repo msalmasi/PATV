@@ -3,15 +3,15 @@
   "label": "1.99aoi",
   "note": "The previous build (1.99aoi, e4446e74) as test/fixtures/casino-rl-prev-boot.js runs it (supply.js: test/supply.test.js compares its count with this build's): each file is git show <base>:<path>, byte for byte. Refresh with the deployed base whenever it moves.",
   "files": {
+    "funding.js": "15240e2ff58ba3e49bdcd6422e53f194bb02cc89",
+    "gangs.js": "ef2b24822a318a9302866b75eeb67cb6a75ce94e",
+    "policy/config.js": "4c0201e9dc45d5c4f07e58429bb08f3b1cdb08b8",
+    "pools.js": "5b8b759cf487b54e5101b0a2fa462de34dde8615",
     "casino/holdem.js": "367dfb07401bfac609f5610c8f408803ed29f5e5",
     "casino/retire.js": "419be9759dca814fd1b77bd9d4ca1830a9a77102",
     "casino/rewards.js": "24f715844a5cb955177fa6b76eb9b9e26c22dc55",
     "casino/roulette.js": "ad1068df604ac32ed92d720b41728f7c3fa3ba63",
     "casino/service.js": "2454d98bd653f24337fba67f6643979fd5092e39",
-    "funding.js": "15240e2ff58ba3e49bdcd6422e53f194bb02cc89",
-    "gangs.js": "ef2b24822a318a9302866b75eeb67cb6a75ce94e",
-    "policy/config.js": "4c0201e9dc45d5c4f07e58429bb08f3b1cdb08b8",
-    "pools.js": "5b8b759cf487b54e5101b0a2fa462de34dde8615",
     "supply.js": "28562bd23091a08c9f2a975ba611d3f68e2c117e"
   }
 }

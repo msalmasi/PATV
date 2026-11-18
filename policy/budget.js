@@ -315,14 +315,15 @@ async function creditLegs(r) {
   }
   return { kind: "legs", legs: out };
 }
-/** Debit + destination for a pad / launchpad / debit-only spend: the pool legs of one keyed move. pad: the vault cap's excess goes to Fort Knox (_rv_credit). */
+/** Debit + destination for a pad / launchpad / debit-only spend: the pool legs of one keyed move. pad: the vault cap's excess goes to Fort Knox
+ *  (_rv_credit). launchpad: the whole amount lands in the pad's vault, like Pepe's transfer: the cap is only the check before a payout is started. */
 async function poolDest(r, vault, ctx) {
   const legs = [{ pool: vault, amount: -r.amount }];
   const out = { kind: r.dest.kind };
   if (r.dest.kind === "pad" || r.dest.kind === "launchpad") {
     const pool = "room:" + r.dest.id;
     const cap = ctx.c.int("room_vault_cap", 50000000);
-    const roomIn = Math.min(r.amount, Math.max(0, cap - (await P().balance(pool))));
+    const roomIn = r.dest.kind === "launchpad" ? r.amount : Math.min(r.amount, Math.max(0, cap - (await P().balance(pool))));
     const overflow = r.amount - roomIn;
     if (roomIn) legs.push({ pool, amount: roomIn });
     if (overflow) legs.push({ pool: "fortknox", amount: overflow });
@@ -687,6 +688,30 @@ async function flashClaim({ claimId, flow, userId, type, gap, meta }) {
     throw e;
   }
 }
+/** The Fed loan key Pepe uses for a website flash claim (pepe_monetary._mo_settle_flash_claim, _mo_flash): one he already opened is found, not opened again. */
+const legacyFlashKey = (claimId) => "fx-" + `site-${claimId}`.replace(/[^A-Za-z0-9_-]/g, "").slice(-48);
+const flashWarned = new Set();
+function warnFlashOnce(claimId, msg) {
+  if (flashWarned.has(claimId)) return;
+  if (flashWarned.size >= 1000) flashWarned.clear();
+  flashWarned.add(claimId);
+  console.error(`[budget] flash claim ${claimId} stays unsettled: ${msg}`);
+}
+/** In the sweep's transaction: a flash claim the site paid before the hand-over. Flash switched off since: the House carries it. Throws when no loan could be made. */
+async function settleLegacyFlash(c) {
+  const amount = Math.trunc(Number(c.amount));
+  if (amount > 0) {
+    const k = await configNow();
+    if (flashHouseOn(k.c, k.flags)) {
+      const Fed = require("../fed/service");
+      if (!(await Fed.meta("live"))) throw new Stop("E_FED_NOT_LIVE", "the Fed's books aren't live here");
+      const m = await Fed.loanInTx({ vault: "house", amount, flash: true, auto: true, key: legacyFlashKey(c.claimId),
+                                     reason: `flash: site ${String(c.flow).slice("flash:house:".length) || "site"} payout past the House floor`.slice(0, 300), actor: "site", via: "site" }, null);
+      if (!m || !m.ok) throw new Stop("E_LOAN_REFUSED", (m && m.error) || "the loan was refused");
+    }
+  }
+  await runQuery("UPDATE reserve_claims SET settled = 1 WHERE claimId = ? AND settled = 0", [c.claimId]);
+}
 /** Claims booked before the hand-over (still unsettled): settled once, each in its own transaction. Runs from pools.settleClaims. */
 async function sweepLegacyClaims({ limit = 200 } = {}) {
   if (!(await isSite())) return { settled: 0 };
@@ -698,17 +723,15 @@ async function sweepLegacyClaims({ limit = 200 } = {}) {
     try {
       await tx(async () => {
         if (!(await isSite())) return;
+        const open = (await getQuery("SELECT 1 AS y FROM reserve_claims WHERE claimId = ? AND settled = 0 AND COALESCE(queued,0) = 0", [c.claimId]))[0];
+        if (!open) return;
         if (String(c.flow).startsWith(INC)) await settleClaimInTx({ claimId: c.claimId, flow: c.flow, amount: c.amount, source: "legacy" });
-        else {
-          const Fed = require("../fed/service");
-          await Fed.loanInTx({ vault: "house", amount: Math.trunc(Number(c.amount)), flash: true, auto: true, key: "flash-" + sha(c.claimId).slice(0, 40),
-                               reason: `site ${String(c.flow).slice("flash:house:".length) || "site"} payout past the House floor`, actor: "site", via: "site" }, null);
-          await runQuery("UPDATE reserve_claims SET settled = 1 WHERE claimId = ? AND settled = 0", [c.claimId]);
-        }
+        else await settleLegacyFlash(c);
         n++;
       });
     } catch (e) {
-      if (!(e instanceof Stop)) console.error(`[budget] legacy claim ${c.claimId}:`, e.message);
+      if (!String(c.flow).startsWith(INC)) warnFlashOnce(c.claimId, e.message);
+      else if (!(e instanceof Stop)) console.error(`[budget] legacy claim ${c.claimId}:`, e.message);
     }
   }
   return { settled: n };

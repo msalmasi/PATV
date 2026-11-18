@@ -99,6 +99,22 @@ test("a difference is tried again: a later clean read closes the day; never clea
   assert.equal(r.site_inputs.final, "no clean attempt");
 });
 
+test("the day's attempts are counted past the 20 kept, and stop at the cap", async () => {
+  const old = Array.from({ length: 20 }, (_, i) => ({ sample_at: i + 1 }));
+  await sync({ roomgames: 7 }, T0 - 120000);
+  await SH.putRow(D, { site_inputs: { eligible: T0 / 1000, attempts: old, n: 33 } });
+  assert.match(await passAt(T0), /differs/);
+  let r = await row();
+  assert.equal(r.site_inputs.n, 34); assert.equal(r.site_inputs.attempts.length, 20, "only the newest are kept");
+  await SH.putRow(D, { site_inputs: Object.assign({}, r.site_inputs, { n: SH.MAX_ATTEMPTS }), site_plan: r.site_plan, pepe_plan: r.pepe_plan, total_diff: r.total_diff, blocking: r.blocking, boundary_ts: r.boundary_ts });
+  await sync({ roomgames: 7 }, T0 + 3600e3);
+  const at = T0 + 3600e3 + 120000;
+  assert.equal(await passAt(at), null);
+  r = await row();
+  assert.equal(r.site_inputs.n, SH.MAX_ATTEMPTS, "no attempt past the cap");
+  assert.equal((await SH.view()).days[0].attempts, SH.MAX_ATTEMPTS, "and the card shows the real count");
+});
+
 test("no usable sample: nothing is compared, and the day closes as 'no quiet sample'", async () => {
   await leg("pv-3", -1000, "beg", T0 - 10000);                        // a leg inside the quiet window of the only sample
   await sync({ roomgames: 1000 }, T0 - 20000);

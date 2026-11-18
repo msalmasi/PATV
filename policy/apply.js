@@ -364,6 +364,8 @@ async function payActivity(did, inputs, plan, nowS) {
   for (const [lg, amt] of pay) {
     if (stopped) break;
     const ref = `act-${did}-${lg}`.slice(0, 80);
+    // a Camfrog login can hold characters a spend key can't (' + * ~ ...): the week's row is keyed on its hash
+    const spendKey = `act-${did}-${crypto.createHash("sha256").update(lg, "utf8").digest("hex").slice(0, 24)}`;
     try {
       await tx(async () => {
         const prev = (await getQuery("SELECT outcome FROM bot_credit_log WHERE ref = ?", [ref]))[0];
@@ -382,7 +384,7 @@ async function payActivity(did, inputs, plan, nowS) {
         await runQuery(`INSERT INTO bot_credit_log (ref, ts, endpoint, userId, type, amount, source, outcome) VALUES (?, ?, 'policy', ?, 'activity-reward', ?, 'incentives', 'ok')
                         ON CONFLICT(ref) DO UPDATE SET outcome = 'ok', ts = excluded.ts`, [ref, Date.now(), posted.userId, amt]);
         // 1.99aop: site-owned week: counted here, per payee, in this savepoint (the day's allowance was the plan's check)
-        if (siteWeek) await require("./budget").spendInTx({ key: ref, flow: "activity_rewards", group: "activity", amount: amt, legsFromCaller: true, noCheck: true, via: "policy", why: "activity_rewards" });
+        if (siteWeek) await require("./budget").spendInTx({ key: spendKey, flow: "activity_rewards", group: "activity", amount: amt, legsFromCaller: true, noCheck: true, via: "policy", why: "activity_rewards" });
         state[lg] = "paid";
         paid += amt;
       });
@@ -472,4 +474,4 @@ async function runBurn(period, nowS, { actor = "accrual", via = "site", inflight
   });
 }
 
-module.exports = { runTreasuryEpoch, runTreasuryDaily, runMonetary, runBurn, transfer, protocolBook, fedMint, base, Halt, notifyStakers, isStakingPay };
+module.exports = { runTreasuryEpoch, runTreasuryDaily, runMonetary, runBurn, transfer, protocolBook, fedMint, base, Halt, notifyStakers, isStakingPay, _payActivity: payActivity };
