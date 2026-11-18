@@ -14,7 +14,8 @@
 <%
   const B_ = bn;
   const V_ = B_.vars || {};
-  const builtIn_ = (part) => (B_.promo && B_.promo !== 'custom' ? t('banner.promo.' + B_.promo + '.' + part, V_) : '');   // 1.99ans: no donation promo text (nopat.js)
+  const supKey_ = V_.promo_on ? 'support_promo' : V_.rate ? 'support_on' : 'support';   // 1.99aor: by the donations switch (banner.js supportTerms)
+  const builtIn_ = (part) => (B_.promo && B_.promo !== 'custom' ? t('banner.promo.' + (B_.promo === 'support' ? supKey_ : B_.promo) + '.' + part, V_) : '');
   const lab_ = B_.paid ? t('banner.sponsored') : t('banner.from_patv');
   const ICON_ = { lotto: '🎟️', season_pass: '🎟️', prime_time: '📺', plex: '📼', wheel: '🎡', support: '💖' };
   const house_ = !B_.paid && B_.kind !== 'image' && !!ICON_[B_.promo] && !B_.headline && !B_.line;

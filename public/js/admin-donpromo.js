@@ -115,6 +115,12 @@
     budgetUi('dp');
   }
   function render() {
+    // 1.99aor: the promo form only while the donations switch is "on" (the server refuses otherwise)
+    var dm = (view.donations && view.donations.mode) || 'perks';
+    $('dpForm').hidden = dm !== 'on';
+    if ($('dpNewT')) $('dpNewT').hidden = dm !== 'on';
+    if ($('dpModeNote')) $('dpModeNote').firstElementChild.textContent = dm === 'on' ? 'Promotions are live: they apply to donations quoted while one runs.'
+      : dm === 'off' ? 'Promotions don\'t apply while donations are paused.' : 'Promotions don\'t apply while donations are perks only.';
     var k = $('dpKv'); k.textContent = '';
     var live = (view.promos || []).filter(function (p) { return p.status === 'live'; })[0];
     k.appendChild(kv('Normal rate (Pepe)', fmt(view.normal.rate) + ' PAT per $1 · +' + view.normal.bonus_pct + '% to incentives'));
@@ -143,7 +149,7 @@
       });
       var td = document.createElement('td');
       if (['live', 'paused', 'scheduled', 'draft'].indexOf(p.status) >= 0) {
-        var e = document.createElement('button'); e.type = 'button'; e.className = 'adm-btn ghost sm'; e.textContent = 'Edit';
+        var e = document.createElement('button'); e.type = 'button'; e.className = 'adm-btn ghost sm'; e.textContent = 'Edit'; e.hidden = dm !== 'on';
         e.addEventListener('click', function () { openEdit(p); });
         var x = document.createElement('button'); x.type = 'button'; x.className = 'adm-btn danger sm'; x.textContent = p.status === 'scheduled' || p.status === 'draft' ? 'Cancel' : 'End now';
         x.addEventListener('click', function () {
@@ -258,5 +264,6 @@
   });
   modeUi();
   load();
+  document.addEventListener('donmode:changed', function () { load(); });   // 1.99aor: the switch just moved (admin-donmode.js)
   setInterval(function () { if (view && document.visibilityState === 'visible') render(); }, 30000);
 })();
