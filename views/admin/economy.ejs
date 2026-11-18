@@ -219,6 +219,9 @@
 
 <%- include('../partials/econ-policy', { isAdmin: _can('econ.telemetry_policy'), me }) %>
 
+<%# 1.99aop: the incentive week, per budget group (read-only) %>
+<%- include('../partials/econ-budget', { isAdmin: _can('econ.telemetry_policy'), me }) %>
+
 <%- include('../partials/econ-autoescrow', { isAdmin: _can('econ.backend_cutover'), me }) %>
 
 <section class="adm-card" id="burn" aria-labelledby="burnT">

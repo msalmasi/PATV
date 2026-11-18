@@ -616,6 +616,8 @@ async function pass(nowS, { tag = null, only = null } = {}) {
   if (engs.treasury.mode !== "off") {
     await derivedPass(nowS, info);
     await digestPass(nowS, info, engs.treasury);
+    // 1.99aop: the incentive week's read-only comparison (never throws, moves nothing; its own policy_sims rows)
+    await require("./budget").shadowPass(nowS, info, engs);
   }
   return out;
 }

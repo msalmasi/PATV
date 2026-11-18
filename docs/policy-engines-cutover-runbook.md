@@ -898,3 +898,13 @@ Stop rule: not cut over by 16:00 UTC - don't start; never 03:30-04:30 UTC; no ot
    the next pass") but switches his engines on anyway, so check before the next boundary: `SELECT COUNT(*) FROM policy_effects
    WHERE acked_at IS NULL` = 0. Not 0 = his journal may lack a period the site ran, and his next tick could run it again:
    investigate (pause his side if needed) before 03:40 UTC.
+
+## 17. The incentive week on the site (1.99aop: dark)
+
+`policy/budget.js` is the weekly incentive budget as a site service, `policy/budgetshadow.js` its read-only check. Nothing here moves a point while `policy_ownership.budget` is not `site`.
+
+- **While Pepe owns the week (today):** `POST /api/policy/bot/spend` answers `409 not_owner` and records nothing, `spend-status` answers `unknown`, `week` answers `week: null` and the latest check. Every hook in `funding.js`, `pools.js`, `gangs.js`, `launchpad.js`, `econstore.js`, `policy/apply.js` and `policy/gather.js` starts with the owner check and falls through to the old lines. `incentive_weeks`, `incentive_spends` and `incentive_settled` exist and stay empty.
+- **The check:** every funding sync leaves Pepe's live `spent` in memory (no database write). From 05:00 to 03:30 UTC, after the day's runs, at most every 15 minutes, the scheduler compares a quiet sample with the sum of the incentive pool's legs per group. `policy_sims` rows, engine `budget`: `shadow:budget:D<date>` (`ok` 1 = one clean read that day, 0 = none by the day's end) and `shadow:budget:W<date>` (the closed week against Pepe's `weeks[]`). A leg nobody can name blocks the day. A count and its leg on either side of Monday's boundary are excused only as a recorded per-group carry: the two weeks' drifts cancel exactly and named legs add up to it.
+- **Read it:** `/admin/economy#budgets`, `node tools/policy-backend.js status`, and `preflight`, where these lines are information or a warning. `preflight --for=budget` makes a missing or unclean day, or an unreconciled closed week, a FAIL: seven consecutive clean policy days are the gate for handing the week over.
+- **Shared with camfrog-bot:** `test/fixtures/policy-budget-vectors.json.gz` and `test/fixtures/budget-contract.json` come from its `tools/gen_budget_vectors.py`, byte-identical in both repos, sha256 pinned in both repos' tests.
+- **Not here:** the hand-over itself (import, flip, rollback). `policy/handover.js` still accepts only `cfg`.

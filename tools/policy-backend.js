@@ -130,6 +130,10 @@ async function gather(opts = {}) {
   out.derived = (await q("SELECT period, ok, blocking, site_plan, site_inputs, updated FROM policy_sims WHERE engine = 'derived' ORDER BY period", [], "policy_sims"))
     .map((r) => { const si = parse(r.site_inputs, {}) || {}; return { period: r.period, ok: r.ok, blocking: (parse(r.blocking, {}) || {}).plan || [], site: parse(r.site_plan, null),
                                                                         attempts: (si.attempts || []).length, final: si.final || null, updated: r.updated }; });
+  // 1.99aop: the incentive week's read-only comparison (one row per policy day + one per closed week)
+  out.budgetShadow = (await q("SELECT period, ok, blocking, whitelisted, site_inputs, updated FROM policy_sims WHERE engine = 'budget' ORDER BY period", [], "policy_sims"))
+    .map((r) => { const si = parse(r.site_inputs, {}) || {}; return { period: r.period, ok: r.ok, blocking: (parse(r.blocking, {}) || {}).plan || [], notes: (parse(r.whitelisted, {}) || {}).plan || [],
+                                                                        attempts: si.n || (si.attempts || []).length, final: si.final || null, updated: r.updated }; });
   out.epochAudits = await q("SELECT eid, via, state, audit_match, digest_match, audit_sent_at, digest_sent_at, updated FROM policy_epoch_audit ORDER BY eid", [], "policy_epoch_audit");
   const push = await meta("policy_meta", "cfg");
   out.push = push ? { age_s: push.at ? Math.round(Date.now() / 1000 - Number(push.at)) : null, bot_version: push.bot_version || "",
@@ -230,6 +234,9 @@ function printStatus(s) {
                 (d.ok !== null && d.ok !== undefined && Number(d.ok) === 0 ? ` - ${(d.blocking || []).slice(0, 3).join(" | ") || d.final || "?"}` : ""));
   }
   const mk = (m, pending) => (m === null || m === undefined ? (pending ? "pending" : "-") : Number(m) ? "✓" : "✗");
+  for (const b of (s.budgetShadow || []).slice(-7)) {               // 1.99aop
+    console.log(`budget   ${b.period} ${b.ok === null || b.ok === undefined ? "open" : Number(b.ok) ? "clean" : "NOT clean"} (${b.attempts} attempt(s))${b.final ? " " + b.final : ""}${(b.blocking || []).length ? ": " + b.blocking.slice(0, 3).join(" | ") : ""}`);
+  }
   for (const a of (s.epochAudits || []).slice(-4)) {
     const pend = a.state !== "final";
     console.log(`audit    ${a.eid} ${a.via}: audit = Pepe's ${a.via === "shadow" ? mk(a.audit_match, pend) : "-"} · digest = Pepe's ${a.via === "shadow" ? mk(a.digest_match, pend) : "-"}` +
@@ -250,7 +257,7 @@ function printStatus(s) {
 }
 
 /** The site half of the plan §6.2 preflight. -> [{level: PASS|WARN|FAIL|INFO, check, detail}] */
-function preflight(s) {
+function preflight(s, { budget = false } = {}) {
   const out = [];
   const add = (level, check, detail) => out.push({ level, check, detail });
   add(s.site.sha ? "PASS" : "WARN", "site version", `${s.site.version || "?"}${s.site.version_sha && s.site.version_sha !== s.site.sha ? ` (release ${s.site.version_sha}, head ${s.site.sha})` : ` (${s.site.sha || "no git checkout"})`}`);
@@ -285,6 +292,7 @@ function preflight(s) {
                      : `${s.shadow14.filter((x) => Number(x.reported)).length} compared, all clean`);
   add("INFO", "last W record", s.lastW ? `${s.lastW.epoch} ${s.lastW.state || "?"}${s.lastW.source ? " (policy_runs)" : " (notified / audit / digest_sent: Pepe's half)"}` : "none pushed");
   for (const r of derivedChecks(s)) add(r.level, r.check, r.detail);
+  for (const r of budgetChecks(s, { strict: budget })) add(r.level, r.check, r.detail);
   add("INFO", "Pepe's half", "!econ policy status: pvault unsure/outbox, corrections unsure/paying, pools outbox/uncertain/inbox, policy outbox + dead letters, capital outbox, the last W record");
   // PO-2: the config store
   if (!s.cfg.store) add("FAIL", "config store", "policy_cfg isn't there - a site before PO-2");
@@ -295,6 +303,39 @@ function preflight(s) {
   const returning = Object.entries(s.features).filter(([, r]) => r.return_sha);
   add(returning.length ? "FAIL" : "PASS", "no feature being handed back", returning.map(([f]) => f).join(", ") || "none");
   for (const r of evidenceChecks(s)) add(r.level, r.check, r.detail);
+  return out;
+}
+/** 1.99aop: the incentive week's comparison (policy/budgetshadow.js). Information for every other hand-over; with --for=budget (the
+ *  hand-over of the week itself) a gap or an unclean day is a FAIL. -> [{level, check, detail}] */
+const BUDGET_STREAK_DAYS = 7;
+function budgetChecks(s, { strict = false, now = Date.now() } = {}) {
+  const out = [];
+  const bad = strict ? "FAIL" : "WARN";
+  const add = (level, check, detail) => out.push({ level, check, detail });
+  const rows = s.budgetShadow || [];
+  const days = rows.filter((r) => /^D\d{4}-\d{2}-\d{2}$/.test(String(r.period)));
+  if (!days.length) {
+    add(strict ? "FAIL" : "INFO", "budget drift recorded every day", "not running yet (no shadow:budget row)");
+    return out;
+  }
+  const today = utcDay(now - 4 * 3600e3);                             // the policy day in progress (04:00 UTC to 04:00 UTC)
+  const have = new Map(days.map((r) => [r.period.slice(1), r]));
+  const span = [];
+  for (let t = Date.parse(days[0].period.slice(1) + "T00:00:00Z"); utcDay(t) < today && span.length < 120; t += DAY_MS) span.push(utcDay(t));
+  const missing = span.filter((d) => !have.has(d));
+  add(missing.length ? bad : span.length ? "PASS" : "INFO", `budget drift recorded every day ${span.length ? `${span[0]}..${span[span.length - 1]}` : ""}`.trim(),
+      missing.length ? `no row: ${missing.slice(0, 14).join(", ")}` : span.length ? `${span.length} day(s)` : "no complete day yet");
+  const lastN = span.slice(-BUDGET_STREAK_DAYS);
+  const notOk = lastN.filter((d) => !have.has(d) || Number(have.get(d).ok) !== 1);
+  if (lastN.length < BUDGET_STREAK_DAYS) add(strict ? "FAIL" : "INFO", `budget drift 0 per group for ${BUDGET_STREAK_DAYS} consecutive days`, `only ${lastN.length} complete day(s) so far`);
+  else if (notOk.length) {
+    const d = notOk[0], r = have.get(d);
+    add(bad, `budget drift 0 per group for ${BUDGET_STREAK_DAYS} consecutive days`, `${d}: ${r ? (r.blocking || []).slice(0, 4).join(" | ") || r.final || "open" : "no row"}`);
+  } else add("PASS", `budget drift 0 per group for ${BUDGET_STREAK_DAYS} consecutive days`, `${lastN[0]}..${lastN[lastN.length - 1]}`);
+  const weeks = rows.filter((r) => /^W\d{4}-\d{2}-\d{2}$/.test(String(r.period))).filter((r) => !lastN.length || r.period.slice(1) >= utcDay(Date.parse(lastN[0] + "T00:00:00Z") - 6 * DAY_MS));
+  const open = weeks.filter((r) => Number(r.ok) !== 1);
+  if (!weeks.length) add("INFO", "closed weeks reconcile", "no closed week compared yet");
+  else add(open.length ? bad : "PASS", "closed weeks reconcile", open.length ? `${open[0].period}: ${(open[0].blocking || []).slice(0, 4).join(" | ") || "open"}` : weeks.map((r) => r.period).join(", "));
   return out;
 }
 /** PO-4: the derived dual read + the weekly shadow audit (H2a gate 5: "PO-4's derived dual read clean on a Monday and the shadow
@@ -464,9 +505,9 @@ async function main() {
   }
   if (!["status", "preflight"].includes(cmd)) throw new Error('usage: node tools/policy-backend.js [status|preflight]   (read-only) | --actor=<who> pause|resume <engine|all|feature|features> --note "why"');
   const s = await gather({ since: sinceArg });
-  if (process.argv.includes("--json")) { console.log(JSON.stringify(cmd === "preflight" ? preflight(s) : s, null, 2)); process.exit(0); }
+  if (process.argv.includes("--json")) { console.log(JSON.stringify(cmd === "preflight" ? preflight(s, { budget: argv.includes("--for=budget") }) : s, null, 2)); process.exit(0); }
   if (cmd === "status") { printStatus(s); process.exit(0); }
-  const res = preflight(s);
+  const res = preflight(s, { budget: argv.includes("--for=budget") });
   for (const r of res) console.log(`${r.level.padEnd(4)}  ${r.check}: ${r.detail}`);
   const fails = res.filter((r) => r.level === "FAIL").length;
   console.log(fails ? `\npreflight: ${fails} FAIL - not ready` : "\npreflight: the site's half is ready (now Pepe's: !econ policy status)");
@@ -474,4 +515,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e.message); process.exit(1); });
-module.exports = { gather, preflight, printStatus, evidenceChecks, evidenceDays, versionOf, siteVersion, derivedChecks };
+module.exports = { gather, preflight, printStatus, evidenceChecks, evidenceDays, versionOf, siteVersion, derivedChecks, budgetChecks };

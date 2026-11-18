@@ -1,0 +1,32 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99aop: the incentive week. While Pepe owns it this card only shows the site's read-only check of his record, per budget group
+    (policy/budgetshadow.js); once the site owns it, also the latest spends and settled claims. Read-only.
+    public/js/admin-budget.js renders it from GET /api/admin/policy/budget. %>
+<section class="adm-card" id="budgets" aria-labelledby="budgetT">
+  <h2 id="budgetT"><span class="ds-ic" aria-hidden="true">🧾</span> <%= t('adm.budget.title') %> <span class="adm-pill admin"><%= t('adm.budget.admins') %></span></h2>
+  <p class="adm-help"><%= t('adm.budget.help') %></p>
+  <% if (!isAdmin) { %><p class="adm-help"><%= t('adm.budget.admins_only') %></p><% } else { %>
+    <div id="budgetAdm">
+      <div class="adm-kv" id="budgetKv"><div><b><%= t('adm.budget.owner') %></b><span><%= t('adm.budget.loading') %></span></div></div>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.budget.groups') %>">
+        <thead><tr><th><%= t('adm.budget.col_group') %></th><th><%= t('adm.budget.col_budget') %></th><th><%= t('adm.budget.col_pepe') %></th><th><%= t('adm.budget.col_site') %></th>
+          <th><%= t('adm.budget.col_drift') %></th><th><%= t('adm.budget.col_left') %></th></tr></thead>
+        <tbody id="budgetGroups"><tr><td colspan="6" class="empty"><%= t('adm.budget.loading') %></td></tr></tbody>
+      </table></div>
+      <h3><%= t('adm.budget.days') %></h3>
+      <div class="adm-tbl"><table aria-label="<%= t('adm.budget.days') %>">
+        <thead><tr><th><%= t('adm.budget.col_day') %></th><th><%= t('adm.budget.col_verdict') %></th><th><%= t('adm.budget.col_attempts') %></th><th><%= t('adm.budget.col_detail') %></th></tr></thead>
+        <tbody id="budgetDays"><tr><td colspan="4" class="empty"><%= t('adm.budget.loading') %></td></tr></tbody>
+      </table></div>
+      <div id="budgetSite" hidden>
+        <h3><%= t('adm.budget.recent') %></h3>
+        <div class="adm-tbl"><table aria-label="<%= t('adm.budget.recent') %>">
+          <thead><tr><th><%= t('adm.budget.col_when') %></th><th><%= t('adm.budget.col_flow') %></th><th><%= t('adm.budget.col_amount') %></th><th><%= t('adm.budget.col_verdict') %></th></tr></thead>
+          <tbody id="budgetRecent"></tbody>
+        </table></div>
+      </div>
+      <p class="adm-msg" id="budgetMsg" role="status" aria-live="polite"></p>
+    </div>
+    <script src="/public/js/admin-budget.js?v=1" defer></script>
+  <% } %>
+</section>
