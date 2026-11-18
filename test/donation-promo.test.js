@@ -89,13 +89,13 @@ test("ceilings: the effective rate is clamped to ceiling_x x the normal rate at 
 });
 
 test("1.99ans: promos are retired - create and edit are refused before anything else; an old one can still be ended", async () => {
-  await assert.rejects(DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, starts: now, ends: now + H }), (e) => e.status === 410 && /retired/.test(e.message));
-  await assert.rejects(DP.create(ADMIN, {}), /retired/, "refused before any validation");
+  await assert.rejects(DP.create(ADMIN, { mode: "rate", rate: 1000000, cap_usd: 100, starts: now, ends: now + H }), (e) => e.status === 410 && /need donations set to On/.test(e.message));
+  await assert.rejects(DP.create(ADMIN, {}), /need donations set to On/, "refused before any validation");
   // a promo row from before 1.99ans
   await runQuery(`INSERT INTO donation_promos (id, label, mode, rate, cap_cents, bonus_base, enabled, starts, ends, ceiling_x, normal_rate, cancelled)
                   VALUES ('DP-old', 'Old promo', 'rate', 1000000, 10000, 'normal', 1, ?, ?, 10, 500000, 0)`, [now - H, now + 24 * H]);
   await DP.refresh();
-  await assert.rejects(DP.edit(ADMIN, "DP-old", { label: "x" }), /retired/);
+  await assert.rejects(DP.edit(ADMIN, "DP-old", { label: "x" }), /need donations set to On/);
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM donation_promos"))[0].n, 1, "nothing created");
 });
 

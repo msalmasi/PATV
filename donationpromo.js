@@ -10,11 +10,12 @@
 //   card     reserveCheckout() reads the switch inside its transaction. In "on" it writes a donation_quotes row with the exact
 //            split of that amount (its promo dollars and PAT count against the promo's cap and budget while it is open) and the
 //            Checkout Session carries its id. The webhook credits that split, whatever the switch says by then.
-//   crypto   a transfer has no checkout, so the quote is what /support showed the member (noteCryptoQuote, valid 2 hours). Failing
-//            that, the snapshot the watcher stored when it first saw the transfer (crypto_payments.terms). cryptoTermsFor() picks.
+//   crypto   a transfer has no checkout, so the quote is what /support showed the member before the transfer was mined
+//            (noteCryptoQuote, valid 2 hours). Failing that, the snapshot the watcher stored when it first saw the transfer
+//            (crypto_payments.terms; none for a transfer mined before the switch last went on). cryptoTermsFor() picks.
 // Moving the switch never rewrites a quote and never credits a past perks-only donation (a row without terms is perks for good).
 // ONE path credits PAT: settleDonation() -> creditDonor(), the only code that can get a ledger grant (nopat.js).
-// Refunds and disputes of a PAT donation: reverseDonation() (donation_credits, donation_reversals).
+// Refunds and disputes of a PAT donation: reverseDonation() (donation_credits, donation_disputes, donation_reversals).
 //
 // The normal donation rate lives in Pepe (pepe_econcfg donation_rate / donation_bonus_pct, synced to the site as
 // funding.donationTerms()). A promo is the SITE's: it only changes how many PAT a donation credits on the site, so Pepe
@@ -128,11 +129,14 @@ function init() {
       await runQuery(`CREATE TABLE IF NOT EXISTS donation_credits (ref TEXT PRIMARY KEY, user_id TEXT NOT NULL, via TEXT NOT NULL, payment_intent TEXT, session TEXT,
         usd_cents INTEGER NOT NULL, pat INTEGER NOT NULL, bonus INTEGER NOT NULL, rate INTEGER, bonus_pct REAL, quote_id TEXT, created INTEGER NOT NULL,
         refunded_cents INTEGER NOT NULL DEFAULT 0, disputed_cents INTEGER NOT NULL DEFAULT 0, clawed_pat INTEGER NOT NULL DEFAULT 0,
-        clawed_bonus INTEGER NOT NULL DEFAULT 0, short_pat INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
+        clawed_bonus INTEGER NOT NULL DEFAULT 0, short_pat INTEGER NOT NULL DEFAULT 0, owed_pat INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
       await runQuery("CREATE INDEX IF NOT EXISTS donation_credits_pi ON donation_credits (payment_intent)");
       await runQuery("CREATE INDEX IF NOT EXISTS donation_credits_user ON donation_credits (user_id)");
       await runQuery(`CREATE TABLE IF NOT EXISTS donation_reversals (event_id TEXT PRIMARY KEY, ref TEXT NOT NULL, kind TEXT NOT NULL, cents INTEGER NOT NULL,
         pat_delta INTEGER NOT NULL, bonus_delta INTEGER NOT NULL, short_pat INTEGER NOT NULL, at INTEGER NOT NULL)`);
+      // one row per Stripe dispute: state inquiry (no funds moved) | open | won | lost. Closed is final, whatever order the events come in
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_disputes (id TEXT PRIMARY KEY, ref TEXT NOT NULL, state TEXT NOT NULL, cents INTEGER NOT NULL, opened INTEGER, updated INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_disputes_ref ON donation_disputes (ref, state)");
       for (const r of await getQuery("SELECT key, value FROM donation_promo_settings")) {
         if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
         try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
@@ -149,7 +153,7 @@ const refuse = (m, s = 400, code = null, detail = null) => new Refuse(s, m, code
 const normalTerms = () => { try { return require("./funding").donationTerms(); } catch (e) { return { rate: 500000, bonus_pct: 20 }; } };
 const NP = require("./nopat");                 // 1.99ans / 1.99aor: the hard guard (the perks-only terms, the ledger grant)
 const issueGrant = NP.takeIssuer();            // 1.99aor: only this module can let a donation credit reach the ledger
-const RETIRED = "Donation promos are retired: donations give supporter perks, never PAT (no PAT for dollars).";
+const RETIRED = "Promotions need donations set to On. Change the switch above first.";
 const PAUSED = "Donations are paused right now. Please check back soon.";
 const PAUSED_PROMO = "Donations are paused: turn them on before setting up a promo.";
 const CRYPTO_QUOTE_MS = 2 * 3600000;           // 1.99aor: how long what /support showed a member holds for a transfer they send
@@ -628,8 +632,11 @@ async function checkoutQuote({ quoteId, sessionId, userId, cents }) {
   if (!terms || !frozen || !frozen.s) return bad("unreadable");
   return { id: q.id, terms, frozen };
 }
-/** 1.99aor: /support just showed this member the crypto address under the current switch: that is their quote for what they send next. */
-async function noteCryptoQuote(userId, now = clock()) {
+/**
+ * 1.99aor: /support just showed this member the crypto address under the current switch: that is their quote for what they send next.
+ * shown = the state the page was rendered in: if the switch has moved since, what it showed is no longer on offer and nothing is noted.
+ */
+async function noteCryptoQuote(userId, now = clock(), shown = null) {
   await init();
   if (!userId) return null;
   const sameAsLast = async (mode, print) => {
@@ -640,13 +647,13 @@ async function noteCryptoQuote(userId, now = clock()) {
   };
   // the usual page view changes nothing: decided without taking the write transaction
   const peekMode = await DM.mode();
-  if (peekMode === "off") return null;
+  if (peekMode === "off" || (shown && peekMode !== shown)) return null;
   const peekQ = await snapshot(now, peekMode);
   const peek = await sameAsLast(peekMode, peekQ ? JSON.stringify({ ...peekQ, at: 0 }) : "");
   if (peek && peek.expires - now >= CRYPTO_QUOTE_MS / 2) return peek.id;
   return tx(async () => {
     const mode = await DM.mode();
-    if (mode === "off") return null;
+    if (mode === "off" || (shown && mode !== shown)) return null;
     const Q = await snapshot(now, mode);
     const last = await sameAsLast(mode, Q ? JSON.stringify({ ...Q, at: 0 }) : "");
     if (last) {
@@ -659,35 +666,61 @@ async function noteCryptoQuote(userId, now = clock()) {
     return id;
   });
 }
-/** 1.99aor: the snapshot stored with a transfer when the watcher first sees it (null = perks only). */
-async function seenTerms(now = clock()) {
+// nothing awaits a page's quote; the tests (and a clean shutdown) can wait for the ones under way
+let quoteWork = Promise.resolve();
+function noteCryptoQuoteSoon(userId, shown) {
+  const p = noteCryptoQuote(userId, clock(), shown).catch((e) => console.error("[support] quote:", e.message));
+  quoteWork = Promise.all([quoteWork, p]).then(() => {});
+  return p;
+}
+/**
+ * 1.99aor: the snapshot stored with a transfer when the watcher first sees it (null = perks only). blockMs = when the chain says it was
+ * mined: a transfer mined before the switch last went on was sent under the earlier state, however late the watcher reaches it.
+ */
+async function seenTerms(now = clock(), blockMs = null) {
   await init();
-  const Q = await snapshot(now, await DM.mode());
+  const st = await DM.get();
+  if (st.mode === "on" && st.on_since && Number(blockMs) > 0 && Number(blockMs) < st.on_since) return null;
+  const Q = await snapshot(now, st.mode);
   return Q ? JSON.stringify(Q) : null;
 }
-/** 1.99aor: the terms of one crypto payment: what /support showed its owner when it was seen, else what was stored when it was seen. */
+/** 1.99aor: the terms of one crypto payment: what /support had shown its owner when it was mined (else seen), else what was stored when it was seen. */
 async function cryptoTermsFor(owner, p) {
-  const seen = Number(p.seen);
+  const at = Number(p.block_ms) || Number(p.seen);
   const q = owner ? (await getQuery(`SELECT mode, terms FROM donation_quotes WHERE user_id = ? AND via = 'crypto' AND created <= ? AND expires >= ?
-                                     ORDER BY created DESC, rowid DESC LIMIT 1`, [String(owner), seen, seen]))[0] : null;
+                                     ORDER BY created DESC, rowid DESC LIMIT 1`, [String(owner), at, at]))[0] : null;
   if (q) return q.mode === "on" ? parseJson(q.terms) : null;
   return p.terms ? parseJson(p.terms) : null;
 }
 
 // ── 1.99aor: a card donation that credited PAT, refunded or disputed ──
-// Stripe's cumulative numbers decide what is owed back: floor(PAT x min(usd, refunded + disputed) / usd), the bonus the same way. The
-// difference from what was already taken moves now, so a replayed or reordered event can't take twice. A wallet never goes negative:
-// what it can't cover is recorded (short_pat, on the admin card). What comes back goes to the Federal Reserve (the wallet's PAT and,
-// out of the incentive budget, the bonus), so the supply stays conserved and the mint journal stays true; a dispute won moves it back.
-async function reverseDonation({ eventId, paymentIntent, kind, cents = 0 }) {
+// Stripe's numbers decide what is owed back: floor(PAT x min(usd, refunded + disputed) / usd), the bonus the same way. refunded is Stripe's
+// cumulative figure; disputed is the sum of this donation's open and lost disputes (donation_disputes, one row per Stripe dispute: a
+// dispute that has closed stays closed, so a late or replayed "created" changes nothing, and a close that arrives alone is enough). An
+// inquiry (kind "inquiry", status warning_*) moves no funds and takes nothing. The difference from what was already taken moves now, so
+// a replayed or reordered event can't take twice. A wallet never goes negative: what it can't cover is recorded (short_pat, on the admin
+// card). What comes back goes to the Federal Reserve (the wallet's PAT and, out of the incentive budget, the bonus), so the supply stays
+// conserved and the mint journal stays true. A dispute won gives all of it back (fed/service.js donationReturnInTx: from the Reserve,
+// minted again for whatever the Reserve no longer holds); only an account that can't be credited is left owed (owed_pat).
+async function reverseDonation({ eventId, paymentIntent, kind, cents = 0, disputeId = null }) {
   const c = paymentIntent ? (await getQuery("SELECT * FROM donation_credits WHERE payment_intent = ?", [String(paymentIntent)]))[0] : null;
   if (!c) return null;
-  const usdc = Number(c.usd_cents);
+  const usdc = Number(c.usd_cents), at = clock();
   let refunded = Number(c.refunded_cents) || 0, disputed = Number(c.disputed_cents) || 0;
-  const amt = Math.max(0, Math.floor(Number(cents) || 0));
-  if (kind === "refund") refunded = Math.min(usdc, Math.max(refunded, amt));
-  else if (kind === "dispute") disputed = Math.min(usdc, amt);
-  else if (kind === "won") disputed = 0;
+  const before = Math.min(usdc, refunded + disputed);
+  const amt = Math.min(usdc, Math.max(0, Math.floor(Number(cents) || 0)));
+  if (kind === "refund") refunded = Math.max(refunded, amt);
+  else {
+    const id = String(disputeId || `pi-${paymentIntent}`).slice(0, 120);
+    if (kind === "dispute" || kind === "inquiry") {
+      await runQuery("INSERT OR IGNORE INTO donation_disputes (id, ref, state, cents, opened, updated) VALUES (?, ?, ?, ?, ?, ?)", [id, c.ref, kind === "dispute" ? "open" : "inquiry", amt, at, at]);
+    } else {
+      await runQuery(`INSERT INTO donation_disputes (id, ref, state, cents, opened, updated) VALUES (?, ?, ?, ?, ?, ?)
+                      ON CONFLICT(id) DO UPDATE SET state = excluded.state, cents = CASE WHEN excluded.cents > 0 THEN excluded.cents ELSE cents END, updated = excluded.updated`,
+                     [id, c.ref, kind === "won" ? "won" : "lost", amt, at, at]);
+    }
+    disputed = Math.min(usdc, Number((await getQuery("SELECT COALESCE(SUM(cents), 0) AS c FROM donation_disputes WHERE ref = ? AND state IN ('open', 'lost')", [c.ref]))[0].c) || 0);
+  }
   const target = Math.min(usdc, refunded + disputed);
   const owedPat = Math.floor((c.pat * target) / usdc), owedBonus = Math.floor((c.bonus * target) / usdc);
   const FS = require("./fed/service"), PL = require("./pools");
@@ -713,25 +746,23 @@ async function reverseDonation({ eventId, paymentIntent, kind, cents = 0 }) {
       if (r.ok) wallet = take;
     }
   } else if (dp < 0) {
-    const give = fed ? Math.min(-dp, await poolHas("reserve")) : -dp;
-    if (give > 0) {
-      const r = await L.post(c.user_id, give, "donation-restored", { transactionId: txId, source: "donation reversal", note: "Dispute closed in your favour",
-                                                                     donationGrant: issueGrant({ userId: c.user_id, amount: give, type: "donation-restored", ref: txId }) });
-      if (r.ok) wallet = -give;
-    }
+    const r = await L.post(c.user_id, -dp, "donation-restored", { transactionId: txId, source: "donation reversal", note: "Dispute closed in your favour",
+                                                                  donationGrant: issueGrant({ userId: c.user_id, amount: -dp, type: "donation-restored", ref: txId }) });
+    if (r.ok) wallet = dp;
   }
   const db = owedBonus - c.clawed_bonus;
   if (fed && db > 0) bonus = Math.min(db, await poolHas("incentives"));
-  else if (fed && db < 0) bonus = -Math.min(-db, await poolHas("reserve"));
+  else if (fed && db < 0) bonus = db;
   if (fed && (wallet || bonus)) await FS.donationReturnInTx({ key: String(eventId), wallet, bonus });
   const clawedPat = c.clawed_pat + wallet, clawedBonus = c.clawed_bonus + bonus;
-  const short = Math.max(0, owedPat - clawedPat);
-  await runQuery(`UPDATE donation_credits SET refunded_cents = ?, disputed_cents = ?, clawed_pat = ?, clawed_bonus = ?, short_pat = ?, updated = ? WHERE ref = ?`,
-                 [refunded, disputed, clawedPat, clawedBonus, short, clock(), c.ref]);
+  const short = Math.max(0, owedPat - clawedPat), owed = Math.max(0, clawedPat - owedPat);
+  await runQuery(`UPDATE donation_credits SET refunded_cents = ?, disputed_cents = ?, clawed_pat = ?, clawed_bonus = ?, short_pat = ?, owed_pat = ?, updated = ? WHERE ref = ?`,
+                 [refunded, disputed, clawedPat, clawedBonus, short, owed, at, c.ref]);
   await runQuery(`INSERT OR IGNORE INTO donation_reversals (event_id, ref, kind, cents, pat_delta, bonus_delta, short_pat, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [String(eventId), c.ref, kind, target, wallet, bonus, short, clock()]);
+                 [String(eventId), c.ref, kind, target, wallet, bonus, short, at]);
   if (short) console.warn(`[donations] ${c.ref}: ${short} PAT of a reversed donation couldn't be taken back (the wallet doesn't hold it)`);
-  return { ref: c.ref, userId: c.user_id, kind, usd_cents: usdc, reversed_cents: target, taken: Math.max(0, wallet), given: Math.max(0, -wallet), bonus, short };
+  if (owed) console.error(`[donations] ${c.ref}: ${owed} PAT of a dispute won couldn't be put back (the account can't be credited)`);
+  return { ref: c.ref, userId: c.user_id, kind, usd_cents: usdc, reversed_cents: target, moved_cents: Math.abs(target - before), taken: Math.max(0, wallet), given: Math.max(0, -wallet), bonus, short, owed };
 }
 /** Card: the checkout opened - its hold now lasts as long as the session can be paid. */
 async function attachSession(ref, sessionId, expiresMs) {
@@ -1062,12 +1093,25 @@ async function modeState() {
   const st = await DM.get();
   const hist = await DM.history(20);
   const sum = (await getQuery(`SELECT COUNT(*) AS n, COALESCE(SUM(pat),0) AS pat, COALESCE(SUM(bonus),0) AS bonus, COALESCE(SUM(clawed_pat),0) AS clawed,
-                               COALESCE(SUM(short_pat),0) AS short FROM donation_credits`))[0];
+                               COALESCE(SUM(short_pat),0) AS short, COALESCE(SUM(owed_pat),0) AS owed FROM donation_credits`))[0];
   const reversals = await getQuery(`SELECT r.event_id, r.ref, r.kind, r.cents, r.pat_delta, r.bonus_delta, r.short_pat, r.at, c.user_id, u.username
       FROM donation_reversals r LEFT JOIN donation_credits c ON c.ref = r.ref LEFT JOIN users u ON u.userId = c.user_id ORDER BY r.at DESC LIMIT 20`);
   const open = (await getQuery("SELECT COUNT(*) AS n FROM donation_quotes WHERE via = 'card' AND mode = 'on' AND status = 'open' AND expires > ?", [clock()]))[0].n;
-  return { mode: st.mode, readable: st.readable, updated: st.updated, actor: st.actor, modes: DM.MODES, describe: DM.DESCRIBE, normal: normalTerms(), history: hist,
-           credits: { n: Number(sum.n) || 0, pat: Number(sum.pat) || 0, bonus: Number(sum.bonus) || 0, clawed: Number(sum.clawed) || 0, short: Number(sum.short) || 0 }, open_quotes: Number(open) || 0, reversals };
+  return { mode: st.mode, readable: st.readable, ever_on: st.ever_on, updated: st.updated, actor: st.actor, modes: DM.MODES, describe: DM.DESCRIBE, normal: normalTerms(), history: hist,
+           credits: { n: Number(sum.n) || 0, pat: Number(sum.pat) || 0, bonus: Number(sum.bonus) || 0, clawed: Number(sum.clawed) || 0, short: Number(sum.short) || 0, owed: Number(sum.owed) || 0 },
+           open_quotes: Number(open) || 0, reversals, rollback: await rollbackCases() };
+}
+/**
+ * 1.99aor: donations a build older than 1.99aor settled although they were quoted PAT (a rollback while the switch was on): it ignored the
+ * quote, so they got 0 PAT. This build always marks what it settles (a card quote "used", a crypto row's `applied`), so these rows are exact.
+ */
+async function rollbackCases() {
+  const list = async (sql) => { try { return await getQuery(sql); } catch (e) { return []; } };
+  const card = await list(`SELECT q.id AS ref, q.user_id, u.username, q.usd_cents FROM donation_quotes q JOIN donation_usd_log l ON l.session = q.session AND l.status = 'credited' AND COALESCE(l.pat, 0) = 0
+                           LEFT JOIN users u ON u.userId = q.user_id WHERE q.via = 'card' AND q.mode = 'on' AND q.status = 'open' AND q.session IS NOT NULL ORDER BY q.created DESC LIMIT 20`);
+  const crypto_ = await list(`SELECT p.id AS ref, p.user_id, u.username, p.usd_cents FROM crypto_payments p LEFT JOIN users u ON u.userId = p.user_id
+                              WHERE p.status = 'credited' AND p.terms IS NOT NULL AND COALESCE(p.pat, 0) = 0 AND p.applied IS NULL ORDER BY p.seen DESC LIMIT 20`);
+  return { card, crypto: crypto_ };
 }
 /** The admin card: settings, the normal terms, every promo (newest first) with its numbers. */
 async function adminState() {
@@ -1143,12 +1187,17 @@ function register(app, { addUser, noTimers } = {}) {
   }, { admin: true }));
   // 1.99aor: THE SWITCH (donationmode.js): a Pepe owner (the json wrapper, read fresh), then the password step-up (stepup.js: a same-origin
   // fetch, the single-use nonce from POST /api/admin/stepup/nonce {for: "donations_mode"}, the account password), audited
+  // from = the state the owner's page showed: anything else is refused before the password is used, and again inside the write
   app.post("/api/admin/donations/mode", ...json(async (req, b) => {
-    const next = String(b.mode || "");
+    await init();
+    const next = String(b.mode || ""), from = String(b.from || "");
     if (!DM.MODES.includes(next)) throw refuse("Pick on, perks or off.");
+    const stale = async () => refuse("Donations were changed after this page loaded. It now shows the current state: choose again.", 409, "stale", await modeState());
+    if ((await DM.get()).mode !== from) throw await stale();
     const me = await require("./staffroles").ownerOf(req.user, "donations.admin");
     await require("./stepup").check(req, me, b);
-    const r = await DM.set(me, next, b.note);
+    let r;
+    try { r = await DM.set(me, next, b.note, { from }); } catch (e) { if (e && e.code === "stale") throw await stale(); throw e; }
     await refresh();
     return { changed: r.changed, before: r.before, donations: await modeState() };
   }, { owner: true }));
@@ -1163,7 +1212,8 @@ module.exports = {
   promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
   setOverride, overrideOf, limitState, donorKeyOf, budgetState,
   // 1.99aor
-  settleDonation, attachQuote, releaseQuote, checkoutQuote, noteCryptoQuote, seenTerms, cryptoTermsFor, reverseDonation, modeState, snapshot, PAUSED,
+  settleDonation, attachQuote, releaseQuote, checkoutQuote, noteCryptoQuote, noteCryptoQuoteSoon, seenTerms, cryptoTermsFor, reverseDonation, modeState, rollbackCases, snapshot, PAUSED,
+  _quotesSettled: () => quoteWork,
   // 1.99uh
   previewTerms, ensureFrozen, globalCaps, globalCheck, globalPublic, globalAdmin, globalMaxUsd, prepare, dayKey, mintOf,
   _setSupply: (fn) => { supplyFn = fn || (async () => (await require("./supply").patSupply()).total); }, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,

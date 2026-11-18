@@ -123,10 +123,14 @@
       : dm === 'off' ? 'Promotions don\'t apply while donations are paused.' : 'Promotions don\'t apply while donations are perks only.';
     var k = $('dpKv'); k.textContent = '';
     var live = (view.promos || []).filter(function (p) { return p.status === 'live'; })[0];
-    k.appendChild(kv('Normal rate (Pepe)', fmt(view.normal.rate) + ' PAT per $1 · +' + view.normal.bonus_pct + '% to incentives'));
+    // a promo inside its window applies only while donations are On: otherwise it is on hold, and it resumes if they go back On in time
+    var held = dm !== 'on', heldWhy = dm === 'off' ? 'Paused' : 'Perks only';
+    var heldTxt = 'Not applying while donations are ' + heldWhy + '. It resumes if they are switched On before it ends.';
+    k.appendChild(kv('Normal rate', fmt(view.normal.rate) + ' PAT per $1 · +' + view.normal.bonus_pct + '% to incentives'));
     if (live) {
-      k.appendChild(kv('Live promo', (live.label || live.id) + ' · ' + rateText(live) + ' PAT per $1 · first $' + fmt(live.cap_usd) + ' per donor'));
-      k.appendChild(kv('Time left', left(live.ends - Date.now()) + ' (ends ' + when(live.ends) + ')'));
+      k.appendChild(kv(held ? 'Promo on hold' : 'Live promo', (live.label || live.id) + ' · ' + rateText(live) + ' PAT per $1 · first $' + fmt(live.cap_usd) + ' per donor'));
+      if (held) k.appendChild(kv('Status', heldTxt));
+      k.appendChild(kv(held ? 'Window ends in' : 'Time left', left(live.ends - Date.now()) + ' (ends ' + when(live.ends) + ')'));
       k.appendChild(kv('So far', fmt(live.stats.donors) + ' donors · ' + usd(live.stats.promo_cents) + ' at the promo rate of ' + usd(live.stats.usd_cents) + ' · ' +
         fmt(live.stats.promo_pat) + ' PAT at the promo rate (' + fmt(live.stats.extra_pat) + ' above the normal rate)'));
       if (live.budget) { k.appendChild(budgetKv(live)); k.appendChild(fallbackKv(live)); }
@@ -135,7 +139,7 @@
     var rows = $('dpRows'); rows.textContent = '';
     (view.promos || []).forEach(function (p) {
       var tr = document.createElement('tr');
-      var cells = [(p.label ? p.label + ' ' : '') + '(' + p.id + ')', p.status + (p.status === 'live' ? ' · ' + left(p.ends - Date.now()) + ' left' : ''),
+      var cells = [(p.label ? p.label + ' ' : '') + '(' + p.id + ')', (p.status === 'live' && held ? 'on hold · ' + heldTxt : p.status + (p.status === 'live' ? ' · ' + left(p.ends - Date.now()) + ' left' : '')),
         when(p.starts) + ' → ' + when(p.ends), rateText(p), '$' + fmt(p.cap_usd), fmt(p.stats.donors), usd(p.stats.promo_cents),
         fmt(p.stats.promo_pat) + (p.budget_pat != null ? ' / ' + fmt(p.budget_pat) : '')];
       cells.forEach(function (t, i) {

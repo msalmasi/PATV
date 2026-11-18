@@ -1,4 +1,5 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%_ const DS_ = locals.donations || {}, patK_ = (k) => (DS_.mode === 'on' ? 'don_on.' + k : DS_.ever_on ? 'don_was.' + k : k); _%>
 <%# 1.99uj: /pads/owners - the pad owners guide (padguide.js): what a pad is for, how it earns PAT, Pepe as co-host, what
     Pepe can do per goal (linked to each connected chat service's command guide) and the pad tiers. Every number comes
     from padguide.facts() (F). The technical list is /pads/owner-guide ("Pad owner reference", padowner.js). %>
@@ -105,7 +106,7 @@
     <p class="ds-lead"><%- t('owners.new_lead') %></p>
     <dl class="pg-primer">
       <% [['patv', '📡'], ['pad', '🏠'], ['pat', '🪙'], ['pepe', '🐸'], ['vault', '🏦'], ['tiers', '📺']].forEach(([k, ic]) => { %>
-      <div><dt><span class="ds-ic" aria-hidden="true"><%= ic %></span> <%- t('owners.new.' + k + '_t') %></dt><dd><%- t('owners.new.' + k + '_d') %></dd></div><% }) %>
+      <div><dt><span class="ds-ic" aria-hidden="true"><%= ic %></span> <%- t('owners.new.' + k + '_t') %></dt><dd><%- t(k === 'pat' ? patK_('owners.new.pat_d') : 'owners.new.' + k + '_d') %></dd></div><% }) %>
     </dl>
     <p class="ds-meta"><%- t('owners.new_more', { link: '<a href="#glossary">' + t('owners.gl_link') + '</a>' }) %></p>
   </section>
@@ -232,7 +233,7 @@
     <% const glv_ = { cap: num(F.cap), rate: F.rate.default, min: F.rate.min, max: F.rate.max, owner: F.owner, streamers: F.streamers, people: F.people, gang: F.gang, games: F.games }; %>
     <dl class="ds-card lg pg-gloss">
       <% ['pat', 'pad', 'vault', 'payout', 'split', 'boost', 'stage', 'flair', 'prime', 'plus', 'chat', 'room', 'pepe', 'gang', 'fortknox', 'padiquette'].forEach((k) => { %>
-      <div id="g-<%= k %>"><dt><%- t('owners.gl.' + k + '_t') %></dt><dd><%- t('owners.gl.' + k + '_d', glv_) %><% if (k === 'split' && F.gamesUnpaid) { %> <%- t('owners.earn.games_unpaid') %><% } %></dd></div><% }) %>
+      <div id="g-<%= k %>"><dt><%- t('owners.gl.' + k + '_t') %></dt><dd><%- t(k === 'pat' ? patK_('owners.gl.pat_d') : 'owners.gl.' + k + '_d', glv_) %><% if (k === 'split' && F.gamesUnpaid) { %> <%- t('owners.earn.games_unpaid') %><% } %></dd></div><% }) %>
     </dl>
   </section>
 </main>

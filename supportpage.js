@@ -90,8 +90,9 @@ async function pageData(now = Date.now()) {
 }
 
 /**
- * The viewer's newest card donation in the last `withinMs` (the thank-you after Stripe's redirect) -> {usd} | null, plus {pat, promo}
- * when that donation credited PAT (1.99aor: its "mint:donation" claim; a perks-only donation has none).
+ * The viewer's newest card donation in the last `withinMs` (the thank-you after Stripe's redirect) -> {usd} | null, plus {pat, bonus, promo}
+ * when that donation credited PAT (1.99aor: its "mint:donation" claim; a perks-only donation has none). bonus = what THIS donation added
+ * to the community pot (0 for dollars a promo's bonus base leaves out).
  */
 async function latestCard(userId, now = Date.now(), withinMs = 60 * 60 * 1000) {
   if (!userId) return null;
@@ -102,9 +103,10 @@ async function latestCard(userId, now = Date.now(), withinMs = 60 * 60 * 1000) {
   if (!r) return null;
   const out = { usd: (Number(r.usd_cents) || 0) / 100 };
   // donation_credits: only donations credited under the switch (a claim from before 1.99ans shows as it has since then: no PAT line)
-  const c = (await getQuery("SELECT r.pat AS amount, c.meta FROM donation_credits r JOIN reserve_claims c ON c.claimId = r.ref WHERE r.ref = ?", [r.ref]))[0];
+  const c = (await getQuery("SELECT r.pat AS amount, r.bonus AS bonus, c.meta FROM donation_credits r JOIN reserve_claims c ON c.claimId = r.ref WHERE r.ref = ?", [r.ref]))[0];
   if (c && Number(c.amount) > 0) {
     out.pat = Number(c.amount);
+    out.bonus = Number(c.bonus) || 0;
     try { const m = JSON.parse(c.meta || "{}"); if (m.promo && m.promo.pat) out.promo = { pat: m.promo.pat, usd: m.promo.usd_cents / 100, rate: m.promo.rate, normal_pat: m.normal ? m.normal.pat : 0 }; } catch (e) { /* no promo line */ }
   }
   return out;

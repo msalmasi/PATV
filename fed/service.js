@@ -555,16 +555,27 @@ async function settleDonationInTx(c) {
 }
 /**
  * 1.99aor: a reversed donation (refund / dispute, donationpromo.reverseDonation), inside its transaction. wallet > 0: PAT already taken
- * from the donor's wallet lands in the Federal Reserve; < 0: the Reserve pays it back out (a dispute won; the wallet leg is the caller's).
- * bonus > 0: incentives -> Reserve; < 0: back. Keyed by the Stripe event. The mint journal is untouched: the mint happened, the PAT came back.
+ * from the donor's wallet lands in the Federal Reserve; < 0: it goes back out (a dispute won; the wallet leg is the caller's).
+ * bonus > 0: incentives -> Reserve; < 0: back. Keyed by the Stripe event.
+ * Going back, the Reserve pays what it still holds (wallet first) and the rest is minted again under policy "donation", on the journal:
+ * the ceiling release and the Monday guarantee may have spent what came in, and a dispute won always makes the donor whole.
  */
 async function donationReturnInTx({ key, wallet = 0, bonus = 0 }) {
-  const k = cleanKey(`donret-${key}`, 80);
+  const k = cleanKey(`donret-${key}`, 60);
   const why = "donation reversed";
-  if (wallet) await leg(`${k}-w`, FED, Math.trunc(wallet), why);
-  if (bonus > 0) await transfer(`${k}-b`, INCENTIVES, FED, Math.trunc(bonus), why);
-  else if (bonus < 0) await transfer(`${k}-b`, FED, INCENTIVES, Math.trunc(-bonus), why);
-  return { ok: true };
+  let w = Math.trunc(wallet), b = Math.trunc(bonus), mintW = 0, mintB = 0;
+  if (w < 0 || b < 0) {
+    let room = Math.max(0, Math.trunc(Number(await P().balance(FED)) || 0));
+    if (w < 0) { const pay = Math.min(-w, room); room -= pay; mintW = -w - pay; w = -pay; }
+    if (b < 0) { const pay = Math.min(-b, room); room -= pay; mintB = -b - pay; b = -pay; }
+  }
+  if (w) await leg(`${k}-w`, FED, w, why);
+  if (b > 0) await transfer(`${k}-b`, INCENTIVES, FED, b, why);
+  else if (b < 0) await transfer(`${k}-b`, FED, INCENTIVES, -b, why);
+  const again = { policy: "donation", actor: "stripe", via: "site" };
+  if (mintW) await mintInTx({ ...again, amount: mintW, reason: "donation dispute won - the Reserve no longer held the donor's PAT", key: `${k}-mw`, dest: "site" });
+  if (mintB) await mintInTx({ ...again, amount: mintB, reason: "donation dispute won - the Reserve no longer held the incentives bonus", key: `${k}-mb`, dest: INCENTIVES });
+  return { ok: true, minted: mintW + mintB };
 }
 let sweeping = false;
 async function donationSweep() {

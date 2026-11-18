@@ -402,11 +402,13 @@ function donateLocals(back, result) {
   // 1.99ks: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
   let crypto = false;
   try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
-  const mode = require("./donationmode").cachedMode();
+  const DM = require("./donationmode");
+  const mode = DM.cachedMode(), was = DM.wasOn() ? { was: true } : {};   // was: donations have given PAT, so the perks wording can't say "never"
   const res = result === "success" || result === "cancel" ? result : null;
-  if (mode === "off") return { stripe: st, crypto, back, result: res, paused: true, mode };
-  if (!st.enabled) return mode === "on" ? { stripe: st, crypto, back, mode } : { stripe: st, crypto, back };
-  if (mode !== "on") return { stripe: st, crypto, back, result: res, max: DONATE_MAX_USD, perks_only: true };
+  // paused: only where a donation would have been offered (a rail is on); it still answers someone back from a checkout already open
+  if (mode === "off") return st.enabled || crypto ? { stripe: st, crypto, back, result: res, paused: true, mode, ...was } : { stripe: st, crypto, back, ...was };
+  if (!st.enabled) return mode === "on" ? { stripe: st, crypto, back, mode } : { stripe: st, crypto, back, ...was };
+  if (mode !== "on") return { stripe: st, crypto, back, result: res, max: DONATE_MAX_USD, perks_only: true, ...was };
   const terms = require("./funding").donationTerms();
   let promo = null;     // 1.99tq: a live donation promo (the card shows the boosted rate + the cap; /support has the allowance)
   try { promo = require("./donationpromo").liveCached(); } catch (e) { promo = null; }
@@ -514,11 +516,12 @@ async function handleEvent(ev) {
         }
       }
     } else if (ev.type === "charge.refunded" || ev.type === "charge.dispute.created" || ev.type === "charge.dispute.closed") {
-      // 1.99aor: only a donation that credited PAT has anything to take back (donation_credits, by its payment_intent)
-      const closed = ev.type === "charge.dispute.closed";
-      const kind = ev.type === "charge.refunded" ? "refund" : !closed ? "dispute" : obj.status === "won" ? "won" : "lost";
-      const r = await require("./donationpromo").reverseDonation({ eventId: ev.id, paymentIntent: obj.payment_intent, kind,
-                                                                   cents: kind === "refund" ? obj.amount_refunded : obj.amount });
+      // 1.99aor: only a donation that credited PAT has anything to take back (donation_credits, by its payment_intent). A card network's
+      // INQUIRY (status warning_*) withdraws no funds: nothing is taken for it, and closing one (warning_closed) is like a dispute won
+      const refund = ev.type === "charge.refunded", closed = ev.type === "charge.dispute.closed", st = String(obj.status || "");
+      const kind = refund ? "refund" : closed ? (st === "won" || st === "warning_closed" ? "won" : "lost") : st.startsWith("warning_") ? "inquiry" : "dispute";
+      const r = await require("./donationpromo").reverseDonation({ eventId: ev.id, paymentIntent: obj.payment_intent, kind, disputeId: refund ? null : obj.id,
+                                                                   cents: refund ? obj.amount_refunded : obj.amount });
       if (r) { reversal = r; outcome = "donation-" + (closed ? "dispute-" : "") + kind; }
       // a quoted donation's own charge, but its payment event hasn't landed yet: Stripe retries this one (the row rolls back)
       else if (dm.kind === "donation" && dm.quote) throw Object.assign(new Error("the donation isn't recorded yet"), { status: 409 });
@@ -621,7 +624,7 @@ async function handleEvent(ev) {
           body: t("donate.notice_body", { usd, pat: t.num ? t.num(T.pat) : T.pat.toLocaleString("en-US") }) + require("./donationpromo").receiptLine(t, T) });
       } else {
         await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/support#perks",
-          title: t("donate.notice_title"), body: t(require("./donationmode").cachedMode() === "on" ? "don_on.donate.notice_perks" : "donate.notice_perks", { usd }) });
+          title: t("donate.notice_title"), body: t(require("./donationmode").cached().ever_on ? "don_on.donate.notice_perks" : "donate.notice_perks", { usd }) });
       }
     } catch (e) { /* notice only */ }
   }
@@ -634,9 +637,12 @@ async function handleEvent(ev) {
         const tt = i18n.tFor(i18n.getPref(reversal.userId) || "en");
         const f = (n) => (tt.num ? tt.num(n) : Number(n).toLocaleString("en-US"));
         const usd = (reversal.usd_cents / 100).toFixed(2);
+        // the dollars THIS event reversed (when it only retried taking what a wallet was short of: the total reversed so far)
+        const cents = reversal.moved_cents || reversal.reversed_cents, part = (cents / 100).toFixed(2), whole = cents >= reversal.usd_cents;
+        const word = reversal.kind === "refund" ? "refund" : reversal.kind === "lost" ? "chargeback" : "dispute";
         const body = reversal.given > 0 ? tt("donate.notice_restored", { usd, pat: f(reversal.given) })
-          : tt(reversal.kind === "refund" ? "donate.notice_refund" : "donate.notice_dispute", { usd, pat: f(reversal.taken) });
-        await require("./inbox").addSafe(reversal.userId, { kind: "system", ref: "donation-rev-" + ev.id, link: "/wallet", title: tt("donate.notice_title"), body });
+          : tt(`donate.notice_${word}${whole ? "" : "_part"}`, { usd, part, pat: f(reversal.taken) });
+        await require("./inbox").addSafe(reversal.userId, { kind: "system", ref: "donation-rev-" + ev.id, link: "/wallet", title: tt("donate.notice_update_title"), body });
       } catch (e) { /* notice only */ }
     }
   }

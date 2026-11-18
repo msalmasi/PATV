@@ -93,7 +93,7 @@ test("1.99ans: promos are retired (no PAT for dollars) - the create / edit route
   const r = await post("/api/admin/donpromo/create", { ...base1, budget: 1000 });
   assert.equal(r.status, 410);
   assert.equal(r.json.code, "retired");
-  assert.match(r.json.error, /donations give supporter perks, never PAT/);
+  assert.match(r.json.error, /Promotions need donations set to On/);
   assert.equal((await post("/api/admin/donpromo/create", { ...base1, budget: 1000, confirm_budget: true })).status, 410);
   assert.equal((await post("/api/admin/donpromo/DP-x/edit", { budget: 5000 })).status, 410);
   const s = await DP.creditTerms({ ref: "don-1", userId: "u-boss", cents: 5000, paidAt: now + 1, via: "card" });

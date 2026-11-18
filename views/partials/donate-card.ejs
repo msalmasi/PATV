@@ -3,13 +3,15 @@
   1.99jw "Support PATV" (stripebilling.js donate): a card donation. Shown on /shop and /wallet ONLY while Stripe is on
   (donate.stripe.enabled). Locals: donate = {stripe, result ('success'|'cancel'|null), back ('/shop'|'/wallet'), max}.
   1.99aor: by the donations switch (D.mode): perks (default) = the supporter perks, no rate, no promo line; on = the rate + a live
-  promo (D.rate, D.promo, the don_on.* wording); off = D.paused: a short notice instead of the card.
+  promo (D.rate, D.promo, the don_on.* wording); off = D.paused: a short notice instead of the card, and still the answer to someone
+  coming back from a checkout that was already open. D.was: perks or paused after donations have given PAT (the don_was.* wording).
 -%>
 <% const D = locals.donate || null; %>
-<%_ const K_ = (k) => (D && D.mode === 'on' ? 'don_on.' + k : k); _%>
+<%_ const K_ = (k) => (D && D.mode === 'on' ? 'don_on.' + k : D && D.was && t.has('don_was.' + k) ? 'don_was.' + k : k); _%>
 <%_ if (D && D.paused) { _%>
 <section class="donate-card" id="donatePaused" aria-labelledby="donatePT" style="background:#111;border:1px solid #6a3d6a;border-radius:10px;padding:14px 16px;margin:12px 0;display:grid;gap:8px;min-width:0">
   <h2 id="donatePT" style="margin:0;font-size:18px;color:#fff">⏸️ <%- t('don_off.title') %></h2>
+  <%_ if (D.result === 'success') { _%><p style="margin:0;color:#81c784;font-size:14px" role="status"><%- t(K_('donate.thanks')) %></p><%_ } else if (D.result === 'cancel') { _%><p style="margin:0;color:#bbb;font-size:14px" role="status"><%- t('donate.cancelled') %></p><%_ } _%>
   <p style="margin:0;color:#bbb;font-size:14px"><%- t('don_off.body') %></p>
 </section>
 <%_ } _%>

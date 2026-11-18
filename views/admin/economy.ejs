@@ -25,12 +25,12 @@
     <% const MP = typeof monetary !== 'undefined' ? monetary : null; %>
     <h3>Monetary policy (from Pepe)</h3>
     <% const DS_ = typeof donations !== 'undefined' && donations ? donations : null; const DM_ = DS_ ? DS_.mode : 'perks'; %>
-    <% if (!MP) { %><p class="adm-help">Not synced yet: House flash liquidity is off. Donations are <a href="#donations"><%= DM_ === 'on' ? 'on (PAT at the default rate)' : DM_ === 'off' ? 'paused' : 'perks only' %></a>.</p><% } else { %>
+    <% if (!MP) { %><p class="adm-help">Not synced yet: House flash liquidity is off. Donations are <a href="#donations" id="dmMono"><%= DM_ === 'on' ? 'on (PAT at the default rate)' : DM_ === 'off' ? 'paused' : 'perks only' %></a>.</p><% } else { %>
     <div class="adm-kv" id="monetaryKv">
       <div><b>Flash liquidity</b><span>House <%= MP.flash.house ? 'on' : 'off' %> · Bank <%= MP.flash.bank ? 'on' : 'off' %> · MM <%= MP.flash.mm ? 'on' : 'off' %></span></div>
       <div><b>Fed loan room</b><span><%= fmt(MP.fedloan_room) %> PAT</span></div>
       <div><b>House hard floor</b><span><%= fmt(MP.house_hard_floor) %> PAT</span></div>
-      <div><b>Donations</b><span><%= fmt(MP.donation.rate) %> PAT per $1 · +<%= MP.donation.bonus_pct %>% to incentives · <a href="#donations"><%= DM_ === 'on' ? 'applied (switch on)' : DM_ === 'off' ? 'not applied (paused)' : 'not applied (perks only)' %></a></span></div>
+      <div><b>Donations</b><span><%= fmt(MP.donation.rate) %> PAT per $1 · +<%= MP.donation.bonus_pct %>% to incentives · <a href="#donations" id="dmMono"><%= DM_ === 'on' ? 'applied (switch on)' : DM_ === 'off' ? 'not applied (paused)' : 'not applied (perks only)' %></a></span></div>
       <div><b>Staff grant cap</b><span><%= MP.grant_weekly_cap < 0 ? 'unlimited' : fmt(MP.grant_weekly_cap) + ' PAT / week' %></span></div>
       <% if (MP.band) { %><div><b>Fed band</b><span><%= MP.band.fed === null ? '?' : fmt(MP.band.fed) %> (floor <%= MP.band.floor === null ? '?' : fmt(MP.band.floor) %> · ceiling <%= MP.band.ceiling === null ? '?' : fmt(MP.band.ceiling) %>)</span></div><% } %>
     </div>
@@ -71,7 +71,8 @@
         <% }) %>
       </fieldset>
       <% if (locals.donOwner) { %>
-      <p class="adm-help">Before choosing <b>On</b>: this is dollars for PAT again, so re-read the note on New York S5935-A first. The public pages and the Terms change the moment you save; members aren't asked to accept the Terms again.</p>
+      <p class="adm-help">Before choosing <b>On</b>: this is dollars for PAT again. New York's law S5935-A (<a href="https://www.reedsmith.com/articles/new-york-enacts-law-prohibiting-sweepstakes-casinos/" target="_blank" rel="noopener noreferrer">the ban on online sweepstakes games</a>) is why donations became perks only: read it again first.</p>
+      <p class="adm-help" id="dmTermsNote"><b>The public pages and the Terms change the moment you save, and nobody is asked to accept them.</b> Section 18 of the Terms says: "for material changes we'll give notice on the site — the next time you post, you'll be asked to accept the new version." Whether this is such a change is your decision; if it is, have a site notice and a new Terms version ready before you choose On.</p>
       <label for="dmNote">Why (optional, kept in the log)<input type="text" id="dmNote" maxlength="200"></label>
       <label for="dmPw">Your account password<input type="password" id="dmPw" autocomplete="current-password"></label>
       <div class="adm-actions"><button type="submit" id="dmGo">Change donations</button></div>
@@ -79,12 +80,21 @@
     </form>
     <p class="adm-msg" id="dmMsg" role="status" aria-live="polite"></p>
     <div class="adm-kv" id="dmKv">
-      <div><b>Rate now</b><span><%= fmt(DS.normal.rate) %> PAT per $1 · +<%= DS.normal.bonus_pct %>% to incentives<%= DS.mode === 'on' ? '' : ' (not applied in this state)' %></span></div>
+      <div><b>Rate now</b><span id="dmRate"><%= fmt(DS.normal.rate) %> PAT per $1 · +<%= DS.normal.bonus_pct %>% to incentives<%= DS.mode === 'on' ? '' : ' (not applied in this state)' %></span></div>
       <div><b>Donations that gave PAT since this switch</b><span id="dmCredits"><%= fmt(DS.credits.n) %> · <%= fmt(DS.credits.pat) %> PAT · +<%= fmt(DS.credits.bonus) %> bonus</span></div>
       <div><b>Open checkouts on PAT terms</b><span id="dmOpen"><%= fmt(DS.open_quotes) %></span></div>
-      <div><b>Taken back (refunds, disputes)</b><span id="dmClawed"><%= fmt(DS.credits.clawed) %> PAT<%= DS.credits.short ? ' · ' + fmt(DS.credits.short) + ' PAT could not be taken (already spent)' : '' %></span></div>
+      <div><b>Taken back (refunds, disputes)</b><span id="dmClawed"><%= fmt(DS.credits.clawed) %> PAT<%= DS.credits.short ? ' · ' + fmt(DS.credits.short) + ' PAT could not be taken (already spent)' : '' %><%= DS.credits.owed ? ' · ' + fmt(DS.credits.owed) + ' PAT still owed back (the account can\'t be credited)' : '' %></span></div>
     </div>
     <p class="adm-help">Refunds and disputes reach us only if the Stripe webhook also sends <code>charge.refunded</code>, <code>charge.dispute.created</code> and <code>charge.dispute.closed</code>.</p>
+    <p class="adm-help">Rolling the site back below 1.99aor: choose Perks only first and wait two hours, so no PAT quote is still open (a card quote lasts 31 minutes, a crypto one 2 hours). An older build ignores quotes and refund events; what it settled shows below, and refunds from that window have to be checked against Stripe.</p>
+    <% const RB_ = [...DS.rollback.card.map((r) => ['card', r]), ...DS.rollback.crypto.map((r) => ['crypto', r])]; %>
+    <div id="dmRbBox"<%= RB_.length ? '' : ' hidden' %>>
+      <h3>Quoted PAT, settled without it by an older build</h3>
+      <div class="adm-tbl"><table aria-label="Donations settled without their quoted PAT">
+        <thead><tr><th>Rail</th><th>Member</th><th class="num">$</th><th>Reference</th></tr></thead>
+        <tbody id="dmRb"><% RB_.forEach(([rail, r]) => { %><tr><td><%= rail %></td><td><%= r.username || r.user_id || '' %></td><td class="num"><%= (Number(r.usd_cents || 0) / 100).toFixed(2) %></td><td><code><%= r.ref %></code></td></tr><% }) %></tbody>
+      </table></div>
+    </div>
     <h3>Switch changes</h3>
     <div class="adm-tbl"><table aria-label="Donation switch changes">
       <thead><tr><th>When (UTC)</th><th>By</th><th>From</th><th>To</th><th>Why</th></tr></thead>
@@ -96,14 +106,14 @@
       <tbody id="dmRev"><% if (!DS.reversals.length) { %><tr><td colspan="7" class="empty">None.</td></tr><% } %><% DS.reversals.forEach((r) => { %><tr><td><%= new Date(r.at).toISOString().slice(0, 16).replace('T', ' ') %></td><td><%= r.username || r.user_id || '' %></td><td><%= r.kind %></td><td class="num"><%= (r.cents / 100).toFixed(2) %></td><td class="num"><%= fmt(r.pat_delta) %></td><td class="num"><%= fmt(r.bonus_delta) %></td><td class="num"><%= fmt(r.short_pat) %></td></tr><% }) %></tbody>
     </table></div>
   </div>
-  <script src="/public/js/admin-donmode.js?v=1" defer></script>
+  <script src="/public/js/admin-donmode.js?v=2" defer></script>
   <% } %>
   <h3>Promotions</h3>
   <p class="adm-help" id="dpModeNote"><b><%= !DS || DS.mode === 'perks' ? 'Promotions don\'t apply while donations are perks only.' : DS.mode === 'off' ? 'Promotions don\'t apply while donations are paused.' : 'Promotions are live: they apply to donations quoted while one runs.' %></b> The table below keeps their history.</p>
   <p class="adm-help">The normal rate is in the economy settings (<code>donation_rate</code> / <code>donation_bonus_pct</code>). A <b>promo</b> boosts it for a while: a promo rate (PAT per $1) or a multiplier, a per-donor cap in dollars (dollars above it earn the normal rate; a donation that straddles the cap is split), an optional budget (the most PAT credited at the promo rate across everyone; then the normal rate), and an end time (at most 7 days). Card and stablecoin donations both use it; a donation belongs to the promo live when it was <b>quoted</b> (card: when the checkout opened; crypto: when the transfer was first seen, or the page last showed it to the member). Once a promo has started, its rate, cap and start are locked (donations were priced with them) - you can still change the label, the end, the budget and the switch, or end it now. Promos can't overlap. Every change is audit-logged.</p>
   <% if (!_can('donations.admin')) { %><p class="adm-help">Admins only.</p><% } else { %>
     <%# owner answers 2026-10-20 (1): the API refuses anyone but a Pepe owner (donationpromo.js) %>
-    <p class="adm-help"><%- t(DS && DS.mode === 'on' ? 'don_on.admin.donpromo.owner_only' : 'admin.donpromo.owner_only') %></p>
+    <p class="adm-help"><%- t('don_on.admin.donpromo.owner_only') %></p>
     <div id="dpAdm">
       <div class="adm-kv" id="dpKv"><div><b>Status</b><span>loading…</span></div></div>
       <h3 id="dpNewT"<%= DS && DS.mode === 'on' ? '' : ' hidden' %>>New promo</h3>
@@ -175,7 +185,7 @@
       </table></div>
     </div>
     <script src="/public/js/donpromo-budget.js?v=1" defer></script>
-    <script src="/public/js/admin-donpromo.js?v=5" defer></script>
+    <script src="/public/js/admin-donpromo.js?v=6" defer></script>
   <% } %>
 </section>
 

@@ -80,15 +80,16 @@ let NOW = () => Date.now();
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 /** 1.99kz: the Support PATV promo's numbers, or null while it isn't shown: neither card (Stripe) nor stablecoin donations are on
  *  (/support would 404) or donations are paused. 1.99aor, by the donations switch: "perks" = {} (no numbers, the perks text);
- *  "on" = {rate} PAT per $1 + {bonus}% to the community pot, and a live donation promo's rate + per-donor cap. */
+ *  "on" = {rate} PAT per $1 + {bonus}% to the community pot, and a live donation promo's rate + per-donor cap; perks after donations
+ *  have given PAT = {was: true} (the text without "never"). */
 let supportTerms = () => {
   let on = false;
   try { on = require("./cryptopay").enabled(); } catch (e) { on = false; }
   if (!on) { try { on = require("./stripebilling").enabled(); } catch (e) { on = false; } }
   if (!on) return null;
-  const mode = require("./donationmode").cachedMode();
+  const DM = require("./donationmode"), mode = DM.cachedMode();
   if (mode === "off") return null;
-  if (mode !== "on") return {};
+  if (mode !== "on") return DM.wasOn() ? { was: true } : {};
   let T = { rate: 500000, bonus_pct: 20 };
   try { T = require("./funding").donationTerms(); } catch (e) { /* defaults */ }
   let P = null;
@@ -97,7 +98,7 @@ let supportTerms = () => {
   return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
 };
 /** 1.99aor: which built-in texts a house promo uses ("support" has one per state of the donations switch). */
-const promoTextKey = (kind, vars) => (kind !== "support" ? kind : vars.promo_on ? "support_promo" : vars.rate ? "support_on" : "support");
+const promoTextKey = (kind, vars) => (kind !== "support" ? kind : vars.promo_on ? "support_promo" : vars.rate ? "support_on" : vars.was ? "support_was" : "support");
 // 1.99ack: the review queue is banner.review (Assistants too since the owner's 2026-10-18 decision), settings + house
 // promos banner.config (siteperms.js)
 const canReview = (u) => SP.can(u, "banner.review");

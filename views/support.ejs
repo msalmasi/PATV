@@ -5,15 +5,17 @@
     switches, all off by default), FAQ, and a thank-you state. UI only: limits / routing are the server's.
     1.99aor: THE DONATIONS SWITCH (dmode, donationmode.js). "perks" (the default): a donation gives the 💚 supporter perks (#perks), no
     "$1 = N PAT", no pot bonus, no promo. "on": the rate, the pot bonus, a live promo and the PAT per tier (K() = the don_on.* wording).
-    "off": a paused notice instead of the amount + payment cards; the member's wallets and their own donations stay. %>
+    "off": a paused notice instead of the amount + payment cards; the member's wallets and their own donations stay.
+    dwas (WAS): perks or paused, but donations have given PAT: a quoted donation can still be paid, so the don_was.* wording never says "never". %>
 <%- include('layout', { title: title, user: user }) %>
 <%
   const num = (n) => (t.num ? t.num(Number(n) || 0) : Number(n || 0).toLocaleString('en-US'));
-  const DMODE = locals.dmode || 'perks', ON = DMODE === 'on', PAUSED = DMODE === 'off';
-  const K = (k) => (ON ? 'don_on.' + k : k);
+  const DMODE = locals.dmode || 'perks', ON = DMODE === 'on', PAUSED = DMODE === 'off', WAS = !ON && !!locals.dwas;
+  const K = (k) => (ON ? 'don_on.' + k : WAS && t.has('don_was.' + k) ? 'don_was.' + k : k);
   const R = ON ? Number(locals.rate) || 0 : 0, BP = ON ? Number(locals.bonus_pct) || 0 : 0;
   // 1.99tq: quoteFor (cryptoweb.js) = donationpromo.split for THIS viewer (a live promo's allowance + budget); the plain formula without one
   const PR = ON ? locals.promo || null : null;
+  const POT_P = !!(PR && PR.bonus_base !== 'all');   // a live promo's bonus base leaves promo dollars out of the pot (or counts them at the normal rate)
   const Q = (usd) => (typeof locals.quoteFor === 'function' ? quoteFor(usd) : null);
   const patOf = (usd) => { const q = Q(usd); return q ? q.pat : Math.floor((Math.round(usd * 100) * R) / 100); };
   const bonusOf = (usd) => { const q = Q(usd); return q ? q.bonus : Math.floor((patOf(usd) * BP) / 100); };
@@ -199,7 +201,7 @@
   .sp-confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; }
   @media (prefers-reduced-motion: reduce) { .sp *, .sp *::before, .sp *::after { animation: none !important; transition: none !important; } .sp .tier:hover { transform: none; } }
 </style>
-<main class="ds-page sp" id="support"<% if (ON) { %> data-rate="<%= R %>" data-bonus="<%= BP %>"<% } %> data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>"<% if (PR) { %> data-promo="<%= JSON.stringify({ rate: PR.rate, allowance_cents: PR.allowance_cents, budget_left_pat: PR.budget_left_pat == null ? null : PR.budget_left_pat, bonus_base: PR.bonus_base, ends: PR.ends }) %>"<% } %>>
+<main class="ds-page sp" id="support"<% if (ON) { %> data-rate="<%= R %>" data-bonus="<%= BP %>"<% } %><% if (WAS) { %> data-was="1"<% } %> data-min="<%= min %>" data-max="<%= max %>" data-cardmax="<%= cardMax %>"<% if (PR) { %> data-promo="<%= JSON.stringify({ rate: PR.rate, allowance_cents: PR.allowance_cents, budget_left_pat: PR.budget_left_pat == null ? null : PR.budget_left_pat, bonus_base: PR.bonus_base, ends: PR.ends }) %>"<% } %>>
   <% if (preview) { %><div class="ds-note warn preview"><span class="ds-ic" aria-hidden="true">👁️</span><div><%- t('support.preview') %></div></div><% } %>
 
   <% if (D.result === 'success') { %>
@@ -211,8 +213,8 @@
     <%_ if (thanks.promo) { _%>
     <p><%- t('support.thanks_promo', { promo_pat: '<b>' + num(thanks.promo.pat) + '</b>', promo_usd: num(thanks.promo.usd), normal_pat: num(thanks.promo.normal_pat) }) %></p>
     <%_ } _%>
-    <%_ if (ON) { _%>
-    <p><%- t('support.thanks_pot', { bonus: BP }) %></p>
+    <%_ if (thanks.bonus > 0) { _%>
+    <p><%- t('support.thanks_pot_pat', { bonus: '<b>' + num(thanks.bonus) + '</b>' }) %></p>
     <%_ } _%>
     <div class="row" style="justify-content:center;margin-block-start:var(--ds-sp-2)"><a class="ds-btn quiet" href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span> <%- t('support.thanks_wallet') %></a></div>
     <%_ } else { _%>
@@ -231,7 +233,7 @@
     <p class="ds-lead"><%- t(PAUSED ? 'don_off.hero_lead' : K('support.hero_lead')) %></p>
     <%# 1.99aor: the value exchange follows the switch: the perks, or PAT + the pot + a live promo %>
     <%_ if (ON) { _%>
-    <p class="deal"><span><%- t('support.hero_deal', { rate: '<b>' + num(R) + '</b>' }) %></span><span class="plus"><%- t('support.hero_deal_pot', { bonus: BP }) %></span></p>
+    <p class="deal"><span><%- t('support.hero_deal', { rate: '<b>' + num(R) + '</b>' }) %></span><span class="plus"><%- t(POT_P ? 'support.hero_deal_pot_promo' : 'support.hero_deal_pot', { bonus: BP }) %></span></p>
     <%_ if (PR) { _%>
     <%# 1.99tq: a live donation promo - the boosted rate, the per-donor cap, the viewer's allowance, a countdown %>
     <div class="promo" id="spPromo" role="note" aria-labelledby="spPromoT">
@@ -243,7 +245,7 @@
     </div>
     <%_ } _%>
     <%_ } else if (!PAUSED) { _%>
-    <p class="deal"><span><%- t('support.hero_deal_perks') %></span><span class="plus"><%- t('support.hero_deal_nopat') %></span></p>
+    <p class="deal"><span><%- t('support.hero_deal_perks') %></span><span class="plus"><%- t(K('support.hero_deal_nopat')) %></span></p>
     <%_ } _%>
     <%_ if (!PAUSED) { _%>
     <div class="ds-ctas">
@@ -254,7 +256,7 @@
     <ul class="mini">
       <li><span class="ds-ic" aria-hidden="true">🔒</span> <%- t('support.mini_keys') %></li>
       <li><span class="ds-ic" aria-hidden="true">📬</span> <%- t('support.mini_receipt') %></li>
-      <li><span class="ds-ic" aria-hidden="true"><%= ON ? '🪙' : '💚' %></span> <%- t(ON ? 'support.mini_pot' : 'support.mini_perks') %></li>
+      <li><span class="ds-ic" aria-hidden="true"><%= ON ? '🪙' : '💚' %></span> <%- t(ON ? (POT_P ? 'support.mini_pot_promo' : 'support.mini_pot') : K('support.mini_perks')) %></li>
     </ul>
     <% if (SP.goal) { %>
     <div class="meter" id="spGoal">
@@ -311,7 +313,7 @@
         <span class="usd">$<%= usd %></span>
         <%_ if (ON) { _%>
         <span class="pat"><%- t('support.tier_pat', { pat: num(patOf(usd)) }) %></span>
-        <span class="bon"><%- t('support.tier_bonus', { bonus: num(bonusOf(usd)) }) %></span>
+        <% if (bonusOf(usd) > 0) { %><span class="bon"><%- t('support.tier_bonus', { bonus: num(bonusOf(usd)) }) %></span><% } %>
         <%_ } _%>
       </label>
       <% }) %>
@@ -336,7 +338,7 @@
     </div>
     <% } %>
     <% if (DL) { %><p class="mut" id="spDaily" data-left="<%= DL.left_cents %>"><span class="ds-ic" aria-hidden="true">📅</span> <% if (DL.left_cents >= 100) { %><%- t('support.daily_left', { left: '<b>' + num(Math.floor(DL.left_cents / 100)) + '</b>', limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } else { %><%- t('support.daily_none', { limit: num(DL.limit_cents / 100), tz: DL.tz.replace(/_/g, ' ') }) %><% } %></p><% } %>
-    <p class="sum" id="spSum" aria-live="polite"><%- ON ? t('support.sum', { usd: 10, pat: '<b>' + num(patOf(10)) + '</b>', bonus: '<span class="plus">' + num(bonusOf(10)) + '</span>' }) : t('support.sum_perks', { usd: 10 }) %></p>
+    <p class="sum" id="spSum" aria-live="polite"><%- ON ? (bonusOf(10) > 0 ? t('support.sum', { usd: 10, pat: '<b>' + num(patOf(10)) + '</b>', bonus: '<span class="plus">' + num(bonusOf(10)) + '</span>' }) : t('support.sum_nopot', { usd: 10, pat: '<b>' + num(patOf(10)) + '</b>' })) : t(K('support.sum_perks'), { usd: 10 }) %></p>
   </section>
 
   <section class="card" id="pay" aria-labelledby="payT">
@@ -432,13 +434,13 @@
           <div id="payBox">
             <% if (!payments.length) { %><p class="mut" style="margin-block-start:var(--ds-sp-2)"><%- t('support.no_payments') %></p><% } else { %>
             <ol class="pays" id="cryptoPayments">
-              <% payments.forEach((p) => { const sg = STAGE[p.status] || 0, tn = tone(p.status); %><li data-id="<%= p.id %>" data-status="<%= p.status %>"<% if (ON) { %> data-pat="<%= p.pat || '' %>"<% } %>>
+              <% payments.forEach((p) => { const sg = STAGE[p.status] || 0, tn = tone(p.status); %><li data-id="<%= p.id %>" data-status="<%= p.status %>"<% if (ON || WAS) { %> data-pat="<%= p.pat || '' %>"<% } %>>
                 <span><span class="amt"><%= (Number(p.usd_cents) / 100).toFixed(2) %> <%= p.token %></span>
                   <span class="meta"> · <a href="<%= p.explorer %>" target="_blank" rel="noopener noreferrer"><%= p.chain_name %> ↗</a> · <time data-ts="<%= p.seen %>"><%= new Date(Number(p.seen)).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time></span></span>
-                <%_ if (ON) { _%>
+                <%_ if (ON || WAS) { _%>
                 <span class="pp"><%= p.pat ? num(p.pat) + ' PAT' : '' %></span>
                 <%_ } _%>
-                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t(ON && p.status === 'credited' ? 'don_on.support.status.credited' : 'support.status.' + (p.status === 'held' && p.hold_reason === 'daily_limit' ? 'held_limit' : p.status === 'held' && p.hold_reason === 'global_daily_limit' ? 'held_global' : p.status)) %></span></span>
+                <span class="st <%= tn %>"><% if (sg) { %><span class="dots" aria-hidden="true"><i class="on<%= sg === 1 ? ' last' : '' %>"></i><i class="<%= sg >= 2 ? 'on' : '' %><%= sg === 2 ? ' last' : '' %>"></i><i class="<%= sg >= 3 ? 'on' : '' %>"></i></span><% } %><span class="lab"><%- t((ON || WAS) && p.status === 'credited' && p.pat > 0 ? 'don_on.support.status.credited' : 'support.status.' + (p.status === 'held' && p.hold_reason === 'daily_limit' ? 'held_limit' : p.status === 'held' && p.hold_reason === 'global_daily_limit' ? 'held_global' : p.status)) %></span></span>
               </li><% }) %>
             </ol>
             <% } %>
@@ -457,7 +459,7 @@
       <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🖥️</span><b><%- t('support.where_servers') %></b><p><%- t('support.where_servers_d') %></p></div>
       <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🌐</span><b><%- t('support.where_hosting') %></b><p><%- t('support.where_hosting_d') %></p></div>
       <%_ if (ON) { _%>
-      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🪙</span><b><%- t('support.where_pot') %></b><p><%- t('support.where_pot_d', { bonus: BP }) %></p></div>
+      <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🪙</span><b><%- t('support.where_pot') %></b><p><%- t(POT_P ? 'support.where_pot_d_promo' : 'support.where_pot_d', { bonus: BP }) %></p></div>
       <%_ } _%>
     </div>
   </section>
@@ -466,7 +468,7 @@
   <%# 1.99mv: 💚 Supporter perks (supporter.js) - automatic on any confirmed donation, card or crypto %>
   <section id="perks" aria-labelledby="perksT">
     <h2 class="ds-h2" id="perksT"><span class="ds-ic" aria-hidden="true">💚</span> <%- t('supporter.perks_title') %></h2>
-    <p class="mut"><%- t('supporter.perks_lede') %></p>
+    <p class="mut"><%- t(ON || WAS ? K('supporter.perks_lede') : 'supporter.perks_lede') %></p>
     <% if (PK.mine) { %><p class="perk-mine"><%- t('supporter.perks_yours', { tier: PK.mine.emoji + ' ' + t('supporter.tier.' + PK.mine.tier) }) %></p><% } %>
     <div class="grid3">
       <div class="tile"><span class="ic ds-ic xl" aria-hidden="true">🏷️</span><b><%- t('supporter.perk_flair') %></b><p><%- t('supporter.perk_flair_d') %></p>
@@ -508,7 +510,7 @@
     <h2 class="ds-h2" id="faqT"><span class="ds-ic" aria-hidden="true">❓</span> <%- t('support.faq_title') %></h2>
     <details><summary><%- t('support.faq_get_q') %></summary><p><%- t(K('support.faq_get_a'), { rate: num(R) }) %><% if (PR) { %> <%- t('support.faq_promo_a', { rate: num(PR.rate), cap: num(PR.cap_usd) }) %><% } %></p></details>
     <%_ if (ON) { _%>
-    <details><summary><%- t('support.faq_pot_q') %></summary><p><%- t('support.faq_pot_a', { bonus: BP }) %></p></details>
+    <details><summary><%- t('support.faq_pot_q') %></summary><p><%- t(POT_P ? 'support.faq_pot_a_promo' : 'support.faq_pot_a', { bonus: BP }) %></p></details>
     <%_ } _%>
     <details><summary><%- t('support.faq_cash_q') %></summary><p><%- t('support.faq_cash_a') %></p></details>
     <% if (cryptoShown) { %>
@@ -528,4 +530,4 @@
   </section>
 </main>
 <script src="/public/js/crypto-link.js?v=3" defer></script>
-<script src="/public/js/support.js?v=6" defer></script>
+<script src="/public/js/support.js?v=7" defer></script>

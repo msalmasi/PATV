@@ -274,6 +274,7 @@
              rate: d.rate != null ? d.rate : 500000, bonus: d.bonus_pct != null ? d.bonus_pct : 20 };
   })();
   const DON_ON = !!(L && L.donationMode === 'on');   // 1.99aor: the donations switch (donationmode.js)
+  const DON_WAS = !DON_ON && !!(L && L.donationEverOn);   // perks or paused, but donations have given PAT: no "never"
   const LAYER_C = { players: '#3987e5', fed: '#d95926', treasury: '#199e70', incentive: '#c98500', pots: '#d55181', burn: '#008300' };
 %>
 <main class="ds-page flow eco" id="top">
@@ -303,7 +304,7 @@
         <div class="step" style="--c:#3a8ad0">
           <span class="sn">1 · <%- t('economy.loop.s1') %></span>
           <b><span class="ds-ic" aria-hidden="true">🏛️</span> <%- t('economy.loop.s1_h') %></b>
-          <p><%- t(DON_ON ? 'don_on.economy.loop.s1_d' : 'economy.loop.s1_d') %></p>
+          <p><%- t(DON_ON ? 'don_on.economy.loop.s1_d' : DON_WAS ? 'don_was.economy.loop.s1_d' : 'economy.loop.s1_d') %></p>
           <ul><li><%- t('economy.loop.minted30') %> <b><%= nf(L.month.minted) %></b></li></ul>
         </div>
         <div class="step" style="--c:#ffcf40">
@@ -553,7 +554,7 @@
     <p class="lead">PAT (Public Access Token) is the points currency of PATV. It's one balance shared by the website, the
       pads' chat rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
       It isn't crypto and it isn't real money: it's points with no cash value, and you spend it on virtual prizes in the <a href="/shop">shop</a>.
-      <%- DON_ON ? "It can't be cashed out: a donation adds some as a thank-you, and that PAT is points like any other." : "It can't be bought: donations give supporter perks, never PAT." %></p>
+      <%- DON_ON ? "It can't be cashed out: a donation adds some as a thank-you, and that PAT is points like any other." : DON_WAS ? "It can't be cashed out, and new donations give supporter perks without adding PAT right now." : "It can't be bought: donations give supporter perks, never PAT." %></p>
     <div class="grid">
       <div class="card">
         <h3><span class="ds-ic" aria-hidden="true">💬</span> Hang out</h3>
@@ -665,7 +666,7 @@
         <h4><%- t('economy.map.pl_h') %></h4>
         <p><%- t('economy.map.pl_d') %></p>
         <%# 1.99aor: what a donation gives follows the donations switch %>
-        <p><%- DON_ON ? t('economy.map.don', { rate: sh(V3.rate), pct: V3.bonus, link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) : t('economy.map.don_perks', { link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) %></p>
+        <p><%- DON_ON ? t('economy.map.don', { rate: sh(V3.rate), pct: V3.bonus, link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) : t(DON_WAS ? 'don_was.economy.map.don_perks' : 'economy.map.don_perks', { link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) %></p>
       </div>
 
       <div class="pm-ar"><%- t('economy.map.to_spend') %></div>

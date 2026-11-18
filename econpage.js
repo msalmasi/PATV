@@ -56,6 +56,7 @@ async function live({ patSupply } = {}) {
     // Economy v3: the donation terms. 1.99aor: the page shows them only while the donations switch is "on" (donationMode)
     donation: F.donationTerms(),
     donationMode: require("./donationmode").cachedMode(),
+    donationEverOn: !!require("./donationmode").cached().ever_on,
     fortknox: P["vault:fortknox"] != null ? P["vault:fortknox"] : F.state.fortknox,
     history: hist,
     month: { minted: sum("minted"), burned: sum("burned"),

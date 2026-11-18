@@ -10,6 +10,7 @@
   var root = document.getElementById('support');
   if (!root) return;
   var RATE = Number(root.getAttribute('data-rate')) || 0, BONUS = Number(root.getAttribute('data-bonus')) || 0;
+  var WAS = root.getAttribute('data-was') === '1';   // perks or paused, but donations have given PAT: the summary can't say "never"
   var MIN = Number(root.getAttribute('data-min')) || 1, MAX = Number(root.getAttribute('data-max')) || 1000, CARDMAX = Number(root.getAttribute('data-cardmax')) || 1000;
   var lang = document.documentElement.lang || 'en';
   var nf; try { nf = new Intl.NumberFormat(lang === 'en' ? 'en-US' : lang); } catch (e) { nf = null; }
@@ -53,10 +54,12 @@
     if (cPat) {
       var cv = Number(custom.value);
       cPat.textContent = cv > 0 ? fmt(patOf(cv)) + ' PAT' : '';
-      cBon.textContent = cv > 0 ? '+' + fmt(bonusOf(cv)) + ' PAT' : '';
+      cBon.textContent = cv > 0 && bonusOf(cv) > 0 ? '+' + fmt(bonusOf(cv)) + ' PAT' : '';
     }
     if (sum) sum.textContent = !ok ? _t('js.support.pick_amount', 'Enter an amount of at least ${min}.', { min: MIN })
-      : RATE ? _t('js.support.sum', 'You give ${usd} → you get {pat} PAT, and the community pot gets +{bonus} PAT.', { usd: fmt(usd), pat: fmt(patOf(usd)), bonus: fmt(bonusOf(usd)) })
+      : RATE ? (bonusOf(usd) > 0 ? _t('js.support.sum', 'You give ${usd} → you get {pat} PAT, and the community pot gets +{bonus} PAT.', { usd: fmt(usd), pat: fmt(patOf(usd)), bonus: fmt(bonusOf(usd)) })
+        : _t('js.support.sum_nopot', 'You give ${usd} → you get {pat} PAT.', { usd: fmt(usd), pat: fmt(patOf(usd)) }))
+      : WAS ? _t('js.support.sum_was', 'You give ${usd} → you get the Supporter perks. New donations don’t add PAT right now.', { usd: fmt(usd) })
       : _t('js.support.sum_perks', 'You give ${usd} → you get the Supporter perks. Donations never add PAT.', { usd: fmt(usd) });
     if (sum && ok && PROMO) {
       var Q = q(usd);

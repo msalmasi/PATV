@@ -126,7 +126,7 @@ They speak 20-plus languages. Most are on phones. Many are night owls. Assume th
 | **Padiquette** | the community guidelines | 📜 |
 | **stash** | a shared PAT account you can stake into the vaults | |
 
-**Words we avoid:** "money", "cash" and "funds" for PAT (it's points: say PAT), "real prizes", "real-world prizes" and "redeem PAT for..." (every prize is virtual: say "virtual prizes"), "buy PAT" or "PAT per $" (PAT can't be bought), sweepstakes words ("no purchase necessary", "void where prohibited"), "users" (say members, people, or you), "customers", "content creators" (say streamers, hosts), "platform" in marketing copy, "invest", "profit", "cash out" (outside heists), "crypto" for PAT (crypto donations are a separate, real-money support feature), "AI" as a selling point (Pepe is a character, not a feature), and "Pond Life" (the old GTF name).
+**Words we avoid:** "money", "cash" and "funds" for PAT (it's points: say PAT), "real prizes", "real-world prizes" and "redeem PAT for..." (every prize is virtual: say "virtual prizes"), "buy PAT", and "PAT per $" except where the owner's donations switch is on (a thank-you for a donation, never a sale), sweepstakes words ("no purchase necessary", "void where prohibited"), "users" (say members, people, or you), "customers", "content creators" (say streamers, hosts), "platform" in marketing copy, "invest", "profit", "cash out" (outside heists), "crypto" for PAT (crypto donations are a separate, real-money support feature), "AI" as a selling point (Pepe is a character, not a feature), and "Pond Life" (the old GTF name).
 
 ### Emoji
 

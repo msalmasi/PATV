@@ -78,8 +78,8 @@ function register(app, { addUser, noTimers } = {}) {
       const me = req.user && req.user.userId ? req.user : null;
       const DP = require("./donationpromo");
       await DP.init();
-      const dmode = (await DM.get()).mode;       // 1.99aor: read fresh: the page says what a donation gives right now
-      const paused = dmode === "off";
+      const dstate = await DM.get();             // 1.99aor: read fresh: the page says what a donation gives right now
+      const dmode = dstate.mode, paused = dmode === "off";
       const chains = paused ? [] : CP.accepted().map((c) => ({ ...c, qr: qrSvg(c.address) }));   // paused: no payment address
       let donate = null;
       try { donate = { ...require("./stripebilling").donateLocals("/support", req.query.donate), onSupport: true }; } catch (e) { donate = null; }
@@ -103,8 +103,9 @@ function register(app, { addUser, noTimers } = {}) {
         onTerms = { rate: T.rate, bonus_pct: T.bonus_pct, promo, quoteFor };
       }
       const wallets = me ? await CP.wallets(me.userId) : [];
-      // 1.99aor: a member with a linked wallet has just been shown what a transfer gives: that is the quote it is settled on
-      if (me && cryptoOn && !paused && wallets.length) await DP.noteCryptoQuote(me.userId).catch((e) => console.error("[support] quote:", e.message));
+      // 1.99aor: a member with a linked wallet has just been shown what a transfer gives: that is the quote it is settled on. Not awaited:
+      // writing it can wait behind any open transaction, the page must not (it keeps this moment and this state, whenever it runs)
+      if (me && cryptoOn && !paused && wallets.length) DP.noteCryptoQuoteSoon(me.userId, dmode);
       res.render("support", {
         // 1.99ts: the viewer's daily donation limit (null = none / signed out)
         daily: me ? await DP.daily(me.userId).catch(() => null) : null,
@@ -114,7 +115,7 @@ function register(app, { addUser, noTimers } = {}) {
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets, payments: me ? await CP.mine(me.userId) : [],
         min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
-        perks: await supporterPerks(me), dmode, ...onTerms,
+        perks: await supporterPerks(me), dmode, dwas: DM.wasOn(dstate), ...onTerms,
       });
     } catch (e) { next(e); }
   });

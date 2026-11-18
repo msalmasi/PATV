@@ -1,6 +1,7 @@
 // admin-donmode.js (1.99aor) - the admin Economy page's donations switch (donationmode.js on the server).
 // Pick a state, enter the account password: a single-use step-up nonce (POST /api/admin/stepup/nonce {for: "donations_mode"}), then
-// POST /api/admin/donations/mode. A Pepe owner only: the server checks that and the password again. The promo card re-reads afterwards.
+// POST /api/admin/donations/mode with the state this page shows (from: a page left open can't undo a newer change, it gets 409 "stale" and
+// the current state). A Pepe owner only: the server checks that and the password again. The promo card re-reads afterwards.
 (function () {
   'use strict';
   var box = document.getElementById('dmAdm');
@@ -29,7 +30,19 @@
     Array.prototype.forEach.call(box.querySelectorAll('input[name="dmMode"]'), function (r) { r.checked = r.value === D.mode; });
     $('dmCredits').textContent = fmt(D.credits.n) + ' · ' + fmt(D.credits.pat) + ' PAT · +' + fmt(D.credits.bonus) + ' bonus';
     $('dmOpen').textContent = fmt(D.open_quotes);
-    $('dmClawed').textContent = fmt(D.credits.clawed) + ' PAT' + (D.credits.short ? ' · ' + fmt(D.credits.short) + ' PAT could not be taken (already spent)' : '');
+    $('dmClawed').textContent = fmt(D.credits.clawed) + ' PAT' + (D.credits.short ? ' · ' + fmt(D.credits.short) + ' PAT could not be taken (already spent)' : '') +
+      (D.credits.owed ? ' · ' + fmt(D.credits.owed) + ' PAT still owed back (the account can\'t be credited)' : '');
+    // the rest of the page that speaks about the state
+    $('dmRate').textContent = fmt(D.normal.rate) + ' PAT per $1 · +' + D.normal.bonus_pct + '% to incentives' + (D.mode === 'on' ? '' : ' (not applied in this state)');
+    var mono = $('dmMono');
+    if (mono) {
+      var inKv = !!(mono.closest && mono.closest('#monetaryKv'));
+      mono.textContent = D.mode === 'on' ? (inKv ? 'applied (switch on)' : 'on (PAT at the default rate)') : D.mode === 'off' ? (inKv ? 'not applied (paused)' : 'paused') : (inKv ? 'not applied (perks only)' : 'perks only');
+    }
+    var rb = $('dmRb'), rows = (D.rollback.card || []).map(function (r) { return ['card', r]; }).concat((D.rollback.crypto || []).map(function (r) { return ['crypto', r]; }));
+    rb.textContent = '';
+    rows.forEach(function (x) { row(rb, [x[0], x[1].username || x[1].user_id, (Number(x[1].usd_cents || 0) / 100).toFixed(2), x[1].ref]); });
+    $('dmRbBox').hidden = !rows.length;
     var lg = $('dmLog'); lg.textContent = '';
     (D.history || []).forEach(function (h) { var d = h.detail || {}; row(lg, [utc(h.at), h.admin, d.before, d.after, h.reason]); });
     if (!(D.history || []).length) empty(lg, 5, 'No changes yet.');
@@ -40,7 +53,7 @@
   function post(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: FETCH, body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        if (!r.ok || !j.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; e.detail = j.detail; throw e; }
         return j;
       }); });
   }
@@ -54,14 +67,18 @@
     go.disabled = true;
     msg('');
     post('/api/admin/stepup/nonce', { for: 'donations_mode' })
-      .then(function (n) { return post('/api/admin/donations/mode', { mode: pick, note: $('dmNote').value, nonce: n.nonce, password: pw }); })
+      .then(function (n) { return post('/api/admin/donations/mode', { mode: pick, from: current, note: $('dmNote').value, nonce: n.nonce, password: pw }); })
       .then(function (j) {
         $('dmPw').value = ''; $('dmNote').value = '';
         render(j.donations);
         msg('Saved. Donations are now: ' + j.donations.describe[j.donations.mode].label + '.');
         document.dispatchEvent(new CustomEvent('donmode:changed'));
       })
-      .catch(function (e) { $('dmPw').value = ''; msg(e.message, true); })
+      .catch(function (e) {
+        $('dmPw').value = '';
+        if (e.code === 'stale' && e.detail) { render(e.detail); document.dispatchEvent(new CustomEvent('donmode:changed')); }   // someone moved it: show what is true now
+        msg(e.message, true);
+      })
       .then(function () { go.disabled = false; });
   });
 })();

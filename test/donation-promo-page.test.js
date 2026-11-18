@@ -76,7 +76,7 @@ test("1.99ans: admin routes are still Admins only, and creating a promo is refus
   assert.equal((await req("GET", "/api/admin/donpromo")).status, 401);
   const no = await req("POST", "/api/admin/donpromo/create", { user: "boss", body: { mode: "rate", rate: 1000000, cap_usd: 100, ends: now + 3 * 3600e3, label: "Today only" } });
   assert.equal(no.status, 410, no.text);
-  assert.match(no.json.error, /retired/);
+  assert.match(no.json.error, /need donations set to On/);
   const st = await req("GET", "/api/admin/donpromo", { user: "boss" });
   assert.equal(st.status, 200);
   assert.deepEqual(st.json.promos, []);
