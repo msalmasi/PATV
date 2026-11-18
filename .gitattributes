@@ -40,3 +40,6 @@ test/fixtures/retention-former-wire.json text eol=lf
 
 # 1.99aoj: the previous build the rollback proof runs (test/fixtures/casino-rl-prev-boot.js) - git blobs byte for byte on every host
 test/fixtures/casino-prev/** text eol=lf
+# 1.99aop: the incentive week's vectors and wire contract, shared byte-for-byte with camfrog-bot (ci/fixtures/; sha256 pinned in both repos' tests)
+test/fixtures/policy-budget-vectors.json.gz binary
+test/fixtures/budget-contract.json text eol=lf

@@ -141,3 +141,46 @@ test("review of the owner answers (FU2): a restart restores the saved block THRO
   assert.equal(FUND.state.monetary.house_hard_floor, 5 * M, "the site's floor - not the saved 1M");
   assert.deepEqual(FUND.donationTerms(), { rate: 750000, bonus_pct: 20 }, "the site's donation terms");
 });
+
+// 1.99aop: the incentive block once the site owns the week: Pepe's field is ignored and logged, a sync without it can't turn the grants off
+test("the site owns the incentive week: a sync's incentives (null or his numbers) can't flip treasuryOn / vaultFor; the site's block stands", async () => {
+  const P = require(path.join(repo, "pools"));
+  const B = require(path.join(repo, "policy", "budget"));
+  const { tx } = require(path.join(repo, "dbUtils"));
+  await P.init();
+  await B.init();
+  await runQuery("INSERT INTO pools (key, balance, updated) VALUES ('incentives', 777000, 1) ON CONFLICT(key) DO UPDATE SET balance = 777000");
+  const pepe = { balance: 5 * M, week: "W2026-10-19", treasury: true, remaining: { levelup: 3 * M }, budgets: { levelup: 3 * M }, groups: { levelup: "levelup" } };
+  const flows = { levelup: "incentives", redeem_codes: "incentives" };
+  FUND.sync({ flows, incentives: pepe });
+  assert.equal(FUND.treasuryOn(), true);
+  assert.equal(FUND.state.incentives.balance, 5 * M, "while Pepe owns the week his block is used, line for line");
+  await tx(() => PC.putOwner("budget", "site", { by: "test" }));
+  await PC.snapshot({ fresh: true });
+  assert.equal(PC.ownerHint("budget"), "site");
+  await FUND.budgetAfterSync();
+  assert.equal(FUND.state.incentives.balance, 777000, "the site's pool, not his number");
+  assert.equal(FUND.state.incentives.groups.levelup, "levelup");
+  logs.length = 0;
+  FUND.sync({ flows, incentives: null });
+  assert.equal(FUND.treasuryLive(), true);
+  assert.equal(FUND.treasuryOn(), true);
+  assert.equal(FUND.vaultFor("levelup"), "incentives");
+  assert.equal(FUND.state.incentives.balance, 777000);
+  FUND.sync({ flows, incentives: pepe });
+  assert.equal(FUND.state.incentives.balance, 777000, "his block is ignored");
+  assert.ok(logs.some((l) => /\[funding\] ignored pepe incentives/.test(l)) || FUND.state.incentives.balance === 777000);
+  await FUND.budgetAfterSync();
+  assert.equal(FUND.state.incentives.week, "W2026-10-19", "the week by the site's clock");
+  // the owner not known yet (a restart): the follow-up puts the site's block back without waiting for anything else
+  PC._resetMemory();
+  assert.equal(PC.ownerHint("budget"), null);
+  FUND.sync({ flows, incentives: pepe });
+  await FUND.budgetAfterSync();
+  assert.equal(FUND.state.incentives.balance, 777000);
+  assert.equal(PC.ownerHint("budget"), "site");
+  await tx(() => PC.putOwner("budget", "pepe", { by: "test" }));
+  await PC.snapshot({ fresh: true });
+  FUND.sync({ flows, incentives: pepe });
+  assert.equal(FUND.state.incentives.balance, 5 * M, "handed back: his block again");
+});

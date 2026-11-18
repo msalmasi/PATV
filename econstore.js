@@ -73,6 +73,8 @@ async function deriveFedJournal(layers) {
   return n;
 }
 async function deriveIncentiveGroups(treasury) {
+  // 1.99aop: once the site owns the week these rows follow the site's numbers (policy/budget.refreshGroupsDisplay), not Pepe's mirror
+  if (await require("./policy/budget").isSite().catch(() => false)) return 0;
   const w = treasury && treasury.week && typeof treasury.week === "object" ? treasury.week : null;
   if (!w) return 0;
   const t = Date.now();

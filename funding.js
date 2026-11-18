@@ -171,6 +171,18 @@ function routeOf(flow) {
 const INCENTIVES_ONLY = new Set(["platform_rewards"]);
 const offRoute = (flow) => INCENTIVES_ONLY.has(flow) && routeOf(flow) !== "incentives";
 
+// 1.99aop: once policy_ownership.budget = "site" the week is the site's (policy/budget.js): a grant is debited and counted in the
+// payout's own transaction and no claim is left for Pepe. While Pepe owns it (today) these answer false and every line below runs as before.
+async function budgetIsSite() {
+  try { return await require("./policy/budget").isSite(); } catch (e) { return false; }
+}
+/** Site-owned week: state.incentives = the site's numbers, fresh. -> is the site the owner? */
+async function siteBlock() {
+  if (!(await budgetIsSite())) return false;
+  try { state.incentives = await require("./policy/budget").fundingBlock(); } catch (e) { console.error("[funding] site budget block:", e.message); }
+  return true;
+}
+
 // PAT the website has paid out of the incentive budget that Pepe hasn't settled yet (all groups / one group)
 async function unsettledIncentives(group) {
   await ready;
@@ -189,6 +201,7 @@ async function queuedCount(group) {
 }
 // Can the incentive budget pay `amount` for `flow` now? (headOfQueue: the queue drain asking for its own head)
 async function canFundIncentives(flow, amount, headOfQueue) {
+  await siteBlock();
   const inc = state.incentives;
   if (!inc) return false;
   const g = groupOf(flow);
@@ -231,6 +244,7 @@ async function fundable(flow) {
   const v = vaultFor(flow);
   if (v === "jackpot") return Math.max(0, await jackpotPot());
   if (v === "incentives") {
+    await siteBlock();
     const inc = state.incentives;
     const g = groupOf(flow);
     if (!inc || !g || (await queuedCount(g)) > 0) return 0;
@@ -320,6 +334,10 @@ async function houseFlashCover(flow, payout, userId, type, ref) {
     return { used: false, gap: p.gap, reason: p.reason };
   }
   const id = uuidv4();
+  if (await budgetIsSite()) {                        // 1.99aop: the Fed lends the gap now, in one transaction - no claim for Pepe
+    return require("./policy/budget").flashClaim({ claimId: id, flow, userId, type, gap: p.gap,
+      meta: { payout: Math.floor(Number(payout) || 0), house: p.house, floor: state.monetary.house_hard_floor, ref: ref || null } });
+  }
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, ?, ?, ?, ?, ?)",
                  [id, "flash:house:" + flow, userId || null, type || flow, p.gap,
                   JSON.stringify({ payout: Math.floor(Number(payout) || 0), house: p.house, floor: state.monetary.house_hard_floor, ref: ref || null })]);
@@ -375,9 +393,22 @@ async function takeFundsRef(flow, amount, userId, type) {
     return { ok: true, undo: () => runQuery("DELETE FROM jackpot_rakes WHERE jackpotId = ?", [id]) };
   }
   const claimFlow = vaultFor(flow) === "incentives" ? INC + flow : flow;
+  if (vaultFor(flow) === "incentives" && (await budgetIsSite())) return takeSite(id, claimFlow, amount, userId, type || flow, true);
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                  [id, claimFlow, userId || null, type || flow, amount]);
   return { ok: true, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
+}
+/** 1.99aop, site-owned week: the claim is booked AND settled here (pool debit + the group's count, one transaction). Its undo is a real
+ *  one: the claim is already settled, so the debit is reversed under claim:<id>:undo and the count removed. */
+async function takeSite(id, claimFlow, amount, userId, type, check, extra = {}) {
+  const B = require("./policy/budget");
+  const t = await B.takeClaim({ claimId: id, flow: claimFlow, userId, type, amount, check });
+  if (!t.ok) {
+    if (amount < 0) throw new Error(`a returned claim was refused (${t.code})`);       // its caller already took the points back from the member
+    console.log(`[funding] ${claimFlow}: ${amount} for ${userId} refused (${t.code})`);
+    return Object.assign({ ok: false, reason: t.code === "E_INSUFFICIENT" ? "short" : "budget", undo: async () => {} }, extra);
+  }
+  return Object.assign({ ok: true, claimId: id, undo: () => B.undoClaim(id) }, extra);
 }
 
 // 1.99jt: what the Federal Reserve could pay right now (its synced balance net of unsettled claims), or null
@@ -414,6 +445,7 @@ async function takeIncentivesRef(flow, amount, userId, type) {
   amount = Math.trunc(Number(amount) || 0);
   const none = async () => {};
   const claimFlow = INC + flow;
+  const site = await siteBlock();
   const inc = state.incentives;
   const available = inc ? Math.max(0, (Number(inc.balance) || 0) - (await unsettledIncentives())) : null;
   if (amount === 0) return { ok: true, available, undo: none };
@@ -423,7 +455,7 @@ async function takeIncentivesRef(flow, amount, userId, type) {
     const m = state.monetary;
     const cap = m && Number.isFinite(m.grant_weekly_cap) ? m.grant_weekly_cap : -1;
     if (cap >= 0) {
-      const since = m.week_start || 0;
+      const since = site ? (await require("./policy/budget").weekOf(Date.now())).start / 1000 : (m.week_start || 0);
       const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
                                 WHERE flow = ? AND amount > 0 AND created >= datetime(?, 'unixepoch')`, [claimFlow, since]);
       const used = (r[0] && r[0].t) || 0;
@@ -431,6 +463,7 @@ async function takeIncentivesRef(flow, amount, userId, type) {
     }
   }
   const id = uuidv4();
+  if (site) return takeSite(id, claimFlow, amount, userId, type || flow, false, { available });   // no weekly group: the cap above is its limit
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                  [id, claimFlow, userId || null, type || flow, amount]);
   return { ok: true, available, claimId: id, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
@@ -478,6 +511,12 @@ async function fundPayoutEx(userId, amount, flow, type) {
     console.warn(`[funding] ${flow}: ${amount} for missing account ${userId} - skipped (E_TARGET_NOT_FOUND)`);
     return { ok: false, queued: false };
   }
+  if (vaultFor(flow) === "incentives" && (await budgetIsSite())) {
+    const paid = await paySite(flow, amount, target, type);
+    if (paid !== "budget") return paid;
+    const claimId = await queueClaim(target, amount, flow, type);     // the group or the pool can't cover it now: it waits, as before
+    return { ok: !!claimId, queued: !!claimId, claimId };
+  }
   const take = await takeFundsRef(flow, amount, target, type);
   if (!take.ok) {
     if (vaultFor(flow) === "incentives") {
@@ -494,6 +533,28 @@ async function fundPayoutEx(userId, amount, flow, type) {
   }
   return { ok: true, queued: false };
 }
+
+/** 1.99aop, site-owned week: the credit and the claim's settlement in ONE transaction. The credit goes first, so a pool or budget refusal
+ *  takes it back. -> {ok, queued:false} | "budget" (can't be covered now: the caller queues it). */
+async function paySite(flow, amount, target, type) {
+  const B = require("./policy/budget");
+  if (!(await canFundIncentives(flow, amount, false))) return "budget";
+  const id = uuidv4();
+  try {
+    await require("./dbUtils").tx(async () => {
+      const r = await require("./autoescrow").credit(target, amount, type || flow, { resolveMerged: true, source: `funding:${flow}`, kind: flow });
+      if (!r.ok) throw new CreditFailed(r.code);
+      await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, paid_at) VALUES (?, ?, ?, ?, ?, ?)", [id, INC + flow, target, type || flow, amount, Date.now()]);
+      await B.settleClaimInTx({ claimId: id, flow: INC + flow, amount, check: true });
+    });
+    return { ok: true, queued: false, claimId: id };
+  } catch (e) {
+    if (e instanceof CreditFailed) return { ok: false, queued: false };
+    if (e instanceof B.Stop || e instanceof B.NotReady) return "budget";
+    throw e;
+  }
+}
+class CreditFailed extends Error {}
 
 // E-2: pay queued grants, oldest first, each group strictly FIFO (a group stops at the first grant it
 // can't cover; other groups carry on). One drain at a time.
@@ -513,6 +574,7 @@ function drainQueue() {
       await runQuery("UPDATE reserve_claims SET queued = ?, paid_at = COALESCE(paid_at, ?) WHERE claimId = ? AND queued = 2",
                      [tx.length ? 0 : 1, tx.length ? Date.now() : null, c.claimId]);
     }
+    await siteBlock();
     if (!treasuryLive()) return { paid: 0 };
     const blocked = new Set();
     let paid = 0;
@@ -522,6 +584,33 @@ function drainQueue() {
       const g = groupOf(flow);
       if (!g || blocked.has(g)) continue;
       if (!(await canFundIncentives(flow, c.amount, true))) { blocked.add(g); continue; }
+      if (await budgetIsSite()) {                    // 1.99aop: credit + settlement + queue mark, one transaction
+        const B = require("./policy/budget");
+        try {
+          let held = false;
+          const done = await require("./dbUtils").tx(async () => {
+            const up = await runQuery("UPDATE reserve_claims SET queued = 0, paid_at = ? WHERE claimId = ? AND queued = 1", [Date.now(), c.claimId]);
+            if (!up || up.changes !== 1) return null;
+            const r = await require("./autoescrow").credit(c.userId, c.amount, c.type || flow, { resolveMerged: true, transactionId: "iq-" + c.claimId,
+                                                                                               source: `funding:${flow} (queued)`, kind: flow });
+            if (!r.ok) throw new CreditFailed(r.code);
+            await B.settleClaimInTx({ claimId: c.claimId, flow: c.flow, amount: c.amount, check: true });
+            held = !!r.escrowed;
+            return r;
+          });
+          if (!done) continue;
+          paid++;
+          if (!held) await require("./inbox").addSafe(done.userId, { kind: "system", title: `Paid: PAT ${Number(c.amount).toLocaleString("en-US")}`,
+            body: `${c.type || flow} - it waited for the weekly incentive budget and is in your wallet now.`, link: "/wallet", ref: `grantq:${c.claimId}` }).catch(() => {});
+        } catch (e) {
+          if (e instanceof CreditFailed) {
+            await runQuery("UPDATE reserve_claims SET queued = 9 WHERE claimId = ?", [c.claimId]);
+            console.warn(`[funding] queued ${flow} ${c.amount} for ${c.userId} dropped (${e.message})`);
+          } else if (e instanceof B.Stop || e instanceof B.NotReady) blocked.add(g);
+          else throw e;
+        }
+        continue;
+      }
       const take = await runQuery("UPDATE reserve_claims SET queued = 2 WHERE claimId = ? AND queued = 1", [c.claimId]);
       if (!take || take.changes !== 1) continue;
       const r = await require("./autoescrow").credit(c.userId, c.amount, c.type || flow, { resolveMerged: true, transactionId: "iq-" + c.claimId,
@@ -649,7 +738,12 @@ function sync(body) {
   }
   state.fortknox = typeof body.fortknox === "number" && isFinite(body.fortknox) ? Math.max(0, Math.floor(body.fortknox)) : null;
   // E-2: every sync sets it - a sync without it (an older Pepe, the treasury off) puts the grants back on the Reserve
-  state.incentives = cleanIncentives(body.incentives);
+  // 1.99aop: unless the site owns the week: then Pepe's block is ignored (budgetAfterSync puts the site's in place)
+  const budgetHint = budgetOwnerHint();
+  if (budgetHint !== "site") state.incentives = cleanIncentives(body.incentives);
+  else noteIgnored("incentives");
+  // 1.99aop: his live numbers for the read-only comparison (memory only: no database write on this path)
+  try { require("./policy/budget").noteSync(body.incentives); } catch (e) { /* never in the way of a sync */ }
   // 1.99jw: every sync sets it - a sync without it (an older Pepe) turns flash liquidity off and the defaults back on
   // PO-2: through the policy config store - mirrored, compared (the dual read) and, once the site owns the config, its config
   // fields are the site's (Pepe's are ignored and logged)
@@ -657,6 +751,7 @@ function sync(body) {
   // the pad launchpad (launchpad.js / Pepe's pepe_launchpad.py): every sync sets it - null = off (no welcomes, no
   // launch progress, no boost credit)
   try { state.launchpad = require("./launchpad").cleanState(body.launchpad); } catch (e) { state.launchpad = null; }
+  if (budgetHint !== "pepe") budgetAfterSync().catch((e) => console.error("[funding] budget block:", e.message));
   // E-3: every sync sets it - a sync without it (an older Pepe, room vaults off) keeps the room halves in the escrow
   const rv = body.room_vaults;
   state.room_vaults = rv && typeof rv === "object" && rv.on === true
@@ -666,6 +761,31 @@ function sync(body) {
   persist();                                         // 1.99ne: survives a site restart (restore())
   if (state.incentives) drainQueue().catch((e) => console.error("[funding] drain:", e.message));
 }
+/** 1.99aop: who owns the week, as last read (null: not known yet). */
+function budgetOwnerHint() {
+  try { return require("./policy/config").ownerHint("budget"); } catch (e) { return null; }
+}
+const ignoredNoted = new Set();
+function noteIgnored(field) {
+  if (ignoredNoted.has(field)) return;
+  ignoredNoted.add(field);
+  console.log(`[funding] ignored pepe ${field} (the site owns the incentive week)`);
+}
+/** 1.99aop: after a sync whose owner wasn't known to be Pepe: learn the owner and, site-owned, put the site's budget blocks in place. */
+async function budgetAfterSync() {
+  await require("./policy/config").snapshot();
+  if (!(await siteBlock())) return;
+  const lp = state.launchpad;
+  if (lp && state.incentives) {
+    const left = Math.max(0, Number((state.incentives.remaining || {}).launchpad) || 0);
+    const cap = Math.max(0, Number((state.incentives.budgets || {}).launchpad) || 0);
+    const keep = Math.max(0, Number((lp.cfg || {}).keep_balance) || 0);
+    lp.budget = { cap, left };
+    lp.spendable = Math.max(0, Math.min(left, (Number(state.incentives.balance) || 0) - keep));
+  }
+  await require("./policy/budget").refreshGroupsDisplay();
+  persist();
+}
 const fortknoxLive = () => state.fortknox !== null;
 const roomVaultsLive = () => state.room_vaults !== null;
 
@@ -674,7 +794,9 @@ async function claims() {
   // P4-1: while the Fed's books live on the site, fed/service.js journals the donation mints and settles those claims itself
   let fedLive = false;
   try { fedLive = await require("./fed/service").live(); } catch (e) { fedLive = false; }
-  const noDon = fedLive ? " AND c.flow != 'mint:donation'" : "";
+  let noDon = fedLive ? " AND c.flow != 'mint:donation'" : "";
+  // 1.99aop: site-owned week: incentive and flash claims are settled here, none of them are Pepe's to settle
+  if (await budgetIsSite()) noDon += " AND c.flow NOT LIKE 'incentives:%' AND c.flow NOT LIKE 'flash:%'";
   // E-2: only claims the website has actually paid (queued = 0); a queued grant reaches Pepe once it's paid
   // 1.99jw: + userId, username (Pepe names the member in his journal) and meta (JSON text, e.g. a donation's terms)
   try {
@@ -683,7 +805,7 @@ async function claims() {
                            WHERE c.settled = 0 AND COALESCE(c.queued,0) = 0${noDon} ORDER BY c.created, c.rowid LIMIT 500`);
   } catch (e) {        // no users table (a bare test database)
     return getQuery(`SELECT claimId, flow, type, amount, created, userId, NULL AS username, meta FROM reserve_claims
-                     WHERE settled = 0 AND COALESCE(queued,0) = 0${noDon.replace("c.", "")} ORDER BY created, rowid LIMIT 500`);
+                     WHERE settled = 0 AND COALESCE(queued,0) = 0${noDon.replace(/c\.flow/g, "flow")} ORDER BY created, rowid LIMIT 500`);
   }
 }
 
@@ -708,4 +830,6 @@ module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, s
                    // 1.99ns
                    reserveNow,
                    // PO-2
-                   reapplyPolicy, applyMonetary, pushedMonetary };
+                   reapplyPolicy, applyMonetary, pushedMonetary,
+                   // 1.99aop
+                   cleanIncentives, budgetIsSite, siteBlock, budgetAfterSync };

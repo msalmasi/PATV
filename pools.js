@@ -663,6 +663,8 @@ async function settleClaims() {
     }
     if (shortLogged.size > 5000) shortLogged = new Set();
     if (n) console.log(`[pools] settled ${n} website claim(s) on the site`);
+    // 1.99aop: once the site owns the incentive week, the incentive / flash claims booked before that are settled here too
+    try { n += (await require("./policy/budget").sweepLegacyClaims()).settled; } catch (e) { console.error("[pools] legacy claims:", e.message); }
     return { settled: n };
   })().finally(() => { settling = null; });
   return settling;
@@ -758,4 +760,4 @@ module.exports = { init, register, enabled, live, rev, balances, balance, total,
                    _tx: tx, _seen: seen, _applyLegs: applyLegs, _recordMove: recordMove, _bumpRev: bumpRev, _lottoIsService: lottoIsService,
                    _validKey: validKey,
                    // 1.99ou: for escrow/ledger.js - a settle's fee legs / a grant's pool debit inside ITS open transaction
-                   _inTx: { applyLegs, recordMove, seen, bumpRev } };
+                   _inTx: { applyLegs, recordMove, seen, bumpRev, recorded, requireLiveInTx } };

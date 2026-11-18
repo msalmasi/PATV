@@ -89,7 +89,10 @@ async function fedLoans(layers) {
   const keep = ["id", "vault", "principal", "outstanding", "state", "ts", "flash", "auto"];
   return loans.map((r) => Object.fromEntries(keep.filter((k) => k in r).map((k) => [k, r[k]])));
 }
-async function week(treasury) {
+async function week(treasury, nowS) {
+  // 1.99aop: once the site owns the incentive week its own record is the input (Pepe's doc is only his mirror then)
+  const B = require("./budget");
+  if (await B.isSite()) return B.weekForEngines(nowS === undefined ? C.nowS() : nowS);
   const w = treasury.week && typeof treasury.week === "object" ? JSON.parse(JSON.stringify(treasury.week)) : null;
   if (!w) return null;
   const seen = treasury.site_spends || {};
@@ -204,7 +207,7 @@ async function daily(nowS, did) {
   const { cfg, consts, flags } = await config();
   const all = await docs();
   return withGweeks({ kind: "daily", now: nowS, did, cfg, consts, flags, pools: await poolsNow(), fed_loans: await fedLoans(await layersOf(all)),
-                      mints: await mints(await layersOf(all), nowS), week: await week(docOf(all, "econ_treasury")) });
+                      mints: await mints(await layersOf(all), nowS), week: await week(docOf(all, "econ_treasury"), nowS) });
 }
 async function monetary(nowS, did, guarantee) {
   const { push, cfg, consts, flags } = await config();
@@ -221,7 +224,7 @@ async function monetary(nowS, did, guarantee) {
     try { supply = (await require("../supply").patSupply()).total || null; } catch (e) { supply = null; }
   }
   return withGweeks({ kind: "monetary", now: nowS, did, guarantee: !!guarantee, cfg, consts, flags, pools: await poolsNow(),
-                      mints: await mints(await layersOf(all), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury")),
+                      mints: await mints(await layersOf(all), nowS), journal: await journal(push), week: await week(docOf(all, "econ_treasury"), nowS),
                       local_day: ld, days, rows, skip, supply });
 }
 

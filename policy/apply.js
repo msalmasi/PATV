@@ -209,8 +209,13 @@ async function runTreasuryEpoch(eid, nowS, { actor = "schedule", via = "site", l
     const p31After = await p31Safe(eid, plan, doneLegs);
     const incAfter = await P.balance("incentives");
     if (E.epochId(nowS, E.C(inputs).hour()) === eid) {               // _tr_finish: the week being settled is this week
-      await C.effect(`week_share:${eid}`, { engine: "treasury", period: eid, kind: "week_share",
-                                            data: { week: eid, share: plan.totals.incentives, release_per_day: plan.release_per_day } });
+      // 1.99aop: once the site owns the incentive week the share goes straight into its record, in this transaction
+      const B = require("./budget");
+      if (await B.isSite()) await B.setShareInTx(eid, plan.totals.incentives, plan.release_per_day);
+      else {
+        await C.effect(`week_share:${eid}`, { engine: "treasury", period: eid, kind: "week_share",
+                                              data: { week: eid, share: plan.totals.incentives, release_per_day: plan.release_per_day } });
+      }
     }
     const conserved = before === after + acc.to_wallet;
     const wal = acc.to_wallet ? { to_wallet: acc.to_wallet } : {};
@@ -352,6 +357,7 @@ async function payActivity(did, inputs, plan, nowS) {
   const CC = require("../capital/core");
   const ledger = require("../ledger");
   await require("../botcredits").init();
+  const siteWeek = await require("./budget").isSite();
   const state = {};
   let paid = 0;
   let stopped = false;
@@ -375,6 +381,8 @@ async function payActivity(did, inputs, plan, nowS) {
                        [require("uuid").v4(), "activity-reward", posted.userId, transactionId, amt]);
         await runQuery(`INSERT INTO bot_credit_log (ref, ts, endpoint, userId, type, amount, source, outcome) VALUES (?, ?, 'policy', ?, 'activity-reward', ?, 'incentives', 'ok')
                         ON CONFLICT(ref) DO UPDATE SET outcome = 'ok', ts = excluded.ts`, [ref, Date.now(), posted.userId, amt]);
+        // 1.99aop: site-owned week: counted here, per payee, in this savepoint (the day's allowance was the plan's check)
+        if (siteWeek) await require("./budget").spendInTx({ key: ref, flow: "activity_rewards", group: "activity", amount: amt, legsFromCaller: true, noCheck: true, via: "policy", why: "activity_rewards" });
         state[lg] = "paid";
         paid += amt;
       });
@@ -386,7 +394,7 @@ async function payActivity(did, inputs, plan, nowS) {
   const w = E.resolveWeek(Object.assign({}, inputs), E.C(inputs), nowS);
   const rec = { day: did, local_day: act.local_day, amount: paid, payouts: Object.fromEntries(pay), state, ts: nowS, paid, group: "activity",
                 week: w.id, via: "site" };
-  if (paid) await C.effect(`budget_spend:act-${did}`, { engine: "monetary", period: did, kind: "budget_spend", data: { week: w.id, group: "activity", amount: paid } });
+  if (paid && !siteWeek) await C.effect(`budget_spend:act-${did}`, { engine: "monetary", period: did, kind: "budget_spend", data: { week: w.id, group: "activity", amount: paid } });
   await C.effect(`activity_record:${did}`, { engine: "monetary", period: did, kind: "activity_record", data: { did, rec } });
   return rec;
 }

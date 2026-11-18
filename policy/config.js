@@ -137,6 +137,13 @@ async function putReturning(feature, sha, { by = null, note } = {}) {
 }
 async function owner(feature = "cfg") { return (await snapshot()).own[feature].owner; }
 
+/** 1.99aop: what a feature's pause / resume does, for the alert. */
+function pauseText(feature, paused) {
+  if (feature === "cfg") return paused ? "Edits of the economy settings are refused while it is paused (423); nothing else changes." : "Edits are taken again.";
+  if (feature === "budget") return paused ? "Incentive spends answer 503 and nothing is recorded; Pepe keeps them queued. Nothing else changes." : "Incentive spends are taken again.";
+  return paused ? `${feature}: its operations are refused while it is paused.` : `${feature}: running again.`;
+}
+
 /**
  * Pause / resume features (T3): ONE transaction - the flags, policy_audit, admin_audit ("policy.feature_pause" / "_resume") -
  * then every site admin is told. A paused cfg answers 423 on every edit (the readers keep reading). -> [{feature, paused, unchanged}]
@@ -168,7 +175,8 @@ async function setPause(features, paused, { by, auditId = null, via = "admin", n
     try {
       await require("../opsalerts").alert({ source: "policy", ref: `feature-${paused ? "pause" : "resume"}:${changed.map((r) => r.feature).join(",")}:${t}`,
         title: `Economy ${changed.map((r) => r.feature).join(", ")} ${paused ? "PAUSED" : "resumed"} by ${by}`,
-        body: (note ? `Why: ${note}\n` : "") + (paused ? "Edits of the economy settings are refused while it is paused (423); nothing else changes." : "Edits are taken again.") });
+        // 1.99aop: each feature's own effect (only cfg's pause is about edits)
+        body: (note ? `Why: ${note}\n` : "") + changed.map((r) => pauseText(r.feature, paused)).join("\n") });
     } catch (e) { console.error("[policycfg] pause alert:", e.message); }
   }
   return res;
@@ -185,7 +193,7 @@ let gen = 0;               // bumped by forget(): a read that started before a c
 let ownerChanging = true;  // true until the first committed read, and again from a putOwner() until the next one
 const forget = () => { cache = null; gen++; };
 /** The owner of the config as last READ (committed), or null when it isn't known: never read yet, or being changed (putOwner). */
-const ownerHint = () => (ownerChanging || !lastSnap ? null : lastSnap.own.cfg.owner);
+const ownerHint = (feature = "cfg") => (ownerChanging || !lastSnap || !lastSnap.own[feature] ? null : lastSnap.own[feature].owner);
 async function load() {
   try { return await loadOnce(); } catch (e) {
     // the tables were created inside a transaction that rolled back (a first use inside one): create them again

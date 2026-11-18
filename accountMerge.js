@@ -393,6 +393,7 @@ const RULES = {
   // a feature's owner (pepe | cutting | site), who paused it / handed it over (labels); the editor's userId on a web edit follows
   // the account ("chat:<login>" for a chat edit never matches one)
   "policy_cfg.by": { deny: NAME }, "policy_cfg_log.actor": { deny: NAME }, "policy_cfg_log.actor_user_id": M(),
+  "incentive_spends.user_id": M(), "incentive_spends.actor": { deny: NAME },   // 1.99aop: policy/budget.js
   "policy_ownership.owner": { deny: "PO-2: who owns a policy feature - 'pepe' | 'cutting' | 'site', not a userId" },
   "policy_ownership.paused_by": { deny: NAME }, "policy_ownership.by": { deny: NAME }, "policy_handovers.by": { deny: NAME },
   // owner answers 2026-10-20: backends.js - who last switched a hand-over (a site username - an audit label) and their userId

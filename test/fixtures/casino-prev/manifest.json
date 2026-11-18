@@ -8,6 +8,10 @@
     "casino/rewards.js": "24f715844a5cb955177fa6b76eb9b9e26c22dc55",
     "casino/roulette.js": "ad1068df604ac32ed92d720b41728f7c3fa3ba63",
     "casino/service.js": "2454d98bd653f24337fba67f6643979fd5092e39",
+    "funding.js": "15240e2ff58ba3e49bdcd6422e53f194bb02cc89",
+    "gangs.js": "ef2b24822a318a9302866b75eeb67cb6a75ce94e",
+    "policy/config.js": "4c0201e9dc45d5c4f07e58429bb08f3b1cdb08b8",
+    "pools.js": "5b8b759cf487b54e5101b0a2fa462de34dde8615",
     "supply.js": "28562bd23091a08c9f2a975ba611d3f68e2c117e"
   }
 }

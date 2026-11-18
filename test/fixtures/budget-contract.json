@@ -1,0 +1,513 @@
+{
+ "answers": {
+  "conflict": {
+   "body": {
+    "code": "E_KEY_CONFLICT",
+    "error": "this key was used for a different spend",
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "ok": false,
+    "state": "conflict",
+    "terminal": false
+   },
+   "status": 409
+  },
+  "cutting": {
+   "body": {
+    "code": "E_CUTTING",
+    "error": "the budget is being handed over",
+    "ok": false,
+    "state": "cutting",
+    "terminal": false
+   },
+   "status": 423
+  },
+  "invalid": {
+   "body": {
+    "code": "E_BAD_REQUEST",
+    "error": "bad flow",
+    "ok": false,
+    "state": "invalid",
+    "terminal": false
+   },
+   "status": 400
+  },
+  "not_owner": {
+   "body": {
+    "code": "E_NOT_OWNER",
+    "error": "the incentive budget is Pepe's",
+    "ok": false,
+    "owner": "pepe",
+    "state": "not_owner",
+    "terminal": false
+   },
+   "status": 409
+  },
+  "offline": {
+   "body": {
+    "code": "E_OFFLINE",
+    "error": "the pools aren't live here",
+    "ok": false,
+    "state": "offline",
+    "terminal": false
+   },
+   "status": 503
+  },
+  "paid_pad": {
+   "body": {
+    "amount": 853926,
+    "at": 1795000000.25,
+    "balance": 19232431,
+    "dest": {
+     "id": "room-0001",
+     "kind": "pad",
+     "overflow": 0,
+     "room_in": 853926
+    },
+    "dup": false,
+    "flow": "activity_rewards",
+    "group": "activity",
+    "key": "rctopa-2026-11-18-room-0001",
+    "left": 498016,
+    "ok": true,
+    "spent": 1984,
+    "state": "paid",
+    "ts": 1795000000250,
+    "vault": "incentives",
+    "week": "W2026-11-16"
+   },
+   "status": 200
+  },
+  "paid_user": {
+   "body": {
+    "amount": 1984,
+    "at": 1795000000.25,
+    "balance": 19232431,
+    "dest": {
+     "escrowed": false,
+     "expires_at": null,
+     "kind": "user",
+     "transactionId": "sp-0123456789abcdef0123456789abcdef01234567",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "dup": false,
+    "flow": "beg",
+    "group": "roomgames",
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "left": 498016,
+    "ok": true,
+    "spent": 1984,
+    "state": "paid",
+    "ts": 1795000000250,
+    "vault": "incentives",
+    "week": "W2026-11-16"
+   },
+   "status": 200
+  },
+  "paused": {
+   "body": {
+    "code": "E_PAUSED",
+    "error": "the budget is paused",
+    "ok": false,
+    "retry_after_s": 60,
+    "state": "paused",
+    "terminal": false
+   },
+   "status": 503
+  },
+  "refused": {
+   "body": {
+    "balance": 19234415,
+    "code": "E_OVER_BUDGET",
+    "error": "over the group's weekly budget",
+    "flow": "beg",
+    "group": "roomgames",
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "left": 0,
+    "ok": false,
+    "state": "refused",
+    "terminal": true,
+    "ts": 1795000000250,
+    "vault": "incentives",
+    "week": "W2026-11-16"
+   },
+   "status": 409
+  },
+  "server_error": {
+   "body": {
+    "error": "server_error",
+    "ok": false
+   },
+   "status": 500
+  },
+  "status_paid": {
+   "body": {
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "ok": true,
+    "owner": "site",
+    "paused": false,
+    "result": {
+     "amount": 1984,
+     "at": 1795000000.25,
+     "balance": 19232431,
+     "dest": {
+      "escrowed": false,
+      "expires_at": null,
+      "kind": "user",
+      "transactionId": "sp-0123456789abcdef0123456789abcdef01234567",
+      "userId": "7f3c2a10-1111-4222-8333-444455556666"
+     },
+     "dup": false,
+     "flow": "beg",
+     "group": "roomgames",
+     "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+     "left": 498016,
+     "ok": true,
+     "spent": 1984,
+     "state": "paid",
+     "ts": 1795000000250,
+     "vault": "incentives",
+     "week": "W2026-11-16"
+    },
+    "state": "paid"
+   },
+   "status": 200
+  },
+  "status_unknown": {
+   "body": {
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "ok": true,
+    "owner": "pepe",
+    "paused": false,
+    "result": null,
+    "state": "unknown"
+   },
+   "status": 200
+  },
+  "unauthorized": {
+   "body": {
+    "error": "unauthorized",
+    "ok": false
+   },
+   "status": 403
+  },
+  "week_pepe": {
+   "body": {
+    "hour": 4,
+    "now": 1795000000.25,
+    "ok": true,
+    "owner": "pepe",
+    "paused": false,
+    "settled": null,
+    "shadow": null,
+    "week": null,
+    "weeks": []
+   },
+   "status": 200
+  }
+ },
+ "dead_letter": [
+  "conflict",
+  "invalid"
+ ],
+ "flows": {
+  "activity_rewards": {
+   "dests": [
+    "pad",
+    "user"
+   ],
+   "group": "activity",
+   "vault": "incentives"
+  },
+  "beg": {
+   "dests": [
+    "user"
+   ],
+   "group": "roomgames",
+   "vault": "route"
+  },
+  "launchpad_grant": {
+   "dests": [
+    "launchpad"
+   ],
+   "group": "launchpad",
+   "vault": "incentives"
+  },
+  "launchpad_match": {
+   "dests": [
+    "launchpad"
+   ],
+   "group": "launchpad",
+   "vault": "incentives"
+  },
+  "mic_hourly": {
+   "dests": [
+    "user"
+   ],
+   "group": "roomgames",
+   "vault": "route"
+  },
+  "pictionary": {
+   "dests": [
+    "user"
+   ],
+   "group": "roomgames",
+   "vault": "route"
+  },
+  "raffle": {
+   "dests": [
+    "user"
+   ],
+   "group": "roomgames",
+   "vault": "route"
+  },
+  "store_heist": {
+   "dests": [
+    "user"
+   ],
+   "group": "roomgames",
+   "vault": "route"
+  },
+  "turf_income": {
+   "dests": [
+    "none"
+   ],
+   "group": "turf",
+   "vault": "route"
+  },
+  "turf_season": {
+   "dests": [
+    "none"
+   ],
+   "group": "season",
+   "vault": "route"
+  }
+ },
+ "generated_by": "camfrog-bot tools/gen_budget_vectors.py",
+ "key_re": "^[A-Za-z0-9_.:@\\-]{6,120}$",
+ "paths": {
+  "spend": "/api/policy/bot/spend",
+  "status": "/api/policy/bot/spend-status",
+  "week": "/api/policy/bot/week"
+ },
+ "refusal_codes": [
+  "E_EXPIRED",
+  "E_FED_GUARD",
+  "E_HOUSE_SHORT",
+  "E_INSUFFICIENT",
+  "E_NO_ACCOUNT",
+  "E_OVER_BUDGET",
+  "E_SITE_BANNED",
+  "E_VOIDED"
+ ],
+ "requests": [
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 1984,
+    "at": 1795000000.25,
+    "dest": {
+     "counterparty": null,
+     "kind": "user",
+     "type": "beg",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "flow": "beg",
+    "keep": 0,
+    "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+    "room": "room-0001",
+    "why": "!beg"
+   },
+   "scheduled": false,
+   "site": "beg"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 2000,
+    "at": 1795000000.25,
+    "dest": {
+     "counterparty": null,
+     "kind": "user",
+     "type": "pictionary-win",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "flow": "pictionary",
+    "keep": 0,
+    "key": "pict:1a2b3c4d:3:7f3c2a10-1111-4222-8333-444455556666",
+    "room": "room-0001",
+    "why": "pictionary win"
+   },
+   "scheduled": true,
+   "site": "pictionary"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 1500,
+    "at": 1795000000.25,
+    "dest": {
+     "counterparty": null,
+     "kind": "user",
+     "type": "store-heist",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "flow": "store_heist",
+    "keep": 0,
+    "key": "sheist:77:7f3c2a10-1111-4222-8333-444455556666:1",
+    "room": "room-0001",
+    "why": "store heist"
+   },
+   "scheduled": true,
+   "site": "store_heist"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 10000,
+    "at": 1795000000.25,
+    "dest": {
+     "counterparty": null,
+     "kind": "user",
+     "type": "mic-hourly",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "flow": "mic_hourly",
+    "keep": 0,
+    "key": "mic:498611:1a2b3c4d5e",
+    "room": "room-0001",
+    "why": "top mic"
+   },
+   "scheduled": true,
+   "site": "top_mic"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 25000,
+    "at": 1795000000.25,
+    "dest": {
+     "counterparty": null,
+     "kind": "user",
+     "type": "camfrog-raffle",
+     "userId": "7f3c2a10-1111-4222-8333-444455556666"
+    },
+    "flow": "raffle",
+    "keep": 0,
+    "key": "raffle:1a2b3c4d5e:1795000000",
+    "room": "room-0001",
+    "why": "raffle"
+   },
+   "scheduled": true,
+   "site": "raffle"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 853926,
+    "at": 1795000000.25,
+    "dest": {
+     "id": "room-0001",
+     "kind": "pad",
+     "tag": "activity_topup"
+    },
+    "flow": "activity_rewards",
+    "keep": 0,
+    "key": "rctopa-2026-11-18-room-0001",
+    "room": "room-0001",
+    "why": "activity top-up pool"
+   },
+   "scheduled": true,
+   "site": "pad_topup"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 100000,
+    "at": 1795000000.25,
+    "dest": {
+     "id": "room-0001",
+     "kind": "launchpad",
+     "tag": "launchpad grant"
+    },
+    "flow": "launchpad_grant",
+    "keep": 500000,
+    "key": "lp-grant-room-0001-2:a0",
+    "room": "room-0001",
+    "why": "launchpad grant"
+   },
+   "scheduled": true,
+   "site": "launchpad_grant"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 5000,
+    "at": 1795000000.25,
+    "dest": {
+     "id": "room-0001",
+     "kind": "launchpad",
+     "tag": "launchpad match"
+    },
+    "flow": "launchpad_match",
+    "keep": 500000,
+    "key": "lpm-ref1234:a0",
+    "room": "room-0001",
+    "why": "launchpad match"
+   },
+   "scheduled": false,
+   "site": "launchpad_match"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 7000,
+    "at": 1795000000.25,
+    "dest": {
+     "kind": "none",
+     "tag": "turf tips"
+    },
+    "flow": "turf_income",
+    "keep": 0,
+    "key": "turf-tip:2026-11-18",
+    "room": "room-0001",
+    "why": "turf tips"
+   },
+   "scheduled": true,
+   "site": "turf_tips"
+  },
+  {
+   "body": {
+    "actor": "player_one",
+    "amount": 90000,
+    "at": 1795000000.25,
+    "dest": {
+     "kind": "none",
+     "tag": "season match"
+    },
+    "flow": "turf_season",
+    "keep": 0,
+    "key": "season:j1:match",
+    "room": "room-0001",
+    "why": "season match"
+   },
+   "scheduled": false,
+   "site": "turf_season"
+  }
+ ],
+ "retry_same_key": [
+  "cutting",
+  "not_owner",
+  "offline",
+  "paused"
+ ],
+ "terminal": [
+  "paid",
+  "refused"
+ ],
+ "v": 1,
+ "void": {
+  "key": "beg:7f3c2a10-1111-4222-8333-444455556666:a1b2c3d4e5f6",
+  "reason": "ttl",
+  "void": true
+ }
+}

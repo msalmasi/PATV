@@ -697,6 +697,18 @@ async function spend(b, via) {
   });
 }
 
+/** 1.99aop: once the site owns the incentive week, the daily tick's incentive leg is checked against the turf group and counted HERE, in
+ *  the move's transaction (Pepe no longer counts it). A refusal refuses the whole move. While Pepe owns the week: nothing. */
+async function tickBudget(b, legs) {
+  if (String(b.flow || "") !== "turf_tick") return;
+  const amount = legs.filter((l) => l.pool === "incentives" && l.amount < 0).reduce((t, l) => t - l.amount, 0);
+  if (!amount) return;
+  const B = require("./policy/budget");
+  if (!(await B.isSite())) return;
+  const r = await B.spendInTx({ key: "g:" + b.key, flow: "turf_income", group: "turf", amount, legsFromCaller: true, why: str(b.why, 120), via: "gangs" });
+  if (!r.ok) throw new Refuse(409, `The incentive budget refused the tick (${r.code}).`, r.code);
+}
+
 /**
  * Pepe only: treasury legs with the other side in his turf store, and/or protocol-pool legs - one keyed move.
  * legs: [["gang:<gid>" | "gang" (= b.gid), amount], [pool, amount], ["jackpot", +amount]]. A gang leg's gang must exist.
@@ -726,6 +738,7 @@ async function move(b, via) {
       } else throw new Refuse(400, `Bad leg ${pool.slice(0, 40)}.`, "E_BAD_LEGS");
     }
     if (house) await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, NULL, ?)", [`gm-${b.key}`, `bot:gang:${str(b.flow, 40) || "move"}`, house]);
+    await tickBudget(b, legs);
     let a;
     try { a = await poolLegs("g:" + b.key, legs, { kind: "gang", flow: str(b.flow, 64), why: str(b.why, 120), via }); } catch (e) { throw insufficientToRefuse(e, [...gids][0]); }
     for (const gid of gids) await touch(gid);

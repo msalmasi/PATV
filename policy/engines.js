@@ -749,5 +749,5 @@ function planActivity(inp, localDay, amount) {
 
 module.exports = { planEpoch, planDaily, planMonetary, planActivity, planBurn, cutoffPending, bucketOpen, TR_CUTOFF_WAIT, weekStart, dayStart, epochId, dayId, monthOf, resolveWeek, budgetLeft,
                    capRoom, mintsMtd, weekIssuance, weekTarget, heistCap, guaranteeBase, gscale, gscaleOf, WEEK, budgetSum, loansByVault, poolOwed, target, stakers,
-                   activity, patDaysAvg, patDaysWhole, weightingFor, weightingOf, lastBoundaryOf, trackOf, stakerCapOf, TR_TRACK_CAP, TR_FALLBACK_CAP, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, TREASURY, CASH, FED,
+                   activity, patDaysAvg, patDaysWhole, weightingFor, weightingOf, lastBoundaryOf, trackOf, stakerCapOf, TR_TRACK_CAP, TR_FALLBACK_CAP, floorDiv, floorDivF, pyInt, fmt, pyFloatStr, cmpPy, C, BUDGETS, GROUPS, CAPPED, SOURCES, budgetOf, paceOf, PACED, UNCAPPABLE, UNCAPPED, TREASURY, CASH, FED,
                    INCENTIVES, FORTKNOX, CASINO, GUARANTEE_WAIT, DEFAULTS, CONSTS };

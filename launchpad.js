@@ -395,6 +395,7 @@ async function recordGrads(pad, m, t = now()) {
 // ── newcomer welcomes ──
 async function welcomeRoom() {
   const f = require("./funding");
+  await f.siteBlock();                                     // 1.99aop: a site-owned week's numbers, fresh (no-op while Pepe owns it)
   const s = state();
   if (!s || !isLive() || !f.state.incentives) return 0;
   const g = f.groupOf("launchpad_welcome");
@@ -404,6 +405,7 @@ async function welcomeRoom() {
   const bal = (Number(f.state.incentives.balance) || 0) - s.cfg.keep_balance - (await f.unsettledIncentives());
   return Math.max(0, Math.min(left, bal));
 }
+const s0Keep = () => Math.max(0, Number(cfg().keep_balance) || 0);
 async function payWelcomes(pad, m, t = now()) {
   const c = cfg();
   const amt = c.welcome_amount;
@@ -437,6 +439,12 @@ async function payWelcomes(pad, m, t = now()) {
       if (!ins || ins.changes !== 1) return null;
       const r = await require("./ledger").postOrThrow(uid, amt, `🚀 Pad welcome: p/${pad.slug}`.slice(0, 120),
         { transactionId: "lpw-" + uid, source: "launchpad" });
+      const B = require("./policy/budget");
+      if (await B.isSite()) {                              // 1.99aop: debit + count here, in this transaction; no claim for Pepe
+        const sp = await B.spendInTx({ key: "lpw-" + uid, flow: "launchpad_welcome", group: "launchpad", amount: amt, debitOnly: true, keep: s0Keep(), why: "launchpad welcome", via: "launchpad" });
+        if (!sp.ok) throw new Error(`budget refused the welcome (${sp.code})`);
+        return r;
+      }
       await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
         ["lpw-" + uid, "incentives:launchpad_welcome", r.userId, `launchpad welcome p/${pad.slug}`.slice(0, 120), amt]);
       return r;

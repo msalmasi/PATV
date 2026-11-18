@@ -91,8 +91,8 @@ test("the gates: refused before 2026-12-01 14:00:00 UTC (to the ms), then each m
   assert.deepEqual(await BUD.createGate(AFTER, { mtt_guarantees: "on" }), { ok: true });
   for (const k of ["H2B_AT", "mtt_h2b_at", "h2b"]) await assert.rejects(() => svc.setSetting(k, String(Date.now()), "test"));
   // without the module the admin form says why (no_budget_service): never a guarantee
-  BUD._hooks.budget = undefined;
-  assert.equal((await BUD.spendGate(AFTER)).why, "no_budget_service", "policy/budget.js is not on this branch");
+  BUD._hooks.budget = null;
+  assert.equal((await BUD.spendGate(AFTER)).why, "no_budget_service", "no budget service");
   BUD._hooks.budget = stub;
 });
 

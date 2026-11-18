@@ -1472,6 +1472,7 @@ require("./roomwars").register(app, { isBotToken, addUser });
 require("./capital/service").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 // Phase 4: the policy engines (treasury waterfall + daily release, the monetary day, the burn accrual) on ONE site scheduler
 require("./policy/scheduler").register(app, { isBotToken, addUser });
+require("./policy/budget").register(app, { isBotToken, addUser, resolveCounterparty });   // 1.99aop: the incentive week (dark while Pepe owns it)
 // PO-2 (economy policy -> site, "Phase 6"): the policy config store (mirror + dual read until H1; the site's after it) and the
 // hand-over endpoints - policy/config.js, policy/handover.js
 require("./policy/config").register(app, { isBotToken, addUser });
