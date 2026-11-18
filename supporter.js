@@ -44,9 +44,12 @@ function init() { if (!loaded) loaded = reload().catch((e) => { loaded = null; c
 async function refresh(userId) {
   await DON();
   const r = (await getQuery(`${SQL} AND r.user_id = ? GROUP BY r.user_id`, [String(userId)]).catch(() => []))[0];
-  if (!r) return null;
-  const v = view(r);
   const old = BY_ID.get(String(userId));
+  if (!r) {                                    // 1.99aor: nothing counts any more (a PAT donation refunded in full): no longer a Supporter
+    if (old) { BY_ID.delete(String(userId)); if (old.username) BY_NAME.delete(old.username.toLowerCase()); }
+    return null;
+  }
+  const v = view(r);
   if (old && old.username) BY_NAME.delete(old.username.toLowerCase());
   BY_ID.set(String(userId), v);
   if (v.username) BY_NAME.set(v.username.toLowerCase(), v);

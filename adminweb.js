@@ -222,6 +222,9 @@ function register(app, { addUser }) {
              inc: isAdmin ? await safe(incentiveStatus) : null,
              // 1.99jw: Pepe's monetary policy (flash switches, Fed loan room, House floor, donation rate, grant cap)
              monetary: isAdmin ? require("./funding").state.monetary : null,
+             // 1.99aor: the donations switch: its state for the card, and whether this admin may move it (a Pepe owner; the API re-checks)
+             donations: SP.can(me, "donations.admin") ? await safe(async () => { const DP = require("./donationpromo"); await DP.init(); return DP.modeState(); }, null) : null,
+             donOwner: !!(await safe(() => require("./staffroles").ownerOf(me, "donations.admin"), null)),
              // 1.99xs: the Reserve desk (wallet.adminBook; was the ADMIN sections of /wallet) + the loan commands' results
              book: isAdmin ? await safe(() => require("./wallet").adminBook(), null) : null,
              acts: isAdmin ? await safe(() => require("./actions").recentFor(me.userId, "admin-loans"), []) : [],

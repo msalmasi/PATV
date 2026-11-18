@@ -154,6 +154,8 @@ const RULES = {
   // 1.99ts: the daily donation limit - a member's donations by day move (a merged account shares ONE daily limit); an override
   // folds into the target's (the target's own override wins when both have one)
   "donation_usd_log.user_id": M(),
+  // 1.99aor: a member's donation quotes and PAT donations follow the account (the terms they were shown, the refund / dispute clawback)
+  "donation_quotes.user_id": M(), "donation_credits.user_id": M(),
   "donation_limit_overrides.user_id": M({ key: [], merge: { limit_usd: "OLD_IF_NULL" } }),
   "donation_limit_overrides.actor": { deny: NAME },
   "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move

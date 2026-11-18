@@ -80,6 +80,8 @@ function triggerSql(userCols = null) {
   add("donlog_i", "AFTER INSERT ON donation_usd_log", row("NEW.user_id"), "NEW.status = 'credited'");
   add("donlog_u", "AFTER UPDATE OF status, user_id ON donation_usd_log", both("user_id"),
       "(NEW.status = 'credited' OR OLD.status = 'credited') AND (" + changed(["status", "user_id"]) + ")");
+  // 1.99aor: a refunded or disputed PAT donation counts for less (donations.js), so the Supporter look can change
+  add("doncr_u", "AFTER UPDATE OF refunded_cents, disputed_cents ON donation_credits", row("NEW.user_id"));
   add("show_i", "AFTER INSERT ON user_badge_showcase", row("NEW.user_id"));
   add("show_u", "AFTER UPDATE ON user_badge_showcase", both("user_id"));
   add("show_d", "AFTER DELETE ON user_badge_showcase", row("OLD.user_id"));

@@ -90,16 +90,24 @@ async function pageData(now = Date.now()) {
 }
 
 /**
- * The viewer's newest card donation in the last `withinMs` (the thank-you after Stripe's redirect) -> {usd} | null.
- * 1.99ans: no PAT for dollars (nopat.js) - there's no PAT amount to show, only that it arrived (the perks are on).
+ * The viewer's newest card donation in the last `withinMs` (the thank-you after Stripe's redirect) -> {usd} | null, plus {pat, promo}
+ * when that donation credited PAT (1.99aor: its "mint:donation" claim; a perks-only donation has none).
  */
 async function latestCard(userId, now = Date.now(), withinMs = 60 * 60 * 1000) {
   if (!userId) return null;
   const DON = require("./donations");
   await DON.init().catch(() => {});
-  const r = (await getQuery(`SELECT usd_cents, at FROM ${DON.SQL} d WHERE d.user_id = ? AND d.via = 'card' AND d.at >= ? ORDER BY d.at DESC LIMIT 1`,
+  const r = (await getQuery(`SELECT usd_cents, at, ref FROM ${DON.SQL} d WHERE d.user_id = ? AND d.via = 'card' AND d.at >= ? ORDER BY d.at DESC LIMIT 1`,
                             [String(userId), now - withinMs]))[0];
-  return r ? { usd: (Number(r.usd_cents) || 0) / 100 } : null;
+  if (!r) return null;
+  const out = { usd: (Number(r.usd_cents) || 0) / 100 };
+  // donation_credits: only donations credited under the switch (a claim from before 1.99ans shows as it has since then: no PAT line)
+  const c = (await getQuery("SELECT r.pat AS amount, c.meta FROM donation_credits r JOIN reserve_claims c ON c.claimId = r.ref WHERE r.ref = ?", [r.ref]))[0];
+  if (c && Number(c.amount) > 0) {
+    out.pat = Number(c.amount);
+    try { const m = JSON.parse(c.meta || "{}"); if (m.promo && m.promo.pat) out.promo = { pat: m.promo.pat, usd: m.promo.usd_cents / 100, rate: m.promo.rate, normal_pat: m.normal ? m.normal.pat : 0 }; } catch (e) { /* no promo line */ }
+  }
+  return out;
 }
 
 module.exports = { init, get, set, showName, setShowName, pageData, latestCard, tierOf, DEFAULTS };

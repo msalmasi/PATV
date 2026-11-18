@@ -24,6 +24,8 @@ const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
 // 1.99ans (NY S5935-A, owner 2026-11-11): sections 9 / 10 say every prize is virtual and donations give perks, never PAT. The date
 // moves; VERSION (re-acceptance) is NOT bumped here - whether members must accept again is the owner's decision.
+// 1.99aor: sections 9 / 10 now read by the donations switch (donationmode.js): on, perks and paused each have their own sentences. The
+// perks text is the one this date belongs to; a switch change is what moves "Last updated" after it (donationTermsDay), VERSION doesn't.
 const UPDATED = "11 November 2026";                // /terms
 const PRIVACY_UPDATED = "28 October 2026";         // /privacy (WP-1's "your voice is still heard" is dated by TEXT_DATES below - the day this server first served it; mic retention review 2: the deleted accounts' Camfrog-name markers in sections 10 and 9 - additive, VERSION unchanged; the owner approved the text on 2026-10-27 (ops plan mic-audio-retention 8.5 A) and it merged to staging on 28 October 2026 - this date and its changelog entry; 1.99afn: the never-kept commands list matches chatlog.PRIVATE_ARGS - + !patvmsg, !padmove and the privacy commands - additive, VERSION unchanged; date it the day it reaches prod; S1 F13:the patv_chat_sweep sign-out cookie in section 8 - additive, VERSION unchanged; photos sent to Pepe in DMs - additive, VERSION unchanged; the owner's rule of 2026-10-19 (1.99add refix 4 + the chat-history owner change): incognito hides who, not what - "someone"; !bridge hide left out - additive, VERSION unchanged; CL11 + CL13: messages from Camfrog, the admin's own Camfrog log - additive, VERSION unchanged; 1.99acd: browser notifications - additive, VERSION unchanged; 1.99aax: live cams + ghost mode, forget me, export / delete, no crawlers)
 
@@ -237,6 +239,13 @@ function register(app, { addUser }) {
       try { pcopy = await require("./privacycopy").load(); } catch (e) { /* the page as before */ }
     }
     let upd = updated, updAt = Date.parse(updated + " 23:59:59 UTC");
+    // 1.99aor: /terms says what donations give in the switch's current state; the day it last moved is when that text last changed
+    let dmode = null;
+    if (view === "terms") {
+      const D = await require("./donationmode").get();
+      dmode = D;
+      if (D.updated && D.updated > updAt) { updAt = D.updated; upd = new Date(D.updated).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }); }
+    }
     for (const [at, day] of [[chatlog && chatlog.notice_at, chatlog && chatlog.notice_day], [hubErasure && hubErasure.on_at, hubErasure && hubErasure.on_day],
                              [micrec && micrec.on_at, micrec && micrec.on_day], [micrec && micrec.rule_at, micrec && micrec.rule_day],   // 1.99afv review
                              [memory && memory.on_at, memory && memory.on_day], [privwire && privwire.g, privwire && privwire.g_day],
@@ -258,6 +267,8 @@ function register(app, { addUser }) {
     res.locals.netban = netbanOn();                                  // 1.99ajn padppl: section 4's network codes, only while network bans are on
     res.locals.giftsOn = giftsOn();                                  // 1.99ajn padppl: section 6's gifts to frog names, only while they are on
     res.locals.storyOrig = storyOrigOn();                            // 1.99anv: section 9's original story uploads row, while any are kept
+    res.locals.donations = dmode;                                    // 1.99aor: section 10's donation sentences follow the donations switch
+    if (view === "terms" && dmode && dmode.mode === "on") { try { res.locals.donationTerms = require("./funding").donationTerms(); } catch (e) { res.locals.donationTerms = null; } }
     try { res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: upd, enforced: enforced(), chatlog, hubErasure, micrec, memory, txbar, privwire, evidence, policyDates }); } catch (e) { next(e); }
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));

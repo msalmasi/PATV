@@ -328,6 +328,7 @@ async function collect(userId, { at = now(), parts = null } = {}) {
   await put("purchases", "gifts_given", rows("gift_log", "giver_id = ?", [uid]));
   await put("purchases", "gifts_received", rows("gift_log", "recipient_id = ? AND (anon IS NULL OR anon = 0)", [uid]));
   await put("purchases", "donations", rows("donation_usd_log", "user_id = ?", [uid], { omit: ["session"] }));
+  await put("purchases", "donation_pat_credits", rows("donation_credits", "user_id = ?", [uid], { omit: ["session", "payment_intent", "quote_id"] }));   // 1.99aor
   await put("purchases", "crypto_donations", rows("crypto_payments", "user_id = ?", [uid]));
   // 1.99aid (privacy controls, review fixes 2 - ID-B): a cam slot this account put up of a FROG-NAME cam (opened by the frog's opaque
   // id) keeps the frog name it ran under (displayname / title) - never the login or the frog-name session behind it (cam_veil)

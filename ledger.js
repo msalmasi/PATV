@@ -91,9 +91,10 @@ const userExists = async (id) => !!id && (await getQuery("SELECT 1 FROM users WH
 async function post(userId, points, type, opts = {}) {
   const amount = Math.trunc(Number(points));
   if (!Number.isFinite(amount)) return { ok: false, code: E_BAD_AMOUNT, userId };
-  // 1.99ans THE HARD RULE (nopat.js): real money never buys PAT - a credit labelled as a card / crypto donation is refused
-  if (require("./nopat").refusedCredit(amount, type, opts)) {
-    console.error(`[ledger] refused ${type} +${amount} for ${userId}: no PAT for dollars (nopat.js)`);
+  // 1.99ans / 1.99aor THE HARD GUARD (nopat.js): a credit labelled as a card / crypto donation is refused, unless it carries the
+  // one-shot grant only the donation path (donationpromo.creditDonor, on terms that allow PAT) can make
+  if (require("./nopat").refusedCredit(amount, type, opts, userId)) {
+    console.error(`[ledger] refused ${type} +${amount} for ${userId}: no PAT for dollars outside the donation path (nopat.js)`);
     return { ok: false, code: E_NO_PAT_FOR_DOLLARS, userId };
   }
   await ensure();              // before any transaction: its one-time setup never waits on one

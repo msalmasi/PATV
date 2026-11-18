@@ -553,6 +553,19 @@ async function settleDonationInTx(c) {
   await runQuery("UPDATE reserve_claims SET settled = 1 WHERE claimId = ? AND settled = 0", [String(c.claimId)]);
   return { ok: true, wallet: r1.rec, bonus: r2 && r2.rec };
 }
+/**
+ * 1.99aor: a reversed donation (refund / dispute, donationpromo.reverseDonation), inside its transaction. wallet > 0: PAT already taken
+ * from the donor's wallet lands in the Federal Reserve; < 0: the Reserve pays it back out (a dispute won; the wallet leg is the caller's).
+ * bonus > 0: incentives -> Reserve; < 0: back. Keyed by the Stripe event. The mint journal is untouched: the mint happened, the PAT came back.
+ */
+async function donationReturnInTx({ key, wallet = 0, bonus = 0 }) {
+  const k = cleanKey(`donret-${key}`, 80);
+  const why = "donation reversed";
+  if (wallet) await leg(`${k}-w`, FED, Math.trunc(wallet), why);
+  if (bonus > 0) await transfer(`${k}-b`, INCENTIVES, FED, Math.trunc(bonus), why);
+  else if (bonus < 0) await transfer(`${k}-b`, FED, INCENTIVES, Math.trunc(-bonus), why);
+  return { ok: true };
+}
 let sweeping = false;
 async function donationSweep() {
   if (sweeping) return 0;
@@ -796,5 +809,5 @@ function register(app, { isBotToken }) {
 }
 
 module.exports = { init, register, meta, setMeta, enabled, live, forgetLive, layersDoc, mintInTx, grantInTx, loanInTx, repaidInTx, loanRepayInTx,
-                   flashRepayInTx, settleDonationInTx, donationSweep, donationKeys, op, botState, importFromPepe, exportState, rollback, totalsOf,
+                   flashRepayInTx, settleDonationInTx, donationReturnInTx, donationSweep, donationKeys, op, botState, importFromPepe, exportState, rollback, totalsOf,
                    outstanding, capRoom, cfgNow, _setClock, nowS, Refuse, KINDS };

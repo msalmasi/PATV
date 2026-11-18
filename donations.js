@@ -4,16 +4,20 @@
 //   before 1.99ans  a donation credited PAT and booked a reserve_claims "mint:donation" row (meta.usd_cents; claimId
 //                   "don-<stripe event>" for a card, "cdon-<hash>" for crypto). Its donation_usd_log row (since 1.99ts) has
 //                   the SAME ref as the claim, so it's counted once.
-//   since 1.99ans   no PAT for dollars (nopat.js): a donation is only its donation_usd_log row (status 'credited', pat 0) -
-//                   there is no claim.
+//   perks-only      (1.99ans; since 1.99aor the switch's "perks" and "off" states) a donation is only its donation_usd_log row
+//                   (status 'credited', pat 0) - there is no claim.
+//   with PAT        (1.99aor, the switch's "on") a claim again; donation_credits holds what was refunded or disputed, and those
+//                   dollars no longer count (a donation refunded in full doesn't count at all).
 // SQL = a subquery (user_id, usd_cents, at (ms), ref, via) over both. Call init() once before using it (both tables exist).
 "use strict";
 const { getQuery } = require("./dbUtils");
 
-const SQL = `(SELECT c.userId AS user_id, CAST(COALESCE(json_extract(c.meta, '$.usd_cents'), 0) AS INTEGER) AS usd_cents,
+const SQL = `(SELECT c.userId AS user_id, CAST(COALESCE(json_extract(c.meta, '$.usd_cents'), 0) AS INTEGER)
+                       - COALESCE((SELECT MIN(r.usd_cents, r.refunded_cents + r.disputed_cents) FROM donation_credits r WHERE r.ref = c.claimId), 0) AS usd_cents,
                      CAST(strftime('%s', c.created) AS INTEGER) * 1000 AS at, c.claimId AS ref,
                      CASE WHEN c.claimId LIKE 'cdon-%' THEN 'crypto' ELSE 'card' END AS via
                 FROM reserve_claims c WHERE c.flow = 'mint:donation' AND c.amount > 0 AND c.userId IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM donation_credits r2 WHERE r2.ref = c.claimId AND r2.refunded_cents + r2.disputed_cents >= r2.usd_cents)
               UNION ALL
               SELECT l.user_id, l.usd_cents, l.paid_at, l.ref, l.via FROM donation_usd_log l
                 WHERE l.status = 'credited' AND l.user_id IS NOT NULL

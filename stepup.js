@@ -1,10 +1,11 @@
 // stepup.js — the owner's password step-up on the website actions that move PAT or change who owns Pepe (owner answers
 // 2026-10-20, (3)): the PAT grant (POST /api/admin/transfer/:username), the House adjust (POST /api/g/wheel/jackpot), a
 // direct owner grant / removal on /admin/roles (POST /api/admin/roles/role) and (1.99aoj) the redirect / write-off of owed casino PAT
-// (POST /api/casino/admin/owed/redirect | writeoff, casino/owedweb.js; purpose casino_owed). The same throttled step-up as the
+// (POST /api/casino/admin/owed/redirect | writeoff, casino/owedweb.js; purpose casino_owed) and (1.99aor) the donations switch
+// (POST /api/admin/donations/mode, donationpromo.js; purpose donations_mode). The same throttled step-up as the
 // /admin/economy edit (econstore.stepUp):
 //   * a same-origin fetch: X-Requested-With: fetch AND an Origin / Referer naming this host (a request with neither is refused)
-//   * a single-use nonce (pepecontrol.issueNonce / takeNonce): POST /api/admin/stepup/nonce {for: grant|house|casino_owed} here, or
+//   * a single-use nonce (pepecontrol.issueNonce / takeNonce): POST /api/admin/stepup/nonce {for: grant|house|casino_owed|donations_mode} here, or
 //     /api/admin/roles/nonce on /admin/roles - only a Pepe owner gets one
 //   * the account's own password; 5 wrong in 15 minutes per account -> 429 until the window ends (shared with every other
 //     step-up: the economy edit, the payout recipe and staking cards, the owner-change confirm)
@@ -15,7 +16,8 @@ const CROSS = "Security check failed - reload the page.";
 const fail = (status, code, message) => Object.assign(new Error(message), { status, code, refuse: true });
 
 /** What each step-up guards: the capability the owner check uses (staffroles.ownerOf). */
-const PURPOSES = { grant: "econ.grant_pat", house: "econ.house_adjust", casino_owed: "casino.admin" };
+const PURPOSES = { grant: "econ.grant_pat", house: "econ.house_adjust", casino_owed: "casino.admin",
+                   donations_mode: "donations.admin" };   // 1.99aor: the donations switch (donationmode.js) - it decides whether dollars credit PAT
 
 /** Throws unless the request is a same-origin fetch. */
 function sameOrigin(req) {
