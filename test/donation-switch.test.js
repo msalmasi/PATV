@@ -415,6 +415,12 @@ test("a wallet never goes negative: what's spent is recorded as not recovered; a
   assert.equal((await claim(ref)).settled, 1, "settled inside the reversal");
   assert.deepEqual((await getQuery("SELECT clawed_pat, short_pat FROM donation_credits WHERE ref = ?", [ref]))[0], { clawed_pat: 500000, short_pat: pat - 500000 });
   assert.equal((await DP.modeState()).credits.short >= pat - 500000, true);
+  // an account that is gone: nothing can move, the event still completes (Stripe isn't left retrying)
+  const g = await checkout("erin", 1);
+  await pay(g);
+  await runQuery("UPDATE donation_credits SET user_id = 'u-gone' WHERE ref = ?", ["don-evt_" + g.id]);
+  assert.equal((await SB.handleEvent(refundEvent(g, 100, "evt_gone"))).outcome, "donation-refund");
+  assert.deepEqual((await getQuery("SELECT clawed_pat, short_pat FROM donation_credits WHERE ref = ?", ["don-evt_" + g.id]))[0], { clawed_pat: 0, short_pat: RATE });
 });
 
 test("a dispute takes the PAT while open; won gives it back, lost keeps it; a perks donation has nothing to take", async () => {

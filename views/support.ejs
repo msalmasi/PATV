@@ -211,6 +211,9 @@
     <%_ if (thanks.promo) { _%>
     <p><%- t('support.thanks_promo', { promo_pat: '<b>' + num(thanks.promo.pat) + '</b>', promo_usd: num(thanks.promo.usd), normal_pat: num(thanks.promo.normal_pat) }) %></p>
     <%_ } _%>
+    <%_ if (ON) { _%>
+    <p><%- t('support.thanks_pot', { bonus: BP }) %></p>
+    <%_ } _%>
     <div class="row" style="justify-content:center;margin-block-start:var(--ds-sp-2)"><a class="ds-btn quiet" href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span> <%- t('support.thanks_wallet') %></a></div>
     <%_ } else { _%>
     <p><%- locals.thanks ? t(K('support.thanks_perks')) : t(K('donate.thanks')) %></p>

@@ -707,16 +707,17 @@ async function reverseDonation({ eventId, paymentIntent, kind, cents = 0 }) {
     const bal = Number(((await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [c.user_id]))[0] || {}).b) || 0;
     const take = Math.min(dp, Math.max(0, Math.trunc(bal)));
     if (take > 0) {
-      await L.postOrThrow(c.user_id, -take, "donation-reversal", { transactionId: txId, source: "donation reversal", system: true, requireCover: true,
-                                                                   note: kind === "refund" ? "Donation refunded" : "Donation disputed" });
-      wallet = take;
+      // post, not postOrThrow: an account that can't be debited just leaves it "not recovered" - a throw would have Stripe retry for days
+      const r = await L.post(c.user_id, -take, "donation-reversal", { transactionId: txId, source: "donation reversal", system: true, requireCover: true,
+                                                                      note: kind === "refund" ? "Donation refunded" : "Donation disputed" });
+      if (r.ok) wallet = take;
     }
   } else if (dp < 0) {
     const give = fed ? Math.min(-dp, await poolHas("reserve")) : -dp;
     if (give > 0) {
-      await L.postOrThrow(c.user_id, give, "donation-restored", { transactionId: txId, source: "donation reversal", note: "Dispute closed in your favour",
-                                                                  donationGrant: issueGrant({ userId: c.user_id, amount: give, type: "donation-restored", ref: txId }) });
-      wallet = -give;
+      const r = await L.post(c.user_id, give, "donation-restored", { transactionId: txId, source: "donation reversal", note: "Dispute closed in your favour",
+                                                                     donationGrant: issueGrant({ userId: c.user_id, amount: give, type: "donation-restored", ref: txId }) });
+      if (r.ok) wallet = -give;
     }
   }
   const db = owedBonus - c.clawed_bonus;
