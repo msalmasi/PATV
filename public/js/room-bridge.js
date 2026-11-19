@@ -1101,11 +1101,20 @@
       var s = it.stEl; s.textContent = '';
       if (it.st === 'failed') {
         s.appendChild(el('span', 'rb-st-t', '⚠ ' + _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: it.why || _t('js.pad.relay.refused', 'refused') })));
-        var rb = el('button', 'rb-st-b', _t('js.pad.relay.retry', 'Retry')); rb.type = 'button';
-        rb.addEventListener('click', function () { retry(it); });
+        // 1.99aot gifs: review - a GIF moderators removed everywhere can never be sent: no Retry, and its picture gives way to the plain
+        // "GIF no longer available" (chatlog-core's placeholder)
+        var gone = it.code === 'gif_removed';
+        if (gone) {
+          var pic = n.querySelector('.gif-media');
+          if (pic && pic.parentNode) { var ph = el('span', 'gif-gone', _t('js.pad.chat.gif_gone', 'GIF no longer available')); pic.parentNode.replaceChild(ph, pic); }
+          it.gif = null;
+        }
+        var rb = null;
+        if (!gone) { rb = el('button', 'rb-st-b', _t('js.pad.relay.retry', 'Retry')); rb.type = 'button'; rb.addEventListener('click', function () { retry(it); }); }
         var db = el('button', 'rb-st-b', '✕'); db.type = 'button'; db.title = _t('js.pad.relay.delete', 'Delete'); db.setAttribute('aria-label', db.title);
         db.addEventListener('click', function () { drop(it); });
-        s.appendChild(rb); s.appendChild(db);
+        if (rb) s.appendChild(rb);
+        s.appendChild(db);
       } else if (it.st === 'sent') {
         s.textContent = '✓ ' + _t('js.pad.relay.sent', 'sent');
         s.title = _t('js.pad.relay.sent_title', 'Pepe posted it in the Camfrog room');
@@ -1128,7 +1137,11 @@
       if (it.node && it.node.parentNode) it.node.parentNode.removeChild(it.node);
       it.node = null;
     }
-    function fail(it, why, code) { it.st = 'failed'; it.off = false; it.why = why || ''; it.code = code || ''; paint(it); }
+    function fail(it, why, code) {
+      it.st = 'failed'; it.off = false; it.why = why || ''; it.code = code || ''; paint(it);
+      // 1.99aot gifs: review - the free GIF picker hears a refusal's code (gif_removed: it stops offering that GIF on this page)
+      if (typeof it.onRefused === 'function') { var r = it.onRefused; try { r(it.code); } catch (e) { /* the picker's own */ } }
+    }
     function retry(it) {
       if (waiting() >= SAY_QUEUE) { showNote(_t('js.pad.relay.queue_full', 'Wait a moment — {n} messages are already on their way.', { n: SAY_QUEUE })); return; }
       it.cid = newCid(); it.st = 'queue'; it.id = null; it.why = ''; it.code = ''; it.at = Date.now(); it.settled = false; it.mine = true;
@@ -1175,7 +1188,7 @@
       if (outbox.some(function (x) { return x.st === 'queue' || x.st === 'posting'; })) { e.preventDefault(); e.returnValue = ''; }
     });
     // 1.99aot gifs: extra (the Dock's GIF picker in free mode) = {gif: {src, w, h, title, page} - the pick's details, posted with the line;
-    // onPosted: called once when the site has taken the line}
+    // onPosted: called once when the site has taken the line; onRefused(code): when the site refused it (review)}
     function sendChat(text, extra) {
       if (dead) return false;
       if (waiting() >= SAY_QUEUE) {
@@ -1186,6 +1199,7 @@
       var g = extra && extra.gif && typeof extra.gif === 'object' ? extra.gif : null;
       if (g) it.gif = { src: String(g.src || ''), w: Math.floor(Number(g.w)) || 0, h: Math.floor(Number(g.h)) || 0, title: String(g.title || '').slice(0, 80), page: String(g.page || '') };
       if (extra && typeof extra.onPosted === 'function') it.onPosted = extra.onPosted;
+      if (extra && typeof extra.onRefused === 'function') it.onRefused = extra.onRefused;
       // 1.99ajn padppl: the picked @mentions still in these words (the server checks again and resolves each ref exactly)
       var lowT = String(text).toLowerCase(), mn = mnPicked.filter(function (m) { return lowT.indexOf('@' + m.n.toLowerCase()) >= 0; });
       if (mn.length) it.mn = mn;

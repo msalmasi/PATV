@@ -13,7 +13,11 @@
     free: _t('js.pad.dock.admin.gifs_free', 'Free — members’ browsers ask KLIPY'), partner: _t('js.pad.dock.admin.gifs_partner', 'Partner — PATV’s server asks KLIPY') };
   function node(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function buttons(on) { Array.prototype.forEach.call(form.querySelectorAll('button'), function (b) { b.disabled = on; }); }
-  var KEY_STATE = { set: _t('js.pad.dock.admin.key_set', 'set'), missing: _t('js.pad.dock.admin.key_missing', 'missing'), malformed: _t('js.pad.dock.admin.key_malformed', 'set but malformed') };
+  var KEY_STATE = { set: _t('js.pad.dock.admin.key_set', 'set'), missing: _t('js.pad.dock.admin.key_missing', 'missing'), malformed: _t('js.pad.dock.admin.key_malformed', 'set but malformed'),
+    same_as_server: _t('js.pad.dock.admin.key_same', 'the same as KLIPY_API_KEY — not used (pages would get the server key; ask KLIPY for a separate key)') };
+  // review: what a mode missing its key says - a short mode name and the variable to set (not the long option label)
+  var MODE_KEY = { free: function (state) { return _t('js.pad.dock.admin.gifs_off_free', 'GIFs are not on: Free mode needs KLIPY_PUBLIC_KEY ({state}).', { state: state }); },
+    partner: function (state) { return _t('js.pad.dock.admin.gifs_off_partner', 'GIFs are not on: Partner mode needs KLIPY_API_KEY ({state}).', { state: state }); } };
   function gifPanel(data) {
     var box = document.getElementById('paddockGifs'); if (!box) return;
     box.textContent = '';
@@ -21,8 +25,9 @@
     box.appendChild(node('p', 'adm-help', _t('js.pad.dock.admin.gifs_free_what', 'Free: members’ browsers search KLIPY themselves with the browser key and the pad’s rating (G; PG-13 on 18+ pads); PATV’s server never calls KLIPY. The server checks each sent GIF’s link, size and title but can’t confirm its rating — moderators can remove a GIF everywhere. Needs KLIPY_PUBLIC_KEY: {state}.', { state: KEY_STATE[g.keys.free] || g.keys.free })));
     box.appendChild(node('p', 'adm-help', _t('js.pad.dock.admin.gifs_partner_what', 'Partner: PATV’s server searches KLIPY (G only) and members can send only GIFs that search returned. Needs KLIPY’s paid server-side plan and KLIPY_API_KEY: {state}.', { state: KEY_STATE[g.keys.partner] || g.keys.partner })));
     if (data.cfg && data.cfg.gifs !== 'off' && !g.on) {
+      var st = KEY_STATE[g.keys[data.cfg.gifs]] || g.keys[data.cfg.gifs];
       var why = data.cfg.mode === 'off' ? _t('js.pad.dock.admin.gifs_off_dock', 'GIFs are not on: the Room Dock is off.')
-        : _t('js.pad.dock.admin.gifs_off_key', 'GIFs are not on: the {mode} mode’s key is {state}.', { mode: choices[data.cfg.gifs] || data.cfg.gifs, state: KEY_STATE[g.keys[data.cfg.gifs]] || g.keys[data.cfg.gifs] });
+        : MODE_KEY[data.cfg.gifs] ? MODE_KEY[data.cfg.gifs](st) : _t('js.pad.dock.admin.gifs_off_dock', 'GIFs are not on: the Room Dock is off.');
       box.appendChild(node('p', 'adm-help', '⚠️ ' + why));
     }
     var list = g.blocks || [];
@@ -30,7 +35,8 @@
     if (!list.length) return;
     var ul = node('ul', 'adm-help');
     list.forEach(function (b) {
-      var li = node('li', '', b.id + ' · ' + new Date(b.at).toLocaleString() + (b.room ? ' · ' + b.room : '') + (b.kind ? ' · ' + b.kind : '') + (b.why ? ' · ' + b.why : '') + ' ');
+      // (review: no reason or line here - the hidden line keeps its reason, as any 🙈 Hide)
+      var li = node('li', '', b.id + ' · ' + new Date(b.at).toLocaleString() + (b.room ? ' · ' + b.room : '') + (b.kind ? ' · ' + b.kind : '') + ' ');
       var un = node('button', 'ds-btn quiet', _t('js.pad.dock.admin.gifs_unblock', 'Unblock')); un.type = 'button';
       un.addEventListener('click', function () {
         if (busy) return;

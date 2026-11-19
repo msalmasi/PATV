@@ -30,6 +30,12 @@ test.before(async () => {
     if (u.pathname === "/to-localhost") { res.writeHead(301, { location: `http://localhost:${port}/page` }); return res.end(); }
     if (u.pathname === "/to-loop2") { res.writeHead(302, { location: `http://127.0.0.2:${port}/page` }); return res.end(); }
     if (u.pathname === "/to-file") { res.writeHead(302, { location: "file:///etc/passwd" }); return res.end(); }
+    // 1.99aot gifs: a redirect onto KLIPY, and a page whose preview image is on KLIPY's CDN
+    if (u.pathname === "/to-klipy") { res.writeHead(302, { location: "https://klipy.com/gifs/hello-hi-662" }); return res.end(); }
+    if (u.pathname === "/klipy-image") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      return res.end(`<html><head><title>Has a GIF</title><meta property="og:image" content="https://static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/14/af/SE72470w.webp"></head></html>`);
+    }
     if (u.pathname === "/loop") { res.writeHead(302, { location: "/loop" }); return res.end(); }
     if (u.pathname === "/big") {
       res.writeHead(200, { "content-type": "text/html" });
@@ -125,6 +131,28 @@ test("caps: a huge page is cut at 512 KB, a slow one times out, compressed bodie
   assert.ok(Date.now() - t0 < 2500);
   await assert.rejects(lp.safeGet(`http://page.example.com:${port}/gz`, { lookup: DNS }), (e) => e.code === "encoding");
   await assert.rejects(lp.safeGet(`http://page.example.com:${port}/404`, { lookup: DNS }), (e) => e.code === "status");
+});
+
+test("1.99aot gifs: KLIPY links are never fetched by the server (its free plan: browsers only, no copies) - a plain link card, no picture", async () => {
+  const asked = [];
+  const dns = async (host) => { asked.push(host); return [{ address: "127.0.0.3", family: 4 }]; };
+  for (const url of ["https://static.klipy.com/ii/935d7ab9d8c6202580a668421940ec81/14/af/SE72470w.webp", "https://klipy.com/gifs/hello-hi-662",
+                     "https://api.klipy.com/api/v1/x/gifs/trending", "https://STATIC2.KLIPY.COM/ii/a/b.gif", "https://www.klipy.com/", "https://klipy.com./gifs/x"]) {
+    const r = await lp.preview(url, { lookup: dns });
+    assert.equal(r.image, null, url); assert.equal(r.imageUrl, null, url); assert.equal(r.description, "", url);
+    assert.equal(r.title, r.domain, url + ": the domain as its title, nothing fetched");
+    await assert.rejects(lp.safeGet(url, { lookup: dns }), (e) => e instanceof lp.PreviewError && e.code === "nofetch", url);
+  }
+  assert.deepEqual(asked, [], "not even a DNS lookup");
+  // a redirect that lands on KLIPY: stopped at that hop - a plain card for the link
+  const red = await lp.preview(`http://redir.example.com:${port}/to-klipy`, { lookup: DNS });
+  assert.equal(red.title, "redir.example.com"); assert.equal(red.image, null);
+  // a page whose preview image is on KLIPY's CDN: the page's title, never the picture
+  const seen = [];
+  const pg = await lp.preview(`http://page.example.com:${port}/klipy-image`, { lookup: async (h, o) => { seen.push(h); return DNS(h, o); } });
+  assert.equal(pg.title, "Has a GIF"); assert.equal(pg.image, null); assert.ok(!seen.some((h) => /klipy/i.test(h)));
+  // only KLIPY: look-alike hosts are other sites
+  for (const h of ["klipy.com.evil.example", "notklipy.com", "klipy.co"]) assert.equal(lp.noFetchHost(h), false, h);
 });
 
 test("YouTube / Twitch links carry the stage's sanitised embed even when the page can't be fetched", async () => {

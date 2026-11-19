@@ -41,7 +41,10 @@ const ALICE = { id: "alicecf", login: "alicecf", display: "Alice" };
 const BOB = { id: "bobcf", login: "bobcf", display: "Bob" };
 const PEPE = { id: "pepefrog", login: "pepefrog", display: "PepeFrog", is_self: true };
 const GIF = "wave-hello-1", OTHER_GIF = "other-gif-2";
-const details = (id = GIF) => ({ src: "https://static1.klipy.com/ii/0123456789abcdef0123456789abcdef/14/af/AbCd1234.webp", w: 220, h: 124, title: "Wave hello", page: "https://klipy.com/gifs/" + id });
+// each GIF its own KLIPY CDN directory (/ii/<32 hex>/<2 hex>/<2 hex>/ - its media key); `hash` = another GIF's picture
+const hashOf = (id) => require("crypto").createHash("md5").update(id).digest("hex");
+const srcOf = (id) => "https://static1.klipy.com/ii/" + hashOf(id) + "/14/af/AbCd1234.webp";
+const details = (id = GIF, hash = null) => ({ src: hash ? "https://static1.klipy.com/ii/" + hash + "/14/af/AbCd1234.webp" : srcOf(id), w: 220, h: 124, title: "Wave hello", page: "https://klipy.com/gifs/" + id });
 const users = new Map(), U = {};
 let base, server, seq = 0, klipy = [];
 const realFetch = global.fetch;
@@ -78,8 +81,8 @@ async function mkUser(name, cls = "pleb", camfrog = null) {
   return u;
 }
 /** A GIF pick from alice's browser (the details the free picker posts), then Pepe's echo of that job -> the archived line's c. */
-async function sendGif(id = GIF, cid = "gfcid" + (++seq)) {
-  const s = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:" + id + "]", cid, gif: details(id) });
+async function sendGif(id = GIF, cid = "gfcid" + (++seq), hash = null) {
+  const s = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:" + id + "]", cid, gif: details(id, hash) });
   assert.equal(s.status, 200, JSON.stringify(s.d));
   relay.takeJobs(new Set([ROOM.id]), "pull");
   await bridge.ingest({ rooms: [snap()], acks: [], events: [ev("message", { user: PEPE, text: "🌐 Alice (web): 🎞️ Wave hello https://klipy.com/gifs/" + id, self: true,
@@ -140,7 +143,7 @@ test("the live view gives an eligible member the browser key, the pad's rating a
   const r = await live(U.alice);
   assert.equal(r.status, 200, r.text);
   assert.equal(r.d.room.gifPicker, true);
-  assert.deepEqual(r.d.room.gifFree, { k: process.env.KLIPY_PUBLIC_KEY, r: "high", n: false });
+  assert.deepEqual(r.d.room.gifFree, { k: process.env.KLIPY_PUBLIC_KEY, r: "high", n: false, b: [] });
   const old = AG.isAdultPad;
   try { AG.isAdultPad = (id) => id === ROOM.id; assert.equal((await live(U.alice)).d.room.gifFree.r, "low", "an 18+ pad: PG-13 at most"); }
   finally { AG.isAdultPad = old; }
@@ -191,27 +194,66 @@ test("🚫 Remove this GIF everywhere: the room's mods / owner / staff only, GIF
   assert.equal(m.status, 403, m.text); assert.equal(m.d.code, "forbidden", "a member can only report");
   assert.equal((await act(plain, "gifblock", U.mod, {})).d.code, "not_gif");
   assert.equal(G.isBlocked(GIF), false, "nothing blocked by a refused try");
+  // review: the same picture already posted under ANOTHER slug (a hand-made client) - a removal must take it too
+  const alias = await sendGif("made-up-slug-1000", "gfblock010", hashOf(GIF));
   const ok = await act(c1, "gifblock", U.mod, { why: "not for this pad" });
   assert.equal(ok.status, 200, ok.text); assert.deepEqual(ok.d, { ok: true, blocked: true });
   const r1 = (await getQuery("SELECT rm_at, rm_by, rm_why FROM chat_log WHERE c = ?", [c1]))[0];
-  assert.ok(r1.rm_at); assert.equal(r1.rm_by, "mod:" + U.mod.userId); assert.equal(r1.rm_why, "not for this pad");
-  const b = await getQuery("SELECT id, room, c, kind, why FROM gif_blocks");
-  assert.deepEqual(b, [{ id: GIF, room: ROOM.id, c: c1, kind: "mod", why: "not for this pad" }]);
+  assert.ok(r1.rm_at); assert.equal(r1.rm_by, "mod:" + U.mod.userId); assert.equal(r1.rm_why, "not for this pad", "the reason stays on the hidden line");
+  // review: the block row - the slug and the picture's media key; no line number, no reason (privacy)
+  const b = await getQuery("SELECT * FROM gif_blocks");
+  assert.equal(b.length, 1); assert.deepEqual({ ...b[0], at: 0 }, { id: GIF, at: 0, room: ROOM.id, kind: "mod", slug: GIF, mk: hashOf(GIF) + "/14/af" });
   const d = (await live(U.mem)).d;
   assert.equal(lineOf(d, c1), undefined, "the line is gone");
   assert.deepEqual(lineOf(d, c2).gif, { gone: 1 }, "the same GIF's other lines: GIF no longer available");
+  assert.deepEqual(lineOf(d, alias).gif, { gone: 1 }, "review: its picture under another slug too");
   // open pad pages draw those other lines again (the redo ring), never the removed one
   const redo = (bridge._rooms.get(ROOM.id).redo || []).map((x) => x.c);
-  assert.ok(redo.includes(c2), "the other line is redrawn on open pages"); assert.ok(!redo.includes(c1)); assert.ok(!redo.includes(keep));
-  assert.equal(lineOf(d, keep).gif.src, details().src, "other GIFs untouched");
+  assert.ok(redo.includes(c2), "the other line is redrawn on open pages"); assert.ok(redo.includes(alias), "review: and the alias line");
+  assert.ok(!redo.includes(c1)); assert.ok(!redo.includes(keep));
+  assert.equal(lineOf(d, keep).gif.src, details(OTHER_GIF).src, "other GIFs untouched");
   const again = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:" + GIF + "]", cid: "gfblock004", gif: details() });
-  assert.equal(again.status, 403); assert.equal(again.d.code, "gif", "never sendable again");
+  assert.equal(again.status, 403); assert.equal(again.d.code, "gif_removed", "never sendable again");
+  // review: the same picture under a fresh slug - refused; and the free picker's page data names it (it leaves it out of KLIPY's answers)
+  const fresh = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:made-up-slug-1001]", cid: "gfblock005", gif: details("made-up-slug-1001", hashOf(GIF)) });
+  assert.equal(fresh.d.code, "gif_removed");
+  assert.deepEqual((await live(U.alice)).d.room.gifFree.b, [GIF, hashOf(GIF) + "/14/af"]);
   // the owner (no reason: "GIF removed") and an already-hidden line still block
   const own = await act(keep, "gifblock", U.own, {});
   assert.equal(own.status, 200, own.text);
   assert.equal((await getQuery("SELECT rm_why FROM chat_log WHERE c = ?", [keep]))[0].rm_why, "GIF removed");
   assert.equal((await getQuery("SELECT kind FROM gif_blocks WHERE id = ?", [OTHER_GIF]))[0].kind, "owner");
   assert.ok((await getQuery("SELECT 1 FROM room_events WHERE room_id = ? AND what = 'chat.hide' AND detail LIKE '%GIF removed everywhere%'", [ROOM.id])).length);
+  assert.deepEqual(klipy, []);
+});
+
+test("review: a pad's owner / mods remove at most BLOCK_DAY_MAX GIFs everywhere a day (each is site-wide); staff have no cap", async () => {
+  await ready();
+  const c = await sendGif("quota-gif-1", "gfquota01"), c2 = await sendGif("quota-gif-2", "gfquota02");
+  for (let i = 0; i < G.BLOCK_DAY_MAX; i++) G.noteBlockUse(U.mod.userId, false);
+  const r = await act(c, "gifblock", U.mod, {});
+  assert.equal(r.status, 429, r.text); assert.equal(r.d.code, "gif_quota");
+  assert.equal(G.isBlocked("quota-gif-1"), false, "nothing blocked");
+  assert.equal((await getQuery("SELECT rm_at FROM chat_log WHERE c = ?", [c]))[0].rm_at, null, "nor hidden");
+  for (let i = 0; i < G.BLOCK_DAY_MAX + 1; i++) G.noteBlockUse(U.staff.userId, true);
+  assert.equal((await act(c2, "gifblock", U.staff, {})).status, 200, "staff: no cap");
+});
+
+test("review: a free line's stored rating against the pad's NOW - sent on an 18+ pad (low), then the pad made general: GIF no longer available", async () => {
+  await ready();
+  await rooms.setPage(ROOM.id, { adult: true }, "test");
+  let c;
+  try {
+    assert.equal((await live(U.alice)).d.room.gifFree.r, "low");
+    c = await sendGif("adult-era-gif", "gfadult01");
+    assert.equal(JSON.parse((await getQuery("SELECT d FROM chat_log WHERE c = ?", [c]))[0].d).gf.r, "low");
+  } finally { await rooms.setPage(ROOM.id, { adult: false }, "test"); }
+  CV._clearCaches();
+  const it = lineOf((await live(U.mem)).d, c);
+  assert.ok(it, "the line is still there");
+  assert.deepEqual(it.gif, { gone: 1 }, "its PG-13 picture isn't shown on a general pad");
+  const proj = await CV.project([CV.itemOf((await getQuery("SELECT * FROM chat_log WHERE c = ?", [c]))[0])], { view: await CV.view(ROOM.id, U.mem) });
+  assert.deepEqual((proj.items || proj)[0].gif, { gone: 1 }, "scrollback too");
   assert.deepEqual(klipy, []);
 });
 

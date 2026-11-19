@@ -448,17 +448,19 @@ async function takeDown(roomId, cs, { db = true, ring: useRing = true } = {}) {
   wakeRoom(R.id);
   return n;
 }
-/** 1.99aot gifs: GIF `id` was removed everywhere (or a block was lifted) - every live line with it is drawn again on open pad pages
+/** 1.99aot gifs: a GIF was removed everywhere (or a block was lifted) - every live line with it is drawn again on open pad pages
  *  (the `redo` ring: re-dressed, so gifs.attach says {gone: 1} or gives the picture back). Pages without the ring (the homepage
- *  panel) show the change on their next load. -> lines touched */
-function gifRedo(id) {
+ *  panel) show the change on their next load. `match` = a GIF id, or (review) gifs.lineMatcher's (token, item) -> bool: the block's
+ *  id, slug or picture (a free line's stored one). -> lines touched */
+function gifRedo(match) {
   const t = Date.now(), core = require("./public/js/chatlog-core");
+  const hit = typeof match === "function" ? match : (tok) => tok.id === match;
   let n = 0;
   for (const R of rooms.values()) {
     const cs = [];
     for (const it of R.feed) {
       const tok = it && it.md === "gif" ? core.mediaOf(it) : null;
-      if (tok && tok.type === "gif" && tok.id === id) cs.push(Number(it.c));
+      if (tok && tok.type === "gif" && hit(tok, it)) cs.push(Number(it.c));
     }
     if (!cs.length) continue;
     ringPut(R, "redo", cs, t);

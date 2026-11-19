@@ -1220,8 +1220,9 @@ function dress(items, ctx) {
       if (mn.length) o.mn = mn; else delete o.mn;
     }
     // 1.99aiw: cache-only, after the complete privacy/removal projection. 1.99aot gifs: + the stored item, whose gf (a free-mode GIF's
-    // checked details) draws the line - never copied into the page item itself (only gifs.attach's {src, w, h, title} goes out)
-    out.push(require("./gifs").attach(o, it));
+    // checked details) draws the line - never copied into the page item itself (only gifs.attach's {src, w, h, title} goes out);
+    // + the view (review: a free line's stored rating against the pad's NOW - an 18+ pad made general hides its PG-13 GIFs)
+    out.push(require("./gifs").attach(o, it, ctx.view));
   }
   return out;
 }

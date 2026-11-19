@@ -106,6 +106,11 @@ async function resolvePublic(host, lookup = dns.promises.lookup) {
   return addrs;
 }
 
+// 1.99aot gifs: review - KLIPY (the pads' GIFs, gifs.js) on its free plan: requests to KLIPY come from members' browsers only and its
+// media is never copied or re-hosted. So this server never fetches a KLIPY link - a feed preview of one is a plain link card (no
+// title or picture fetched), and an on-air card / download of one, or a redirect hop that lands on KLIPY, is refused. klipy.com and
+// every subdomain (an exclusion: the suffix match is the safe side here).
+const noFetchHost = (host) => { const h = String(host || "").toLowerCase().replace(/\.$/, ""); return h === "klipy.com" || h.endsWith(".klipy.com"); };
 /** Normalise a pasted link -> URL object (throws PreviewError). */
 function checkUrl(input) {
   let s = String(input == null ? "" : input).trim();
@@ -205,6 +210,7 @@ async function safeGet(input, opts = {}) {
   const deadline = Date.now() + (opts.timeoutMs || TIMEOUT_MS);
   let u = input instanceof URL ? input : checkUrl(input);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (noFetchHost(u.hostname)) throw new PreviewError("PATV doesn't fetch KLIPY links.", "nofetch");   // (1.99aot gifs: every hop)
     await resolvePublic(u.hostname, opts.lookup);            // fail fast before opening a socket
     const r = await getOnce(u, { maxBytes: opts.maxBytes || HTML_MAX, accept: opts.accept || "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
                                  lookup: opts.lookup, deadline, cut: !!opts.cut });
@@ -288,13 +294,18 @@ async function preview(input, opts = {}) {
   const u = checkUrl(input);
   const out = { url: u.toString(), domain: domainOf(u.toString()), title: "", description: "", site: "", imageUrl: null, iconUrl: null, image: null, embed: null };
   try { out.embed = require("./stageembed").parse(u.toString()); } catch (e) { out.embed = null; }
+  // (1.99aot gifs: a KLIPY link - or one redirecting to KLIPY - is a plain link card: nothing fetched from KLIPY, no picture kept)
+  const plain = () => { out.title = out.domain; return out; };
+  if (noFetchHost(u.hostname)) return plain();
   let r;
   try {
     r = await safeGet(u, { lookup: opts.lookup, timeoutMs: opts.timeoutMs });
   } catch (e) {
     if (out.embed) return out;          // a YouTube/Twitch link still embeds without its title
+    if (e && e.code === "nofetch") return plain();
     throw e;
   }
+  // (and an image link the page names on KLIPY's CDN is never fetched either: the hop check refuses it, so no picture)
   out.url = r.url;
   out.domain = domainOf(r.url);
   if (/^image\//.test(r.ct)) {
@@ -313,5 +324,5 @@ async function preview(input, opts = {}) {
   return out;
 }
 
-module.exports = { preview, safeGet, checkUrl, isPublicIp, resolvePublic, parseMeta, decodeEntities, domainOf, tidy, PreviewError,
+module.exports = { preview, safeGet, checkUrl, isPublicIp, resolvePublic, parseMeta, decodeEntities, domainOf, tidy, PreviewError, noFetchHost,
                    HTML_MAX, IMAGE_MAX, TIMEOUT_MS, MAX_URL, _testAllow };

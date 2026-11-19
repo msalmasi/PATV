@@ -14,8 +14,10 @@ const realFetch = global.fetch, browserKey = "fixtureBrowserKey_0123456789", ser
 const room = { id: "Fixture.Free", slug: "fixture-free", relay: true, members: [] }, adultRoom = { id: "Fixture.Adult", slug: "fixture-adult", relay: true, members: [] };
 let server, base, adminSeq = 0, now = 1000000, calls = [], adult = new Set();
 const SLUG = "wave-hello-1";
-const details = (over = {}) => ({ src: "https://static1.klipy.com/ii/0123456789abcdef0123456789abcdef/14/af/AbCd1234.webp", w: 220, h: 124,
-  title: "<b>Wave</b> hello", page: "https://klipy.com/gifs/" + SLUG, ...over });
+// KLIPY's CDN shape (docs.klipy.com trending / search examples): /ii/<32 hex>/<2 hex>/<2 hex>/<file>.<ext> - one directory per GIF
+const HASH = "0123456789abcdef0123456789abcdef", DIR = "/ii/" + HASH + "/14/af/", MK = HASH + "/14/af";
+const pic = (hash = HASH, file = "AbCd1234.webp", host = "static1") => "https://" + host + ".klipy.com/ii/" + hash + "/14/af/" + file;
+const details = (over = {}) => ({ src: pic(), w: 220, h: 124, title: "<b>Wave</b> hello", page: "https://klipy.com/gifs/" + SLUG, ...over });
 const flags = cfg => P.save({ userId: "cfg-" + (++adminSeq), username: "fixture-admin", class: "Admin" }, { cfg });
 const headers = (user = "linked") => ({ "content-type": "application/json", "X-Requested-With": "fetch", ...(user ? { "x-test-user": user } : {}) });
 async function request(url, { user = "linked", body, extraHeaders = {} } = {}) {
@@ -79,14 +81,14 @@ test("free mode send: Pepe's job keeps its old shape {type, id, title, page}; th
   const bare = await say("[gif:" + SLUG + "]", "free-shape-2", details({ page: "" }));
   assert.equal(bare.status, 200); assert.equal(relay.takeJobs(new Set([room.id]))[0].media.page, "");
   // a gif query (webp or gif) with a plain query string is taken as KLIPY gave it
-  assert.equal((await say("[gif:" + SLUG + "]", "free-shape-3", details({ src: "https://static.klipy.com/ii/aa/bb/x.gif?v=2&t=a-b_c" }))).status, 200);
+  assert.equal((await say("[gif:" + SLUG + "]", "free-shape-3", details({ src: "https://static.klipy.com" + DIR + "x.gif?v=2&t=a-b_c" }))).status, 200);
   assert.deepEqual(calls, []);
 });
 
 test("free mode: the per-pad rating is the server's - general pads high, 18+ pads low - on the page data and on the line", async () => {
   adult.add(adultRoom.id);
-  assert.deepEqual(G.pageData(room.id, "linked"), { k: browserKey, r: "high", n: false });
-  assert.deepEqual(G.pageData(adultRoom.id, "linked"), { k: browserKey, r: "low", n: false });
+  assert.deepEqual(G.pageData(room.id, "linked"), { k: browserKey, r: "high", n: false, b: [] });
+  assert.deepEqual(G.pageData(adultRoom.id, "linked"), { k: browserKey, r: "low", n: false, b: [] });
   assert.equal(G.ratingFor(room.id), G.RATINGS.general); assert.equal(G.ratingFor(adultRoom.id), G.RATINGS.adult);
   assert.deepEqual(G.RATINGS, { general: "high", adult: "low" }, "never off (R) until the 18+ gate is on");
   const out = await say("[gif:" + SLUG + "]", "adult-send-1", { ...details(), r: "off" }, { slug: adultRoom.slug });
@@ -101,17 +103,24 @@ test("free mode: the per-pad rating is the server's - general pads high, 18+ pad
 
 test("free mode refuses what it can check without KLIPY: hosts, scheme, URL shape and length, sizes, title, page link - no job", async () => {
   const src = (s) => details({ src: s });
+  // each refused for its own reason only: every other part is KLIPY's real shape (the base itself is accepted - checked below)
+  const D = DIR + "b";
+  assert.equal(G.freeGif(SLUG, details({ src: "https://static.klipy.com" + D + ".gif" }), room.id).ok, true, "the base shape is fine");
   const bad = [
-    ["http", src("http://static.klipy.com/ii/a/b.gif")], ["suffix host", src("https://static.klipy.com.evil.invalid/ii/a/b.gif")],
-    ["other host", src("https://evil.invalid/ii/a/b.gif")], ["api host", src("https://api.klipy.com/ii/a/b.gif")], ["page host", src("https://klipy.com/ii/a/b.gif")],
-    ["userinfo", src("https://me:pw@static.klipy.com/ii/a/b.gif")], ["port", src("https://static.klipy.com:8443/ii/a/b.gif")],
-    ["port 443", src("https://static.klipy.com:443/ii/a/b.gif")], ["upper-case host", src("https://STATIC.klipy.com/ii/a/b.gif")],
-    ["dot segment", src("https://static.klipy.com/ii/../b.gif")], ["encoded", src("https://static.klipy.com/ii/%2e%2e/b.gif")],
-    ["fragment", src("https://static.klipy.com/ii/a/b.gif#x")], ["backslash", src("https://static.klipy.com\\@evil.invalid/b.gif")],
-    ["png", src("https://static.klipy.com/ii/a/b.png")], ["no extension", src("https://static.klipy.com/ii/a/b")],
-    ["double dot name", src("https://static.klipy.com/ii/a/b.gif.png")], ["query markup", src("https://static.klipy.com/ii/a/b.gif?x=<b>")],
-    ["too long", src("https://static.klipy.com/" + "a/".repeat(260) + "b.gif")], ["deep path", src("https://static.klipy.com/a/b/c/d/e/f/g/h/i/j/k.gif")],
-    ["space", src("https://static.klipy.com/ii/a b.gif")], ["not a string", src(["https://static.klipy.com/ii/a/b.gif"])], ["no src", details({ src: undefined })],
+    ["http", src("http://static.klipy.com" + D + ".gif")], ["suffix host", src("https://static.klipy.com.evil.invalid" + D + ".gif")],
+    ["other host", src("https://evil.invalid" + D + ".gif")], ["api host", src("https://api.klipy.com" + D + ".gif")], ["page host", src("https://klipy.com" + D + ".gif")],
+    ["userinfo", src("https://me:pw@static.klipy.com" + D + ".gif")], ["port", src("https://static.klipy.com:8443" + D + ".gif")],
+    ["port 443", src("https://static.klipy.com:443" + D + ".gif")], ["upper-case host", src("https://STATIC.klipy.com" + D + ".gif")],
+    ["dot segment", src("https://static.klipy.com/ii/" + HASH + "/14/../b.gif")], ["encoded", src("https://static.klipy.com/ii/" + HASH + "/14/%2e%2e/b.gif")],
+    ["fragment", src("https://static.klipy.com" + D + ".gif#x")], ["backslash", src("https://static.klipy.com\\@evil.invalid" + D + ".gif")],
+    ["png", src("https://static.klipy.com" + D + ".png")], ["no extension", src("https://static.klipy.com" + D)],
+    ["double dot name", src("https://static.klipy.com" + D + ".gif.png")], ["query markup", src("https://static.klipy.com" + D + ".gif?x=<b>")],
+    ["too long", src("https://static.klipy.com" + D + ".gif?" + "a=b&".repeat(130))], ["deep path", src("https://static.klipy.com" + DIR + "c/d/b.gif")],
+    ["space", src("https://static.klipy.com" + DIR + "a b.gif")], ["not a string", src(["https://static.klipy.com" + D + ".gif"])], ["no src", details({ src: undefined })],
+    // review: KLIPY's own path only - never any other file on the CDN (its media key could not be read)
+    ["any CDN path", src("https://static.klipy.com/a.gif")], ["other path", src("https://static.klipy.com/anything/at/all/x.gif")],
+    ["short hash", src("https://static.klipy.com/ii/abc/14/af/b.gif")], ["not hex", src("https://static.klipy.com/ii/" + "g".repeat(32) + "/14/af/b.gif")],
+    ["3-char segment", src("https://static.klipy.com/ii/" + HASH + "/14a/af/b.gif")], ["no ii", src("https://static.klipy.com/xx/" + HASH + "/14/af/b.gif")],
     ["w 0", details({ w: 0 })], ["w huge", details({ w: 5000 })], ["w string", details({ w: "220" })], ["w float", details({ w: 1.5 })], ["no h", details({ h: undefined })],
     ["title object", details({ title: { x: 1 } })], ["title too long", details({ title: "x".repeat(201) })],
     ["page other host", details({ page: "https://evil.invalid/gifs/" + SLUG })], ["page other gif", details({ page: "https://klipy.com/gifs/other-gif" })],
@@ -145,21 +154,138 @@ test("free mode: every say gate still applies first (sign-in, the Dock, a link),
   assert.deepEqual(calls, []);
 });
 
-test("a GIF removed everywhere is refused in both modes, never offered by the partner search, and draws as gone", async () => {
-  await db.tx(async () => { await G.blockInTx(SLUG, { room: room.id, c: 7, kind: "mod", why: "fixture" }, now); });
-  G.noteBlocked(SLUG); assert.equal(G.isBlocked(SLUG), true);
-  assert.equal((await say("[gif:" + SLUG + "]", "blocked-1", details())).data.code, "gif");
-  assert.deepEqual(G.attach({ k: "msg", u: { web: true }, text: "[gif:" + SLUG + "]", md: "gif" }, { gf: { src: details().src, w: 1, h: 1, title: "x", r: "high" } }).gif, { gone: 1 });
+const line = (id) => ({ k: "msg", u: { web: true }, text: "[gif:" + id + "]", md: "gif" });
+const stored = (src = details().src, r = "high") => ({ gf: { src, w: 1, h: 1, title: "x", r } });
+// a partner (v2) answer as KLIPY documents it (migrate-from-tenor/search): a NUMERIC id, the slug only in itemurl, the CDN directory
+const v2 = (id, slug, hash = HASH) => ({ id, title: "Blocked", itemurl: "https://klipy.com/gifs/" + slug,
+  media_formats: { tinygif: { url: "https://static.klipy.com/ii/" + hash + "/14/af/NIKSFkmQ.gif", dims: [8, 8] }, gif: { url: "https://static.klipy.com/ii/" + hash + "/14/af/p30ORxL1.gif", dims: [8, 8] } } });
+const partnerFetch = (results) => { global.fetch = async (url) => { calls.push(String(url)); return new Response(JSON.stringify({ results }), { headers: { "content-type": "application/json" } }); }; };
+const noFetch = () => { global.fetch = async (url) => { calls.push(String(url)); throw new Error("no provider request expected"); }; };
+/** a moderator's removal of a free line's GIF, as chatlogmod.gifBlock makes it */
+async function removeFree(slug = SLUG, src = details().src) {
+  const keys = G.keysOf(slug, stored(src));
+  await db.tx(async () => { await G.blockInTx(keys, { room: room.id, kind: "mod" }, now); }); G.noteBlocked(keys, now);
+  return keys;
+}
+
+test("a GIF removed everywhere is refused in both modes (its own code), never offered by the partner search, and draws as gone", async () => {
+  const keys = await removeFree();
+  assert.deepEqual(keys, { id: SLUG, slug: SLUG, mk: MK }, "the slug and the picture's media key");
+  assert.equal(G.isBlocked(SLUG), true);
+  const out = await say("[gif:" + SLUG + "]", "blocked-1", details());
+  assert.equal(out.status, 403); assert.equal(out.data.code, "gif_removed"); assert.match(out.data.error, /removed by moderators/);
+  assert.deepEqual(G.attach(line(SLUG), stored()).gif, { gone: 1 });
   // reloaded from the database (a restart)
-  G._resetStore(); await G.init(); assert.equal(G.isBlocked(SLUG), true);
+  G._resetStore(); await G.init(); assert.equal(G.isBlocked(SLUG), true); assert.equal(G.blockedAny([], details().src), true);
   // partner mode honours it too: its search never offers it and it isn't sendable
   await flags({ gifs: "partner" });
-  global.fetch = async (url) => { calls.push(String(url)); return new Response(JSON.stringify({ results: [{ id: SLUG, title: "Blocked", media_formats: { tinygif: { url: "https://static.klipy.com/t.gif", dims: [8, 8] }, gif: { url: "https://static.klipy.com/g.gif", dims: [8, 8] } } }] }), { headers: { "content-type": "application/json" } }); };
+  partnerFetch([v2("2525964843568523", SLUG)]);
   try {
-    assert.deepEqual(await G.search(""), []); assert.equal(G.picked(SLUG), null);
-    assert.equal((await say("[gif:" + SLUG + "]", "blocked-2")).data.code, "gif");
-  } finally { global.fetch = async (url) => { calls.push(String(url)); throw new Error("no provider request expected"); }; }
+    assert.deepEqual(await G.search(""), []); assert.equal(G.picked("2525964843568523"), null);
+    const p = await say("[gif:2525964843568523]", "blocked-2");
+    assert.equal(p.data.code, "gif");
+  } finally { noFetch(); }
   calls = [];
+});
+
+test("review: a removed picture stays removed under any slug, and a removed slug with any picture - free mode", async () => {
+  // a line of ANOTHER slug that already showed the same picture (sent before the removal)
+  const other = G.attach(line("made-up-slug-1000"), stored());
+  assert.equal(other.gif.src, details().src, "drawn before");
+  await removeFree("hello-hi-662", details().src);
+  assert.deepEqual(G.attach(line("made-up-slug-1000"), stored()).gif, { gone: 1 }, "every line with that picture is gone");
+  assert.deepEqual(G.attach(line("made-up-slug-1000"), stored(pic(HASH, "SE72470w.webp", "static2"))).gif, { gone: 1 }, "any size / format / CDN host of it");
+  // the same picture reposted under a fresh slug (and page link) is refused
+  const fresh = await say("[gif:made-up-slug-1001]", "repost-1", details({ page: "https://klipy.com/gifs/made-up-slug-1001" }));
+  assert.equal(fresh.data.code, "gif_removed", JSON.stringify(fresh.data));
+  const other2 = await say("[gif:made-up-slug-1002]", "repost-2", details({ src: pic(HASH, "y6iepZM7.gif", "static"), page: "" }));
+  assert.equal(other2.data.code, "gif_removed", "another rendition of the same GIF");
+  // the removed slug with a different picture is refused too
+  const swap = await say("[gif:hello-hi-662]", "repost-3", details({ src: pic("f".repeat(32)), page: "" }));
+  assert.equal(swap.data.code, "gif_removed");
+  // an unrelated GIF still goes
+  assert.equal((await say("[gif:" + SLUG + "]", "repost-4", details({ src: pic("e".repeat(32)) }))).status, 200);
+  assert.equal(relay._jobs.size, 1); assert.deepEqual(calls, []);
+});
+
+test("review: blocks hold across the GIF modes - a free removal in partner search / picks, a partner removal in free sends", async () => {
+  // free-mode removal (the v1 slug + the picture) ...
+  await removeFree("excited-im-so-excited-22", pic("a".repeat(32)));
+  await flags({ gifs: "partner" });
+  // ... then partner mode: KLIPY's v2 answer names the same GIF by a numeric id, the slug only in itemurl
+  partnerFetch([v2("2525964843568523", "excited-im-so-excited-22", "b".repeat(32)), v2("4551195970372378", "greetings-PSr", "a".repeat(32)),
+                v2("1111111111111111", "fine-one-1", "c".repeat(32))]);
+  try {
+    const offered = await G.search("");
+    assert.deepEqual(offered.map((x) => x.id), ["1111111111111111"], "neither the slug nor the picture is offered");
+    assert.equal(G.picked("2525964843568523"), null); assert.equal(G.picked("4551195970372378"), null);
+    assert.equal(G.picked("1111111111111111").id, "1111111111111111");
+    // partner lines of them (their details from the Posts lookup - rendering only): gone
+    for (const id of ["2525964843568523", "4551195970372378"]) { await G.resolve(id); assert.deepEqual(G.attach(line(id)).gif, { gone: 1 }, id); }
+    assert.equal(G.attach(line("1111111111111111")).gif.src, "https://static.klipy.com/ii/" + "c".repeat(32) + "/14/af/p30ORxL1.gif");
+    // a partner-mode removal: the cache's item gives its slug and picture
+    const keys = G.keysOf("1111111111111111", null);
+    assert.deepEqual(keys, { id: "1111111111111111", slug: "fine-one-1", mk: "c".repeat(32) + "/14/af" });
+    await db.tx(async () => { await G.blockInTx(keys, { room: room.id, kind: "staff" }, now); }); G.noteBlocked(keys, now);
+    assert.equal(G.picked("1111111111111111"), null); assert.deepEqual(G.attach(line("1111111111111111")).gif, { gone: 1 });
+  } finally { noFetch(); }
+  // ... and back in free mode the browser's slug for it, or its picture, is refused
+  await flags({ gifs: "free" }); calls = [];
+  assert.equal((await say("[gif:fine-one-1]", "x-mode-1", details({ src: pic("d".repeat(32)), page: "" }))).data.code, "gif_removed");
+  assert.equal((await say("[gif:another-slug-9]", "x-mode-2", details({ src: pic("c".repeat(32)), page: "" }))).data.code, "gif_removed");
+  assert.deepEqual(calls, []);
+});
+
+test("review: the free picker gets the removed GIFs' keys (bounded, newest first); an unblock keeps another removal of the same picture", async () => {
+  await removeFree("first-gone-1", pic("1".repeat(32)));
+  now += 1000; await removeFree("second-gone-2", pic("2".repeat(32)));
+  assert.deepEqual(G.pageData(room.id, "linked").b, ["second-gone-2", "2".repeat(32) + "/14/af", "first-gone-1", "1".repeat(32) + "/14/af"]);
+  // the same picture removed again under another slug - lifting one removal leaves the picture blocked by the other
+  now += 1000; await removeFree("third-name-3", pic("2".repeat(32)));
+  const ok = await G.unblock({ userId: "admin", username: "fixture-boss", class: "Admin" }, "second-gone-2", "fixture");
+  assert.equal(ok.removed, true);
+  assert.equal(G.isBlocked("second-gone-2"), false, "its slug is free again");
+  assert.equal(G.blockedAny([], pic("2".repeat(32))), true, "the picture is still removed under third-name-3");
+  // bounded: never more than BLOCK_PAGE_MAX keys
+  await db.tx(async () => { for (let i = 0; i < G.BLOCK_PAGE_MAX; i++) await G.blockInTx({ id: "bulk-" + i, mk: i.toString(16).padStart(32, "0") + "/00/00" }, { kind: "staff" }, now + 10 + i); });
+  G._resetStore(); await G.init();
+  const b = G.pageData(room.id, "linked").b;
+  assert.equal(b.length, G.BLOCK_PAGE_MAX); assert.equal(b[0], "bulk-" + (G.BLOCK_PAGE_MAX - 1), "newest first");
+});
+
+test("review: a free line's stored rating is checked against the pad's rating NOW - an 18+ pad made general hides its PG-13 GIFs", async () => {
+  adult.add(adultRoom.id);
+  const out = await say("[gif:" + SLUG + "]", "rating-1", details(), { slug: adultRoom.slug });
+  assert.equal(out.status, 200);
+  const gf = relay.echoJob(out.data.id, adultRoom.id).gf;
+  assert.equal(gf.r, "low");
+  assert.equal(G.attach(line(SLUG), { gf }, { adult: true }).gif.src, details().src, "still 18+: drawn");
+  assert.deepEqual(G.attach(line(SLUG), { gf }, { adult: false }).gif, { gone: 1 }, "made general: gone");
+  assert.deepEqual(G.attach(line(SLUG), { gf }).gif, { gone: 1 }, "no view: the strictest");
+  assert.equal(G.attach(line(SLUG), { gf: { ...gf, r: "high" } }, { adult: false }).gif.src, details().src, "a G GIF anywhere");
+  assert.deepEqual(G.attach(line(SLUG), { gf: { ...gf, r: "bogus" } }, { adult: true }).gif, { gone: 1 }, "an unknown rating: never drawn");
+  assert.deepEqual(G.attach(line(SLUG), { gf: { ...gf, r: undefined } }, { adult: true }).gif, { gone: 1 });
+  assert.equal(Object.keys(G.attach(line(SLUG), { gf }, { adult: true }).gif).sort().join(), "h,src,title,w", "no rating on the page");
+});
+
+test("review: a browser key equal to the server key is no browser key - free mode is off and the card says why", async () => {
+  process.env.KLIPY_PUBLIC_KEY = serverKey; process.env.KLIPY_API_KEY = " " + serverKey + " ";   // (the same value; whitespace trimmed)
+  assert.equal(G.publicKey(), ""); assert.equal(G.available(), false); assert.equal(G.freeOn(), false);
+  assert.equal(G.pageData(room.id, "linked"), null, "the server key never reaches a page");
+  assert.equal((await G.adminStatus()).keys.free, "same_as_server");
+  const view = await request("/api/admin/paddock", { user: "admin" });
+  assert.equal(view.data.gifs.keys.free, "same_as_server"); assert.doesNotMatch(JSON.stringify(view.data), new RegExp(process.env.KLIPY_API_KEY));
+  assert.equal((await say("[gif:" + SLUG + "]", "same-key-1", details())).data.code, "gif");
+  process.env.KLIPY_PUBLIC_KEY = browserKey; assert.equal(G.publicKey(), browserKey, "different keys: fine"); assert.equal(G.freeOn(), true);
+});
+
+test("review: a pad's owner / mods remove at most BLOCK_DAY_MAX GIFs everywhere a day; staff have no cap", () => {
+  for (let i = 0; i < G.BLOCK_DAY_MAX; i++) { assert.equal(G.blockQuota("modx", false), true, String(i)); G.noteBlockUse("modx", false); }
+  assert.equal(G.blockQuota("modx", false), false);
+  assert.equal(G.blockQuota("mody", false), true, "per account");
+  for (let i = 0; i < G.BLOCK_DAY_MAX + 5; i++) G.noteBlockUse("staffx", true);
+  assert.equal(G.blockQuota("staffx", true), true);
+  now += 24 * 60 * 60 * 1000; assert.equal(G.blockQuota("modx", false), true, "a day later");
 });
 
 test("switching modes: a free pick's details are ignored in partner mode (only its own filtered search makes an id sendable), and the other way round", async () => {
@@ -194,7 +320,13 @@ test("the GIF setting and the block list are site admins' only; the admin card s
   delete process.env.KLIPY_API_KEY; process.env.KLIPY_PUBLIC_KEY = "x";
   assert.deepEqual((await G.adminStatus()).keys, { free: "malformed", partner: "missing" });
   // unblock: signed in, pads.config, same-site fetch; audited
+  await require(path.join(repo, "adminaudit")).init();
+  await db.runQuery("DELETE FROM admin_audit WHERE action = 'gif_unblock'");          // (an earlier test's unblock)
   await db.tx(async () => { await G.blockInTx("to_unblock", { room: room.id, kind: "mod" }, now); }); G.noteBlocked("to_unblock");
+  // review (privacy): a block row holds the GIF's keys, when, the pad and the kind of moderator - no line, no reason, no account
+  const cols = (await db.getQuery("PRAGMA table_info(gif_blocks)")).map((c) => c.name);
+  assert.deepEqual(cols, ["id", "at", "room", "kind", "slug", "mk"]);
+  assert.deepEqual((await G.adminStatus()).blocks.map((b) => Object.keys(b).sort().join()), ["at,id,kind,room"]);
   assert.equal((await request("/api/admin/gifs/unblock", { user: null, body: { id: "to_unblock" } })).status, 401);
   assert.equal((await request("/api/admin/gifs/unblock", { user: "other", body: { id: "to_unblock" } })).status, 403);
   assert.equal((await request("/api/admin/gifs/unblock", { user: "staff", body: { id: "to_unblock" } })).status, 403);

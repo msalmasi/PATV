@@ -754,28 +754,35 @@ async function gifBlock(user, slug, c, { why, jc } = {}) {
   const { me, R, V, row } = await lineCtx(user, slug, c, { jc, see: false, must: mustHide });
   const w = hiddenWhy(V, R.id, row, jc, { cleared: true, range: row.rm_at != null || !!row.purged });
   if (w) throw notFound(V, w);
-  const token = require("./public/js/chatlog-core").mediaOf(require("./chatlogview").itemOf(Object.assign({}, row, { rm_at: null, rm_by: null, rm_why: null, purged: null })));
+  const item = require("./chatlogview").itemOf(Object.assign({}, row, { rm_at: null, rm_by: null, rm_why: null, purged: null }));
+  const token = require("./public/js/chatlog-core").mediaOf(item);
   if (!token || token.type !== "gif") throw new Refuse(400, "That line isn't a GIF.", "not_gif");
   const lim = limited(me.userId);
   if (lim) throw lim;
   const staff = V.role === "staff";
-  const by = (staff ? "staff:" : "mod:") + me.userId;
   const G = require("./gifs");
+  // review: each removal is site-wide - a pad's owner / mods remove at most G.BLOCK_DAY_MAX GIFs a day (staff: no cap)
+  if (!G.blockQuota(me.userId, staff)) throw new Refuse(429, `You've removed ${G.BLOCK_DAY_MAX} GIFs everywhere today — hide the line instead, or ask PATV staff.`, "gif_quota");
+  const by = (staff ? "staff:" : "mod:") + me.userId;
   await G.init();
+  // review: the GIF by every key it has - the token's id, its slug and its picture's media key (a free line's stored details, else the
+  // partner cache's item) - so it's blocked under any slug, in either GIF mode
+  const keys = G.keysOf(token.id, item);
   let hid = false;
   const have = await copyTables(), t = now();
   await tx(async () => {
-    await G.blockInTx(token.id, { room: R.id, c: Number(row.c), kind: staff ? "staff" : V.role === "owner" ? "owner" : "mod", why: text }, t);
+    await G.blockInTx(keys, { room: R.id, kind: staff ? "staff" : V.role === "owner" ? "owner" : "mod" }, t);
     if (!row.purged && row.rm_at == null) hid = await setRm(row, by, text, t, have);
   });
-  G.noteBlocked(token.id);
+  G.noteBlocked(keys, t);
+  G.noteBlockUse(me.userId, staff);
   if (hid) {
     await liveDrop(R.id, [row.c], false);
     await roomEvent(R.id, "chat.hide", staff ? STAFF_ACTOR : me.username || me.userId, `#${row.c}: ${text} (GIF removed everywhere)`);
     if (staff) await staffAudit(me, row, "hide", text);
   }
   // its other live lines, in every pad, are drawn again on open pages: "GIF no longer available" (after the line itself left)
-  try { require("./bridge").gifRedo(token.id); } catch (e) { console.error("[chatlogmod] gif redo:", e.message); }
+  try { require("./bridge").gifRedo(G.lineMatcher(keys)); } catch (e) { console.error("[chatlogmod] gif redo:", e.message); }
   return { ok: true, blocked: true };
 }
 

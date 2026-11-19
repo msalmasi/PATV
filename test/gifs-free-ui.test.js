@@ -15,9 +15,12 @@ const repo = path.resolve(__dirname, "..");
 const picker = fs.readFileSync(path.join(repo, "public/js/pad-picker.js"), "utf8");
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 const KEY = "fixtureBrowserKey_0123456789", API = "https://api.klipy.com/api/v1/" + KEY + "/gifs/";
+// KLIPY's CDN shape (docs.klipy.com trending example): every size and format of one GIF in /ii/<32 hex>/<2 hex>/<2 hex>/
+const hashOf = (slug) => require("node:crypto").createHash("md5").update(slug).digest("hex");
+const dirOf = (slug) => "/ii/" + hashOf(slug) + "/aa/bb/";
 const item = (slug, over = {}) => ({ id: 1000 + slug.length, slug, title: "<b>" + slug + "</b>", type: "gif", tags: [], blur_preview: "data:image/jpeg;base64,AA==",
-  file: { xs: { gif: { url: "https://static.klipy.com/ii/aa/bb/" + slug.replace(/-/g, "") + "xs.gif", width: 90, height: 60, size: 1 }, webp: { url: "https://static.klipy.com/ii/aa/bb/" + slug.replace(/-/g, "") + "xs.webp", width: 90, height: 60, size: 1 } },
-          sm: { gif: { url: "https://static2.klipy.com/ii/aa/bb/" + slug.replace(/-/g, "") + "sm.gif", width: 220, height: 146, size: 1 }, webp: { url: "https://static2.klipy.com/ii/aa/bb/" + slug.replace(/-/g, "") + "sm.webp", width: 220, height: 146, size: 1 } } }, ...over });
+  file: { xs: { gif: { url: "https://static.klipy.com" + dirOf(slug) + slug.replace(/[^A-Za-z0-9]/g, "") + "xs.gif", width: 90, height: 60, size: 1 }, webp: { url: "https://static.klipy.com" + dirOf(slug) + slug.replace(/[^A-Za-z0-9]/g, "") + "xs.webp", width: 90, height: 60, size: 1 } },
+          sm: { gif: { url: "https://static2.klipy.com" + dirOf(slug) + slug.replace(/[^A-Za-z0-9]/g, "") + "sm.gif", width: 220, height: 146, size: 1 }, webp: { url: "https://static2.klipy.com" + dirOf(slug) + slug.replace(/[^A-Za-z0-9]/g, "") + "sm.webp", width: 220, height: 146, size: 1 } } }, ...over });
 const klipyBody = (rows) => ({ result: true, data: { data: rows, current_page: 1, per_page: 24, has_next: false } });
 const answer = (body, status = 200) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) });
 
@@ -59,7 +62,8 @@ test("free picker: the KLIPY notice comes first - no request to KLIPY (not even 
 test("free picker: KLIPY's own API with the pad's rating, no cookies / customer id / locale; results in KLIPY's order, malformed items skipped, attribution kept", async () => {
   const rows = [item("first-one"), item("bad-host", { file: { sm: { gif: { url: "https://static.klipy.com.evil.invalid/x.gif", width: 1, height: 1 } } } }),
     item("ad-item", { type: "ad" }), item("bad slug!"), item("second-one"), item("no-file", { file: null }),
-    item("bad-dims", { file: { sm: { gif: { url: "https://static.klipy.com/ii/a/b.gif", width: 0, height: 9 } } } }), item("third-one", { title: "<img onerror=alert(1)>Third" })];
+    item("bad-dims", { file: { sm: { gif: { url: "https://static.klipy.com" + dirOf("bad-dims") + "b.gif", width: 0, height: 9 } } } }), item("third-one", { title: "<img onerror=alert(1)>Third" }),
+    item("odd-path", { file: { sm: { gif: { url: "https://static.klipy.com/anything/at/all/x.gif", width: 9, height: 9 } } } })];
   const h = pickerPage({ gifFree: { k: KEY, r: "high", n: true } }, () => answer(klipyBody(rows)));
   await flush();
   const first = h.calls.requests[0];
@@ -67,7 +71,7 @@ test("free picker: KLIPY's own API with the pad's rating, no cookies / customer 
   assert.equal(first.opts.headers["X-Requested-With"], undefined, "no site headers to KLIPY"); assert.doesNotMatch(first.url, /customer_id|locale/);
   const tiles = h.sheet.querySelectorAll(".rmp-grid button");
   assert.deepEqual(tiles.map((b) => b.title), ["first-one", "second-one", "Third"], "KLIPY's order; malformed ones skipped");
-  assert.equal(tiles[0].querySelector("img").src, "https://static.klipy.com/ii/aa/bb/firstonexs.webp", "the small preview, webp first");
+  assert.equal(tiles[0].querySelector("img").src, "https://static.klipy.com" + dirOf("first-one") + "firstonexs.webp", "the small preview, webp first");
   assert.equal(h.sheet.querySelector("input").placeholder, "Search KLIPY", "KLIPY's required placeholder"); assert.match(h.sheet.textContent, /via KLIPY/);
   const input = h.sheet.querySelector("input"); input.value = "  cats & dogs  ";
   h.sheet.querySelector("form").dispatchEvent(new Event("submit")); await flush();
@@ -82,7 +86,7 @@ test("free picker: a pick sends the token + the GIF's details through the relay;
   assert.equal(h.calls.send.length, 1); assert.equal(h.calls.closed, 1, "the sheet closes back to the composer");
   const { token, extra } = h.calls.send[0];
   assert.equal(token, "[gif:wave-hi]");
-  assert.deepEqual(JSON.parse(JSON.stringify(extra.gif)), { src: "https://static2.klipy.com/ii/aa/bb/wavehism.webp", w: 220, h: 146, title: "wave-hi", page: "https://klipy.com/gifs/wave-hi" });
+  assert.deepEqual(JSON.parse(JSON.stringify(extra.gif)), { src: "https://static2.klipy.com" + dirOf("wave-hi") + "wavehism.webp", w: 220, h: 146, title: "wave-hi", page: "https://klipy.com/gifs/wave-hi" });
   assert.equal(h.calls.requests.length, 1, "no share trigger before the site took the line");
   extra.onPosted(); await flush();
   const share = h.calls.requests[1];
@@ -113,8 +117,64 @@ test("free picker: KLIPY unavailable says so plainly; a malformed browser key me
   assert.equal(partner.calls.requests[0].url, "/api/gifs/search"); assert.equal(partner.calls.requests[0].opts.method, "POST");
   partner.sheet.querySelectorAll(".rmp-grid button")[0].click();
   assert.equal(partner.calls.send.length, 1); assert.equal(partner.calls.send[0].token, "[gif:gif_safe]"); assert.equal(partner.calls.send[0].extra, undefined, "partner picks send the token only");
-  assert.equal(partner.win.PATVPadPicker._cdnOk("https://STATIC.klipy.com/a.gif"), false); assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com/ii/a/b.webp"), true);
+  assert.equal(partner.win.PATVPadPicker._cdnOk("https://STATIC.klipy.com/a.gif"), false);
+  assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com" + dirOf("x") + "b.webp"), true);
+  // review: KLIPY's path only (the server's cdnSrc) - never any other file on the CDN
+  assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com/ii/a/b.webp"), false);
+  assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com/anything/at/all/x.gif"), false);
+  assert.equal(partner.win.PATVPadPicker._mediaKey("https://static2.klipy.com" + dirOf("x") + "b.webp"), hashOf("x") + "/aa/bb");
   assert.doesNotMatch(picker, /innerHTML|localStorage|sessionStorage|KLIPY_API_KEY|KLIPY_PUBLIC_KEY|customer_id/);
+});
+
+test("review: the free picker leaves out the GIFs moderators removed everywhere - by slug, by KLIPY id, by picture (any tier) - keeping KLIPY's order", async () => {
+  const gone = item("gone-by-pic"), rows = [item("keep-one"), item("gone-by-slug"), gone, item("gone-by-id", { id: 424242 }), item("keep-two"),
+    item("xs-only-match", { file: { xs: item("gone-by-pic").file.xs, sm: item("xs-only-match").file.sm } })];
+  const b = ["gone-by-slug", hashOf("gone-by-pic") + "/aa/bb", "424242", 42];
+  const h = pickerPage({ gifFree: { k: KEY, r: "high", n: true, b } }, () => answer(klipyBody(rows)));
+  await flush();
+  assert.deepEqual(h.sheet.querySelectorAll(".rmp-grid button").map((x) => x.title), ["keep-one", "keep-two"], "never offered - nothing to pick that can't be sent");
+  // without the list (partner-era page data, or none removed) everything shows
+  const all = pickerPage({ gifFree: { k: KEY, r: "high", n: true } }, () => answer(klipyBody(rows)));
+  await flush();
+  assert.equal(all.sheet.querySelectorAll(".rmp-grid button").length, 6);
+  // removed while this page still offered it: the site refuses the pick (gif_removed) and the picker stops offering it at once
+  all.sheet.querySelectorAll(".rmp-grid button").find((x) => x.title === "keep-two").click();
+  assert.equal(all.calls.send.length, 1);
+  all.calls.send.at(-1).extra.onRefused("gif");                           // any other refusal: still offered
+  all.win.PATVPadPicker.open(all.opts); await flush();                    // (a pick closes the sheet: open it again)
+  all.sheet.querySelectorAll(".rmp-grid button")[0].click();
+  assert.equal(all.calls.send.length, 2); assert.equal(all.calls.send[1].token, "[gif:keep-one]");
+  all.calls.send.at(-1).extra.onRefused("gif_removed");                   // keep-one: removed everywhere
+  all.win.PATVPadPicker.open(all.opts); await flush();
+  assert.deepEqual(all.sheet.querySelectorAll(".rmp-grid button").map((x) => x.title).slice(0, 2), ["gone-by-slug", "gone-by-pic"], "keep-one left out, keep-two kept");
+  assert.ok(all.sheet.querySelectorAll(".rmp-grid button").some((x) => x.title === "keep-two"));
+});
+
+test("review: the notice, once accepted on this page, stays accepted - a sheet opened with a newer data object (n still false) goes straight to GIFs", async () => {
+  const h = pickerPage({ gifFree: { k: KEY, r: "high", n: false } }, (url) => (/^https:\/\/api\.klipy\.com\//.test(url) ? answer(klipyBody([item("wave-hi")])) : answer({ ok: true })));
+  await flush();
+  h.sheet.querySelectorAll("button").find((b) => /OK, show GIFs/.test(b.textContent)).click(); await flush();
+  const before = h.calls.requests.length;
+  h.opts.closeLayer();
+  // a live poll replaced the Dock's data while the notice was up: a fresh object, its n still false
+  const again = h.win.PATVPadPicker.open(Object.assign({}, h.opts, { data: { room: { relay: true, gifPicker: true, gifFree: { k: KEY, r: "high", n: false } } } }));
+  assert.ok(again); await flush();
+  assert.doesNotMatch(h.sheet.textContent, /GIF search is provided by KLIPY/, "not asked again");
+  assert.equal(h.calls.requests.length, before + 1); assert.match(h.calls.requests.at(-1).url, /\/gifs\/trending\?/);
+});
+
+test("review: after 'OK, show GIFs' focus goes to the search box (a fine pointer) or the panel (touch: no uninvited keyboard)", async () => {
+  for (const [fine, want] of [[true, "INPUT"], [false, "panel"], [null, "panel"]]) {
+    const h = pickerPage({ gifFree: { k: KEY, r: "high", n: false } }, () => answer(klipyBody([])));
+    if (fine !== null) h.win.matchMedia = (q) => ({ matches: q === "(pointer: fine)" && fine });
+    await flush();
+    const ok = h.sheet.querySelectorAll("button").find((b) => /OK, show GIFs/.test(b.textContent));
+    ok.focus(); ok.click(); await flush();
+    const a = h.doc.activeElement;
+    if (want === "INPUT") { assert.equal(a.tagName.toUpperCase(), "INPUT"); assert.equal(a.placeholder, "Search KLIPY"); }
+    else { assert.ok(a.classList.contains("rmp-body"), "the panel: " + a.tagName); assert.equal(a.tabIndex, -1); }
+    assert.ok(a.isConnected, "never a removed node");
+  }
 });
 
 // ── the relay outbox ──
@@ -150,6 +210,65 @@ test("relay: a GIF pick's details ride with the line (and a retry); the pending 
   // an ordinary line's body is unchanged
   P.R._send("hello"); await flush();
   assert.deepEqual(Object.keys(P.posted[2].body).sort(), ["cid", "text"]);
+});
+
+test("review: a pick of a GIF moderators removed everywhere - its picture gives way to 'GIF no longer available', and no Retry (it can never be sent)", async () => {
+  const P = relayPage(() => Promise.resolve({ status: 403, json: () => Promise.resolve({ ok: false, code: "gif_removed", error: "That GIF was removed by moderators." }) }));
+  const gif = { src: "https://static2.klipy.com" + dirOf("wave-hi") + "wave.webp", w: 220, h: 146, title: "Wave", page: "https://klipy.com/gifs/wave-hi" };
+  const heard = [];
+  P.R._send("[gif:wave-hi]", { gif, onRefused: (code) => heard.push(code) }); await flush();
+  assert.deepEqual(heard, ["gif_removed"], "the picker hears why (it stops offering the GIF)");
+  const pending = P.feed.querySelector("[data-cid]");
+  assert.ok(pending.classList.contains("rb-opt-failed"));
+  assert.equal(pending.querySelector("img"), null, "no picture of a removed GIF"); assert.equal(pending.querySelector(".gif-gone").textContent, "GIF no longer available");
+  assert.match(pending.textContent, /removed by moderators/);
+  const labels = pending.querySelectorAll("button").map((b) => b.textContent);
+  assert.ok(!labels.some((l) => /Retry/.test(l)), "no Retry"); assert.ok(labels.includes("✕"), "✕ still drops it");
+  // any other refusal keeps its Retry
+  const Q = relayPage(() => Promise.resolve({ status: 403, json: () => Promise.resolve({ ok: false, code: "gif", error: "That GIF isn't available here." }) }));
+  Q.R._send("[gif:wave-hi]", { gif }); await flush();
+  assert.ok(Q.feed.querySelector("[data-cid]").querySelectorAll("button").some((b) => /Retry/.test(b.textContent)));
+  assert.ok(Q.feed.querySelector("[data-cid] img.gif"));
+});
+
+// ── the admin card ──
+function adminCard(data) {
+  const doc = new Document(), ids = {};
+  for (const id of ["paddockForm", "paddockFields", "paddockMessage", "paddockAudit", "paddockReset", "paddockGifs"]) ids[id] = doc.createElement(id === "paddockForm" ? "form" : id === "paddockReset" ? "button" : "div");
+  doc.getElementById = (id) => ids[id] || null;
+  const form = ids.paddockForm; form.appendChild(ids.paddockFields); form.appendChild(ids.paddockGifs); form.appendChild(ids.paddockReset);
+  Object.defineProperty(form, "elements", { get: () => Object.fromEntries([...form.querySelectorAll("input"), ...form.querySelectorAll("select")].map((n) => [n.name, n])) });
+  const fields = { mode: { def: "off", choices: ["off", "staff", "everyone"] }, cfstickers: { def: false }, gifs: { def: "off", choices: ["off", "free", "partner"] } };
+  vm.runInNewContext(fs.readFileSync(path.join(repo, "public/js/admin-paddock.js"), "utf8"), { window: {}, document: doc,
+    fetch: async () => ({ json: async () => ({ ok: true, fields, audit: [], ...data }) }) });
+  return ids;
+}
+test("review: the admin card's missing-key warning names the mode and the variable plainly; a browser key equal to the server key says so; no reasons listed", async () => {
+  const st = (free, partner) => ({ keys: { free, partner }, on: false, blocks: [{ id: "gone-1", at: 1, room: "Fixture.Room", kind: "mod", why: "a reason naming someone" }] });
+  let ids = adminCard({ cfg: { mode: "everyone", cfstickers: false, gifs: "partner" }, gifs: st("set", "missing") });
+  await flush();
+  assert.match(ids.paddockGifs.textContent, /⚠️ GIFs are not on: Partner mode needs KLIPY_API_KEY \(missing\)\./);
+  assert.doesNotMatch(ids.paddockGifs.textContent, /the Partner — /, "never the long option label inside the sentence");
+  assert.doesNotMatch(ids.paddockGifs.textContent, /a reason naming someone/, "the block list shows no reasons");
+  assert.match(ids.paddockGifs.textContent, /gone-1/);
+  ids = adminCard({ cfg: { mode: "everyone", cfstickers: false, gifs: "free" }, gifs: st("same_as_server", "set") });
+  await flush();
+  assert.match(ids.paddockGifs.textContent, /GIFs are not on: Free mode needs KLIPY_PUBLIC_KEY \(the same as KLIPY_API_KEY — not used/);
+  ids = adminCard({ cfg: { mode: "off", cfstickers: false, gifs: "free" }, gifs: st("set", "set") });
+  await flush();
+  assert.match(ids.paddockGifs.textContent, /GIFs are not on: the Room Dock is off\./);
+});
+
+test("review: no raw bidirectional / zero-width control characters in this feature's source (escapes only - the repo is public)", () => {
+  const files = ["gifs.js", "linkpreview.js", "public/js/pad-picker.js", "public/js/chatlog-core.js", "public/js/room-bridge.js", "public/js/chat-lines.js", "public/js/admin-paddock.js",
+    "test/gifs-free.test.js", "test/gifs-free-line.test.js", "test/gifs-free-ui.test.js"];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(repo, f), "utf8");
+    const bad = src.match(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g);
+    assert.equal(bad, null, f + ": " + (bad || []).map((c) => "U+" + c.charCodeAt(0).toString(16)).join(","));
+    // (a backslash, "u0000-", then a raw space - built from pieces so this file doesn't match itself)
+    assert.doesNotMatch(src, new RegExp(String.fromCharCode(92, 92) + "u0000-" + String.fromCharCode(32)), f + ": a raw space closing a NUL range");
+  }
 });
 
 // ── chatlog-core: the placeholder ──

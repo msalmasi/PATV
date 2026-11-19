@@ -15,24 +15,37 @@
   // share/{slug}); gifs.js KLIPY_BROWSER_API is the same base. The page link Pepe posts in Camfrog: FREE_PAGE + slug.
   var FREE_API = 'https://api.klipy.com/api/v1', FREE_PAGE = 'https://klipy.com/gifs/', FREE_PRIVACY = 'https://klipy.com/support/privacy-policy';
   var RATINGS = ['high', 'medium', 'low', 'off'];
-  /** room.gifFree -> {k, r, n} | null (no valid browser key: no free picker). An unknown rating is the strictest. */
+  // review: the one-time notice accepted on this page - kept here, not on the data object the sheet opened with (a live update replaces
+  // that object, and the next sheet would ask again)
+  var noticeOk = false;
+  // review: GIFs the site refused on this page as removed everywhere (gif_removed) - left out at once, before the next live update
+  // brings them in room.gifFree.b
+  var goneHere = [];
+  /** room.gifFree -> {k, r, n, b} | null (no valid browser key: no free picker). An unknown rating is the strictest. b = the keys of the
+   *  GIFs moderators removed everywhere (ids / slugs, media keys: gifs.js pageBlocks) - left out of KLIPY's answers. */
   function freeOf(x) {
     if (!x || typeof x !== 'object' || !/^[A-Za-z0-9_-]{8,128}$/.test(String(x.k))) return null;
-    return { k: String(x.k), r: RATINGS.indexOf(x.r) >= 0 ? x.r : 'high', n: x.n === true };
+    var b = Array.isArray(x.b) ? x.b.filter(function (v) { return typeof v === 'string'; }) : [];
+    return { k: String(x.k), r: RATINGS.indexOf(x.r) >= 0 ? x.r : 'high', n: x.n === true || noticeOk, b: b };
   }
   // the same checks the server makes on a send (gifs.js cdnSrc): exact KLIPY CDN hosts, https, no userinfo / port / fragment / encoded
-  // characters, a plain path ending in .gif / .webp, a plain query, at most 512 characters, exactly as given
+  // characters, KLIPY's own path /ii/<32 hex>/<2 hex>/<2 hex>/<name>.gif|webp, a plain query, at most 512 characters, exactly as given
+  var CDN_PATH = /^\/ii\/([0-9a-fA-F]{32})\/([0-9a-fA-F]{2})\/([0-9a-fA-F]{2})\/[A-Za-z0-9_-]{1,64}\.(?:gif|webp)$/;
   function cdnOk(src) {
-    if (typeof src !== 'string' || !src || src.length > 512 || /[\u0000- \u007f\\%#"'<>]/.test(src) || !/^https:\/\//.test(src)) return false;
+    if (typeof src !== 'string' || !src || src.length > 512 || /[\u0000-\u0020\u007f\\%#"'<>]/.test(src) || !/^https:\/\//.test(src)) return false;
     try {
       var u = new W.URL(src);
       return u.href === src && u.protocol === 'https:' && !u.username && !u.password && !u.port && !u.hash &&
         /^(static|static1|static2)\.klipy\.com$/.test(u.hostname) &&
-        /^\/(?:[A-Za-z0-9_-]{1,64}\/){0,8}[A-Za-z0-9_-]{1,64}\.(?:gif|webp)$/.test(u.pathname) && /^[A-Za-z0-9._~=&-]{0,256}$/.test(u.search.replace(/^\?/, ''));
+        CDN_PATH.test(u.pathname) && /^[A-Za-z0-9._~=&-]{0,256}$/.test(u.search.replace(/^\?/, ''));
     } catch (e) { return false; }
   }
+  /** a checked CDN URL -> its media key (gifs.js mediaKey: the GIF's directory, shared by every size and format) */
+  function mediaKey(src) {
+    try { var m = CDN_PATH.exec(new W.URL(src).pathname); return m ? (m[1] + '/' + m[2] + '/' + m[3]).toLowerCase() : null; } catch (e) { return null; }
+  }
   function cleanTitle(v) {
-    return String(v == null ? '' : v).replace(/<[^>]*>/g, '').replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').slice(0, 80);
+    return String(v == null ? '' : v).replace(/<[^>]*>/g, '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').slice(0, 80);
   }
   function dimOk(n) { return typeof n === 'number' && Math.floor(n) === n && n >= 1 && n <= 4096; }
   /** One size tier of a KLIPY item (file.xs / sm / md) -> {src, w, h} of its webp (smaller), else its gif; null when neither checks. */
@@ -46,14 +59,17 @@
     }
     return null;
   }
-  /** KLIPY's search / trending answer ({result, data: {data: [...]}}) -> [{id: slug, title, preview, media}], in KLIPY's order. */
-  function freeRows(body) {
-    var list = body && body.data && Array.isArray(body.data.data) ? body.data.data : [], out = [];
+  /** KLIPY's search / trending answer ({result, data: {data: [...]}}) -> [{id: slug, title, preview, media}], in KLIPY's order.
+   *  review: `blocked` (freeOf's b) - a GIF moderators removed everywhere, by its slug / id or by its picture, is left out (never re-ranked). */
+  function freeRows(body, blocked) {
+    var list = body && body.data && Array.isArray(body.data.data) ? body.data.data : [], out = [], no = Array.isArray(blocked) ? blocked : [];
     for (var i = 0; i < list.length && i < 50; i++) {
       var r = list[i];
       if (!r || typeof r !== 'object' || (r.type != null && r.type !== 'gif') || typeof r.slug !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(r.slug)) continue;
       var media = tierOf(r.file, 'sm') || tierOf(r.file, 'md'), preview = tierOf(r.file, 'xs') || media;
-      if (media) out.push({ id: r.slug, title: cleanTitle(r.title), preview: preview, media: media });
+      if (!media) continue;
+      if (no.length && (no.indexOf(r.slug) >= 0 || (r.id != null && no.indexOf(String(r.id)) >= 0) || no.indexOf(mediaKey(media.src)) >= 0 || no.indexOf(mediaKey(preview.src)) >= 0)) continue;
+      out.push({ id: r.slug, title: cleanTitle(r.title), preview: preview, media: media });
     }
     return out;
   }
@@ -220,10 +236,16 @@
       a.href = FREE_PRIVACY; a.target = '_blank'; a.rel = 'noopener noreferrer'; more.appendChild(a); wrap.appendChild(more);
       var ok = button(t('free_notice_ok', 'OK, show GIFs'), function () {
         if (!connected(g)) return;
-        free.n = true; if (room.gifFree && typeof room.gifFree === 'object') room.gifFree.n = true;   // (this page: once)
+        // (this page: once - review: noticeOk, whatever data object a later sheet opens with)
+        noticeOk = true; free.n = true; if (room.gifFree && typeof room.gifFree === 'object') room.gifFree.n = true;
         W.fetch('/api/gifs/notice', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch', 'Content-Type': 'application/json' }, body: '{}' })
           .then(null, function () { /* shown again on another device until it's recorded - never a KLIPY request before it's accepted */ });
         body.textContent = ''; gifsFree();
+        // review: focus follows - the OK button is gone. The search box with a fine pointer; else the panel (no uninvited iPhone keyboard)
+        var fine = false;
+        try { fine = !!(W.matchMedia && W.matchMedia('(pointer: fine)').matches); } catch (e) { fine = false; }
+        if (fine && search && search.isConnected) search.focus();
+        else { body.tabIndex = -1; body.focus(); }
       }, 'ds-btn');
       wrap.appendChild(ok); body.appendChild(wrap);
       Array.prototype.forEach.call(wrap.querySelectorAll('p'), function (p) { p.style.margin = '0'; });
@@ -242,14 +264,15 @@
           .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
           .then(function (data) {
             if (!connected(g)) return;
-            var rows = freeRows(data);
+            var rows = freeRows(data, free.b.concat(goneHere));
             note(rows.length ? '' : t('empty', 'Nothing here yet.'));
             var items = el('div', 'rmp-grid'); items.style.display = 'grid'; items.style.gridTemplateColumns = 'repeat(auto-fill, minmax(100px, 1fr))'; items.style.gap = 'var(--ds-sp-2)'; results.appendChild(items);
             rows.forEach(function (r) {
               var title = r.title || t('gif', 'GIF');
               var b = mediaButton(title, function () {
                 send('[gif:' + r.id + ']', { gif: { src: r.media.src, w: r.media.w, h: r.media.h, title: r.title, page: FREE_PAGE + r.id },
-                                             onPosted: function () { share(r.id, query); } });
+                                             onPosted: function () { share(r.id, query); },
+                                             onRefused: function (code) { if (code === 'gif_removed') goneHere.push(r.id, mediaKey(r.media.src) || r.id); } });
               });
               b.title = title; b.setAttribute('aria-label', t('send_gif', 'Send GIF: {name}', { name: title })); picture(b, r.preview.src, title);
               caption(b, title); items.appendChild(b);
@@ -298,5 +321,5 @@
     // focus goes back to the composer when the sheet closes (the Dock's layer returns it to the opener otherwise)
     return { box: box, tabs: tabs, current: function () { return active.id; } };
   }
-  W.PATVPadPicker = { available: available, open: open, voices: voices, _freeRows: freeRows, _cdnOk: cdnOk };
+  W.PATVPadPicker = { available: available, open: open, voices: voices, _freeRows: freeRows, _cdnOk: cdnOk, _mediaKey: mediaKey };
 })(window);

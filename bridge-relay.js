@@ -712,6 +712,9 @@ async function stickerRefusal(u, raw, out) {
 // /\[gif\b/i test refused them for everyone, Dock on or off). sayLine checks the cleaned text again.
 const mediaKind = text => /\[cfsticker:/i.test(String(text || "")) ? "sticker" : /\[gif:/i.test(String(text || "")) ? "gif" : null;
 function mediaRefusal(kind) { return { status: 403, body: { ok: false, code: kind, error: kind === "sticker" ? "That sticker isn't available here." : "That GIF isn't available here." } }; }
+// 1.99aot gifs: review - a GIF moderators removed everywhere: its own code, so the sender's pending line drops the picture and offers no
+// Retry (room-bridge.js) - it can never be sent
+function gifRemoved() { return { status: 403, body: { ok: false, code: "gif_removed", error: "That GIF was removed by moderators." } }; }
 function sayLine(u, R, text, cid, opts = {}) {
   const kind = mediaKind(text), token = kind && require("./public/js/chatlog-core").mediaToken(text);
   if (kind && !token) return Promise.resolve(mediaRefusal(kind));
@@ -757,14 +760,16 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       const gifs = require("./gifs"), got = gifs.freeGif(token.id, opts.gif, R.id);
       if (!got.ok) {
         return got.code === "gif_title" ? { status: 403, body: { ok: false, code: "gif", error: "That GIF's title can't be posted here — pick another one." } }
-          : mediaRefusal(kind);
+          : got.code === "gif_removed" ? gifRemoved() : mediaRefusal(kind);
       }
       if (!gifs.sendOk(u.userId)) return { status: 429, body: { ok: false, code: "rate", error: "You're sending GIFs quickly — wait a moment." } };
       media = got.media; gf = got.gf;
     } else {
       // 1.99aiw dock: only a GIF a filtered (contentfilter=high) search / featured answer gave - gifs.picked reads the cache, never
       // the unfiltered Posts lookup, so a hand-made "[gif:<id>]" can't post an unrated GIF (and no provider request runs here)
-      const gifs = require("./gifs"), gif = gifs.picked(token.id);
+      const gifs = require("./gifs");
+      if (gifs.available() && gifs.removed(token.id, null)) return gifRemoved();     // (1.99aot gifs: review - says so, never Retry)
+      const gif = gifs.picked(token.id);
       if (!gifs.available() || !gif) return mediaRefusal(kind);
       media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
     }
@@ -800,7 +805,8 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
     // (1.99aot gifs: still the mode the GIF was checked under - a switch from free to partner, or the other way, refuses it - and not
     // removed everywhere meanwhile)
     const G = require("./gifs");
-    if (media.type === "gif" ? !G.available() || (gf ? !G.freeOn() : !G.partnerOn()) || G.isBlocked(media.id)
+    if (media.type === "gif" && G.available() && G.removed(media.id, gf)) return gifRemoved();
+    if (media.type === "gif" ? !G.available() || (gf ? !G.freeOn() : !G.partnerOn())
       : !require("./cfstickers").enabled() || R.stickers !== true || !require("./cfstickers").valid(media.set, media.id))
       return mediaRefusal(media.type === "gif" ? "gif" : "sticker");
     let waiting = 0;
