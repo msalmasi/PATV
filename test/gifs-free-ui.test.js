@@ -116,38 +116,62 @@ test("free picker: KLIPY unavailable says so plainly; a malformed browser key me
   await flush();
   assert.equal(partner.calls.requests[0].url, "/api/gifs/search"); assert.equal(partner.calls.requests[0].opts.method, "POST");
   partner.sheet.querySelectorAll(".rmp-grid button")[0].click();
-  assert.equal(partner.calls.send.length, 1); assert.equal(partner.calls.send[0].token, "[gif:gif_safe]"); assert.equal(partner.calls.send[0].extra, undefined, "partner picks send the token only");
+  assert.equal(partner.calls.send.length, 1); assert.equal(partner.calls.send[0].token, "[gif:gif_safe]"); assert.equal(partner.calls.send[0].extra.gif, undefined, "partner picks send the token only (no details)");
   assert.equal(partner.win.PATVPadPicker._cdnOk("https://STATIC.klipy.com/a.gif"), false);
   assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com" + dirOf("x") + "b.webp"), true);
   // review: KLIPY's path only (the server's cdnSrc) - never any other file on the CDN
   assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com/ii/a/b.webp"), false);
   assert.equal(partner.win.PATVPadPicker._cdnOk("https://static.klipy.com/anything/at/all/x.gif"), false);
-  assert.equal(partner.win.PATVPadPicker._mediaKey("https://static2.klipy.com" + dirOf("x") + "b.webp"), hashOf("x") + "/aa/bb");
   assert.doesNotMatch(picker, /innerHTML|localStorage|sessionStorage|KLIPY_API_KEY|KLIPY_PUBLIC_KEY|customer_id/);
 });
 
-test("review: the free picker leaves out the GIFs moderators removed everywhere - by slug, by KLIPY id, by picture (any tier) - keeping KLIPY's order", async () => {
-  const gone = item("gone-by-pic"), rows = [item("keep-one"), item("gone-by-slug"), gone, item("gone-by-id", { id: 424242 }), item("keep-two"),
-    item("xs-only-match", { file: { xs: item("gone-by-pic").file.xs, sm: item("xs-only-match").file.sm } })];
-  const b = ["gone-by-slug", hashOf("gone-by-pic") + "/aa/bb", "424242", 42];
-  const h = pickerPage({ gifFree: { k: KEY, r: "high", n: true, b } }, () => answer(klipyBody(rows)));
+// owner 2026-11-19 ("lets stick to their rules"): KLIPY's rules say Search and Trending results are never removed, suppressed or filtered.
+// A GIF removed on PATV stays in its place among KLIPY's results (both modes); the site refuses to send it, and picking it again on the
+// same page says so plainly in the picker - no second send. (The site's side of it - the refusal and its words - is gifs-free.test.js.)
+const tileTitles = (h) => h.sheet.querySelectorAll(".rmp-grid button").map((x) => x.title);
+const statusOf = (h) => h.sheet.querySelector("[role=status]");
+test("owner: the free picker draws KLIPY's answer in KLIPY's order, a GIF removed on PATV included; refused once, picking it again says so - no second send", async () => {
+  const rows = [item("keep-one"), item("gone-one"), item("keep-two", { id: 424242 })];
+  // a page data object that still carries a list of removed GIFs (an older server's): ignored - nothing is left out
+  const h = pickerPage({ gifFree: { k: KEY, r: "high", n: true, b: ["gone-one", hashOf("gone-one") + "/aa/bb", "424242"] } }, () => answer(klipyBody(rows)));
   await flush();
-  assert.deepEqual(h.sheet.querySelectorAll(".rmp-grid button").map((x) => x.title), ["keep-one", "keep-two"], "never offered - nothing to pick that can't be sent");
-  // without the list (partner-era page data, or none removed) everything shows
-  const all = pickerPage({ gifFree: { k: KEY, r: "high", n: true } }, () => answer(klipyBody(rows)));
+  assert.deepEqual(tileTitles(h), ["keep-one", "gone-one", "keep-two"], "KLIPY's order, all of it");
+  assert.deepEqual([...h.win.PATVPadPicker._freeRows(klipyBody(rows))].map((r) => r.id), ["keep-one", "gone-one", "keep-two"]);   // (the page's realm)
+  // the pick goes to the site, which refuses it as removed everywhere (gif_removed)
+  h.sheet.querySelectorAll(".rmp-grid button")[1].click();
+  assert.equal(h.calls.send.length, 1); assert.equal(h.calls.send[0].token, "[gif:gone-one]"); assert.equal(h.calls.closed, 1);
+  assert.equal(typeof h.calls.send[0].extra.onPosted, "function", "the share trigger still waits for the site");
+  h.calls.send[0].extra.onRefused("gif_removed");
+  // the sheet again: still offered in its place; picking it says so, plainly, and sends nothing
+  h.win.PATVPadPicker.open(h.opts); await flush();
+  assert.deepEqual(tileTitles(h), ["keep-one", "gone-one", "keep-two"], "never left out, never re-ranked");
+  h.sheet.querySelectorAll(".rmp-grid button")[1].click();
+  assert.equal(h.calls.send.length, 1, "no second send"); assert.equal(h.calls.closed, 1, "the sheet stays open to say why");
+  assert.equal(statusOf(h).textContent, "This GIF was removed on PATV."); assert.equal(statusOf(h).hidden, false);
+  // any other refusal is not "removed": that GIF can be picked again
+  h.sheet.querySelectorAll(".rmp-grid button")[2].click();
+  assert.equal(h.calls.send.length, 2); h.calls.send[1].extra.onRefused("gif");
+  h.win.PATVPadPicker.open(h.opts); await flush();
+  h.sheet.querySelectorAll(".rmp-grid button")[2].click();
+  assert.equal(h.calls.send.length, 3, "an ordinary refusal: picked again, sent again"); assert.equal(h.calls.send[2].token, "[gif:keep-two]");
+  assert.doesNotMatch(picker, /gifFree\.b|goneHere|pageBlocks/, "no list of removed GIFs in the picker");
+});
+
+test("owner: partner mode the same - the site's search answer drawn as it comes, a removed GIF included; picked again, the picker says so", async () => {
+  const rows = [{ id: "gif_one", title: "One", preview: { src: "https://static.klipy.com/one.gif" } }, { id: "gif_gone", title: "Gone", preview: { src: "https://static.klipy.com/gone.gif" } },
+    { id: "gif_two", title: "Two", preview: { src: "https://static2.klipy.com/two.gif" } }];
+  const h = pickerPage({}, () => answer(rows));
   await flush();
-  assert.equal(all.sheet.querySelectorAll(".rmp-grid button").length, 6);
-  // removed while this page still offered it: the site refuses the pick (gif_removed) and the picker stops offering it at once
-  all.sheet.querySelectorAll(".rmp-grid button").find((x) => x.title === "keep-two").click();
-  assert.equal(all.calls.send.length, 1);
-  all.calls.send.at(-1).extra.onRefused("gif");                           // any other refusal: still offered
-  all.win.PATVPadPicker.open(all.opts); await flush();                    // (a pick closes the sheet: open it again)
-  all.sheet.querySelectorAll(".rmp-grid button")[0].click();
-  assert.equal(all.calls.send.length, 2); assert.equal(all.calls.send[1].token, "[gif:keep-one]");
-  all.calls.send.at(-1).extra.onRefused("gif_removed");                   // keep-one: removed everywhere
-  all.win.PATVPadPicker.open(all.opts); await flush();
-  assert.deepEqual(all.sheet.querySelectorAll(".rmp-grid button").map((x) => x.title).slice(0, 2), ["gone-by-slug", "gone-by-pic"], "keep-one left out, keep-two kept");
-  assert.ok(all.sheet.querySelectorAll(".rmp-grid button").some((x) => x.title === "keep-two"));
+  assert.equal(h.calls.requests[0].url, "/api/gifs/search");
+  assert.deepEqual(tileTitles(h), ["One", "Gone", "Two"], "the server's (KLIPY's) order, all of it");
+  h.sheet.querySelectorAll(".rmp-grid button")[1].click();
+  assert.equal(h.calls.send.length, 1); assert.equal(h.calls.send[0].token, "[gif:gif_gone]"); assert.equal(h.calls.send[0].extra.gif, undefined);
+  h.calls.send[0].extra.onRefused("gif_removed");
+  h.win.PATVPadPicker.open(h.opts); await flush();
+  assert.deepEqual(tileTitles(h), ["One", "Gone", "Two"], "still offered in its place");
+  h.sheet.querySelectorAll(".rmp-grid button")[1].click();
+  assert.equal(h.calls.send.length, 1, "no second send"); assert.equal(statusOf(h).textContent, "This GIF was removed on PATV.");
+  h.sheet.querySelectorAll(".rmp-grid button")[0].click(); assert.equal(h.calls.send.length, 2, "another GIF goes as usual");
 });
 
 test("review: the notice, once accepted on this page, stays accepted - a sheet opened with a newer data object (n still false) goes straight to GIFs", async () => {
@@ -212,16 +236,16 @@ test("relay: a GIF pick's details ride with the line (and a retry); the pending 
   assert.deepEqual(Object.keys(P.posted[2].body).sort(), ["cid", "text"]);
 });
 
-test("review: a pick of a GIF moderators removed everywhere - its picture gives way to 'GIF no longer available', and no Retry (it can never be sent)", async () => {
-  const P = relayPage(() => Promise.resolve({ status: 403, json: () => Promise.resolve({ ok: false, code: "gif_removed", error: "That GIF was removed by moderators." }) }));
+test("review: a pick of a GIF moderators removed everywhere - its picture gives way to 'GIF no longer available', the line says it was removed on PATV, and no Retry (it can never be sent)", async () => {
+  const P = relayPage(() => Promise.resolve({ status: 403, json: () => Promise.resolve({ ok: false, code: "gif_removed", error: "This GIF was removed on PATV." }) }));
   const gif = { src: "https://static2.klipy.com" + dirOf("wave-hi") + "wave.webp", w: 220, h: 146, title: "Wave", page: "https://klipy.com/gifs/wave-hi" };
   const heard = [];
   P.R._send("[gif:wave-hi]", { gif, onRefused: (code) => heard.push(code) }); await flush();
-  assert.deepEqual(heard, ["gif_removed"], "the picker hears why (it stops offering the GIF)");
+  assert.deepEqual(heard, ["gif_removed"], "the picker hears why (picked again on this page, it says so)");
   const pending = P.feed.querySelector("[data-cid]");
   assert.ok(pending.classList.contains("rb-opt-failed"));
   assert.equal(pending.querySelector("img"), null, "no picture of a removed GIF"); assert.equal(pending.querySelector(".gif-gone").textContent, "GIF no longer available");
-  assert.match(pending.textContent, /removed by moderators/);
+  assert.match(pending.textContent, /not sent — This GIF was removed on PATV\./, "plainly: PATV removed it, not KLIPY");
   const labels = pending.querySelectorAll("button").map((b) => b.textContent);
   assert.ok(!labels.some((l) => /Retry/.test(l)), "no Retry"); assert.ok(labels.includes("✕"), "✕ still drops it");
   // any other refusal keeps its Retry

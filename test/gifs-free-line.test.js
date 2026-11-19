@@ -143,7 +143,7 @@ test("the live view gives an eligible member the browser key, the pad's rating a
   const r = await live(U.alice);
   assert.equal(r.status, 200, r.text);
   assert.equal(r.d.room.gifPicker, true);
-  assert.deepEqual(r.d.room.gifFree, { k: process.env.KLIPY_PUBLIC_KEY, r: "high", n: false, b: [] });
+  assert.deepEqual(r.d.room.gifFree, { k: process.env.KLIPY_PUBLIC_KEY, r: "high", n: false });
   const old = AG.isAdultPad;
   try { AG.isAdultPad = (id) => id === ROOM.id; assert.equal((await live(U.alice)).d.room.gifFree.r, "low", "an 18+ pad: PG-13 at most"); }
   finally { AG.isAdultPad = old; }
@@ -214,10 +214,13 @@ test("🚫 Remove this GIF everywhere: the room's mods / owner / staff only, GIF
   assert.equal(lineOf(d, keep).gif.src, details(OTHER_GIF).src, "other GIFs untouched");
   const again = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:" + GIF + "]", cid: "gfblock004", gif: details() });
   assert.equal(again.status, 403); assert.equal(again.d.code, "gif_removed", "never sendable again");
-  // review: the same picture under a fresh slug - refused; and the free picker's page data names it (it leaves it out of KLIPY's answers)
+  assert.equal(again.d.error, "This GIF was removed on PATV.", "plainly: PATV removed it (KLIPY's search still offers it)");
+  // review: the same picture under a fresh slug - refused. (owner 2026-11-19: the page data carries no list of removed GIFs - the
+  // picker shows KLIPY's results as KLIPY gives them)
   const fresh = await post(`/api/rooms/${SLUG}/say`, U.alice, { text: "[gif:made-up-slug-1001]", cid: "gfblock005", gif: details("made-up-slug-1001", hashOf(GIF)) });
   assert.equal(fresh.d.code, "gif_removed");
-  assert.deepEqual((await live(U.alice)).d.room.gifFree.b, [GIF, hashOf(GIF) + "/14/af"]);
+  const pageNow = (await live(U.alice)).d.room.gifFree;
+  assert.deepEqual(Object.keys(pageNow).sort(), ["k", "n", "r"]); assert.doesNotMatch(JSON.stringify(pageNow), new RegExp(GIF + "|" + hashOf(GIF)));
   // the owner (no reason: "GIF removed") and an already-hidden line still block
   const own = await act(keep, "gifblock", U.own, {});
   assert.equal(own.status, 200, own.text);

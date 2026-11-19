@@ -18,15 +18,14 @@
   // review: the one-time notice accepted on this page - kept here, not on the data object the sheet opened with (a live update replaces
   // that object, and the next sheet would ask again)
   var noticeOk = false;
-  // review: GIFs the site refused on this page as removed everywhere (gif_removed) - left out at once, before the next live update
-  // brings them in room.gifFree.b
-  var goneHere = [];
-  /** room.gifFree -> {k, r, n, b} | null (no valid browser key: no free picker). An unknown rating is the strictest. b = the keys of the
-   *  GIFs moderators removed everywhere (ids / slugs, media keys: gifs.js pageBlocks) - left out of KLIPY's answers. */
+  // owner 2026-11-19 (KLIPY's rules: Search and Trending as KLIPY gives them - "lets stick to their rules"): a GIF moderators removed
+  // everywhere stays in its place among KLIPY's results, in both modes; the site refuses to send it (gif_removed) and the sender's line
+  // says so. removedHere = the GIFs the site refused that way on this page: picking one again says so here, with no second send.
+  var removedHere = [];
+  /** room.gifFree -> {k, r, n} | null (no valid browser key: no free picker). An unknown rating is the strictest. */
   function freeOf(x) {
     if (!x || typeof x !== 'object' || !/^[A-Za-z0-9_-]{8,128}$/.test(String(x.k))) return null;
-    var b = Array.isArray(x.b) ? x.b.filter(function (v) { return typeof v === 'string'; }) : [];
-    return { k: String(x.k), r: RATINGS.indexOf(x.r) >= 0 ? x.r : 'high', n: x.n === true || noticeOk, b: b };
+    return { k: String(x.k), r: RATINGS.indexOf(x.r) >= 0 ? x.r : 'high', n: x.n === true || noticeOk };
   }
   // the same checks the server makes on a send (gifs.js cdnSrc): exact KLIPY CDN hosts, https, no userinfo / port / fragment / encoded
   // characters, KLIPY's own path /ii/<32 hex>/<2 hex>/<2 hex>/<name>.gif|webp, a plain query, at most 512 characters, exactly as given
@@ -39,10 +38,6 @@
         /^(static|static1|static2)\.klipy\.com$/.test(u.hostname) &&
         CDN_PATH.test(u.pathname) && /^[A-Za-z0-9._~=&-]{0,256}$/.test(u.search.replace(/^\?/, ''));
     } catch (e) { return false; }
-  }
-  /** a checked CDN URL -> its media key (gifs.js mediaKey: the GIF's directory, shared by every size and format) */
-  function mediaKey(src) {
-    try { var m = CDN_PATH.exec(new W.URL(src).pathname); return m ? (m[1] + '/' + m[2] + '/' + m[3]).toLowerCase() : null; } catch (e) { return null; }
   }
   function cleanTitle(v) {
     return String(v == null ? '' : v).replace(/<[^>]*>/g, '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').slice(0, 80);
@@ -59,16 +54,16 @@
     }
     return null;
   }
-  /** KLIPY's search / trending answer ({result, data: {data: [...]}}) -> [{id: slug, title, preview, media}], in KLIPY's order.
-   *  review: `blocked` (freeOf's b) - a GIF moderators removed everywhere, by its slug / id or by its picture, is left out (never re-ranked). */
-  function freeRows(body, blocked) {
-    var list = body && body.data && Array.isArray(body.data.data) ? body.data.data : [], out = [], no = Array.isArray(blocked) ? blocked : [];
+  /** KLIPY's search / trending answer ({result, data: {data: [...]}}) -> [{id: slug, title, preview, media}], in KLIPY's order, all of
+   *  it. Only an item this page can't draw safely is skipped (not a GIF item, no usable slug, no picture that passes cdnOk) - never one
+   *  for what it shows: no content filter, never re-ranked (owner 2026-11-19: KLIPY's rules). */
+  function freeRows(body) {
+    var list = body && body.data && Array.isArray(body.data.data) ? body.data.data : [], out = [];
     for (var i = 0; i < list.length && i < 50; i++) {
       var r = list[i];
       if (!r || typeof r !== 'object' || (r.type != null && r.type !== 'gif') || typeof r.slug !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(r.slug)) continue;
       var media = tierOf(r.file, 'sm') || tierOf(r.file, 'md'), preview = tierOf(r.file, 'xs') || media;
       if (!media) continue;
-      if (no.length && (no.indexOf(r.slug) >= 0 || (r.id != null && no.indexOf(String(r.id)) >= 0) || no.indexOf(mediaKey(media.src)) >= 0 || no.indexOf(mediaKey(preview.src)) >= 0)) continue;
       out.push({ id: r.slug, title: cleanTitle(r.title), preview: preview, media: media });
     }
     return out;
@@ -108,6 +103,16 @@
       if (!box.isConnected) return;
       if (extra ? o.relay._send(token, extra) : o.relay._send(token)) closeToInput();
       else note(t('queue', 'Your messages are still on their way. Try again in a moment.'));
+    }
+    // 1.99aot gifs: a GIF pick, either mode. The site's refusal as removed everywhere (gif_removed) is remembered on this page (the
+    // sender's line says so at once - room-bridge.js): the GIF stays in its place among KLIPY's results, and picking it again says so
+    // plainly here instead of sending it once more
+    function pickGif(id, token, extra) {
+      if (!box.isConnected) return;
+      if (removedHere.indexOf(id) >= 0) { note(t('gif_removed', 'This GIF was removed on PATV.')); return; }
+      var x = extra || {};
+      x.onRefused = function (code) { if (code === 'gif_removed' && removedHere.indexOf(id) < 0) removedHere.push(id); };
+      send(token, x);
     }
     // 1.99aiw dock: review - `post` = a JSON body (the GIF search: its words never ride in a URL, which request logs keep)
     function request(url, g, show, post) {
@@ -200,7 +205,7 @@
           rows.forEach(function (r) {
             if (!r || !/^[A-Za-z0-9_-]{1,64}$/.test(String(r.id)) || !r.preview || !safeGif(r.preview.src)) return;
             var title = String(r.title || t('gif', 'GIF')).slice(0, 80);
-            var b = mediaButton(title, function () { send('[gif:' + r.id + ']'); });
+            var b = mediaButton(title, function () { pickGif(String(r.id), '[gif:' + r.id + ']'); });
             b.title = title; b.setAttribute('aria-label', t('send_gif', 'Send GIF: {name}', { name: title })); picture(b, r.preview.src, title);
             caption(b, title); items.appendChild(b);
           });
@@ -264,15 +269,14 @@
           .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
           .then(function (data) {
             if (!connected(g)) return;
-            var rows = freeRows(data, free.b.concat(goneHere));
+            var rows = freeRows(data);
             note(rows.length ? '' : t('empty', 'Nothing here yet.'));
             var items = el('div', 'rmp-grid'); items.style.display = 'grid'; items.style.gridTemplateColumns = 'repeat(auto-fill, minmax(100px, 1fr))'; items.style.gap = 'var(--ds-sp-2)'; results.appendChild(items);
             rows.forEach(function (r) {
               var title = r.title || t('gif', 'GIF');
               var b = mediaButton(title, function () {
-                send('[gif:' + r.id + ']', { gif: { src: r.media.src, w: r.media.w, h: r.media.h, title: r.title, page: FREE_PAGE + r.id },
-                                             onPosted: function () { share(r.id, query); },
-                                             onRefused: function (code) { if (code === 'gif_removed') goneHere.push(r.id, mediaKey(r.media.src) || r.id); } });
+                pickGif(r.id, '[gif:' + r.id + ']', { gif: { src: r.media.src, w: r.media.w, h: r.media.h, title: r.title, page: FREE_PAGE + r.id },
+                                                      onPosted: function () { share(r.id, query); } });
               });
               b.title = title; b.setAttribute('aria-label', t('send_gif', 'Send GIF: {name}', { name: title })); picture(b, r.preview.src, title);
               caption(b, title); items.appendChild(b);
@@ -321,5 +325,5 @@
     // focus goes back to the composer when the sheet closes (the Dock's layer returns it to the opener otherwise)
     return { box: box, tabs: tabs, current: function () { return active.id; } };
   }
-  W.PATVPadPicker = { available: available, open: open, voices: voices, _freeRows: freeRows, _cdnOk: cdnOk, _mediaKey: mediaKey };
+  W.PATVPadPicker = { available: available, open: open, voices: voices, _freeRows: freeRows, _cdnOk: cdnOk };
 })(window);

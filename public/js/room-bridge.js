@@ -1139,7 +1139,7 @@
     }
     function fail(it, why, code) {
       it.st = 'failed'; it.off = false; it.why = why || ''; it.code = code || ''; paint(it);
-      // 1.99aot gifs: review - the free GIF picker hears a refusal's code (gif_removed: it stops offering that GIF on this page)
+      // 1.99aot gifs: review - the GIF picker hears a refusal's code (gif_removed: picked again on this page, it says so instead of sending)
       if (typeof it.onRefused === 'function') { var r = it.onRefused; try { r(it.code); } catch (e) { /* the picker's own */ } }
     }
     function retry(it) {
@@ -1187,8 +1187,8 @@
       if (dead) return;
       if (outbox.some(function (x) { return x.st === 'queue' || x.st === 'posting'; })) { e.preventDefault(); e.returnValue = ''; }
     });
-    // 1.99aot gifs: extra (the Dock's GIF picker in free mode) = {gif: {src, w, h, title, page} - the pick's details, posted with the line;
-    // onPosted: called once when the site has taken the line; onRefused(code): when the site refused it (review)}
+    // 1.99aot gifs: extra (the Dock's GIF picker) = {gif: {src, w, h, title, page} - a free-mode pick's details, posted with the line;
+    // onPosted: called once when the site has taken the line; onRefused(code): when the site refused it (review; either mode)}
     function sendChat(text, extra) {
       if (dead) return false;
       if (waiting() >= SAY_QUEUE) {

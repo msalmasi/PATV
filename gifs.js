@@ -9,6 +9,10 @@
 // Both: the Room Dock off is the kill switch, a moderator's block (gif_blocks) removes a GIF everywhere - by its id, its slug and its
 // picture's media key, in either mode - the privacy notice first. No server request ever goes to KLIPY in free mode (and linkpreview.js
 // never fetches a KLIPY link in any mode).
+// 1.99aot gifs (owner 2026-11-19, "lets stick to their rules"): KLIPY's integration rules say Search and Trending results are shown as
+// KLIPY gives them - never removed, suppressed or filtered. So neither mode leaves anything we judge out of KLIPY's answers: a GIF our
+// moderators removed, or one whose title the text guard refuses, is still offered in its place; the say route refuses to SEND it
+// (gif_removed: "This GIF was removed on PATV."). Only an item that can't be drawn safely (malformed - normalize) is skipped.
 "use strict";
 const guard = require("./middleware/authGuard");
 const { runQuery, getQuery, tx } = require("./dbUtils");
@@ -38,7 +42,6 @@ const KEY_RE = /^[A-Za-z0-9_-]{8,128}$/;  // 1.99aot gifs: the browser key's sha
 const SRC_MAX = 512, DIM_MAX = 4096, NOTICE_V = "2026-11-19";
 // 1.99aot gifs: review - GIF removals by a pad's owner / mods (staff: no cap) a day per account - each one is site-wide
 const BLOCK_DAY_MAX = 20, DAY_MS = 24 * 60 * 60 * 1000;
-const BLOCK_PAGE_MAX = 300;                // the newest removals' keys the free picker gets with the page (it hides those GIFs)
 const cache = new Map(), pending = new Map(), retried = new Map(), hits = new Map(), blockHits = new Map();
 let clock = () => Date.now();
 class Refuse extends Error { constructor(status, code) { super(code); this.status = status; this.refuse = true; } }
@@ -153,11 +156,10 @@ async function search(q) {
   const params = { contentfilter: CONTENT_FILTER, media_filter: "tinygif,gif", limit: 20 };
   if (q) params.q = q;
   const items = await request(q ? "search" : "featured", params), out = [];
-  // 1.99aiw dock: review - Pepe says the title in the Camfrog room; the rating filter rates the picture, not the uploader's title,
-  // so a title the text guard refuses (textguard.js) is never offered - and never becomes sendable
-  // (1.99aot gifs: a GIF a moderator removed everywhere is never offered either)
-  // (review: by its v2 id, its itemurl's slug or its picture - itemBlocked)
-  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item && !itemBlocked(item) && !require("./textguard").bad(item.title)) { remember(item, true); out.push(clone(item)); } }
+  // 1.99aot gifs (owner 2026-11-19: KLIPY's rules - results as KLIPY gives them): every item that can be drawn safely (normalize), in
+  // KLIPY's order. A GIF a moderator removed everywhere, or whose title the text guard refuses (Pepe says the title in the Camfrog
+  // room - 1.99aiw dock), is offered like the rest and refused at the send (bridge-relay.js sendSayLine: removed / titleBad)
+  for (const raw of items.slice(0, 50)) { const item = normalize(raw); if (item) { remember(item, true); out.push(clone(item)); } }
   return out;
 }
 /** 1.99aiw dock: the GIF a say line may post - only an id a filtered (contentfilter=high) search / featured answer gave in the
@@ -169,6 +171,9 @@ function picked(id) {
   const entry = cache.get(id);
   return entry && entry.filtered === true && !itemBlocked(entry.item) ? peek(id) : null;
 }
+/** 1.99aot gifs: a GIF title the text guard refuses - Pepe says the title in the Camfrog room (1.99aiw dock). The partner search offers
+ *  such a GIF (KLIPY's results as given); the say route refuses to send it. */
+const titleBad = (title) => require("./textguard").bad(titleOf(title));
 function resolve(id) {
   if (typeof id !== "string" || !ID_RE.test(id) || !partnerOn()) return Promise.resolve(null);
   const saved = peek(id); if (saved) return Promise.resolve(saved);
@@ -255,15 +260,15 @@ const sendOk = (userId) => hit("send:" + userId, SEND_LIMIT);
 // its KLIPY slug, and its picture's media key (mediaKey) - so it holds across both GIF modes and under any slug a browser picks.
 // review (privacy): a block row has no personal data - no line number, no reason (the hidden line keeps that, as any 🙈 Hide does),
 // no account: the GIF's keys, when, the pad and the kind of moderator (owner / mod / staff).
-let BLOCKED = new Set(), MKS = new Set(), ROWS = [], SEEN = new Set(), ready = null, loaded = false;
+// (owner 2026-11-19: the list stays on the server - no page gets it; the picker never leaves a GIF out of KLIPY's results)
+let BLOCKED = new Set(), MKS = new Set(), SEEN = new Set(), ready = null, loaded = false;
 const MK_RE = /^[0-9a-f]{32}\/[0-9a-f]{2}\/[0-9a-f]{2}$/;
 async function loadBlocks() {
-  const b = new Set(), m = new Set(), rows = [];
-  for (const r of await getQuery("SELECT id, at, slug, mk FROM gif_blocks ORDER BY at DESC, id")) {
-    const row = { id: String(r.id), at: Number(r.at), slug: r.slug ? String(r.slug) : null, mk: r.mk ? String(r.mk) : null };
-    b.add(row.id); if (row.slug) b.add(row.slug); if (row.mk) m.add(row.mk); rows.push(row);
+  const b = new Set(), m = new Set();
+  for (const r of await getQuery("SELECT id, slug, mk FROM gif_blocks")) {
+    b.add(String(r.id)); if (r.slug) b.add(String(r.slug)); if (r.mk) m.add(String(r.mk));
   }
-  BLOCKED = b; MKS = m; ROWS = rows;
+  BLOCKED = b; MKS = m;
 }
 function init() {
   if (!ready) ready = (async () => {
@@ -317,13 +322,11 @@ async function blockInTx(keys, { room = null, kind = null } = {}, at = clock()) 
                            [k.id, at, room ? String(room).slice(0, 128) : null, kind ? String(kind).slice(0, 16) : null, k.slug, k.mk]);
   return !!(r && r.changes);
 }
-function noteBlocked(keys, at = clock()) {
+function noteBlocked(keys) {
   let k;
   try { k = keysIn(keys); } catch (e) { return; }
   BLOCKED.add(k.id); if (k.slug) BLOCKED.add(k.slug); if (k.mk) MKS.add(k.mk);
   cache.delete(k.id);
-  const old = ROWS.find((x) => x.id === k.id);
-  if (old) { old.slug = old.slug || k.slug; old.mk = old.mk || k.mk; } else ROWS.unshift({ id: k.id, at, slug: k.slug, mk: k.mk });
 }
 /** review: whether account `userId` may remove one more GIF everywhere today (owners / mods: BLOCK_DAY_MAX a day; staff: always) */
 function blockQuota(userId, staff) {
@@ -382,22 +385,12 @@ async function noteNotice(userId) {
   SEEN.add(String(userId));
   return { ok: true };
 }
-/** review: the newest removals' keys (ids, slugs, media keys - KLIPY's names for GIFs, no personal data), at most BLOCK_PAGE_MAX, for
- *  the free picker to leave out of KLIPY's answers */
-function pageBlocks() {
-  const out = [];
-  for (const r of ROWS) {
-    for (const v of [r.id, r.slug !== r.id ? r.slug : null, r.mk]) if (v && out.length < BLOCK_PAGE_MAX && !out.includes(v)) out.push(v);
-    if (out.length >= BLOCK_PAGE_MAX) break;
-  }
-  return out;
-}
-/** The page data for an eligible viewer in free mode: {k: browser key, r: rating, n: notice seen, b: removed GIFs' keys} | null
- *  (bridge.js liveView). */
+/** The page data for an eligible viewer in free mode: {k: browser key, r: rating, n: notice seen} | null (bridge.js liveView).
+ *  (owner 2026-11-19: no list of removed GIFs - the picker shows KLIPY's results as KLIPY gives them; the say route refuses a removed one) */
 function pageData(roomId, userId) {
   if (!freeOn()) return null;
   if (!loaded) init().catch(() => {});
-  return { k: publicKey(), r: ratingFor(roomId), n: noticeSeen(userId), b: pageBlocks() };
+  return { k: publicKey(), r: ratingFor(roomId), n: noticeSeen(userId) };
 }
 /** The admin card's status - never a key: which modes have their key, the mode chosen, the recent blocks. review: a browser key equal to
  *  the server key is "same_as_server" (refused: free mode would publish the server's key) */
@@ -498,8 +491,8 @@ function register(app, { addUser }) {
 }
 module.exports = { available, mode, partnerOn, freeOn, publicKey, ratingFor, freeGif, storedOf, sendOk, pageData, adminStatus, normalize, peek, picked,
   resolve, search, attach, register, init, isBlocked, blockedAny, itemBlocked, removed, keysOf, mediaKey, slugOfPage, lineMatcher, blockInTx, noteBlocked,
-  blockQuota, noteBlockUse, blocks, unblock, noticeSeen, noteNotice, pageBlocks,
+  blockQuota, noteBlockUse, blocks, unblock, noticeSeen, noteNotice, titleBad,
   KLIPY_API_BASE, KLIPY_BROWSER_API, MEDIA_HOSTS, PAGE_HOSTS, CSP_SOURCES, CONTENT_FILTER, RATINGS, RANK,
-  CACHE_TTL_MS, CACHE_MAX, SEARCH_LIMIT, SEND_LIMIT, LOOKUP_LIMIT, LOOKUP_RETRY_MS, RESPONSE_MAX_BYTES, SRC_MAX, DIM_MAX, NOTICE_V, BLOCK_DAY_MAX, BLOCK_PAGE_MAX,
+  CACHE_TTL_MS, CACHE_MAX, SEARCH_LIMIT, SEND_LIMIT, LOOKUP_LIMIT, LOOKUP_RETRY_MS, RESPONSE_MAX_BYTES, SRC_MAX, DIM_MAX, NOTICE_V, BLOCK_DAY_MAX,
   _reset: () => { cache.clear(); pending.clear(); retried.clear(); hits.clear(); blockHits.clear(); clock = () => Date.now(); }, _clock: fn => { clock = fn; },
-  _resetStore: () => { BLOCKED = new Set(); MKS = new Set(); ROWS = []; SEEN = new Set(); ready = null; loaded = false; } };
+  _resetStore: () => { BLOCKED = new Set(); MKS = new Set(); SEEN = new Set(); ready = null; loaded = false; } };

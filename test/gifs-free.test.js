@@ -87,8 +87,8 @@ test("free mode send: Pepe's job keeps its old shape {type, id, title, page}; th
 
 test("free mode: the per-pad rating is the server's - general pads high, 18+ pads low - on the page data and on the line", async () => {
   adult.add(adultRoom.id);
-  assert.deepEqual(G.pageData(room.id, "linked"), { k: browserKey, r: "high", n: false, b: [] });
-  assert.deepEqual(G.pageData(adultRoom.id, "linked"), { k: browserKey, r: "low", n: false, b: [] });
+  assert.deepEqual(G.pageData(room.id, "linked"), { k: browserKey, r: "high", n: false });
+  assert.deepEqual(G.pageData(adultRoom.id, "linked"), { k: browserKey, r: "low", n: false });
   assert.equal(G.ratingFor(room.id), G.RATINGS.general); assert.equal(G.ratingFor(adultRoom.id), G.RATINGS.adult);
   assert.deepEqual(G.RATINGS, { general: "high", adult: "low" }, "never off (R) until the 18+ gate is on");
   const out = await say("[gif:" + SLUG + "]", "adult-send-1", { ...details(), r: "off" }, { slug: adultRoom.slug });
@@ -168,22 +168,43 @@ async function removeFree(slug = SLUG, src = details().src) {
   return keys;
 }
 
-test("a GIF removed everywhere is refused in both modes (its own code), never offered by the partner search, and draws as gone", async () => {
+// owner 2026-11-19 ("lets stick to their rules" - KLIPY's: Search and Trending results never removed, suppressed or filtered): a GIF
+// removed everywhere is refused at the SEND, in both modes, with words that say PATV removed it - never left out of KLIPY's results
+test("a GIF removed everywhere is refused in both modes (its own code, 'This GIF was removed on PATV.'), still offered by the partner search in KLIPY's order, and draws as gone", async () => {
   const keys = await removeFree();
   assert.deepEqual(keys, { id: SLUG, slug: SLUG, mk: MK }, "the slug and the picture's media key");
   assert.equal(G.isBlocked(SLUG), true);
   const out = await say("[gif:" + SLUG + "]", "blocked-1", details());
-  assert.equal(out.status, 403); assert.equal(out.data.code, "gif_removed"); assert.match(out.data.error, /removed by moderators/);
+  assert.equal(out.status, 403); assert.equal(out.data.code, "gif_removed"); assert.equal(out.data.error, "This GIF was removed on PATV.");
+  assert.equal(relay._jobs.size, 0, "nothing queued");
   assert.deepEqual(G.attach(line(SLUG), stored()).gif, { gone: 1 });
   // reloaded from the database (a restart)
   G._resetStore(); await G.init(); assert.equal(G.isBlocked(SLUG), true); assert.equal(G.blockedAny([], details().src), true);
-  // partner mode honours it too: its search never offers it and it isn't sendable
+  // partner mode: its search offers it like the rest, in KLIPY's order; it isn't sendable, and the refusal says why
   await flags({ gifs: "partner" });
-  partnerFetch([v2("2525964843568523", SLUG)]);
+  partnerFetch([v2("1111111111111111", "fine-one-1", "c".repeat(32)), v2("2525964843568523", SLUG), v2("3333333333333333", "fine-two-3", "d".repeat(32))]);
   try {
-    assert.deepEqual(await G.search(""), []); assert.equal(G.picked("2525964843568523"), null);
+    assert.deepEqual((await G.search("")).map((x) => x.id), ["1111111111111111", "2525964843568523", "3333333333333333"], "KLIPY's order, the removed one included");
+    const viaRoute = await request("/api/gifs/search", { body: { pad: room.slug, q: "" } });
+    assert.equal(viaRoute.status, 200); assert.deepEqual(viaRoute.data.map((x) => x.id), ["1111111111111111", "2525964843568523", "3333333333333333"]);
+    assert.equal(G.picked("2525964843568523"), null);
     const p = await say("[gif:2525964843568523]", "blocked-2");
-    assert.equal(p.data.code, "gif");
+    assert.equal(p.status, 403); assert.equal(p.data.code, "gif_removed"); assert.equal(p.data.error, "This GIF was removed on PATV.");
+    assert.equal(relay._jobs.size, 0);
+    assert.equal((await say("[gif:1111111111111111]", "blocked-3")).status, 200, "its neighbours go as usual");
+  } finally { noFetch(); }
+  calls = [];
+});
+
+test("owner: the partner search offers a GIF whose title the text guard refuses too (KLIPY's order) - the send refuses it, with the title's words", async () => {
+  await flags({ gifs: "partner" });
+  partnerFetch([{ ...v2("4444444444444444", "rude-title-4", "e".repeat(32)), title: "kys lol" }, v2("5555555555555555", "nice-one-5", "f".repeat(32))]);
+  try {
+    assert.deepEqual((await G.search("x")).map((x) => x.id), ["4444444444444444", "5555555555555555"], "nothing left out");
+    const bad = await say("[gif:4444444444444444]", "title-1");
+    assert.equal(bad.status, 403); assert.equal(bad.data.code, "gif"); assert.match(bad.data.error, /title can't be posted here/);
+    assert.equal(relay._jobs.size, 0, "Pepe never says it");
+    assert.equal((await say("[gif:5555555555555555]", "title-2")).status, 200);
   } finally { noFetch(); }
   calls = [];
 });
@@ -217,8 +238,9 @@ test("review: blocks hold across the GIF modes - a free removal in partner searc
                 v2("1111111111111111", "fine-one-1", "c".repeat(32))]);
   try {
     const offered = await G.search("");
-    assert.deepEqual(offered.map((x) => x.id), ["1111111111111111"], "neither the slug nor the picture is offered");
+    assert.deepEqual(offered.map((x) => x.id), ["2525964843568523", "4551195970372378", "1111111111111111"], "offered as KLIPY gives them (owner 2026-11-19)");
     assert.equal(G.picked("2525964843568523"), null); assert.equal(G.picked("4551195970372378"), null);
+    for (const [i, id] of ["2525964843568523", "4551195970372378"].entries()) assert.equal((await say("[gif:" + id + "]", "x-pick-" + i)).data.code, "gif_removed", "by its slug / by its picture: " + id);
     assert.equal(G.picked("1111111111111111").id, "1111111111111111");
     // partner lines of them (their details from the Posts lookup - rendering only): gone
     for (const id of ["2525964843568523", "4551195970372378"]) { await G.resolve(id); assert.deepEqual(G.attach(line(id)).gif, { gone: 1 }, id); }
@@ -236,21 +258,21 @@ test("review: blocks hold across the GIF modes - a free removal in partner searc
   assert.deepEqual(calls, []);
 });
 
-test("review: the free picker gets the removed GIFs' keys (bounded, newest first); an unblock keeps another removal of the same picture", async () => {
+test("owner: no page gets the list of removed GIFs (the picker leaves nothing out); an unblock keeps another removal of the same picture", async () => {
   await removeFree("first-gone-1", pic("1".repeat(32)));
   now += 1000; await removeFree("second-gone-2", pic("2".repeat(32)));
-  assert.deepEqual(G.pageData(room.id, "linked").b, ["second-gone-2", "2".repeat(32) + "/14/af", "first-gone-1", "1".repeat(32) + "/14/af"]);
+  const page = G.pageData(room.id, "linked");
+  assert.deepEqual(Object.keys(page).sort(), ["k", "n", "r"], "the browser key, the rating, the notice flag - nothing else");
+  assert.doesNotMatch(JSON.stringify(page), /gone|2222|1111/);
+  assert.equal(G.pageBlocks, undefined); assert.equal(G.BLOCK_PAGE_MAX, undefined);
   // the same picture removed again under another slug - lifting one removal leaves the picture blocked by the other
   now += 1000; await removeFree("third-name-3", pic("2".repeat(32)));
   const ok = await G.unblock({ userId: "admin", username: "fixture-boss", class: "Admin" }, "second-gone-2", "fixture");
   assert.equal(ok.removed, true);
   assert.equal(G.isBlocked("second-gone-2"), false, "its slug is free again");
   assert.equal(G.blockedAny([], pic("2".repeat(32))), true, "the picture is still removed under third-name-3");
-  // bounded: never more than BLOCK_PAGE_MAX keys
-  await db.tx(async () => { for (let i = 0; i < G.BLOCK_PAGE_MAX; i++) await G.blockInTx({ id: "bulk-" + i, mk: i.toString(16).padStart(32, "0") + "/00/00" }, { kind: "staff" }, now + 10 + i); });
   G._resetStore(); await G.init();
-  const b = G.pageData(room.id, "linked").b;
-  assert.equal(b.length, G.BLOCK_PAGE_MAX); assert.equal(b[0], "bulk-" + (G.BLOCK_PAGE_MAX - 1), "newest first");
+  assert.equal(G.isBlocked("first-gone-1"), true, "reloaded from the table"); assert.equal(G.blockedAny([], pic("2".repeat(32))), true);
 });
 
 test("review: a free line's stored rating is checked against the pad's rating NOW - an 18+ pad made general hides its PG-13 GIFs", async () => {

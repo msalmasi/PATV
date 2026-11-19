@@ -326,7 +326,7 @@
       // 1.99aot gifs: 🚫 a GIF everywhere - this line hidden (like 🙈 Hide) and the GIF blocked site-wide in one go (chatlogmod.gifBlock)
       if (id === 'gifblock') {
         var gw = el('input', 'ds-in'); gw.type = 'text'; gw.maxLength = 200; gw.autocomplete = 'off';
-        dialog(b, _t('js.pad.chat.gifblock_h', 'Remove this GIF everywhere?'), [el('p', null, _t('js.pad.chat.gifblock_text', 'This line is hidden, and the GIF stops showing anywhere on PATV: other lines with it say “GIF no longer available” and nobody can send it again. PATV’s admins can undo it. The Camfrog room already saw its link.')),
+        dialog(b, _t('js.pad.chat.gifblock_h', 'Remove this GIF everywhere?'), [el('p', null, _t('js.pad.chat.gifblock_text', 'This line is hidden, and the GIF stops showing in chats anywhere on PATV: other lines with it say “GIF no longer available” and nobody can send it again (KLIPY’s search still shows it). PATV’s admins can undo it. The Camfrog room already saw its link.')),
           field(_t('js.pad.chat.gifblock_why', 'Reason (optional - the pad’s owner and staff see it)'), gw)],
           _t('js.pad.chat.gifblock_go', 'Remove the GIF'), true, function () {
             return post(c, 'gifblock', { why: gw.value.trim(), jc: jc() }).then(function () { gone(c); toast(_t('js.pad.chat.gifblock_done', 'GIF removed everywhere.'), 'ok'); });

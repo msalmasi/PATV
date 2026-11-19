@@ -713,8 +713,11 @@ async function stickerRefusal(u, raw, out) {
 const mediaKind = text => /\[cfsticker:/i.test(String(text || "")) ? "sticker" : /\[gif:/i.test(String(text || "")) ? "gif" : null;
 function mediaRefusal(kind) { return { status: 403, body: { ok: false, code: kind, error: kind === "sticker" ? "That sticker isn't available here." : "That GIF isn't available here." } }; }
 // 1.99aot gifs: review - a GIF moderators removed everywhere: its own code, so the sender's pending line drops the picture and offers no
-// Retry (room-bridge.js) - it can never be sent
-function gifRemoved() { return { status: 403, body: { ok: false, code: "gif_removed", error: "That GIF was removed by moderators." } }; }
+// Retry (room-bridge.js) - it can never be sent. (owner 2026-11-19: KLIPY's search still offers it - their rules - so the words say
+// plainly that PATV removed it, not KLIPY; the picker says the same if it is picked again on that page)
+function gifRemoved() { return { status: 403, body: { ok: false, code: "gif_removed", error: "This GIF was removed on PATV." } }; }
+// (both modes: a title the text guard refuses - Pepe would say it in the Camfrog room)
+function gifTitleRefusal() { return { status: 403, body: { ok: false, code: "gif", error: "That GIF's title can't be posted here — pick another one." } }; }
 function sayLine(u, R, text, cid, opts = {}) {
   const kind = mediaKind(text), token = kind && require("./public/js/chatlog-core").mediaToken(text);
   if (kind && !token) return Promise.resolve(mediaRefusal(kind));
@@ -759,8 +762,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       // everywhere). The rating can't be confirmed - the one the page was told to use is kept with the line (gf.r)
       const gifs = require("./gifs"), got = gifs.freeGif(token.id, opts.gif, R.id);
       if (!got.ok) {
-        return got.code === "gif_title" ? { status: 403, body: { ok: false, code: "gif", error: "That GIF's title can't be posted here — pick another one." } }
-          : got.code === "gif_removed" ? gifRemoved() : mediaRefusal(kind);
+        return got.code === "gif_title" ? gifTitleRefusal() : got.code === "gif_removed" ? gifRemoved() : mediaRefusal(kind);
       }
       if (!gifs.sendOk(u.userId)) return { status: 429, body: { ok: false, code: "rate", error: "You're sending GIFs quickly — wait a moment." } };
       media = got.media; gf = got.gf;
@@ -771,6 +773,8 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       if (gifs.available() && gifs.removed(token.id, null)) return gifRemoved();     // (1.99aot gifs: review - says so, never Retry)
       const gif = gifs.picked(token.id);
       if (!gifs.available() || !gif) return mediaRefusal(kind);
+      // (1.99aot gifs, owner 2026-11-19: the search offers every GIF KLIPY returned - their rules - so the title guard is here, at the send)
+      if (gifs.titleBad(gif.title)) return gifTitleRefusal();
       media = { type: "gif", id: token.id, title: gif.title, page: gif.page };
     }
   }

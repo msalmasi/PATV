@@ -272,13 +272,16 @@ test("1.99aiw dock: review - with the Room Dock off nothing reaches KLIPY, even 
 
 // 1.99aiw dock: review - Pepe says a GIF's title in the Camfrog room ("🌐 name (web): 🎞️ <title>"); KLIPY's rating filter rates the
 // picture, not the uploader's title, so a title the text guard refuses (textguard.js: what a line Pepe says may not contain) is
-// never offered or sendable
-test("1.99aiw dock: review - a GIF whose title trips the text guard is never offered or sendable", async () => {
+// never sendable. 1.99aot gifs (owner 2026-11-19, KLIPY's rules: Search and Trending results are never removed, suppressed or
+// filtered): it is still offered in KLIPY's order - the send refuses it, saying why
+test("1.99aiw dock: review - a GIF whose title trips the text guard is offered as KLIPY gave it but never sendable", async () => {
   provider = async () => response([{ ...fixture("bad_title"), title: "kys lol" }, fixture("ok_title")]);
   const out = await search("x"); assert.equal(out.status, 200);
-  assert.deepEqual(out.data.map(x => x.id), ["ok_title"]);
-  assert.equal(G.picked("bad_title"), null); assert.ok(G.picked("ok_title"));
-  assert.equal((await say("[gif:bad_title]", "bad-title")).data.code, "gif"); assert.equal(relay._jobs.size, 0);
+  assert.deepEqual(out.data.map(x => x.id), ["bad_title", "ok_title"], "KLIPY's order, nothing left out");
+  assert.ok(G.picked("ok_title"));
+  const bad = await say("[gif:bad_title]", "bad-title");
+  assert.equal(bad.data.code, "gif"); assert.match(bad.data.error, /title can't be posted here/); assert.equal(relay._jobs.size, 0);
+  assert.equal((await say("[gif:ok_title]", "ok-title")).status, 200);
 });
 
 // 1.99aiw dock: review - privacy: what people look for (often a name) is never logged (spec O.1). A GET puts it in the URL, and the URL
