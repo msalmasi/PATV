@@ -1,11 +1,21 @@
 // donationpromo.js — 1.99tq: time-limited DONATION PROMOS ("500k PAT per $1, up to $100, today only").
 //
-// 1.99ans: NO PAT FOR DOLLARS (nopat.js; NY S5935-A, owner 2026-11-11: donations are "Perks only, no PAT"). The donation
-// credit below (creditTerms / previewTerms / quote) is nopat.donorTerms(): 0 PAT, 0 incentive bonus, never a promo rate.
-// Promos are RETIRED: create / edit refuse, live() / liveCached() are null, so nothing shows or applies one (an old row can
-// still be ended). Kept as they were: the per-member DAILY donation limit, the global daily USD cap (the PAT caps can't trip -
-// nothing is minted), donation_usd_log (THE record of every donation since 1.99ts - donations.js reads it) and the pure
-// split() arithmetic. The text below describes how promos worked before 1.99ans.
+// 1.99aor: THE DONATIONS SWITCH (donationmode.js: on | perks | off; the default and the deploy state is perks). 1.99ans made
+// donations perks-only for good; the owner, 2026-11-18: that was temporary. In "on" everything below works as it did before
+// 1.99ans. In "perks" and "off" no new donation gets PAT: the terms are nopat.donorTerms() (0 PAT, 0 bonus), promos can't be
+// created, don't show and don't apply (an old row can still be ended). The daily limits and donation_usd_log run in every state.
+//
+// WHAT A DONOR WAS SHOWN IS WHAT THEY GET. The terms are a snapshot Q = {v, mode: "on", rate, bonus_pct, at, promo} taken when the
+// donor is quoted, and no snapshot means perks:
+//   card     reserveCheckout() reads the switch inside its transaction. In "on" it writes a donation_quotes row with the exact
+//            split of that amount (its promo dollars and PAT count against the promo's cap and budget while it is open) and the
+//            Checkout Session carries its id. The webhook credits that split, whatever the switch says by then.
+//   crypto   a transfer has no checkout, so the quote is what /support showed the member before the transfer was mined
+//            (noteCryptoQuote, valid 2 hours). Failing that, the snapshot the watcher stored when it first saw the transfer
+//            (crypto_payments.terms; none for a transfer mined before the switch last went on). cryptoTermsFor() picks.
+// Moving the switch never rewrites a quote and never credits a past perks-only donation (a row without terms is perks for good).
+// ONE path credits PAT: settleDonation() -> creditDonor(), the only code that can get a ledger grant (nopat.js).
+// Refunds and disputes of a PAT donation: reverseDonation() (donation_credits, donation_disputes, donation_reversals).
 //
 // The normal donation rate lives in Pepe (pepe_econcfg donation_rate / donation_bonus_pct, synced to the site as
 // funding.donationTerms()). A promo is the SITE's: it only changes how many PAT a donation credits on the site, so Pepe
@@ -50,6 +60,7 @@
 const crypto = require("crypto");
 const { runQuery, getQuery, tx, inTx } = require("./dbUtils");
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
+const DM = require("./donationmode");   // 1.99aor: the donations switch
 const BUDGET = require("./public/js/donpromo-budget");   // 1.99vi: the budget arithmetic + wording, shared with the admin form
 
 const DAY = 86400000;
@@ -107,10 +118,30 @@ function init() {
         await runQuery(`UPDATE donation_usd_log SET pat = (SELECT c.amount + COALESCE(json_extract(c.meta, '$.bonus'), 0) FROM reserve_claims c WHERE c.claimId = donation_usd_log.ref)
                         WHERE pat IS NULL AND status = 'credited' AND EXISTS (SELECT 1 FROM reserve_claims c WHERE c.claimId = donation_usd_log.ref)`);
       } catch (e) { /* no reserve_claims yet */ }
+      // 1.99aor: what a donor was quoted (card: the exact split, while the checkout is open; crypto: what /support showed them),
+      // every donation that credited PAT (the refund / dispute clawback reads it) and each reversal event
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_quotes (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, via TEXT NOT NULL, usd_cents INTEGER, mode TEXT NOT NULL,
+        terms TEXT, split TEXT, promo_id TEXT, promo_cents INTEGER NOT NULL DEFAULT 0, promo_pat INTEGER NOT NULL DEFAULT 0, session TEXT, status TEXT NOT NULL,
+        created INTEGER NOT NULL, expires INTEGER NOT NULL, ref TEXT)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_quotes_user ON donation_quotes (user_id, via, created)");
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_quotes_promo ON donation_quotes (promo_id, status)");
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_quotes_session ON donation_quotes (session)");
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_credits (ref TEXT PRIMARY KEY, user_id TEXT NOT NULL, via TEXT NOT NULL, payment_intent TEXT, session TEXT,
+        usd_cents INTEGER NOT NULL, pat INTEGER NOT NULL, bonus INTEGER NOT NULL, rate INTEGER, bonus_pct REAL, quote_id TEXT, created INTEGER NOT NULL,
+        refunded_cents INTEGER NOT NULL DEFAULT 0, disputed_cents INTEGER NOT NULL DEFAULT 0, clawed_pat INTEGER NOT NULL DEFAULT 0,
+        clawed_bonus INTEGER NOT NULL DEFAULT 0, short_pat INTEGER NOT NULL DEFAULT 0, owed_pat INTEGER NOT NULL DEFAULT 0, updated INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_credits_pi ON donation_credits (payment_intent)");
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_credits_user ON donation_credits (user_id)");
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_reversals (event_id TEXT PRIMARY KEY, ref TEXT NOT NULL, kind TEXT NOT NULL, cents INTEGER NOT NULL,
+        pat_delta INTEGER NOT NULL, bonus_delta INTEGER NOT NULL, short_pat INTEGER NOT NULL, at INTEGER NOT NULL)`);
+      // one row per Stripe dispute: state inquiry (no funds moved) | open | won | lost. Closed is final, whatever order the events come in
+      await runQuery(`CREATE TABLE IF NOT EXISTS donation_disputes (id TEXT PRIMARY KEY, ref TEXT NOT NULL, state TEXT NOT NULL, cents INTEGER NOT NULL, opened INTEGER, updated INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS donation_disputes_ref ON donation_disputes (ref, state)");
       for (const r of await getQuery("SELECT key, value FROM donation_promo_settings")) {
         if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
         try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
       }
+      await DM.get();                        // 1.99aor: the sync copy of the switch
       await refresh();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -120,8 +151,14 @@ function init() {
 class Refuse extends Error { constructor(status, message, code = null, detail = null) { super(message); this.status = status; this.refuse = true; this.code = code; this.detail = detail; } }
 const refuse = (m, s = 400, code = null, detail = null) => new Refuse(s, m, code, detail);
 const normalTerms = () => { try { return require("./funding").donationTerms(); } catch (e) { return { rate: 500000, bonus_pct: 20 }; } };
-const NP = require("./nopat");                 // 1.99ans: the hard rule - a dollar donation's terms are always 0 PAT
-const RETIRED = "Donation promos are retired: donations give supporter perks, never PAT (no PAT for dollars).";
+const NP = require("./nopat");                 // 1.99ans / 1.99aor: the hard guard (the perks-only terms, the ledger grant)
+const issueGrant = NP.takeIssuer();            // 1.99aor: only this module can let a donation credit reach the ledger
+const RETIRED = "Promotions need donations set to On. Change the switch above first.";
+const PAUSED = "Donations are paused right now. Please check back soon.";
+const PAUSED_PROMO = "Donations are paused: turn them on before setting up a promo.";
+const CRYPTO_QUOTE_MS = 2 * 3600000;           // 1.99aor: how long what /support showed a member holds for a transfer they send
+const CHECKOUT_QUOTE_MS = 5 * 60000;           // until the Checkout Session exists (attachQuote then sets its real end)
+const parseJson = (s) => { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } };
 
 // ── the cache (sync readers: the homepage banner) ──
 let CACHE = [];
@@ -133,7 +170,7 @@ let timer = null;
 function startTimer() {
   if (timer) return;
   // 1.99uh: also freezes the day's supply within a minute of midnight (the % global cap's base)
-  timer = setInterval(() => { refresh().catch(() => {}); if (S.global_mode === "pct") ensureFrozen(clock()).catch(() => {}); }, 60000);
+  timer = setInterval(() => { refresh().catch(() => {}); DM.get().catch(() => {}); if (S.global_mode === "pct") ensureFrozen(clock()).catch(() => {}); }, 60000);
   if (timer.unref) timer.unref();
 }
 
@@ -178,10 +215,13 @@ function identity(userId, donorKey) {
   if (donorKey) return { col: "donor_key", v: String(donorKey).slice(0, 80) };
   return null;
 }
-async function usage(promoId, id) {
+async function usage(promoId, id, now = clock()) {
   const d = id ? (await getQuery(`SELECT COALESCE(SUM(promo_cents),0) AS c FROM donation_promo_credits WHERE promo_id = ? AND ${id.col} = ?`, [promoId, id.v]))[0] : null;
   const b = (await getQuery("SELECT COALESCE(SUM(promo_pat),0) AS p FROM donation_promo_credits WHERE promo_id = ?", [promoId]))[0];
-  return { usedCents: d ? Number(d.c) || 0 : 0, usedBudget: Number(b.p) || 0 };
+  // 1.99aor: an open card quote already promised its promo dollars: they count until it is paid (then the credit row does) or lapses
+  const qd = id && id.col === "user_id" ? (await getQuery("SELECT COALESCE(SUM(promo_cents),0) AS c FROM donation_quotes WHERE promo_id = ? AND user_id = ? AND via = 'card' AND status = 'open' AND expires > ?", [promoId, id.v, now]))[0] : null;
+  const qb = (await getQuery("SELECT COALESCE(SUM(promo_pat),0) AS p FROM donation_quotes WHERE promo_id = ? AND via = 'card' AND status = 'open' AND expires > ?", [promoId, now]))[0];
+  return { usedCents: (d ? Number(d.c) || 0 : 0) + (qd ? Number(qd.c) || 0 : 0), usedBudget: (Number(b.p) || 0) + (Number(qb.p) || 0) };
 }
 /** A hashed donor key for an account-less donation (never the raw value): kind = "stripe-customer" | "email" | "wallet". */
 function donorKeyOf(kind, value) {
@@ -189,37 +229,95 @@ function donorKeyOf(kind, value) {
   return v ? kind + ":" + crypto.createHash("sha256").update(v).digest("hex").slice(0, 32) : null;
 }
 
-/** The split a donation would get (read-only): {s, p (the promo row or null), rate, id}. creditTerms() writes what this says. */
-async function computeTerms({ userId = null, donorKey = null, cents, paidAt }) {
-  if (NP.PAT_PER_USD === 0) return { s: NP.donorTerms(cents), p: null };     // 1.99ans: always (nopat.js)
+/** 1.99aor: the terms a donor quoted now gets: null = perks only (the switch is perks or off), else the snapshot Q. */
+async function snapshot(at, mode) {
+  if (mode !== "on") return null;
   const T = normalTerms();
-  const plain = { s: { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null }, p: null };
-  const at = Number(paidAt);
+  const when = Number(at);
+  const p = Number.isFinite(when) ? await promoAt(when) : null;
+  const rate = p ? effectiveRate(p, T.rate) : 0;
+  return { v: 1, mode: "on", rate: T.rate, bonus_pct: T.bonus_pct, at: when,
+           promo: rate ? { id: p.id, label: p.label || null, rate, cap_cents: p.cap_cents, budget_pat: p.budget_pat, bonus_base: p.bonus_base } : null };
+}
+/** The split under terms Q (read-only): {s, p (Q's promo or null), rate, id, budgetShort}. No Q = the perks-only terms. */
+async function splitFor(Q, { userId = null, donorKey = null, cents }) {
+  if (!Q) return { s: NP.donorTerms(cents), p: null };
+  const plain = { s: { ...split({ cents, normalRate: Q.rate, bonusPct: Q.bonus_pct }), promo: null }, p: null };
+  const p = Q.promo;
   const id = identity(userId, donorKey);
-  if (!Number.isFinite(at) || !id) return plain;
-  const p = await promoAt(at);
-  if (!p) return plain;
-  const rate = effectiveRate(p, T.rate);
-  if (!rate) return plain;
+  if (!p || !id) return plain;
   const u = await usage(p.id, id);
-  const s = split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
-                    promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
+  const s = split({ cents, normalRate: Q.rate, bonusPct: Q.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
+                    promo: { rate: p.rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } });
   // 1.99vi: what the donor's cap still allowed at the promo rate but the budget didn't (= a budget fallback)
   const capFits = Math.min(s.usd_cents, Math.max(0, Math.floor(p.cap_cents) - Math.floor(u.usedCents)));
   const budgetShort = p.budget_pat == null ? 0 : Math.max(0, capFits - s.promo_cents);
-  return { s: { ...s, promo: { id: p.id, label: p.label || null } }, p, rate, id, budgetShort };
+  return { s: { ...s, promo: { id: p.id, label: p.label || null } }, p, rate: p.rate, id, budgetShort };
+}
+/** The split a donation would get: under `terms` when given (null = perks), else under the switch and the promo of `paidAt`. */
+async function computeTerms({ userId = null, donorKey = null, cents, paidAt, terms }) {
+  const Q = terms !== undefined ? terms : await snapshot(paidAt, await DM.mode());
+  return splitFor(Q, { userId, donorKey, cents });
 }
 /** 1.99uh: what a donation would credit (PAT + the incentive bonus = what it mints), without writing anything. */
 async function previewTerms(args) { await init(); return (await computeTerms(args)).s; }
+const fromRow = (r, promo) => ({ usd_cents: r.usd_cents, pat: r.promo_pat + r.normal_pat, bonus: r.bonus, rate: r.normal_rate, bonus_pct: r.bonus_pct,
+  promo_cents: r.promo_cents, normal_cents: r.normal_cents, promo_pat: r.promo_pat, normal_pat: r.normal_pat, promo_rate: r.promo_rate,
+  promo: { id: r.promo_id, label: promo ? promo.label : null }, replay: true, allow_pat: true });
 /**
- * THE donation "credit" both rails take their numbers from ({cents, ...} - the other fields the callers pass are ignored).
- * 1.99ans: always nopat.donorTerms(cents) -> {usd_cents, pat: 0, bonus: 0, rate: 0, bonus_pct: 0, ..., promo: null, perks_only}.
+ * THE terms a donation is settled on. `terms` = the snapshot fixed when the donor was quoted; none = perks only (0 PAT, whatever
+ * the switch says now). `frozen` = a card quote's own split {s, budgetShort}. Call it inside the credit's transaction: a promo
+ * portion writes its donation_promo_credits row (idempotent per ref).
+ * -> {usd_cents, pat, bonus, rate, bonus_pct, promo_cents, normal_cents, promo_pat, normal_pat, promo_rate, promo, allow_pat | perks_only}
  */
-async function creditTerms({ cents } = {}) {
+async function creditTerms({ ref, userId = null, donorKey = null, cents, paidAt, via = null, terms = null, frozen = null } = {}) {
   await init();
-  // 1.99ans: no PAT for dollars and no promo split (nopat.js). Before 1.99ans this split the donation at the promo / normal rate
-  // and wrote its donation_promo_credits row; those rows stay as the history of the promo credits already made.
-  return NP.donorTerms(cents);
+  if (!terms) return NP.donorTerms(cents);
+  const run = async () => {
+    const old = ref ? (await getQuery("SELECT * FROM donation_promo_credits WHERE ref = ?", [String(ref)]))[0] : null;
+    if (old) return fromRow(old, (await getQuery("SELECT label FROM donation_promos WHERE id = ?", [old.promo_id]))[0]);
+    const C = frozen ? { s: frozen.s, p: frozen.s.promo ? terms.promo : null, rate: terms.promo ? terms.promo.rate : 0, id: identity(userId, donorKey), budgetShort: frozen.budgetShort || 0 }
+                     : await splitFor(terms, { userId, donorKey, cents });
+    if (!C.p || !C.id) return { ...C.s, promo: C.s.promo || null, allow_pat: true };
+    const { s, p, rate, id, budgetShort } = C;
+    await runQuery(`INSERT INTO donation_promo_credits (ref, promo_id, user_id, donor_key, via, paid_at, credited, usd_cents, promo_cents, normal_cents,
+                    promo_rate, normal_rate, promo_pat, normal_pat, bonus, bonus_pct, budget_short_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [String(ref), p.id, id.col === "user_id" ? id.v : null, id.col === "donor_key" ? id.v : null, via, Number(paidAt), clock(), s.usd_cents, s.promo_cents,
+       s.normal_cents, rate, terms.rate, s.promo_pat, s.normal_pat, s.bonus, terms.bonus_pct, budgetShort || 0]);
+    if (budgetShort > 0) console.warn(`[donpromo] budget fallback: ${ref} (${via || "?"}) - $${(budgetShort / 100).toFixed(2)} got the normal rate because ` +
+                                      `${p.id}'s budget (${Number(p.budget_pat).toLocaleString("en-US")} PAT) ran out`);
+    return { ...s, promo: { id: p.id, label: p.label || null }, allow_pat: true };
+  };
+  return inTx() ? run() : tx(run);
+}
+/**
+ * 1.99aor: THE ONLY PLACE A DOLLAR DONATION BECOMES PAT: the wallet credit (with the grant nopat.js wants), its "mint:donation" claim
+ * (the Fed journals it - fed/service.js donationSweep; Pepe while the Fed's books are his) and its donation_credits row. Inside the
+ * caller's transaction. meta = what the claim also records (the card's event, the crypto transfer).
+ */
+async function creditDonor({ ref, userId, via, cents, terms: T, meta = {}, sessionId = null, paymentIntent = null, quoteId = null }) {
+  if (!T || !T.allow_pat) throw Object.assign(new Error("no PAT for dollars: these terms don't allow a credit"), { code: "E_NO_PAT_FOR_DOLLARS" });
+  const isCrypto = via === "crypto";
+  const type = isCrypto ? "donation-crypto" : "donation";
+  await require("./ledger").postOrThrow(userId, T.pat, type, { transactionId: ref, source: isCrypto ? "crypto donation" : "stripe donation", note: noteOf(T),
+    donationGrant: issueGrant({ userId, amount: T.pat, type, ref }) });
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
+    [ref, userId, T.pat, JSON.stringify({ bonus: T.bonus, usd_cents: cents, rate: T.rate, bonus_pct: T.bonus_pct, ...meta, ...metaOf(T) })]);
+  await runQuery(`INSERT INTO donation_credits (ref, user_id, via, payment_intent, session, usd_cents, pat, bonus, rate, bonus_pct, quote_id, created)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [ref, userId, via, paymentIntent || null, sessionId || null, cents, T.pat, T.bonus, T.rate, T.bonus_pct, quoteId || null, clock()]);
+}
+/**
+ * 1.99aor: settle one donation inside the rail's transaction: the terms, its donation_usd_log row (the record + the day's limits; a
+ * race past a limit is still counted - the money is taken - and flagged), and the PAT credit when the terms allow one. -> the terms
+ */
+async function settleDonation({ ref, sessionId = null, userId, via, paidAt, cents, terms = null, frozen = null, quoteId = null, paymentIntent = null, meta = {} }) {
+  const T = await creditTerms({ ref, userId, cents, paidAt, via, terms, frozen });
+  await recordCredit({ ref, sessionId, userId, via, paidAt, cents, mint: T.pat + T.bonus });
+  if (T.allow_pat && T.pat > 0) await creditDonor({ ref, userId, via, cents, terms: T, meta, sessionId, paymentIntent, quoteId });
+  else NP.assertNoPat(T.allow_pat ? 0 : T.pat + T.bonus, via + " donation");
+  if (quoteId) await runQuery("UPDATE donation_quotes SET status = 'used', ref = ? WHERE id = ? AND via = 'card'", [ref, quoteId]);
+  return T;
 }
 /** The extra reserve_claims meta for a credit: {} without a promo (the old meta stays byte-for-byte the same). */
 function metaOf(s) {
@@ -234,6 +332,16 @@ function noteOf(s) {
   return `Promo${s.promo.label ? " (" + s.promo.label + ")" : ""}: ${f(s.promo_pat)} PAT for $${(s.promo_cents / 100).toFixed(2)} at ${f(s.promo_rate)}/$1` +
          (s.normal_cents ? ` + ${f(s.normal_pat)} PAT for $${(s.normal_cents / 100).toFixed(2)} at the normal ${f(s.rate)}/$1` : "");
 }
+/** The receipt's promo sentence (" " + text) for the donor's inbox notice, in their language; "" without a promo portion. */
+function receiptLine(t, s) {
+  if (!s || !s.promo || !s.promo_cents) return "";
+  const f = (n) => (t && t.num ? t.num(n) : Number(n).toLocaleString("en-US"));
+  const usd = (c) => (c / 100).toFixed(2);
+  return " " + (s.normal_cents
+    ? t("donate.notice_promo_split", { promo_usd: usd(s.promo_cents), promo_pat: f(s.promo_pat), promo_rate: f(s.promo_rate),
+                                        normal_usd: usd(s.normal_cents), normal_pat: f(s.normal_pat), normal_rate: f(s.rate) })
+    : t("donate.notice_promo_all", { promo_usd: usd(s.promo_cents), promo_pat: f(s.promo_pat), promo_rate: f(s.promo_rate) }));
+}
 
 // ── public (what a donor sees BEFORE paying) ──
 function publicOf(p, normal, now) {
@@ -243,10 +351,10 @@ function publicOf(p, normal, now) {
            cap_usd: p.cap_cents / 100, starts: p.starts, ends: p.ends, left_ms: Math.max(0, p.ends - now), bonus_base: p.bonus_base,
            bonus_pct: normal.bonus_pct, budget: p.budget_pat != null };
 }
-/** The live promo for display (+ the viewer's allowance when signed in), or null. 1.99ans: always null (promos retired). */
+/** The live promo for display (+ the viewer's allowance when signed in), or null. 1.99aor: only while the switch is "on". */
 async function live(userId = null, now = clock()) {
   await init();
-  if (NP.PAT_PER_USD === 0) return null;
+  if ((await DM.mode()) !== "on") return null;
   const p = await promoAt(now);
   if (!p) return null;
   const out = publicOf(p, normalTerms(), now);
@@ -264,7 +372,7 @@ async function live(userId = null, now = clock()) {
 }
 /** Sync: the live promo from the cache (no allowance) - the homepage banner. */
 function liveCached(now = clock()) {
-  if (NP.PAT_PER_USD === 0) return null;       // 1.99ans: promos retired
+  if (DM.cachedMode() !== "on") return null;   // 1.99aor: promos only show while the switch is "on"
   const p = CACHE.find((x) => !x.cancelled && x.enabled && x.starts <= now && x.ends > now);
   return p ? publicOf(p, normalTerms(), now) : null;
 }
@@ -273,19 +381,12 @@ async function quote(userId, usd, now = clock()) {
   await init();
   const cents = Math.round(Number(usd) * 100);
   if (!Number.isFinite(cents) || cents <= 0 || cents > MAX_CAP_USD * 100 * 10) throw refuse("Pick an amount in dollars.");
-  const T = normalTerms();
   const D = await daily(userId, now);      // 1.99ts: the daily limit (null = none)
   const lim = D ? { left_cents: D.left_cents, over: cents > D.left_cents } : null;
-  const p = NP.PAT_PER_USD === 0 ? null : await promoAt(now);      // 1.99ans: no promo applies
-  const rate = p ? effectiveRate(p, T.rate) : 0;
-  let s;
-  if (NP.PAT_PER_USD === 0) s = { ...NP.donorTerms(cents) };      // 1.99ans: 0 PAT for dollars (nopat.js)
-  else if (!p || !rate) s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct }), promo: null };
-  else {
-    const u = await usage(p.id, identity(userId));
-    s = { ...split({ cents, normalRate: T.rate, bonusPct: T.bonus_pct, usedCents: u.usedCents, usedBudget: u.usedBudget,
-                     promo: { rate, capCents: p.cap_cents, budgetPat: p.budget_pat, bonusBase: p.bonus_base } }), promo: { id: p.id, label: p.label || null } };
-  }
+  // 1.99aor: under the switch: PAT + a live promo in "on", the perks-only terms otherwise
+  const M = await DM.mode();
+  const s = { ...(await splitFor(await snapshot(now, M), { userId, cents })).s };
+  if (M === "off") s.paused = true;
   // 1.99uh: the global pool - does this amount fit, and the most whole dollars that do (never the cap itself)
   let global = { on: false };
   if (globalOn()) {
@@ -420,11 +521,11 @@ async function globalCheck(cents, mint, at, now = clock(), exceptRefs = []) {
 }
 const mintOf = (s) => (s ? s.pat + s.bonus : 0);
 /** The most whole dollars (<= maxUsd) the member can donate right now within the global caps (binary search: minting grows with dollars). */
-async function globalMaxUsd(userId, maxUsd, now) {
+async function globalMaxUsd(userId, maxUsd, now, terms) {
   let lo = 0, hi = Math.max(0, Math.floor(maxUsd));
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    const s = (await computeTerms({ userId, cents: mid * 100, paidAt: now })).s;
+    const s = (await computeTerms({ userId, cents: mid * 100, paidAt: now, terms })).s;
     if ((await globalCheck(mid * 100, mintOf(s), now, now)).fits) lo = mid; else hi = mid - 1;
   }
   return lo;
@@ -440,8 +541,9 @@ async function globalPublic(now = clock()) {
   if (caps.pat != null) fr.push(caps.pat > 0 ? Math.max(0, 1 - used.pat / caps.pat) : 0);
   if (caps.cents != null) fr.push(caps.cents > 0 ? Math.max(0, 1 - used.cents / caps.cents) : 0);
   const left = fr.length ? Math.min(...fr) : 1;
-  // full = not even $1 fits (1.99ans: a donation mints nothing - nopat.js)
-  const one = NP.donorTerms(100);
+  // full = not even $1 at the normal rate fits (1.99aor: outside "on" a donation mints nothing)
+  const Tn = normalTerms();
+  const one = (await DM.mode()) === "on" ? split({ cents: 100, normalRate: Tn.rate, bonusPct: Tn.bonus_pct }) : NP.donorTerms(100);
   const full = !(await globalCheck(100, mintOf(one), now, now)).fits;
   return { on: true, full, pct_left: Math.floor(left * 100), resets_at: dayWindow(now).end, tz: S.tz };
 }
@@ -462,14 +564,17 @@ async function globalAdmin(now = clock()) {
 /** Before a transaction that may credit / reserve: tables ready + the day's supply frozen (the % mode). */
 async function prepare(at = clock()) { await init(); await auditReady(); if (S.global_mode === "pct" && S.global_pct > 0) await ensureFrozen(at); }
 
-/** Card: hold `cents` of today's allowances (the member's + the global pool) BEFORE opening a checkout; refused over either,
- *  with the amount that fits. -> {ref, limited} */
+/** Card: BEFORE a checkout opens: the switch (paused = refused), today's allowances (the member's + the global pool; refused over
+ *  either, with the amount that fits), and in "on" the quote that fixes this donation's terms. -> {ref, limited, quote} */
 async function reserveCheckout(userId, cents, now = clock()) {
   await prepare(now);
   return tx(async () => {
+    const mode = await DM.mode();                // read inside the transaction: a switch change can't slip between it and the quote
+    if (mode === "off") throw refuse(PAUSED, 409, "paused");
+    const Q = await snapshot(now, mode);
     const limit = await limitFor(userId);
     const gOn = globalOn();
-    if (!limit && !gOn) return { ref: null, limited: false };
+    if (!limit && !gOn && !Q) return { ref: null, limited: false, quote: null };
     let userLeft = Infinity;
     if (limit) {
       const u = await dayUsed(userId, now, now);
@@ -481,18 +586,183 @@ async function reserveCheckout(userId, cents, now = clock()) {
           : `You have reached today's donation limit (${usdTxt(limit)}). It resets at midnight ${tzName()} time.`, 409);
       }
     }
-    const s = (await computeTerms({ userId, cents, paidAt: now })).s;
+    const C = await splitFor(Q, { userId, cents });
+    const s = C.s;
     if (gOn && !(await globalCheck(cents, mintOf(s), now, now)).fits) {
-      const max = await globalMaxUsd(userId, Math.min(Math.floor(cents / 100) - 1, Math.floor(userLeft / 100)), now);
+      const max = await globalMaxUsd(userId, Math.min(Math.floor(cents / 100) - 1, Math.floor(userLeft / 100)), now, Q);
       throw Object.assign(refuse(max >= 1
         ? `Today's donation pool only has room for ${usdTxt(max * 100)} more - you can donate up to ${usdTxt(max * 100)} now.`
         : `Donations are full for today; they reopen at midnight ${tzLabel()} time.`, 409), { fits_usd: max });
     }
+    let quote = null;
+    if (Q) {
+      quote = { id: "dq_" + crypto.randomBytes(9).toString("hex"), promo_id: C.p ? C.p.id : null, terms: Q, split: s };
+      await runQuery(`INSERT INTO donation_quotes (id, user_id, via, usd_cents, mode, terms, split, promo_id, promo_cents, promo_pat, status, created, expires)
+                      VALUES (?, ?, 'card', ?, 'on', ?, ?, ?, ?, ?, 'open', ?, ?)`,
+        [quote.id, String(userId), cents, JSON.stringify(Q), JSON.stringify({ s, budgetShort: C.budgetShort || 0 }), quote.promo_id, s.promo_cents || 0, s.promo_pat || 0, now, now + CHECKOUT_QUOTE_MS]);
+    }
+    if (!limit && !gOn) return { ref: null, limited: false, quote };
     const ref = "hold:" + crypto.randomBytes(8).toString("hex");
     await runQuery("INSERT INTO donation_usd_log (ref, user_id, via, paid_at, usd_cents, pat, status, expires, limit_cents, created) VALUES (?, ?, 'card', ?, ?, ?, 'open', ?, ?, ?)",
-      [ref, String(userId), now, cents, mintOf(s), now + 5 * 60000, limit || null, now]);
-    return { ref, limited: true };
+      [ref, String(userId), now, cents, mintOf(s), now + CHECKOUT_QUOTE_MS, limit || null, now]);
+    return { ref, limited: true, quote };
   });
+}
+/** 1.99aor: the checkout opened: its quote holds as long as the session can be paid. */
+async function attachQuote(id, sessionId, expiresMs) {
+  if (id) await runQuery("UPDATE donation_quotes SET session = ?, expires = ? WHERE id = ? AND status = 'open'", [String(sessionId), expiresMs, id]);
+}
+/** 1.99aor: the checkout couldn't open: its quote goes (and gives its promo room back). */
+async function releaseQuote(id) { if (id) await runQuery("UPDATE donation_quotes SET status = 'released' WHERE id = ? AND status = 'open'", [id]); }
+/**
+ * 1.99aor: the quote a paid checkout carries (metadata.quote) -> {id, terms, frozen} | {dup: true} (it already paid once) | null (no
+ * quote = perks only). A quote that isn't this session's, this amount's or this account's is not honoured.
+ */
+async function checkoutQuote({ quoteId, sessionId, userId, cents }) {
+  if (!quoteId) return null;
+  const q = (await getQuery("SELECT * FROM donation_quotes WHERE id = ?", [String(quoteId)]))[0];
+  const bad = (why) => { console.error(`[donations] quote ${String(quoteId).slice(0, 40)} not honoured: ${why} - perks only`); return null; };
+  if (!q || q.via !== "card" || q.mode !== "on") return bad("no such card quote");
+  if (q.session && sessionId && q.session !== String(sessionId)) return bad("another session's quote");
+  if (Number(q.usd_cents) !== Math.floor(Number(cents))) return bad("another amount");
+  const owner = await require("./ledger").resolveUserId(q.user_id);
+  if (String(owner) !== String(userId)) return bad("another account's quote");
+  if (q.status === "used") return { dup: true };
+  const terms = parseJson(q.terms), frozen = parseJson(q.split);
+  if (!terms || !frozen || !frozen.s) return bad("unreadable");
+  return { id: q.id, terms, frozen };
+}
+/**
+ * 1.99aor: /support just showed this member the crypto address under the current switch: that is their quote for what they send next.
+ * shown = the state the page was rendered in: if the switch has moved since, what it showed is no longer on offer and nothing is noted.
+ */
+async function noteCryptoQuote(userId, now = clock(), shown = null) {
+  await init();
+  if (!userId) return null;
+  const sameAsLast = async (mode, print) => {
+    const last = (await getQuery("SELECT * FROM donation_quotes WHERE user_id = ? AND via = 'crypto' ORDER BY created DESC, rowid DESC LIMIT 1", [String(userId)]))[0];
+    if (!last || last.mode !== mode || last.expires <= now) return null;
+    const q = parseJson(last.terms);
+    return (q ? JSON.stringify({ ...q, at: 0 }) : "") === print ? last : null;
+  };
+  // the usual page view changes nothing: decided without taking the write transaction
+  const peekMode = await DM.mode();
+  if (peekMode === "off" || (shown && peekMode !== shown)) return null;
+  const peekQ = await snapshot(now, peekMode);
+  const peek = await sameAsLast(peekMode, peekQ ? JSON.stringify({ ...peekQ, at: 0 }) : "");
+  if (peek && peek.expires - now >= CRYPTO_QUOTE_MS / 2) return peek.id;
+  return tx(async () => {
+    const mode = await DM.mode();
+    if (mode === "off" || (shown && mode !== shown)) return null;
+    const Q = await snapshot(now, mode);
+    const last = await sameAsLast(mode, Q ? JSON.stringify({ ...Q, at: 0 }) : "");
+    if (last) {
+      await runQuery("UPDATE donation_quotes SET expires = ? WHERE id = ?", [now + CRYPTO_QUOTE_MS, last.id]);
+      return last.id;
+    }
+    const id = "dq_" + crypto.randomBytes(9).toString("hex");
+    await runQuery("INSERT INTO donation_quotes (id, user_id, via, mode, terms, status, created, expires) VALUES (?, ?, 'crypto', ?, ?, 'open', ?, ?)",
+      [id, String(userId), mode, Q ? JSON.stringify(Q) : null, now, now + CRYPTO_QUOTE_MS]);
+    return id;
+  });
+}
+// nothing awaits a page's quote; the tests (and a clean shutdown) can wait for the ones under way
+let quoteWork = Promise.resolve();
+function noteCryptoQuoteSoon(userId, shown) {
+  const p = noteCryptoQuote(userId, clock(), shown).catch((e) => console.error("[support] quote:", e.message));
+  quoteWork = Promise.all([quoteWork, p]).then(() => {});
+  return p;
+}
+/**
+ * 1.99aor: the snapshot stored with a transfer when the watcher first sees it (null = perks only). blockMs = when the chain says it was
+ * mined: a transfer mined before the switch last went on was sent under the earlier state, however late the watcher reaches it.
+ */
+async function seenTerms(now = clock(), blockMs = null) {
+  await init();
+  const st = await DM.get();
+  if (st.mode === "on" && st.on_since && Number(blockMs) > 0 && Number(blockMs) < st.on_since) return null;
+  const Q = await snapshot(now, st.mode);
+  return Q ? JSON.stringify(Q) : null;
+}
+/** 1.99aor: the terms of one crypto payment: what /support had shown its owner when it was mined (else seen), else what was stored when it was seen. */
+async function cryptoTermsFor(owner, p) {
+  const at = Number(p.block_ms) || Number(p.seen);
+  const q = owner ? (await getQuery(`SELECT mode, terms FROM donation_quotes WHERE user_id = ? AND via = 'crypto' AND created <= ? AND expires >= ?
+                                     ORDER BY created DESC, rowid DESC LIMIT 1`, [String(owner), at, at]))[0] : null;
+  if (q) return q.mode === "on" ? parseJson(q.terms) : null;
+  return p.terms ? parseJson(p.terms) : null;
+}
+
+// ── 1.99aor: a card donation that credited PAT, refunded or disputed ──
+// Stripe's numbers decide what is owed back: floor(PAT x min(usd, refunded + disputed) / usd), the bonus the same way. refunded is Stripe's
+// cumulative figure; disputed is the sum of this donation's open and lost disputes (donation_disputes, one row per Stripe dispute: a
+// dispute that has closed stays closed, so a late or replayed "created" changes nothing, and a close that arrives alone is enough). An
+// inquiry (kind "inquiry", status warning_*) moves no funds and takes nothing. The difference from what was already taken moves now, so
+// a replayed or reordered event can't take twice. A wallet never goes negative: what it can't cover is recorded (short_pat, on the admin
+// card). What comes back goes to the Federal Reserve (the wallet's PAT and, out of the incentive budget, the bonus), so the supply stays
+// conserved and the mint journal stays true. A dispute won gives all of it back (fed/service.js donationReturnInTx: from the Reserve,
+// minted again for whatever the Reserve no longer holds); only an account that can't be credited is left owed (owed_pat).
+async function reverseDonation({ eventId, paymentIntent, kind, cents = 0, disputeId = null }) {
+  const c = paymentIntent ? (await getQuery("SELECT * FROM donation_credits WHERE payment_intent = ?", [String(paymentIntent)]))[0] : null;
+  if (!c) return null;
+  const usdc = Number(c.usd_cents), at = clock();
+  let refunded = Number(c.refunded_cents) || 0, disputed = Number(c.disputed_cents) || 0;
+  const before = Math.min(usdc, refunded + disputed);
+  const amt = Math.min(usdc, Math.max(0, Math.floor(Number(cents) || 0)));
+  if (kind === "refund") refunded = Math.max(refunded, amt);
+  else {
+    const id = String(disputeId || `pi-${paymentIntent}`).slice(0, 120);
+    if (kind === "dispute" || kind === "inquiry") {
+      await runQuery("INSERT OR IGNORE INTO donation_disputes (id, ref, state, cents, opened, updated) VALUES (?, ?, ?, ?, ?, ?)", [id, c.ref, kind === "dispute" ? "open" : "inquiry", amt, at, at]);
+    } else {
+      await runQuery(`INSERT INTO donation_disputes (id, ref, state, cents, opened, updated) VALUES (?, ?, ?, ?, ?, ?)
+                      ON CONFLICT(id) DO UPDATE SET state = excluded.state, cents = CASE WHEN excluded.cents > 0 THEN excluded.cents ELSE cents END, updated = excluded.updated`,
+                     [id, c.ref, kind === "won" ? "won" : "lost", amt, at, at]);
+    }
+    disputed = Math.min(usdc, Number((await getQuery("SELECT COALESCE(SUM(cents), 0) AS c FROM donation_disputes WHERE ref = ? AND state IN ('open', 'lost')", [c.ref]))[0].c) || 0);
+  }
+  const target = Math.min(usdc, refunded + disputed);
+  const owedPat = Math.floor((c.pat * target) / usdc), owedBonus = Math.floor((c.bonus * target) / usdc);
+  const FS = require("./fed/service"), PL = require("./pools");
+  let fed = false;
+  try { fed = !!(await FS.live()); } catch (e) { fed = false; }
+  const poolHas = async (k) => { try { return Math.max(0, Math.trunc(Number(await PL.balance(k)) || 0)); } catch (e) { return 0; } };
+  if (fed) {                                     // the mint is journaled first, so the books read in order
+    const cl = (await getQuery(`SELECT c.claimId, c.flow, c.amount, c.userId, c.meta, c.settled, u.username FROM reserve_claims c LEFT JOIN users u ON u.userId = c.userId
+                                WHERE c.claimId = ?`, [c.ref]))[0];
+    if (cl && !cl.settled) await FS.settleDonationInTx(cl);
+  }
+  const L = require("./ledger");
+  const txId = `${c.ref}-r-${eventId}`.slice(0, 190);
+  let wallet = 0, bonus = 0;
+  const dp = owedPat - c.clawed_pat;
+  if (dp > 0) {
+    const bal = Number(((await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [c.user_id]))[0] || {}).b) || 0;
+    const take = Math.min(dp, Math.max(0, Math.trunc(bal)));
+    if (take > 0) {
+      // post, not postOrThrow: an account that can't be debited just leaves it "not recovered" - a throw would have Stripe retry for days
+      const r = await L.post(c.user_id, -take, "donation-reversal", { transactionId: txId, source: "donation reversal", system: true, requireCover: true,
+                                                                      note: kind === "refund" ? "Donation refunded" : "Donation disputed" });
+      if (r.ok) wallet = take;
+    }
+  } else if (dp < 0) {
+    const r = await L.post(c.user_id, -dp, "donation-restored", { transactionId: txId, source: "donation reversal", note: "Dispute closed in your favour",
+                                                                  donationGrant: issueGrant({ userId: c.user_id, amount: -dp, type: "donation-restored", ref: txId }) });
+    if (r.ok) wallet = dp;
+  }
+  const db = owedBonus - c.clawed_bonus;
+  if (fed && db > 0) bonus = Math.min(db, await poolHas("incentives"));
+  else if (fed && db < 0) bonus = db;
+  if (fed && (wallet || bonus)) await FS.donationReturnInTx({ key: String(eventId), wallet, bonus });
+  const clawedPat = c.clawed_pat + wallet, clawedBonus = c.clawed_bonus + bonus;
+  const short = Math.max(0, owedPat - clawedPat), owed = Math.max(0, clawedPat - owedPat);
+  await runQuery(`UPDATE donation_credits SET refunded_cents = ?, disputed_cents = ?, clawed_pat = ?, clawed_bonus = ?, short_pat = ?, owed_pat = ?, updated = ? WHERE ref = ?`,
+                 [refunded, disputed, clawedPat, clawedBonus, short, owed, at, c.ref]);
+  await runQuery(`INSERT OR IGNORE INTO donation_reversals (event_id, ref, kind, cents, pat_delta, bonus_delta, short_pat, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                 [String(eventId), c.ref, kind, target, wallet, bonus, short, at]);
+  if (short) console.warn(`[donations] ${c.ref}: ${short} PAT of a reversed donation couldn't be taken back (the wallet doesn't hold it)`);
+  if (owed) console.error(`[donations] ${c.ref}: ${owed} PAT of a dispute won couldn't be put back (the account can't be credited)`);
+  return { ref: c.ref, userId: c.user_id, kind, usd_cents: usdc, reversed_cents: target, moved_cents: Math.abs(target - before), taken: Math.max(0, wallet), given: Math.max(0, -wallet), bonus, short, owed };
 }
 /** Card: the checkout opened - its hold now lasts as long as the session can be paid. */
 async function attachSession(ref, sessionId, expiresMs) {
@@ -503,7 +773,9 @@ async function attachSession(ref, sessionId, expiresMs) {
 async function releaseHold(ref) { if (ref) await runQuery("UPDATE donation_usd_log SET status = 'released' WHERE ref = ? AND status = 'open'", [ref]); }
 /** Card: Stripe says the checkout expired unpaid - its hold goes (it would lapse at `expires` anyway). */
 async function expireSession(sessionId) {
-  return runQuery("UPDATE donation_usd_log SET status = 'expired' WHERE session = ? AND status = 'open'", [String(sessionId)]);
+  const q = await runQuery("UPDATE donation_quotes SET status = 'expired' WHERE session = ? AND via = 'card' AND status = 'open'", [String(sessionId)]);   // 1.99aor
+  const r = await runQuery("UPDATE donation_usd_log SET status = 'expired' WHERE session = ? AND status = 'open'", [String(sessionId)]);
+  return { changes: ((r && r.changes) || 0) + ((q && q.changes) || 0) };
 }
 /**
  * A credited donation counts toward its day (call it inside the credit's transaction; idempotent per ref). Card: its open
@@ -645,10 +917,15 @@ const nextId = async () => {
   return "DP" + (Number(r.n) + 1) + "-" + crypto.randomBytes(2).toString("hex");
 };
 
+async function promosOpen() {
+  const M = await DM.mode();
+  if (M === "perks") throw refuse(RETIRED, 410, "retired");
+  if (M === "off") throw refuse(PAUSED_PROMO, 409, "paused");
+}
 /** Create a promo. b = {label, mode, rate | mult, cap_usd, budget, bonus_base, enabled, starts, ends, today} */
 async function create(admin, b = {}) {
   await init();
-  if (NP.PAT_PER_USD === 0) throw refuse(RETIRED, 410, "retired");      // 1.99ans: promos raise a PAT rate - retired
+  await promosOpen();                          // 1.99aor: a promo raises a PAT rate - only while the switch is "on"
   await auditReady();
   const now = clock();
   const T = normalTerms();
@@ -680,7 +957,7 @@ const LOCKED = ["mode", "rate", "mult", "cap_usd", "bonus_base", "starts"];
 /** Edit. Before it starts (and with no credits): anything. After: label, ends, budget, enabled only. */
 async function edit(admin, id, b = {}) {
   await init();
-  if (NP.PAT_PER_USD === 0) throw refuse(RETIRED, 410, "retired");      // 1.99ans (end() still works)
+  await promosOpen();                          // 1.99aor (end() still works in every state)
   await auditReady();
   const now = clock();
   const row = await tx(async () => {
@@ -811,6 +1088,31 @@ function budgetState(p, st, rate, status) {
            exhausted, exhausted_live: exhausted && (status === "live" || status === "paused"), small: !!BUDGET.check(p.budget_pat, p.cap_cents, r),
            allowance_pat: BUDGET.allowance(p.cap_cents, r) };
 }
+/** 1.99aor: the switch for the admin card: the state, what each state does, who changed it, PAT donations and their reversals. */
+async function modeState() {
+  const st = await DM.get();
+  const hist = await DM.history(20);
+  const sum = (await getQuery(`SELECT COUNT(*) AS n, COALESCE(SUM(pat),0) AS pat, COALESCE(SUM(bonus),0) AS bonus, COALESCE(SUM(clawed_pat),0) AS clawed,
+                               COALESCE(SUM(short_pat),0) AS short, COALESCE(SUM(owed_pat),0) AS owed FROM donation_credits`))[0];
+  const reversals = await getQuery(`SELECT r.event_id, r.ref, r.kind, r.cents, r.pat_delta, r.bonus_delta, r.short_pat, r.at, c.user_id, u.username
+      FROM donation_reversals r LEFT JOIN donation_credits c ON c.ref = r.ref LEFT JOIN users u ON u.userId = c.user_id ORDER BY r.at DESC LIMIT 20`);
+  const open = (await getQuery("SELECT COUNT(*) AS n FROM donation_quotes WHERE via = 'card' AND mode = 'on' AND status = 'open' AND expires > ?", [clock()]))[0].n;
+  return { mode: st.mode, readable: st.readable, ever_on: st.ever_on, updated: st.updated, actor: st.actor, modes: DM.MODES, describe: DM.DESCRIBE, normal: normalTerms(), history: hist,
+           credits: { n: Number(sum.n) || 0, pat: Number(sum.pat) || 0, bonus: Number(sum.bonus) || 0, clawed: Number(sum.clawed) || 0, short: Number(sum.short) || 0, owed: Number(sum.owed) || 0 },
+           open_quotes: Number(open) || 0, reversals, rollback: await rollbackCases() };
+}
+/**
+ * 1.99aor: donations a build older than 1.99aor settled although they were quoted PAT (a rollback while the switch was on): it ignored the
+ * quote, so they got 0 PAT. This build always marks what it settles (a card quote "used", a crypto row's `applied`), so these rows are exact.
+ */
+async function rollbackCases() {
+  const list = async (sql) => { try { return await getQuery(sql); } catch (e) { return []; } };
+  const card = await list(`SELECT q.id AS ref, q.user_id, u.username, q.usd_cents FROM donation_quotes q JOIN donation_usd_log l ON l.session = q.session AND l.status = 'credited' AND COALESCE(l.pat, 0) = 0
+                           LEFT JOIN users u ON u.userId = q.user_id WHERE q.via = 'card' AND q.mode = 'on' AND q.status = 'open' AND q.session IS NOT NULL ORDER BY q.created DESC LIMIT 20`);
+  const crypto_ = await list(`SELECT p.id AS ref, p.user_id, u.username, p.usd_cents FROM crypto_payments p LEFT JOIN users u ON u.userId = p.user_id
+                              WHERE p.status = 'credited' AND p.terms IS NOT NULL AND COALESCE(p.pat, 0) = 0 AND p.applied IS NULL ORDER BY p.seen DESC LIMIT 20`);
+  return { card, crypto: crypto_ };
+}
 /** The admin card: settings, the normal terms, every promo (newest first) with its numbers. */
 async function adminState() {
   await init();
@@ -825,7 +1127,7 @@ async function adminState() {
   }
   let log = [];
   try { log = await require("./adminaudit").recent("donation_promo", 30); } catch (e) { log = []; }
-  return { now, settings: { ...S }, normal: T, limit: await limitState(), global: await globalAdmin(now), limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
+  return { now, donations: await modeState(), settings: { ...S }, normal: T, limit: await limitState(), global: await globalAdmin(now), limits: { hard_ceiling_x: HARD_CEILING_X, max_days: MAX_DAYS, max_cap_usd: MAX_CAP_USD },
            bonus_bases: BONUS_BASES, today_ends: nextMidnight(now), promos, log };
 }
 /** 1.99tq: promo PAT per UTC day (the supply history's "of which promo" line). */
@@ -865,6 +1167,8 @@ function register(app, { addUser, noTimers } = {}) {
   app.get("/api/donate/promo", ...json(async (req) => {
     const uid = req.user && req.user.userId ? req.user.userId : null;
     const out = { promo: await live(uid), daily: await daily(uid), global: await globalPublic() };
+    const M = await DM.mode();                 // 1.99aor: the page's script needs the state only when it isn't the default one
+    if (M === "off") out.paused = true; else if (M === "on") out.mode = "on";
     if (req.query.usd !== undefined) out.quote = await quote(uid, req.query.usd);
     return out;
   }));
@@ -881,6 +1185,22 @@ function register(app, { addUser, noTimers } = {}) {
     if (!u) throw refuse("No such member.", 404);
     return { ...(await setOverride(req.user, u.userId, b.limit_usd, b.note)), username: u.username, today: await daily(u.userId) };
   }, { admin: true }));
+  // 1.99aor: THE SWITCH (donationmode.js): a Pepe owner (the json wrapper, read fresh), then the password step-up (stepup.js: a same-origin
+  // fetch, the single-use nonce from POST /api/admin/stepup/nonce {for: "donations_mode"}, the account password), audited
+  // from = the state the owner's page showed: anything else is refused before the password is used, and again inside the write
+  app.post("/api/admin/donations/mode", ...json(async (req, b) => {
+    await init();
+    const next = String(b.mode || ""), from = String(b.from || "");
+    if (!DM.MODES.includes(next)) throw refuse("Pick on, perks or off.");
+    const stale = async () => refuse("Donations were changed after this page loaded. It now shows the current state: choose again.", 409, "stale", await modeState());
+    if ((await DM.get()).mode !== from) throw await stale();
+    const me = await require("./staffroles").ownerOf(req.user, "donations.admin");
+    await require("./stepup").check(req, me, b);
+    let r;
+    try { r = await DM.set(me, next, b.note, { from }); } catch (e) { if (e && e.code === "stale") throw await stale(); throw e; }
+    await refresh();
+    return { changed: r.changed, before: r.before, donations: await modeState() };
+  }, { owner: true }));
   app.post("/api/admin/donpromo/create", ...json(async (req, b) => ({ promo: await create(req.user, b) }), { owner: true }));
   app.post("/api/admin/donpromo/settings", ...json(async (req, b) => setSettings(req.user, b), { owner: true }));
   app.post("/api/admin/donpromo/:id/edit", ...json(async (req, b) => ({ promo: await edit(req.user, req.params.id, b) }), { owner: true }));
@@ -888,9 +1208,12 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = {
-  init, register, creditTerms, metaOf, noteOf, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
+  init, register, creditTerms, metaOf, noteOf, receiptLine, split, effectiveRate, live, liveCached, quote, create, edit, end, setSettings, adminState,
   promoByDay, nextMidnight, dayWindow, daily, limitCheck, reserveCheckout, attachSession, releaseHold, expireSession, recordCredit,
   setOverride, overrideOf, limitState, donorKeyOf, budgetState,
+  // 1.99aor
+  settleDonation, attachQuote, releaseQuote, checkoutQuote, noteCryptoQuote, noteCryptoQuoteSoon, seenTerms, cryptoTermsFor, reverseDonation, modeState, rollbackCases, snapshot, PAUSED,
+  _quotesSettled: () => quoteWork,
   // 1.99uh
   previewTerms, ensureFrozen, globalCaps, globalCheck, globalPublic, globalAdmin, globalMaxUsd, prepare, dayKey, mintOf,
   _setSupply: (fn) => { supplyFn = fn || (async () => (await require("./supply").patSupply()).total); }, refresh, Refuse, BONUS_BASES, DEFAULTS, MAX_DAYS, HARD_CEILING_X, MAX_CAP_USD,

@@ -6,8 +6,8 @@
 <main class="sb" id="cryptoAdm">
   <div class="sb-head">
     <h1><span class="ds-ic" aria-hidden="true">🪙</span> Crypto donations</h1>
-    <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature count as a donation exactly like a card donation:
-      the donor gets the 💚 supporter perks and <b>no PAT</b> - nothing is minted (1.99ans, no PAT for dollars: <code>nopat.js</code>).
+    <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature count as a donation exactly like a card donation.
+      <% const DM_ = locals.dmode || 'perks'; %><% if (DM_ === 'on') { %>The donations switch is <b>on</b>: <b><%= fmt(terms.rate) %></b> PAT per $1 to the donor + <b><%= terms.bonus_pct %>%</b> into the incentive budget (policy <code>donation</code>), on the terms the donor was quoted.<% } else if (DM_ === 'off') { %>The donations switch is <b>paused</b>: the address is off the public page, and what still arrives is recorded on the terms it was quoted (no quote: supporter perks, no PAT).<% } else { %>The donations switch is <b>perks only</b>: the donor gets the 💚 supporter perks and <b>no PAT</b> - nothing is minted.<% } %> The switch: <a href="/admin/economy#donations">/admin/economy → Donations</a>.
       Receive-only: nobody here holds a key and nothing is ever sent out. Public page: <a href="/support">/support</a>. Card donations: <%= stripe ? 'on' : 'off' %>.</p>
   </div>
 
@@ -82,7 +82,7 @@
 
   <section class="sb-card" id="held" aria-labelledby="heT">
     <h2 id="heT">Held (over $<%= fmt(S.max_usd) %>, or over the member's daily limit / today's global donation cap)</h2>
-    <p class="muted">Approve = count it now (supporter perks, no PAT; an approved over-limit one is flagged on /admin/economy#donations). Reject = not counted; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: not counted, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
+    <p class="muted">Approve = count it now, on the terms it was quoted when it was seen (no PAT unless those terms give PAT; an approved over-limit one is flagged on /admin/economy#donations). Reject = not counted; the coins stay at the receiving address. Refunded off-site = you sent the coins back from the wallet that owns it, outside PATV: not counted, and the donor gets a notice. The daily limit: <a href="/admin/economy#donations">/admin/economy → Donations</a>.</p>
     <% table(held, 'held', 'held') %>
   </section>
   <% if (suspect.length) { %>
@@ -109,5 +109,5 @@
     <pre id="cxDryOut" style="white-space:pre-wrap;max-height:420px;overflow:auto"></pre>
   </section>
 </main>
-<script src="/public/js/crypto-admin.js?v=3" defer></script>
+<script src="/public/js/crypto-admin.js?v=4" defer></script>
 <%- include('partials/admin-close') %>

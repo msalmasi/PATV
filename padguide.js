@@ -78,7 +78,9 @@ function register(app, { addUser }) {
       const username = req.user ? req.user.username : null;
       const mine = username ? await safe(() => require("./padowner").myPads(username), []) : [];
       res.set("Cache-Control", "private, max-age=0, must-revalidate");
-      res.render("padGuide", { user: username, F: await facts(), SERVICES, GOALS, mine });
+      // 1.99aor: what the page says a donation gives follows the donations switch (donationmode.js)
+      const donations = await safe(() => require("./donationmode").get(), { mode: "perks", ever_on: false });
+      res.render("padGuide", { user: username, F: await facts(), SERVICES, GOALS, mine, donations });
     } catch (e) {
       console.error("[padguide]", e);
       res.status(500).send("Something went wrong.");

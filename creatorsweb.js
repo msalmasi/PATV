@@ -50,7 +50,8 @@ function register(app, { addUser, isBotToken }) {
     } catch (e) { console.error("[creators] page:", e); res.status(500).send("Couldn't load PATV Creators."); }
   });
   app.get("/creators/terms", addUser, (req, res) => {
-    res.render("creatorTerms", { user: req.user ? req.user.username : null, title: T(req, "cr.terms.title", "PATV Creator Terms"), version: CR.CREATOR_TERMS_VERSION, C: CR.config() });
+    res.render("creatorTerms", { user: req.user ? req.user.username : null, title: T(req, "cr.terms.title", "PATV Creator Terms"), version: CR.CREATOR_TERMS_VERSION, C: CR.config(),
+      donations: require("./donationmode").cached() });      // 1.99aor: the reversed-payment sentence follows the donations switch
   });
   app.get("/creators/:username", addUser, async (req, res, next) => {
     if (!/^[\w.-]{1,64}$/.test(String(req.params.username || ""))) return next();

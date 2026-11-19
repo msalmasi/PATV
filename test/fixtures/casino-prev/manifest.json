@@ -12,6 +12,8 @@
     "casino/rewards.js": "24f715844a5cb955177fa6b76eb9b9e26c22dc55",
     "casino/roulette.js": "ad1068df604ac32ed92d720b41728f7c3fa3ba63",
     "casino/service.js": "2454d98bd653f24337fba67f6643979fd5092e39",
+    "ledger.js": "0822b07dd15a6d548d659337bdbff3ae773ea23b",
+    "nopat.js": "06d11c4d08a643b40269ea0b4d8dfda98e92c2df",
     "supply.js": "28562bd23091a08c9f2a975ba611d3f68e2c117e"
   }
 }

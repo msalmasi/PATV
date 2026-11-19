@@ -78,15 +78,27 @@ const DEFAULT_PROMOS = Object.freeze([
 
 let NOW = () => Date.now();
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
-/** 1.99kz: the Support PATV promo is shown ({} = on, no numbers), or null while neither card (Stripe) nor stablecoin
- *  donations are on - /support would 404 then. 1.99ans: no "{rate} PAT per $1", no pot bonus, no donation promo - a
- *  donation gives supporter perks, never PAT (nopat.js). */
+/** 1.99kz: the Support PATV promo's numbers, or null while it isn't shown: neither card (Stripe) nor stablecoin donations are on
+ *  (/support would 404) or donations are paused. 1.99aor, by the donations switch: "perks" = {} (no numbers, the perks text);
+ *  "on" = {rate} PAT per $1 + {bonus}% to the community pot, and a live donation promo's rate + per-donor cap; perks after donations
+ *  have given PAT = {was: true} (the text without "never"). */
 let supportTerms = () => {
   let on = false;
   try { on = require("./cryptopay").enabled(); } catch (e) { on = false; }
   if (!on) { try { on = require("./stripebilling").enabled(); } catch (e) { on = false; } }
-  return on ? {} : null;
+  if (!on) return null;
+  const DM = require("./donationmode"), mode = DM.cachedMode();
+  if (mode === "off") return null;
+  if (mode !== "on") return DM.wasOn() ? { was: true } : {};
+  let T = { rate: 500000, bonus_pct: 20 };
+  try { T = require("./funding").donationTerms(); } catch (e) { /* defaults */ }
+  let P = null;
+  try { P = require("./donationpromo").liveCached(); } catch (e) { P = null; }
+  if (P) return { rate: fmt(P.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)), promo_on: true, promo_cap: fmt(P.cap_usd), promo_mult: String(P.mult) };
+  return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
 };
+/** 1.99aor: which built-in texts a house promo uses ("support" has one per state of the donations switch). */
+const promoTextKey = (kind, vars) => (kind !== "support" ? kind : vars.promo_on ? "support_promo" : vars.rate ? "support_on" : vars.was ? "support_was" : "support");
 // 1.99ack: the review queue is banner.review (Assistants too since the owner's 2026-10-18 decision), settings + house
 // promos banner.config (siteperms.js)
 const canReview = (u) => SP.can(u, "banner.review");
@@ -613,9 +625,10 @@ async function chatHouse(paidToday) {
     if (p.kind === "support" && !sup) continue;
     const fill = (s) => plainText(String(s || "").replace(/\{(jackpot|draw)\}/g, (m, k) => vars[k] || ""));
     const own = !!(p.headline || p.line);                                    // an admin's own text, else the built-in
-    const headline = cleanLine(own ? fill(p.headline) : enText(`banner.promo.${p.kind}.h`, vars), HEADLINE_MAX);   // 1.99ans: no donation promo text
+    const base = promoTextKey(p.kind, vars);
+    const headline = cleanLine(own ? fill(p.headline) : enText(`banner.promo.${base}.h`, vars), HEADLINE_MAX);
     if (!headline) continue;
-    const line = cleanLine(own ? fill(p.line) : enText(`banner.promo.${p.kind}.l`, vars), LINE_MAX) || null;
+    const line = cleanLine(own ? fill(p.line) : enText(`banner.promo.${base}.l`, vars), LINE_MAX) || null;
     const link = p.link ? (p.link[0] === "/" ? siteBase() + p.link : p.link) : null;
     items.push({ id: "h:" + p.id, kind: p.kind, headline, line, link, weight: Math.max(1, Math.min(10, Number(p.weight) || 1)) });
   }

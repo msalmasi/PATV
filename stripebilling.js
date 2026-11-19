@@ -45,12 +45,17 @@
 // 1.99jw "Support PATV" donations: POST /api/premium/stripe/donate {usd} (whole dollars, 1..1000) -> a Checkout Session in
 // mode "payment" (price_data, product "Support PATV", metadata {kind:"donation", userId}). Its checkout.session.completed
 // (payment_status "paid") is recorded in ONE transaction with the stripe_events row.
-// 1.99ans NO PAT FOR DOLLARS (nopat.js; NY S5935-A, owner 2026-11-11: "Perks only, no PAT"): a donation credits NO PAT and
-// books NO "mint:donation" claim (nothing is minted, no incentive bonus). It's recorded - stripe_events outcome
-// "donation-perks" + its donation_usd_log row (status 'credited', pat 0; it also counts toward the daily limit) - and gives
-// the 💚 supporter perks (supporter.onDonation). Before 1.99ans it credited floor(cents * rate / 100) PAT (a "donation"
-// transactions row "don-<event id>") and booked the mint claim; those balances and claims are untouched. Card subscriptions
-// (above) never moved PAT either: they extend the tier. A replayed event changes nothing (stripe_events).
+// 1.99aor THE DONATIONS SWITCH (donationmode.js: on | perks | off; default perks; 1.99ans had made perks-only permanent):
+//   * off: no new checkout (409). A session already open is still honoured when it's paid.
+//   * perks: no PAT, no "mint:donation" claim, no incentive bonus. It's recorded - outcome "donation-perks" + its donation_usd_log
+//     row (status 'credited', pat 0; it counts toward the daily limit) - and gives the 💚 supporter perks (supporter.onDonation).
+//   * on: the session is opened with a quote (donationpromo.js: the exact PAT, bonus and promo split, metadata.quote) and the webhook
+//     credits THAT, outcome "donation-credited": a "donation" transactions row "don-<event id>", its "mint:donation" claim and the
+//     perks. The switch moving afterwards changes nothing, and a session without a quote is perks only, whatever the switch says.
+// Card subscriptions (above) never moved PAT: they extend the tier. A replayed event changes nothing (stripe_events).
+// Refunds and disputes of a PAT donation (add these three to the webhook endpoint at Stripe): charge.refunded,
+// charge.dispute.created, charge.dispute.closed -> donationpromo.reverseDonation (the PAT comes back to the Federal Reserve as far as
+// the wallet holds it; a dispute won puts it back). A perks-only donation has no PAT to take: those events change nothing for it.
 //
 // TEST MODE (later): put sk_test_ / whsec_ from the Stripe dashboard's test mode in the env, create two test Prices,
 // set STRIPE_ENABLED=1 on STAGING only, point a test-mode webhook endpoint at
@@ -353,11 +358,9 @@ async function donate(user, { usd, back } = {}) {
   const n = Number(usd);
   if (!Number.isInteger(n) || n < 1 || n > DONATE_MAX_USD) throw new P.Refuse(400, `Pick a whole number of dollars from 1 to ${DONATE_MAX_USD}.`);
   const page = back === "/shop" ? "/shop" : back === "/support" ? "/support" : "/wallet";   // 1.99mn: /support shows its own thank-you
-  // 1.99tq: a donation promo is decided by when the session was created (the quote the donor saw) - while one is live the
-  // session can be paid for 31 minutes only (Stripe's minimum is 30), so a promo quote can't be paid hours after the promo
-  let promo = null;
   const DP = require("./donationpromo");
-  try { promo = await DP.live(user.userId, clock()); } catch (e) { promo = null; }
+  // 1.99aor: reserveCheckout reads the switch: paused = refused here; "on" = a quote fixing what this donation credits. A quoted session
+  // can be paid for 31 minutes only (Stripe's minimum is 30), so a quote can't be paid hours later.
   // 1.99ts: the daily donation limit - today's credited + open checkouts + this one must fit, or no checkout opens (we never
   // take money we won't credit). The amount is held while the session can be paid (31 minutes when a limit applies).
   let hold;
@@ -365,34 +368,51 @@ async function donate(user, { usd, back } = {}) {
     if (e && e.refuse) throw new P.Refuse(e.status || 409, e.message);
     throw e;
   }
-  const short = !!promo || hold.limited;
+  const quote = hold.quote || null;
+  const short = !!quote || hold.limited;
   const expiresAt = Math.floor(clock() / 1000) + SESSION_S;
   let s;
   try {
     s = await api("/checkout/sessions", {
       mode: "payment", client_reference_id: user.userId,
       line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
-      metadata: promo ? { kind: "donation", userId: user.userId, promo: promo.id } : { kind: "donation", userId: user.userId },
+      metadata: quote ? { kind: "donation", userId: user.userId, quote: quote.id, ...(quote.promo_id ? { promo: quote.promo_id } : {}) } : { kind: "donation", userId: user.userId },
+      // the charge carries it too, so a refund that reaches us before the payment event is retried, not lost
+      ...(quote ? { payment_intent_data: { metadata: { kind: "donation", quote: quote.id } } } : {}),
       ...(short ? { expires_at: expiresAt } : {}),
       success_url: site() + page + "?donate=success",
       cancel_url: site() + page + "?donate=cancel",
     });
-  } catch (e) { await DP.releaseHold(hold.ref).catch(() => {}); throw e; }
+  } catch (e) {
+    await DP.releaseHold(hold.ref).catch(() => {});
+    if (quote) await DP.releaseQuote(quote.id).catch(() => {});
+    throw e;
+  }
   await DP.attachSession(hold.ref, s.id, expiresAt * 1000 + 60000);
+  if (quote) await DP.attachQuote(quote.id, s.id, expiresAt * 1000 + 60000);
   return { url: s.url, id: s.id };
 }
 
 /**
  * 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it.
- * 1.99ans: no rate, no bonus, no promo - a donation gives supporter perks, never PAT (nopat.js).
+ * 1.99aor: by the donations switch - perks: no rate, no bonus, no promo; on: + rate, bonus_pct, the live promo; off: paused.
  */
 function donateLocals(back, result) {
   const st = publicState();
   // 1.99ks: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
   let crypto = false;
   try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
-  if (!st.enabled) return { stripe: st, crypto, back };
-  return { stripe: st, crypto, back, result: result === "success" || result === "cancel" ? result : null, max: DONATE_MAX_USD, perks_only: true };
+  const DM = require("./donationmode");
+  const mode = DM.cachedMode(), was = DM.wasOn() ? { was: true } : {};   // was: donations have given PAT, so the perks wording can't say "never"
+  const res = result === "success" || result === "cancel" ? result : null;
+  // paused: only where a donation would have been offered (a rail is on); it still answers someone back from a checkout already open
+  if (mode === "off") return st.enabled || crypto ? { stripe: st, crypto, back, result: res, paused: true, mode, ...was } : { stripe: st, crypto, back, ...was };
+  if (!st.enabled) return mode === "on" ? { stripe: st, crypto, back, mode } : { stripe: st, crypto, back, ...was };
+  if (mode !== "on") return { stripe: st, crypto, back, result: res, max: DONATE_MAX_USD, perks_only: true, ...was };
+  const terms = require("./funding").donationTerms();
+  let promo = null;     // 1.99tq: a live donation promo (the card shows the boosted rate + the cap; /support has the allowance)
+  try { promo = require("./donationpromo").liveCached(); } catch (e) { promo = null; }
+  return { stripe: st, crypto, back, result: res, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD, promo, mode };
 }
 
 /** Stripe's billing portal for the customer behind one of the viewer's card subscriptions. -> {url} */
@@ -442,7 +462,11 @@ async function handleEvent(ev) {
   let notice = null;
   let donation = null;
   let overCap = null, upgraded = null;         // 1.99th
+  let reversal = null;                         // 1.99aor: a PAT donation refunded or disputed
   await require("./donationpromo").init();     // 1.99tq: its tables before the transaction (never a memoized init inside one)
+  if (/^charge\./.test(ev.type)) {              // 1.99aor: a reversal moves pools: their tables before the transaction too
+    for (const m of ["./fed/service", "./pools"]) await require(m).init().catch((e) => console.error("[stripe] reversal prepare:", e.message));
+  }
   // 1.99uh: the donation day's supply frozen before the transaction (the global % cap reads the whole supply)
   if (ev && ev.type === "checkout.session.completed") {
     const o = (ev.data && ev.data.object) || {};
@@ -465,21 +489,42 @@ async function handleEvent(ev) {
         if (!target) { outcome = "donation-no-user"; console.error(`[stripe] donation ${ev.id}: account ${dm.userId} not found - not credited`); }
         else if (cents <= 0) outcome = "donation-zero";
         else {
-          // 1.99ans: THE shared donation terms (donationpromo.creditTerms = nopat.donorTerms; the crypto rail takes the same):
-          // 0 PAT, 0 bonus. Paid when the Checkout Session was CREATED.
+          // 1.99aor: THE shared donation path (donationpromo.settleDonation; the crypto rail takes the same). The terms were fixed when
+          // the Checkout Session was CREATED: its quote (the switch was "on" then), or none = perks only, whatever the switch says now.
           const DP = require("./donationpromo");
           const id = "don-" + ev.id;
           const paidAt = Number(obj.created) > 0 ? Number(obj.created) * 1000 : Number(ev.created) * 1000;
-          const terms = await DP.creditTerms({ ref: id, userId: target, cents, paidAt, via: "card" });
-          require("./nopat").assertNoPat(terms.pat + terms.bonus, "card donation");
-          // 1.99ts: the donation's record, and it counts toward the day's limit; a race past it (two checkouts at once) is still
-          // counted - the money is taken - and flagged. mint 0: nothing is minted (the global cap's PAT side never moves).
-          await DP.recordCredit({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents, mint: 0 });
-          donation = { userId: target, cents, ref: "donation-" + ev.id };
-          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} from ${target} - supporter perks, no PAT (nopat.js)`);
-          outcome = "donation-perks";
+          const Q = await DP.checkoutQuote({ quoteId: dm.quote, sessionId: obj.id, userId: target, cents });
+          if (Q && Q.dup) {                    // the same checkout under another event id: it was credited once
+            outcome = "donation-dup";
+            console.error(`[stripe] donation ${ev.id}: session ${obj.id} was already credited - ignored`);
+          } else {
+            // 1.99ts: the donation's record, and it counts toward the day's limit; a race past it (two checkouts at once) is still
+            // counted - the money is taken - and flagged
+            const terms = await DP.settleDonation({ ref: id, sessionId: obj.id || null, userId: target, via: "card", paidAt, cents,
+              terms: Q ? Q.terms : null, frozen: Q ? Q.frozen : null, quoteId: Q ? Q.id : null, paymentIntent: obj.payment_intent || null, meta: { event: ev.id } });
+            donation = { userId: target, cents, ref: "donation-" + ev.id, terms };
+            if (terms.pat > 0) {
+              console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} -> ${terms.pat} PAT for ${target} (+${terms.bonus} to the incentive budget)` +
+                          (terms.promo ? ` - promo ${terms.promo.id}: ${terms.promo_pat} PAT for $${(terms.promo_cents / 100).toFixed(2)}` : ""));
+              outcome = "donation-credited";
+            } else {
+              console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} from ${target} - supporter perks, no PAT`);
+              outcome = "donation-perks";
+            }
+          }
         }
       }
+    } else if (ev.type === "charge.refunded" || ev.type === "charge.dispute.created" || ev.type === "charge.dispute.closed") {
+      // 1.99aor: only a donation that credited PAT has anything to take back (donation_credits, by its payment_intent). A card network's
+      // INQUIRY (status warning_*) withdraws no funds: nothing is taken for it, and closing one (warning_closed) is like a dispute won
+      const refund = ev.type === "charge.refunded", closed = ev.type === "charge.dispute.closed", st = String(obj.status || "");
+      const kind = refund ? "refund" : closed ? (st === "won" || st === "warning_closed" ? "won" : "lost") : st.startsWith("warning_") ? "inquiry" : "dispute";
+      const r = await require("./donationpromo").reverseDonation({ eventId: ev.id, paymentIntent: obj.payment_intent, kind, disputeId: refund ? null : obj.id,
+                                                                   cents: refund ? obj.amount_refunded : obj.amount });
+      if (r) { reversal = r; outcome = "donation-" + (closed ? "dispute-" : "") + kind; }
+      // a quoted donation's own charge, but its payment event hasn't landed yet: Stripe retries this one (the row rolls back)
+      else if (dm.kind === "donation" && dm.quote) throw Object.assign(new Error("the donation isn't recorded yet"), { status: 409 });
     } else if (ev.type === "checkout.session.completed" && obj.mode === "subscription") {
       const m = obj.metadata || {};
       if (P.TIERS[m.tier] && m.target) {
@@ -572,11 +617,34 @@ async function handleEvent(ev) {
       const i18n = require("./i18n");
       await i18n.ensure();
       const t = i18n.tFor(i18n.getPref(donation.userId) || "en");
-      // 1.99ans: the receipt names the perks - no PAT (nopat.js)
-      await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/support#perks",
-        title: t("donate.notice_title"),
-        body: t("donate.notice_perks", { usd: (donation.cents / 100).toFixed(2) }) });
+      const usd = (donation.cents / 100).toFixed(2), T = donation.terms;
+      // 1.99aor: the receipt says what THIS donation gave: its PAT (and promo split), or the perks
+      if (T && T.pat > 0) {
+        await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/wallet", title: t("donate.notice_title"),
+          body: t("donate.notice_body", { usd, pat: t.num ? t.num(T.pat) : T.pat.toLocaleString("en-US") }) + require("./donationpromo").receiptLine(t, T) });
+      } else {
+        await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/support#perks",
+          title: t("donate.notice_title"), body: t(require("./donationmode").cached().ever_on ? "don_on.donate.notice_perks" : "donate.notice_perks", { usd }) });
+      }
     } catch (e) { /* notice only */ }
+  }
+  if (reversal && !out.dup) {                  // 1.99aor: the supporter tier follows the dollars that stayed; the member is told what moved
+    try { require("./supporter").refresh(reversal.userId).catch(() => {}); } catch (e) { /* never blocks */ }
+    if (reversal.taken > 0 || reversal.given > 0) {
+      try {
+        const i18n = require("./i18n");
+        await i18n.ensure();
+        const tt = i18n.tFor(i18n.getPref(reversal.userId) || "en");
+        const f = (n) => (tt.num ? tt.num(n) : Number(n).toLocaleString("en-US"));
+        const usd = (reversal.usd_cents / 100).toFixed(2);
+        // the dollars THIS event reversed (when it only retried taking what a wallet was short of: the total reversed so far)
+        const cents = reversal.moved_cents || reversal.reversed_cents, part = (cents / 100).toFixed(2), whole = cents >= reversal.usd_cents;
+        const word = reversal.kind === "refund" ? "refund" : reversal.kind === "lost" ? "chargeback" : "dispute";
+        const body = reversal.given > 0 ? tt("donate.notice_restored", { usd, pat: f(reversal.given) })
+          : tt(`donate.notice_${word}${whole ? "" : "_part"}`, { usd, part, pat: f(reversal.taken) });
+        await require("./inbox").addSafe(reversal.userId, { kind: "system", ref: "donation-rev-" + ev.id, link: "/wallet", title: tt("donate.notice_update_title"), body });
+      } catch (e) { /* notice only */ }
+    }
   }
   if (notice) {
     const T = P.TIERS[notice.tier];

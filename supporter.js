@@ -43,10 +43,15 @@ async function reload() {
 function init() { if (!loaded) loaded = reload().catch((e) => { loaded = null; console.error("[supporter] load:", e.message); return 0; }); return loaded; }
 async function refresh(userId) {
   await DON();
-  const r = (await getQuery(`${SQL} AND r.user_id = ? GROUP BY r.user_id`, [String(userId)]).catch(() => []))[0];
-  if (!r) return null;
-  const v = view(r);
   const old = BY_ID.get(String(userId));
+  let r;
+  try { r = (await getQuery(`${SQL} AND r.user_id = ? GROUP BY r.user_id`, [String(userId)]))[0]; }
+  catch (e) { return old || null; }            // a failed read says nothing about the member: the cache stays as it was
+  if (!r) {                                    // 1.99aor: nothing counts any more (a PAT donation refunded in full): no longer a Supporter
+    if (old) { BY_ID.delete(String(userId)); if (old.username) BY_NAME.delete(old.username.toLowerCase()); }
+    return null;
+  }
+  const v = view(r);
   if (old && old.username) BY_NAME.delete(old.username.toLowerCase());
   BY_ID.set(String(userId), v);
   if (v.username) BY_NAME.set(v.username.toLowerCase(), v);

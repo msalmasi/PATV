@@ -83,7 +83,7 @@
     <ul>
       <li>While a payment is held, a buyer can report a problem ("not as described", "empty", harassment). That payment stays held until the staff decide; they may refund it.</li>
       <li>Deleting a pay-per-view post refunds its unreleased purchases. Removing a subscriber refunds their unreleased payment.</li>
-      <li>If the money behind PAT is reversed (a disputed donation from before 11 November 2026, when donations stopped adding PAT), we may reverse the PAT it added. Payments already released to you are only taken back if you and the buyer are linked accounts; otherwise PATV absorbs it. A balance is never made negative.</li>
+      <li>If the money behind PAT is reversed (<%= locals.donations && (donations.mode === 'on' || donations.ever_on) ? 'a refunded or disputed donation that added PAT' : 'a disputed donation from before 11 November 2026, when donations stopped adding PAT' %>), we may reverse the PAT it added. Payments already released to you are only taken back if you and the buyer are linked accounts; otherwise PATV absorbs it. A balance is never made negative.</li>
     </ul>
   </section>
 

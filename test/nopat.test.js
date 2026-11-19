@@ -1,8 +1,8 @@
-// 1.99ans: THE HARD RULE "no PAT for dollars" (nopat.js; NY S5935-A, owner 2026-11-11: donations are "Perks only, no PAT").
-//   * nopat.donorTerms is always 0 PAT / 0 bonus, whatever Pepe synced; donationpromo's credit / preview / quote agree
-//   * ledger.post refuses ANY positive credit labelled as a dollar donation (type or source), whoever calls it
-//   * no site code books a "mint:donation" claim or posts a donation credit any more (a source scan)
-//   * card and crypto donations: recorded, perks, 0 PAT, 0 mint - even with a high synced rate
+// 1.99ans / 1.99aor: the "perks" state of the donations switch (the default) and THE HARD GUARD (nopat.js). The rest of the switch: test/donation-switch.test.js.
+//   * nopat.donorTerms is always 0 PAT / 0 bonus, whatever the settings say; donationpromo's credit / preview / quote agree while the switch is "perks"
+//   * ledger.post refuses ANY positive credit labelled as a dollar donation (type or source) without the donation path's grant
+//   * only donationpromo.js books a "mint:donation" claim or posts a donation credit (a source scan)
+//   * card and crypto donations in "perks": recorded, perks, 0 PAT, 0 mint - even with a high rate set
 //   * the 💡 Supporter cosmetics a donation unlocks are bound: no listing, sale, trade or gift (indirect PAT for dollars)
 //   NODE_PATH=G:/PATV/node_modules TZ=UTC node --test test/nopat.test.js
 "use strict";
@@ -104,7 +104,7 @@ test("the rails: a card and a crypto donation are recorded and give perks - no P
   assert.equal((await require(path.join(repo, "supporter")).refresh("u-bob")).tier, "silver", "$50 in total: the perks");
 });
 
-test("source scan: no site code books a donation mint claim or credits PAT for a donation any more", () => {
+test("source scan: only donationpromo.js books a donation mint claim or credits PAT for a donation", () => {
   const files = [];
   const walk = (d) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -116,11 +116,13 @@ test("source scan: no site code books a donation mint claim or credits PAT for a
   walk(repo);
   assert.ok(files.length > 100, "the site's modules");
   for (const f of files) {
+    if (path.basename(f) === "donationpromo.js") continue;
     const src = fs.readFileSync(f, "utf8");
     assert.doesNotMatch(src, /INSERT INTO reserve_claims[^;]*'mint:donation'/, path.relative(repo, f) + " books a donation mint");
     assert.doesNotMatch(src, /\.post(?:OrThrow)?\([^)]*"donation(?:-crypto)?"/, path.relative(repo, f) + " posts a donation credit");
   }
-  for (const f of ["stripebilling.js", "cryptopay.js"]) assert.match(fs.readFileSync(path.join(repo, f), "utf8"), /nopat"\)\.assertNoPat\(/, f + " asserts the rule");
+  for (const f of ["stripebilling.js", "cryptopay.js"]) assert.match(fs.readFileSync(path.join(repo, f), "utf8"), /\.settleDonation\(/, f + " settles through the one path");
+  assert.match(fs.readFileSync(path.join(repo, "donationpromo.js"), "utf8"), /NP\.assertNoPat\(/, "terms without PAT can't carry an amount");
 });
 
 test("the 💡 Supporter cosmetics a donation unlocks are bound: never listed, sold, traded or gifted (that would be PAT for dollars)", async () => {
@@ -186,21 +188,16 @@ test("the 💡 Supporter cosmetics a donation unlocks are bound: never listed, s
   }
 });
 
-test("copy: no English string promises PAT for a donation; the retired PAT-per-dollar strings are gone from every catalog", () => {
+test("copy: the English strings that promise PAT for a donation are only the ones the \"on\" state uses", () => {
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   const bad = /PAT per \$1|\$1 (=|adds)[^.]*PAT|mint that lands in a wallet|PAT (just landed|credited to your wallet)|added \{pat\} PAT|community pot gets|credit your stablecoin|won.t be credited|donation\(s\) credited/i;
-  for (const [k, v] of Object.entries(en)) assert.doesNotMatch(typeof v === "string" ? v : JSON.stringify(v), bad, k);
-  assert.match(en["economy.loop.s1_d"], /Donations never create PAT: they give supporter perks\.$/, "the public /economy page");
-  const gone = ["support.rate", "support.hero_deal", "support.hero_deal_pot", "support.promo_deal", "support.promo_signin", "support.promo_left",
-    "support.promo_used", "support.faq_promo_a", "support.sum", "support.tier_pat", "support.tier_bonus", "support.mini_pot", "support.where_pot",
-    "support.where_pot_d", "support.faq_pot_q", "support.faq_pot_a", "support.thanks_credited", "donate.notice_body", "donate.notice_promo_split",
-    "donate.notice_promo_all", "donate.promo_line", "economy.map.don", "banner.promo.support_promo.h", "banner.promo.support_promo.l",
-    "js.support.sum", "js.support.credited"];
-  for (const f of fs.readdirSync(path.join(repo, "locales")).filter((x) => x.endsWith(".json") && x !== "glossary.json" && !x.startsWith("."))) {
-    const cat = JSON.parse(fs.readFileSync(path.join(repo, "locales", f), "utf8"));
-    for (const k of gone) assert.equal(cat[k], undefined, `${f}: ${k}`);
-    // rewritten: dropped from the machine catalogs until the i18n sync re-translates them from the new English
-    if (f !== "en.json") for (const k of ["economy.loop.s1_d", "settings.connections.crypto_hint", "js.crypto.linked_claimed", "js.crypto.unlink_confirm"]) assert.equal(cat[k], undefined, `${f}: ${k}`);
+  const onOnly = new Set(["support.rate", "support.hero_deal", "support.promo_deal", "support.faq_promo_a", "support.sum", "support.thanks_credited", "donate.notice_body",
+    "donate.notice_promo_split", "donate.notice_promo_all", "donate.promo_line", "economy.map.don", "banner.promo.support_on.h", "banner.promo.support_promo.h",
+    "js.support.sum", "js.support.credited", "crypto.notice_body"]);
+  for (const [k, v] of Object.entries(en)) {
+    if (onOnly.has(k) || k.startsWith("don_on.")) continue;
+    assert.doesNotMatch(typeof v === "string" ? v : JSON.stringify(v), bad, k);
   }
-  for (const f of ["banner.js", path.join("views", "partials", "banner.ejs")]) assert.doesNotMatch(fs.readFileSync(path.join(repo, f), "utf8"), /support_promo/, f);
+  assert.match(en["economy.loop.s1_d"], /Donations never create PAT: they give supporter perks\.$/, "the public /economy page, in the default state");
+  assert.match(en["don_on.economy.loop.s1_d"], /Donations are the one mint that lands in a wallet/, "...and with the switch on");
 });

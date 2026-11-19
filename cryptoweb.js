@@ -13,6 +13,7 @@
 const SP = require("./siteperms");   // 1.99ack: the website's capabilities (siteperms.js)
 const CP = require("./cryptopay");
 const SPG = require("./supportpage");   // 1.99mn: /support extras (goal meter, total raised, recent supporters) - admin switches, off by default
+const DM = require("./donationmode");   // 1.99aor: the donations switch (on | perks | off)
 
 const QR = new Map();
 /** An inline SVG QR code for a (public) address. */
@@ -75,7 +76,11 @@ function register(app, { addUser, noTimers } = {}) {
       const cryptoOn = CP.enabled();
       if (!cryptoOn && !stripeOn() && !admin) return next("route");
       const me = req.user && req.user.userId ? req.user : null;
-      const chains = CP.accepted().map((c) => ({ ...c, qr: qrSvg(c.address) }));
+      const DP = require("./donationpromo");
+      await DP.init();
+      const dstate = await DM.get();             // 1.99aor: read fresh: the page says what a donation gives right now
+      const dmode = dstate.mode, paused = dmode === "off";
+      const chains = paused ? [] : CP.accepted().map((c) => ({ ...c, qr: qrSvg(c.address) }));   // paused: no payment address
       let donate = null;
       try { donate = { ...require("./stripebilling").donateLocals("/support", req.query.donate), onSupport: true }; } catch (e) { donate = null; }
       // 1.99mn design pass: the optional goal / total / recent supporters (supportpage.js, all off by default), the viewer's
@@ -86,17 +91,31 @@ function register(app, { addUser, noTimers } = {}) {
         if (me) showName = await SPG.showName(me.userId);
         if (me && donate && donate.result === "success") thanks = await SPG.latestCard(me.userId);
       } catch (e) { console.error("[support] page extras:", e.message); }
-      // 1.99ans: no PAT for dollars (nopat.js) - no rate, no pot bonus, no promo on the page: a donation gives the supporter perks
+      // 1.99aor: the rate, the pot bonus and a live promo only while the switch is "on" (perks: a donation gives the supporter perks);
+      // quoteFor = what each amount credits THIS viewer (donationpromo.split - the same split the credit uses)
+      let onTerms = {};
+      if (dmode === "on") {
+        const T = CP.patFor(100);
+        let promo = null;
+        try { promo = await DP.live(me ? me.userId : null); } catch (e) { console.error("[support] promo:", e.message); }
+        const quoteFor = (usdAmt) => DP.split({ cents: Math.round(Number(usdAmt) * 100), normalRate: T.rate, bonusPct: T.bonus_pct,
+          promo: promo ? { rate: promo.rate, capCents: promo.allowance_cents, budgetPat: promo.budget_left_pat == null ? null : promo.budget_left_pat, bonusBase: promo.bonus_base } : null });
+        onTerms = { rate: T.rate, bonus_pct: T.bonus_pct, promo, quoteFor };
+      }
+      const wallets = me ? await CP.wallets(me.userId) : [];
+      // 1.99aor: a member with a linked wallet has just been shown what a transfer gives: that is the quote it is settled on. Not awaited:
+      // writing it can wait behind any open transaction, the page must not (it keeps this moment and this state, whenever it runs)
+      if (me && cryptoOn && !paused && wallets.length) DP.noteCryptoQuoteSoon(me.userId, dmode);
       res.render("support", {
         // 1.99ts: the viewer's daily donation limit (null = none / signed out)
-        daily: me ? await require("./donationpromo").daily(me.userId).catch(() => null) : null,
+        daily: me ? await DP.daily(me.userId).catch(() => null) : null,
         // 1.99uh: today's global donation pool ({on, full, pct_left, resets_at} - never the cap itself)
-        globalPool: await require("./donationpromo").globalPublic().catch(() => ({ on: false })),
+        globalPool: await DP.globalPublic().catch(() => ({ on: false })),
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
-        wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],
+        wallets, payments: me ? await CP.mine(me.userId) : [],
         min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
-        perks: await supporterPerks(me),
+        perks: await supporterPerks(me), dmode, dwas: DM.wasOn(dstate), ...onTerms,
       });
     } catch (e) { next(e); }
   });
@@ -125,8 +144,9 @@ function register(app, { addUser, noTimers } = {}) {
       await SPG.init();
       const [health, payments, unclaimed, held, suspect, totals] = await Promise.all([CP.health(), CP.adminList({ limit: 200 }),
         CP.adminList({ status: "unclaimed" }), CP.adminList({ status: "held" }), CP.adminList({ status: "suspect" }), CP.totals()]);
+      await require("./donationpromo").init();
       res.render("cryptoAdmin", { user: req.user.username, S: CP.get(), health, payments, unclaimed, held, suspect, totals,
-        accepted: CP.accepted(), terms: CP.patFor(100), stripe: stripeOn(), SPS: SPG.get() });
+        accepted: CP.accepted(), terms: CP.patFor(100), stripe: stripeOn(), SPS: SPG.get(), dmode: (await DM.get()).mode });
     } catch (e) { next(e); }
   });
   app.get("/api/crypto/admin/health", ...json(async () => ({ health: await CP.health(), totals: await CP.totals() }), { admin: true }));

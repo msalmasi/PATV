@@ -1,7 +1,7 @@
 // cryptopay.js — 1.99ks: stablecoin donations (USDC / USDT on Ethereum, Base, Solana), recorded the same way a Stripe
-// donation is (stripebilling.js). 1.99ans: NO PAT FOR DOLLARS (nopat.js) - a donation gives supporter perks, never PAT and
-// never a mint (step 4 below describes the credit before 1.99ans). Switch: crypto_donations_enabled (default OFF),
-// independent of Stripe. Pages + routes: cryptoweb.js. Wallet-ownership proofs: cryptosig.js.
+// donation is (stripebilling.js). 1.99aor: what one gives follows the donations switch (donationmode.js, step 4). Switch for the rail
+// itself: crypto_donations_enabled (default OFF), independent of Stripe. Pages + routes: cryptoweb.js. Wallet-ownership proofs:
+// cryptosig.js.
 //
 // RECEIVE ONLY. PATV never holds a key, never signs a transaction and never sends crypto anywhere: the receiving
 // addresses are settings (public addresses the owner controls elsewhere) and this module only READS public chain data.
@@ -21,10 +21,12 @@
 //   3. A final transfer is: dust (under min_usd; recorded, never credited), unclaimed (the sender isn't a linked
 //      wallet - credited automatically when someone links it with a valid signature), held (over max_usd - an admin
 //      approves or rejects it on /admin/crypto) or credited.
-//   4. "Credited" (1.99ans) = counted for the donor: crypto_payments status 'credited' (pat 0, bonus 0, no claim) + its
-//      donation_usd_log row, in ONE transaction, then the supporter perks (supporter.onDonation). No PAT, no mint, no
-//      incentive bonus (nopat.js). Before 1.99ans it was the Stripe donation mint: pat = floor(usd_cents * donation_rate /
-//      100), a "donation-crypto" transactions row and a "mint:donation" reserve_claims row - those stay as they were.
+//   4. "Credited" = counted for the donor, in ONE transaction: crypto_payments status 'credited' + its donation_usd_log row, then the
+//      supporter perks (supporter.onDonation). 1.99aor: the PAT side comes from the terms fixed when the donor was quoted
+//      (donationpromo.cryptoTermsFor: what /support showed them when the transfer was MINED, else the snapshot stored in
+//      crypto_payments.terms when the watcher first saw it - never PAT for a transfer mined before the switch went on; none = perks
+//      only: pat 0, bonus 0, no claim). With PAT terms: pat = floor(usd_cents * rate / 100), a "donation-crypto" transactions row and a
+//      "mint:donation" reserve_claims row. The switch moving later changes neither way.
 //
 // Settings (crypto_settings, key -> JSON; /admin/crypto): see DEFAULTS. RPC endpoints: env CRYPTO_RPC_ETH / _BASE / _SOL
 // (may carry a provider key - never shown, never logged) override the admin-set public URLs.
@@ -149,6 +151,12 @@ function init() {
       // 1.99ts: why a payment is held: "max" (over max_usd) or "daily_limit" (over the member's daily donation limit)
       const pc = (await getQuery("SELECT name FROM pragma_table_info('crypto_payments')")).map((r) => r.name);
       if (!pc.includes("hold_reason")) await runQuery("ALTER TABLE crypto_payments ADD COLUMN hold_reason TEXT");
+      // 1.99aor: the donation terms when the watcher first saw the transfer (JSON; NULL = perks only, and every older row is that)
+      if (!pc.includes("terms")) await runQuery("ALTER TABLE crypto_payments ADD COLUMN terms TEXT");
+      // 1.99aor: when the chain says it was mined (ms; Solana always, EVM while the switch is on), and what settlement applied ("pat" |
+      // "perks"; NULL on a credited row = a build older than 1.99aor settled it: the admin card's rollback check)
+      if (!pc.includes("block_ms")) await runQuery("ALTER TABLE crypto_payments ADD COLUMN block_ms INTEGER");
+      if (!pc.includes("applied")) await runQuery("ALTER TABLE crypto_payments ADD COLUMN applied TEXT");
       // watcher state per chain (EVM: last finalized block fully scanned; Solana: per token account in crypto_sol_cursors)
       await runQuery(`CREATE TABLE IF NOT EXISTS crypto_cursors (chain TEXT PRIMARY KEY, last_block INTEGER, head INTEGER, final_head INTEGER,
         recv TEXT, last_ok INTEGER, last_error TEXT, last_error_at INTEGER, errors INTEGER DEFAULT 0, next_try INTEGER DEFAULT 0)`);
@@ -221,8 +229,13 @@ function centsOf(raw, decimals) {
   return c > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(c);
 }
 const usd = (cents) => (Number(cents) / 100).toFixed(2);
-/** 1.99ans: what a transfer of `cents` credits - always 0 PAT and 0 bonus (nopat.js: no PAT for dollars). */
+/** What a transfer of `cents` would credit right now: 0 PAT and 0 bonus unless the donations switch is "on" (1.99aor). */
 function patFor(cents) {
+  if (require("./donationmode").cachedMode() === "on") {
+    const T = require("./funding").donationTerms();
+    const pat = Math.floor((Number(cents) * T.rate) / 100);
+    return { pat, bonus: Math.floor((pat * T.bonus_pct) / 100), rate: T.rate, bonus_pct: T.bonus_pct };
+  }
   const T = require("./nopat").donorTerms(cents);
   return { pat: T.pat, bonus: T.bonus, rate: T.rate, bonus_pct: T.bonus_pct };
 }
@@ -256,8 +269,10 @@ function parseEvmLogs(chain, logs, recv) {
     const tx = String(l.transactionHash || "").toLowerCase();
     if (!/^0x[0-9a-f]{64}$/.test(tx)) continue;
     const li = hexNum(l.logIndex);
+    // 1.99aor: some providers put the block's time on the log (blockTimestamp); the others are asked once a block (chainTime)
+    const stamp = l.blockTimestamp ? hexNum(l.blockTimestamp) * 1000 : null;
     out.push({ id: `${chain}:${tx}:${li}`, chain, token: T.symbol, token_addr: token, tx, idx: String(li), block: hexNum(l.blockNumber),
-               src_addr: from, dst_addr: to, raw_amount: raw, usd_cents: centsOf(raw, T.decimals) });
+               src_addr: from, dst_addr: to, raw_amount: raw, usd_cents: centsOf(raw, T.decimals), ...(stamp ? { block_ms: stamp } : {}) });
   }
   return out;
 }
@@ -291,7 +306,8 @@ function parseSolTx(sigStr, txr, account, mint, owner) {
     const from = (srcInfo && srcInfo.owner) || info.authority || info.multisigAuthority || null;
     if (!from || !sig.normSol(from)) return;
     out.push({ id: `sol:${sigStr}:${idx}`, chain: "sol", token: T.symbol, token_addr: mint, tx: sigStr, idx: String(idx), block: Number(txr.slot) || null,
-               src_addr: from, dst_addr: owner, dst_acct: account, raw_amount: String(raw), usd_cents: centsOf(raw, T.decimals) });
+               src_addr: from, dst_addr: owner, dst_acct: account, raw_amount: String(raw), usd_cents: centsOf(raw, T.decimals),
+               ...(Number(txr.blockTime) > 0 ? { block_ms: Number(txr.blockTime) * 1000 } : {}) });
   };
   const outer = (txr.transaction && txr.transaction.message && txr.transaction.message.instructions) || [];
   outer.forEach((ix, i) => look(ix, String(i)));
@@ -379,6 +395,22 @@ async function wallets(userId) {
 // ── recording + crediting ──
 const tx = (fn) => require("./boosts").tx(fn);
 const claimIdOf = (id) => "cdon-" + crypto.createHash("sha256").update(String(id)).digest("hex").slice(0, 40);
+const BLOCK_MS = new Map();                    // "chain:block" -> ms: one lookup a block, however many transfers it holds
+/** 1.99aor: when the chain says this transfer was mined (ms). Can't tell = throws: the watcher's pass is retried, nothing is decided on a guess. */
+async function chainTime(t) {
+  if (Number(t.block_ms) > 0) return Number(t.block_ms);
+  const k = `${t.chain}:${t.block}`;
+  if (BLOCK_MS.has(k)) return BLOCK_MS.get(k);
+  let s = null;
+  if (CHAINS[t.chain].family === "evm") {
+    const b = await rpc(t.chain, "eth_getBlockByNumber", ["0x" + Number(t.block).toString(16), false]);
+    s = b && b.timestamp ? hexNum(b.timestamp) : null;
+  } else s = await rpc("sol", "getBlockTime", [Number(t.block)]);
+  if (!(Number(s) > 0)) throw new Error(`${CHAINS[t.chain].name}: no time for block ${t.block} yet - retried`);
+  if (BLOCK_MS.size > 500) BLOCK_MS.clear();
+  BLOCK_MS.set(k, Number(s) * 1000);
+  return Number(s) * 1000;
+}
 /**
  * Record a transfer. final=false -> "pending" (EVM, not yet final). A final one goes "verifying" -> (the second provider
  * agrees) "final" -> settle(), or "suspect". Returns the row's status after.
@@ -388,10 +420,14 @@ async function record(t, final) {
   const ex = (await getQuery("SELECT status FROM crypto_payments WHERE id = ?", [t.id]))[0];
   if (!ex) {
     const linked = await walletOwner(familyOf(t.chain), t.src_addr);
+    // 1.99aor: the terms of this moment, fixed with the row. While the switch is on they depend on when the transfer was mined
+    const on = (await require("./donationmode").mode()) === "on";
+    const blockMs = on ? await chainTime(t) : Number(t.block_ms) || null;
+    const terms = await require("./donationpromo").seenTerms(now, blockMs);
     await runQuery(`INSERT OR IGNORE INTO crypto_payments (id, chain, token, token_addr, tx, idx, block, src_addr, dst_addr, dst_acct, raw_amount,
-      usd_cents, status, user_id, seen, final_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      usd_cents, status, user_id, seen, final_at, terms, block_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [t.id, t.chain, t.token, t.token_addr, t.tx, t.idx, t.block, t.src_addr, t.dst_addr, t.dst_acct || null, t.raw_amount, t.usd_cents,
-       final ? "verifying" : "pending", linked, now, final ? now : null]);
+       final ? "verifying" : "pending", linked, now, final ? now : null, terms, blockMs]);
   } else if (final && (ex.status === "pending" || ex.status === "dropped")) {
     await runQuery("UPDATE crypto_payments SET status = 'verifying', block = ?, final_at = ? WHERE id = ? AND status IN ('pending', 'dropped')", [t.block, now, t.id]);
   }
@@ -467,6 +503,9 @@ async function settle(id, { force = false, actor = null } = {}) {
       if (c === "held" && p.status !== "held") notice = { kind: "held", userId: owner, p };
       return c;
     }
+    // 1.99aor: the terms this transfer was quoted (never the switch's state now); none = perks only
+    const quoted = await require("./donationpromo").cryptoTermsFor(owner, p);
+    if (quoted && Math.floor((Number(p.usd_cents) * quoted.rate) / 100) <= 0) { await runQuery("UPDATE crypto_payments SET status = 'dust', user_id = ? WHERE id = ?", [owner, id]); return "dust"; }
     // 1.99ts: over the member's daily donation limit (the day it was SEEN) -> held for review, never silently refused: an admin
     // credits it (at the terms of the moment it was seen) or marks it refunded off-site. An admin approval (force) skips this.
     if (!force) {
@@ -479,7 +518,7 @@ async function settle(id, { force = false, actor = null } = {}) {
       }
       // 1.99uh: over today's GLOBAL donation cap (all donors; the PAT it would mint at the seen-time terms) -> held the same way
       const DPg = require("./donationpromo");
-      const pv = await DPg.previewTerms({ userId: owner, cents: p.usd_cents, paidAt: Number(p.seen) });
+      const pv = await DPg.previewTerms({ userId: owner, cents: p.usd_cents, paidAt: Number(p.seen), terms: quoted });
       const G = await DPg.globalCheck(p.usd_cents, pv.pat + pv.bonus, Number(p.seen));
       if (!G.fits) {
         await runQuery("UPDATE crypto_payments SET status = 'held', user_id = ?, hold_reason = 'global_daily_limit' WHERE id = ?", [owner, id]);
@@ -489,17 +528,16 @@ async function settle(id, { force = false, actor = null } = {}) {
       }
     }
     const cid = claimIdOf(id);
-    // 1.99ans: THE shared donation terms (donationpromo.creditTerms = nopat.donorTerms; the card rail takes the same): 0 PAT,
-    // 0 bonus - no PAT for dollars. The transfer is recorded (crypto_payments 'credited' = counted, pat 0, no claim) and
-    // gives the supporter perks; donation_usd_log carries it (the record + the day's limits). Paid = when the watcher first saw it.
-    const DP = require("./donationpromo");
-    const T = await DP.creditTerms({ ref: cid, userId: owner, cents: p.usd_cents, paidAt: Number(p.seen), via: "crypto" });
-    require("./nopat").assertNoPat(T.pat + T.bonus, "crypto donation");
-    await DP.recordCredit({ ref: cid, userId: owner, via: "crypto", paidAt: Number(p.seen), cents: p.usd_cents, mint: 0 });   // 1.99ts/ug: the day's limits
-    await runQuery(`UPDATE crypto_payments SET status = 'credited', user_id = ?, pat = 0, bonus = 0, claim_id = NULL, credited_at = ?, decided_by = ?
-                    WHERE id = ?`, [owner, clock(), actor, id]);
-    console.log(`[crypto] donation ${id}: ${usd(p.usd_cents)} ${p.token} on ${CHAINS[p.chain].name} from ${owner} - supporter perks, no PAT (nopat.js)${actor ? "; approved by " + actor : ""}`);
-    notice = { kind: "credited", userId: owner, p };
+    // 1.99aor: THE shared donation path (donationpromo.settleDonation; the card rail takes the same): the transfer is recorded
+    // (crypto_payments 'credited' = counted; donation_usd_log = the record + the day's limits) and gives the supporter perks; PAT only
+    // on terms that allow it. Paid = when the watcher first saw it.
+    const T = await require("./donationpromo").settleDonation({ ref: cid, userId: owner, via: "crypto", paidAt: Number(p.seen), cents: p.usd_cents, terms: quoted,
+      meta: { via: "crypto", chain: p.chain, token: p.token, tx: p.tx, idx: p.idx } });
+    await runQuery(`UPDATE crypto_payments SET status = 'credited', user_id = ?, pat = ?, bonus = ?, claim_id = ?, credited_at = ?, decided_by = ?, applied = ?
+                    WHERE id = ?`, [owner, T.pat, T.bonus, T.pat > 0 ? cid : null, clock(), actor, T.pat > 0 ? "pat" : "perks", id]);
+    console.log(`[crypto] donation ${id}: ${usd(p.usd_cents)} ${p.token} on ${CHAINS[p.chain].name} from ${owner} - ` +
+                (T.pat > 0 ? `${T.pat} PAT (+${T.bonus} to the incentive budget; mint claim ${cid})` : "supporter perks, no PAT") + (actor ? "; approved by " + actor : ""));
+    notice = { kind: "credited", userId: owner, p, terms: T };
     return "credited";
   });
   if (notice) await notify(notice);
@@ -515,9 +553,14 @@ async function notify(n) {
     const fmt = (x) => (t.num ? t.num(x) : Number(x).toLocaleString("en-US"));
     const amount = usd(n.p.usd_cents);
     if (n.kind === "credited") {
-      // 1.99ans: the receipt names the perks - no PAT (nopat.js)
-      await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cdon-" + n.p.id.slice(0, 120), link: "/support#perks",
-        title: t("donate.notice_title"), body: t("crypto.notice_perks", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name }) });
+      // 1.99aor: the receipt says what THIS donation gave: its PAT (and promo split), or the perks
+      if (n.terms && n.terms.pat > 0) {
+        await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cdon-" + n.p.id.slice(0, 120), link: "/support", title: t("donate.notice_title"),
+          body: t("crypto.notice_body", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name, pat: fmt(n.terms.pat) }) + require("./donationpromo").receiptLine(t, n.terms) });
+      } else {
+        await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cdon-" + n.p.id.slice(0, 120), link: "/support#perks",
+          title: t("donate.notice_title"), body: t(require("./donationmode").cached().ever_on ? "don_on.crypto.notice_perks" : "crypto.notice_perks", { amount, token: n.p.token, chain: CHAINS[n.p.chain].name }) });
+      }
     } else if (n.kind === "held") {
       await require("./inbox").addSafe(n.userId, { kind: "system", ref: "cheld-" + n.p.id.slice(0, 120), link: "/support",
         title: t("donate.notice_title"), body: t("crypto.notice_held", { amount, token: n.p.token, max: fmt(S.max_usd) }) });
@@ -841,7 +884,7 @@ async function dryRun({ chains = CHAIN_IDS, blocks = 5000, sigs = 50, receivers 
         const owner = await walletOwner(familyOf(chain), t.src_addr);
         const c = classify(t.usd_cents, owner);
         rows.push({ id: t.id, token: t.token, from: t.src_addr, usd: usd(t.usd_cents), already: ex ? ex.status : null,
-                    would: c === "credit" ? `count it for ${owner} (supporter perks, no PAT)` : c, transfer: t });
+                    would: c === "credit" ? (patFor(t.usd_cents).pat > 0 ? `credit ${patFor(t.usd_cents).pat} PAT to ${owner}` : `count it for ${owner} (supporter perks, no PAT)`) : c, transfer: t });
       }
       out[chain] = { receiver: recv, range, transfers: rows };
     } catch (e) { out[chain] = { error: String(e.message || e).replace(/https?:\/\/\S+/g, "<url>").slice(0, 200) }; }

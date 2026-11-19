@@ -53,8 +53,10 @@ async function live({ patSupply } = {}) {
     fed: fed == null ? null : Math.floor(Number(fed) || 0),
     band: band ? { floor: band.floor == null ? null : Number(band.floor), ceiling: band.ceiling == null ? null : Number(band.ceiling) } : null,
     incentives: F.state.incentives || null,
-    // Economy v3: Pepe's donation terms. 1.99ans: the page no longer shows them - donations give perks, never PAT (nopat.js)
+    // Economy v3: the donation terms. 1.99aor: the page shows them only while the donations switch is "on" (donationMode)
     donation: F.donationTerms(),
+    donationMode: require("./donationmode").cachedMode(),
+    donationEverOn: !!require("./donationmode").cached().ever_on,
     fortknox: P["vault:fortknox"] != null ? P["vault:fortknox"] : F.state.fortknox,
     history: hist,
     month: { minted: sum("minted"), burned: sum("burned"),
