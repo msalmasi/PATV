@@ -1078,7 +1078,8 @@
       // 1.99ajc dockfu (D3): the sender's own pending preview of an exact sticker / GIF token draws as one (the server sends exactly such
       // a line as a media pick - sayLine - or refuses it); room lines draw media only with the server's mark (chatlog-core mediaOf)
       var CLm = window.PATVChatlog, tok = CLm && CLm.mediaToken ? CLm.mediaToken(it.text) : null;
-      try { n = mkLine ? mkLine(tok ? { k: 'msg', u: u, text: it.text, ts: it.at, md: tok.type } : { k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }
+      // (1.99aot gifs: a free-mode GIF pick carries its picture - the sender sees it while it's on its way)
+      try { n = mkLine ? mkLine(tok ? { k: 'msg', u: u, text: it.text, ts: it.at, md: tok.type, gif: tok.type === 'gif' && it.gif ? it.gif : undefined } : { k: 'msg', u: u, text: it.text, ts: it.at }) : null; } catch (e) { n = null; }
       if (!n) { n = el('div', 'rb-optline'); n.appendChild(el('b', null, u.display || '')); n.appendChild(document.createTextNode(' ' + it.text)); }
       n.classList.add('rb-opt'); n.setAttribute('data-cid', it.cid);
       n.removeAttribute('data-c'); n.removeAttribute('data-k');      // not a room line (yet): no ✂️ Clip / quote on it
@@ -1147,14 +1148,20 @@
       for (var i = 0; i < outbox.length; i++) if (outbox[i].st === 'queue') { it = outbox[i]; break; }
       if (!it) return;
       busy = true; it.st = 'posting';
-      post(it.mn ? { text: it.text, cid: it.cid, mentions: it.mn } : { text: it.text, cid: it.cid }).then(function (x) {
+      var body = it.mn ? { text: it.text, cid: it.cid, mentions: it.mn } : { text: it.text, cid: it.cid };
+      if (it.gif) body.gif = it.gif;                                     // 1.99aot gifs: a free-mode pick's details (the server checks them)
+      post(body).then(function (x) {
         busy = false;
         if (dead) return;
         if (outbox.indexOf(it) < 0) { pump(); return; }                  // deleted meanwhile
         var d = x.d;
         if (!d || x.s >= 500) { offlineRetry(it); return; }
         setOffline(false); backoff = 0;
-        if (d.ok) { it.st = 'wait'; it.id = d.id; it.off = false; paint(it); }      // `mine` takes it from here
+        if (d.ok) {
+          it.st = 'wait'; it.id = d.id; it.off = false; paint(it);           // `mine` takes it from here
+          // 1.99aot gifs: once, when the site took the line (the free GIF picker's share trigger to KLIPY)
+          if (typeof it.onPosted === 'function') { var done = it.onPosted; it.onPosted = null; try { done(); } catch (e) { /* the picker's own */ } }
+        }
         else if (d.code === 'queue_full') { it.st = 'queue'; paint(it); clearTimeout(retryTimer); retryTimer = setTimeout(pump, 1500); return; }
         else if (x.s === 401) fail(it, _t('js.pad.relay.signed_out', 'you\'re signed out — sign in again'), 'signin');
         else fail(it, d.error || _t('js.pad.relay.refused', 'refused'), d.code);
@@ -1167,13 +1174,18 @@
       if (dead) return;
       if (outbox.some(function (x) { return x.st === 'queue' || x.st === 'posting'; })) { e.preventDefault(); e.returnValue = ''; }
     });
-    function sendChat(text) {
+    // 1.99aot gifs: extra (the Dock's GIF picker in free mode) = {gif: {src, w, h, title, page} - the pick's details, posted with the line;
+    // onPosted: called once when the site has taken the line}
+    function sendChat(text, extra) {
       if (dead) return false;
       if (waiting() >= SAY_QUEUE) {
         showNote(_t('js.pad.relay.queue_full', 'Wait a moment — {n} messages are already on their way.', { n: SAY_QUEUE }));
         return false;
       }
       var it = { cid: newCid(), text: text, at: Date.now(), st: 'queue', mine: true };
+      var g = extra && extra.gif && typeof extra.gif === 'object' ? extra.gif : null;
+      if (g) it.gif = { src: String(g.src || ''), w: Math.floor(Number(g.w)) || 0, h: Math.floor(Number(g.h)) || 0, title: String(g.title || '').slice(0, 80), page: String(g.page || '') };
+      if (extra && typeof extra.onPosted === 'function') it.onPosted = extra.onPosted;
       // 1.99ajn padppl: the picked @mentions still in these words (the server checks again and resolves each ref exactly)
       var lowT = String(text).toLowerCase(), mn = mnPicked.filter(function (m) { return lowT.indexOf('@' + m.n.toLowerCase()) >= 0; });
       if (mn.length) it.mn = mn;

@@ -163,6 +163,9 @@
 .chatlog .gif-media { display: inline-flex; flex-direction: column; max-inline-size: 100%; gap: var(--ds-sp-1); }
 .chatlog img.gif { display: block; max-inline-size: min(280px, 100%); max-block-size: 240px; object-fit: contain; border-radius: var(--ds-r-sm); }
 .chatlog .gif-credit { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+/* 1.99aot gifs: a GIF removed everywhere, or whose picture no longer loads - plain words in a quiet box, never a broken image */
+.chatlog .gif-gone { display: inline-block; padding: var(--ds-sp-1) var(--ds-sp-2); border: 1px dashed var(--ds-line-strong); border-radius: var(--ds-r-sm);
+                     color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
 /* CL10 fix-up: each date has an optional time beside it (continuing a file cut inside a day) */
 .chatlog .cldl-dt { display: flex; gap: var(--ds-sp-1); min-width: 0; }
 .chatlog .cldl-dt .ds-in { flex: 1 1 auto; }

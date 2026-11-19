@@ -107,10 +107,11 @@
 <section class="adm-card" id="room-dock" aria-labelledby="paddockTitle">
   <h2 id="paddockTitle"><span class="ds-ic" aria-hidden="true">🧭</span> <%= _dt('js.pad.dock.admin.title', 'Room Dock') %></h2>
   <p class="adm-help"><%= _dt('js.pad.dock.admin.hint', 'A compact Live view for bridged pads. Off by default; reload open pads after changing the audience.') %></p>
-  <p class="adm-help"><%= _dt('js.pad.dock.admin.media_hint', 'Stickers also need the room sticker switch. GIFs need the server key, the approved KLIPY plan and the privacy notice before activation. Both start off.') %></p>
+  <p class="adm-help"><%= _dt('js.pad.dock.admin.media_modes', 'Stickers also need the room sticker switch. GIFs have two modes: Free (KLIPY’s free plan - members’ browsers ask KLIPY) and Partner (KLIPY’s paid plan - our server asks KLIPY). Keep GIFs off until the privacy policy addition for KLIPY is approved. Both start off.') %></p>
   <% if (_can('pads.config')) { %>
   <form id="paddockForm" class="adm-form">
     <div id="paddockFields"></div>
+    <div id="paddockGifs"></div><%# 1.99aot gifs: what each GIF mode does and is missing, and the GIFs removed everywhere (admin-paddock.js) %>
     <label><%= _dt('js.pad.dock.admin.reason', 'Reason (optional)') %><input class="ds-in" name="reason" maxlength="200" autocomplete="off"></label>
     <div class="adm-actions">
       <button type="button" id="paddockReset" class="ds-btn quiet"><%= _dt('js.pad.dock.admin.reset', 'Reset to off') %></button>
@@ -119,7 +120,7 @@
     </div>
   </form>
   <ul id="paddockAudit" class="adm-help" aria-label="<%= _dt('js.pad.dock.admin.audit', 'Recent setting changes') %>"></ul>
-  <script src="/public/js/admin-paddock.js?v=2"></script>
+  <script src="/public/js/admin-paddock.js?v=3"></script>
   <% } else { %><p class="adm-help"><%= _dt('js.pad.dock.admin.admins', 'Site admins only.') %></p><% } %>
 </section>
 

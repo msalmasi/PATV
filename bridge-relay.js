@@ -655,6 +655,8 @@ function echoJob(jobId, roomId = null) {
            // echo by it; null for an ordinary line
            media: j.media && typeof j.media === "object" ? (j.media.type === "gif" ? { type: "gif", id: String(j.media.id) }
              : { type: "cfsticker", set: Number(j.media.set), id: Number(j.media.id) }) : null,
+           // 1.99aot gifs: a free-mode GIF's checked details (gifs.freeGif) - mediaMark keeps them with the echo line (it draws from them)
+           gf: j.gf && typeof j.gf === "object" ? { ...j.gf } : null,
            // 1.99ajf dockclean: the 🧸 PATV sticker this say job was (sendSayLine) - {pack, id, alt: the words Pepe posts} | null
            stk: j.stk && typeof j.stk === "object" ? { pack: String(j.stk.pack), id: String(j.stk.id), alt: String(j.stk.alt) } : null,
            // 1.99ajn padppl: its @mentions - page-safe (mn) and the server-only resolution for the alerts (mnIds)
@@ -738,7 +740,7 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
   }
   const st = await stickerRefusal(u, text, out);           // stkfix B3: packs this account owns; the expanded length
   if (st) return st;
-  let media = null;
+  let media = null, gf = null;                             // (1.99aot gifs: gf = a free-mode GIF's details - server-side, never to Pepe)
   if (opts.mediaToken) {
     const token = opts.mediaToken, kind = token.type === "cfsticker" ? "sticker" : "gif";
     const access = await sayEligibility({ user: opts.viewer || u }, R);
@@ -748,6 +750,17 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
       const stickers = require("./cfstickers"); await stickers.init();
       if (!stickers.enabled() || R.stickers !== true || !stickers.valid(token.set, token.id)) return mediaRefusal(kind);
       media = { type: "cfsticker", set: Number(token.set), id: Number(token.id) };
+    } else if (require("./gifs").freeOn()) {
+      // 1.99aot gifs: free mode - the browser picked the GIF from KLIPY itself and sends its details (opts.gif); checked here without
+      // asking KLIPY (gifs.freeGif: exact CDN host + URL shape, sizes, the title through the text guard, the page link, not removed
+      // everywhere). The rating can't be confirmed - the one the page was told to use is kept with the line (gf.r)
+      const gifs = require("./gifs"), got = gifs.freeGif(token.id, opts.gif, R.id);
+      if (!got.ok) {
+        return got.code === "gif_title" ? { status: 403, body: { ok: false, code: "gif", error: "That GIF's title can't be posted here — pick another one." } }
+          : mediaRefusal(kind);
+      }
+      if (!gifs.sendOk(u.userId)) return { status: 429, body: { ok: false, code: "rate", error: "You're sending GIFs quickly — wait a moment." } };
+      media = got.media; gf = got.gf;
     } else {
       // 1.99aiw dock: only a GIF a filtered (contentfilter=high) search / featured answer gave - gifs.picked reads the cache, never
       // the unfiltered Posts lookup, so a hand-made "[gif:<id>]" can't post an unrated GIF (and no provider request runs here)
@@ -784,14 +797,18 @@ async function sendSayLine(u, R, text, cid, opts = {}) {
   if (media) {
     // Distinct picks can finish provider/name work together. No awaits after this final queue check.
     if (!require("./paddock").viewerOn({ ...opts.viewer, ...u })) return mediaRefusal(media.type === "gif" ? "gif" : "sticker");
-    if (media.type === "gif" ? !require("./gifs").available() : !require("./cfstickers").enabled() || R.stickers !== true || !require("./cfstickers").valid(media.set, media.id))
+    // (1.99aot gifs: still the mode the GIF was checked under - a switch from free to partner, or the other way, refuses it - and not
+    // removed everywhere meanwhile)
+    const G = require("./gifs");
+    if (media.type === "gif" ? !G.available() || (gf ? !G.freeOn() : !G.partnerOn()) || G.isBlocked(media.id)
+      : !require("./cfstickers").enabled() || R.stickers !== true || !require("./cfstickers").valid(media.set, media.id))
       return mediaRefusal(media.type === "gif" ? "gif" : "sticker");
     let waiting = 0;
     for (const prior of jobs.values()) if (prior.kind === "say" && prior.userId === u.userId && prior.roomId === R.id && prior.state !== "done") waiting++;
     if (waiting >= SAY_QUEUE_MAX) return { status: 429, body: { ok: false, code: "queue_full", max: SAY_QUEUE_MAX, error: `You have ${SAY_QUEUE_MAX} messages waiting to go out — give them a second.` } };
   }
   const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "", display, text,
-                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}), ...(stk ? { stk } : {}),
+                     actor: require("./actorcap").actorOf(u, display), cid: cid || null, ...(media ? { media } : {}), ...(gf ? { gf } : {}), ...(stk ? { stk } : {}),
                      ...(mn && mn.page.length ? { mn: mn.page, mnIds: mn.ids } : {}) });
   if (key) cids.set(key, j.id);
   console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername || "-"} job=${j.id}${opts.test ? " (staging test)" : ""}`);
@@ -866,7 +883,9 @@ function register(app, { isBotToken, addUser, bySlug, isLive, gated = null, live
       const out = mediaRefusal(special); return res.status(out.status).json(out.body);
     }
     if (text.length > SAY_MAX) return res.status(400).json({ ok: false, code: "too_long", max: SAY_MAX, error: `That's too long — ${SAY_MAX} characters at most.` });
-    const out = await sayLine(u, R, text, body.cid, { viewer: req.user, mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 10) : null });
+    // (1.99aot gifs: body.gif = a free-mode pick's details - read only for an exact "[gif:<id>]" while free mode is on: gifs.freeGif)
+    const out = await sayLine(u, R, text, body.cid, { viewer: req.user, mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 10) : null,
+                                                      gif: body.gif && typeof body.gif === "object" && !Array.isArray(body.gif) ? body.gif : null });
     res.status(out.status).json(out.body);
   });
 

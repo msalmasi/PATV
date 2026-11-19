@@ -118,13 +118,15 @@ test("stkimg: the HTML (downloads, server) render has no retry machinery, no inl
   const html = String(CL.renderItem({ k: "msg", c: 1, ts: 0, u: { display: "A" }, text: "[cfsticker:1642/9006]", md: "cfsticker" }, { cfsticker: (s, id) => "/media/cfsticker/" + id + ".webp" }, CL.htmlH));
   assert.match(html, /class="cfstk" src="\/media\/cfsticker\/9006\.webp" alt="sticker" width="100" height="100" loading="lazy" decoding="async"/);
   assert.doesNotMatch(html, /onerror|onload|\?r=/);
-  // GIFs and the site's own 🧸 stickers keep the one-shot fallback (only Camfrog pictures can arrive late)
+  // GIFs and the site's own 🧸 stickers keep a one-shot fallback (only Camfrog pictures can arrive late) - 1.99aot gifs: a GIF's is the
+  // "GIF no longer available" placeholder (gif-gone), once, never a retry
   const src = fs.readFileSync(path.join(__dirname, "..", "public", "js", "chatlog-core.js"), "utf8");
-  assert.match(src, /\[stickerImage\(\{ 'class': 'cfstk'/); assert.match(src, /\[mediaImage\(\{ 'class': 'pstk'/); assert.match(src, /mediaImage\(\{ 'class': 'gif'/);
+  assert.match(src, /\[stickerImage\(\{ 'class': 'cfstk'/); assert.match(src, /\[mediaImage\(\{ 'class': 'pstk'/);
+  assert.match(src, /h\('img', \{ 'class': 'gif'/); assert.match(src, /gone\.className = 'gif-gone'[\s\S]{0,200}replaceChild\(gone, box\);\s*\}, \{ once: true \}\);/);
   // every page that loads the renderer asks for the new copy
   for (const f of ["views/room.ejs", "views/home.ejs", "views/partials/pad-chat-history.ejs"])
-    assert.ok(fs.readFileSync(path.join(__dirname, "..", f), "utf8").includes('<script src="/public/js/chatlog-core.js?v=16"></script>'), f);
-  assert.ok(fs.readFileSync(path.join(__dirname, "..", "views/room.ejs"), "utf8").includes('<script src="/public/js/pad-picker.js?v=4"></script>'));
+    assert.ok(fs.readFileSync(path.join(__dirname, "..", f), "utf8").includes('<script src="/public/js/chatlog-core.js?v=17"></script>'), f);
+  assert.ok(fs.readFileSync(path.join(__dirname, "..", "views/room.ejs"), "utf8").includes('<script src="/public/js/pad-picker.js?v=5"></script>'));
   for (const f of ["public/js/home-dock.js", "views/room.ejs", "views/partials/pad-chat-history.ejs"])
     assert.match(fs.readFileSync(path.join(__dirname, "..", f), "utf8"), /cfsticker: function \(set, id\) \{ return '\/media\/cfsticker\/' \+ id \+ '\.webp'; \}/, f + " builds the line's URL for chatlog-core");
 });

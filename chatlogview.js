@@ -1219,7 +1219,9 @@ function dress(items, ctx) {
         .map((m) => (m.veil ? { n: String(m.n).slice(0, 40), veil: 1 } : { n: String(m.n).slice(0, 40), username: m.username ? String(m.username).slice(0, 48) : null, login: m.login ? String(m.login).slice(0, 40) : null, veil: 0 })) : [];
       if (mn.length) o.mn = mn; else delete o.mn;
     }
-    out.push(require("./gifs").attach(o));                  // 1.99aiw: cache-only, after the complete privacy/removal projection
+    // 1.99aiw: cache-only, after the complete privacy/removal projection. 1.99aot gifs: + the stored item, whose gf (a free-mode GIF's
+    // checked details) draws the line - never copied into the page item itself (only gifs.attach's {src, w, h, title} goes out)
+    out.push(require("./gifs").attach(o, it));
   }
   return out;
 }

@@ -299,11 +299,11 @@ test("ptttail: the setting - pttlimits tail_ms (0-1000, 400) and tail_ios (off) 
   assert.match(card, /NAMES = \['gap_s', 'burst', 'max_secs', 'tail_ms'\]/, "the card's script saves the tail");
 });
 
-test("ptttail: cache-busters - room-bridge.js v34 wherever it loads", () => {
+test("ptttail: cache-busters - room-bridge.js v35 (1.99aot gifs; v34 the release tail) wherever it loads", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = read("views", v);
-    assert.match(s, /room-bridge\.js\?v=34/, v);
-    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!34\b)\d+/, v + ": one version");
+    assert.match(s, /room-bridge\.js\?v=35/, v);
+    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!35\b)\d+/, v + ": one version");
   }
 });
 

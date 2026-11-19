@@ -3,9 +3,11 @@
 const { runQuery, getQuery, tx } = require("./dbUtils");
 const SP = require("./siteperms");
 const guard = require("./middleware/authGuard");
+// 1.99aot gifs: the GIF control is a mode - off | free (KLIPY's free plan: browsers call KLIPY) | partner (the server calls KLIPY,
+// KLIPY's paid plan) - gifs.js. It was a boolean: a stored (or posted) true is the server-side mode it meant, false is off.
 const FIELDS = Object.freeze({ mode: { def: "off", choices: ["off", "staff", "everyone"] },
-  cfstickers: { def: false }, gifs: { def: false } });
-const DEFAULTS = Object.freeze({ mode: "off", cfstickers: false, gifs: false });
+  cfstickers: { def: false }, gifs: { def: "off", choices: ["off", "free", "partner"], legacy: { true: "partner", false: "off" } } });
+const DEFAULTS = Object.freeze({ mode: "off", cfstickers: false, gifs: "off" });
 const AUDIT = "paddock_cfg";
 let ready = null, saving = Promise.resolve(), CFG = { v: 0, cfg: { ...DEFAULTS }, at: null };
 let adminHits = guard.limiter({ max: 20, windowMs: 60000 });
@@ -16,7 +18,8 @@ function normalize(input, { base = DEFAULTS } = {}) {
   for (const [key, field] of Object.entries(FIELDS)) {
     const old = base[key] == null ? field.def : base[key];
     if (!Object.prototype.hasOwnProperty.call(src, key)) { cfg[key] = old; continue; }
-    const value = typeof src[key] === "string" ? src[key].trim().toLowerCase() : src[key];
+    let value = typeof src[key] === "string" ? src[key].trim().toLowerCase() : src[key];
+    if (field.legacy && typeof value === "boolean") value = field.legacy[String(value)];
     if (field.choices ? field.choices.includes(value) : typeof value === "boolean") cfg[key] = value;
     else { cfg[key] = old; errors[key] = "invalid"; }
   }
@@ -66,8 +69,11 @@ async function save(user, body = {}) {
 }
 async function view() {
   await init();
+  // 1.99aot gifs: what each GIF mode is missing (key set / missing / malformed - never a key) and the GIFs removed everywhere
+  let gifs = null;
+  try { gifs = await require("./gifs").adminStatus(); } catch (e) { gifs = null; }
   return { ...current(), defaults: { ...DEFAULTS }, fields: FIELDS, updated_at: CFG.at,
-    audit: await require("./adminaudit").recent(AUDIT, 15) };
+    audit: await require("./adminaudit").recent(AUDIT, 15), gifs };
 }
 function register(app, { addUser }) {
   init().catch(e => console.error("[paddock] init:", e.message));

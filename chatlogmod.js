@@ -365,6 +365,7 @@ async function purgeInTx(todo, by, why, t, have, out) {
     if (!d || typeof d !== "object") d = {};
     if (d.u) d.u = {};
     delete d.md;                          // 1.99ajc dockfu: review - the media mark says what the words were (a sticker / GIF): it goes with them
+    delete d.gf;                          // 1.99aot gifs: and a free-mode GIF's details (its URL, size, title, rating)
     const nd = JSON.stringify(d);
     const who = r.who && !String(r.who).startsWith("h:") ? "h:" + CL.hash(r.who) : r.who || null;
     // (CL6 fix-up: the 🎙 id goes too - it is a hash of the login and the words, testable against a guess)
@@ -737,6 +738,45 @@ async function hide(user, slug, c, { why, jc } = {}) {
     if (staff) await staffAudit(me, row, "hide", text);
   }
   return { ok: true };
+}
+
+/**
+ * 1.99aot gifs: 🚫 Remove this GIF everywhere - whoever may hide this line (the pad's owner, its room's mods, PATV staff), on a GIF line
+ * (the server's mark: chatlog-core mediaOf). ONE transaction: the GIF's id is blocked site-wide (gifs.blockInTx - every line with it
+ * shows "GIF no longer available", nobody can send it again, in either GIF mode) and this line is hidden like 🙈 Hide (its reason:
+ * the one given, else "GIF removed"). A line already down still blocks the GIF. Site admins lift a block on the Room Dock card.
+ * Free mode can't confirm a posted GIF's rating (gifs.js) - this is the moderators' answer to one that got through. -> {ok, blocked}
+ */
+async function gifBlock(user, slug, c, { why, jc } = {}) {
+  const me0 = await account(user);
+  if (!me0) throw new Refuse(401, "Sign in first.", "signin");
+  const text = clean(why, WHY_MAX) || "GIF removed";
+  const { me, R, V, row } = await lineCtx(user, slug, c, { jc, see: false, must: mustHide });
+  const w = hiddenWhy(V, R.id, row, jc, { cleared: true, range: row.rm_at != null || !!row.purged });
+  if (w) throw notFound(V, w);
+  const token = require("./public/js/chatlog-core").mediaOf(require("./chatlogview").itemOf(Object.assign({}, row, { rm_at: null, rm_by: null, rm_why: null, purged: null })));
+  if (!token || token.type !== "gif") throw new Refuse(400, "That line isn't a GIF.", "not_gif");
+  const lim = limited(me.userId);
+  if (lim) throw lim;
+  const staff = V.role === "staff";
+  const by = (staff ? "staff:" : "mod:") + me.userId;
+  const G = require("./gifs");
+  await G.init();
+  let hid = false;
+  const have = await copyTables(), t = now();
+  await tx(async () => {
+    await G.blockInTx(token.id, { room: R.id, c: Number(row.c), kind: staff ? "staff" : V.role === "owner" ? "owner" : "mod", why: text }, t);
+    if (!row.purged && row.rm_at == null) hid = await setRm(row, by, text, t, have);
+  });
+  G.noteBlocked(token.id);
+  if (hid) {
+    await liveDrop(R.id, [row.c], false);
+    await roomEvent(R.id, "chat.hide", staff ? STAFF_ACTOR : me.username || me.userId, `#${row.c}: ${text} (GIF removed everywhere)`);
+    if (staff) await staffAudit(me, row, "hide", text);
+  }
+  // its other live lines, in every pad, are drawn again on open pages: "GIF no longer available" (after the line itself left)
+  try { require("./bridge").gifRedo(token.id); } catch (e) { console.error("[chatlogmod] gif redo:", e.message); }
+  return { ok: true, blocked: true };
 }
 
 /** ↩ Show a hidden line again: within 30 days - the owner / staff for a mod's hide, or the mod who hid it; staff for a staff or a
@@ -1386,6 +1426,7 @@ function register(app, { addUser }) {
   line("report", (u, s, c, b) => report(u, s, c, { reason: b.reason, note: b.note, jc: typeof b.jc === "string" ? b.jc : null }));
   line("remove", (u, s, c, b) => removeMine(u, s, c, { jc: typeof b.jc === "string" ? b.jc : null }));
   line("hide", (u, s, c, b) => hide(u, s, c, { why: b.why, jc: typeof b.jc === "string" ? b.jc : null }));
+  line("gifblock", (u, s, c, b) => gifBlock(u, s, c, { why: b.why, jc: typeof b.jc === "string" ? b.jc : null }));   // 1.99aot gifs
   line("unhide", (u, s, c) => unhide(u, s, c));
   line("purge", (u, s, c, b) => purge(u, s, c, { why: b.why }));
 
@@ -1434,7 +1475,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
-  init, register, start, actsFor, report, removeMine, hide, unhide, purge, purgeRows, removeAccountLines, removedFor, removedRead, removedWho, rmNames, reportQueue, reportRead, reportDecide,
+  init, register, start, actsFor, report, removeMine, hide, gifBlock, unhide, purge, purgeRows, removeAccountLines, removedFor, removedRead, removedWho, rmNames, reportQueue, reportRead, reportDecide,
   resolveKeys, whoAction, roomHold, ownerGrant, adminView, nightly, isHeld, heldRooms, heldWho, loadHolds, Refuse, reachable,
   KEEP_RM_MS, UNHIDE_MS, VIEWS_KEEP_MS, REPORTS_PER_HOUR, ACT_PER_MIN, READ_ALL, REASONS, ADMIN_ONLY, URGENT, LABELS, REMOVED_MAX, BATCH, EXPORT_MAX,
   NOTE_MAX, WHY_MAX, QUEUE_ACTIONS, WHO_ACTIONS, DUE_SQL, STAFF_ACTOR,

@@ -307,6 +307,7 @@ const RULES = {
   "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
   // 1.99alq train3: which one-time table notices the account has seen (casino/notices.js) - follows it; seen by either = seen
   "casino_notice_seen.userId": M({ key: ["notice"], merge: { at: "MIN" } }),
+  "gif_notice_seen.user_id": M({ key: [], merge: { at: "MIN" } }),          // 1.99aot gifs: the free GIF picker's one-time KLIPY notice
   "casino_settings.actor": { deny: NAME },
   // 1.99mw/1.99nc: Pepe's achievement counts so far (a base per metric, replaced at his next report) follow the account and add
   // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)

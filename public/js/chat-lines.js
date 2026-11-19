@@ -3,6 +3,7 @@
 //                         copyright) + an optional note                                                    -> report
 //   🗑 Remove my line      the line's author                                                                -> remove
 //   🙈 Hide line…          the pad's owner, its room's mods, PATV staff - with a reason                     -> hide
+//   🚫 Remove this GIF…    1.99aot gifs: a GIF line, whoever may hide it - hidden + the GIF blocked site-wide -> gifblock
 //   ↩ Show it again        on a hidden line as the owner / staff see it (scrollback)                       -> unhide
 //   ⛔ Delete for good…    PATV staff                                                                       -> purge
 // What the menu offers comes from the live answer (history.acts: null = nothing - signed out, or the archive is off; lines are
@@ -104,6 +105,8 @@
       if (n.getAttribute('data-own') === '1') out.push({ id: 'remove', label: _t('js.pad.chat.remove_mine', '🗑 Remove my line') });
       else if (acts.report) out.push({ id: 'report', label: _t('js.pad.chat.report', '⚑ Report…') });
       if (acts.hide) out.push({ id: 'hide', label: _t('js.pad.chat.hide', '🙈 Hide line…') });
+      // 1.99aot gifs: a GIF line (chatlog-core's data-gif - the server's mark) - whoever may hide it may remove the GIF everywhere
+      if (acts.hide && n.getAttribute('data-gif') === '1') out.push({ id: 'gifblock', label: _t('js.pad.chat.gifblock', '🚫 Remove this GIF everywhere…'), danger: true });
       if (acts.purge) out.push({ id: 'purge', label: _t('js.pad.chat.purge', '⛔ Delete for good…'), danger: true });
       return out;
     }
@@ -318,6 +321,16 @@
           });
         H.go.disabled = true;
         why.addEventListener('input', function () { H.go.disabled = why.value.trim().length < 2; });
+        return;
+      }
+      // 1.99aot gifs: 🚫 a GIF everywhere - this line hidden (like 🙈 Hide) and the GIF blocked site-wide in one go (chatlogmod.gifBlock)
+      if (id === 'gifblock') {
+        var gw = el('input', 'ds-in'); gw.type = 'text'; gw.maxLength = 200; gw.autocomplete = 'off';
+        dialog(b, _t('js.pad.chat.gifblock_h', 'Remove this GIF everywhere?'), [el('p', null, _t('js.pad.chat.gifblock_text', 'This line is hidden, and the GIF stops showing anywhere on PATV: other lines with it say “GIF no longer available” and nobody can send it again. PATV’s admins can undo it. The Camfrog room already saw its link.')),
+          field(_t('js.pad.chat.gifblock_why', 'Reason (optional - the pad’s owner and staff see it)'), gw)],
+          _t('js.pad.chat.gifblock_go', 'Remove the GIF'), true, function () {
+            return post(c, 'gifblock', { why: gw.value.trim(), jc: jc() }).then(function () { gone(c); toast(_t('js.pad.chat.gifblock_done', 'GIF removed everywhere.'), 'ok'); });
+          });
         return;
       }
       if (id === 'unhide') {

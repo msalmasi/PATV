@@ -561,6 +561,7 @@ const DELETE_ROWS = [
   ["pad_user_flairs", "user_id", "uid"], ["feed_room_members", "user_id", "uid"], ["launchpad_visits", "user_id", "uid"], ["premium_plus_waitlist", "user_id", "uid"],
   ["camfrog_userstats", "login", "login"], ["golive_log", "user_id", "uid"],
   ["help_misses", "user_id", "uid"], ["age_attest", "user_id", "uid"], ["plex_watch_stats", "user_id", "uid"],
+  ["gif_notice_seen", "user_id", "uid"],                        // 1.99aot gifs: they saw the free GIF picker's KLIPY notice (gifs.js)
   ["webpush_subs", "user_id", "uid"], ["webpush_outbox", "user_id", "uid"],   // 1.99acd: browser notifications (webpush.js)
   // storyreact site (storyreact.js): their story votes and the story references of the replies they sent (those messages are
   // blanked in step 3); story_tips are kept like post_tips (ledger evidence, no names in them)

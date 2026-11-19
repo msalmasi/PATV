@@ -474,11 +474,23 @@
     // (gifs.attach) draws remote media. 1.99ajc dockfu (D2, owner answer 6): a veiled sender's (incognito / !bridge hide frog name, or
     // "someone") GIF draws like anyone's - the picture and its credit say nothing about who sent it; the name stays the veil's
     var g = it.gif, noGif = _t('js.pad.chat.gif', '🎞️ GIF');
+    // 1.99aot gifs: a GIF that's gone - removed everywhere by a moderator (the server's {gone: 1}) or whose picture no longer loads
+    // (KLIPY removed or restricted it: no server check in free mode) - is a plain "GIF no longer available", never a broken image
+    var goneText = _t('js.pad.chat.gif_gone', 'GIF no longer available');
+    if (g && g.gone === 1) return [h('span', { 'class': 'gif-gone' }, [goneText])];
     if (!g || !safeSrc(g.src) || !/^https:\/\//.test(g.src)) return [noGif];
     function size(n, d) { n = Number(n); return isFinite(n) && n > 0 ? Math.min(2048, Math.floor(n)) : d; }
-    return [h('span', { 'class': 'gif-media' }, [mediaImage({ 'class': 'gif', src: g.src, alt: str(g.title).slice(0, 80) || noGif,
-      width: size(g.w, 160), height: size(g.h, 120), loading: 'lazy', decoding: 'async' }, noGif, h),
-      h('small', { 'class': 'gif-credit' }, [_t('js.pad.chat.gif_via', 'via KLIPY')])])];
+    var img = h('img', { 'class': 'gif', src: g.src, alt: str(g.title).slice(0, 80) || noGif,
+      width: size(g.w, 160), height: size(g.h, 120), loading: 'lazy', decoding: 'async' }, []);
+    var box = h('span', { 'class': 'gif-media' }, [img, h('small', { 'class': 'gif-credit' }, [_t('js.pad.chat.gif_via', 'via KLIPY')])]);
+    // (DOM-only, like mediaImage: exports never create these images and no inline event attribute enters HTML)
+    if (img && typeof img.addEventListener === 'function') img.addEventListener('error', function () {
+      var doc = box.ownerDocument;
+      if (!box.parentNode || !doc) return;
+      var gone = doc.createElement('span'); gone.className = 'gif-gone'; gone.textContent = goneText;
+      box.parentNode.replaceChild(gone, box);
+    }, { once: true });
+    return [box];
   }
   /** A chat or mic line. CL6: rm = a hidden line as the owner / staff see it - muted, with why, and data-rmc instead of data-c
    *  (never picked by ✂️ Clip chat / 🔊 Clip); it.own = the viewer's own line (data-own: the ⋯ menu offers Remove). */
@@ -562,6 +574,7 @@
       else {
         if (it.c) a['data-c'] = it.c;
         a['data-k'] = k; a['data-name'] = label(it.u, ctx); a['data-text'] = mediaOf(it) ? itemText(it) : text;
+        if (mediaOf(it) && mediaOf(it).type === 'gif') a['data-gif'] = '1';   // 1.99aot gifs: the ⋯ menu's 🚫 Remove this GIF everywhere
         if (tx && it.id) a['data-tx'] = it.id;
         if (it.own) a['data-own'] = '1';
       }

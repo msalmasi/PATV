@@ -25,14 +25,15 @@ async function request(method, body, user = "admin", headers = {}) {
 const post = (body, user, headers = { "X-Requested-With": "fetch" }) => request("POST", body, user, headers);
 
 test("rollout defaults off; strict mode validation retains the previous setting", async () => {
-  assert.deepEqual(P.current(), { v: 0, cfg: { mode: "off", cfstickers: false, gifs: false } });
+  // (1.99aot gifs: the GIF control is a mode now - off | free | partner, default off)
+  assert.deepEqual(P.current(), { v: 0, cfg: { mode: "off", cfstickers: false, gifs: "off" } });
   for (const user of [null, member, staff, admin]) assert.equal(P.viewerOn(user), false);
   for (const value of [null, true, 1, [], {}, "all", "__proto__"]) {
     const result = P.normalize({ mode: value }, { base: { mode: "staff" } });
     assert.equal(result.cfg.mode, "staff"); assert.equal(result.errors.mode, "invalid");
   }
-  assert.deepEqual(P.normalize({}).cfg, { mode: "off", cfstickers: false, gifs: false });
-  assert.deepEqual(P.normalize({ mode: " EVERYONE " }).cfg, { mode: "everyone", cfstickers: false, gifs: false });
+  assert.deepEqual(P.normalize({}).cfg, { mode: "off", cfstickers: false, gifs: "off" });
+  assert.deepEqual(P.normalize({ mode: " EVERYONE " }).cfg, { mode: "everyone", cfstickers: false, gifs: "off" });
   await P.save(admin, { cfg: { mode: "staff" } });
   const before = P.current();
   await assert.rejects(P.save(admin, { cfg: { mode: "bad" } }), e => e.status === 400);
@@ -54,16 +55,22 @@ test("staff audience delegates to pads.manage_any; everyone includes signed-out 
   for (const user of [null, member, staff, admin]) assert.equal(P.viewerOn(user), false);
 });
 
-test("media switches default false, accept only booleans, persist and reset together with the audience", async () => {
-  for (const field of ["cfstickers", "gifs"]) {
-    for (const bad of ["true", "false", 1, 0, null, [], {}]) {
-      const result = P.normalize({ [field]: bad }); assert.equal(result.cfg[field], false); assert.equal(result.errors[field], "invalid");
-    }
+test("media switches default off, accept only their values, persist and reset together with the audience", async () => {
+  for (const bad of ["true", "false", 1, 0, null, [], {}]) {
+    const result = P.normalize({ cfstickers: bad }); assert.equal(result.cfg.cfstickers, false); assert.equal(result.errors.cfstickers, "invalid");
   }
-  await P.save({ ...admin, userId: "media-switch-admin" }, { cfg: { mode: "staff", cfstickers: true, gifs: true } });
-  P._reset(); await P.init(); assert.deepEqual(P.current().cfg, { mode: "staff", cfstickers: true, gifs: true });
+  // 1.99aot gifs: off | free | partner; the old boolean reads as what it meant (true = the server-side mode), anything else is refused
+  for (const bad of ["true", "on", "klipy", 1, 0, null, [], {}, "__proto__"]) {
+    const result = P.normalize({ gifs: bad }, { base: { gifs: "free" } }); assert.equal(result.cfg.gifs, "free", String(bad)); assert.equal(result.errors.gifs, "invalid");
+  }
+  for (const [value, want] of [[" FREE ", "free"], ["partner", "partner"], ["off", "off"], [true, "partner"], [false, "off"]]) assert.equal(P.normalize({ gifs: value }).cfg.gifs, want, String(value));
+  await P.save({ ...admin, userId: "media-switch-admin" }, { cfg: { mode: "staff", cfstickers: true, gifs: "free" } });
+  P._reset(); await P.init(); assert.deepEqual(P.current().cfg, { mode: "staff", cfstickers: true, gifs: "free" });
+  // a row saved before 1.99aot (gifs: true) loads as partner
+  await db.runQuery("UPDATE paddock_cfg SET data = ? WHERE id = 1", [JSON.stringify({ mode: "staff", cfstickers: true, gifs: true })]);
+  P._reset(); await P.init(); assert.equal(P.current().cfg.gifs, "partner");
   const result = await P.save({ ...admin, userId: "media-switch-admin" }, { reset: true });
-  assert.deepEqual(result.cfg, { mode: "off", cfstickers: false, gifs: false });
+  assert.deepEqual(result.cfg, { mode: "off", cfstickers: false, gifs: "off" });
 });
 
 test("admin route requires pads.config and same-site fetch; refused requests do not change config", async () => {
@@ -273,7 +280,7 @@ test("admin script loads once, saves the chosen mode, resets explicitly, and sho
   const form = ids.paddockForm, reason = doc.createElement("input"), save = doc.createElement("button"); reason.name = "reason";
   form.appendChild(ids.paddockFields); form.appendChild(reason); form.appendChild(ids.paddockReset); form.appendChild(save);
   Object.defineProperty(form, "elements", { get: () => Object.fromEntries([...form.querySelectorAll("input"), ...form.querySelectorAll("select")].map(n => [n.name, n])) });
-  let mode = "off", cfstickers = false, gifs = false, failure = null;
+  let mode = "off", cfstickers = false, gifs = "off", failure = null;
   const view = () => ({ cfg: { mode, cfstickers, gifs }, fields: P.FIELDS, audit: [{ at: 1, admin: "<script>fixture</script>", detail: { v: 1 } }] });
   vm.runInNewContext(fs.readFileSync(path.join(repo, "public/js/admin-paddock.js"), "utf8"), {
     window: {}, document: doc, fetch: async (url, init) => {
@@ -281,7 +288,7 @@ test("admin script loads once, saves the chosen mode, resets explicitly, and sho
       if (init.method) {
         if (failure) return { json: async () => ({ ok: false, error: failure }) };
         const body = JSON.parse(init.body); mode = body.reset ? "off" : body.cfg.mode;
-        cfstickers = !body.reset && body.cfg.cfstickers; gifs = !body.reset && body.cfg.gifs;
+        cfstickers = !body.reset && body.cfg.cfstickers; gifs = body.reset ? "off" : body.cfg.gifs;
         return { json: async () => ({ ok: true, view: view() }) };
       }
       return { json: async () => ({ ok: true, ...view() }) };
@@ -289,13 +296,15 @@ test("admin script loads once, saves the chosen mode, resets explicitly, and sho
   });
   await b.flush(); assert.equal(calls.length, 1); assert.equal(calls[0].url, "/api/admin/paddock"); assert.equal(form.elements.mode.value, "off");
   assert.match(ids.paddockAudit.textContent, /<script>fixture<\/script>/, "audit names stay literal text");
-  form.elements.mode.value = "staff"; form.elements.cfstickers.checked = true; form.elements.gifs.checked = true;
+  // (1.99aot gifs: the GIF control is a select - off / free / partner)
+  assert.equal(form.elements.gifs.tagName, "select"); assert.deepEqual(form.elements.gifs.children.map(o => o.value), ["off", "free", "partner"]);
+  form.elements.mode.value = "staff"; form.elements.cfstickers.checked = true; form.elements.gifs.value = "free";
   reason.value = " Staging review "; form.fire("submit"); await b.flush();
   assert.equal(calls[1].init.method, "POST"); assert.equal(calls[1].init.headers["X-Requested-With"], "fetch");
-  assert.deepEqual(JSON.parse(calls[1].init.body), { cfg: { mode: "staff", cfstickers: true, gifs: true }, reset: false, reason: "Staging review" });
+  assert.deepEqual(JSON.parse(calls[1].init.body), { cfg: { mode: "staff", cfstickers: true, gifs: "free" }, reset: false, reason: "Staging review" });
   assert.equal(form.elements.mode.value, "staff"); assert.equal(reason.value, ""); assert.match(ids.paddockMessage.textContent, /Saved.*Reload/);
   ids.paddockReset.fire("click"); await b.flush(); assert.equal(form.elements.mode.value, "off"); assert.equal(JSON.parse(calls[2].init.body).reset, true);
-  assert.equal(form.elements.cfstickers.checked, false); assert.equal(form.elements.gifs.checked, false);
+  assert.equal(form.elements.cfstickers.checked, false); assert.equal(form.elements.gifs.value, "off");
   failure = "rate"; form.elements.mode.value = "everyone"; form.fire("submit"); await b.flush();
   assert.match(ids.paddockMessage.textContent, /Wait a moment/); assert.equal(mode, "off"); assert.equal(save.disabled, false);
 });

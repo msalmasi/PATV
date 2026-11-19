@@ -448,6 +448,26 @@ async function takeDown(roomId, cs, { db = true, ring: useRing = true } = {}) {
   wakeRoom(R.id);
   return n;
 }
+/** 1.99aot gifs: GIF `id` was removed everywhere (or a block was lifted) - every live line with it is drawn again on open pad pages
+ *  (the `redo` ring: re-dressed, so gifs.attach says {gone: 1} or gives the picture back). Pages without the ring (the homepage
+ *  panel) show the change on their next load. -> lines touched */
+function gifRedo(id) {
+  const t = Date.now(), core = require("./public/js/chatlog-core");
+  let n = 0;
+  for (const R of rooms.values()) {
+    const cs = [];
+    for (const it of R.feed) {
+      const tok = it && it.md === "gif" ? core.mediaOf(it) : null;
+      if (tok && tok.type === "gif" && tok.id === id) cs.push(Number(it.c));
+    }
+    if (!cs.length) continue;
+    ringPut(R, "redo", cs, t);
+    R.ver = (R.ver || 0) + 1;
+    wakeRoom(R.id);
+    n += cs.length;
+  }
+  return n;
+}
 /** CL6: an un-hidden line goes back into the live feed (and bridge_feed) when it is still inside the room's last FEED_KEEP
  *  items. -> restored? */
 async function restoreLine(roomId, item) {
@@ -627,7 +647,9 @@ function feedItem(ev, roomId = null) {
         const wu = cleanUser(w.user, true);
         const wt = cpStr(w.text, INBOUND_MAX);
         const tag = jid ? { _job: jid } : {};
-        // Media metadata belongs to the current viewer projection (chatlogview.dress), never the persisted feed.
+        // Media metadata belongs to the current viewer projection (chatlogview.dress), never the persisted feed. (1.99aot gifs: except a
+        // free-mode GIF's own checked details - mediaMark's `gf`: free mode never asks KLIPY, so the line keeps its URL, size, title and
+        // rating - never the media itself)
         if (wu && !wu.anon && !wu.self && wt) return Object.assign({ k: "msg", ts, u: Object.assign(wu, { web: true }), text: wt }, tag);
         // 1.99acb: Pepe's sender ref didn't pass (a lost ref, a failed label lookup) but the job says who sent it: still THEIR
         // line (their linked login, or their PATV account when they have no chat login) - never Pepe's. Words = Pepe's
@@ -1026,7 +1048,7 @@ async function pickerEligible(viewer, R, login) {
  */
 function mediaMark(it, ev, roomId) {
   if (!it || typeof it !== "object") return it;
-  delete it.md; delete it.stk;
+  delete it.md; delete it.stk; delete it.gf;
   if (it.k !== "msg" || typeof it.text !== "string" || (it.u && it.u.self)) return it;
   // 1.99ajf dockclean (owner point 21): a 🧸 PATV sticker - the line's own say job was that sticker and its words are exactly the stand-in
   // the job sent ("[sticker: Name]"); typed words that merely look like one stay text
@@ -1040,6 +1062,9 @@ function mediaMark(it, ev, roomId) {
     const J = relay.echoJob(it._job, roomId), m = J && J.media;
     const same = !!m && m.type === token.type && (token.type === "gif" ? m.id === token.id : Number(m.set) === token.set && Number(m.id) === token.id);
     if (same) it.md = token.type;
+    // 1.99aot gifs: a free-mode GIF's details (checked by gifs.freeGif when it was sent) stay with its line - bridge_feed and chat_log.d
+    // keep them (URLs and sizes, never the media) and gifs.attach draws the line from them; PATV never asks KLIPY for them
+    if (same && token.type === "gif" && J.gf) it.gf = { src: J.gf.src, w: J.gf.w, h: J.gf.h, title: J.gf.title, r: J.gf.r };
     return it;
   }
   const d = ev && ev.data && typeof ev.data === "object" ? ev.data : null;
@@ -1910,7 +1935,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
     return b && (b.b || b.p) ? { ...x, wban: b } : x;
   };
   // 1.99aiw: picker visibility shares the say route's full access check; no extra account lookup while the Dock/media are off.
-  let cfstickerPicker = false, gifPicker = false;
+  let cfstickerPicker = false, gifPicker = false, gifFree = null;
   if (userId && require("./paddock").current().cfg.mode !== "off") {
     const stickersOn = R.stickers === true && require("./cfstickers").enabled(), gifsOn = require("./gifs").available();
     if (stickersOn || gifsOn) {
@@ -1918,6 +1943,9 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
         if (await pickerEligible(viewer, R, login)) { cfstickerPicker = stickersOn; gifPicker = gifsOn; }
       } catch (e) { /* an unavailable eligibility check leaves both picker tabs hidden */ }
     }
+    // 1.99aot gifs: free mode - the picker calls KLIPY from the browser: the browser key, this pad's rating (the server's: 18+ pads
+    // "low", others "high") and whether this member has seen the one-time KLIPY notice. Only beside a shown GIF tab
+    if (gifPicker) gifFree = require("./gifs").pageData(R.id, userId);
   }
   return {
     room: { name: R.name, slug: R.slug, topic: CV.redact(R.topic), count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
@@ -1932,7 +1960,7 @@ async function liveView(R, after, userId, login, username = null, withMe = !afte
             // relaymic 1.99anh: the recorder's release tail (ms) and whether it applies on iPhone / iPad (pttlimits tail_ms / tail_ios)
             pttTail: require("./pttlimits").current().tail_ms, pttTailIos: require("./pttlimits").current().tail_ios === 1,
             stickers: R.stickers === true,
-            cfstickerPicker, gifPicker,
+            cfstickerPicker, gifPicker, ...(gifFree ? { gifFree } : {}),
             // 1.99yh: 📡 ▶ Live on the cam popover (livecam.js) - null = not here; {slots: {used, max}, watching} for this viewer
             // (1.99aid privacy controls S4: reveal: 1 for a moderator who may view a hidden cam here - the popover's "View for moderation")
             livecams: isLive(R) ? withReveal(livecamHint(R, userId), crRole) : null,
@@ -2883,6 +2911,7 @@ module.exports = { ELIG_TTL_MS, _eligClock: (fn) => { eligClock = typeof fn === 
   revealLookup, forgetVeiled, bridgeOk, isLiveShown, reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, audioTap, audioRecheck, AUDIO_RECHECK_MS, _audioTick: audioTick, _audioListeners: (id) => (audio.get(String(id)) ? audio.get(String(id)).listeners.size : 0), _audioRecheckOn: () => !!audioRecheckT, _audioRecheckStart: startAudioRecheck, _audioRecheckStop: stopAudioRecheck, stageProgramFor, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, pepeOnAir, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, mnLook, resolveNames, touch, cleanMic, _nameCache: nameCache, _noteWhoAll: noteWhoAll, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, boostAnnounce, _boostAnnHits: boostAnnHits, requestLanded,_pepeName: (v) => { pepeName = { v, at: Date.now() }; },
   noteItem, refreshRoom, markRemoved, nameKey, takeDown, restoreLine, _dropTakenDown: dropTakenDown,
+  gifRedo,                                              // 1.99aot gifs: a GIF removed everywhere / unblocked - open pad pages redraw its lines
   chatGate, chatEmbedAsked, liveBridged, pepeUsername,   // 1.99ajw casino2 (casino/people.js, the chat embed)
   embedClosed,                                          // tablechat review: padaccess.js answers it for an Approved pad's embed
   _k3Refs: K3_REFS, _k3Replay: k3Replay,   // 1.99afl review (B.1's per-hold stamp; tests)

@@ -473,9 +473,9 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   assert.equal((room.match(/render: renderLine, ctx: rctx,/g) || []).length, 2, "scrollback's and search's lines too (CL8 / CL9)");
   assert.match(room, /feed: feedEl, line: item,/, "your pending relay lines are built the same way (room-bridge.js)");
   // the script loads before the page's own; the stylesheet right after the block it came from (the cascade keeps its order)
-  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=16"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
+  const core = room.indexOf('<script src="/public/js/chatlog-core.js?v=17"></script>'), init = room.indexOf('<script id="rmInit"');   // Room Dock phase 1a: v=7 (the reserved line head); 1.99ajc dockfu: v=9 (media drawn only with the server's mark)
   assert.ok(core > 0 && core < init, "chatlog-core.js before the page script");
-  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
+  const styleEnd = room.indexOf("</style>"), link = room.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=13">');   // Room Dock phase 1a: v=10 (head spacing and menu clearance)
   assert.ok(styleEnd > 0 && link > styleEnd, "linked after the style block");
   assert.match(room.slice(styleEnd + 8, link), /^\s*<%#[^%]*%>\s*$/, "nothing in between but a comment");
   assert.match(room, /<main class="ds-page rm chatlog<%= LK_ && LK_\.accent \? ' pad-acc' : '' %><%= dockOn_ \? ' rm-dock' : '' %><%= chatOnly_ \? ' rmd-popout' : '' %>"/);   // (1.99ajh dockpop: + the chat window)
@@ -491,7 +491,7 @@ test("room.ejs builds every line with chatlog-core: no inline copy, the styleshe
   // home.ejs is left alone in v1 (its own markup and keys) - 1.99ajh dockpop: except its Room Dock (the owner's P2: the pad Dock's
   // chat card on the homepage, public/js/home-dock.js draws its lines with chatlog-core) - chatlog.css only inside that branch, and
   // today's widget (Dock off) still has its own renderer
-  const home = rd("views", "home.ejs"), dockCss = home.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=12">');
+  const home = rd("views", "home.ejs"), dockCss = home.indexOf('<link rel="stylesheet" href="/public/css/chatlog.css?v=13">');
   assert.ok(!home.includes("PATVChatlog"));
   assert.equal(home.split("chatlog.css").length, 2, "linked once");
   assert.match(home.slice(home.lastIndexOf("<%_ if (homeDock_) { _%>", dockCss), dockCss), /^<%_ if \(homeDock_\) \{ _%>\s*$/, "only in the Dock branch");
