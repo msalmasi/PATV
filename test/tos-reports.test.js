@@ -437,7 +437,8 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   const PROD_DAY = Date.UTC(2026, 10, 3, 12, 0, 0);
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep', 'blocks-2', 'chat-mentions', 'story-originals')", [PROD_DAY]);   // (1.99ajn padppl: + its always-shown dated texts; 1.99anv: + story-originals, shown while story_keep_originals is on - the default)
   const p2 = await get("/privacy", null);
-  assert.match(p2.text, /Last updated 3 November 2026/);
+  // (1.99aot gifs: PRIVACY_UPDATED, hand-set to 24 November 2026, is newer than the 3 November texts - "Last updated" is the newest)
+  assert.match(p2.text, new RegExp("Last updated " + (Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") > PROD_DAY ? terms.PRIVACY_UPDATED : "3 November 2026")));
   assert.match(p2.text, /3 November 2026:<\/b> sections 3 and 10 now say that/);
   assert.match(p2.text, /3 November 2026:<\/b> added <a href="#mic-stage-captures">Mic-stage snaps and clips<\/a> \(section 3\)/, "mic keep: its change note, dated");
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [wp1.at]);
@@ -455,7 +456,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(ms3, /<code>!livecam off<\/code> keeps your cam \(not your voice\) out, and a person whose cam is shown in a capture can delete it from the story, while someone shown only as a name card can't\./);
   assert.doesNotMatch(ms3, /where it can't be saved to a collection or posted to the pad/, "the clause this build changed is gone");
   assert.match(inc, /snaps and clips that show you can't be kept or posted/, "still true: a capture showing an incognito person (a cover tile) is never kept");
-  assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.equal(terms.PRIVACY_UPDATED, "24 November 2026");    // 1.99aot gifs: GIFs (KLIPY), owner-approved 2026-11-19, the planned prod day (before: 28 October 2026 -) mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#messages-camfrog">/, "a dated change note for CL11");

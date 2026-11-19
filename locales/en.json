@@ -4961,7 +4961,7 @@
   "js.pad.dock.admin.gifs_unblock": "Unblock",
   "js.pad.dock.admin.gifs_unblocked": "Unblocked.",
   "js.pad.dock.admin.media_hint": "Stickers also need the room sticker switch. GIFs need the server key, the approved KLIPY plan and the privacy notice before activation. Both start off.",
-  "js.pad.dock.admin.media_modes": "Stickers also need the room sticker switch. GIFs have two modes: Free (KLIPY’s free plan - members’ browsers ask KLIPY) and Partner (KLIPY’s paid plan - our server asks KLIPY). Keep GIFs off until the privacy policy addition for KLIPY is approved. Both start off.",
+  "js.pad.dock.admin.media_modes": "Stickers also need the room sticker switch. GIFs have two modes: Free (KLIPY’s free plan - members’ browsers ask KLIPY) and Partner (KLIPY’s paid plan - our server asks KLIPY). The privacy policy describes Free; Partner needs its own wording there first. Both start off.",
   "js.pad.picker.credit": "via KLIPY",
   "js.pad.picker.free_notice": "GIF search is provided by KLIPY. When you search or browse GIFs, what you type and your IP address go to KLIPY, and the GIFs load from KLIPY.",
   "js.pad.picker.free_notice_link": "KLIPY’s privacy policy",

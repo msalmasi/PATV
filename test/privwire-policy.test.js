@@ -25,7 +25,8 @@ const MEMORY = { on_day: "29 October 2026", on_at: 1793200000000 };
 const DATES = { "wp1-voice": { at: 1793100000000, day: "28 October 2026" }, "mic-stage-keep": { at: 1793534400000, day: "1 November 2026" } };
 // 1.99ajn padppl: section 6's "Blocking someone" paragraph is the current text for everyone (blocks.js - not behind a switch; dated by
 // terms.js "blocks-2"): the one addition to the switch-off page, taken out before comparing with the old commit
-const PADPPL = (page) => page.replace(/[ \t]*<p id="blocking">[\s\S]*?<\/p>\r?\n/, "");
+// (1.99aot gifs: and the GIFs (KLIPY) lines, also always shown - test/fixtures/padppl-privacy.js gifsOut)
+const PADPPL = (page) => require("./fixtures/padppl-privacy").gifsOut(page).replace(/[ \t]*<p id="blocking">[\s\S]*?<\/p>\r?\n/, "");
 const render = (src, extra) => ejs.render(lf(src), Object.assign({}, BASE, extra), { filename: FILE });
 
 // mic keep wording fix (owner-approved 2026-11-02): the two sentences added to the Mic-stage snaps and clips paragraph - the only
