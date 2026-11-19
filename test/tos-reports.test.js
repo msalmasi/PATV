@@ -385,6 +385,10 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   // 1.99aft (review): WP-1 is dated the day this server first served it (terms.TEXT_DATES) - here, the test's own run
   const wp1 = (await terms.textDates())["wp1-voice"];
   assert.ok(wp1 && wp1.at > 0 && wp1.day, "WP-1's first-served day is recorded");
+  // 1.99aot gifs (review: the 1.99aft rule, no hand-set day): the GIFs (KLIPY) text is dated the same way, at boot ("gifs-klipy")
+  const gfk = (await terms.textDates())["gifs-klipy"];
+  assert.ok(gfk && gfk.at > 0 && gfk.day, "the GIFs text's first-served day is recorded");
+  assert.ok(p.text.includes('<li id="gifs-change"><b>' + gfk.day + ':</b> added <a href="#gifs-klipy">GIFs (KLIPY)</a> to sections 3, 7 and 9.'), "its note, dated that day");
   // mic keep (handoff 16 follow-up): the Mic-stage snaps and clips paragraph is dated the same way - but only from the first time
   // /privacy is served with mic-stage captures on (stagecap_mic); while they are off it isn't on the page at all
   const MS = require("../mainstage");
@@ -435,12 +439,18 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   await terms.textDates();
   assert.equal((await terms.textDates())["wp1-voice"].at, wp1.at, "the first-served moment never moves");
   const PROD_DAY = Date.UTC(2026, 10, 3, 12, 0, 0);
-  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep', 'blocks-2', 'chat-mentions', 'story-originals')", [PROD_DAY]);   // (1.99ajn padppl: + its always-shown dated texts; 1.99anv: + story-originals, shown while story_keep_originals is on - the default)
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key IN ('wp1-voice', 'mic-stage-keep', 'blocks-2', 'chat-mentions', 'story-originals', 'gifs-klipy')", [PROD_DAY]);   // (1.99ajn padppl: + its always-shown dated texts; 1.99anv: + story-originals, shown while story_keep_originals is on - the default; 1.99aot gifs: + gifs-klipy)
   const p2 = await get("/privacy", null);
-  // (1.99aot gifs: PRIVACY_UPDATED, hand-set to 24 November 2026, is newer than the 3 November texts - "Last updated" is the newest)
-  assert.match(p2.text, new RegExp("Last updated " + (Date.parse(terms.PRIVACY_UPDATED + " 23:59:59 UTC") > PROD_DAY ? terms.PRIVACY_UPDATED : "3 November 2026")));
+  assert.match(p2.text, /Last updated 3 November 2026/);
   assert.match(p2.text, /3 November 2026:<\/b> sections 3 and 10 now say that/);
   assert.match(p2.text, /3 November 2026:<\/b> added <a href="#mic-stage-captures">Mic-stage snaps and clips<\/a> \(section 3\)/, "mic keep: its change note, dated");
+  // 1.99aot gifs: a server that first serves the GIFs text on a later day (prod on its promote day, 24 November 2026) says that day -
+  // at the top and in section 14's note - with nobody editing a date
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'gifs-klipy'", [Date.UTC(2026, 10, 24, 12, 0, 0)]);
+  const p3 = await get("/privacy", null);
+  assert.match(p3.text, /Last updated 24 November 2026/);
+  assert.ok(p3.text.includes('<li id="gifs-change"><b>24 November 2026:</b> added <a href="#gifs-klipy">GIFs (KLIPY)</a>'), "the GIFs note, that day");
+  await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'gifs-klipy'", [gfk.at]);
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'wp1-voice'", [wp1.at]);
   await runQuery("UPDATE policy_text_dates SET at = ? WHERE key = 'mic-stage-keep'", [msk.at]);
   // mic keep (handoff 16 follow-up, the owner's 2026-11-01 sentence as amended): section 3's paragraph, not behind a switch
@@ -456,7 +466,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(ms3, /<code>!livecam off<\/code> keeps your cam \(not your voice\) out, and a person whose cam is shown in a capture can delete it from the story, while someone shown only as a name card can't\./);
   assert.doesNotMatch(ms3, /where it can't be saved to a collection or posted to the pad/, "the clause this build changed is gone");
   assert.match(inc, /snaps and clips that show you can't be kept or posted/, "still true: a capture showing an incognito person (a cover tile) is never kept");
-  assert.equal(terms.PRIVACY_UPDATED, "24 November 2026");    // 1.99aot gifs: GIFs (KLIPY), owner-approved 2026-11-19, the planned prod day (before: 28 October 2026 -) mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
+  assert.equal(terms.PRIVACY_UPDATED, "28 October 2026");    // (1.99aot gifs: unchanged - the GIFs (KLIPY) text is dated by TEXT_DATES "gifs-klipy") mic retention 8.5 A (merged 28 October); WP-1 (your voice is still heard): TEXT_DATES; F13: patv_chat_sweep; 20 October: photos sent to Pepe + the incognito owner change + CL11 / CL13: messages from Camfrog (1.99acd, 18 October: browser notifications; 1.99aax, 15 October: live cams, forget me, export / delete, no crawlers)
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#pepe-photos">/, "a dated change note for photos sent to Pepe");
   assert.match(p.text, /id="pepe-photos"/);
   assert.match(p.text, /19 October 2026:<\/b> added <a href="#messages-camfrog">/, "a dated change note for CL11");
