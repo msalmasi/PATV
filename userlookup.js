@@ -7,7 +7,8 @@
 // any caller. Now:
 //   * bot-only: the caller sends the platform bot token in an "X-Bot-Token" header (or
 //     "Authorization: Bearer <token>") - 401 without one, 403 with a wrong one. Never in the URL
-//     (query strings end up in access logs).
+//     (query strings end up in access logs). 1.99aou: a request whose X-PATV-Key resolved passes
+//     without any bot token (requireBot).
 //   * only LOOKUP_FIELDS go back - what the Discord bot, the Discord selfbot, blackjack, the Twitch
 //     bot (server.js) and Pepe actually read: userId, username, displayname, points_balance,
 //     discordId / discordUsername, twitchId / twitchDisplayname / twitchLogin.
@@ -60,13 +61,14 @@ function botTokenOf(req) {
   return m ? m[1] : null;
 }
 
-/** Express middleware: 401 without a token, 403 with a wrong one. */
+/** Express middleware: a resolved X-PATV-Key passes with no bot token (1.99aou); otherwise 401 without a token, 403
+ *  with a wrong one. */
 function requireBot(isPlatformBot) {
   return (req, res, next) => {
     const t = botTokenOf(req);
+    if (isPlatformBot(t)) return next();
     if (!t) return res.status(401).json({ error: "unauthorized" });
-    if (!isPlatformBot(t)) return res.status(403).json({ error: "forbidden" });
-    next();
+    return res.status(403).json({ error: "forbidden" });
   };
 }
 

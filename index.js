@@ -457,7 +457,7 @@ app.get("/api/admin/ledger/orphans", addUser, async (req, res) => {
 // Pepe: the Camfrog logins still warned (he PMs them when he sees them), and "I saw this login"
 // (they're active again: the warning is cleared).
 app.get("/api/stale/notice-logins", async (req, res) => {
-  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  if (!isBotToken(req.get("x-bot-token") || req.query.password)) return res.status(403).json({ error: "unauthorized" });
   try { res.json(await stale.pendingLogins()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/stale/seen", async (req, res) => {
@@ -1613,7 +1613,7 @@ achievements.setUpdateLevel(updateLevel);
 // Phase 5 (5.14): the achievement counters on the site - Pepe posts metric events, the site evaluates and awards (achprogress.js)
 require("./achprogress").register(app, { isBotToken, addUser });
 app.get("/api/g/achievement-feed", async (req, res) => {
-  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  if (!isBotToken(req.get("x-bot-token") || req.query.password)) return res.status(403).json({ error: "unauthorized" });
   try { res.json({ feed: await achievements.feed() }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/g/achievement-feed/ack", async (req, res) => {
@@ -2740,7 +2740,7 @@ app.post("/api/g/funding-sync", (req, res) => {
   res.json({ ok: true });
 });
 app.get("/api/g/reserve-claims", async (req, res) => {
-  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  if (!isBotToken(req.get("x-bot-token") || req.query.password)) return res.status(403).json({ error: "unauthorized" });
   try { res.json({ claims: await funding.claims() }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });

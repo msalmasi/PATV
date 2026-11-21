@@ -36,7 +36,7 @@ a request started can never act as that caller later.
 | `pepe` | Pepe's admin panel: API keys → **PATV caller key** (`patv_key`, env `PATV_KEY`). Staging: `C:\PATV\staging-backend.key` on the staging VM. | Sent on every request to the site (`pepe_siteauth.py`), over verified TLS only (a keyed https request is certificate-checked even though Pepe's shared session runs with `verify=False`). Links chat users post (image links, `!imagine` / `!video` references) are fetched on a plain session that never carries it. The panel's Test button calls `GET /api/botkeys/whoami`. The VM supervisor (`vm/control.py`, which re-reads the key every minute and on a 401) and the WHIP setup (`obs_control.py`) send it too; a separate `pepe-vm` key scoped to `/api/pepe` is the next step. |
 | `discord` | `PATV_KEY=` in `discord-bot/.env` | Every axios request to `BACKEND_BASE_URL`'s exact origin, `/chattip` included, the `/events` streams of `/spin` and the one `fetch()` (`siteHeaders()`). User-Agent `patv-discord-bot/1` (blackjack: `patv-blackjack/1`). |
 | `twitch` | `PATV_KEY=` in the Twitch bot's `.env` | The same (`twitchbot/patvAuth.js`), including its two `/events` streams and the `!spin` chatspin `fetch()`. User-Agent `patv-twitch-bot/1`. |
-| `ops` | `OPS_PATV_KEY=` in the site's `.env` | `deploy/webrtc/pepe-relay-watchdog.sh` sends it as a header read from a pipe (never on the command line). Reinstall the watchdog after setting it. |
+| `ops` | `OPS_PATV_KEY=` in the site's `.env` | `deploy/webrtc/pepe-relay-watchdog.sh` sends it as a header read from a pipe (never on the command line). Reinstall the watchdog after setting it. `tools/relay-latency.js` too (1.99aou). |
 | selfbot | none | It only drives the retired PokerNow bridge. Its fallback to the site's `TWITCH_BOT_TOKEN` was removed. |
 
 The body passwords and `X-Bot-Token` stay on every caller until the legacy branch is deleted, so a missing or unknown
@@ -94,6 +94,15 @@ token was last used.
   both tokens after **14 consecutive days at zero on prod and staging**. The S0 exit is zero for Pepe and the Discord bot.
 - `legacybj.js` (the old Discord blackjack routes) is not converted: it answers 410 unless `LEGACY_DISCORD_BLACKJACK=1`, and
   when on it still wants a non-empty password, so a key-only caller is refused there.
+
+### Headers, not query strings (1.99aou)
+
+Pepe's three polling GETs (`/api/g/reserve-claims`, `/api/g/achievement-feed`, `/api/stale/notice-logins`) send the
+legacy token, when he still has one, in `X-Bot-Token`; the routes still read `?password=` for older bots until the
+legacy branch is deleted. The bot-only user lookups (`userlookup.js` `requireBot`) let a request whose `X-PATV-Key`
+resolved through without any `X-Bot-Token`, so a bot needs no placeholder token. `tools/relay-latency.js` reads
+`OPS_PATV_KEY` from the environment (never the command line) and sends it as `X-PATV-Key`; only without it does it put
+`TWITCH_BOT_TOKEN` in the body.
 
 ## Settings
 

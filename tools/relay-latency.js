@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tools/relay-latency.js - 1.99ye: measure the web -> Camfrog chat relay end to end on STAGING (the bot-token test routes
-// in bridge.js only exist when STAGING is set). Run on the VPS from the staging checkout, so the bot token never leaves it:
+// in bridge.js only exist when STAGING is set). Reads OPS_PATV_KEY (legacy token only as fallback) from the environment:
 //
 //   cd /home/PATV-staging && node tools/relay-latency.js --slug <pad slug> --login <linked camfrog login> [--n 12] [--gap 4]
 //        [--burst 5] [--page lp|poll] [--base http://127.0.0.1:3100]
@@ -23,10 +23,14 @@ const GAP = Math.max(0.5, Number(args.gap) || 4) * 1000;
 const BURST = Math.max(0, parseInt(args.burst, 10) || 0);
 const PAGE = args.page === "poll" ? "poll" : "lp";
 const TOKEN = process.env.TWITCH_BOT_TOKEN;
-if (!SLUG || !LOGIN || !TOKEN) { console.error("usage: --slug <pad> --login <camfrog login>  (and TWITCH_BOT_TOKEN in .env)"); process.exit(2); }
+const KEY = process.env.OPS_PATV_KEY;
+if (!SLUG || !LOGIN || (!KEY && !TOKEN)) { console.error("usage: --slug <pad> --login <camfrog login>  (and OPS_PATV_KEY, or TWITCH_BOT_TOKEN, in the environment)"); process.exit(2); }
 
 const post = async (p, body) => {
-  const r = await fetch(BASE + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(Object.assign({ password: TOKEN }, body)) });
+  const headers = { "content-type": "application/json" };
+  if (KEY) headers["X-PATV-Key"] = KEY;
+  const credentials = !KEY && TOKEN ? { password: TOKEN } : {};
+  const r = await fetch(BASE + p, { method: "POST", headers, body: JSON.stringify(Object.assign({}, body, credentials)) });
   return { status: r.status, d: await r.json().catch(() => null) };
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
