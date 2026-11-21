@@ -3,6 +3,7 @@
   "label": "1.99aoi",
   "note": "The previous build (1.99aoi, e4446e74) as test/fixtures/casino-rl-prev-boot.js runs it (supply.js: test/supply.test.js compares its count with this build's): each file is git show <base>:<path>, byte for byte. Refresh with the deployed base whenever it moves.",
   "files": {
+    "autoescrow.js": "8d27326c23a9fc1820705b6231501a7259f95790",
     "funding.js": "15240e2ff58ba3e49bdcd6422e53f194bb02cc89",
     "gangs.js": "ef2b24822a318a9302866b75eeb67cb6a75ce94e",
     "policy/config.js": "4c0201e9dc45d5c4f07e58429bb08f3b1cdb08b8",

@@ -438,3 +438,62 @@ test("admin view and settings", async () => {
   const r = await AE.release("auto7");
   assert.equal(r.amount, 120);
 });
+
+// 1.99aou: a site-banned account (siteban.js lockOf: a feed_bans row with room_id '' that is for good or still running) gets no
+// claim link - the answer says reason "banned" so Pepe can tell the person plainly; the Admin class stays exempt (siteban.js
+// EXEMPT_MIN_RANK),
+// a ban that has ended or a pad's ban changes nothing.
+test("the claim link: a site-banned account gets reason 'banned' and no link; an ended or pad ban, or an Admin, as before", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_bans (user_id TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '', username TEXT, reason TEXT, by TEXT,
+                  at INTEGER, until INTEGER, PRIMARY KEY (user_id, room_id))`);
+  const ban = async (id, { room = "", until = null } = {}) => {
+    await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, 'spam', 'staffer', ?, ?)
+                    ON CONFLICT(user_id, room_id) DO UPDATE SET until = excluded.until`, [id, room, id, Date.now(), until]);
+    SB._clear();
+  };
+  const links = async (login) => (await getQuery("SELECT COUNT(*) AS n FROM auto_escrow_claimlinks WHERE login = ?", [login]))[0].n;
+
+  // a real (linked) account, site-banned for good
+  await user("bannedreal", { username: "banned_real", email: "banned-real@example.com", cf: "ban_linked_cf" });
+  assert.deepEqual(await AE.claimLink("ban_linked_cf"), { ok: true, state: "linked", username: "banned_real" }, "before the ban");
+  await ban("bannedreal");
+  assert.deepEqual(await AE.claimLink("ban_linked_cf"), { ok: false, state: "linked", reason: "banned" });
+  assert.deepEqual(await AE.claimLink("BAN_LINKED_CF "), { ok: false, state: "linked", reason: "banned" }, "any case / spacing");
+  assert.equal(await links("ban_linked_cf"), 0);
+
+  // Pepe's auto account on a login, site-banned until a time still ahead
+  await user("auto20", { username: "CFnnnn2020", cf: "ban_auto_cf" });
+  await AA.markNew("auto20");
+  await ban("auto20", { until: Date.now() + DAY });
+  const B = await AE.claimLink("ban_auto_cf");
+  assert.deepEqual(B, { ok: false, state: "auto", reason: "banned" });
+  assert.equal(B.url, undefined);
+  assert.equal(await links("ban_auto_cf"), 0, "no claim link row");
+
+  // the ban has ended: a link as before
+  await ban("auto20", { until: Date.now() - 1000 });
+  const E = await AE.claimLink("ban_auto_cf");
+  assert.equal(E.ok, true);
+  assert.equal(E.state, "auto");
+  assert.match(E.url, /\/claim\/[A-Za-z0-9_-]{32}$/);
+  assert.equal(E.reason, undefined);
+  assert.equal(await links("ban_auto_cf"), 1);
+
+  // a pad's ban is not a site ban
+  await user("auto21", { username: "CFoooo2121", cf: "pad_ban_cf" });
+  await AA.markNew("auto21");
+  await ban("auto21", { room: "test-pad" });
+  assert.equal((await AE.claimLink("pad_ban_cf")).ok, true);
+
+  // the Admin class is never locked out by a site ban (siteban.js EXEMPT_MIN_RANK): its answer is unchanged
+  await user("bannedadmin", { username: "banned_admin", email: "banned-admin@example.com", cf: "ban_admin_cf" });
+  await runQuery("UPDATE users SET class = 'Admin' WHERE userId = 'bannedadmin'");
+  await ban("bannedadmin");
+  assert.deepEqual(await AE.claimLink("ban_admin_cf"), { ok: true, state: "linked", username: "banned_admin" });
+
+  // an unbanned login with no account: as before
+  const N = await AE.claimLink("nobody_here_cf");
+  assert.deepEqual([N.ok, N.state, N.waiting, N.wallet], [true, "none", 0, 0]);
+  SB._clear();
+});

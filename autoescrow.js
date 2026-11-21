@@ -393,7 +393,8 @@ async function notified(login, { now = Date.now(), upto = null } = {}) {
 // Pepe knows who typed the command (the Camfrog chat author), exactly as !verify trusts him; the token he PMs to that login is
 // the proof. On the website the token lets a SIGNED-IN account take that login (user.controller.completeCamfrogLink - the same
 // merge !verify runs: the auto account's wallet, XP, badges and escrow move, then the escrow is released). One use, 30 minutes,
-// hashed at rest, at most CLAIM_PER_HOUR per login; never for a login a REAL account already holds (that one uses !verify).
+// hashed at rest, at most CLAIM_PER_HOUR per login; never for a login a REAL account already holds (that one uses !verify),
+// and (1.99aou) never for a site-banned account - the answer says reason "banned" instead.
 const sha = (t) => require("crypto").createHash("sha256").update(String(t)).digest("hex");
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
 function siteBase() {
@@ -406,12 +407,19 @@ async function loginState(login) {
   if (!u) return { state: "none", user: null };
   return { state: (await AA.isAutoAccount(u.userId)) ? "auto" : "linked", user: u };
 }
-/** Pepe: a claim link for the login that typed !signup. -> {ok, state, url?, waiting, wallet, username?, error?} */
+/** Pepe: a claim link for the login that typed !signup.
+ *  -> {ok, state, url?, waiting, wallet, username?, error?, reason?: "banned"} (1.99aou: "banned" = no link, a site ban) */
 async function claimLink(login, { now = Date.now() } = {}) {
   await init();
   const l = String(login || "").toLowerCase().trim();
   if (!l || l.length > 64) return { ok: false, error: "bad login" };
   const st = await loginState(l);
+  // 1.99aou: a site-banned account (siteban.js lockOf - the one ban rule) gets no claim link; Pepe tells the person plainly
+  // (the claim page would refuse the link anyway). A pending staff deletion still gets its link (the page says why).
+  if (st.user) {
+    const lock = await require("./siteban").lockOf(st.user.userId);
+    if (lock && lock.kind === "ban") return { ok: false, state: st.state, reason: "banned" };
+  }
   if (st.state === "linked") return { ok: true, state: "linked", username: st.user.username };
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM auto_escrow_claimlinks WHERE login = ? AND created > ?", [l, now - 3600000]))[0].n;
   if (recent >= CLAIM_PER_HOUR) return { ok: false, state: st.state, error: "too many links - try again in an hour" };
