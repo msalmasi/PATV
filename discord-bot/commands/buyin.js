@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils');
+const { errInfo } = require('../errinfo'); // 1.99aou: status + answer only - never a request's config or headers
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -46,7 +47,7 @@ module.exports = {
         const balance = balanceResponse.data.balance;
         interaction.reply({ content: `${interaction.user} (PAT ${balance}), you don't have enough PAT to buy ${amount} poker chips.`, ephemeral: true });
       } else {
-        console.error('Error during buy-in:', error);
+        console.error('Error during buy-in:', errInfo(error));
         interaction.reply({ content: 'An error occurred during the buy-in process.', ephemeral: true });
       }
     }

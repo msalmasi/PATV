@@ -9,6 +9,7 @@ const {
 } = require("discord.js");
 const { token } = require("./config.json");
 const axios = require("axios");
+const { errInfo } = require("./errinfo"); // 1.99aou: status + answer only - never a request's config or headers
 require("./backendAuth");   // 1.99fy: the bot token on PATV user lookups (bot-only now)
 require("dotenv").config();
 const { findOrCreateDiscordUser, findDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
@@ -112,7 +113,7 @@ async function onChatMessage(message) {
       }
     }
   } catch (error) {
-    console.error("Error adding user to raffle:", error.message);
+    console.error("Error adding user to raffle:", errInfo(error));
   }
 }
 
@@ -144,7 +145,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
       userId = userResponse.data.user.userId;
     }
   } catch (error) {
-    console.error(`Error fetching winner info for ${winnerId}:`, error.message);
+    console.error(`Error fetching winner info for ${winnerId}:`, errInfo(error));
     return;
   }
 
@@ -173,7 +174,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
       `🎉 ${member} (PAT ${winnerBalance}) won the random chat raffle with a prize of PAT ${randomPrize}! 🎉`
     );
   } catch (error) {
-    console.error("Failed to log raffle winner:", error);
+    console.error("Failed to log raffle winner:", errInfo(error));
   }
 
   // Start a new raffle
@@ -238,7 +239,7 @@ client.on("messageCreate", (message) => {
       .get(targetGuild) // Grab the guild
       .leave() // Leave
       .then((g) => console.log(`I left ${g}`)) // Give confirmation after leaving
-      .catch(console.error);
+      .catch((e) => console.error("Discord request failed:", errInfo(e)));
   }
   if (
     message.author.id == "675758566304514086" &&
@@ -296,7 +297,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
             const data = await response.json();
             console.log(data.message);
         } catch (error) {
-            console.error("Failed to add Poker Now game:", error.message);
+            console.error("Failed to add Poker Now game:", errInfo(error));
         }
     }
   }
@@ -330,7 +331,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
        try {
           await reaction.fetch(); //fetches reaction because not every reaction is stored in the cache
        } catch (error) {
-          console.error('Fetching message failed: ', error);
+          console.error('Fetching message failed: ', errInfo(error));
           return;
        }
     }
@@ -391,14 +392,14 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
  
               console.log("Discord bonus logged in backend.");
               } catch (error) {
-              console.error("Failed to log bonus winner:", error);
+              console.error("Failed to log bonus winner:", errInfo(error));
               }
       
       } else {
         console.error('Failed to award badge:', response.data.message);
       }
     } catch (error) {
-      console.error('Error awarding badge:', error);
+      console.error('Error awarding badge:', errInfo(error));
       user.send(`Sorry, there was an error awarding the discord degen badge.`);
     }
   }
@@ -407,7 +408,7 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
 async function processCashout(discordId, amount, discordUsername) {
     // 1.99gb: look up only - a cash-out never creates an account (it used to make one named "undefined")
     let user = null;
-    try { user = await findDiscordUser(discordId); } catch (e) { console.error(`Cash-out lookup for ${discordId}:`, e.message); return; }
+    try { user = await findDiscordUser(discordId); } catch (e) { console.error(`Cash-out lookup for ${discordId}:`, errInfo(e)); return; }
     if (!user) { console.error(`Cash-out for ${discordId}: no PATV account - nothing to cash out to`); return; }
     const balance = await findUserBalance(discordId);
         // Call the backend API to perform the cash-out
@@ -422,7 +423,7 @@ async function processCashout(discordId, amount, discordUsername) {
           }
         }
         catch (error) {
-          console.error(`Error fetching info for ${discordId}:`, error.message);
+          console.error(`Error fetching info for ${discordId}:`, errInfo(error));
           return;
         }
       
@@ -444,7 +445,7 @@ async function addLevelUpBonus(levelBonus, winnerId, channel) {
       userId = userResponse.data.user.userId;
     }
   } catch (error) {
-    console.error(`Error fetching winner info for ${winnerId}:`, error.message);
+    console.error(`Error fetching winner info for ${winnerId}:`, errInfo(error));
     return;
   }
 
@@ -469,7 +470,7 @@ async function addLevelUpBonus(levelBonus, winnerId, channel) {
       `🎉 ${member} (PAT ${winnerBalance}) received a PAT ${levelBonus} level up bonus! 🎉`
     );
   } catch (error) {
-    console.error("Failed to log bonus winner:", error);
+    console.error("Failed to log bonus winner:", errInfo(error));
   }
 }
 
@@ -486,7 +487,7 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
       userId = userResponse.data.user.userId;
     }
   } catch (error) {
-    console.error(`Error fetching winner info for ${winnerId}:`, error.message);
+    console.error(`Error fetching winner info for ${winnerId}:`, errInfo(error));
     return;
   }
 
@@ -503,7 +504,7 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
       password: process.env.DISCORD_BOT_TOKEN,
     });
   } catch (error) {
-    console.error("Failed to log bonus winner:", error);
+    console.error("Failed to log bonus winner:", errInfo(error));
   }
 }
 

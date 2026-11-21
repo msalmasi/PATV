@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils'); // Assuming this is where the utility is stored
+const { errInfo } = require('../errinfo'); // 1.99aou: status + answer only - never a request's config or headers
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,7 +34,7 @@ module.exports = {
         interaction.reply({ content: `${interaction.user} asked to swap ${amount} poker chips back to PAT!`, ephemeral: true });
   
       } catch (error) {
-        console.error('Error during cashout:', error);
+        console.error('Error during cashout:', errInfo(error));
         interaction.reply({ content: 'Something went wrong swapping your chips back to PAT.', ephemeral: true });
       }
     }

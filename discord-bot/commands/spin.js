@@ -3,6 +3,7 @@ const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils');
 const EventSource = require('eventsource');
 const { sseHeaders } = require('../backendAuth');   // 1.99acf: X-PATV-Key on the /events streams when PATV_KEY is set
+const { errInfo } = require('../errinfo'); // 1.99aou: status + answer only - never a request's config or headers
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -47,8 +48,10 @@ module.exports = {
         throw new Error("Spin request failed.");
       }
     } catch (error) {
-      console.error(`Error during spin for ${discordUser.username}:`, error.response.data);
-      interaction.editReply(`${interaction.user}, I can't do that right now: ${error.response.data} 😵`);
+      console.error(`Error during spin for ${discordUser.username}:`, errInfo(error));
+      // 1.99aou: the site's answer when there is one - a network error or a spin with no id has none (that threw here)
+      const answer = error && error.response ? error.response.data : "please try again in a minute";
+      interaction.editReply(`${interaction.user}, I can't do that right now: ${answer} 😵`);
     }
   },
 };

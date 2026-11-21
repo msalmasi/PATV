@@ -3,6 +3,7 @@ const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 const axios = require('axios');
 const { findOrCreateDiscordUser } = require('../userUtils'); // Reuse this to get user info
 const { purchaseReply } = require('../shopReply'); // 1.99ans: a virtual collectible is never "activated"
+const { errInfo } = require('../errinfo'); // 1.99aou: status + answer only - never a request's config or headers
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -44,7 +45,7 @@ module.exports = {
       await interaction.reply({ content: 'Here are the available items in the shop:', components: rows, ephemeral: true });
 
     } catch (error) {
-      console.error('Error fetching shop items:', error);
+      console.error('Error fetching shop items:', errInfo(error));
       interaction.reply({ content: 'There was an error fetching the shop items.', ephemeral: true });
     }
   },
@@ -105,7 +106,7 @@ module.exports = {
         // The backend's own reason: out of stock, already have that role, short by N PAT, ...
         await interaction.update({ content: `Purchase failed: ${error.response.data.message}`, components: [], ephemeral: true });
       } else {
-        console.error('Error during purchase:', error);
+        console.error('Error during purchase:', errInfo(error));
         await interaction.update({ content: 'There was an error processing your purchase.', components: [], ephemeral: true });
       }
     }
@@ -133,7 +134,7 @@ async function getPrizeDetails(prizeId) {
         throw new Error(`Prize with ID ${prizeId} not found.`);
       }
     } catch (error) {
-      console.error(`Error fetching prize details for prizeId ${prizeId}:`, error);
+      console.error(`Error fetching prize details for prizeId ${prizeId}:`, errInfo(error));
       throw error; // Rethrow the error to handle it in the calling function
     }
   }

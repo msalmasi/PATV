@@ -101,3 +101,20 @@ test("every root file the Twitch bot and the webhook server load restarts that b
     assert.ok(apps.includes("server") && apps.includes("index"), `${f} (server.js loads it) restarts ${A.get(f) || "nothing"}`);
   }
 });
+
+// 1.99aou: the Discord bot logs through its own discord-bot/errinfo.js, so it loads no root file the map would have to
+// restart 'discord' for; a change to any file it loads restarts 'discord'.
+test("the Discord bot loads only discord-bot/ files, and each one restarts discord", { skip: !hasBash && "needs bash" }, () => {
+  const dir = (d) => fs.readdirSync(path.join(repo, "discord-bot", d)).filter((f) => f.endsWith(".js")).map((f) => `discord-bot/${d}/${f}`);
+  const entries = ["discord-bot/discord.js", "discord-bot/registerCommands.js", ...dir("commands"), ...dir("events")];
+  const files = [...new Set(entries.flatMap(loads))];
+  assert.ok(files.includes("discord-bot/errinfo.js"), "the walk finds it: " + files.join(" "));
+  assert.deepEqual(files.filter((f) => !f.startsWith("discord-bot/")), [], "the Discord bot loads no site file");
+  const A = appsFor(files);
+  for (const f of files) {
+    const apps = A.get(f).split(" ");
+    assert.ok(apps.includes("discord"), `${f} (the Discord bot loads it) restarts ${A.get(f) || "nothing"}`);
+  }
+  assert.equal(A.get("discord-bot/errinfo.js"), "discord");
+  assert.equal(appsFor(["discord-bot/errinfo.js"], "patv-staging").get("discord-bot/errinfo.js"), "", "bots don't run on staging");
+});

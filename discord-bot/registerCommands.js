@@ -2,6 +2,7 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const { clientId, guildId, token } = require('./config.json');
 const fs = require('fs');
+const { errInfo } = require('./errinfo'); // 1.99aou: status + answer only - never a request's config or headers
 
 const commands = [];
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
@@ -24,6 +25,6 @@ const rest = new REST({ version: '9' }).setToken(token);
 
     console.log('Successfully reloaded application (/) commands.');
   } catch (error) {
-    console.error(error);
+    console.error('Refreshing application (/) commands failed:', errInfo(error));
   }
 })();

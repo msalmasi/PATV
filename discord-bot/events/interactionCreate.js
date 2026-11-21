@@ -1,3 +1,5 @@
+const { errInfo } = require('../errinfo'); // 1.99aou: status + answer only - never a request's config or headers
+
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction) {
@@ -10,7 +12,7 @@ module.exports = {
       try {
         await command.execute(interaction);
       } catch (error) {
-        console.error(error);
+        console.error(`Command /${interaction.commandName} failed:`, errInfo(error));
         await interaction.reply({
           content: 'There was an error while executing this command!',
           ephemeral: true,
