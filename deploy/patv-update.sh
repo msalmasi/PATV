@@ -83,7 +83,8 @@ apps_for() {
   fi
   case "$1" in
     *.md|docs/*|deploy/*|.github/*|.gitignore|.gitattributes|public/*|uploads/*) ;;
-    discord-bot/userUtils.js)          echo discord blackjack ;;
+    # 1.99aou: blackjack/blackjack.js loads these three Discord-bot files (userUtils.js loads backendAuth.js)
+    discord-bot/userUtils.js|discord-bot/backendAuth.js|discord-bot/errinfo.js) echo discord blackjack ;;
     discord-bot/*)                     echo discord ;;
     discordself/*)                     echo discordbot ;;
     twitchbot/*)                       echo twitch server ;;   # server.js requires twitchbot/twitch

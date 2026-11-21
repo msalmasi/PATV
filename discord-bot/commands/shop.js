@@ -53,13 +53,16 @@ module.exports = {
   // Handle the select menu interaction
   async handleSelectMenu(interaction) {
     const selectedPrizeId = interaction.values[0]; // Get the selected prizeId from the menu
-    const selectedPrizeName = await getPrizeDetails(selectedPrizeId);
     const discordId = interaction.user.id;
     const displayName = interaction.user.username;
     const profileImage = interaction.user.displayAvatarURL();
     let user = '';
+    let selectedPrizeName = null;
 
     try {
+      // 1.99aou: the prize lookup inside the try - a site error gets the "error processing your purchase" answer below
+      // instead of an unhandled rejection (and no answer at all)
+      selectedPrizeName = await getPrizeDetails(selectedPrizeId);
       // Ensure the user exists or is created
       user = await findOrCreateDiscordUser(discordId, displayName, profileImage);
 

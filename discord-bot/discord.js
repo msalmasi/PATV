@@ -9,7 +9,10 @@ const {
 } = require("discord.js");
 const { token } = require("./config.json");
 const axios = require("axios");
-const { errInfo } = require("./errinfo"); // 1.99aou: status + answer only - never a request's config or headers
+const { errInfo, guardProcess } = require("./errinfo"); // 1.99aou: status + answer only - never a request's config or headers
+// 1.99aou: an unhandled rejection / uncaught exception is logged as errInfo too (Node 22 printed the whole AxiosError -
+// X-Bot-Token, X-PATV-Key - and exited, losing the raffle in progress); a rejection keeps the bot running
+guardProcess(process, "discord");
 require("./backendAuth");   // 1.99fy: the bot token on PATV user lookups (bot-only now)
 require("dotenv").config();
 const { findOrCreateDiscordUser, findDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
@@ -71,8 +74,12 @@ function startRaffle(channelId) {
   console.log(`Raffle will end in ${raffleDurationMinutes} minutes`);
 
   // Schedule the end of the raffle
+  // 1.99aou: a draw that fails is logged (errInfo) and the next raffle still starts
   raffleTimeout = setTimeout(() => {
-    endRaffle(channelId, raffleDurationMinutes);
+    endRaffle(channelId, raffleDurationMinutes).catch((error) => {
+      console.error("Raffle draw failed:", errInfo(error));
+      startRaffle(channelId);
+    });
   }, raffleDurationMs);
 }
 
@@ -81,7 +88,11 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId === "select_prize" || interaction.customId.startsWith("select_prize_")) {   // one per menu of 25
       const shopCommand = require("./commands/shop"); // Adjust the path as needed
-      await shopCommand.handleSelectMenu(interaction);
+      try {
+        await shopCommand.handleSelectMenu(interaction);
+      } catch (error) {
+        console.error("Shop selection failed:", errInfo(error));   // 1.99aou: never an unhandled rejection
+      }
     }
   }
 });
@@ -131,12 +142,14 @@ async function endRaffle(channelId, raffleDurationMinutes) {
   const participantsArray = Array.from(currentRaffleParticipants);
   const randomIndex = Math.floor(Math.random() * participantsArray.length);
   const winnerId = participantsArray[randomIndex];
-  const winnerBalance = await findUserBalance(winnerId);
+  let winnerBalance;
   let discordUsername = "";
   let userId = "";
 
-  // Find the discordUsername of the winnerId from the backend
+  // Find the winner's balance and discordUsername from the backend (1.99aou: the balance lookup inside the try too - a site
+  // error skips this draw, logged as errInfo, and the next raffle starts)
   try {
+    winnerBalance = await findUserBalance(winnerId);
     const userResponse = await axios.get(
       process.env.BACKEND_BASE_URL+`/api/users/discord/${encodeURIComponent(winnerId)}`
     );
@@ -146,6 +159,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
     }
   } catch (error) {
     console.error(`Error fetching winner info for ${winnerId}:`, errInfo(error));
+    startRaffle(channelId);   // 1.99aou: the raffles go on (a failed lookup used to end them until the next restart)
     return;
   }
 
@@ -250,8 +264,9 @@ client.on("messageCreate", (message) => {
     const levelXpBonus = extractLevel(message.content)^2 * 1000;
     const winnerId = message.mentions.members.first().id;
     const channel = message.channel;
-    addLevelUpBonus(levelBonus, winnerId, channel);
-    addLevelUpXpBonus(levelXpBonus, winnerId, channel);
+    // 1.99aou: not awaited - a failure is logged (errInfo), never an unhandled rejection
+    addLevelUpBonus(levelBonus, winnerId, channel).catch((error) => console.error("Level-up bonus failed:", errInfo(error)));
+    addLevelUpXpBonus(levelXpBonus, winnerId, channel).catch((error) => console.error("Level-up XP bonus failed:", errInfo(error)));
   } else {
     return;
   }
@@ -281,12 +296,12 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
         // 1.99gb: the member's Discord username (a string) - the GuildMember object stringified to "<@id>"
         const displayName = newMessage.mentions.members.first().user.username;
         const avatar = newMessage.mentions.members.first().displayAvatarURL()
-        const discordUser = await findOrCreateDiscordUser(discordId, displayName, avatar);
-        console.log("di "+discordUser);
-        const userId = discordUser.userId; // Get the user ID
-        console.log('ui '+userId);
-        // Call API to add game
+        // Call API to add game (1.99aou: the account lookup inside the try - a site error is logged as errInfo)
         try {
+            const discordUser = await findOrCreateDiscordUser(discordId, displayName, avatar);
+            console.log("di "+discordUser);
+            const userId = discordUser.userId; // Get the user ID
+            console.log('ui '+userId);
             const pokerUrl = process.env.BACKEND_BASE_URL+`/api/pokernow/add`;
             const response = await fetch(pokerUrl, {
                 method: "POST",
@@ -313,7 +328,8 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
     const pokerMessage = newMessage.content;
     const splitMessage = pokerMessage.split(" ");
     const amount = splitMessage[4];
-    processCashout(discordId, amount, discordUsername);
+    processCashout(discordId, amount, discordUsername)   // 1.99aou: not awaited - a failure is logged (errInfo)
+      .catch((error) => console.error(`Cash-out for ${discordId} failed:`, errInfo(error)));
   } 
   if (
     newMessage.member.displayName == "Poker Now Bot" &&

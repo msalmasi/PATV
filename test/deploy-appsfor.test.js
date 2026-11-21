@@ -115,6 +115,26 @@ test("the Discord bot loads only discord-bot/ files, and each one restarts disco
     const apps = A.get(f).split(" ");
     assert.ok(apps.includes("discord"), `${f} (the Discord bot loads it) restarts ${A.get(f) || "nothing"}`);
   }
-  assert.equal(A.get("discord-bot/errinfo.js"), "discord");
+  assert.equal(A.get("discord-bot/errinfo.js"), "discord blackjack");
   assert.equal(appsFor(["discord-bot/errinfo.js"], "patv-staging").get("discord-bot/errinfo.js"), "", "bots don't run on staging");
+});
+
+// 1.99aou: blackjack/blackjack.js loads three Discord-bot files (userUtils.js, which loads backendAuth.js, and errinfo.js):
+// a change to any file it loads restarts 'blackjack' too (backendAuth.js used to restart 'discord' only).
+test("the blackjack bot: every file it loads restarts blackjack", { skip: !hasBash && "needs bash" }, () => {
+  const files = loads("blackjack/blackjack.js");
+  for (const f of ["discord-bot/userUtils.js", "discord-bot/backendAuth.js", "discord-bot/errinfo.js"]) {
+    assert.ok(files.includes(f), "the walk finds " + f + ": " + files.join(" "));
+  }
+  assert.deepEqual(files.filter((f) => !f.startsWith("discord-bot/") && !f.startsWith("blackjack/")), [],
+    "the blackjack bot loads no site file");
+  const A = appsFor(files);
+  for (const f of files) {
+    assert.ok(A.get(f).split(" ").includes("blackjack"), `${f} (the blackjack bot loads it) restarts ${A.get(f) || "nothing"}`);
+  }
+  for (const f of files.filter((x) => x.startsWith("discord-bot/"))) {
+    assert.ok(A.get(f).split(" ").includes("discord"), `${f} still restarts discord`);
+  }
+  assert.equal(appsFor(["discord-bot/backendAuth.js"], "patv-staging").get("discord-bot/backendAuth.js"), "",
+    "bots don't run on staging");
 });

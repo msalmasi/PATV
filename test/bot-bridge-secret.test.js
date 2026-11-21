@@ -140,3 +140,31 @@ test("the bridge with no secret configured refuses everything", async () => {
     } finally { await stopBridge(server); }
   }
 });
+
+// The handler itself must go through validSecret: status codes alone can't tell a constant-time compare from `!==` (both
+// answer 401 / 200), so count the timingSafeEqual calls each request makes (botBridge calls crypto.timingSafeEqual at call
+// time, so a wrapper on the shared module sees them).
+test("the bridge's handler compares through validSecret: one timingSafeEqual of two 32-byte digests per request", async () => {
+  const crypto = require("node:crypto");
+  const real = crypto.timingSafeEqual;
+  const seen = [];
+  crypto.timingSafeEqual = function (a, b) { seen.push([a.length, b.length]); return real.call(this, a, b); };
+  let server;
+  try {
+    server = await startBridge(SECRET);
+    for (const supplied of [SECRET, ...WRONG]) {
+      seen.length = 0;
+      await call(server, { headers: { "X-Bot-Secret": supplied } });
+      assert.deepEqual(seen, [[32, 32]], `one compare of two SHA-256 digests for a ${supplied.length}-character secret`);
+    }
+    seen.length = 0;
+    assert.equal((await call(server, {})).status, 401);
+    assert.deepEqual(seen, [], "no header: refused before any compare (nothing to time)");
+  } finally {
+    crypto.timingSafeEqual = real;
+    await stopBridge(server);
+  }
+  const src = require("node:fs").readFileSync(require("node:path").join(__dirname, "../discord-bot/botBridge.js"), "utf8");
+  assert.match(src, /if \(!validSecret\(SECRET, req\.headers\['x-bot-secret'\]\)\) \{/, "the handler's one check");
+  assert.doesNotMatch(src, /x-bot-secret['"]\]\s*[!=]==|[!=]==\s*SECRET\b/, "no plain comparison with the secret anywhere");
+});

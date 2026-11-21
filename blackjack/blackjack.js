@@ -9,6 +9,10 @@ const { token } = require("./config.json");
 const blackjack = require("discord-blackjack")
 const axios = require("axios");
 require("dotenv").config();
+// 1.99aou: the Discord bot's errinfo.js - a failed request is logged as its status + answer only (never the AxiosError, whose
+// config carries userUtils' X-Bot-Token / X-PATV-Key headers), and so is an unhandled rejection / uncaught exception
+const { errInfo, guardProcess } = require("../discord-bot/errinfo");
+guardProcess(process, "blackjack");
 const { findOrCreateDiscordUser, findUserBalance } = require("../discord-bot/userUtils"); // Helper function to find or create user
 
 // Create a new Discord client instance
@@ -1613,7 +1617,7 @@ client.on("messageCreate", async message => {
             }
 
         } catch (error) {
-            console.error(`Error processing blackjack command for ${message.author}:`, error);
+            console.error(`Error processing blackjack command for ${message.author}:`, errInfo(error));
             message.channel.send(`There was an error processing your request, ${message.author}. Please try again.`);
         }
     }

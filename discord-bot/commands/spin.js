@@ -63,32 +63,37 @@ async function setupResultsListener(spinId, interaction, user) {
   const resultsUrl = process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${encodeURIComponent(spinId)}`;
   const eventSource1 = new EventSource(resultsUrl, sseHeaders(resultsUrl));
 
+  // 1.99aou: the handler's body in a try - a failed balance lookup or follow-up is logged as errInfo and the stream closed,
+  // never an unhandled rejection (that printed the whole AxiosError with the request's headers)
   eventSource1.onmessage = async function (event) {
-    const result = JSON.parse(event.data);
-    console.log("Spin result received:", result);
+    try {
+      const result = JSON.parse(event.data);
+      console.log("Spin result received:", result);
 
-    const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
-    const spinnerBalance = spinnerBalanceResponse.data.balance;
+      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(user.username)}/balance`);
+      const spinnerBalance = spinnerBalanceResponse.data.balance;
 
-    if (result.jackpot) {
-      if (result.grand) {
-        await interaction.followUp(
-          `🏆🏆🏆 ${interaction.user} hit the GRAND JACKPOT and won the ENTIRE pot: PAT ${result.result}!!!! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
-        );
+      if (result.jackpot) {
+        if (result.grand) {
+          await interaction.followUp(
+            `🏆🏆🏆 ${interaction.user} hit the GRAND JACKPOT and won the ENTIRE pot: PAT ${result.result}!!!! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
+          );
+        } else {
+          await interaction.followUp(
+            `🏆 ${interaction.user} hit the JACKPOT and won ${result.jackpotPct}% of the pot: PAT ${result.result}! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
+          );
+        }
+        eventSource1.close();
       } else {
         await interaction.followUp(
-          `🏆 ${interaction.user} hit the JACKPOT and won ${result.jackpotPct}% of the pot: PAT ${result.result}! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
+          `${interaction.user} won PAT ${result.result} and gained ${result.xp} XP. (New Balance: PAT ${spinnerBalance}).`
         );
+        eventSource1.close();
       }
-      eventSource1.close();
-    } else {
-      await interaction.followUp(
-        `${interaction.user} won PAT ${result.result} and gained ${result.xp} XP. (New Balance: PAT ${spinnerBalance}).`
-      );
+    } catch (error) {
+      console.error("Spin result failed:", errInfo(error));
       eventSource1.close();
     }
-
-    
   };
 
   eventSource1.onerror = async function (event) {
@@ -101,19 +106,22 @@ async function setupWagerListener(spinId, interaction) {
     const spinUrl = process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${encodeURIComponent(spinId)}`;
     const eventSource = new EventSource(spinUrl, sseHeaders(spinUrl));
 
-  eventSource.onmessage = async function (event) {
-    const data = JSON.parse(event.data);
-    console.log("Spin command received:", data);
+  eventSource.onmessage = async function (event) {   // 1.99aou: in a try, like the results handler
+    try {
+      const data = JSON.parse(event.data);
+      console.log("Spin command received:", data);
 
-    if (data.message.includes("public spinid") && data.spinId) {
-      var spinnerUsername = data.message.split(" ")[4];
-      console.log (spinnerUsername);
-      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(spinnerUsername)}/balance`);
-      const spinnerBalance = spinnerBalanceResponse.data.balance;
-      await interaction.editReply(
-        `${interaction.user} is spinning the wheel for PAT 5000, good luck! (New Balance: PAT ${spinnerBalance}).`
-      );
-      
+      if (data.message.includes("public spinid") && data.spinId) {
+        var spinnerUsername = data.message.split(" ")[4];
+        console.log (spinnerUsername);
+        const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${encodeURIComponent(spinnerUsername)}/balance`);
+        const spinnerBalance = spinnerBalanceResponse.data.balance;
+        await interaction.editReply(
+          `${interaction.user} is spinning the wheel for PAT 5000, good luck! (New Balance: PAT ${spinnerBalance}).`
+        );
+      }
+    } catch (error) {
+      console.error("Spin wager update failed:", errInfo(error));
     }
     eventSource.close();
 
