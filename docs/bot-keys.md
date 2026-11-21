@@ -105,6 +105,31 @@ resolved through without any `X-Bot-Token`, so a bot needs no placeholder token.
 body too while that is set (like every caller, until the legacy branch is deleted). It sends either only to an https
 `--base` or to loopback, and follows no redirect.
 
+## The webhook server's Twitch app token (1.99aow)
+
+`server.js` (the EventSub webhook) calls Twitch's Helix API with an app access token it mints itself
+(`twitchbot/apptoken.js`): the client-credentials grant with `TWITCH_CLIENT_ID2` and `TWITCH_SECRET_KEY2` (the app the
+channel-point subscription belongs to) when it starts, again at 80 % of the token's lifetime (after about 48 days for a
+60-day token), and once more when Helix answers 401 (that request is then retried once; a second 401 is logged as before).
+The token is kept in memory only: it is never written to `.env` or any other file, and never logged. A failed renewal is
+retried once a minute, and the token it still has is used until it expires. If there is no token at start, the server
+deletes no subscription: the one Twitch has keeps delivering.
+
+`TWITCH_ACCESS_TOKEN` is only a start-up fallback: it is used when the first mint fails (the pair unset, Twitch
+unreachable) and only until a mint works. After one successful mint it is never used again. The log lines carry an HTTP
+status or an error code at most, never a value:
+
+- `[twitch-app] app token ready (renews in about N days)`
+- `[twitch-app] startup mint failed (<why>); using TWITCH_ACCESS_TOKEN until a mint works`
+- `[twitch-app] renewal failed (<why>); retrying in a minute` (the first failure, then once an hour while it lasts)
+
+Starting `server.js` replaces the live subscription (at start it deletes every subscription and creates one for the
+production callback), so it runs on production only. To check the mint anywhere else, run
+`node --env-file=<env file> tools/twitch-app-token-check.js` (no arguments): it mints one token, lists the
+subscriptions read-only, revokes the token it minted, and prints only `mint: ...`, `helix list: ...` and `revoke: ...`.
+
+`getAccessToken.js` prints the token it mints: don't run it.
+
 ## Settings
 
 | Setting | Default | What it does |
@@ -152,6 +177,7 @@ Counters are kept in memory and flushed every 30 seconds (and when the site star
 - `botkeys.js`: the middleware, `isBotToken` / `isPlatformBot` (index.js wraps them), management, `whoami`.
 - `adminkeys.js`, `views/admin/keys.ejs`, `public/js/admin-keys.js`: the page.
 - `eventsauth.js`: `/events`.
+- `twitchbot/apptoken.js`: the webhook server's Twitch app token; `tools/twitch-app-token-check.js`: its read-only check.
 - The 12 places that compared the token directly (10 in `index.js`, `shop.js` `/chatshop`, `user.controller.js`
   `verifyCamfrogLink`) call `isBotToken()` now. `test/botkeys-callsites.test.js` fails if a new direct comparison appears,
   and checks that no bot route uses multer (which would lose the request context).

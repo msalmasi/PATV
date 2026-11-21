@@ -4,7 +4,10 @@
 //     (Node 22 would exit pm2 'server' - inside the prod updater's stability check that rolls the deploy back) nor log the
 //     bot token / X-PATV-Key / the app token: every failure is logged as status + answer (errInfo);
 //   * the next raffle still starts after a failed draw; the chatter / redeemer is told in chat;
-//   * the webhook server.js serves answers Twitch's challenge (text/plain) and refuses a bad signature.
+//   * the webhook server.js serves answers Twitch's challenge (text/plain) and refuses a bad signature;
+//   * 1.99aow: server.js mints its app token (twitchbot/apptoken.js; Twitch's token endpoint is faked here too): the Helix
+//     calls carry the minted token, never TWITCH_ACCESS_TOKEN, and each 401 mints once more - neither the minted token nor
+//     the app's client secret is logged.
 //   NODE_PATH=G:/PATV/node_modules node --test test/twitch-bot-errors.test.js
 "use strict";
 const test = require("node:test");
@@ -20,8 +23,10 @@ const Module = require("module");
 const repo = path.resolve(__dirname, "..");
 process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), "twitch-bot-errors-")));   // dotenv finds no .env; the DB is a scratch one
 const TOKEN = "SECRET-BOT-TOKEN-7f3a", KEY = "twitch.SECRET-PATV-KEY-91c2", APP = "SECRET-APP-TOKEN-55aa", ES = "eventsub-test-secret";
+const MINTED = "SECRET-MINTED-APP-TOKEN-3c9e", CLIENT_SECRET = "SECRET-APP-CLIENT-SECRET-0c4e";   // 1.99aow
 delete process.env.STAGING;
 Object.assign(process.env, { TWITCH_BOT_TOKEN: TOKEN, PATV_KEY: KEY, TWITCH_ACCESS_TOKEN: APP, TWITCH_CLIENT_ID2: "client-id",
+                             TWITCH_SECRET_KEY2: CLIENT_SECRET,
                              TWITCH_EVENTSUB_SECRET: ES, TWITCH_BROADCASTER_ID: "77", TWITCH_OAUTH_TOKEN: "oauth:SECRET-CHAT",
                              PORT: "0", BIND_HOST: "127.0.0.1", SECRET_KEY: "test-secret" });
 
@@ -48,10 +53,24 @@ for (const [k, v] of Object.entries(fakes)) {
 }
 
 // ── Twitch's API answers 401 (server.js's startup lists / creates the EventSub subscription with the app token) ──
+// 1.99aow: and Twitch's token endpoint mints the app token (the client-credentials form is checked here)
 const axios = require("axios");
 const httpAdapter = axios.getAdapter(["http"]);
+let appMints = 0;
+const helixAuth = [];
 axios.defaults.adapter = (config) => {
+  if (config.url === "https://id.twitch.tv/oauth2/token") {
+    appMints++;
+    const form = new URLSearchParams(config.data);
+    assert.equal(form.get("client_id"), "client-id");
+    assert.equal(form.get("client_secret"), CLIENT_SECRET);
+    assert.equal(form.get("grant_type"), "client_credentials");
+    assert.equal(config.maxRedirects, 0, "the form is never re-sent to a redirect");
+    return Promise.resolve({ status: 200, statusText: "OK", headers: {}, config,
+                             data: { access_token: MINTED, expires_in: 3600, token_type: "bearer" } });
+  }
   if (/^https:\/\/api\.twitch\.tv\//.test(String(config.url))) {
+    helixAuth.push(String(config.headers && (config.headers.Authorization || config.headers.authorization)));
     const response = { status: 401, statusText: "Unauthorized", headers: {}, config, data: { error: "Unauthorized", status: 401, message: "Invalid OAuth token" } };
     return Promise.reject(new axios.AxiosError("Request failed with status code 401", "ERR_BAD_REQUEST", config, null, response));
   }
@@ -122,6 +141,16 @@ test("startup: Twitch's 401s are logged as status + answer - never the app token
   assert.match(text, /Error creating subscription: HTTP 401/);
   assert.deepEqual(leaks(), []);
   assert.deepEqual(unhandled, []);
+});
+
+// 1.99aow
+test("startup: the app token is minted (at start, then once per 401) and the Helix calls carry it, never TWITCH_ACCESS_TOKEN", () => {
+  assert.equal(appMints, 3, "the start-up mint, then one for each Helix call that got a 401 (the list, the create)");
+  assert.deepEqual(helixAuth, Array(4).fill(`Bearer ${MINTED}`), "the list + its one retry, the create + its one retry");
+  const text = logs.join("\n");
+  assert.match(text, /\[twitch-app\] app token ready \(renews in about 48 minutes\)/);
+  assert.ok(!text.includes(MINTED) && !text.includes(CLIENT_SECRET) && !text.includes(APP), "no token or secret in the logs");
+  assert.equal(process.env.TWITCH_ACCESS_TOKEN, APP, "nothing is written back to the environment");
 });
 
 for (const [label, site] of [["refuses connections", () => refusedBase], ["answers 500", () => failingBase]]) {

@@ -13,6 +13,11 @@ const CP = require("./twitchbot/channelpoints");
 // rolls the deploy back. An uncaught exception still exits (pm2 restarts it), logged the same way.
 CP.guardProcess(process);
 const { redeemChannelPoints } = require("./twitchbot/twitch");
+// 1.99aow: the Helix calls below (the EventSub subscription setup at start) use an app access token this process mints from
+// TWITCH_CLIENT_ID2 / TWITCH_SECRET_KEY2 and renews in memory (twitchbot/apptoken.js: at 80 % of its lifetime, and once on a
+// 401). TWITCH_ACCESS_TOKEN, a token minted by hand that expires after about 60 days, is only the fallback when the first mint
+// fails. No token is written anywhere or logged.
+const appTokens = require("./twitchbot/apptoken").createAppTokenManager({ http: axios, env: process.env });
 
 const PORT = process.env.PORT || 3001;
 const REDEMPTION_ADD = CP.REDEMPTION_ADD;
@@ -32,9 +37,10 @@ const app = CP.webhookApp({
     try {
       const callbackUrl = 'https://publicaccess.tv/webhooks/callback'; // Replace with your public URL (e.g., ngrok URL)
 
-      const response = await axios.post(
-        'https://api.twitch.tv/helix/eventsub/subscriptions',
-        {
+      const response = await appTokens.request({
+        method: 'post',
+        url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
+        data: {
           type: REDEMPTION_ADD,
           version: '1',
           condition: {
@@ -46,14 +52,8 @@ const app = CP.webhookApp({
             secret: process.env.TWITCH_EVENTSUB_SECRET,
           },
         },
-        {
-          headers: {
-            'Client-ID': process.env.TWITCH_CLIENT_ID2,
-            Authorization: `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+        headers: { 'Content-Type': 'application/json' },
+      });
 
       const sub = response.data && Array.isArray(response.data.data) ? response.data.data[0] : null;
       console.log('Subscription created:', sub ? `${sub.id} ${sub.type} ${sub.status}` : 'ok');
@@ -68,6 +68,10 @@ require('./listen').listen(app, PORT, 'webhooks', async () => {
   try {
     console.log(`Webhook listener is running on ${require('./listen').bindHost()}:${PORT}`);
 
+    // 1.99aow: the app token first. Without one (no mint and no fallback) nothing is deleted: the subscription Twitch has keeps
+    // delivering, and the failure is logged below.
+    await appTokens.getToken();
+
     // Delete all existing subscriptions
     await deleteAllSubscriptions();
 
@@ -81,11 +85,9 @@ require('./listen').listen(app, PORT, 'webhooks', async () => {
 // Function to list all current EventSub subscriptions
 async function listSubscriptions() {
     try {
-      const response = await axios.get('https://api.twitch.tv/helix/eventsub/subscriptions', {
-        headers: {
-          'Client-ID': process.env.TWITCH_CLIENT_ID2,
-          Authorization: `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`,
-        },
+      const response = await appTokens.request({
+        method: 'get',
+        url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
       });
 
       return response.data && Array.isArray(response.data.data) ? response.data.data : []; // Return the list of subscriptions
@@ -98,11 +100,9 @@ async function listSubscriptions() {
   // Function to delete a subscription by ID
   async function deleteSubscription(id) {
     try {
-      await axios.delete('https://api.twitch.tv/helix/eventsub/subscriptions', {
-        headers: {
-          'Client-ID': process.env.TWITCH_CLIENT_ID2,
-          Authorization: `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`,
-        },
+      await appTokens.request({
+        method: 'delete',
+        url: 'https://api.twitch.tv/helix/eventsub/subscriptions',
         params: {
           id: id,
         },

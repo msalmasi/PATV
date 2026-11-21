@@ -138,3 +138,17 @@ test("the blackjack bot: every file it loads restarts blackjack", { skip: !hasBa
   assert.equal(appsFor(["discord-bot/backendAuth.js"], "patv-staging").get("discord-bot/backendAuth.js"), "",
     "bots don't run on staging");
 });
+
+// 1.99aow: the webhook server's app token manager (twitchbot/apptoken.js, loaded by server.js) restarts 'server' (and 'twitch',
+// which the updater leaves alone while it is stopped); its read-only check tool is a site file; on staging nothing restarts for
+// the manager (no webhook server runs there).
+test("apps_for: twitchbot/apptoken.js restarts the webhook server; the check tool restarts the site only", { skip: !hasBash && "needs bash" }, () => {
+  assert.ok(loads("server.js").includes("twitchbot/apptoken.js"), "server.js loads it");
+  const A = appsFor(["twitchbot/apptoken.js", "tools/twitch-app-token-check.js", "server.js"]);
+  assert.equal(A.get("twitchbot/apptoken.js"), "twitch server");
+  assert.equal(A.get("tools/twitch-app-token-check.js"), "index");
+  assert.equal(A.get("server.js"), "server");
+  const S = appsFor(["twitchbot/apptoken.js", "tools/twitch-app-token-check.js"], "patv-staging");
+  assert.equal(S.get("twitchbot/apptoken.js"), "");
+  assert.equal(S.get("tools/twitch-app-token-check.js"), "patv-staging");
+});
