@@ -1,6 +1,8 @@
-// 1.99aou: tools/relay-latency.js authenticates with the ops key from the environment (OPS_PATV_KEY -> X-PATV-Key) and
-// puts the legacy token (TWITCH_BOT_TOKEN) in the body only when there is no key. Never from the command line: a --key
-// argument is ignored. Invented values only; the tool's post() runs in a vm with a fake fetch (no network).
+// 1.99aou: tools/relay-latency.js authenticates with the ops key from the environment (OPS_PATV_KEY -> X-PATV-Key) and,
+// while TWITCH_BOT_TOKEN is set, the legacy token in the body too (as every bot does until the legacy branch is deleted:
+// a key that doesn't resolve is judged on the token). Never from the command line: a --key argument is ignored. The key
+// and the token go only over https or to loopback (--base), and a redirect is never followed. Invented values only; the
+// tool's post() runs in a vm with a fake fetch (no network).
 //   node --test test/relay-latency-key.test.js
 "use strict";
 const test = require("node:test");
@@ -35,14 +37,47 @@ async function postWith(argv, env) {
 
 const ARGS = ["--slug", "test-pad", "--login", "test-login"];
 
-test("with OPS_PATV_KEY: the key goes in X-PATV-Key and no password goes in the body", async () => {
+test("with OPS_PATV_KEY: the key goes in X-PATV-Key, and the legacy token in the body while it is set", async () => {
   const { sent } = await postWith(ARGS, { OPS_PATV_KEY: KEY, TWITCH_BOT_TOKEN: TOKEN });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].options.headers["X-PATV-Key"], KEY);
   const body = JSON.parse(sent[0].options.body);
-  assert.equal(body.password, undefined, "the legacy token stays home when the key is there");
+  assert.equal(body.password, TOKEN, "the token too, until the legacy branch is deleted (a key that doesn't resolve falls back to it)");
   assert.equal(body.text, "test line");
   assert.ok(!sent[0].url.includes(KEY) && !sent[0].url.includes(TOKEN), "nothing secret in the URL");
+  const keyOnly = await postWith(ARGS, { OPS_PATV_KEY: KEY });
+  assert.equal(keyOnly.sent[0].options.headers["X-PATV-Key"], KEY);
+  assert.equal(JSON.parse(keyOnly.sent[0].options.body).password, undefined, "no token set: none in the body");
+});
+
+test("never follows a redirect (fetch would keep X-PATV-Key on one to another host)", async () => {
+  for (const env of [{ OPS_PATV_KEY: KEY }, { TWITCH_BOT_TOKEN: TOKEN }]) {
+    const { sent } = await postWith(ARGS, env);
+    assert.equal(sent[0].options.redirect, "error");
+  }
+  assert.equal((source.match(/fetch\(/g) || []).length, (source.match(/redirect: "error"/g) || []).length,
+    "every fetch in the tool says redirect: \"error\"");
+});
+
+test("--base: the key and the token only over https or to loopback", async () => {
+  const env = { OPS_PATV_KEY: KEY, TWITCH_BOT_TOKEN: TOKEN };
+  for (const base of ["https://staging.example.test", "http://127.0.0.1:3100", "http://localhost:3100", "http://[::1]:3100",
+                      "http://127.0.0.1", "https://staging.example.test/"]) {
+    const { sent, exited } = await postWith([...ARGS, "--base", base], env);
+    assert.equal(exited, null, base);
+    assert.equal(sent.length, 1, base);
+    assert.ok(sent[0].url.startsWith(base.replace(/\/+$/, "") + "/api/"), sent[0].url);
+  }
+  for (const base of ["http://staging.example.test", "http://192.0.2.1:3100", "ftp://127.0.0.1", "http://127.0.0.1.example.test",
+                      "http://localhost.example.test:3100", "http://127.0.0.1@example.test", "https://", "127.0.0.1:3100"]) {
+    for (const e of [env, { TWITCH_BOT_TOKEN: TOKEN }, { OPS_PATV_KEY: KEY }]) {
+      const { sent, exited } = await postWith([...ARGS, "--base", base], e);
+      assert.equal(exited, 2, "refused: " + base);
+      assert.equal(sent.length, 0, "nothing sent to " + base);
+    }
+  }
+  const { sent } = await postWith(ARGS, env);
+  assert.ok(sent[0].url.startsWith("http://127.0.0.1:3100/"), "the default is the site's own loopback port");
 });
 
 test("without a key: the legacy token in the body (the fallback), no key header", async () => {

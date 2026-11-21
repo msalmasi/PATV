@@ -101,8 +101,9 @@ Pepe's three polling GETs (`/api/g/reserve-claims`, `/api/g/achievement-feed`, `
 legacy token, when he still has one, in `X-Bot-Token`; the routes still read `?password=` for older bots until the
 legacy branch is deleted. The bot-only user lookups (`userlookup.js` `requireBot`) let a request whose `X-PATV-Key`
 resolved through without any `X-Bot-Token`, so a bot needs no placeholder token. `tools/relay-latency.js` reads
-`OPS_PATV_KEY` from the environment (never the command line) and sends it as `X-PATV-Key`; only without it does it put
-`TWITCH_BOT_TOKEN` in the body.
+`OPS_PATV_KEY` from the environment (never the command line) and sends it as `X-PATV-Key`, with `TWITCH_BOT_TOKEN` in the
+body too while that is set (like every caller, until the legacy branch is deleted). It sends either only to an https
+`--base` or to loopback, and follows no redirect.
 
 ## Settings
 

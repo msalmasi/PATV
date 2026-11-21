@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tools/relay-latency.js - 1.99ye: measure the web -> Camfrog chat relay end to end on STAGING (the bot-token test routes
-// in bridge.js only exist when STAGING is set). Reads OPS_PATV_KEY (legacy token only as fallback) from the environment:
+// in bridge.js only exist when STAGING is set). Reads OPS_PATV_KEY and/or TWITCH_BOT_TOKEN from the environment:
 //
 //   cd /home/PATV-staging && node tools/relay-latency.js --slug <pad slug> --login <linked camfrog login> [--n 12] [--gap 4]
 //        [--burst 5] [--page lp|poll] [--base http://127.0.0.1:3100]
@@ -25,12 +25,21 @@ const PAGE = args.page === "poll" ? "poll" : "lp";
 const TOKEN = process.env.TWITCH_BOT_TOKEN;
 const KEY = process.env.OPS_PATV_KEY;
 if (!SLUG || !LOGIN || (!KEY && !TOKEN)) { console.error("usage: --slug <pad> --login <camfrog login>  (and OPS_PATV_KEY, or TWITCH_BOT_TOKEN, in the environment)"); process.exit(2); }
+// 1.99aou: the key and the token go only over https or to loopback (as the bots' keyAllowed), and never follow a redirect
+// (fetch keeps a custom header like X-PATV-Key on a redirect to another host)
+if (!/^(?:https:\/\/[^/?#]+|http:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?)$/i.test(BASE)) {
+  console.error("usage: --base must be https://<host> or http://127.0.0.1:<port> (the key / token never go in cleartext across a network)");
+  process.exit(2);
+}
 
+// The key in X-PATV-Key, and (1.99aou) the legacy token in the body too while it is set - until the legacy branch is deleted,
+// as every bot does: a key that doesn't resolve on this site (bad_key = fallback) is judged on the token; one that resolves
+// makes the body password ignored (docs/bot-keys.md).
 const post = async (p, body) => {
   const headers = { "content-type": "application/json" };
   if (KEY) headers["X-PATV-Key"] = KEY;
-  const credentials = !KEY && TOKEN ? { password: TOKEN } : {};
-  const r = await fetch(BASE + p, { method: "POST", headers, body: JSON.stringify(Object.assign({}, body, credentials)) });
+  const credentials = TOKEN ? { password: TOKEN } : {};
+  const r = await fetch(BASE + p, { method: "POST", headers, redirect: "error", body: JSON.stringify(Object.assign({}, body, credentials)) });
   return { status: r.status, d: await r.json().catch(() => null) };
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
