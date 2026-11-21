@@ -627,7 +627,13 @@ test("source: nothing else in the site / bots installs its own unhandledRejectio
       }
     }
   })(repo);
-  assert.deepEqual(hits, ["processguard.js"]);
+  // 1.99aou: the Discord bot's own copy (discord-bot/errinfo.js guardProcess) - that bot loads no site file, as with its errInfo
+  // copy; it does what processguard does after boot (a rejection: one errInfo line, kept running; an exception: exit 1)
+  assert.deepEqual(hits, ["discord-bot/errinfo.js", "processguard.js"]);
+  const bot = fs.readFileSync(path.join(repo, "discord-bot", "errinfo.js"), "utf8");
+  assert.equal((bot.match(/\.on\(\s*["'](?:unhandledRejection|uncaughtException)["']/g) || []).length, 2,
+    "errinfo.js: one handler each, inside guardProcess");
+  assert.match(bot, /function guardProcess\(proc, label,[\s\S]*?proc\.on\("unhandledRejection"[\s\S]*?proc\.on\("uncaughtException"[\s\S]*?\(1\);/);
   const srv = fs.readFileSync(path.join(repo, "server.js"), "utf8");
   assert.match(srv, /CP\.guardProcess\(process\);/, "server.js keeps its guard (through channelpoints.js)");
 });
