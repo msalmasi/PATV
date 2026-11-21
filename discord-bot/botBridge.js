@@ -1,5 +1,6 @@
 // botBridge.js — the Discord bot's local HTTP bridge: lets the other services ask THIS bot to do
-// things on Discord. Secret-protected (X-Bot-Secret = BOT_BRIDGE_SECRET). Formerly pokerServer.js.
+// things on Discord. Secret-protected (X-Bot-Secret = BOT_BRIDGE_SECRET, compared in constant time (1.99aou)).
+// Formerly pokerServer.js.
 //
 //   /store/purchase, /store/role-members   the PATV backend's prize store (index.js): announce
 //                                          website/Camfrog sales, grant role prizes, list holders
@@ -20,7 +21,17 @@
 // confirms the removal (and refused if the stack is short — free stack validation).
 
 const http = require('http');
+const crypto = require('crypto');
 const axios = require('axios');
+
+// 1.99aou: X-Bot-Secret in constant time - both sides hashed to 32-byte SHA-256 digests first, so timingSafeEqual always
+// gets equal-length buffers and neither the secret nor its length shows in how long a refusal takes. An empty configured
+// secret refuses everything.
+function validSecret(expected, supplied) {
+  if (typeof expected !== 'string' || !expected || typeof supplied !== 'string' || !supplied) return false;
+  const digest = (value) => crypto.createHash('sha256').update(value).digest();
+  return crypto.timingSafeEqual(digest(expected), digest(supplied));
+}
 
 const POKER_CHANNEL_ID = '1243767733762392134'; // #poker
 
@@ -307,7 +318,7 @@ function start(client) {
 
   const server = http.createServer(async (req, res) => {
     if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
-    if (!SECRET || req.headers['x-bot-secret'] !== SECRET) {
+    if (!validSecret(SECRET, req.headers['x-bot-secret'])) {
       return send(res, 401, { error: 'unauthorized' });
     }
 
@@ -340,4 +351,4 @@ function start(client) {
   return server;
 }
 
-module.exports = { start };
+module.exports = { start, validSecret };
