@@ -497,3 +497,34 @@ test("the claim link: a site-banned account gets reason 'banned' and no link; an
   assert.deepEqual([N.ok, N.state, N.waiting, N.wallet], [true, "none", 0, 0]);
   SB._clear();
 });
+
+// 1.99aou: Pepe's weekly "claim it - type !signup" PM (noticeLogins) skips a site-banned auto account: claimLink would only
+// answer reason "banned". The same rule as claimLink (siteban.js lockOf, kind "ban"): an ended or a pad's ban is listed.
+test("Pepe's reminders skip a site-banned auto account; an ended or a pad's ban is reminded as before", async () => {
+  const SB = require(path.join(repo, "siteban"));
+  const ban = async (id, { room = "", until = null } = {}) => {
+    await runQuery(`INSERT INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, 'spam', 'staffer', ?, ?)
+                    ON CONFLICT(user_id, room_id) DO UPDATE SET until = excluded.until`, [id, room, id, Date.now(), until]);
+    SB._clear();
+  };
+  const listed = async (login) => (await AE.noticeLogins({ now: Date.now() })).some((x) => x.login === login);
+  const before = { enabled: await AE.enabled(), kinds: [...(await AE.kinds())] };
+  await AE.setSettings({ enabled: true, kinds: "beg" }, { userId: "admin", username: "boss" });   // the admin test turned it off
+  await user("auto30", { username: "CFpppp3030", cf: "ban_notice_cf" });
+  await AA.markNew("auto30");
+  await AE.credit("auto30", 40, "bonus win", { kind: "beg", transactionId: "beg-auto30" });
+  assert.equal(await listed("ban_notice_cf"), true, "held and never reminded: listed");
+  await ban("auto30");
+  assert.equal(await listed("ban_notice_cf"), false, "site-banned for good: no reminder");
+  await ban("auto30", { until: Date.now() + DAY });
+  assert.equal(await listed("ban_notice_cf"), false, "site-banned until a time still ahead: no reminder");
+  await ban("auto30", { until: Date.now() - 1000 });
+  assert.equal(await listed("ban_notice_cf"), true, "the ban has ended: reminded again");
+  await user("auto31", { username: "CFqqqq3131", cf: "pad_notice_cf" });
+  await AA.markNew("auto31");
+  await AE.credit("auto31", 40, "bonus win", { kind: "beg", transactionId: "beg-auto31" });
+  await ban("auto31", { room: "test-pad" });
+  assert.equal(await listed("pad_notice_cf"), true, "a pad's ban is not a site ban");
+  SB._clear();
+  await AE.setSettings({ enabled: before.enabled, kinds: before.kinds.join(" ") }, { userId: "admin", username: "boss" });
+});

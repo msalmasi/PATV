@@ -178,7 +178,8 @@ never depends on the time of day the job happens to run.
 * Pepe reminds an auto user **when he sees them** (the stale-notice pattern): at most **once a week** per account while
   something is held: "🎁 PAT X is waiting for you - it expires if you're inactive for 6 months - claim it free at
   publicaccess.tv: type !signup". The site keeps the per-account state (`/api/autoescrow/notice-logins`,
-  `/api/autoescrow/notified`); a credit answered `escrowed: true` makes Pepe refresh the list early.
+  `/api/autoescrow/notified`); a credit answered `escrowed: true` makes Pepe refresh the list early. A site-banned account
+  (`siteban.js` `lockOf`, the claim link's own rule) is left off the list (1.99aou): its `!signup` gets no link.
 
 ### Signing up: `!signup` / `!claim` and the claim page
 

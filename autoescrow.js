@@ -370,8 +370,13 @@ async function noticeLogins({ now = Date.now(), limit = 500 } = {}) {
       AND (n.last_at IS NULL OR n.last_at <= ?)
     GROUP BY e.user_id HAVING waiting > 0 ORDER BY MAX(e.earned_at) DESC LIMIT ?`, [now, now - NOTICE_GAP_MS, limit]);
   const out = [];
+  const siteban = require("./siteban");
   for (const r of rows) {
     if (!(await AA.isAutoAccount(r.user_id))) continue;     // claimed in place: the sweep releases it, no PM
+    // 1.99aou: no "claim it - type !signup" PM to a site-banned account: claimLink refuses it (reason "banned"), so the
+    // weekly nudge would only lead to that refusal. The same rule as claimLink (siteban.js lockOf, kind "ban").
+    const lock = await siteban.lockOf(r.user_id);
+    if (lock && lock.kind === "ban") continue;
     out.push({ login: String(r.login).toLowerCase().trim(), waiting: Number(r.waiting) || 0, fresh: Number(r.fresh) || 0,
                next_expiry: r.next_expiry, upto: r.last_entry });
   }
