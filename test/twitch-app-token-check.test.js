@@ -143,3 +143,23 @@ test("the command line: no argument is read (one is refused with usage, exit 2);
   assert.doesNotMatch(code, /method:\s*["'](?:delete|post|put|patch)["']|\.(?:delete|put|patch)\(/, "no Helix write");
   assert.doesNotMatch(code, /process\.argv\[/, "no argument is read");
 });
+
+// The root script that minted an app token by hand printed it (to a terminal, or a shell / pm2 log); the check tool does that
+// job without showing the token. No script in the repo prints a minted token's field.
+test("no script prints a minted token: getAccessToken.js is gone, and nothing logs an access_token", () => {
+  assert.equal(fs.existsSync(path.join(repo, "getAccessToken.js")), false);
+  const bad = [];
+  const walk = (dir) => {
+    for (const ent of fs.readdirSync(path.join(repo, dir), { withFileTypes: true })) {
+      if (ent.name === "node_modules" || ent.name === ".git" || ent.name === "uploads") continue;
+      const rel = dir ? dir + "/" + ent.name : ent.name;
+      if (ent.isDirectory()) walk(rel);
+      else if (/\.(?:js|mjs|cjs)$/.test(ent.name)) {
+        const src = fs.readFileSync(path.join(repo, rel), "utf8");
+        if (/console\.(?:log|error|warn|info|debug)\([^;]*\b(?:access_token|refresh_token)\b/.test(src)) bad.push(rel);
+      }
+    }
+  };
+  walk("");
+  assert.deepEqual(bad, []);
+});

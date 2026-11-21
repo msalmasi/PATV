@@ -268,6 +268,30 @@ test("a failed renewal is retried once a minute (not on every call) and logged o
   assert.ok(!g.logs.join("\n").match(VALUES), "a network error's message (it can say anything) is never logged");
 });
 
+test("a retry timer that fires a moment early (Node's timer clock vs Date.now) is re-armed, and the next tick retries", async () => {
+  const f = fixture();
+  const first = await f.manager.getToken();
+  f.fail(httpError(500, { message: "boom" }));
+  f.time(80000);
+  f.live().at(-1).fn();                               // the renewal timer: the mint fails, a retry a minute later
+  await new Promise((r) => setImmediate(r));
+  assert.equal(f.mints, 2);
+  assert.equal(f.live().length, 1);
+  assert.equal(f.live().at(-1).delay, 60000);
+  f.fail(null);
+  f.time(80000 + 60000 - 1);                          // the retry timer fires 1 ms before the retry time
+  f.live().at(-1).fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(f.mints, 2, "not yet: the retry minute isn't over");
+  assert.equal(f.live().length, 1, "a timer is still armed (it used to be none: no renewal until some call came)");
+  f.time(80000 + 60000 - 1 + f.live().at(-1).delay);
+  f.live().at(-1).fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(f.mints, 3, "the re-armed timer retried the renewal");
+  assert.notEqual(await f.manager.getToken(), first, "and the new token is the one used");
+  assert.equal(f.live().length, 1, "one live timer: the new token's renewal");
+});
+
 test("stop(): the timer is cancelled and none is set again", async () => {
   const f = fixture();
   await f.manager.getToken();

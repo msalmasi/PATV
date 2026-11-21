@@ -75,7 +75,11 @@ function createAppTokenManager({ http, env = process.env, now = Date.now, later 
 
   function tick() {
     timer = null;
-    if (token && now() < renewAt) { schedule(renewAt - now()); return; }   // a capped delay ran out early: not time yet
+    // not time yet - a capped delay ran out early, or the timer fired a little before the time it was set for (Node's timer
+    // clock and Date.now() can differ by a millisecond or so): re-armed against the later of the renewal time and a failed
+    // renewal's retry time, so getToken()'s "still inside the retry minute" answer never leaves no timer armed
+    const due = Math.max(renewAt, retryAt);
+    if (token && now() < due) { schedule(due - now()); return; }
     getToken().catch(() => {});                                            // logged and re-armed by mint() / getToken()
   }
 

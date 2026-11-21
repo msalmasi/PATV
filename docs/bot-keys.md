@@ -128,7 +128,8 @@ production callback), so it runs on production only. To check the mint anywhere 
 `node --env-file=<env file> tools/twitch-app-token-check.js` (no arguments): it mints one token, lists the
 subscriptions read-only, revokes the token it minted, and prints only `mint: ...`, `helix list: ...` and `revoke: ...`.
 
-`getAccessToken.js` prints the token it mints: don't run it.
+The old root script that minted an app token by hand and printed it (`getAccessToken.js`) is gone (1.99aow): the check
+tool above is the way to see whether a mint works, and it never shows the token.
 
 ## Settings
 
