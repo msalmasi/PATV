@@ -238,11 +238,12 @@
 
   // One capability check per page, only on explicit opt-in. Discard the admin response:
   // settings, audit records and bot state never enter diagnostics or clipboard output.
+  // A redirect never counts (a sign-in page, a proxy or maintenance page answering 200): it rejects -> no panel.
   var debugAccess = null;
   function audioDebugAccess() {
     if (!window.location || !/(?:^|[?&])audiodebug=1(?:&|$)/.test(window.location.search || '')) return null;
-    if (!debugAccess) debugAccess = fetch('/api/admin/pepe/audio', { credentials: 'same-origin', cache: 'no-store' })
-      .then(function (r) { return r.status === 200; }, function () { return false; });
+    if (!debugAccess) debugAccess = fetch('/api/admin/pepe/audio', { credentials: 'same-origin', cache: 'no-store', redirect: 'error' })
+      .then(function (r) { return r.status === 200 && !r.redirected; }, function () { return false; });
     return debugAccess;
   }
 
