@@ -1,4 +1,4 @@
-// 1.99apl room audio (decisions 2-3): public/js/room-bridge.js's audio session, volume and ducking state machine, in a small fake DOM
+// 1.99apl room audio: public/js/room-bridge.js's audio session, volume and ducking state machine, in a small fake DOM
 // (the real player + push-to-talk, a stubbed navigator.audioSession that logs every write):
 //   * the room starts playing -> 'playback' (▶, inside the tap, before any element plays; each element's 'playing'): MP3 relay and ⚡,
 //     iOS and desktop; never while the page holds a mic (between the hand-off's before() and after()); no API / a throwing one: no error
