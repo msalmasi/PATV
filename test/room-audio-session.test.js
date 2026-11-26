@@ -5,7 +5,8 @@
 //   * push-to-talk's before / after hand-off unchanged: 'play-and-record' just before the mic opens, 'playback' / 'auto' after
 //   * the user's saved volume / mute re-applied when playback starts (never read back, never saved)
 //   * no duck level before the first recording; every way a recording ends clears it (pointerup, the release tail, pointercancel,
-//     pointerleave, the tap / key that sends, the max length, a recorder error, a hidden page, pagehide, the mic relay off, destroy)
+//     pointerleave, the tap / key that sends, the max length, a recorder error, a hidden page, pagehide, the mic relay off, destroy);
+//     a pointercancel / pointerleave ends the press at any point of the hold (never the quick tap that starts tap mode)
 //   node --test test/room-audio-session.test.js
 "use strict";
 const test = require("node:test");
@@ -266,6 +267,11 @@ const ENDS = {
   } },
   "pointercancel": { end: (E, T) => { E.advance(1000); T.btn.fire("pointercancel"); } },
   "pointerleave": { end: (E, T) => { E.advance(1000); T.btn.fire("pointerleave"); } },
+  // a cancelled / lost pointer is never a quick tap: 100 ms in it still ends the press (before, under 400 ms it became tap mode -
+  // the mic open and the room ducked until a tap or the max length)
+  "pointercancel 100 ms in": { end: (E, T) => { E.advance(100); T.btn.fire("pointercancel"); }, idle: true },
+  "pointerleave 100 ms in": { end: (E, T) => { E.advance(100); T.btn.fire("pointerleave"); }, idle: true },
+  "pointercancel 100 ms in, with the release tail": { room: { pttTail: 300 }, end: (E, T) => { E.advance(100); T.btn.fire("pointercancel"); E.due(300); }, idle: true },
   "the tap that sends (tap mode)": { start: async (E, T) => { T.btn.fire("pointerdown"); await flush(); T.btn.fire("pointerup"); }, end: (E, T, P) => {
     assert.ok(close(P.au.volume, 0.16), "a quick tap keeps recording (tap to send)");
     E.advance(1000); T.btn.fire("pointerdown"); T.btn.fire("pointerup");
@@ -301,6 +307,39 @@ for (const [name, path_] of Object.entries(ENDS)) {
     if (path_.idle) assert.match(T.btn.textContent, /Hold to talk/, name + ": the button is idle again");
   });
 }
+
+test("a pointercancel / pointerleave right after the recorder started ends the press - never tap mode; the clip is dropped as too short", async () => {
+  for (const kind of ["pointercancel", "pointerleave"]) {
+    const E = page(), P = E.player();
+    P.p.duck(true); await playIt(E, P, "mp3");
+    const T = E.talk(P);
+    T.btn.fire("pointerdown"); await flush();
+    assert.equal(E.records[0].state, "recording", kind);
+    E.advance(100); T.btn.fire(kind); await flush();
+    assert.equal(E.records[0].state, "inactive", kind + ": the recorder stopped");
+    assert.doesNotMatch(T.btn.textContent, /tap to send/, kind + ": not tap mode");
+    assert.match(T.btn.textContent, /Hold to talk/, kind + ": idle");
+    assert.equal(E.stopped(), 1, kind + ": the mic track stopped");
+    assert.equal(P.au.volume, 0.8, kind + ": not ducked");
+    assert.deepEqual(E.log.filter((l) => /\/clip$/.test(l)), [], kind + ": nothing uploaded (too short)");
+    assert.deepEqual([...E.timers.values()].filter((t) => t.ms > 1000), [], kind + ": no max-length timer left running");
+  }
+  // unchanged: a quick RELEASE (pointerup) is the tap that starts tap mode
+  const E = page(), P = E.player(), T = E.talk(P);
+  await playIt(E, P, "mp3");
+  T.btn.fire("pointerdown"); await flush(); E.advance(100); T.btn.fire("pointerup"); await flush();
+  assert.equal(E.records[0].state, "recording"); assert.match(T.btn.textContent, /tap to send/, "a quick pointerup: tap mode, as before");
+  // unchanged: the browser's permission prompt takes the touch (a pointercancel while the mic is still opening, inside 400 ms) -
+  // once allowed it records in tap mode, as before (the press could not be held through the prompt)
+  let grant;
+  const F = page({ gum: (s) => new Promise((r) => { grant = () => r(s()); }) }), Q = F.player(), U = F.talk(Q);
+  await playIt(F, Q, "mp3");
+  U.btn.fire("pointerdown"); F.advance(100); U.btn.fire("pointercancel"); F.advance(3000); grant(); await flush();
+  assert.equal(F.records.length, 1); assert.equal(F.records[0].state, "recording", "the prompt's cancel while opening: recording");
+  assert.match(U.btn.textContent, /tap to send/, "...in tap mode");
+  F.advance(2000); U.btn.fire("pointerdown"); U.btn.fire("pointerup"); await flush();
+  assert.equal(F.records[0].state, "inactive"); assert.equal(F.stopped(), 1, "the tap sends it and lets the mic go");
+});
 
 test("a mic that never opened (refused, granted after the press was over) never ducks the room", async () => {
   const E = page({ gum: () => Promise.reject(new Error("NotAllowedError")) }), P = E.player();

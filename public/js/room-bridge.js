@@ -38,9 +38,11 @@
 //     LIVE (recording true) .... volume = userVol x DUCK_LEVEL while duckOn
 //     IDLE -> LIVE: push-to-talk's recorder started (ptt recordState(true) -> onRecording -> audio.setRecording(true))
 //     LIVE -> IDLE: every end of a recording, all through ptt release() -> recordState(false): pointerup / the tap or key that
-//       sends (after the release tail), pointercancel / pointerleave, the max length, a recorder error, the page hidden
-//       (visibilitychange) or pagehide, the mic relay switched off, destroy(); a mic that never opened (refused, a stale grant,
-//       a press already over) never enters LIVE
+//       sends (after the release tail), pointercancel / pointerleave (at any point of a hold - never taken as the quick tap),
+//       the max length, a recorder error, the page hidden (visibilitychange) or pagehide, the mic relay switched off, destroy();
+//       a mic that never opened (refused, a stale grant, a press already over) never enters LIVE. Stays LIVE: a quick RELEASE
+//       (pointerup inside 400 ms of the recorder starting, or a press that ended inside 400 ms while the mic was opening -
+//       a permission prompt's pointercancel too) is the tap that starts tap mode, which records until the next tap / key sends
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -1709,11 +1711,17 @@
         recTimer = setTimeout(stop, Math.max(1000, capS * 1000 - PTT_EARLY_MS));   // pttlimits: the site's max length (was a fixed 20 s), 0.5 s early
       }).catch(function () { opening = false; release(); say(_t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'), 'bad'); });
     }
-    function up() {
+    // 1.99apl room audio: a pointercancel / pointerleave is never the quick tap - the browser or the OS took the pointer (a system
+    // gesture, an OS dialog), nobody tapped: once the recorder runs it ends the press whatever its length (under 0.7 s send() drops
+    // it as too short). Before, one inside 400 ms became tap mode: the mic open and the room ducked until a tap or the max length.
+    // While the mic is still opening the timing rule stays: the browser's permission prompt takes the touch, and once allowed the
+    // quick press records in tap mode as before.
+    function up(e) {
       if (!held) return;
       held = false; upAt = Date.now();
       if (ending || !rec || rec.state !== 'recording' || tapMode) return;
-      if (Date.now() - recAt > 400) finish();    // relaymic: the release tail
+      var lost = !!e && (e.type === 'pointercancel' || e.type === 'pointerleave');
+      if (lost || Date.now() - recAt > 400) finish();    // relaymic: the release tail
       else { tapMode = true; btn.textContent = _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send'); }
     }
     btn.addEventListener('pointerdown', function (e) {
