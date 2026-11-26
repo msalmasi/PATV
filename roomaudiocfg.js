@@ -40,6 +40,12 @@ const FIELDS = Object.freeze({
   // MP3 relay (pepe_audiolv -> audiolv.js), the browser's own receiver level on ⚡ (the WHEP ticket's `levels`). Off = no levels
   // anywhere: Pepe sends none, /p/:slug/audio is plain MP3 even to ?lv=1, the page never polls - exactly as before.
   levels:              { def: "on", choices: ["on", "off"] },
+  // 1.99apl room audio: Pepe's makeup gain on the room's sound, one step before BOTH encoders (the ⚡ Opus publish and the MP3 relay):
+  // 0 = the level as it arrives (exactly what was sent before), up to +12 dB in 0.5 dB steps; limiter on = a soft limiter just under
+  // full scale (about -1 dBFS, a few ms look-ahead) whenever the gain is above 0, so a louder room never clips. test/room-audio-gain.test.js
+  // checks these against the bot's pepe_roomrtc CFG_RANGES / CFG_CHOICES / DEFAULT_CFG.
+  gain_db:             { def: 0, min: 0, max: 12, step: 0.5 },
+  limiter:             { def: "on", choices: ["on", "off"] },
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(Object.entries(FIELDS).map(([k, f]) => [k, f.def])));
 const ONLINE_MS = 90 * 1000;               // Pepe pushes every 20 s
@@ -101,7 +107,8 @@ function normalize(input, { base = DEFAULTS, lenient = false } = {}) {
       if (!lenient) errors[k] = `${f.min}–${f.max}`;
       cfg[k] = Math.max(f.min, Math.min(f.max, n));
     } else cfg[k] = n;
-    cfg[k] = k === "mixer_latency_s" ? Math.round(cfg[k] * 100) / 100 : Math.round(cfg[k]);
+    // (1.99apl room audio: gain_db in its 0.5 dB steps)
+    cfg[k] = k === "mixer_latency_s" ? Math.round(cfg[k] * 100) / 100 : k === "gain_db" ? Math.round(cfg[k] * 2) / 2 : Math.round(cfg[k]);
   }
   if (cfg.helper_min_ms > cfg.helper_max_ms) {
     if (!lenient) errors.helper_min_ms = "can't be more than the adaptive max";

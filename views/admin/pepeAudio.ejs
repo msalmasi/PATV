@@ -2,12 +2,12 @@
 <%# 1.99yd: room-audio settings (roomaudiocfg.js). The site owns them; Pepe (camfrog-bot pepe_audiocfg.py) applies them within seconds. Admins only. %>
 <div class="adm-head">
   <h1>Room audio</h1>
-  <p>How Pepe streams a Camfrog room's sound to its pad: the ⚡ WebRTC publish (pacing and its buffer), the room mixer, the listener's jitter buffer and the bitrates. One global setting for every pad. Pepe picks a save up in a few seconds; <code>!audiostats latency &lt;s&gt;</code> in chat changes the mixer latency here too.</p>
+  <p>How Pepe streams a Camfrog room's sound to its pad: the ⚡ WebRTC publish (pacing and its buffer), the room mixer, the loudness (gain and limiter), the listener's jitter buffer and the bitrates. One global setting for every pad. Pepe picks a save up in a few seconds; <code>!audiostats latency &lt;s&gt;</code> in chat changes the mixer latency here too.</p>
 </div>
 
 <section class="adm-card" id="room-audio" aria-labelledby="raT">
   <h2 id="raT"><span class="ds-ic" aria-hidden="true">🔊</span> Room audio settings <span class="adm-pill admin">admins</span> <span class="adm-pill" id="raVer"></span></h2>
-  <p class="adm-help">Changing the pacing, the buffer of the pacing in use or the Opus bitrate restarts each live ⚡ publish: the old WebRTC session ends, the new one connects about a second later. Listeners hear the MP3 relay for those seconds and their player switches back to ⚡ by itself. The mixer latency applies at once, the MP3 bitrate from the next chunk, the jitter target from a listener's next ⚡ connection, the mic-bar levels from a listener's next ▶.</p>
+  <p class="adm-help">Changing the pacing, the buffer of the pacing in use, the Opus bitrate or the gain (the limiter too, while the gain is above 0) restarts each live ⚡ publish: the old WebRTC session ends, the new one connects about a second later. Listeners hear the MP3 relay for those seconds and their player switches back to ⚡ by itself. The mixer latency applies at once, the MP3 bitrate and the MP3 relay's gain from the next chunk, the jitter target from a listener's next ⚡ connection, the mic-bar levels from a listener's next ▶. The gain (0 = no change) is one step on Pepe's side, so ⚡ and the MP3 relay always get the same level; set it by ear in a test room first.</p>
   <form class="adm-form" id="raForm" autocomplete="off" novalidate>
     <fieldset>
       <legend>WebRTC pacing</legend>
@@ -34,6 +34,12 @@
       <label>⚡ listener jitter buffer target (ms) - the browser holds this much <input type="number" name="jitter_ms" inputmode="numeric"></label>
       <%# micvad 1.99akk: roomaudiocfg.js FIELDS.levels (default on) %>
       <label>Real mic bars where the page can't measure the sound (iPhone) - with the MP3 relay Pepe's loudness level (one value per 100 ms, nothing per speaker); ⚡ uses the browser's own level <select name="levels"><option value="on">on</option><option value="off">off - the bars only animate while someone holds the mic</option></select></label>
+    </fieldset>
+    <%# 1.99apl room audio: roomaudiocfg.js FIELDS.gain_db / limiter - Pepe's one gain step before both encoders %>
+    <fieldset>
+      <legend>Loudness</legend>
+      <label>Gain (dB) - added to the room's sound before both encoders (⚡ WebRTC and the MP3 relay), in 0.5 dB steps; 0 = the sound exactly as it arrives <input type="number" name="gain_db" step="0.5" inputmode="decimal"></label>
+      <label>Limiter - while the gain is above 0, a soft limiter just under full scale (about -1 dBFS) holds the loud moments down instead of letting them clip <select name="limiter"><option value="on">on</option><option value="off">off - the gain alone (loud moments can clip)</option></select></label>
     </fieldset>
     <fieldset>
       <legend>Bitrates</legend>
@@ -140,7 +146,8 @@
       'adaptive ' + c.helper_min_ms + '–' + c.helper_max_ms + ' ms +' + c.helper_headroom_ms + ' ms / ' + c.helper_window_s + ' s') + ')' :
       'in-process (prebuffer ' + c.inproc_prebuffer_ms + ' ms, splice > ' + c.inproc_splice_ms + ' ms)';
     return pace + ' · mixer ' + c.mixer_latency_s + ' s · jitter ' + c.jitter_ms + ' ms · Opus ' + c.opus_kbps + ' / MP3 ' + c.mp3_kbps + ' kbps' +
-      (c.levels ? ' · levels ' + c.levels : '');
+      (c.levels ? ' · levels ' + c.levels : '') +
+      (c.gain_db != null ? ' · gain ' + (c.gain_db > 0 ? '+' : '') + c.gain_db + ' dB' + (c.gain_db > 0 ? ', limiter ' + c.limiter : '') : '');   // 1.99apl room audio
   }
   function live() {
     var b = V.bot;

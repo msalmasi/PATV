@@ -302,8 +302,8 @@ test("ptttail: the setting - pttlimits tail_ms (0-1000, 400) and tail_ios (off) 
 test("ptttail: cache-busters - room-bridge.js v36 (1.99apj audiodebug; v35 1.99aot gifs; v34 the release tail) wherever it loads", () => {
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = read("views", v);
-    assert.match(s, /room-bridge\.js\?v=36/, v);
-    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!36\b)\d+/, v + ": one version");
+    assert.match(s, /room-bridge\.js\?v=37/, v);   // (room audio: v37)
+    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!37\b)\d+/, v + ": one version");
   }
 });
 

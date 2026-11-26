@@ -19,8 +19,28 @@
 // for how iOS Safari's play-and-record switch is handled (1.99bk).
 // All are driven by the live view JSON: call .update(d) with each poll result.
 // 1.99apj audiodebug: ?audiodebug=1 adds local diagnostics only after the room-audio admin API
-// confirms pepe.rooms_commands_audio. No playback/session changes, telemetry or person data.
+// confirms pepe.rooms_commands_audio. The panel itself changes no playback / session, sends no telemetry, shows no person data.
 // Everything user-visible goes in via textContent.
+//
+// The room audio's session / volume / ducking state machine (1.99apl room audio; the iOS story is "the page's audio session" below):
+//   audio session (navigator.audioSession.type, Safari 17+ - feature-detected, a write never throws; other browsers have none):
+//     page load ............................ untouched (the browser's 'auto') - nothing plays, nothing records
+//     the room starts playing .............. 'playback' (roomSession): on ▶ (inside the tap, before any sound) and on every
+//                                            'playing' of either element (the MP3 cushion, ⚡ -> MP3 and back, a resume) -
+//                                            NOT while the page holds a mic (MIC below); an unchanged type isn't written again
+//     MIC: a mic opens ..................... 'play-and-record' (recSession.before: push-to-talk, the story camera); held until after()
+//     the mic is released .................. 'playback' if a room player plays, else 'auto' (recSession.after, in the ending gesture)
+//   volume / mute: the user's own variables (userVol / userMuted, saved only from the slider / mute button) are written to BOTH
+//     elements on ▶, on every 'playing', after every mic release and on every slider / mute / duck / recording change - never
+//     read back from an element; on iOS only `muted` (element.volume is read-only there: the hardware buttons)
+//   ducking (opt-in: duckOn, the Room Dock's 🦆 switch, off by default; not on iOS), two states:
+//     IDLE (recording false) ... volume = userVol: page load, before the first recording, after every recording
+//     LIVE (recording true) .... volume = userVol x DUCK_LEVEL while duckOn
+//     IDLE -> LIVE: push-to-talk's recorder started (ptt recordState(true) -> onRecording -> audio.setRecording(true))
+//     LIVE -> IDLE: every end of a recording, all through ptt release() -> recordState(false): pointerup / the tap or key that
+//       sends (after the release tail), pointercancel / pointerleave, the max length, a recorder error, the page hidden
+//       (visibilitychange) or pagehide, the mic relay switched off, destroy(); a mic that never opened (refused, a stale grant,
+//       a press already over) never enters LIVE
 (function () {
   'use strict';
   var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
@@ -39,7 +59,10 @@
   //     hardware buttons set it). Media elements follow the session back to playback by themselves.
   //   * everywhere else ONE AudioContext per page (ctx()) feeds the meter, resumed after a clip
   //   * the Audio Session API (navigator.audioSession, Safari 17+): 'play-and-record' just before
-  //     the mic opens, 'playback' (room playing) / 'auto' right after - an explicit hand-back
+  //     the mic opens, 'playback' (room playing) / 'auto' right after - an explicit hand-back.
+  //     1.99apl room audio: and 'playback' as soon as the room starts playing (roomSession) - before, nothing set it until
+  //     the first press, so the room played in the browser's 'auto' session and the first hand-back switched it
+  //     (the owner's 11-26 repro: 'auto' before the first press, 'playback' after it)
   //   * every mic track is stopped and the stream dropped the moment a clip ends, in the very
   //     gesture that ended it (pointerup) - iOS holds play-and-record while any track is live, and
   //     only lets the paused room player resume from a user gesture
@@ -50,15 +73,24 @@
   var IOS = /iP(hone|ad|od)/.test(navigator.userAgent || '') ||
     (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
   var AC = window.AudioContext || window.webkitAudioContext;
-  var shared = { ctx: null, players: [] };
+  // (1.99apl room audio: mic = the page holds a mic - from recSession.before() until after(); the room player leaves the session alone then)
+  var shared = { ctx: null, players: [], mic: false };
   function ctx() {
     if (!shared.ctx && AC && !IOS) { try { shared.ctx = new AC(); } catch (e) { shared.ctx = null; } }
     return shared.ctx;
   }
   function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) { /* no Audio Session API */ } }
+  // 1.99apl room audio: the room starts playing -> the 'playback' session (the header's state machine). Never while a mic is held
+  // (after() hands 'playback' back itself); a type that is already 'playback' isn't written again.
+  function roomSession() {
+    if (shared.mic) return;
+    var now = null; try { now = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { now = null; }
+    if (now !== 'playback') setSession('playback');
+  }
   var recSession = {
-    before: function () { setSession('play-and-record'); },
+    before: function () { shared.mic = true; setSession('play-and-record'); },
     after: function () {
+      shared.mic = false;
       setSession(shared.players.some(function (p) { return p.wantsPlay(); }) ? 'playback' : 'auto');
       var c = shared.ctx;
       if (c && c.state !== 'running' && c.state !== 'closed') { try { c.resume(); } catch (e) { /* resumes on the next play */ } }
@@ -314,6 +346,8 @@
         if (!IOS) { try { x.volume = userVol * (duckOn && recording ? DUCK_LEVEL : 1); } catch (e) { /* read-only */ } }
       });
     }
+    // 1.99apl room audio: playback starts (▶, or either element's 'playing') - the 'playback' session and the user's own volume / mute
+    function playbackStarts() { roomSession(); applyVolume(); }
     function setMode(m) {
       mode = m;
       modeEl.classList.toggle('hide', !m);
@@ -633,6 +667,7 @@
     }
     function start() {
       unlock();
+      playbackStarts();             // 1.99apl room audio: the session inside the tap, before anything with a source plays
       clearInterval(waitTimer); startedAt = 0;
       clearTimeout(rejoinTimer); rejoinTries = 0;
       shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page
@@ -712,9 +747,10 @@
     });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
     au.addEventListener('waiting', function () { auWait = true; stalled('mp3'); if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); lvKick(); });
-    au.addEventListener('playing', function () { auWait = false; unstall('mp3'); mp3Sound = playing && mode === 'mp3'; syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
+    // (1.99apl room audio: each 'playing' of a player that plays = playback starts - the session + the user's volume / mute)
+    au.addEventListener('playing', function () { auWait = false; unstall('mp3'); mp3Sound = playing && mode === 'mp3'; if (playing) playbackStarts(); syncAudio(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
     au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
-    rau.addEventListener('playing', function () { rauWait = false; rauSoundAt = Date.now(); unstall('rtc'); rtcSound = !!(playing && rau.srcObject); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
+    rau.addEventListener('playing', function () { rauWait = false; rauSoundAt = Date.now(); unstall('rtc'); rtcSound = !!(playing && rau.srcObject); if (playing) playbackStarts(); syncAudio(); if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); lvKick(); });
     ['pause', 'ended'].forEach(function (kind) {
       au.addEventListener(kind, function () { unstall('mp3'); mp3Sound = false; syncAudio(); });
       rau.addEventListener(kind, function () { unstall('rtc'); rtcSound = false; syncAudio(); });
@@ -791,6 +827,7 @@
         ahead: mode === 'rtc' ? null : ahead(), rate: active.playbackRate,
         paused: active.paused, muted: active.muted, volume: active.volume, userMuted: userMuted, userVol: userVol,
         duckOn: duckOn, recording: recording, duckActive: duckOn && recording,
+        micHeld: shared.mic,                       // 1.99apl room audio: between the mic hand-off's before() and after()
         browser: navigator.userAgent || '', os: navigator.platform || '' };
     };
     var access = audioDebugAccess();
@@ -1655,6 +1692,9 @@
         catch (e) { release(); say(_t('js.pad.ptt.cant_record', 'this browser can\'t record a clip'), 'bad'); return; }
         rec = r; recAt = t0;
         r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        // 1.99apl room audio: a recorder error ends the recording at once (the mic released, the room un-ducked, the button idle) -
+        // not only through the stop event a browser is meant to fire after it; a later onstop still sends what was recorded
+        r.onerror = function () { if (rec !== r || stream !== s) return; stop(); idle(); };
         r.onstop = function () {
           if (stream === s) release();           // stopped some other way (track ended, page hidden); relaymic: after a tail, here
           idle();

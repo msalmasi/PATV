@@ -67,7 +67,7 @@ test.after(() => { server.close(); });
 test("defaults = what shipped; strict validation names each bad field; lenient clamps", () => {
   assert.deepEqual(AC.DEFAULTS, { pacing: "helper", helper_mode: "adaptive", helper_fixed_ms: 1000, helper_min_ms: 200, helper_max_ms: 1000,
     helper_headroom_ms: 120, helper_window_s: 60, inproc_prebuffer_ms: 140, inproc_splice_ms: 600, mixer_latency_s: 0.7, jitter_ms: 200,
-    opus_kbps: 64, mp3_kbps: 64, levels: "on" });
+    opus_kbps: 64, mp3_kbps: 64, levels: "on", gain_db: 0, limiter: "on" });
   assert.deepEqual(AC.normalize({}).errors, {});
   // micvad 1.99akk: the mic-bar levels switch - on | off, default on; strict names a bad value, lenient falls back to on
   assert.equal(AC.normalize({ levels: "OFF " }).cfg.levels, "off");
@@ -85,6 +85,23 @@ test("defaults = what shipped; strict validation names each bad field; lenient c
   assert.equal(len.cfg.mixer_latency_s, 3); assert.equal(len.cfg.pacing, "helper");
   assert.equal(AC.normalize({ mixer_latency_s: "1.234" }).cfg.mixer_latency_s, 1.23, "string numbers from the form");
   assert.equal(AC.normalize({ helper_fixed_ms: "" }, { base: { ...AC.DEFAULTS, helper_fixed_ms: 800 } }).cfg.helper_fixed_ms, 800, "blank = keep");
+});
+
+test("1.99apl room audio: gain_db 0..12 in 0.5 dB steps (default 0) and limiter on | off (default on) - strict names them, lenient clamps", () => {
+  assert.equal(AC.FIELDS.gain_db.step, 0.5);
+  for (const [given, want] of [[0, 0], ["6", 6], ["3.5", 3.5], [3.3, 3.5], [3.2, 3], [11.9, 12], [12, 12]]) {
+    const r = AC.normalize({ gain_db: given });
+    assert.deepEqual(r.errors, {}, String(given)); assert.equal(r.cfg.gain_db, want, String(given));
+  }
+  for (const bad of [-0.5, 12.5, 40, "loud", "3 dB", true]) assert.deepEqual(Object.keys(AC.normalize({ gain_db: bad }).errors), ["gain_db"], String(bad));
+  assert.match(AC.normalize({ gain_db: 13 }).errors.gain_db, /^0.12$/);
+  assert.equal(AC.normalize({ gain_db: 13 }, { lenient: true }).cfg.gain_db, 12, "lenient: clamped to the top");
+  assert.equal(AC.normalize({ gain_db: -4 }, { lenient: true }).cfg.gain_db, 0, "lenient: never below 0");
+  assert.equal(AC.normalize({ gain_db: "x" }, { lenient: true }).cfg.gain_db, 0, "lenient: not a number -> the default");
+  assert.equal(AC.normalize({ limiter: " OFF" }).cfg.limiter, "off");
+  assert.deepEqual(Object.keys(AC.normalize({ limiter: "maybe" }).errors), ["limiter"]);
+  assert.equal(AC.normalize({ limiter: false }, { lenient: true }).cfg.limiter, "on", "lenient: a bad value -> on");
+  assert.deepEqual(AC.normalize({ gain_db: "" }, { base: { ...AC.DEFAULTS, gain_db: 4.5 } }).cfg.gain_db, 4.5, "blank = keep");
 });
 
 test("admin API: Admins only, fetch only; save -> v+1 + audit; a bad value changes nothing; reset", async () => {
@@ -118,6 +135,40 @@ test("admin API: Admins only, fetch only; save -> v+1 + audit; a bad value chang
   assert.equal(page.status, 200);
   assert.match(html, /id="room-audio"/); assert.match(html, /Reset to defaults/);
   assert.equal((await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "u1" } })).status, 403);
+});
+
+test("1.99apl room audio: the gain + limiter fields render on /admin/pepe/audio, save (audited) and clamp; Pepe's report is clamped too", async () => {
+  const page = await fetch(base + "/admin/pepe/audio", { headers: { "x-test-user": "adm" } });
+  const html = await page.text();
+  assert.equal(page.status, 200);
+  assert.match(html, /<input type="number" name="gain_db" step="0\.5" inputmode="decimal">/, "the gain box, 0.5 dB steps");
+  assert.match(html, /<select name="limiter"><option value="on">on<\/option><option value="off">/, "the limiter switch");
+  assert.match(html, /<legend>Loudness<\/legend>/);
+  const V = JSON.parse(html.match(/var V = (\{.*?\});\r?\n/)[1]);
+  assert.deepEqual(V.fields.gain_db, { def: 0, min: 0, max: 12, step: 0.5 }, "the page's range + default come from FIELDS");
+  assert.deepEqual(V.fields.limiter, { def: "on", choices: ["on", "off"] });
+  assert.equal(V.cfg.gain_db, 0); assert.equal(V.cfg.limiter, "on");
+  const v0 = AC.current().v;
+  let r = await adminPost({ cfg: { gain_db: "6", limiter: "on" }, reason: "louder by ear" });
+  assert.equal(r.status, 200); assert.equal(r.d.v, v0 + 1);
+  assert.deepEqual(r.d.changed, { gain_db: [0, 6] });
+  assert.equal(AC.current().cfg.gain_db, 6);
+  const a = (await audits()).pop();
+  assert.deepEqual(JSON.parse(a.detail).changed, { gain_db: [0, 6] }, "one admin_audit row, from -> to");
+  r = await adminPost({ cfg: { gain_db: 20 } });
+  assert.equal(r.status, 400); assert.deepEqual(Object.keys(r.d.fields), ["gain_db"]); assert.match(r.d.error, /^gain_db: 0.12$/);
+  r = await adminPost({ cfg: { limiter: "loud" } });
+  assert.equal(r.status, 400); assert.deepEqual(Object.keys(r.d.fields), ["limiter"]);
+  assert.equal(AC.current().v, v0 + 1, "a refused value changes nothing");
+  r = await adminPost({ cfg: { gain_db: 3.3, limiter: "off" } });
+  assert.equal(r.d.cfg.gain_db, 3.5, "rounded to its 0.5 dB step"); assert.equal(r.d.cfg.limiter, "off");
+  let b = await bot("/api/bridge/audio", { room: ALPHA, seq: 5, data: "", rtc_cap: true, acfg_v: v0 });
+  assert.equal(b.audio_cfg.cfg.gain_db, 3.5, "Pepe hears it with his next audio post"); assert.equal(b.audio_cfg.cfg.limiter, "off");
+  await bot("/api/pepe/audio/state", { state: { v: AC.current().v, src: "site", cfg: { gain_db: 99, limiter: "sideways" }, rooms: {} } });
+  const view = (await req("GET", "/api/admin/pepe/audio", null, "adm")).d;
+  assert.equal(view.bot.cfg.gain_db, 12, "what Pepe says he runs is clamped for the page"); assert.equal(view.bot.cfg.limiter, "on");
+  r = await adminPost({ reset: true });
+  assert.equal(AC.current().cfg.gain_db, 0); assert.equal(AC.current().cfg.limiter, "on");
 });
 
 test("Pepe: settings ride on the audio answer when his version is older; the state push is stored and answered", async () => {

@@ -132,12 +132,12 @@ test("⚡ live: the snapshot reads the WebRTC element and its analyser, never th
   x.player.duck(true); x.player.setRecording(true); assert.equal(box.rbDebug().volume, 0.8 * 0.2);
   x.player.setRecording(false); assert.equal(box.rbDebug().duckActive, false); assert.equal(box.rbDebug().volume, 0.8);
 });
-test("cache-busters: room-bridge.js v36 and room-bridge.css v17 (1.99apj audiodebug) in every view that loads them, one version each", () => {
+test("cache-busters: room-bridge.js v37 (1.99apl room audio; v36 = 1.99apj audiodebug) and room-bridge.css v17 (1.99apj) in every view that loads them, one version each", () => {
   const views = path.join(__dirname, "..", "views");
   for (const v of ["room.ejs", "home.ejs"]) {
     const s = fs.readFileSync(path.join(views, v), "utf8");
-    assert.match(s, /room-bridge\.js\?v=36\b/, v); assert.match(s, /room-bridge\.css\?v=17\b/, v);
-    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!36\b)\d+/, v + ": one room-bridge.js version");
+    assert.match(s, /room-bridge\.js\?v=37\b/, v); assert.match(s, /room-bridge\.css\?v=17\b/, v);
+    assert.doesNotMatch(s, /room-bridge\.js\?v=(?!37\b)\d+/, v + ": one room-bridge.js version");
     assert.doesNotMatch(s, /room-bridge\.css\?v=(?!17\b)\d+/, v + ": one room-bridge.css version");
   }
   const home = fs.readFileSync(path.join(views, "home.ejs"), "utf8");
